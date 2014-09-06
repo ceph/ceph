@@ -65,8 +65,10 @@ static char *mount_resolve_src(const char *orig_str)
 	}
 
 	src = resolve_addrs(buf);
-	if (!src)
+	if (!src) {
+		free(buf);
 		return NULL;
+	}
 
 	len = strlen(src);
 	pos = safe_cat(&src, &len, len, ":");

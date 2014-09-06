@@ -1165,49 +1165,48 @@ int Client::choose_target_mds(MetaRequest *req)
       is_hash = true;
     }
   }
-  if (in && in->snapid != CEPH_NOSNAP) {
-    ldout(cct, 10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
-    while (in->snapid != CEPH_NOSNAP) {
-      if (in->snapid == CEPH_SNAPDIR)
-	in = in->snapdir_parent;
-      else if (!in->dn_set.empty())
-        /* In most cases there will only be one dentry, so getting it
-         * will be the correct action. If there are multiple hard links,
-         * I think the MDS should be able to redirect as needed*/
-	in = in->get_first_parent()->dir->parent_inode;
-      else {
-        ldout(cct, 10) << "got unlinked inode, can't look at parent" << dendl;
-        break;
+  if (in) {
+    if (in->snapid != CEPH_NOSNAP) {
+      ldout(cct, 10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
+      while (in->snapid != CEPH_NOSNAP) {
+        if (in->snapid == CEPH_SNAPDIR)
+  	in = in->snapdir_parent;
+        else if (!in->dn_set.empty())
+          /* In most cases there will only be one dentry, so getting it
+           * will be the correct action. If there are multiple hard links,
+           * I think the MDS should be able to redirect as needed*/
+  	in = in->get_first_parent()->dir->parent_inode;
+        else {
+          ldout(cct, 10) << "got unlinked inode, can't look at parent" << dendl;
+          break;
+        }
+      }
+      is_hash = false;
+    }
+  
+    ldout(cct, 20) << "choose_target_mds " << *in << " is_hash=" << is_hash
+             << " hash=" << hash << dendl;
+  
+    if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
+      frag_t fg = in->dirfragtree[hash];
+      if (in->fragmap.count(fg)) {
+        mds = in->fragmap[fg];
+        ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
+        goto out;
       }
     }
-    is_hash = false;
-  }
   
-  if (!in)
-    goto random_mds;
-
-  ldout(cct, 20) << "choose_target_mds " << *in << " is_hash=" << is_hash
-           << " hash=" << hash << dendl;
-
-  if (is_hash && S_ISDIR(in->mode) && !in->dirfragtree.empty()) {
-    frag_t fg = in->dirfragtree[hash];
-    if (in->fragmap.count(fg)) {
-      mds = in->fragmap[fg];
-      ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
-      goto out;
-    }
+    if (req->auth_is_best())
+      cap = in->auth_cap;
+    if (!cap && !in->caps.empty())
+      cap = in->caps.begin()->second;
+    if (!cap)
+      goto random_mds;
+    mds = cap->session->mds_num;
+    ldout(cct, 10) << "choose_target_mds from caps on inode " << *in << dendl;
+  
+    goto out;
   }
-
-  if (req->auth_is_best())
-    cap = in->auth_cap;
-  if (!cap && !in->caps.empty())
-    cap = in->caps.begin()->second;
-  if (!cap)
-    goto random_mds;
-  mds = cap->session->mds_num;
-  ldout(cct, 10) << "choose_target_mds from caps on inode " << *in << dendl;
-
-  goto out;
 
 random_mds:
   if (mds < 0) {

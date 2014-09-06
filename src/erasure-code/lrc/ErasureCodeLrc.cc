@@ -132,7 +132,7 @@ int ErasureCodeLrc::layers_parse(string description_string,
   int position = 0;
   for (vector<json_spirit::mValue>::iterator i = description.begin();
        i != description.end();
-       i++, position++) {
+       ++i, position++) {
     if (i->type() != json_spirit::array_type) {
       stringstream json_string;
       json_spirit::write(*i, json_string);
@@ -420,7 +420,7 @@ int ErasureCodeLrc::parse_ruleset(const map<string,string> &parameters,
     int position = 0;
     for (vector<json_spirit::mValue>::iterator i = description.begin();
 	 i != description.end();
-	 i++, position++) {
+	 ++i, position++) {
       if (i->type() != json_spirit::array_type) {
 	stringstream json_string;
 	json_spirit::write(*i, json_string);
@@ -450,7 +450,7 @@ int ErasureCodeLrc::parse_ruleset_step(string description_string,
   int position = 0;
   for (vector<json_spirit::mValue>::iterator i = description.begin();
        i != description.end();
-       i++, position++) {
+       ++i, position++) {
     if ((position == 0 || position == 1) &&
 	i->type() != json_spirit::str_type) {
       *ss << "element " << position << " of the array "
@@ -631,7 +631,7 @@ int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
 	  //
 	  for (set<int>::const_iterator j = erasures.begin();
 	       j != erasures.end();
-	       j++) {
+	       ++j) {
 	    erasures_not_recovered.erase(*j);
 	    if (erasures_want.count(*j))
 	      erasures_want.erase(*j);
@@ -644,7 +644,7 @@ int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
       minimum->insert(want_to_read.begin(), want_to_read.end());
       for (set<int>::const_iterator i = erasures_total.begin();
 	   i != erasures_total.end();
-	   i++) {
+	   ++i) {
 	if (minimum->count(*i))
 	  minimum->erase(*i);
       }
@@ -691,7 +691,7 @@ int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
 	//
 	for (set<int>::const_iterator j = layer_erasures.begin();
 	     j != layer_erasures.end();
-	     j++) {
+	     ++j) {
 	  erasures_total.erase(*j);
 	}
       }
@@ -733,7 +733,7 @@ int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
     int j = 0;
     for (vector<int>::const_iterator c = layer.chunks.begin();
 	 c != layer.chunks.end();
-	 c++) {
+	 ++c) {
       layer_encoded[j] = (*encoded)[*c];
       if (want_to_encode.find(*c) != want_to_encode.end())
 	layer_want_to_encode.insert(j);
@@ -786,7 +786,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
       int j = 0;
       for (vector<int>::const_iterator c = layer->chunks.begin();
 	   c != layer->chunks.end();
-	   c++) {
+	   ++c) {
 	//
 	// Pick chunks from *decoded* instead of *chunks* to re-use
 	// chunks recovered by previous layers. In other words
@@ -812,7 +812,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
       j = 0;
       for (vector<int>::const_iterator c = layer->chunks.begin();
 	   c != layer->chunks.end();
-	   c++) {
+	   ++c) {
 	(*decoded)[*c] = layer_decoded[j];
 	++j;
 	if (erasures.count(*c) != 0)

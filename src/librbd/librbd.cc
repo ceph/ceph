@@ -633,6 +633,9 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
     return -ERANGE;
   }
 
+  if (!names) 
+    return -EINVAL;
+
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     strcpy(names, cpp_names[i].c_str());
     names += strlen(names) + 1;
