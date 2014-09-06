@@ -220,7 +220,6 @@ OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this po
 OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
 
 OPTION(mon_debug_idempotency, OPT_BOOL, false)
-OPTION(mon_advanced_debug_mode, OPT_BOOL, false) // true for developper oriented testing
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
