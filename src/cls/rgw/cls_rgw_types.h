@@ -242,6 +242,10 @@ struct cls_rgw_obj_key {
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
+
+#define RGW_BUCKET_DIRENT_FLAG_OLH         0x1
+#define RGW_BUCKET_DIRENT_FLAG_OLH_PENDING 0x2
+
 struct rgw_bucket_dir_entry {
   cls_rgw_obj_key key;
   rgw_bucket_entry_ver ver;
@@ -251,12 +255,13 @@ struct rgw_bucket_dir_entry {
   map<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
+  uint16_t flags;
 
   rgw_bucket_dir_entry() :
-    exists(false), index_ver(0) {}
+    exists(false), index_ver(0), flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(6, 3, bl);
+    ENCODE_START(7, 3, bl);
     ::encode(key.name, bl);
     ::encode(ver.epoch, bl);
     ::encode(exists, bl);
@@ -291,8 +296,14 @@ struct rgw_bucket_dir_entry {
     if (struct_v >= 6) {
       ::decode(key.instance, bl);
     }
+    if (struct_v >= 7) {
+      ::decode(flags, bl);
+    }
     DECODE_FINISH(bl);
   }
+
+  bool is_olh() { return (flags & RGW_BUCKET_DIRENT_FLAG_OLH) != 0; }
+  bool is_olh_pending() { return (flags & RGW_BUCKET_DIRENT_FLAG_OLH_PENDING) != 0; }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
