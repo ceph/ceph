@@ -38,6 +38,7 @@ function TEST_default_deprectated_0() {
     run_mon $dir a --public-addr 127.0.0.1 \
         --osd_pool_default_crush_replicated_ruleset $expected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     ! grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -48,6 +49,7 @@ function TEST_default_deprectated_1() {
     run_mon $dir a --public-addr 127.0.0.1 \
         --osd_pool_default_crush_rule $expected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -60,6 +62,7 @@ function TEST_default_deprectated_2() {
         --osd_pool_default_crush_replicated_ruleset $unexpected
     ./ceph --format json osd dump | grep '"crush_ruleset":'$expected
     ! ./ceph --format json osd dump | grep '"crush_ruleset":'$unexpected || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "osd_pool_default_crush_rule is deprecated " $dir/a/log || return 1
 }
 
@@ -107,6 +110,7 @@ function TEST_erasure_crush_rule_pending() {
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$crush_ruleset'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
     test $result = true || return 1
     ./ceph osd pool create pool_erasure 12 12 erasure default $crush_ruleset || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
     grep "$crush_ruleset try again" $dir/a/log || return 1
 }
 
