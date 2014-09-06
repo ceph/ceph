@@ -20,7 +20,7 @@
 
 extern "C" const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory)
+extern "C" int __erasure_code_init(char *plugin_name, char *directory)
 {
   sleep(1000);
   return 0;
