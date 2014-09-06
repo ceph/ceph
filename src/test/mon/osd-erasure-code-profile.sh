@@ -69,6 +69,7 @@ function SHARE_MON_TEST_set_pending() {
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
     test $result = true || return 1
     ./ceph osd erasure-code-profile set $profile --force || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/$id/ceph-mon.$id.asok log flush || return 1
     grep "$profile try again" $dir/$id/log || return 1
 
     ./ceph osd erasure-code-profile rm $profile # cleanup
@@ -121,6 +122,7 @@ function SHARE_MON_TEST_rm_pending() {
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd erasure-code-profile set","name":"'$profile'"}' | nc -U $dir/$id/ceph-mon.$id.asok | cut --bytes=5-)
     test $result = true || return 1
     ./ceph osd erasure-code-profile rm $profile || return 1
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/$id/ceph-mon.$id.asok log flush || return 1
     grep "$profile: creation canceled" $dir/$id/log || return 1
 }
 
