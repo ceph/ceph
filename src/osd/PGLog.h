@@ -148,7 +148,7 @@ struct PGLog {
       rollback_info_trimmed_to_riter = log.rbegin();
       while (rollback_info_trimmed_to_riter != log.rend() &&
 	     rollback_info_trimmed_to_riter->version > rollback_info_trimmed_to)
-	rollback_info_trimmed_to_riter++;
+	++rollback_info_trimmed_to_riter;
     }
 
     void index(pg_log_entry_t& e) {

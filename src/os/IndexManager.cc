@@ -63,8 +63,8 @@ static int get_version(const char *path, uint32_t *version) {
 
 IndexManager::~IndexManager() {
 
-  for(map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
-                                it != col_indices.end(); it++) {
+  for (map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
+       it != col_indices.end(); ++it) {
 
     delete it->second;
     it->second = NULL;

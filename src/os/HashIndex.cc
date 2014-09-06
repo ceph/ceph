@@ -375,7 +375,7 @@ int HashIndex::pre_split_folder(uint32_t pg_num, uint64_t expected_num_objs)
 
   // Calculate the number of leaf folders (which actually store files)
   // need to be created
-  const uint64_t objs_per_folder = (unsigned)(abs(merge_threshold)) * 16 * split_multiplier;
+  const uint64_t objs_per_folder = (uint64_t)(abs(merge_threshold)) * (uint64_t)split_multiplier * 16;
   uint64_t leavies = expected_num_objs / objs_per_folder ;
   // No need to split
   if (leavies == 0 || expected_num_objs == objs_per_folder)

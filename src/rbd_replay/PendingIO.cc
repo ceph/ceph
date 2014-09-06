@@ -21,7 +21,7 @@ using namespace rbd_replay;
 
 extern "C"
 void pending_io_callback(librbd::completion_t cb, void *arg) {
-  PendingIO *io = (PendingIO*)arg;
+  PendingIO *io = static_cast<PendingIO*>(arg);
   io->completed(cb);
 }
 
