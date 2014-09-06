@@ -150,7 +150,7 @@ function TEST_crush_rule_create_erasure_profile_default_exists() {
     ./ceph osd erasure-code-profile ls | grep default || return 1
 }
 
-function Check_ruleset_id_match_rule_id() {
+function check_ruleset_id_match_rule_id() {
     local rule_name=$1
     rule_id=`./ceph osd crush rule dump $rule_name | grep "\"rule_id\":" | awk -F ":|," '{print int($2)}'`
     ruleset_id=`./ceph osd crush rule dump $rule_name | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
@@ -185,7 +185,7 @@ function TEST_crush_ruleset_match_rule_when_creating() {
 
     ./ceph osd crush rule dump
     #show special_rule_simple has same rule_id and ruleset_id
-    Check_ruleset_id_match_rule_id special_rule_simple || return 1
+    check_ruleset_id_match_rule_id special_rule_simple || return 1
 }
 
 function TEST_add_ruleset_failed() {
