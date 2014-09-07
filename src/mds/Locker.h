@@ -49,6 +49,7 @@ class LogSegment;
 class SimpleLock;
 class ScatterLock;
 class LocalLock;
+
 class MDCache;
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
@@ -194,6 +195,8 @@ public:
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
 
   void remove_client_cap(CInode *in, client_t client);
+
+  void get_late_cap_releases(std::list<const Capability*> *late_caps) const;
 
  protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
