@@ -924,7 +924,7 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
 
   printf("  SEC       OPS   OPS/SEC   BYTES/SEC\n");
   uint64_t off;
-  for (off = 0; off < io_bytes; off += io_size) {
+  for (off = 0; off < io_bytes; ) {
     b.wait_for(io_threads - 1);
     i = 0;
     while (i < io_threads && off < io_bytes &&
