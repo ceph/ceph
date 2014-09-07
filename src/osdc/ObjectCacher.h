@@ -340,6 +340,7 @@ class ObjectCacher {
   void *flush_set_callback_arg;
 
   vector<ceph::unordered_map<sobject_t, Object*> > objects; // indexed by pool_id
+  list<Context*> waitfor_read;
 
   ceph_tid_t last_read_tid;
 
