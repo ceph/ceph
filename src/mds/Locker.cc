@@ -3215,20 +3215,47 @@ void Locker::caps_tick()
 {
   utime_t now = ceph_clock_now(g_ceph_context);
 
+  dout(20) << __func__ << " " << revoking_caps.size() << " revoking caps" << dendl;
+
   for (xlist<Capability*>::iterator p = revoking_caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
 
+
     utime_t age = now - cap->get_last_revoke_stamp();
-    if (age <= g_conf->mds_revoke_cap_timeout)
+    dout(20) << __func__ << " age = " << age << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+    if (age <= g_conf->mds_revoke_cap_timeout) {
+      dout(20) << __func__ << " age below timeout " << g_conf->mds_revoke_cap_timeout << dendl;
       break;
+    }
     // exponential backoff of warning intervals
     if (age > g_conf->mds_revoke_cap_timeout * (1 << cap->get_num_revoke_warnings())) {
       cap->inc_num_revoke_warnings();
       stringstream ss;
-      ss << "client." << cap->get_client() << " isn't responding to MClientCaps(revoke), ino "
+      ss << "client." << cap->get_client() << " isn't responding to mclientcaps(revoke), ino "
 	 << cap->get_inode()->ino() << " pending " << ccap_string(cap->pending())
 	 << " issued " << ccap_string(cap->issued()) << ", sent " << age << " seconds ago\n";
       mds->clog->warn() << ss.str();
+      dout(20) << __func__ << " " << ss.str() << dendl;
+    } else {
+      dout(20) << __func__ << " silencing log message (backoff) for " << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+    }
+  }
+}
+
+void Locker::get_late_cap_releases(std::list<const Capability*> *late_caps) const
+{
+  assert(late_caps != NULL);
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+
+  for (xlist<Capability*>::const_iterator p = revoking_caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+
+    utime_t age = now - cap->get_last_revoke_stamp();
+    if (age <= g_conf->mds_revoke_cap_timeout) {
+      break;
+    } else {
+      late_caps->push_back(cap);
     }
   }
 }
