@@ -286,7 +286,7 @@ public:
   void clear_new() { state &= ~STATE_NEW; }
 
   CInode *get_inode() { return inode; }
-  client_t get_client() { return client; }
+  client_t get_client() const { return client; }
 
   // caps this client wants to hold
   int wanted() { return _wanted; }
