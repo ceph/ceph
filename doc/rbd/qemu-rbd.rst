@@ -33,6 +33,34 @@ QEMU, see  `QEMU Open Source Processor Emulator`_. For QEMU documentation, see
    running Ceph cluster.
 
 
+Usage
+=====
+
+The QEMU command line expects you to specify the pool name and image name. You
+may also specify a snapshot name. 
+
+QEMU will assume that the Ceph configuration file resides in the default
+location (e.g., ``/etc/ceph/$cluster.conf``) and that you are executing
+commands as the default ``client.admin`` user unless you expressly specify
+another Ceph configuration file path or another user. When specifying a user,
+QEMU uses the ``ID`` rather than the full ``TYPE:ID``. See `User Management -
+User`_ for details. Do not prepend the client type (i.e., ``client.``) to the
+beginning of the user  ID, or you will receive an authentication error. You
+should have the key for the ``admin`` user or the key of another user you
+specify with the ``:id={user}`` option in a keyring file stored in default path
+(i.e., ``/etc/ceph`` or the local directory with appropriate file ownership and
+permissions. Usage takes the following form::
+
+	qemu-img {command} [options] rbd:{pool-name}/{image-name}[@snapshot-name][:option1=value1][:option2=value2...]
+
+For example, specifying the ``id`` and ``conf`` options might look like the following:: 
+
+	qemu-img {command} [options] rbd:glance-pool/maipo:id=glance:conf=/etc/ceph/ceph.conf
+
+.. tip:: Configuration values containing ``:``, ``@``, or ``=`` can be escaped with a
+         leading ``\`` character.
+
+
 Creating Images with QEMU
 =========================
 
@@ -187,3 +215,4 @@ QEMU command line settings override the Ceph configuration file settings.
 .. _RBD Cache: ../rbd-config-ref/
 .. _Snapshots: ../rbd-snapshot/
 .. _Installation: ../../install
+.. _User Management - User: ../../rados/operations/user-management#user
