@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
+#include <sys/utsname.h>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -1611,6 +1612,23 @@ MetaSession *Client::_get_or_open_mds_session(int mds)
   return _open_mds_session(mds);
 }
 
+/**
+ * Populate a map of strings with client-identifying metadata,
+ * such as the hostname.
+ */
+void Client::get_session_metadata(std::map<std::string, std::string> *meta) const
+{
+  // Hostname
+  struct utsname u;
+  int r = uname(&u);
+  if (r >= 0) {
+    (*meta)["hostname"] = u.nodename;
+    ldout(cct, 20) << __func__ << " read hostname '" << u.nodename << "'" << dendl;
+  } else {
+    ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
+  }
+}
+
 MetaSession *Client::_open_mds_session(int mds)
 {
   ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
@@ -1622,7 +1640,9 @@ MetaSession *Client::_open_mds_session(int mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
-  session->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN));
+  MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
+  get_session_metadata(&m->client_meta);
+  session->con->send_message(m);
   return session;
 }
 
