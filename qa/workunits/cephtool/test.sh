@@ -262,7 +262,6 @@ function test_tiering()
   ceph osd pool delete basepoolA basepoolA --yes-i-really-really-mean-it
 }
 
-
 function test_auth()
 {
   ceph auth add client.xx mon allow osd "allow *"
@@ -287,6 +286,67 @@ function test_auth()
   ceph auth del client.xx
 }
 
+function test_auth_profiles()
+{
+  ceph auth add client.xx-profile-ro mon 'allow profile read-only'
+  ceph auth add client.xx-profile-rw mon 'allow profile read-write'
+  ceph auth add client.xx-profile-rd mon 'allow profile role-definer'
+
+  ceph auth export > client.xx.keyring
+
+  # read-only is allowed all read-only commands (auth excluded)
+  ceph -n client.xx-profile-ro -k client.xx.keyring status
+  ceph -n client.xx-profile-ro -k client.xx.keyring osd dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring pg dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring mon dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring mds dump
+  # read-only gets access denied for rw commands or auth commands
+  ceph -n client.xx-profile-ro -k client.xx.keyring log foo >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-ro -k client.xx.keyring osd set noout >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-ro -k client.xx.keyring auth list >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  # read-write is allowed for all read-write commands (except auth)
+  ceph -n client.xx-profile-rw -k client.xx.keyring status
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring pg dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring mon dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring mds dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring log foo
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd set noout
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd unset noout
+  # read-write gets access denied for auth commands
+  ceph -n client.xx-profile-rw -k client.xx.keyring auth list >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  # role-definer is allowed RWX 'auth' commands and read-only 'mon' commands
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth list
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth export
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth add client.xx-profile-foo
+  ceph -n client.xx-profile-rd -k client.xx.keyring status
+  ceph -n client.xx-profile-rd -k client.xx.keyring osd dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring pg dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  # read-only 'mon' subsystem commands are allowed
+  ceph -n client.xx-profile-rd -k client.xx.keyring mon dump
+  # but read-write 'mon' commands are not
+  ceph -n client.xx-profile-rd -k client.xx.keyring mon add foo 1.1.1.1 >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring mds dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring log foo >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring osd set noout >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-ro
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rw
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rd
+  rm -f client.xx.keyring
+}
 
 function test_mon_misc()
 {
@@ -1046,6 +1106,7 @@ TESTS=(
   mon_injectargs_SI
   tiering
   auth
+  auth_profiles
   mon_misc
   mon_mds
   mon_mon
