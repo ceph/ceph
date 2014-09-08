@@ -1,23 +1,7 @@
-v0.85
+v0.86
 -----
 
-* The client-side caching for librbd is now enabled by default (rbd
-  cache = true).  A safety option (rbd cache writethrough until flush
-  = true) is also enabled so that writeback caching is not used until
-  the library observes a 'flush' command, indicating that the librbd
-  users is passing that operation through from the guest VM.  This
-  avoids potential data loss when used with older versions of qemu
-  that do not support flush.
 
-    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
-    leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
-    leveldb_block_size        = 64*1024       = 65536     // 64KB
-    leveldb_compression       = false
-    leveldb_log               = ""
 
-  OSDs will still maintain the following osd-specific defaults:
-
-    leveldb_log               = ""
-
-v0.86
+v0.87
 -----
