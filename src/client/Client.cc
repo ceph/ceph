@@ -3183,6 +3183,12 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
+          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+            // Only issue one of these per DN for inodes in root: handle
+            // others more efficiently by calling for root-child DNs at
+            // the end of this function.
+            _schedule_invalidate_dentry_callback(dn, true);
+          }
 	  trim_dentry(dn);
 
         } else {
