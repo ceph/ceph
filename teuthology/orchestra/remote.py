@@ -268,6 +268,18 @@ class Remote(object):
             self._host_key = ' '.join((key.get_name(), key.get_base64()))
         return self._host_key
 
+    @property
+    def inventory_info(self):
+        node = dict()
+        node['name'] = self.hostname
+        node['user'] = self.user
+        node['arch'] = self.arch
+        node['os_type'] = self.distro.name
+        node['os_version'] = self.distro.release
+        node['ssh_pub_key'] = self.host_key
+        node['up'] = True
+        return node
+
 
 class Distribution(object):
     """
