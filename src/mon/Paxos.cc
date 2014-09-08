@@ -1424,16 +1424,22 @@ void Paxos::dispatch(PaxosServiceMessage *m)
 
 bool Paxos::is_readable(version_t v)
 {
-  dout(1) << "is_readable now=" << ceph_clock_now(g_ceph_context) << " lease_expire=" << lease_expire
-	  << " has v" << v << " lc " << last_committed << dendl;
+  bool ret;
   if (v > last_committed)
-    return false;
-  return 
-    (mon->is_peon() || mon->is_leader()) &&
-    (is_active() || is_updating() || is_writing()) &&
-    last_committed > 0 &&           // must have a value
-    (mon->get_quorum().size() == 1 ||  // alone, or
-     is_lease_valid()); // have lease
+    ret = false;
+  else
+    ret =
+      (mon->is_peon() || mon->is_leader()) &&
+      (is_active() || is_updating() || is_writing()) &&
+      last_committed > 0 &&           // must have a value
+      (mon->get_quorum().size() == 1 ||  // alone, or
+       is_lease_valid()); // have lease
+  dout(5) << __func__ << " = " << (int)ret
+	  << " - now=" << ceph_clock_now(g_ceph_context)
+	  << " lease_expire=" << lease_expire
+	  << " has v" << v << " lc " << last_committed
+	  << dendl;
+  return ret;
 }
 
 bool Paxos::read(version_t v, bufferlist &bl)
