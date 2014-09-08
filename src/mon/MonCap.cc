@@ -174,6 +174,23 @@ void MonCapGrant::expand_profile(entity_name_t name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R));
     profile_grants.push_back(MonCapGrant("pg", MON_CAP_R));
   }
+
+  if (profile == "read-only") {
+    // grants READ-ONLY caps monitor-wide
+    // 'auth' requires MON_CAP_X even for RO, which we do not grant here.
+    profile_grants.push_back(mon_rwxa_t(MON_CAP_R));
+  }
+
+  if (profile == "read-write") {
+    // grants READ-WRITE caps monitor-wide
+    // 'auth' requires MON_CAP_X for all operations, which we do not grant.
+    profile_grants.push_back(mon_rwxa_t(MON_CAP_R | MON_CAP_W));
+  }
+
+  if (profile == "role-definer") {
+    // grants ALL caps to the auth subsystem and nothing else.
+    profile_grants.push_back(MonCapGrant("auth", MON_CAP_ALL));
+  }
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
