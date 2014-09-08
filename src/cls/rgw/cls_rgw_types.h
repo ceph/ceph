@@ -244,7 +244,6 @@ WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
 
 #define RGW_BUCKET_DIRENT_FLAG_OLH         0x1
-#define RGW_BUCKET_DIRENT_FLAG_OLH_PENDING 0x2
 
 struct rgw_bucket_dir_entry {
   cls_rgw_obj_key key;
@@ -272,6 +271,7 @@ struct rgw_bucket_dir_entry {
     ::encode_packed_val(index_ver, bl);
     ::encode(tag, bl);
     ::encode(key.instance, bl);
+    ::encode(flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -303,11 +303,80 @@ struct rgw_bucket_dir_entry {
   }
 
   bool is_olh() { return (flags & RGW_BUCKET_DIRENT_FLAG_OLH) != 0; }
-  bool is_olh_pending() { return (flags & RGW_BUCKET_DIRENT_FLAG_OLH_PENDING) != 0; }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
+
+
+enum OLHLogOp {
+  CLS_RGW_OLH_OP_LINK_OLH = 1,
+  CLS_RGW_OLH_OP_REMOVE_INSTANCE = 2,
+};
+
+struct rgw_bucket_olh_log_entry {
+  uint64_t epoch;
+  OLHLogOp op;
+  string op_tag;
+  cls_rgw_obj_key key;
+  bool delete_marker;
+
+  rgw_bucket_olh_log_entry() : delete_marker(false) {}
+
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(epoch, bl);
+    ::encode((__u8)op, bl);
+    ::encode(op_tag, bl);
+    ::encode(key, bl);
+    ::encode(delete_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(epoch, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (OLHLogOp)c;
+    ::decode(op_tag, bl);
+    ::decode(key, bl);
+    ::decode(delete_marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
+
+struct rgw_bucket_olh_entry {
+  cls_rgw_obj_key key;
+  bool exists;
+  uint64_t epoch;
+  map<uint64_t, struct rgw_bucket_olh_log_entry> pending_log;
+  string tag;
+
+  rgw_bucket_olh_entry() : exists(false), epoch(0) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(key, bl);
+    ::encode(exists, bl);
+    ::encode(epoch, bl);
+    ::encode(pending_log, bl);
+    ::encode(tag, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(key, bl);
+    ::decode(exists, bl);
+    ::decode(epoch, bl);
+    ::decode(pending_log, bl);
+    ::decode(tag, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
 struct rgw_bi_log_entry {
   string id;
