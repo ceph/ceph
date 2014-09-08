@@ -253,53 +253,86 @@ void Beacon::notify_health(MDS const *mds)
 
   // Detect MDS_HEALTH_TRIM condition
   // Arbitrary factor of 2, indicates MDS is not trimming promptly
-  if (mds->mdlog->get_num_segments() > (size_t)(g_conf->mds_log_max_segments * 2)) {
-    std::ostringstream oss;
-    oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
-      << "/" << g_conf->mds_log_max_segments << ")";
+  {
+    if (mds->mdlog->get_num_segments() > (size_t)(g_conf->mds_log_max_segments * 2)) {
+      std::ostringstream oss;
+      oss << "Behind on trimming (" << mds->mdlog->get_num_segments()
+        << "/" << g_conf->mds_log_max_segments << ")";
 
-    MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
-    m.metadata["num_segments"] = mds->mdlog->get_num_segments();
-    m.metadata["max_segments"] = g_conf->mds_log_max_segments;
-    health.metrics.push_back(m);
+      MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, oss.str());
+      m.metadata["num_segments"] = mds->mdlog->get_num_segments();
+      m.metadata["max_segments"] = g_conf->mds_log_max_segments;
+      health.metrics.push_back(m);
+    }
   }
 
   // Detect clients failing to respond to modifications to capabilities in
   // CLIENT_CAPS messages.
-  std::list<client_t> late_clients;
-  mds->locker->get_late_revoking_clients(&late_clients);
-  for (std::list<client_t>::iterator i = late_clients.begin();
-          i != late_clients.end(); ++i) {
-    std::ostringstream oss;
-    oss << "client." << *i << " failing to respond to capability release";
-    MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
-    m.metadata["client_id"] = stringify(i->v);
-    health.metrics.push_back(m);
+  {
+
+    std::list<client_t> late_clients;
+    mds->locker->get_late_revoking_clients(&late_clients);
+    std::list<MDSHealthMetric> late_cap_metrics;
+
+    for (std::list<client_t>::iterator i = late_clients.begin(); i != late_clients.end(); ++i) {
+      std::ostringstream oss;
+      oss << "client." << *i << " failing to respond to capability release";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
+      m.metadata["client_id"] = stringify(i->v);
+      late_cap_metrics.push_back(m);
+    }
+
+    if (late_cap_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+      health.metrics.splice(health.metrics.end(), late_cap_metrics);
+    } else {
+      std::ostringstream oss;
+      oss << "Many clients (" << late_cap_metrics.size() << ") failing to respond to"
+          << "capability release";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE_MANY, HEALTH_WARN, oss.str());
+      m.metadata["client_count"] = late_cap_metrics.size();
+      health.metrics.push_back(m);
+      late_cap_metrics.clear();
+    }
   }
 
-  // Detect clients failing to generate cap releases from SESSION_RECALL messages
-  // May be due to buggy client or resource-hogging application.
-  set<Session*> sessions;
-  mds->sessionmap.get_client_session_set(sessions);
-  utime_t cutoff = ceph_clock_now(g_ceph_context);
-  cutoff -= g_conf->mds_recall_state_timeout;
+  // Detect clients failing to generate cap releases from CEPH_SESSION_RECALL_STATE
+  // messages. May be due to buggy client or resource-hogging application.
+  {
+    set<Session*> sessions;
+    mds->sessionmap.get_client_session_set(sessions);
+    utime_t cutoff = ceph_clock_now(g_ceph_context);
+    cutoff -= g_conf->mds_recall_state_timeout;
 
-  for (set<Session*>::iterator i = sessions.begin(); i != sessions.end(); ++i) {
-    Session *session = *i;
-    if (!session->recalled_at.is_zero()) {
-      dout(20) << "Session servicing RECALL " << session->info.inst
-        << ": " << session->recalled_at << " " << session->recall_release_count
-        << "/" << session->recall_count << dendl;
-      if (session->recalled_at < cutoff) {
-        dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
-        std::ostringstream oss;
+    std::list<MDSHealthMetric> late_recall_metrics;
+    for (set<Session*>::iterator i = sessions.begin(); i != sessions.end(); ++i) {
+      Session *session = *i;
+      if (!session->recalled_at.is_zero()) {
+        dout(20) << "Session servicing RECALL " << session->info.inst
+          << ": " << session->recalled_at << " " << session->recall_release_count
+          << "/" << session->recall_count << dendl;
+        if (session->recalled_at < cutoff) {
+          dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
+          std::ostringstream oss;
         oss << "Client " << session->info.inst.name.num() << " failing to respond to cache pressure";
-        MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
-        m.metadata["client_id"] = session->info.inst.name.num();
-        health.metrics.push_back(m);
-      } else {
-        dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
+          MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
+          m.metadata["client_id"] = session->info.inst.name.num();
+          late_recall_metrics.push_back(m);
+        } else {
+          dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
+        }
       }
+    }
+
+    if (late_recall_metrics.size() <= (size_t)g_conf->mds_health_summarize_threshold) {
+      health.metrics.splice(health.metrics.end(), late_recall_metrics);
+    } else {
+      std::ostringstream oss;
+      oss << "Many clients (" << late_recall_metrics.size() << ") failing to respond to"
+          << "cache pressure";
+      MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL_MANY, HEALTH_WARN, oss.str());
+      m.metadata["client_count"] = late_recall_metrics.size();
+      health.metrics.push_back(m);
+      late_recall_metrics.clear();
     }
   }
 }
