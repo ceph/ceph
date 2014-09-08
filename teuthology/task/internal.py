@@ -15,6 +15,7 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc
 from teuthology import provision
+from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
 
@@ -225,6 +226,23 @@ def connect(ctx, config):
     else:
         for rem in remotes:
             ctx.cluster.add(rem, rem.name)
+
+
+@contextlib.contextmanager
+def push_inventory(ctx, config):
+    if not teuth_config.lock_server:
+        yield
+        return
+
+    def push():
+        for rem in ctx.cluster.remotes.keys():
+            info = rem.inventory_info
+            lock.update_inventory(info)
+    try:
+        push()
+        yield
+    except Exception:
+        log.exception("Error pushing inventory")
 
 
 def serialize_remote_roles(ctx, config):
