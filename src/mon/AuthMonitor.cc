@@ -859,6 +859,11 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
 
+    if (!valid_caps(caps_vec, &ss)) {
+      err = -EINVAL;
+      goto done;
+    }
+
     // do we have it?
     EntityAuth entity_auth;
     if (mon->key_server.get_auth(entity, entity_auth)) {
@@ -949,6 +954,11 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
     if (!mon->key_server.get_auth(auth_inc.name, auth_inc.auth)) {
       ss << "couldn't find entry " << auth_inc.name;
       err = -ENOENT;
+      goto done;
+    }
+
+    if (!valid_caps(caps_vec, &ss)) {
+      err = -EINVAL;
       goto done;
     }
 
