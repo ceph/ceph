@@ -155,6 +155,7 @@ def main(ctx):
         {'internal.save_config': None},
         {'internal.check_lock': None},
         {'internal.connect': None},
+        {'internal.push_inventory': None},
         {'internal.serialize_remote_roles': None},
         {'internal.check_conflict': None},
     ])
