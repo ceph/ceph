@@ -110,20 +110,22 @@ Where:
 
 ``[crush-ruleset-name]``
 
-:Description: The name of the crush ruleset for this pool. If specified ruleset doesn't
-              exists, the creation of **replicated** pool will fail with -ENOENT. But 
-              **replicated** pool will create a new erasure ruleset with specified name.
+:Description: The name of the crush ruleset for this pool. If specified ruleset
+              doesn't exist, the creation of **replicated** pool will fail with
+              -ENOENT. But **replicated** pool will create a new erasure 
+              ruleset with specified name.
 
 :Type: String
 :Required: No. 
 :Default: "erasure-code" for **erasure pool**. Pick up Ceph configuraion variable
-**osd_pool_default_crush_replicated_ruleset** for **replicated** pool.
+          **osd_pool_default_crush_replicated_ruleset** for **replicated** pool.
+
 
 ``[erasure-code-profile=profile]``
 
-:Description: For **erasure** pools only. Use the erasure code
-              **profile**. It must be an existing profile as
-              defined by **osd erasure-code-profile set**.
+:Description: For **erasure** pools only. Use the erasure code **profile**. It 
+              must be an existing profile as defined by 
+              **osd erasure-code-profile set**.
 
 :Type: String
 :Required: No. 
