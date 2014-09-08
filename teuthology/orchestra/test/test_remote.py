@@ -59,6 +59,42 @@ class TestRemote(object):
         assert got.remote is r
 
     @fudge.with_fakes
+    def test_hostname(self):
+        fudge.clear_expectations()
+        ssh = fudge.Fake('SSHConnection')
+        ssh.expects('get_transport').returns_fake().expects('getpeername')\
+            .returns(('name', 22))
+        run = fudge.Fake('run')
+        args = [
+            'hostname',
+            '--fqdn',
+            ]
+        stdout = StringIO('test_hostname')
+        print repr(stdout)
+        stdout.seek(0)
+        print repr(stdout)
+        ret = RemoteProcess(
+            client=ssh,
+            args='fakey',
+            )
+        # status = self._stdout_buf.channel.recv_exit_status()
+        ret._stdout_buf = fudge.Fake()
+        ret._stdout_buf.channel = fudge.Fake()
+        ret._stdout_buf.channel.expects('recv_exit_status').returns(0)
+        ret.stdout = stdout
+        r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
+        run.expects_call().with_args(
+            client=ssh,
+            args=args,
+            stdout=fudge.inspector.arg.passes_test(
+                lambda v: isinstance(v, OutputType)),
+            name=r.shortname,
+            ).returns(ret)
+        # monkey patch ook ook
+        r._runner = run
+        assert r.hostname == 'test_hostname'
+
+    @fudge.with_fakes
     def test_arch(self):
         fudge.clear_expectations()
         ssh = fudge.Fake('SSHConnection')

@@ -37,13 +37,13 @@ class Remote(object):
                  host_key=None, keep_alive=True):
         self.name = name
         if '@' in name:
-            (self.user, self.hostname) = name.split('@')
+            (self.user, hostname) = name.split('@')
         else:
             # os.getlogin() doesn't work on non-login shells. The following
             # should work on any unix system
             self.user = pwd.getpwuid(os.getuid()).pw_name
-            self.hostname = name
-        self._shortname = shortname
+            hostname = name
+        self._shortname = shortname or hostname.split('.')[0]
         self.host_key = host_key
         self.keep_alive = keep_alive
         self.console = console
@@ -70,11 +70,18 @@ class Remote(object):
             return False
 
     @property
+    def hostname(self):
+        if not hasattr(self, '_hostname'):
+            proc = self.run(args=['hostname', '--fqdn'], stdout=StringIO())
+            proc.wait()
+            self._hostname = proc.stdout.getvalue().strip()
+        return self._hostname
+
+    @property
     def shortname(self):
-        name = self._shortname
-        if name is None:
-            name = self.hostname.split('.')[0]
-        return name
+        if self._shortname is None:
+            self._shortname = self.hostname.split('.')[0]
+        return self._shortname
 
     @property
     def is_online(self):
