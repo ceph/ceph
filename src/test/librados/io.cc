@@ -25,6 +25,58 @@ TEST_F(LibRadosIo, SimpleWrite) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 }
 
+TEST_F(LibRadosIo, ReadTimeout) {
+  char buf[128];
+  memset(buf, 'a', sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+
+  {
+    // set up a second client
+    rados_t cluster;
+    rados_ioctx_t ioctx;
+    rados_create(&cluster, "admin");
+    rados_conf_read_file(cluster, NULL);
+    rados_conf_parse_env(cluster, NULL);
+    rados_conf_set(cluster, "rados_osd_op_timeout", "0.00001"); // use any small value that will result in a timeout
+    rados_connect(cluster);
+    rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+    rados_ioctx_set_namespace(ioctx, nspace.c_str());
+
+    // then we show that the buffer is changed after rados_read returned
+    // with a timeout
+    for (int i=0; i<5; i++) {
+      char buf2[sizeof(buf)];
+      memset(buf2, 0, sizeof(buf2));
+      int err = rados_read(ioctx, "foo", buf2, sizeof(buf2), 0);
+      if (err == -110) {
+	int startIndex = 0;
+	// find the index until which librados already read the object before the timeout occurred
+	for (unsigned b=0; b<sizeof(buf); b++) {
+	  if (buf2[b] != buf[b]) {
+	    startIndex = b;
+	    break;
+	  }
+	}
+
+	// wait some time to give librados a change to do something
+	sleep(1);
+
+	// then check if the buffer was changed after the call
+	if (buf2[startIndex] == 'a') {
+	  printf("byte at index %d was changed after the timeout to %d\n",
+		 startIndex, (int)buf[startIndex]);
+	  ASSERT_TRUE(0);
+	  break;
+	}
+      } else {
+	printf("no timeout :/\n");
+      }
+    }
+    rados_ioctx_destroy(ioctx);
+    rados_shutdown(cluster);
+  }
+}
+
 TEST_F(LibRadosIoPP, SimpleWritePP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
