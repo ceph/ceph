@@ -377,6 +377,33 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
     return True
 
 
+def update_inventory(node_dict):
+    """
+    Like update_lock(), but takes a dict and doesn't try to do anything smart
+    by itself
+    """
+    name = node_dict.get('name')
+    if not name:
+        raise ValueError("must specify name")
+    if not config.lock_server:
+        return
+    uri = os.path.join(config.lock_server, 'nodes', name, '')
+    log.info("Updating %s on lock server", name)
+    response = requests.put(
+        uri,
+        json.dumps(node_dict))
+    if response.status_code == 404:
+        log.info("Creating new node %s on lock server", name)
+        uri = os.path.join(config.lock_server, 'nodes', '')
+        response = requests.post(
+            uri,
+            json.dumps(node_dict))
+    if not response.ok:
+        log.error("Node update/creation failed for %s: %s",
+                  name, response.text)
+    return response.ok
+
+
 def ssh_keyscan(hostnames):
     """
     Fetch the SSH public key of one or more hosts
