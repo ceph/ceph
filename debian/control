@@ -40,7 +40,7 @@ Build-Depends: autoconf,
                uuid-dev,
                uuid-runtime,
                xfslibs-dev,
-               yasm
+               yasm [amd64]
 Standards-Version: 3.9.3
 
 Package: ceph
