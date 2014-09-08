@@ -428,7 +428,7 @@ def updatekeys(ctx):
 
 
 def do_update_keys(machines):
-    reference = list_locks(keyed_by_name=True, up=True)
+    reference = list_locks(keyed_by_name=True)
     if not machines:
         machines = reference.keys()
     keys_dict = ssh_keyscan(machines)
