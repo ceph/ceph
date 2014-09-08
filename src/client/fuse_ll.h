@@ -17,9 +17,12 @@ public:
   CephFuse(Client *c, int fd);
   ~CephFuse();
   int init(int argc, const char *argv[]);
+  int start();
+  int mount();
   int loop();
   void finalize();
   class Handle;
+  std::string get_mount_point() const;
 private:
   CephFuse::Handle *_handle;
 };
