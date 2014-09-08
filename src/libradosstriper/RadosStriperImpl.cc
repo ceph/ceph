@@ -393,9 +393,8 @@ static void rados_req_read_safe(rados_completion_t c, void *arg)
   // ENOENT means that we are dealing with a sparse file. This is fine,
   // data (0s) will be created on the fly by the rados_req_read_complete method
   if (rc == -ENOENT) rc = 0;
-  librados::AioCompletion *comp = reinterpret_cast<librados::AioCompletion*>(c);
   libradosstriper::MultiAioCompletionImpl *multiAioComp = data->m_multiAioCompl;
-  if (0 == comp->pc->ack) delete data;
+  delete data;
   multiAioComp->safe_request(rc);
 }
 
@@ -428,7 +427,7 @@ static void rados_req_read_complete(rados_completion_t c, void *arg)
   }
   librados::AioCompletion *comp = reinterpret_cast<librados::AioCompletion*>(c);
   libradosstriper::MultiAioCompletionImpl * multiAioComp = data->m_multiAioCompl;
-  if (0 == comp->pc->safe) delete data;
+  if (comp->pc->callback_safe == NULL) delete data;
   multiAioComp->complete_request(rc);
 }
 
