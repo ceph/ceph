@@ -102,7 +102,7 @@ def destroy_if_vm(ctx, machine_name):
     Return False only on vm downburst failures.
     """
     status_info = get_status(machine_name)
-    if not status_info.get('is_vm', False):
+    if not status_info or not status_info.get('is_vm', False):
         return True
     phys_host = decanonicalize_hostname(status_info['vm_host']['name'])
     destroyMe = decanonicalize_hostname(machine_name)
