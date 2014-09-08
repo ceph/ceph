@@ -36,6 +36,7 @@ class TestClientRecovery(CephFSTestCase):
     def setUp(self):
         self.fs.clear_firewall()
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_b.mount()
         self.mount_a.wait_until_mounted()
