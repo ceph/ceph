@@ -18,22 +18,22 @@ coming up in the next month.
 Upgrading
 ---------
 
-* The *_kb perf counters on the monitor have been removed.  These are
-  replaced with a new set of *_bytes counters (e.g., cluster_osd_kb is
-  replaced by cluster_osd_bytes).
+* The ``*_kb perf`` counters on the monitor have been removed.  These are
+  replaced with a new set of ``*_bytes`` counters (e.g., ``cluster_osd_kb`` is
+  replaced by ``cluster_osd_bytes``).
 
-* The rd_kb and wr_kb fields in the JSON dumps for pool stats (accessed via
-  the 'ceph df detail -f json-pretty' and related commands) have been replaced
-  with corresponding *_bytes fields.  Similarly, the 'total_space', 'total_used',
-  and 'total_avail' fields are replaced with 'total_bytes', 'total_used_bytes',
-  and 'total_avail_bytes' fields.
-
-* The 'rados df --format=json' output 'read_bytes' and 'write_bytes'
+* The ``rd_kb`` and ``wr_kb`` fields in the JSON dumps for pool stats (accessed
+  via the ``ceph df detail -f json-pretty`` and related commands) have been 
+  replaced with corresponding ``*_bytes`` fields.  Similarly, the 
+  ``total_space``, ``total_used``, and ``total_avail`` fields are replaced with 
+  ``total_bytes``, ``total_used_bytes``,  and ``total_avail_bytes`` fields.
+  
+* The ``rados df --format=json`` output ``read_bytes`` and ``write_bytes``
   fields were incorrectly reporting ops; this is now fixed.
 
-* The 'rados df --format=json' output previously included 'read_kb' and
-  'write_kb' fields; these have been removed.  Please use 'read_bytes' and
-  'write_bytes' instead (and divide by 1024 if appropriate).
+* The ``rados df --format=json`` output previously included ``read_kb`` and
+  ``write_kb`` fields; these have been removed.  Please use ``read_bytes`` and
+  ``write_bytes`` instead (and divide by 1024 if appropriate).
 
 Notable Changes
 ---------------
@@ -126,7 +126,7 @@ Upgrading
   affects developers and testers only.
 
 * mon-specific and osd-specific leveldb options have been removed.
-  From this point onward users should use the `leveldb_*' generic
+  From this point onward users should use the `leveldb_*` generic
   options and add the options in the appropriate sections of their
   configuration files.  Monitors will still maintain the following
   monitor-specific defaults:
@@ -516,7 +516,7 @@ Upgrade Sequencing
 
 * If your existing cluster is running a version older than v0.67
   Dumpling, please first upgrade to the latest Dumpling release before
-  upgrading to v0.80 Firefly.  Please refer to the :ref:`Dumpling upgrade`
+  upgrading to v0.80 Firefly.  Please refer to the `Dumpling upgrade`_
   documentation.
 
 * We recommand adding the following to the [mon] section of your
@@ -2675,10 +2675,11 @@ headline features for this release include:
 
 * Object namespaces in librados.
 
-Upgrade Sequencing
-------------------
 
 .. _Dumpling upgrade:
+
+Upgrade Sequencing
+------------------
 
 It is possible to do a rolling upgrade from Cuttlefish to Dumpling.
 
