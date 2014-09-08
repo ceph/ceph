@@ -44,14 +44,14 @@ class Remote(object):
             self.user = pwd.getpwuid(os.getuid()).pw_name
             hostname = name
         self._shortname = shortname or hostname.split('.')[0]
-        self.host_key = host_key
+        self._host_key = host_key
         self.keep_alive = keep_alive
         self.console = console
         self.ssh = ssh or self.connect()
 
     def connect(self):
         self.ssh = connection.connect(user_at_host=self.name,
-                                      host_key=self.host_key,
+                                      host_key=self._host_key,
                                       keep_alive=self.keep_alive)
         return self.ssh
 
@@ -259,6 +259,14 @@ class Remote(object):
             proc.wait()
             self._arch = proc.stdout.getvalue().strip()
         return self._arch
+
+    @property
+    def host_key(self):
+        if not self._host_key:
+            trans = self.ssh.get_transport()
+            key = trans.get_remote_server_key()
+            self._host_key = ' '.join((key.get_name(), key.get_base64()))
+        return self._host_key
 
 
 class Distribution(object):

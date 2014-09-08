@@ -70,9 +70,7 @@ class TestRemote(object):
             '--fqdn',
             ]
         stdout = StringIO('test_hostname')
-        print repr(stdout)
         stdout.seek(0)
-        print repr(stdout)
         ret = RemoteProcess(
             client=ssh,
             args='fakey',
@@ -127,6 +125,17 @@ class TestRemote(object):
         # monkey patch ook ook
         r._runner = run
         assert r.arch == 'test_arch'
+
+    @fudge.with_fakes
+    def test_host_key(self):
+        fudge.clear_expectations()
+        ssh = fudge.Fake('SSHConnection')
+        key = ssh.expects('get_transport').returns_fake().expects(
+            'get_remote_server_key').returns_fake()
+        key.expects('get_name').returns('key_type')
+        key.expects('get_base64').returns('test ssh key')
+        r = remote.Remote(name='jdoe@xyzzy.example.com', ssh=ssh)
+        assert r.host_key == 'key_type test ssh key'
 
 
 class TestDistribution(object):
