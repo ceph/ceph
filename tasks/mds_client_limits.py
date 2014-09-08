@@ -131,7 +131,7 @@ class TestClientLimits(CephFSTestCase):
         self.fs.set_ceph_conf('mds', 'mds cache size', cache_size)
         self.fs.mds_restart()
 
-        mount_a_client_id = self.mount_a.get_client_id()
+        mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir/mount_a" if use_subdir else "mount_a"
         open_proc = self.mount_a.open_n_background(path, open_files)
 
@@ -184,7 +184,7 @@ class TestClientLimits(CephFSTestCase):
         self.mount_a.teardown()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
-        mount_a_client_id = self.mount_a.get_client_id()
+        mount_a_client_id = self.mount_a.get_global_id()
 
         # Client A creates a file.  He will hold the write caps on the file, and later (simulated bug) fail
         # to comply with the MDSs request to release that cap
