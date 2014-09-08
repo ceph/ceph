@@ -21,21 +21,23 @@ class MClientSession : public Message {
 public:
   ceph_mds_session_head head;
 
+  std::map<std::string, std::string> client_meta;
+
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
   utime_t get_stamp() const { return utime_t(head.stamp); }
   int get_max_caps() const { return head.max_caps; }
   int get_max_leases() const { return head.max_leases; }
 
-  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION) { }
+  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, 2, 0) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION) {
+    Message(CEPH_MSG_CLIENT_SESSION, 2, 0) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION) {
+    Message(CEPH_MSG_CLIENT_SESSION, 2, 0) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
@@ -58,9 +60,13 @@ public:
   void decode_payload() { 
     bufferlist::iterator p = payload.begin();
     ::decode(head, p);
+    if (header.version >= 2) {
+      ::decode(client_meta, p);
+    }
   }
   void encode_payload(uint64_t features) { 
     ::encode(head, payload);
+    ::encode(client_meta, payload);
   }
 };
 
