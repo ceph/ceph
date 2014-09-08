@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
+#include <sys/utsname.h>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -420,6 +421,8 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+
+  populate_metadata();
 
   client_lock.Lock();
   initialized = true;
@@ -1611,6 +1614,42 @@ MetaSession *Client::_get_or_open_mds_session(int mds)
   return _open_mds_session(mds);
 }
 
+/**
+ * Populate a map of strings with client-identifying metadata,
+ * such as the hostname.  Call this once at initialization.
+ */
+void Client::populate_metadata()
+{
+  // Hostname
+  struct utsname u;
+  int r = uname(&u);
+  if (r >= 0) {
+    metadata["hostname"] = u.nodename;
+    ldout(cct, 20) << __func__ << " read hostname '" << u.nodename << "'" << dendl;
+  } else {
+    ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
+  }
+
+  // Ceph entity id (the '0' in "client.0")
+  metadata["entity_id"] = cct->_conf->name.get_id();
+}
+
+/**
+ * Optionally add or override client metadata fields.
+ */
+void Client::update_metadata(std::string const &k, std::string const &v)
+{
+  Mutex::Locker l(client_lock);
+  assert(initialized);
+
+  if (metadata.count(k)) {
+    ldout(cct, 1) << __func__ << " warning, overriding metadata field '" << k
+      << "' from '" << metadata[k] << "' to '" << v << "'" << dendl;
+  }
+
+  metadata[k] = v;
+}
+
 MetaSession *Client::_open_mds_session(int mds)
 {
   ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
@@ -1622,7 +1661,9 @@ MetaSession *Client::_open_mds_session(int mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
-  session->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN));
+  MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
+  m->client_meta = metadata;
+  session->con->send_message(m);
   return session;
 }
 
