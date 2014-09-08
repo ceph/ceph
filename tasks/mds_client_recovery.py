@@ -68,7 +68,7 @@ class TestClientRecovery(CephFSTestCase):
 
         self.assertSetEqual(
             set([l['id'] for l in ls_data]),
-            {self.mount_a.get_client_id(), self.mount_b.get_client_id()}
+            {self.mount_a.get_global_id(), self.mount_b.get_global_id()}
         )
 
     def test_restart(self):
@@ -91,7 +91,7 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_stop()
         self.fs.mds_fail()
 
-        mount_a_client_id = self.mount_a.get_client_id()
+        mount_a_client_id = self.mount_a.get_global_id()
         self.mount_a.umount_wait(force=True)
 
         self.fs.mds_restart()
@@ -130,7 +130,7 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_stop()
         self.fs.mds_fail()
 
-        mount_a_client_id = self.mount_a.get_client_id()
+        mount_a_client_id = self.mount_a.get_global_id()
         self.mount_a.umount_wait(force=True)
 
         self.fs.mds_restart()
@@ -208,7 +208,7 @@ class TestClientRecovery(CephFSTestCase):
         # Take out a write capability on a file on client A,
         # and then immediately kill it.
         cap_holder = self.mount_a.open_background()
-        mount_a_client_id = self.mount_a.get_client_id()
+        mount_a_client_id = self.mount_a.get_global_id()
 
         # Wait for the file to be visible from another client, indicating
         # that mount_a has completed its network ops
@@ -263,7 +263,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.umount_wait()
 
         # Initially our one client session should be visible
-        client_id = self.mount_a.get_client_id()
+        client_id = self.mount_a.get_global_id()
         ls_data = self._session_list()
         self.assert_session_count(1, ls_data)
         self.assertEqual(ls_data[0]['id'], client_id)
