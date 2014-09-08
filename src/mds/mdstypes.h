@@ -510,6 +510,7 @@ struct session_info_t {
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
+  std::map<std::string, std::string> client_metadata;
 
   client_t get_client() const { return client_t(inst.name.num()); }
 

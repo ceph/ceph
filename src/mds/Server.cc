@@ -224,6 +224,15 @@ void Server::handle_client_session(MClientSession *m)
     }
     assert(session->is_closed() ||
 	   session->is_closing());
+
+    session->info.client_metadata = m->client_meta;
+    dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
+      << session->info.client_metadata.size() << " metadata entries:" << dendl;
+    for (map<string, string>::iterator i = session->info.client_metadata.begin();
+        i != session->info.client_metadata.end(); ++i) {
+      dout(20) << "  " << i->first << ": " << i->second << dendl;
+    }
+
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
