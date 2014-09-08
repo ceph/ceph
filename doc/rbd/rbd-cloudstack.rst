@@ -66,7 +66,7 @@ with Ceph.
 .. note:: Raring Ringtail (13.04) will have ``libvirt`` version 0.9.13 or higher
    with RBD storage pool support enabled by default.
 
-index:: pools; CloudStack
+..index:: pools; CloudStack
 
 Create a Pool
 =============
@@ -81,18 +81,20 @@ See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-Create a CephX user
-===================
+Create a Ceph User
+==================
 
-To access the Ceph cluster we require a CephX user which has the correct credentials
-to access the ``cloudstack`` pool we just created.
-
-Although we could use ``client.admin`` for this, it's recommended to create a user
-with only access to the ``cloudstack`` pool.
+To access the Ceph cluster we require a Ceph user which has the correct
+credentials to access the ``cloudstack`` pool we just created. Although we could
+use ``client.admin`` for this, it's recommended to create a user with only
+access to the ``cloudstack`` pool. ::
 
   ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow rwx pool=cloudstack'
 
-Use the information returned by the command in the next step when adding the Primary Storage.
+Use the information returned by the command in the next step when adding the 
+Primary Storage.
+
+See `User Management`_ for additional details.
 
 Add Primary Storage
 ===================
@@ -139,3 +141,4 @@ Limitations
 .. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
 .. _Add Primary Storage (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/primary-storage-add.html
 .. _Create a New Disk Offering (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
+.. _User Management: ../../rados/operations/user-management
