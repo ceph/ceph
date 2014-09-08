@@ -1364,6 +1364,11 @@ int Objecter::op_cancel(ceph_tid_t tid, int r)
 
   ldout(cct, 10) << __func__ << " tid " << tid << dendl;
   Op *op = p->second;
+  if (op->con) {
+    ldout(cct, 20) << " revoking rx buffer for " << tid
+		   << " on " << op->con << dendl;
+    op->con->revoke_rx_buffer(tid);
+  }
   if (op->onack) {
     op->onack->complete(r);
     op->onack = NULL;
