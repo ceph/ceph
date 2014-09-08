@@ -25,6 +25,7 @@
 #include "include/radosstriper/libradosstriper.hpp"
 
 #include "librados/IoCtxImpl.h"
+#include "common/RefCountedObj.h"
 
 struct libradosstriper::RadosStriperImpl {
 
@@ -99,11 +100,14 @@ struct libradosstriper::RadosStriperImpl {
    * struct handling the data needed to pass to the call back
    * function in asynchronous read operations of a Rados File
    */
-  struct RadosReadCompletionData {
+  struct RadosReadCompletionData : RefCountedObject {
     /// constructor
     RadosReadCompletionData(MultiAioCompletionImpl *multiAioCompl,
 			    uint64_t expectedBytes,
-			    bufferlist *bl) :
+			    bufferlist *bl,
+			    CephContext *context,
+			    int n = 1) :
+      RefCountedObject(context, n),
       m_multiAioCompl(multiAioCompl), m_expectedBytes(expectedBytes), m_bl(bl) {};
     /// the multi asynch io completion object to be used
     MultiAioCompletionImpl *m_multiAioCompl;

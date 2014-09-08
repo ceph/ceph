@@ -392,10 +392,9 @@ static void rados_req_read_safe(rados_completion_t c, void *arg)
   // ENOENT means that we are dealing with a sparse file. This is fine,
   // data (0s) will be created on the fly by the rados_req_read_complete method
   if (rc == -ENOENT) rc = 0;
-  librados::AioCompletion *comp = reinterpret_cast<librados::AioCompletion*>(c);
   libradosstriper::MultiAioCompletionImpl *multiAioComp = data->m_multiAioCompl;
-  if (0 == comp->pc->ack) delete data;
   multiAioComp->safe_request(rc);
+  data->put();
 }
 
 static void rados_req_read_complete(rados_completion_t c, void *arg)
@@ -425,10 +424,9 @@ static void rados_req_read_complete(rados_completion_t c, void *arg)
     }
     rc = data->m_expectedBytes;
   }
-  librados::AioCompletion *comp = reinterpret_cast<librados::AioCompletion*>(c);
   libradosstriper::MultiAioCompletionImpl * multiAioComp = data->m_multiAioCompl;
-  if (0 == comp->pc->safe) delete data;
   multiAioComp->complete_request(rc);
+  data->put();
 }
 
 int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
@@ -481,7 +479,9 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
     }
     // read all extends of a given object in one go
     nc->add_request();
-    RadosReadCompletionData *data = new RadosReadCompletionData(nc, p->length, oid_bl);
+    // we need 2 references on data as both rados_req_read_safe and rados_req_read_complete
+    // will release one
+    RadosReadCompletionData *data = new RadosReadCompletionData(nc, p->length, oid_bl, cct(), 2);
     librados::AioCompletion *rados_completion =
       m_radosCluster.aio_create_completion(data, rados_req_read_complete, rados_req_read_safe);
     r = m_ioCtx.aio_read(p->oid.name, rados_completion, oid_bl, p->length, p->offset);
