@@ -1264,7 +1264,8 @@ void Paxos::dispatch(PaxosServiceMessage *m)
 
 bool Paxos::is_readable(version_t v)
 {
-  dout(1) << "is_readable now=" << ceph_clock_now(g_ceph_context) << " lease_expire=" << lease_expire
+  dout(5) << "is_readable now=" << ceph_clock_now(g_ceph_context)
+	  << " lease_expire=" << lease_expire
 	  << " has v" << v << " lc " << last_committed << dendl;
   if (v > last_committed)
     return false;
