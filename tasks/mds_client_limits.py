@@ -85,6 +85,7 @@ class TestClientLimits(CephFSTestCase):
 
     def setUp(self):
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
         self.mount_b.mount()
