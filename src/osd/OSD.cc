@@ -5523,10 +5523,12 @@ void OSD::ms_fast_preprocess(Message *m)
     if (m->get_type() == CEPH_MSG_OSD_MAP) {
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       Session *s = static_cast<Session*>(m->get_connection()->get_priv());
-      s->received_map_lock.Lock();
-      s->received_map_epoch = mm->get_last();
-      s->received_map_lock.Unlock();
-      s->put();
+      if (s) {
+	s->received_map_lock.Lock();
+	s->received_map_epoch = mm->get_last();
+	s->received_map_lock.Unlock();
+	s->put();
+      }
     }
   }
 }
