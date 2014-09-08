@@ -293,6 +293,11 @@ unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sharedptr_registry_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_sharedptr_registry
 
+unittest_shared_cache_SOURCES = test/common/test_shared_cache.cc
+unittest_shared_cache_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_shared_cache_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_shared_cache
+
 unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
 unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
