@@ -2775,8 +2775,11 @@ int main(int argc, const char **argv)
     cerr << "rados: you must give an action. Try --help" << std::endl;
     return 1;
   }
-  if ((strcmp(args[0], "import") == 0) || (strcmp(args[0], "export") == 0))
-    return rados_tool_sync(opts, args);
-  else
+  if ((strcmp(args[0], "import") == 0) || (strcmp(args[0], "export") == 0)) {
+    cout << "The import and export operations are not available" << std::endl;
+    exit(1);
+    //return rados_tool_sync(opts, args);
+  } else {
     return rados_tool_common(opts, args);
+  }
 }
