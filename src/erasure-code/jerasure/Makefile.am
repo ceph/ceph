@@ -50,6 +50,30 @@ endif
 
 erasure_codelib_LTLIBRARIES += libec_jerasure_generic.la
 
+libec_jerasure_neon_la_SOURCES = ${jerasure_sources}                                       \
+                                  erasure-code/jerasure/gf-complete/src/neon/gf_w4_neon.c  \
+                                  erasure-code/jerasure/gf-complete/src/neon/gf_w8_neon.c  \
+                                  erasure-code/jerasure/gf-complete/src/neon/gf_w16_neon.c \
+                                  erasure-code/jerasure/gf-complete/src/neon/gf_w32_neon.c \
+                                  erasure-code/jerasure/gf-complete/src/neon/gf_w64_neon.c
+libec_jerasure_neon_la_CFLAGS = ${AM_CFLAGS}  \
+	${ARM_NEON_FLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include
+libec_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS} \
+	${ARM_NEON_FLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include
+libec_jerasure_neon_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
+if LINUX
+libec_jerasure_neon_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
+endif
+
+if HAVE_NEON
+erasure_codelib_LTLIBRARIES += libec_jerasure_neon.la
+endif
+
 libec_jerasure_sse3_la_SOURCES = ${jerasure_sources}
 libec_jerasure_sse3_la_CFLAGS = ${AM_CFLAGS}  \
 	${INTEL_SSE_FLAGS} \
