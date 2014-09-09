@@ -80,6 +80,33 @@ new_formatter(const std::string &type)
     else
       return (Formatter *)NULL;
 }
+
+void Formatter::dump_format(const char *name, const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  dump_format_va(name, NULL, true, fmt, ap);
+  va_end(ap);
+}
+
+void Formatter:: dump_format_ns(const char *name, const char *ns, const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  dump_format_va(name, ns, true, fmt, ap);
+  va_end(ap);
+
+}
+
+
+void Formatter::dump_format_unquoted(const char *name, const char *fmt, ...)
+{
+  va_list ap;
+  va_start(ap, fmt);
+  dump_format_va(name, NULL, false, fmt, ap);
+  va_end(ap);
+}
+
 // -----------------------
 JSONFormatter::JSONFormatter(bool p)
   : m_pretty(p), m_is_pending_string(false)
@@ -243,28 +270,17 @@ std::ostream& JSONFormatter::dump_stream(const char *name)
   return m_pending_string;
 }
 
-void JSONFormatter::dump_format(const char *name, const char *fmt, ...)
+void JSONFormatter::dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  va_list ap;
-  va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
 
   print_name(name);
-  print_quoted_string(buf);
-}
-
-void JSONFormatter::dump_format_unquoted(const char *name, const char *fmt, ...)
-{
-  char buf[LARGE_SIZE];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
-
-  print_name(name);
-  m_ss << buf;
+  if (quoted) {
+    print_quoted_string(buf);
+  } else {
+    m_ss << buf;
+  }
 }
 
 int JSONFormatter::get_len() const
@@ -402,32 +418,19 @@ std::ostream& XMLFormatter::dump_stream(const char *name)
   return m_pending_string;
 }
 
-void XMLFormatter::dump_format(const char *name, const char *fmt, ...)
+void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  va_list ap;
-  va_start(ap, fmt);
   vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
 
   std::string e(name);
   print_spaces();
-  m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
-  if (m_pretty)
-    m_ss << "\n";
-}
+  if (ns) {
+    m_ss << "<" << e  << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
+  } else {
+    m_ss << "<" << e << ">" << escape_xml_str(buf) << "</" << e << ">";
+  }
 
-void XMLFormatter::dump_format_unquoted(const char *name, const char *fmt, ...)
-{
-  char buf[LARGE_SIZE];
-  va_list ap;
-  va_start(ap, fmt);
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  va_end(ap);
-
-  std::string e(name);
-  print_spaces();
-  m_ss << "<" << e << ">" << buf << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
 }

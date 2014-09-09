@@ -312,7 +312,8 @@ public:
   SharedPtrRegistry<spg_t, DeletingState> deleting_pgs;
   const int whoami;
   ObjectStore *&store;
-  LogClient &clog;
+  LogClient &log_client;
+  LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
   hobject_t infos_oid;
 private:
@@ -649,23 +650,8 @@ public:
 
 
   // -- Objecter, for teiring reads/writes from/to other OSDs --
-  Mutex objecter_lock;
-  SafeTimer objecter_timer;
-  OSDMap objecter_osdmap;
   Objecter *objecter;
   Finisher objecter_finisher;
-  struct ObjecterDispatcher : public Dispatcher {
-    OSDService *osd;
-    bool ms_dispatch(Message *m);
-    bool ms_handle_reset(Connection *con);
-    void ms_handle_remote_reset(Connection *con) {}
-    void ms_handle_connect(Connection *con);
-    bool ms_get_authorizer(int dest_type,
-			   AuthAuthorizer **authorizer,
-			   bool force_new);
-    ObjecterDispatcher(OSDService *o) : Dispatcher(cct), osd(o) {}
-  } objecter_dispatcher;
-  friend struct ObjecterDispatcher;
 
 
   // -- Watch --
@@ -939,7 +925,8 @@ protected:
   PerfCounters      *recoverystate_perf;
   ObjectStore *store;
 
-  LogClient clog;
+  LogClient log_client;
+  LogChannelRef clog;
 
   int whoami;
   std::string dev_path, journal_path;

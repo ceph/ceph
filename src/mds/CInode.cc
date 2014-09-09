@@ -49,6 +49,18 @@
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
 
 
+class CInodeIOContext : public MDSIOContextBase
+{
+protected:
+  CInode *in;
+  MDS *get_mds() {return in->mdcache->mds;}
+public:
+  CInodeIOContext(CInode *in_) : in(in_) {
+    assert(in != NULL);
+  }
+};
+
+
 boost::pool<> CInode::pool(sizeof(CInode));
 boost::pool<> Capability::pool(sizeof(Capability));
 
@@ -885,11 +897,10 @@ void CInode::mark_clean()
 // per-inode storage
 // (currently for root inode only)
 
-struct C_Inode_Stored : public Context {
-  CInode *in;
+struct C_IO_Inode_Stored : public CInodeIOContext {
   version_t version;
   Context *fin;
-  C_Inode_Stored(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
     assert(r == 0);
     in->_stored(version, fin);
@@ -903,7 +914,7 @@ object_t InodeStore::get_object_name(inodeno_t ino, frag_t fg, const char *suffi
   return object_t(n);
 }
 
-void CInode::store(Context *fin)
+void CInode::store(MDSInternalContextBase *fin)
 {
   dout(10) << "store " << get_version() << dendl;
   assert(is_base());
@@ -922,8 +933,12 @@ void CInode::store(Context *fin)
   object_t oid = CInode::get_object_name(ino(), frag_t(), ".inode");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
 
-  mdcache->mds->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(g_ceph_context), 0,
-				 NULL, new C_Inode_Stored(this, get_version(), fin) );
+  Context *newfin =
+    new C_OnFinisher(new C_IO_Inode_Stored(this, get_version(), fin),
+		     &mdcache->mds->finisher);
+  mdcache->mds->objecter->mutate(oid, oloc, m, snapc,
+				 ceph_clock_now(g_ceph_context), 0,
+				 NULL, newfin);
 }
 
 void CInode::_stored(version_t v, Context *fin)
@@ -935,22 +950,21 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
-struct C_Inode_Fetched : public Context {
-  CInode *in;
+struct C_IO_Inode_Fetched : public CInodeIOContext {
   bufferlist bl, bl2;
   Context *fin;
-  C_Inode_Fetched(CInode *i, Context *f) : in(i), fin(f) {}
+  C_IO_Inode_Fetched(CInode *i, Context *f) : CInodeIOContext(i), fin(f) {}
   void finish(int r) {
     in->_fetched(bl, bl2, fin);
   }
 };
 
-void CInode::fetch(Context *fin)
+void CInode::fetch(MDSInternalContextBase *fin)
 {
   dout(10) << "fetch" << dendl;
 
-  C_Inode_Fetched *c = new C_Inode_Fetched(this, fin);
-  C_GatherBuilder gather(g_ceph_context, c);
+  C_IO_Inode_Fetched *c = new C_IO_Inode_Fetched(this, fin);
+  C_GatherBuilder gather(g_ceph_context, new C_OnFinisher(c, &mdcache->mds->finisher));
 
   object_t oid = CInode::get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(mdcache->mds->mdsmap->get_metadata_pool());
@@ -1015,18 +1029,17 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   }
 }
 
-struct C_Inode_StoredBacktrace : public Context {
-  CInode *in;
+struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   version_t version;
   Context *fin;
-  C_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : in(i), version(v), fin(f) {}
+  C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
     assert(r == 0);
     in->_stored_backtrace(version, fin);
   }
 };
 
-void CInode::store_backtrace(Context *fin, int op_prio)
+void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
 {
   dout(10) << "store_backtrace on " << *this << dendl;
   assert(is_dirty_parent());
@@ -1055,7 +1068,9 @@ void CInode::store_backtrace(Context *fin, int op_prio)
   SnapContext snapc;
   object_t oid = get_object_name(ino(), frag_t(), "");
   object_locator_t oloc(pool);
-  Context *fin2 = new C_Inode_StoredBacktrace(this, inode.backtrace_version, fin);
+  Context *fin2 = new C_OnFinisher(
+    new C_IO_Inode_StoredBacktrace(this, inode.backtrace_version, fin),
+    &mdcache->mds->finisher);
 
   if (!state_test(STATE_DIRTYPOOL) || inode.old_pools.empty()) {
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
@@ -1683,15 +1698,19 @@ void CInode::start_scatter(ScatterLock *lock)
   }
 }
 
-struct C_Inode_FragUpdate : public Context {
+
+class C_Inode_FragUpdate : public MDSInternalContextBase {
+protected:
   CInode *in;
   CDir *dir;
   MutationRef mut;
-
-  C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m) : in(i), dir(d), mut(m) {}
+  MDS *get_mds() {return in->mdcache->mds;}
   void finish(int r) {
     in->_finish_frag_update(dir, mut);
   }    
+
+public:
+  C_Inode_FragUpdate(CInode *i, CDir *d, MutationRef& m) : in(i), dir(d), mut(m) {}
 };
 
 void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
@@ -1778,7 +1797,7 @@ void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
 void CInode::finish_scatter_gather_update(int type)
 {
-  LogClient &clog = mdcache->mds->clog;
+  LogChannelRef clog = mdcache->mds->clog;
 
   dout(10) << "finish_scatter_gather_update " << type << " on " << *this << dendl;
   assert(is_auth());
@@ -1819,7 +1838,7 @@ void CInode::finish_scatter_gather_update(int type)
 
 	if (pf->fragstat.nfiles < 0 ||
 	    pf->fragstat.nsubdirs < 0) {
-	  clog.error() << "bad/negative dir size on "
+	  clog->error() << "bad/negative dir size on "
 	      << dir->dirfrag() << " " << pf->fragstat << "\n";
 	  assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 	  
@@ -1853,7 +1872,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog.error() << "unmatched fragstat on " << ino() << ", inode has "
+	  clog->error() << "unmatched fragstat on " << ino() << ", inode has "
 		       << pi->dirstat << ", dirfrags have " << dirstat << "\n";
 	  assert(!"unmatched fragstat" == g_conf->mds_verify_scatter);
 	  // trust the dirfrags for now
@@ -1865,7 +1884,7 @@ void CInode::finish_scatter_gather_update(int type)
 
       if (pi->dirstat.nfiles < 0 ||
 	  pi->dirstat.nsubdirs < 0) {
-	clog.error() << "bad/negative fragstat on " << ino()
+	clog->error() << "bad/negative fragstat on " << ino()
 	    << ", inode has " << pi->dirstat << "\n";
 	assert(!"bad/negative fragstat" == g_conf->mds_verify_scatter);
 
@@ -1948,7 +1967,7 @@ void CInode::finish_scatter_gather_update(int type)
 	    break;
 	  }
 	if (all) {
-	  clog.error() << "unmatched rstat on " << ino() << ", inode has "
+	  clog->error() << "unmatched rstat on " << ino() << ", inode has "
 		       << pi->rstat << ", dirfrags have " << rstat << "\n";
 	  assert(!"unmatched rstat" == g_conf->mds_verify_scatter);
 	  // trust the dirfrag for now
@@ -2018,7 +2037,7 @@ bool CInode::is_freezing()
   return false;
 }
 
-void CInode::add_dir_waiter(frag_t fg, Context *c)
+void CInode::add_dir_waiter(frag_t fg, MDSInternalContextBase *c)
 {
   if (waiting_on_dir.empty())
     get(PIN_DIRWAITER);
@@ -2026,12 +2045,12 @@ void CInode::add_dir_waiter(frag_t fg, Context *c)
   dout(10) << "add_dir_waiter frag " << fg << " " << c << " on " << *this << dendl;
 }
 
-void CInode::take_dir_waiting(frag_t fg, list<Context*>& ls)
+void CInode::take_dir_waiting(frag_t fg, list<MDSInternalContextBase*>& ls)
 {
   if (waiting_on_dir.empty())
     return;
 
-  map<frag_t, list<Context*> >::iterator p = waiting_on_dir.find(fg);
+  map<frag_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dir.find(fg);
   if (p != waiting_on_dir.end()) {
     dout(10) << "take_dir_waiting frag " << fg << " on " << *this << dendl;
     ls.splice(ls.end(), p->second);
@@ -2042,7 +2061,7 @@ void CInode::take_dir_waiting(frag_t fg, list<Context*>& ls)
   }
 }
 
-void CInode::add_waiter(uint64_t tag, Context *c) 
+void CInode::add_waiter(uint64_t tag, MDSInternalContextBase *c) 
 {
   dout(10) << "add_waiter tag " << std::hex << tag << std::dec << " " << c
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
@@ -2062,12 +2081,12 @@ void CInode::add_waiter(uint64_t tag, Context *c)
   MDSCacheObject::add_waiter(tag, c);
 }
 
-void CInode::take_waiting(uint64_t mask, list<Context*>& ls)
+void CInode::take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls)
 {
   if ((mask & WAIT_DIR) && !waiting_on_dir.empty()) {
     // take all dentry waiters
     while (!waiting_on_dir.empty()) {
-      map<frag_t, list<Context*> >::iterator p = waiting_on_dir.begin();
+      map<frag_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dir.begin();
       dout(10) << "take_waiting dirfrag " << p->first << " on " << *this << dendl;
       ls.splice(ls.end(), p->second);
       waiting_on_dir.erase(p);
@@ -2100,7 +2119,7 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   return true;
 }
 
-void CInode::unfreeze_inode(list<Context*>& finished) 
+void CInode::unfreeze_inode(list<MDSInternalContextBase*>& finished) 
 {
   dout(10) << "unfreeze_inode" << dendl;
   if (state_test(STATE_FREEZING)) {
@@ -2116,7 +2135,7 @@ void CInode::unfreeze_inode(list<Context*>& finished)
 
 void CInode::unfreeze_inode()
 {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     unfreeze_inode(finished);
     mdcache->mds->queue_waiters(finished);
 }
@@ -2132,13 +2151,13 @@ void CInode::unfreeze_auth_pin()
   assert(state_test(CInode::STATE_FROZENAUTHPIN));
   state_clear(CInode::STATE_FROZENAUTHPIN);
   if (!state_test(STATE_FREEZING|STATE_FROZEN)) {
-    list<Context*> finished;
+    list<MDSInternalContextBase*> finished;
     take_waiting(WAIT_UNFREEZE, finished);
     mdcache->mds->queue_waiters(finished);
   }
 }
 
-void CInode::clear_ambiguous_auth(list<Context*>& finished)
+void CInode::clear_ambiguous_auth(list<MDSInternalContextBase*>& finished)
 {
   assert(state_test(CInode::STATE_AMBIGUOUSAUTH));
   state_clear(CInode::STATE_AMBIGUOUSAUTH);
@@ -2147,7 +2166,7 @@ void CInode::clear_ambiguous_auth(list<Context*>& finished)
 
 void CInode::clear_ambiguous_auth()
 {
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   clear_ambiguous_auth(finished);
   mdcache->mds->queue_waiters(finished);
 }
@@ -2553,6 +2572,7 @@ void CInode::remove_client_cap(client_t client)
   Capability *cap = client_caps[client];
   
   cap->item_session_caps.remove_myself();
+  cap->item_revoking_caps.remove_myself();
   containing_realm->remove_cap(client, cap);
   
   if (client == loner_cap)
@@ -2574,7 +2594,7 @@ void CInode::remove_client_cap(client_t client)
   bool fcntl_removed = fcntl_locks.remove_all_from(client);
   bool flock_removed = flock_locks.remove_all_from(client);
   if (fcntl_removed || flock_removed) {
-    list<Context*> waiters;
+    list<MDSInternalContextBase*> waiters;
     take_waiting(CInode::WAIT_FLOCK, waiters);
     mdcache->mds->queue_waiters(waiters);
   }
@@ -3223,7 +3243,7 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
 }
-void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<Context*>& waiters,
+void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters,
 				  list<SimpleLock*>& eval_locks)
 {
   authlock.decode_state_rejoin(p, waiters);

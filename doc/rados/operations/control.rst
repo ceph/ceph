@@ -82,10 +82,10 @@ of times. They should be recovering.
 reported to the monitor cluster in a while (configured by
 ``mon_osd_report_timeout``).
 
-Revert "lost" objects to their prior state, either a previous version
+Delete "lost" objects or revert them to their prior state, either a previous version
 or delete them if they were just created. ::
 
-	ceph pg {pgid} mark_unfound_lost revert
+	ceph pg {pgid} mark_unfound_lost revert|delete
 
 
 OSD Subsystem
@@ -273,11 +273,11 @@ Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. ::
 
 	ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_BYTES``
+Runs a simple throughput benchmark against OSD.N, writing ``NUMBER_OF_OBJECTS``
 in write requests of ``BYTES_PER_WRITE`` each. By default, the test
 writes 1 GB in total in 4-MB increments. ::
 
-	ceph osd tell N bench [BYTES_PER_WRITE] [TOTAL_BYTES]
+	ceph tell osd.N bench [NUMER_OF_OBJECTS] [BYTES_PER_WRITE]
 
 
 MDS Subsystem

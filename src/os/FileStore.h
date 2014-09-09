@@ -119,6 +119,7 @@ public:
 private:
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
+  osflagbits_t generic_flags;
   std::string current_fn;
   std::string current_op_seq_fn;
   std::string omap_dir;
@@ -399,7 +400,9 @@ public:
 		 bool force_clear_omap=false);
 
 public:
-  FileStore(const std::string &base, const std::string &jdev, const char *internal_name = "filestore", bool update_to=false);
+  FileStore(const std::string &base, const std::string &jdev,
+    osflagbits_t flags = 0,
+    const char *internal_name = "filestore", bool update_to=false);
   ~FileStore();
 
   int _detect_fs();
@@ -543,7 +546,7 @@ public:
 
   void _start_sync();
 
-  void start_sync();
+  void do_force_sync();
   void start_sync(Context *onsafe);
   void sync();
   void _flush_op_queue();
@@ -623,6 +626,19 @@ public:
   int _create_collection(coll_t c);
   int _create_collection(coll_t c, const SequencerPosition &spos);
   int _destroy_collection(coll_t c);
+  /**
+   * Give an expected number of objects hint to the collection.
+   *
+   * @param c                 - collection id.
+   * @param pg_num            - pg number of the pool this collection belongs to
+   * @param expected_num_objs - expected number of objects in this collection
+   * @param spos              - sequence position
+   *
+   * @Return 0 on success, an error code otherwise
+   */
+  int _collection_hint_expected_num_objs(coll_t c, uint32_t pg_num,
+      uint64_t expected_num_objs,
+      const SequencerPosition &spos);
   int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
 		      const SequencerPosition& spos);
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,

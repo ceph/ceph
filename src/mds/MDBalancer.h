@@ -31,7 +31,6 @@ class MDS;
 class Message;
 class MHeartbeat;
 class CInode;
-class Context;
 class CDir;
 
 class MDBalancer {

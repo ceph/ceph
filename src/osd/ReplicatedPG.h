@@ -417,7 +417,7 @@ public:
 
   ceph_tid_t get_tid() { return osd->get_tid(); }
 
-  LogClientTemp clog_error() { return osd->clog.error(); }
+  LogClientTemp clog_error() { return osd->clog->error(); }
 
   /*
    * Capture all object state associated with an in-progress read or write.
@@ -618,6 +618,7 @@ public:
     bool queue_snap_trimmer;
 
     Context *on_applied;
+    bool log_op_stat;
     
     RepGather(OpContext *c, ObjectContextRef pi, ceph_tid_t rt,
 	      eversion_t lc) :
@@ -631,7 +632,8 @@ public:
       sent_disk(false),
       pg_local_last_complete(lc),
       queue_snap_trimmer(false),
-      on_applied(NULL) { }
+      on_applied(NULL),
+      log_op_stat(false) { }
 
     RepGather *get() {
       nref++;

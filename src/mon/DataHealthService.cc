@@ -226,7 +226,7 @@ void DataHealthService::service_tick()
   // already low available disk space.
   if (ours.latest_avail_percent <= g_conf->mon_data_avail_warn) {
     if (ours.latest_avail_percent != last_warned_percent)
-      mon->clog.warn()
+      mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
 	<< " (" << ours.latest_avail_percent << "% free)\n";
     last_warned_percent = ours.latest_avail_percent;

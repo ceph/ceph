@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.84], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.85], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -87,17 +87,30 @@ AM_CXXFLAGS="${AM_CXXFLAGS}"
 # Check for yasm
 if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
    echo 'we have a modern and working yasm'
-   if test `arch` = "x86_64"; then
+   if test `arch` = "x86_64" ; then
       echo 'we are x86_64'
-      AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
-      with_good_yasm=yes
+      arch_x32=0
+      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
+        #if defined(__x86_64__) && defined(__ILP32__)
+        #error x32
+        #endif]])], [], [arch_x32=1])
+      if test $arch_x32 -eq 0 ; then
+         echo 'we are not x32'
+         AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
+         with_good_yasm=yes
 
-      if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
-         echo 'yasm can also build the isa-l stuff'
-	 with_better_yasm=yes
+         if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
+            echo 'yasm can also build the isa-l stuff'
+            AC_DEFINE([HAVE_BETTER_YASM_ELF64], [1], [yasm can also build the isa-l])
+	    with_better_yasm=yes
+         else
+            echo "yasm doesn't build the isa-l stuff"
+	 fi
       else
-         echo "yasm doesn't build the isa-l stuff"
+         echo 'we are x32; no yasm for you'
       fi
+   else
+      echo 'we are not x86_64 && !x32'
    fi
 else
    echo 'we do not have a modern/working yasm'
@@ -799,6 +812,97 @@ AC_CHECK_HEADERS([linux/types.h])
 AC_CHECK_TYPES([__u8, __s8, __u16, __s16, __u32, __s32, __u64, __s64, __le16,
   __be16, __le32, __be32, __le64, __be64], [], [], [[#include <linux/types.h>]])
 
+
+dnl Old versions of lttng-gen-tp leave out includes, and they break our stuff.
+AC_MSG_CHECKING([if lttng-gen-tp is sane])
+lttng_gen_tp_dir=`mktemp -d`
+echo "#include <foo-inc.h>" > "$lttng_gen_tp_dir/foo.tp"
+if ( ( cd "$lttng_gen_tp_dir" && lttng-gen-tp foo.tp -o foo.h && grep "#include <foo-inc.h>" foo.h ) > /dev/null 2>&1 ) ; then
+  have_good_lttng_gen_tp=yes
+else
+  have_good_lttng_gen_tp=no
+fi
+rm -rf "$lttng_gen_tp_dir"
+AC_MSG_RESULT([$have_good_lttng_gen_tp])
+
+AC_ARG_WITH([lttng],
+	[AS_HELP_STRING([--with-lttng], [Trace with LTTng])])
+AS_IF([test "x$with_lttng" = "xno"], [use_lttng=no],
+      [test "x$with_lttng" = "xyes"], [use_lttng=yes],
+      [test "x$have_good_lttng_gen_tp" = "xyes"], [use_lttng=yes; AC_MSG_NOTICE([lttng auto-enabled])],
+      [use_lttng=no; AC_MSG_NOTICE([lttng auto-disabled])])
+AM_CONDITIONAL([WITH_LTTNG], test x"$use_lttng" = x"yes")
+AM_COND_IF([WITH_LTTNG], [
+  AC_DEFINE([WITH_LTTNG], [1], [Define if you want to use LTTng])
+
+  AC_CHECK_HEADER([lttng/tracepoint.h], [],
+    AC_MSG_ERROR([lttng/tracepoint.h not found (liblttng-ust-dev, lttng-ust-devel)]))
+
+  AC_CHECK_PROG([LTTNG_GEN_TP_CHECK], [lttng-gen-tp], [yes])
+  if test x"$LTTNG_GEN_TP_CHECK" != "xyes"; then
+      AC_MSG_FAILURE([lttng-gen-tp not found])
+  fi
+  AC_SUBST([LTTNG_GEN_TP_PROG], [lttng-gen-tp])
+
+  if test x"$have_good_lttng_gen_tp" != "xyes"; then
+      AC_MSG_FAILURE([lttng-gen-tp does not behave properly])
+  fi
+
+  AC_MSG_CHECKING([if time_t is an integer])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>]], [[
+      struct {
+          unsigned int time_t_is_integer: ((time_t) 1.5 == 1) ? 1 : -1;
+      } x;
+      return 0;
+  ]])], [
+     AC_MSG_RESULT([yes])
+  ], [
+     AC_MSG_RESULT([no])
+     AC_MSG_FAILURE([time_t is not an integer.  We assume this for tracing.])
+  ])
+
+  AC_MSG_CHECKING([if time_t fits in uint64_t])
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <time.h>
+  #include <inttypes.h>]], [[
+      struct {
+          unsigned int time_t_fits_in_uin64_t: (sizeof(time_t) <= sizeof(uint64_t)) ? 1 : -1;
+      } x;
+      return 0;
+  ]])], [
+     AC_MSG_RESULT([yes])
+  ], [
+     AC_MSG_RESULT([no])
+     AC_MSG_FAILURE([time_t is larger than uint64_t.  We assume it can be cast to uint64_t, for tracing.])
+  ])
+], [
+  AC_DEFINE([tracepoint(...)], [], [LTTng is disabled, so define this macro to be nothing.])
+])
+
+
+AC_CHECK_HEADERS([babeltrace/ctf/events.h babeltrace/babeltrace.h])
+AC_CHECK_DECL([BT_CLOCK_REAL],
+              [have_good_babeltrace=yes],
+              [have_good_babeltrace=no],
+              [[#include <babeltrace/babeltrace.h>]])
+AC_ARG_WITH([babeltrace],
+	[AS_HELP_STRING([--with-babeltrace], [Enable Babeltrace])])
+AS_IF([test "x$with_babeltrace" = "xno"], [use_babeltrace=no],
+      [test "x$with_babeltrace" = "xyes"], [use_babeltrace=yes],
+      [test "x$ac_cv_header_babeltrace_ctf_events_h$ac_cv_header_babeltrace_babeltrace_h$have_good_babeltrace" = "xyesyesyes"], [use_babeltrace=yes; AC_MSG_NOTICE([babeltrace auto-enabled])],
+      [use_babeltrace=no; AC_MSG_NOTICE([babeltrace auto-disabled])])
+AM_CONDITIONAL([WITH_BABELTRACE], test x"$use_babeltrace" = x"yes")
+AM_COND_IF([WITH_BABELTRACE], [
+  AC_DEFINE([WITH_BABELTRACE], [1], [Define if you want to use Babeltrace])
+
+  AC_CHECK_HEADER([babeltrace/babeltrace.h], [],
+    AC_MSG_ERROR([babeltrace/babeltrac.h not found (libbabeltrace-dev, libbabeltrace-devel)]))
+
+  AC_CHECK_HEADER([babeltrace/ctf/events.h], [],
+    AC_MSG_ERROR([babeltrace/ctf/events.h not found (libbabeltrace-ctf-dev, libbabeltrace-devel)]))
+])
+
+
+
 # Checks for typedefs, structures, and compiler characteristics.
 #AC_HEADER_STDBOOL
 #AC_C_CONST
@@ -858,6 +962,7 @@ AC_CONFIG_FILES([Makefile
 	src/ocf/ceph
 	src/ocf/rbd
 	src/java/Makefile
+	src/tracing/Makefile
 	man/Makefile
 	ceph.spec])
 AC_OUTPUT

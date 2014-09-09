@@ -2,65 +2,160 @@
  Cephx Config Reference
 ========================
 
-.. index:: cephx; authentication; cephx configuration
+The ``cephx`` protocol is enabled by default. Cryptographic authentication has
+some computational costs, though they should generally be quite low.  If the
+network environment connecting your client and server hosts is very safe and 
+you cannot afford authentication, you can turn it off. **This is not generally
+recommended**.
 
-To identify users and protect against man-in-the-middle attacks, Ceph provides
-its ``cephx`` authentication system to authenticate users and daemons. See `Ceph
-Authentication & Authorization`_ for an introduction to ``cephx``
-authentication. See the `Cephx Guide`_ for details on enabling/disabling,
-creating users and setting user capabilities.
+.. note:: If you disable authentication, you are at risk of a man-in-the-middle
+   attack altering your client/server messages, which could lead to disastrous 
+   security effects.
 
-
-Enable/Disable Authentication
-=============================
-
-Depending on the version, Ceph either enables or disables authentication by 
-default. Use the following settings to expressly enable or disable Ceph. 
-See `Ceph Authentication`_ for additional details.
+For creating users, see `User Management`_. For details on the architecture
+of Cephx, see `Architecture - High Availability Authentication`_.
 
 
-.. topic:: Authentication Enablement Defaults
+Deployment Scenarios
+====================
 
-   Ceph version 0.54 and earlier versions disable authentication by default. 
-   If you want to use Ceph authentication, you must specifically enable it 
-   for version 0.54 and earlier versions. 
-   
-   Ceph version 0.55 and later version enable authentication by default. If you
-   do not want to use Ceph authentication, you must specifically disable it
-   for versions 0.55 and later versions.
-   
+There are two main scenarios for deploying a Ceph cluster, which impact 
+how you initially configure Cephx. Most first time Ceph users use 
+``ceph-deploy`` to create a cluster (easiest). For clusters using
+other deployment tools (e.g., Chef, Juju, Puppet, etc.), you will need
+to use the manual procedures or configure your deployment tool to 
+bootstrap your monitor(s).
 
-.. topic:: Authentication Granularity
+ceph-deploy
+-----------
 
-   Ceph version 0.50 and earlier versions use ``auth supported`` to enable or
-   disable authentication between the :term:`Ceph Client` and the :term:`Ceph 
-   Storage Cluster`. Ceph authentication in earlier versions only authenticates
-   users sending message traffic between the client and the cluster, so it does 
-   not have fine-grained control.
-   
-   Ceph version 0.51 and later versions use fine-grained control, which allows
-   you to require authentication of the client by the cluster 
-   (``auth service required``), authentication of the cluster by the client
-   (``auth client required``), and authentication of a daemon within the
-   cluster by another daemon within the cluster (``auth cluster required``).
+When you deploy a cluster with ``ceph-deploy``, you do not have to bootstrap the
+monitor manually or create the ``client.admin`` user or keyring. The steps you
+execute in the `Storage Cluster Quick Start`_ will invoke ``ceph-deploy`` to do
+that for you.
+
+When you execute ``ceph-deploy new {initial-monitor(s)}``, Ceph will create a
+monitor keyring for you (only used to bootstrap monitors), and it will generate
+an  initial Ceph configuration file for you, which contains the following
+authentication settings, indicating that Ceph enables authentication by
+default::
+
+	auth_cluster_required = cephx
+	auth_service_required = cephx
+	auth_client_required = cephx
+
+When you execute ``ceph-deploy mon create-initial``, Ceph will bootstrap the
+initial monitor(s), retrieve a ``ceph.client.admin.keyring`` file containing the
+key for the  ``client.admin`` user. Additionally, it will also retrieve keyrings
+that give ``ceph-deploy`` and ``ceph-disk`` utilities the ability to prepare and
+activate OSDs and metadata servers.
+
+When you execute ``ceph-deploy admin {node-name}`` (**note:** Ceph must be 
+installed first), you are pushing a Ceph configuration file and the
+``ceph.client.admin.keyring`` to the ``/etc/ceph``  directory of the node. You
+will be able to execute Ceph administrative functions as ``root`` on the command 
+line of that node.
+
+
+Manual Deployment
+-----------------
+
+When you deploy a cluster manually, you have to bootstrap the monitor manually
+and create the ``client.admin`` user and keyring. To bootstrap monitors, follow
+the steps in `Monitor Bootstrapping`_. The steps for monitor bootstrapping are
+the logical steps you must perform when using third party deployment tools like
+Chef, Puppet,  Juju, etc.
+
+
+Enabling/Disabling Cephx
+========================
+
+Enabling Cephx requires that you have deployed keys for your monitors,
+OSDs and metadata servers. If you are simply toggling Cephx on / off, 
+you do not have to repeat the bootstrapping procedures.
+
+
+Enabling Cephx
+--------------
+
+When ``cephx`` is enabled, Ceph will look for the keyring in the default search
+path, which includes ``/etc/ceph/$cluster.$name.keyring``. You can override 
+this location by adding a ``keyring`` option in the ``[global]`` section of 
+your `Ceph configuration`_ file, but this is not recommended.
+
+Execute the following procedures to enable ``cephx`` on a cluster with
+authentication disabled. If you (or your deployment utility) have already
+generated the keys, you may skip the steps related to generating keys.
+
+#. Create a ``client.admin`` key, and save a copy of the key for your client 
+   host::
+
+	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
+
+   **Warning:** This will clobber any existing 
+   ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a 
+   deployment tool has already done it for you. Be careful!
+
+#. Create a keyring for your monitor cluster and generate a monitor 
+   secret key. ::
+
+	ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+
+#. Copy the monitor keyring into a ``ceph.mon.keyring`` file in every monitor's 
+   ``mon data`` directory. For example, to copy it to ``mon.a`` in cluster ``ceph``, 
+   use the following::
+
+    cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
+
+#. Generate a secret key for every OSD, where ``{$id}`` is the OSD number::
+
+    ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
+
+#. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter::
+
+    ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mds/ceph-{$id}/keyring
+
+#. Enable ``cephx`` authentication by setting the following options in the 
+   ``[global]`` section of your `Ceph configuration`_ file::
+
+    auth cluster required = cephx
+    auth service required = cephx
+    auth client required = cephx
+
+
+#. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details. 
+
+For details on bootstrapping a monitor manually, see `Manual Deployment`_.
 
 
 
-``auth supported``
+Disabling Cephx
+---------------
 
-.. deprecated:: 0.51
+The following procedure describes how to disable Cephx. If your cluster
+environment is relatively safe, you can offset the computation expense of
+running authentication. **We do not recommend it.** However, it may be easier
+during setup and/or troubleshooting to temporarily disable authentication.
 
-:Description: Indicates whether to use authentication. If not specified, 
-              it defaults to ``none``, which means it is disabled.
+#. Disable ``cephx`` authentication by setting the following options in the 
+   ``[global]`` section of your `Ceph configuration`_ file::
 
-:Type: String
-:Required: No
-:Default: ``none``
+    auth cluster required = none
+    auth service required = none
+    auth client required = none
 
-    
+
+#. Start or restart the Ceph cluster. See `Operating a Cluster`_ for details.
+
+
+Configuration Settings
+======================
+
+Enablement
+----------
+
+
 ``auth cluster required``
-
-.. versionadded:: 0.51
 
 :Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
               ``ceph-osd``, and ``ceph-mds``) must authenticate with 
@@ -68,12 +163,10 @@ See `Ceph Authentication`_ for additional details.
 
 :Type: String
 :Required: No
-:Default: Version 0.54 and earlier ``none``. Version 0.55 and later ``cephx``.
+:Default: ``cephx``.
 
     
 ``auth service required``
-
-.. versionadded:: 0.51
 
 :Description: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
               to authenticate with the Ceph Storage Cluster in order to access 
@@ -81,13 +174,10 @@ See `Ceph Authentication`_ for additional details.
 
 :Type: String
 :Required: No
-:Default: Version 0.54 and earlier ``none``. Version 0.55 and later ``cephx``.
-
+:Default: ``cephx``.
 
 
 ``auth client required``
-
-.. versionadded:: 0.51
 
 :Description: If enabled, the Ceph Client requires the Ceph Storage Cluster to 
               authenticate with the Ceph Client. Valid settings are ``cephx`` 
@@ -95,13 +185,13 @@ See `Ceph Authentication`_ for additional details.
 
 :Type: String
 :Required: No
-:Default: Version 0.54 and earlier ``none``. Version 0.55 and later ``cephx``.
+:Default: ``cephx``.
 
 
 .. index:: keys; keyring
 
 Keys
-====
+----
 
 When you run Ceph with authentication enabled, ``ceph`` administrative commands
 and Ceph Clients require authentication keys to access the Ceph Storage Cluster.
@@ -152,10 +242,54 @@ setting (not recommended), or a path to a keyfile using the ``keyfile`` setting.
 :Default: None
 
 
+Daemon Keyrings
+---------------
+
+Administrative users or deployment tools  (e.g., ``ceph-deploy``) may generate
+daemon keyrings in the same way as generating user keyrings.  By default, Ceph
+stores daemons keyrings inside their data directory. The default keyring
+locations, and the capabilities necessary for the daemon to function, are shown
+below.
+
+``ceph-mon``
+
+:Location: ``$mon_data/keyring``
+:Capabilities: ``mon 'allow *'``
+
+``ceph-osd``
+
+:Location: ``$osd_data/keyring``
+:Capabilities: ``mon 'allow profile osd' osd 'allow *'``
+
+``ceph-mds``
+
+:Location: ``$mds_data/keyring``
+:Capabilities: ``mds 'allow' mon 'allow profile mds' osd 'allow rwx'``
+
+``radosgw``
+
+:Location: ``$rgw_data/keyring``
+:Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
+
+
+.. note:: The monitor keyring (i.e., ``mon.``) contains a key but no 
+   capabilities, and is not part of the cluster ``auth`` database.
+
+The daemon data directory locations default to directories of the form::
+
+  /var/lib/ceph/$type/$cluster-$id
+
+For example, ``osd.12`` would be::
+
+  /var/lib/ceph/osd/ceph-12
+
+You can override these locations, but it is not recommended.
+
+
 .. index:: signatures
 
 Signatures
-==========
+----------
 
 In Ceph Bobtail and subsequent versions, we prefer that Ceph authenticate all
 ongoing messages between the entities using the session key set up for that
@@ -211,7 +345,7 @@ Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 
 
 Time to Live
-============
+------------
 
 ``auth service ticket ttl``
 
@@ -223,7 +357,76 @@ Time to Live
 :Default: ``60*60``
 
 
-.. _Ceph Authentication & Authorization: ../../operations/auth-intro
-.. _Cephx Guide:  ../../operations/authentication
-.. _Ceph Authentication: ../../operations/auth-intro#ceph-authentication-cephx
-.. _Create an Admin Host: ../../deployment/ceph-deploy-admin#create-an-admin-host
+Backward Compatibility
+======================
+
+For Cuttlefish and earlier releases, see `Cephx`_.
+
+In Ceph Argonaut v0.48 and earlier versions, if you enable ``cephx``
+authentication, Ceph only authenticates the initial communication between the
+client and daemon; Ceph does not authenticate the subsequent messages they send
+to each other, which has security implications. In Ceph Bobtail and subsequent
+versions, Ceph authenticates all ongoing messages between the entities using the
+session key set up for that initial authentication.
+
+We identified a backward compatibility issue between Argonaut v0.48 (and prior
+versions) and Bobtail (and subsequent versions). During testing, if you
+attempted  to use Argonaut (and earlier) daemons with Bobtail (and later)
+daemons, the Argonaut daemons did not know how to perform ongoing message
+authentication, while the Bobtail versions of the daemons insist on
+authenticating message traffic subsequent to the initial
+request/response--making it impossible for Argonaut (and prior) daemons to
+interoperate with Bobtail (and subsequent) daemons.
+
+We have addressed this potential problem by providing a means for Argonaut (and
+prior) systems to interact with Bobtail (and subsequent) systems. Here's how it
+works: by default, the newer systems will not insist on seeing signatures from
+older systems that do not know how to perform them, but will simply accept such
+messages without authenticating them. This new default behavior provides the
+advantage of allowing two different releases to interact. **We do not recommend
+this as a long term solution**. Allowing newer daemons to forgo ongoing
+authentication has the unfortunate security effect that an attacker with control
+of some of your machines or some access to your network can disable session
+security simply by claiming to be unable to sign messages.  
+
+.. note:: Even if you don't actually run any old versions of Ceph, 
+   the attacker may be able to force some messages to be accepted unsigned in the 
+   default scenario. While running Cephx with the default scenario, Ceph still
+   authenticates the initial communication, but you lose desirable session security.
+
+If you know that you are not running older versions of Ceph, or you are willing
+to accept that old servers and new servers will not be able to interoperate, you
+can eliminate this security risk.  If you do so, any Ceph system that is new
+enough to support session authentication and that has Cephx enabled will reject
+unsigned messages.  To preclude new servers from interacting with old servers,
+include the following in the ``[global]`` section of your `Ceph
+configuration`_ file directly below the line that specifies the use of Cephx
+for authentication::
+
+	cephx require signatures = true    ; everywhere possible
+
+You can also selectively require signatures for cluster internal
+communications only, separate from client-facing service::
+
+	cephx cluster require signatures = true    ; for cluster-internal communication
+	cephx service require signatures = true    ; for client-facing service
+
+An option to make a client require signatures from the cluster is not
+yet implemented.
+
+**We recommend migrating all daemons to the newer versions and enabling the 
+foregoing flag** at the nearest practical time so that you may avail yourself 
+of the enhanced authentication.
+
+.. note:: Ceph kernel modules do not support signatures yet.
+
+
+.. _Storage Cluster Quick Start: ../../../start/quick-ceph-deploy/
+.. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
+.. _Operating a Cluster: ../../operations/operating
+.. _Manual Deployment: ../../../install/manual-deployment
+.. _Cephx: http://ceph.com/docs/cuttlefish/rados/configuration/auth-config-ref/
+.. _Ceph configuration: ../ceph-conf
+.. _Create an Admin Host: ../../deployment/ceph-deploy-admin
+.. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
+.. _User Management: ../../operations/user-management

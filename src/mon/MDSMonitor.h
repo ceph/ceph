@@ -36,6 +36,8 @@ class MMDSGetMap;
 class MMonCommand;
 class MMDSLoadTargets;
 
+#define MDS_HEALTH_PREFIX "mds_health"
+
 class MDSMonitor : public PaxosService {
  public:
   // mds maps
@@ -71,9 +73,9 @@ class MDSMonitor : public PaxosService {
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
   void create_pending(); 
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   // we don't require full versions; don't encode any.
-  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
 
   void update_logger();
 
@@ -133,6 +135,10 @@ public:
   void check_subs();
   void check_sub(Subscription *sub);
 
+private:
+  // MDS daemon GID to latest health state from that GID
+  std::map<uint64_t, MDSHealth> pending_daemon_health;
+  std::set<uint64_t> pending_daemon_health_rm;
 };
 
 #endif

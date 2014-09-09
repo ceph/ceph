@@ -1,5 +1,9 @@
 #
-# See .mailmap for author normalization.
+# More information at
+#  https://wiki.ceph.com/Community/Ceph_contributors_list_maintenance_guide
+#
+# See .mailmap for name and mail normalization.
+# See .peoplemap for unique list of people
 #
 # To display the 10 organization who contributed 
 # most commits to ceph ( requires git >= 1.8.4 ):
@@ -23,6 +27,7 @@ Anchor Hosting <contact@anchor.com.au> Christian Marie <pingu@anchor.net.au>
 Anchor Hosting <contact@anchor.com.au> Sharif Olorin <sio@tesser.org>
 ArtiBit <contact@artibit.com> Rutger ter Borg <rutger@terborg.net>
 Bayan <contact@bayan.co.ir> Mohammad Salehe <salehe+dev@gmail.com>
+BCI <contact@bci.co.mz> Marco Garcês <marco.garces@bci.co.mz>
 Bigpoint.com <contact@bigpoint.net> Moritz Möller <mm@mxs.de>
 Canonical <contact@canonical.com> Chris Glass <tribaal@gmail.com>
 Canonical <contact@canonical.com> James Page <james.page@ubuntu.com>
@@ -111,8 +116,10 @@ Inktank <contact@inktank.com> Tyler Brekke <tyler.brekke@inktank.com>
 Inktank <contact@inktank.com> Warren Usui <warren.usui@inktank.com>
 Inktank <contact@inktank.com> Yehuda Sadeh <yehuda@inktank.com>
 Intel <contact@intel.com> Ma Jianpeng <jianpeng.ma@intel.com>
+Intel <contact@intel.com> Shu, Xinxin <xinxin.shu@intel.com>
 Intel <contact@intel.com> Wang, Yaguang <yaguang.wang@intel.com>
 Intel <contact@intel.com> Yan, Zheng <zheng.z.yan@intel.com>
+Intel <contact@intel.com> Xiaoxi Chen <xiaoxi.chen@intel.com>
 Iron Systems Inc. <info@ironsystems.com> Harpreet Dhillon <harpreet@ironsystems.com>
 IT Refined <contact@itrefined.com> Ron Allred <rallred@itrefined.com>
 IWeb <contact@iweb.com> David Moreau Simard <dmsimard@iweb.com>
@@ -130,16 +137,21 @@ Pogoapp <contact@pogoapp.com> Paul Meserve <paul@pogodan.com>
 Red Hat <contact@redhat.com> Alexandre Marangone <amarangone@redhat.com>
 Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
 Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
+Red Hat <contact@redhat.com> Boris Ranto <branto@redhat.com>
 Red Hat <contact@redhat.com> Dan Mick <dmick@redhat.com>
 Red Hat <contact@redhat.com> David Zafman <dzafman@redhat.com>
+Red Hat <contact@redhat.com> Federico Simoncelli <fsimonce@redhat.com>
 Red Hat <contact@redhat.com> Gary Lowell <glowell@redhat.com>
 Red Hat <contact@redhat.com> Greg Farnum <gfarnum@redhat.com>
+Red Hat <contact@redhat.com> Huamin Chen <hchen@redhat.com>
 Red Hat <contact@redhat.com> Ilya Dryomov <idryomov@redhat.com>
 Red Hat <contact@redhat.com> João Eduardo Luís <joao@redhat.com>
 Red Hat <contact@redhat.com> John Spray <jspray@redhat.com>
 Red Hat <contact@redhat.com> John Wilkins <jwilkins@redhat.com>
 Red Hat <contact@redhat.com> Josh Durgin <jdurgin@redhat.com>
 Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
+Red Hat <contact@redhat.com> Loic Dachary <loic-201408@dachary.org>
+Red Hat <contact@redhat.com> Luis Pabón <lpabon@redhat.com>
 Red Hat <contact@redhat.com> Mark Nelson <mnelson@redhat.com>
 Red Hat <contact@redhat.com> Neil Levine <nlevine@redhat.com>
 Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
@@ -153,9 +165,14 @@ Red Hat <contact@redhat.com> Tyler Brekke <tbrekke@redhat.com>
 Red Hat <contact@redhat.com> Venky Shankar <vshankar@redhat.com>
 Red Hat <contact@redhat.com> Warren Usui <wusui@redhat.com>
 Red Hat <contact@redhat.com> Yehuda Sadeh <ysadey@redhat.com>
+Reliance Jio Infocomm Ltd. <contact@ril.com> Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+Reliance Jio Infocomm Ltd. <contact@ril.com> Ashish Chandra <ashish.a.chandra@ril.com>
+Reliance Jio Infocomm Ltd. <contact@ril.com> Swami Reddy <swami.reddy@ril.com>
 Roald van Loon Consultancy <roald@roaldvanloon.nl> Roald J. van Loon <roald@roaldvanloon.nl>
 Sandia National Laboratories <contact@sandia.gov> Jim Schutt <jaschut@sandia.gov>
 SanDisk <contact@sandisk.com> Allen Samuels <allen.samuels@sandisk.com>
+SanDisk <contact@sandisk.com> Anand Bhat <anand.bhat@sandisk.com>
+SanDisk <contact@sandisk.com> Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
 SanDisk <contact@sandisk.com> Somnath Roy <somnath.roy@sandisk.com>
 SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
 Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
@@ -164,6 +181,8 @@ Spectra Logic <contact@spectralogic.com> Alan Somers <asomers@gmail.com>
 SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
 SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
+SUSE <contact@suse.com> Owen Synge <osynge@suse.com>
+SUSE <contact@suse.com> Thorsten Behrens <tbehrens@suse.com>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
 SWITCH <contact@switch.ch> Simon Leinen <simon.leinen@switch.ch>
 TCloud Computing <contact@tcloudcomputing.com> CC Lien <cc_lien@tcloudcomputing.com>
@@ -180,7 +199,9 @@ Unaffiliated <no@organization.net> Ailing Zhang <zhangal1992@gmail.com>
 Unaffiliated <no@organization.net> Colin Mattson <colinmattson@gmail.com>
 Unaffiliated <no@organization.net> Dan Chai <tengweicai@gmail.com>
 Unaffiliated <no@organization.net> Dominik Hannen <cantares1+github@gmail.com>
+Unaffiliated <no@organization.net> Erik Logtenberg <erik@logtenberg.eu>
 Unaffiliated <no@organization.net> Florent Bautista <florent@coppint.com>
+Unaffiliated <no@organization.net> François Lafont <flafdivers@free.fr>
 Unaffiliated <no@organization.net> Huang Jun <hjwsm1989@gmail.com>
 Unaffiliated <no@organization.net> Kevin Cox <kevincox@kevincox.ca>
 Unaffiliated <no@organization.net> koleosfuscus <koleosfuscus@yahoo.com>
@@ -190,6 +211,7 @@ Unaffiliated <no@organization.net> (no author) <(no author)@29311d96-e01e-0410-9
 Unaffiliated <no@organization.net> Shawn Edwards <lesser.evil@gmail.com>
 Unaffiliated <no@organization.net> Stephen F Taylor <steveftaylor@gmail.com>
 Unaffiliated <no@organization.net> Steve Stock <steve@technolope.org>
+Unaffiliated <no@organization.net> Zhiqiang Wang <wonzhq@hotmail.com>
 Unilogic Networks B.V <contact@unilogicnetworks.net> Pascal de Bruijn <pascal@unilogicnetworks.net> 
 UnitedStack <contact@unitedstack.com> Guangliang Zhao <guangliang@unitedstack.com>
 UnitedStack <contact@unitedstack.com> Haomai Wang <haomaiwang@gmail.com>

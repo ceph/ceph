@@ -48,8 +48,10 @@ class Formatter {
     dump_format_unquoted(name, "%s", (b ? "true" : "false"));
   }
   virtual std::ostream& dump_stream(const char *name) = 0;
-  virtual void dump_format(const char *name, const char *fmt, ...) = 0;
-  virtual void dump_format_unquoted(const char *name, const char *fmt, ...) = 0;
+  virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) = 0;
+  virtual void dump_format(const char *name, const char *fmt, ...);
+  virtual void dump_format_ns(const char *name, const char *ns, const char *fmt, ...);
+  virtual void dump_format_unquoted(const char *name, const char *fmt, ...);
   virtual int get_len() const = 0;
   virtual void write_raw_data(const char *data) = 0;
 
@@ -83,8 +85,7 @@ class JSONFormatter : public Formatter {
   void dump_float(const char *name, double d);
   void dump_string(const char *name, std::string s);
   std::ostream& dump_stream(const char *name);
-  void dump_format(const char *name, const char *fmt, ...);
-  void dump_format_unquoted(const char *name, const char *fmt, ...);
+  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
   int get_len() const;
   void write_raw_data(const char *data);
 
@@ -124,8 +125,7 @@ class XMLFormatter : public Formatter {
   void dump_float(const char *name, double d);
   void dump_string(const char *name, std::string s);
   std::ostream& dump_stream(const char *name);
-  void dump_format(const char *name, const char *fmt, ...);
-  void dump_format_unquoted(const char *name, const char *fmt, ...);
+  void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
   int get_len() const;
   void write_raw_data(const char *data);
 

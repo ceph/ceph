@@ -42,6 +42,32 @@
 
 
 
+class CDirContext : public MDSInternalContextBase
+{
+protected:
+  CDir *dir;
+  MDS* get_mds() {return dir->cache->mds;}
+
+public:
+  CDirContext(CDir *d) : dir(d) {
+    assert(dir != NULL);
+  }
+};
+
+
+class CDirIOContext : public MDSIOContextBase
+{
+protected:
+  CDir *dir;
+  MDS* get_mds() {return dir->cache->mds;}
+
+public:
+  CDirIOContext(CDir *d) : dir(d) {
+    assert(dir != NULL);
+  }
+};
+
+
 // PINS
 //int cdir_pins[CDIR_NUM_PINS] = { 0,0,0,0,0,0,0,0,0,0,0,0,0,0 };
 
@@ -779,7 +805,7 @@ void CDir::prepare_new_fragment(bool replay)
   }
 }
 
-void CDir::finish_old_fragment(list<Context*>& waiters, bool replay)
+void CDir::finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay)
 {
   // take waiters _before_ unfreeze...
   if (!replay) {
@@ -830,11 +856,11 @@ void CDir::init_fragment_pins()
     get(PIN_SUBTREE);
 }
 
-void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool replay)
+void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_sp);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_split);
 
   assert(replay || is_complete() || !is_auth());
 
@@ -924,7 +950,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<Context*>& waiters, bool repl
   finish_old_fragment(waiters, replay);
 }
 
-void CDir::merge(list<CDir*>& subs, list<Context*>& waiters, bool replay)
+void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
 
@@ -1074,7 +1100,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blo
  * WAITING
  */
 
-void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, Context *c) 
+void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, MDSInternalContextBase *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
@@ -1085,14 +1111,14 @@ void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, Context *c)
 }
 
 void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t last,
-			       list<Context*>& ls)
+			       list<MDSInternalContextBase*>& ls)
 {
   if (waiting_on_dentry.empty())
     return;
   
   string_snap_t lb(dname, first);
   string_snap_t ub(dname, last);
-  map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.lower_bound(lb);
+  map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.lower_bound(lb);
   while (p != waiting_on_dentry.end() &&
 	 !(ub < p->first)) {
     dout(10) << "take_dentry_waiting dentry " << dname
@@ -1107,11 +1133,11 @@ void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t las
     put(PIN_DNWAITER);
 }
 
-void CDir::take_sub_waiting(list<Context*>& ls)
+void CDir::take_sub_waiting(list<MDSInternalContextBase*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
   if (!waiting_on_dentry.empty()) {
-    for (map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+    for (map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin(); 
 	 p != waiting_on_dentry.end();
 	 ++p) 
       ls.splice(ls.end(), p->second);
@@ -1122,7 +1148,7 @@ void CDir::take_sub_waiting(list<Context*>& ls)
 
 
 
-void CDir::add_waiter(uint64_t tag, Context *c) 
+void CDir::add_waiter(uint64_t tag, MDSInternalContextBase *c) 
 {
   // hierarchical?
 
@@ -1153,12 +1179,12 @@ void CDir::add_waiter(uint64_t tag, Context *c)
 
 
 /* NOTE: this checks dentry waiters too */
-void CDir::take_waiting(uint64_t mask, list<Context*>& ls)
+void CDir::take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls)
 {
   if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
     while (!waiting_on_dentry.empty()) {
-      map<string_snap_t, list<Context*> >::iterator p = waiting_on_dentry.begin(); 
+      map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin(); 
       dout(10) << "take_waiting dentry " << p->first.name
 	       << " snap " << p->first.snapid << " on " << *this << dendl;
       ls.splice(ls.end(), p->second);
@@ -1176,7 +1202,7 @@ void CDir::finish_waiting(uint64_t mask, int result)
 {
   dout(11) << "finish_waiting mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
 
-  list<Context*> finished;
+  list<MDSInternalContextBase*> finished;
   take_waiting(mask, finished);
   if (result < 0)
     finish_contexts(g_ceph_context, finished, result);
@@ -1263,11 +1289,10 @@ void CDir::mark_clean()
 }
 
 
-struct C_Dir_Dirty : public Context {
-  CDir *dir;
+struct C_Dir_Dirty : public CDirContext {
   version_t pv;
   LogSegment *ls;
-  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : dir(d), pv(p), ls(l) {}
+  C_Dir_Dirty(CDir *d, version_t p, LogSegment *l) : CDirContext(d), pv(p), ls(l) {}
   void finish(int r) {
     dir->mark_dirty(pv, ls);
   }
@@ -1304,13 +1329,13 @@ void CDir::last_put()
 
 // -----------------------
 // FETCH
-void CDir::fetch(Context *c, bool ignore_authpinnability)
+void CDir::fetch(MDSInternalContextBase *c, bool ignore_authpinnability)
 {
   string want;
   return fetch(c, want, ignore_authpinnability);
 }
 
-void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
+void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_authpinnability)
 {
   dout(10) << "fetch on " << *this << dendl;
   
@@ -1337,19 +1362,18 @@ void CDir::fetch(Context *c, const string& want_dn, bool ignore_authpinnability)
   auth_pin(this);
   state_set(CDir::STATE_FETCHING);
 
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_f);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_fetch);
 
   _omap_fetch(want_dn);
 }
 
-class C_Dir_TMAP_Fetched : public Context {
+class C_IO_Dir_TMAP_Fetched : public CDirIOContext {
  protected:
-  CDir *dir;
   string want_dn;
  public:
   bufferlist bl;
 
-  C_Dir_TMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_TMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
   void finish(int r) {
     dir->_tmap_fetched(bl, want_dn, r);
   }
@@ -1358,17 +1382,18 @@ class C_Dir_TMAP_Fetched : public Context {
 void CDir::_tmap_fetch(const string& want_dn)
 {
   // start by reading the first hunk of it
-  C_Dir_TMAP_Fetched *fin = new C_Dir_TMAP_Fetched(this, want_dn);
+  C_IO_Dir_TMAP_Fetched *fin = new C_IO_Dir_TMAP_Fetched(this, want_dn);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.tmap_get(&fin->bl, NULL);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
+			     new C_OnFinisher(fin, &cache->mds->finisher));
 }
 
 void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
 {
-  LogClient &clog = cache->mds->clog;
+  LogChannelRef clog = cache->mds->clog;
   dout(10) << "_tmap_fetched " << bl.length()  << " bytes for " << *this
 	   << " want_dn=" << want_dn << dendl;
 
@@ -1387,7 +1412,7 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
     ::decode(omap, p);
 
     if (!p.end()) {
-      clog.warn() << "tmap buffer of dir " << dirfrag() << " has "
+      clog->warn() << "tmap buffer of dir " << dirfrag() << " has "
 		  << bl.length() - p.get_off() << " extra bytes\n";
     }
     bl.clear();
@@ -1396,16 +1421,15 @@ void CDir::_tmap_fetched(bufferlist& bl, const string& want_dn, int r)
   _omap_fetched(header, omap, want_dn, r);
 }
 
-class C_Dir_OMAP_Fetched : public Context {
+class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
  protected:
-  CDir *dir;
   string want_dn;
  public:
   bufferlist hdrbl;
   map<string, bufferlist> omap;
   int ret1, ret2;
 
-  C_Dir_OMAP_Fetched(CDir *d, const string& w) : dir(d), want_dn(w) { }
+  C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
   void finish(int r) {
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
@@ -1415,19 +1439,20 @@ class C_Dir_OMAP_Fetched : public Context {
 
 void CDir::_omap_fetch(const string& want_dn)
 {
-  C_Dir_OMAP_Fetched *fin = new C_Dir_OMAP_Fetched(this, want_dn);
+  C_IO_Dir_OMAP_Fetched *fin = new C_IO_Dir_OMAP_Fetched(this, want_dn);
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
-  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0, fin);
+  cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
+			     new C_OnFinisher(fin, &cache->mds->finisher));
 }
 
 void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 			 const string& want_dn, int r)
 {
-  LogClient &clog = cache->mds->clog;
+  LogChannelRef clog = cache->mds->clog;
   dout(10) << "_fetched header " << hdrbl.length() << " bytes "
 	   << omap.size() << " keys for " << *this
 	   << " want_dn=" << want_dn << dendl;
@@ -1444,7 +1469,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     }
 
     dout(0) << "_fetched missing object for " << *this << dendl;
-    clog.error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
+    clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
     log_mark_dirty();
 
@@ -1463,7 +1488,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     bufferlist::iterator p = hdrbl.begin();
     ::decode(got_fnode, p);
     if (!p.end()) {
-      clog.warn() << "header buffer of dir " << dirfrag() << " has "
+      clog->warn() << "header buffer of dir " << dirfrag() << " has "
 		  << hdrbl.length() - p.get_off() << " extra bytes\n";
     }
   }
@@ -1643,7 +1668,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  string dirpath, inopath;
 	  this->inode->make_path_string(dirpath);
 	  in->make_path_string(inopath);
-	  clog.error() << "loaded dup inode " << inode_data.inode.ino
+	  clog->error() << "loaded dup inode " << inode_data.inode.ino
 	    << " [" << first << "," << last << "] v" << inode_data.inode.version
 	    << " at " << dirpath << "/" << dname
 	    << ", but inode " << in->vino() << " v" << in->inode.version
@@ -1722,7 +1747,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
  * @param want - min version i want committed
  * @param c - callback for completion
  */
-void CDir::commit(version_t want, Context *c, bool ignore_authpinnability, int op_prio)
+void CDir::commit(version_t want, MDSInternalContextBase *c, bool ignore_authpinnability, int op_prio)
 {
   dout(10) << "commit want " << want << " on " << *this << dendl;
   if (want == 0) want = get_version();
@@ -1736,7 +1761,7 @@ void CDir::commit(version_t want, Context *c, bool ignore_authpinnability, int o
   // note: queue up a noop if necessary, so that we always
   // get an auth_pin.
   if (!c)
-    c = new C_NoopContext;
+    c = new C_MDSInternalNoop;
 
   // auth_pin on first waiter
   if (waiting_for_commit.empty())
@@ -1747,11 +1772,10 @@ void CDir::commit(version_t want, Context *c, bool ignore_authpinnability, int o
   _commit(want, op_prio);
 }
 
-class C_Dir_Committed : public Context {
-  CDir *dir;
+class C_IO_Dir_Committed : public CDirIOContext {
   version_t version;
 public:
-  C_Dir_Committed(CDir *d, version_t v) : dir(d), version(v) { }
+  C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) {
     assert(r == 0);
     dir->_committed(version);
@@ -1787,7 +1811,10 @@ void CDir::_omap_commit(int op_prio)
   set<string> to_remove;
   map<string, bufferlist> to_set;
 
-  C_GatherBuilder gather(g_ceph_context, new C_Dir_Committed(this, get_version()));
+  C_GatherBuilder gather(g_ceph_context,
+			 new C_OnFinisher(new C_IO_Dir_Committed(this,
+								 get_version()),
+					  &cache->mds->finisher));
 
   SnapContext snapc;
   object_t oid = get_ondisk_object();
@@ -1944,9 +1971,9 @@ void CDir::_commit(version_t want, int op_prio)
     state_set(STATE_COMMITTING);
   }
   
-  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_c);
+  if (cache->mds->logger) cache->mds->logger->inc(l_mds_dir_commit);
 
-   _omap_commit(op_prio);
+  _omap_commit(op_prio);
 }
 
 
@@ -2022,9 +2049,9 @@ void CDir::_committed(version_t v)
   // finishers?
   bool were_waiters = !waiting_for_commit.empty();
   
-  map<version_t, list<Context*> >::iterator p = waiting_for_commit.begin();
+  map<version_t, list<MDSInternalContextBase*> >::iterator p = waiting_for_commit.begin();
   while (p != waiting_for_commit.end()) {
-    map<version_t, list<Context*> >::iterator n = p;
+    map<version_t, list<MDSInternalContextBase*> >::iterator n = p;
     ++n;
     if (p->first > committed_version) {
       dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
@@ -2230,7 +2257,7 @@ void CDir::set_dir_auth(pair<int,int> a)
 
   // newly single auth?
   if (was_ambiguous && dir_auth.second == CDIR_AUTH_UNKNOWN) {
-    list<Context*> ls;
+    list<MDSInternalContextBase*> ls;
     take_waiting(WAIT_SINGLEAUTH, ls);
     cache->mds->queue_waiters(ls);
   }
@@ -2475,9 +2502,9 @@ CDir *CDir::get_frozen_tree_root()
   }
 }
 
-struct C_Dir_AuthUnpin : public Context {
-  CDir *dir;
-  C_Dir_AuthUnpin(CDir *d) : dir(d) {}
+class C_Dir_AuthUnpin : public CDirContext {
+  public:
+  C_Dir_AuthUnpin(CDir *d) : CDirContext(d) {}
   void finish(int r) {
     dir->auth_unpin(dir->get_inode());
   }

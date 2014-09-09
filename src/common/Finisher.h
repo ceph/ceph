@@ -55,36 +55,36 @@ class Finisher {
     } else
       finisher_queue.push_back(c);
     finisher_cond.Signal();
-    finisher_lock.Unlock();
     if (logger)
       logger->inc(l_finisher_queue_len);
+    finisher_lock.Unlock();
   }
   void queue(vector<Context*>& ls) {
     finisher_lock.Lock();
     finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
     finisher_cond.Signal();
+    if (logger)
+      logger->inc(l_finisher_queue_len, ls.size());
     finisher_lock.Unlock();
     ls.clear();
-    if (logger)
-      logger->inc(l_finisher_queue_len);
   }
   void queue(deque<Context*>& ls) {
     finisher_lock.Lock();
     finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
     finisher_cond.Signal();
+    if (logger)
+      logger->inc(l_finisher_queue_len, ls.size());
     finisher_lock.Unlock();
     ls.clear();
-    if (logger)
-      logger->inc(l_finisher_queue_len);
   }
   void queue(list<Context*>& ls) {
     finisher_lock.Lock();
     finisher_queue.insert(finisher_queue.end(), ls.begin(), ls.end());
     finisher_cond.Signal();
+    if (logger)
+      logger->inc(l_finisher_queue_len, ls.size());
     finisher_lock.Unlock();
     ls.clear();
-    if (logger)
-      logger->inc(l_finisher_queue_len);
   }
   
   void start();
@@ -104,7 +104,7 @@ class Finisher {
     finisher_thread(this) {
     PerfCountersBuilder b(cct, string("finisher-") + name,
 			  l_finisher_first, l_finisher_last);
-    b.add_time_avg(l_finisher_queue_len, "queue_len");
+    b.add_u64(l_finisher_queue_len, "queue_len");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_finisher_queue_len, 0);
@@ -122,7 +122,10 @@ class C_OnFinisher : public Context {
   Context *con;
   Finisher *fin;
 public:
-  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {}
+  C_OnFinisher(Context *c, Finisher *f) : con(c), fin(f) {
+    assert(fin != NULL);
+    assert(con != NULL);
+  }
   void finish(int r) {
     fin->queue(con, r);
   }

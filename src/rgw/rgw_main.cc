@@ -57,6 +57,7 @@
 #include "rgw_resolve.h"
 #include "rgw_loadgen.h"
 #include "rgw_civetweb.h"
+#include "rgw_civetweb_log.h"
 
 #include "civetweb/civetweb.h"
 
@@ -205,6 +206,9 @@ protected:
       perfcounter->inc(l_rgw_qactive, -1);
     }
     void _dump_queue() {
+      if (!g_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+        return;
+      }
       deque<RGWRequest *>::iterator iter;
       if (process->m_req_queue.empty()) {
         dout(20) << "RGWWQ: empty" << dendl;
@@ -699,11 +703,6 @@ static int civetweb_callback(struct mg_connection *conn) {
   return 1;
 }
 
-static int civetweb_log_callback(const struct mg_connection *conn, const char *buf) {
-  dout(10) << "civetweb: " << (void *)conn << ": " << buf << dendl;
-  return 0;
-}
-
 #ifdef HAVE_CURL_MULTI_WAIT
 static void check_curl()
 {
@@ -732,11 +731,11 @@ int usage()
   cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
   cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
   cerr << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
-  generic_server_usage();
   cerr << "  -m monaddress[:port]      connect to specified monitor\n";
   cerr << "  --keyring=<path>          path to radosgw keyring\n";
   cerr << "  --logfile=<logfile>       file to log debug output\n";
   cerr << "  --debug-rgw=<log-level>/<memory-level>  set radosgw debug level\n";
+  generic_server_usage();
 
   return 0;
 }
@@ -942,7 +941,8 @@ public:
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
-    cb.log_message = civetweb_log_callback;
+    cb.log_message = rgw_civetweb_log_callback;
+    cb.log_access = rgw_civetweb_log_access_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {
@@ -981,7 +981,7 @@ int main(int argc, const char **argv)
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
-  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name");
+  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

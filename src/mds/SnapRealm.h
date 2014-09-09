@@ -21,6 +21,7 @@
 #include "include/elist.h"
 #include "common/snap_types.h"
 
+
 struct SnapRealm {
   // realm state
 
@@ -64,8 +65,8 @@ struct SnapRealm {
     return false;
   }
 
-  bool _open_parents(Context *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(Context *retryorfinish) {
+  bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool open_parents(MDSInternalContextBase *retryorfinish) {
     if (!_open_parents(retryorfinish))
       return false;
     delete retryorfinish;

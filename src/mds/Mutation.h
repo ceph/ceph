@@ -257,7 +257,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     Context *slave_commit;
     bufferlist rollback_bl;
 
-    list<Context*> waiting_for_finish;
+    list<MDSInternalContextBase*> waiting_for_finish;
 
     // export & fragment
     CDir* export_dir;
@@ -324,7 +324,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   typedef ceph::shared_ptr<MDRequestImpl> Ref;
 protected:
   void _dump(utime_t now, Formatter *f) const;
-  void _dump_op_descriptor(ostream& stream) const;
+  void _dump_op_descriptor_unlocked(ostream& stream) const;
 };
 
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;

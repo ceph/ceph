@@ -1760,15 +1760,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   ::encode(ev, bl);
   ::encode(osd_addrs->hb_back_addr, bl);
   ::encode(osd_info, bl);
-  {
-    // put this in a sorted, ordered map<> so that we encode in a
-    // deterministic order.
-    map<entity_addr_t,utime_t> blacklist_map;
-    for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p =
-	   blacklist.begin(); p != blacklist.end(); ++p)
-      blacklist_map.insert(make_pair(p->first, p->second));
-    ::encode(blacklist_map, bl);
-  }
+  ::encode(blacklist, bl);
   ::encode(osd_addrs->cluster_addr, bl);
   ::encode(cluster_snapshot_epoch, bl);
   ::encode(cluster_snapshot, bl);
@@ -1826,7 +1818,15 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     ENCODE_START(1, 1, bl); // extended, osd-only data
     ::encode(osd_addrs->hb_back_addr, bl);
     ::encode(osd_info, bl);
-    ::encode(blacklist, bl);
+    {
+      // put this in a sorted, ordered map<> so that we encode in a
+      // deterministic order.
+      map<entity_addr_t,utime_t> blacklist_map;
+      for (ceph::unordered_map<entity_addr_t,utime_t>::const_iterator p =
+	     blacklist.begin(); p != blacklist.end(); ++p)
+	blacklist_map.insert(make_pair(p->first, p->second));
+      ::encode(blacklist_map, bl);
+    }
     ::encode(osd_addrs->cluster_addr, bl);
     ::encode(cluster_snapshot_epoch, bl);
     ::encode(cluster_snapshot, bl);
@@ -2587,7 +2587,7 @@ int OSDMap::get_erasure_code_profile_default(CephContext *cct,
 					     map<string,string> &profile_map,
 					     ostream *ss)
 {
-  int r = get_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
+  int r = get_json_str_map(cct->_conf->osd_pool_default_erasure_code_profile,
 		      *ss,
 		      &profile_map);
   profile_map["directory"] =

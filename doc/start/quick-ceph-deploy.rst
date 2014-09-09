@@ -93,7 +93,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
 #. Add the initial monitor(s) and gather the keys (new in 
    ``ceph-deploy`` v1.1.3). ::
 
-	ceph-deploy mon create-initial
+	ceph-deploy mon create-initial {ceph-node}
 
    **Note:** In earlier versions of ``ceph-deploy``, you must create the
    initial monitor(s) and gather keys in two discrete steps. First, create
@@ -191,7 +191,8 @@ Red Hat, Fedora, and SLES distributions, see `Running Ceph with sysvinit`_.
 
 To learn more about peering and cluster health, see `Monitoring a Cluster`_.
 To learn more about Ceph OSD Daemon and placement group health, see 
-`Monitoring OSDs and PGs`_.
+`Monitoring OSDs and PGs`_. To learn more about managing users, see 
+`User Management`_.
  
 Once you deploy a Ceph cluster, you can try out some of the administration
 functionality, the ``rados`` object store command line, and then proceed to
@@ -380,3 +381,4 @@ the migration manually.
 .. _Monitoring a Cluster: ../../rados/operations/monitoring
 .. _Monitoring OSDs and PGs: ../../rados/operations/monitoring-osd-pg
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
+.. _User Management: ../../rados/operations/user-management

@@ -1,8 +1,7 @@
 usr/bin/ceph-coverage
 usr/bin/ceph_bench_log
 usr/bin/ceph_dupstore
-usr/bin/ceph_filestore_dump
-usr/bin/ceph_filestore_tool
+usr/bin/ceph_objectstore_tool
 usr/bin/ceph_kvstorebench
 usr/bin/ceph_multi_stress_watch
 usr/bin/ceph_erasure_code
@@ -26,3 +25,5 @@ usr/bin/ceph-monstore-tool
 usr/bin/ceph-osdomap-tool
 usr/bin/ceph-kvstore-tool
 usr/share/java/libcephfs-test.jar
+usr/bin/rbd-replay*
+usr/share/man/man8/rbd-replay*.8

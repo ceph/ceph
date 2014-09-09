@@ -153,6 +153,7 @@ int MonClient::get_monmap_privately()
     if (cur_con) {
       cur_con->mark_down();
       cur_con.reset(NULL);
+      cur_mon.clear();
     }
     monc_lock.Unlock();
     messenger->shutdown();
@@ -165,7 +166,6 @@ int MonClient::get_monmap_privately()
 
   hunting = true;  // reset this to true!
   cur_mon.clear();
-
   cur_con.reset(NULL);
 
   if (!monmap.fsid.is_zero())
@@ -292,6 +292,7 @@ bool MonClient::ms_dispatch(Message *m)
   case MSG_LOGACK:
     if (log_client) {
       log_client->handle_log_ack(static_cast<MLogAck*>(m));
+      m->put();
       if (more_log_pending) {
 	send_log();
       }
@@ -397,7 +398,7 @@ int MonClient::init()
 
 void MonClient::shutdown()
 {
-  ldout(cct, 10) << __func__ << "shutdown" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   monc_lock.Lock();
   while (!version_requests.empty()) {
     version_requests.begin()->second->context->complete(-ECANCELED);
@@ -424,6 +425,7 @@ void MonClient::shutdown()
   if (cur_con)
     cur_con->mark_down();
   cur_con.reset(NULL);
+  cur_mon.clear();
 
   monc_lock.Unlock();
 }

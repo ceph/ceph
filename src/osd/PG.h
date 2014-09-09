@@ -170,11 +170,8 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(int64_t i, const char *_name, uint64_t au) :
-    id(i), auid(au) {
-    if (_name)
-      name = _name;
-  }
+  PGPool(int64_t i, const string& _name, uint64_t au)
+    : id(i), name(_name), auid(au) { }
 
   void update(OSDMapRef map);
 };
@@ -353,7 +350,7 @@ public:
       return ret;
     }
 
-    const map<hobject_t, pg_missing_t::item> &get_all_missing() {
+    const map<hobject_t, pg_missing_t::item> &get_all_missing() const {
       return needs_recovery_map;
     }
 
@@ -1640,8 +1637,8 @@ public:
       Active(my_context ctx);
       void exit();
 
-      const set<pg_shard_t> sorted_actingbackfill_set;
-      const set<pg_shard_t> sorted_backfill_set;
+      const set<pg_shard_t> remote_shards_to_reserve_recovery;
+      const set<pg_shard_t> remote_shards_to_reserve_backfill;
       bool all_replicas_activated;
 
       typedef boost::mpl::list <
@@ -1720,10 +1717,14 @@ public:
 
     struct NotBackfilling : boost::statechart::state< NotBackfilling, Active>, NamedState {
       typedef boost::mpl::list<
-	boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>
+	boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved>,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
+	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       NotBackfilling(my_context ctx);
       void exit();
+      boost::statechart::result react(const RemoteBackfillReserved& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt);
     };
 
     struct RepNotRecovering;
@@ -1806,7 +1807,7 @@ public:
 	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
 	boost::statechart::transition< AllRemotesReserved, Recovering >
 	> reactions;
-      set<pg_shard_t>::const_iterator acting_osd_it;
+      set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
       WaitRemoteRecoveryReserved(my_context ctx);
       boost::statechart::result react(const RemoteRecoveryReserved &evt);
       void exit();

@@ -805,11 +805,6 @@ class TestOSD(TestArgparse):
                                                     'erasure-code-profile',
                                                     'set',
                                                     '^^^^']))
-        assert_equal({}, validate_command(sigdict, ['osd',
-                                                    'erasure-code-profile',
-                                                    'set',
-                                                    'name',
-                                                    '^^^^']))
 
     def test_erasure_code_profile_get(self):
         self.assert_valid_command(['osd', 'erasure-code-profile', 'get',

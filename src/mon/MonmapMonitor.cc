@@ -72,8 +72,8 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   mon->monmap->decode(monmap_bl);
 
   if (mon->store->exists("mkfs", "monmap")) {
-    MonitorDBStore::Transaction t;
-    t.erase("mkfs", "monmap");
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->erase("mkfs", "monmap");
     mon->store->apply_transaction(t);
   }
 }
@@ -86,7 +86,7 @@ void MonmapMonitor::create_pending()
   dout(10) << "create_pending monmap epoch " << pending_map.epoch << dendl;
 }
 
-void MonmapMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << "encode_pending epoch " << pending_map.epoch << dendl;
 
@@ -97,6 +97,11 @@ void MonmapMonitor::encode_pending(MonitorDBStore::Transaction *t)
 
   put_version(t, pending_map.epoch, bl);
   put_last_committed(t, pending_map.epoch);
+
+  // generate a cluster fingerprint, too?
+  if (pending_map.epoch == 1) {
+    mon->prepare_new_fingerprint(t);
+  }
 }
 
 void MonmapMonitor::on_active()
@@ -111,14 +116,14 @@ void MonmapMonitor::on_active()
        single-threaded process and, truth be told, no one else relies on this
        thing besides us.
      */
-    MonitorDBStore::Transaction t;
-    t.put(Monitor::MONITOR_NAME, "joined", 1);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->put(Monitor::MONITOR_NAME, "joined", 1);
     mon->store->apply_transaction(t);
     mon->has_ever_joined = true;
   }
 
   if (mon->is_leader())
-    mon->clog.info() << "monmap " << *mon->monmap << "\n";
+    mon->clog->info() << "monmap " << *mon->monmap << "\n";
 }
 
 bool MonmapMonitor::preprocess_query(PaxosServiceMessage *m)

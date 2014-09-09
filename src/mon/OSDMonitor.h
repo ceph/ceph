@@ -158,7 +158,7 @@ public:
 private:
   void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
-  void encode_pending(MonitorDBStore::Transaction *t);
+  void encode_pending(MonitorDBStore::TransactionRef t);
   void on_active();
   void on_shutdown();
 
@@ -166,7 +166,7 @@ private:
    * we haven't delegated full version stashing to paxosservice for some time
    * now, making this function useless in current context.
    */
-  virtual void encode_full(MonitorDBStore::Transaction *t) { }
+  virtual void encode_full(MonitorDBStore::TransactionRef t) { }
   /**
    * do not let paxosservice periodically stash full osdmaps, or we will break our
    * locally-managed full maps.  (update_from_paxos loads the latest and writes them
@@ -182,7 +182,7 @@ private:
    * This ensures that anyone post-sync will have enough to rebuild their
    * full osdmaps.
    */
-  void encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first);
+  void encode_trim_extra(MonitorDBStore::TransactionRef tx, version_t first);
 
   void update_msgr_features();
   int check_cluster_features(uint64_t features, stringstream &ss);
@@ -219,7 +219,8 @@ private:
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
   void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
 
-  int reweight_by_utilization(int oload, std::string& out_str);
+  int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
+			      const set<int64_t> *pools);
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
@@ -284,6 +285,7 @@ private:
                        unsigned pg_num, unsigned pgp_num,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
+                       const uint64_t expected_num_objects,
 		       stringstream &ss);
   int prepare_new_pool(MPoolOp *m);
 

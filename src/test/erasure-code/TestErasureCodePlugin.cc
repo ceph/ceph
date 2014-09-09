@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -72,12 +73,16 @@ TEST_F(ErasureCodePluginRegistryTest, factory_mutex) {
 TEST_F(ErasureCodePluginRegistryTest, all)
 {
   map<std::string,std::string> parameters;
-  parameters["directory"] = ".libs";
+  string directory(".libs");
+  parameters["directory"] = directory;
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   stringstream ss;
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-EIO, instance.factory("invalid", parameters, &erasure_code, ss));
+  EXPECT_FALSE(erasure_code);
+  EXPECT_EQ(-EXDEV, instance.factory("missing_version", parameters,
+				     &erasure_code, ss));
   EXPECT_FALSE(erasure_code);
   EXPECT_EQ(-ENOENT, instance.factory("missing_entry_point", parameters,
 				      &erasure_code, ss));
@@ -91,7 +96,13 @@ TEST_F(ErasureCodePluginRegistryTest, all)
   EXPECT_EQ(0, instance.factory("example", parameters, &erasure_code, ss));
   EXPECT_TRUE(erasure_code);
   ErasureCodePlugin *plugin = 0;
-  EXPECT_EQ(-EEXIST, instance.load("example", parameters, &plugin, ss));
+  {
+    Mutex::Locker l(instance.lock);
+    EXPECT_EQ(-EEXIST, instance.load("example", directory, &plugin, ss));
+    EXPECT_EQ(-ENOENT, instance.remove("does not exist"));
+    EXPECT_EQ(0, instance.remove("example"));
+    EXPECT_EQ(0, instance.load("example", directory, &plugin, ss));
+  }
 }
 
 int main(int argc, char **argv) {
@@ -105,6 +116,12 @@ int main(int argc, char **argv) {
   return RUN_ALL_TESTS();
 }
 
-// Local Variables:
-// compile-command: "cd ../.. ; make -j4 && make unittest_erasure_code_plugin && valgrind  --leak-check=full --tool=memcheck ./unittest_erasure_code_plugin --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
-// End:
+/*
+ * Local Variables:
+ * compile-command: "cd ../.. ; make -j4 && 
+ *   make unittest_erasure_code_plugin && 
+ *   valgrind  --leak-check=full --tool=memcheck \
+ *      ./unittest_erasure_code_plugin \
+ *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
+ * End:
+ */

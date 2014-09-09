@@ -20,6 +20,7 @@
 #include "CDir.h"
 #include "CDentry.h"
 #include "Mutation.h"
+#include "MDSContext.h"
 
 #include "MDLog.h"
 #include "MDSMap.h"
@@ -64,6 +65,22 @@ static ostream& _prefix(std::ostream *_dout, MDS *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".locker ";
 }
 
+
+class LockerContext : public MDSInternalContextBase {
+  protected:
+  Locker *locker;
+  MDS *get_mds()
+  {
+    return locker->mds;
+  }
+
+  public:
+  LockerContext(Locker *locker_) : locker(locker_) {
+    assert(locker != NULL);
+  }
+};
+
+
 /* This function DOES put the passed message before returning */
 void Locker::dispatch(Message *m)
 {
@@ -95,6 +112,11 @@ void Locker::dispatch(Message *m)
   }
 }
 
+void Locker::tick()
+{
+  scatter_tick();
+  caps_tick();
+}
 
 /*
  * locks vs rejoin
@@ -686,7 +708,7 @@ void Locker::drop_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<Context*> *pfinishers)
+void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<MDSInternalContextBase*> *pfinishers)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   assert(!lock->is_stable());
@@ -908,7 +930,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, list<C
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
   bool need_issue = caps_imported;
-  list<Context*> finishers;
+  list<MDSInternalContextBase*> finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
 
@@ -969,12 +991,14 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
   return need_issue;
 }
 
-class C_Locker_Eval : public Context {
-  Locker *locker;
+class C_Locker_Eval : public LockerContext {
   MDSCacheObject *p;
   int mask;
 public:
-  C_Locker_Eval(Locker *l, MDSCacheObject *pp, int m) : locker(l), p(pp), mask(m) {
+  C_Locker_Eval(Locker *l, MDSCacheObject *pp, int m) : LockerContext(l), p(pp), mask(m) {
+    // We are used as an MDSCacheObject waiter, so should
+    // only be invoked by someone already holding the big lock.
+    assert(locker->mds->mds_lock.is_locked_by_me());
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) {
@@ -1072,7 +1096,7 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
 void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 {
   bool need_issue = false;
-  list<Context*> finishers;
+  list<MDSInternalContextBase*> finishers;
 
   // kick locks now
   if (!in->filelock.is_stable())
@@ -1097,7 +1121,7 @@ void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 void Locker::eval_scatter_gathers(CInode *in)
 {
   bool need_issue = false;
-  list<Context*> finishers;
+  list<MDSInternalContextBase*> finishers;
 
   dout(10) << "eval_scatter_gathers " << *in << dendl;
 
@@ -1165,10 +1189,17 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
       return false;
     }
   }
+  if (lock->get_type() == CEPH_LOCK_IFILE) {
+    CInode *in = static_cast<CInode *>(lock->get_parent());
+    if (in->state_test(CInode::STATE_RECOVERING)) {
+      mds->mdcache->recovery_queue.prioritize(in);
+    }
+  }
+
   return false;
 }
 
-bool Locker::rdlock_try(SimpleLock *lock, client_t client, Context *con)
+bool Locker::rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *con)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -1351,6 +1382,11 @@ bool Locker::wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait)
       return true;
     }
 
+    if (lock->get_type() == CEPH_LOCK_IFILE &&
+	in->state_test(CInode::STATE_RECOVERING)) {
+      mds->mdcache->recovery_queue.prioritize(in);
+    }
+
     if (!lock->is_stable())
       break;
 
@@ -1486,6 +1522,13 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	return true;
       }
       
+      if (lock->get_type() == CEPH_LOCK_IFILE) {
+	CInode *in = static_cast<CInode*>(lock->get_parent());
+	if (in->state_test(CInode::STATE_RECOVERING)) {
+	  mds->mdcache->recovery_queue.prioritize(in);
+	}
+      }
+
       if (!lock->is_stable() && !(lock->get_state() == LOCK_XLOCKDONE &&
 				  lock->get_xlock_by_client() == client))
 	break;
@@ -1651,20 +1694,20 @@ version_t Locker::issue_file_data_version(CInode *in)
   return in->inode.file_data_version;
 }
 
-struct C_Locker_FileUpdate_finish : public Context {
-  Locker *locker;
+class C_Locker_FileUpdate_finish : public LockerContext {
   CInode *in;
   MutationRef mut;
   bool share;
   client_t client;
   Capability *cap;
   MClientCaps *ack;
+public:
   C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
-                             bool e=false, client_t c=-1,
-			     Capability *cp = 0,
-			     MClientCaps *ac = 0) : 
-    locker(l), in(i), mut(m), share(e), client(c), cap(cp),
-    ack(ac) {
+				bool e=false, client_t c=-1,
+				Capability *cp = 0,
+				MClientCaps *ac = 0)
+    : LockerContext(l), in(i), mut(m), share(e), client(c), cap(cp),
+      ack(ac) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
@@ -1894,8 +1937,14 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 		<< " new pending " << ccap_string(after) << " was " << ccap_string(before) 
 		<< dendl;
 
-	MClientCaps *m = new MClientCaps((before & ~after) ? CEPH_CAP_OP_REVOKE:CEPH_CAP_OP_GRANT,
-					 in->ino(),
+	int op = (before & ~after) ? CEPH_CAP_OP_REVOKE : CEPH_CAP_OP_GRANT;
+	if (op == CEPH_CAP_OP_REVOKE) {
+		revoking_caps.push_back(&cap->item_revoking_caps);
+		cap->set_last_revoke_stamp(ceph_clock_now(g_ceph_context));
+		cap->reset_num_revoke_warnings();
+	}
+
+	MClientCaps *m = new MClientCaps(op, in->ino(),
 					 in->find_snaprealm()->inode->ino(),
 					 cap->get_cap_id(), cap->get_last_seq(),
 					 after, wanted, 0,
@@ -2001,11 +2050,10 @@ void Locker::remove_stale_leases(Session *session)
 }
 
 
-class C_MDL_RequestInodeFileCaps : public Context {
-  Locker *locker;
+class C_MDL_RequestInodeFileCaps : public LockerContext {
   CInode *in;
 public:
-  C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : locker(l), in(i) {
+  C_MDL_RequestInodeFileCaps(Locker *l, CInode *i) : LockerContext(l), in(i) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
@@ -2071,8 +2119,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 }
 
 
-class C_MDL_CheckMaxSize : public Context {
-  Locker *locker;
+class C_MDL_CheckMaxSize : public LockerContext {
   CInode *in;
   bool update_size;
   uint64_t newsize;
@@ -2083,7 +2130,7 @@ class C_MDL_CheckMaxSize : public Context {
 public:
   C_MDL_CheckMaxSize(Locker *l, CInode *i, bool _update_size, uint64_t _newsize,
                      bool _update_max, uint64_t _new_max_size, utime_t _mtime) :
-    locker(l), in(i),
+    LockerContext(l), in(i),
     update_size(_update_size), newsize(_newsize),
     update_max(_update_max), new_max_size(_new_max_size),
     mtime(_mtime)
@@ -2102,7 +2149,13 @@ public:
 void Locker::calc_new_client_ranges(CInode *in, uint64_t size, map<client_t,client_writeable_range_t>& new_ranges)
 {
   inode_t *latest = in->get_projected_inode();
-  uint64_t ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+  uint64_t ms;
+  if(latest->has_layout()) {
+    ms = ROUND_UP_TO((size+1)<<1, latest->get_layout_size_increment());
+  } else {
+    // Layout-less directories like ~mds0/, have zero size
+    ms = 0;
+  }
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
@@ -2234,7 +2287,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
     mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, true));
+  mds->mdlog->submit_entry(le,
+          new C_Locker_FileUpdate_finish(this, in, mut, true));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
@@ -2313,6 +2367,12 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
       cur->item_open_file.remove_myself();
     }
   } else {
+    if (cur->state_test(CInode::STATE_RECOVERING) &&
+	(cap->wanted() & (CEPH_CAP_FILE_RD |
+			  CEPH_CAP_FILE_WR))) {
+      mds->mdcache->recovery_queue.prioritize(cur);
+    }
+
     if (!cur->item_open_file.is_on_list()) {
       dout(10) << " adding to open file list " << *cur << dendl;
       assert(cur->last == CEPH_NOSNAP);
@@ -2575,13 +2635,13 @@ void Locker::handle_client_caps(MClientCaps *m)
   m->put();
 }
 
-class C_Locker_RetryRequestCapRelease : public Context {
-  Locker *locker;
+
+class C_Locker_RetryRequestCapRelease : public LockerContext {
   client_t client;
   ceph_mds_request_release item;
 public:
   C_Locker_RetryRequestCapRelease(Locker *l, client_t c, const ceph_mds_request_release& it) :
-    locker(l), client(c), item(it) { }
+    LockerContext(l), client(c), item(it) { }
   void finish(int r) {
     string dname;
     MDRequestRef null_ref;
@@ -2667,14 +2727,13 @@ void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, con
     mdr->cap_releases[in->vino()] = cap->get_last_seq();
 }
 
-class C_Locker_RetryKickIssueCaps : public Context {
-  Locker *locker;
+class C_Locker_RetryKickIssueCaps : public LockerContext {
   CInode *in;
   client_t client;
   ceph_seq_t seq;
 public:
   C_Locker_RetryKickIssueCaps(Locker *l, CInode *i, client_t c, ceph_seq_t s) :
-    locker(l), in(i), client(c), seq(s) {
+    LockerContext(l), in(i), client(c), seq(s) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) {
@@ -2795,8 +2854,10 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, false,
-							      client, NULL, ack));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
+								 false,
+								 client, NULL,
+								 ack));
 }
 
 
@@ -3032,8 +3093,10 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY, 0, follows);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in, follows);
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, change_max,
-							      client, cap, ack));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
+								 change_max,
+								 client, cap,
+								 ack));
   // only flush immediately if the lock is unstable, or unissued caps are wanted, or max_size is 
   // changing
   if (((dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) && !in->filelock.is_stable()) ||
@@ -3064,8 +3127,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   m->put();
 }
 
-class C_Locker_RetryCapRelease : public Context {
-  Locker *locker;
+class C_Locker_RetryCapRelease : public LockerContext {
   client_t client;
   inodeno_t ino;
   uint64_t cap_id;
@@ -3074,7 +3136,7 @@ class C_Locker_RetryCapRelease : public Context {
 public:
   C_Locker_RetryCapRelease(Locker *l, client_t c, inodeno_t i, uint64_t id,
 			   ceph_seq_t mseq, ceph_seq_t seq) :
-    locker(l), client(c), ino(i), cap_id(id), migrate_seq(mseq), issue_seq(seq) {}
+    LockerContext(l), client(c), ino(i), cap_id(id), migrate_seq(mseq), issue_seq(seq) {}
   void finish(int r) {
     locker->_do_cap_release(client, ino, cap_id, migrate_seq, issue_seq);
   }
@@ -3141,6 +3203,27 @@ void Locker::remove_client_cap(CInode *in, client_t client)
   try_eval(in, CEPH_CAP_LOCKS);
 }
 
+void Locker::caps_tick()
+{
+  utime_t now = ceph_clock_now(g_ceph_context);
+
+  for (xlist<Capability*>::iterator p = revoking_caps.begin(); !p.end(); ++p) {
+    Capability *cap = *p;
+
+    utime_t age = now - cap->get_last_revoke_stamp();
+    if (age <= g_conf->mds_revoke_cap_timeout)
+      break;
+    // exponential backoff of warning intervals
+    if (age > g_conf->mds_revoke_cap_timeout * (1 << cap->get_num_revoke_warnings())) {
+      cap->inc_num_revoke_warnings();
+      stringstream ss;
+      ss << "client." << cap->get_client() << " isn't responding to MClientCaps(revoke), ino "
+	 << cap->get_inode()->ino() << " pending " << ccap_string(cap->pending())
+	 << " issued " << ccap_string(cap->issued()) << ", sent " << age << " seconds ago\n";
+      mds->clog->warn() << ss.str();
+    }
+  }
+}
 
 void Locker::handle_client_lease(MClientLease *m)
 {
@@ -3872,6 +3955,17 @@ Some notes on scatterlocks.
 
 */
 
+class C_Locker_ScatterWB : public LockerContext {
+  ScatterLock *lock;
+  MutationRef mut;
+public:
+  C_Locker_ScatterWB(Locker *l, ScatterLock *sl, MutationRef& m) :
+    LockerContext(l), lock(sl), mut(m) {}
+  void finish(int r) { 
+    locker->scatter_writebehind_finish(lock, mut); 
+  }
+};
+
 void Locker::scatter_writebehind(ScatterLock *lock)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
@@ -4008,7 +4102,7 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  * we need to lock|scatter in order to push fnode changes into the
  * inode.dirstat.
  */
-void Locker::scatter_nudge(ScatterLock *lock, Context *c, bool forcelockchange)
+void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange)
 {
   CInode *p = static_cast<CInode *>(lock->get_parent());
 

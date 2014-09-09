@@ -23,16 +23,16 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=127.0.0.1 "
 
-    setup $dir || return 1
-    run_mon $dir a --public-addr 127.0.0.1
     FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            cat $dir/a/log
-            return 1
-        fi
+	setup $dir || return 1
+	run_mon $dir a --public-addr 127.0.0.1
+	if ! $TEST_function $dir ; then
+	  cat $dir/a/log
+	  return 1
+	fi
+	teardown $dir || return 1
     done
-    teardown $dir || return 1
 }
 
 function TEST_crush_rule_create_simple() {
@@ -79,6 +79,7 @@ function TEST_crush_rule_create_simple_exists() {
     local ruleset=ruleset2
     local root=default
     local failure_domain=host
+    ./ceph osd erasure-code-profile ls
     # add to the pending OSD map without triggering a paxos proposal
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-simple","name":"'$ruleset'","root":"'$root'","type":"'$failure_domain'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
     test $result = true || return 1
@@ -124,6 +125,7 @@ function TEST_crush_rule_create_erasure() {
 function TEST_crush_rule_create_erasure_exists() {
     local dir=$1
     local ruleset=ruleset5
+    ./ceph osd erasure-code-profile ls
     # add to the pending OSD map without triggering a paxos proposal
     result=$(echo '{"prefix":"osdmonitor_prepare_command","prepare":"osd crush rule create-erasure","name":"'$ruleset'"}' | nc -U $dir/a/ceph-mon.a.asok | cut --bytes=5-)
     test $result = true || return 1
@@ -135,6 +137,7 @@ function TEST_crush_rule_create_erasure_exists() {
 function TEST_crush_rule_create_erasure_profile_default_exists() {
     local dir=$1
     local ruleset=ruleset6
+    ./ceph osd erasure-code-profile ls
     ./ceph osd erasure-code-profile rm default || return 1
     ! ./ceph osd erasure-code-profile ls | grep default || return 1
     # add to the pending OSD map without triggering a paxos proposal
@@ -145,6 +148,73 @@ function TEST_crush_rule_create_erasure_profile_default_exists() {
     grep 'profile default already pending' $dir/a/log || return 1
     ./ceph osd crush rule rm $ruleset || return 1
     ./ceph osd erasure-code-profile ls | grep default || return 1
+}
+
+function Check_ruleset_id_match_rule_id() {
+    local rule_name=$1
+    rule_id=`./ceph osd crush rule dump $rule_name | grep "\"rule_id\":" | awk -F ":|," '{print int($2)}'`
+    ruleset_id=`./ceph osd crush rule dump $rule_name | grep "\"ruleset\":"| awk -F ":|," '{print int($2)}'`
+    test $ruleset_id = $rule_id || return 1
+}
+
+function generate_manipulated_rules() {
+    local dir=$1
+    ./ceph osd crush add-bucket $root host
+    ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
+    ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
+    ./ceph osd getcrushmap -o $dir/original_map
+    ./crushtool -d $dir/original_map -o $dir/decoded_original_map
+    #manipulate the rulesets , to make the rule_id != ruleset_id
+    sed -i 's/ruleset 0/ruleset 3/' $dir/decoded_original_map
+    sed -i 's/ruleset 2/ruleset 0/' $dir/decoded_original_map
+    sed -i 's/ruleset 1/ruleset 2/' $dir/decoded_original_map
+
+    ./crushtool -c $dir/decoded_original_map -o $dir/new_map
+    ./ceph osd setcrushmap -i $dir/new_map
+
+    ./ceph osd crush rule dump
+}
+
+function TEST_crush_ruleset_match_rule_when_creating() {
+    local dir=$1
+    local root=host1
+
+    generate_manipulated_rules $dir
+
+    ./ceph osd crush rule create-simple special_rule_simple $root osd firstn || return 1
+
+    ./ceph osd crush rule dump
+    #show special_rule_simple has same rule_id and ruleset_id
+    Check_ruleset_id_match_rule_id special_rule_simple || return 1
+}
+
+function TEST_add_ruleset_failed() {
+    local dir=$1
+    local root=host1
+
+    ./ceph osd crush add-bucket $root host
+    ./ceph osd crush rule create-simple test_rule1 $root osd firstn || return 1
+    ./ceph osd crush rule create-simple test_rule2 $root osd firstn || return 1
+    ./ceph osd getcrushmap > $dir/crushmap || return 1
+    ./crushtool --decompile $dir/crushmap > $dir/crushmap.txt || return 1
+    for i in $(seq 3 255)
+        do
+            cat <<EOF
+rule test_rule$i {
+	ruleset $i
+	type replicated
+	min_size 1
+	max_size 10
+	step take $root
+	step choose firstn 0 type osd
+	step emit
+}
+EOF
+    done >> $dir/crushmap.txt
+    ./crushtool --compile $dir/crushmap.txt -o $dir/crushmap || return 1
+    ./ceph osd setcrushmap -i $dir/crushmap  || return 1
+    ./ceph osd crush rule create-simple test_rule_nospace $root osd firstn 2>&1 | grep "Error ENOSPC" || return 1
+
 }
 
 main osd-crush

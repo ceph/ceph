@@ -42,11 +42,18 @@
 #include "messages/MOSDSubOpReply.h"
 #include "common/BackTrace.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/pg.h"
+#endif
+
 #include <sstream>
 
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
+
+static coll_t META_COLL("meta");
+
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -1535,7 +1542,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	 * behind.
 	 */
 	// backfill
-	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
+	osd->clog->info() << info.pgid << " restarting backfill on osd." << peer
 			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
 			 << " to " << info.last_update;
 
@@ -1721,6 +1728,14 @@ void PG::queue_op(OpRequestRef& op)
     return;
   }
   osd->op_wq.queue(make_pair(PGRef(this), op));
+  {
+    // after queue() to include any locking costs
+#ifdef WITH_LTTNG
+    osd_reqid_t reqid = op->get_reqid();
+#endif
+    tracepoint(pg, queue_op, reqid.name._type,
+        reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
+  }
 }
 
 void PG::replay_queued_ops()
@@ -2418,6 +2433,7 @@ void PG::init(
     dout(10) << __func__ << ": Setting backfill" << dendl;
     info.last_backfill = hobject_t();
     info.last_complete = info.last_update;
+    pg_log.mark_log_for_rewrite();
   }
 
   reg_next_scrub();
@@ -2600,7 +2616,7 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(coll_t::META_COLL, infos_oid, v);
+  t.omap_setkeys(META_COLL, infos_oid, v);
 
   return 0;
 }
@@ -2644,7 +2660,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
     set<string> keys;
     keys.insert(get_epoch_key(pgid));
     map<string,bufferlist> values;
-    store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+    store->omap_get_values(META_COLL, infos_oid, keys, &values);
     assert(values.size() == 1);
     tmpbl = values[ek];
     bufferlist::iterator p = tmpbl.begin();
@@ -2750,7 +2766,7 @@ void PG::append_log(
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
+  t.omap_setkeys(META_COLL, log_oid, keys);
 
   pg_log.trim(&handler, trim_to, info);
 
@@ -2809,7 +2825,7 @@ int PG::read_info(
     ::decode(struct_v, p);
   } else {
     if (struct_v < 6) {
-      int r = store->read(coll_t::META_COLL, biginfo_oid, 0, 0, lbl);
+      int r = store->read(META_COLL, biginfo_oid, 0, 0, lbl);
       if (r < 0)
         return r;
       p = lbl.begin();
@@ -2822,7 +2838,7 @@ int PG::read_info(
       keys.insert(k);
       keys.insert(bk);
       map<string,bufferlist> values;
-      store->omap_get_values(coll_t::META_COLL, infos_oid, keys, &values);
+      store->omap_get_values(META_COLL, infos_oid, keys, &values);
       assert(values.size() == 2);
       lbl = values[k];
       p = lbl.begin();
@@ -2874,7 +2890,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     assert(!r);
   }
   if (oss.str().length())
-    osd->clog.error() << oss;
+    osd->clog->error() << oss;
 
   // log any weirdness
   log_weirdness();
@@ -2883,12 +2899,12 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 void PG::log_weirdness()
 {
   if (pg_log.get_tail() != info.log_tail)
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " info mismatch, log.tail " << pg_log.get_tail()
 		      << " != info.log_tail " << info.log_tail
 		      << "\n";
   if (pg_log.get_head() != info.last_update)
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " info mismatch, log.head " << pg_log.get_head()
 		      << " != info.last_update " << info.last_update
 		      << "\n";
@@ -2896,7 +2912,7 @@ void PG::log_weirdness()
   if (!pg_log.get_log().empty()) {
     // sloppy check
     if ((pg_log.get_log().log.begin()->version <= pg_log.get_tail()))
-      osd->clog.error() << info.pgid
+      osd->clog->error() << info.pgid
 			<< " log bound mismatch, info (" << pg_log.get_tail() << ","
 			<< pg_log.get_head() << "]"
 			<< " actual ["
@@ -2906,7 +2922,7 @@ void PG::log_weirdness()
   }
   
   if (pg_log.get_log().caller_ops.size() > pg_log.get_log().log.size()) {
-    osd->clog.error() << info.pgid
+    osd->clog->error() << info.pgid
 		      << " caller_ops.size " << pg_log.get_log().caller_ops.size()
 		      << " > log size " << pg_log.get_log().log.size()
 		      << "\n";
@@ -3340,7 +3356,7 @@ void PG::_scan_rollback_obs(
        i != rollback_obs.end();
        ++i) {
     if (i->generation < trimmed_to.version) {
-      osd->clog.error() << "osd." << osd->whoami
+      osd->clog->error() << "osd." << osd->whoami
 			<< " pg " << info.pgid
 			<< " found obsolete rollback obj "
 			<< *i << " generation < trimmed_to "
@@ -3400,7 +3416,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 		 << dendl;
 	    assert(0);
 	  }
-	  osd->clog.error() << "osd." << osd->whoami
+	  osd->clog->error() << "osd." << osd->whoami
 			    << " found snap mapper error on pg "
 			    << info.pgid
 			    << " oid " << hoid << " snaps in mapper: "
@@ -3408,7 +3424,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << oi_snaps
 			    << "...repaired";
 	} else {
-	  osd->clog.error() << "osd." << osd->whoami
+	  osd->clog->error() << "osd." << osd->whoami
 			    << " found snap mapper error on pg "
 			    << info.pgid
 			    << " oid " << hoid << " snaps missing in mapper"
@@ -4071,7 +4087,7 @@ void PG::scrub_compare_maps()
     dout(2) << ss.str() << dendl;
 
     if (!authoritative.empty() || !scrubber.inconsistent_snapcolls.empty()) {
-      osd->clog.error(ss);
+      osd->clog->error(ss);
     }
 
     for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
@@ -4121,7 +4137,7 @@ void PG::scrub_process_inconsistent()
        << scrubber.missing.size() << " missing, "
        << scrubber.inconsistent.size() << " inconsistent objects\n";
     dout(2) << ss.str() << dendl;
-    osd->clog.error(ss);
+    osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
       for (map<hobject_t, pair<ScrubMap::object, pg_shard_t> >::iterator i =
@@ -4217,9 +4233,9 @@ void PG::scrub_finish()
       oss << ", " << scrubber.fixed << " fixed";
     oss << "\n";
     if (total_errors)
-      osd->clog.error(oss);
+      osd->clog->error(oss);
     else
-      osd->clog.info(oss);
+      osd->clog->info(oss);
   }
 
   // finish up
@@ -4386,7 +4402,7 @@ void PG::fulfill_log(
     dout(10) << " sending info+missing+log since " << query.since
 	     << dendl;
     if (query.since != eversion_t() && query.since < pg_log.get_tail()) {
-      osd->clog.error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
+      osd->clog->error() << info.pgid << " got broken pg_query_t::LOG since " << query.since
 			<< " when my log.tail is " << pg_log.get_tail()
 			<< ", sending full log instead\n";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
@@ -4991,7 +5007,7 @@ bool PG::can_discard_request(OpRequestRef& op)
   case MSG_OSD_PG_PUSH_REPLY:
     return can_discard_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
   case MSG_OSD_SUBOPREPLY:
-    return false;
+    return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
 
   case MSG_OSD_EC_WRITE:
     return can_discard_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
@@ -5666,7 +5682,7 @@ void PG::RecoveryState::Backfilling::exit()
 PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/WaitRemoteBackfillReserved"),
-    backfill_osd_it(context< Active >().sorted_backfill_set.begin())
+    backfill_osd_it(context< Active >().remote_shards_to_reserve_backfill.begin())
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
@@ -5679,7 +5695,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (backfill_osd_it != context< Active >().sorted_backfill_set.end()) {
+  if (backfill_osd_it != context< Active >().remote_shards_to_reserve_backfill.end()) {
     //The primary never backfills itself
     assert(*backfill_osd_it != pg->pg_whoami);
     ConnectionRef con = pg->osd->get_con_osd_cluster(
@@ -5720,8 +5736,8 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 
   // Send REJECT to all previously acquired reservations
   set<pg_shard_t>::const_iterator it, begin, end, next;
-  begin = context< Active >().sorted_backfill_set.begin();
-  end = context< Active >().sorted_backfill_set.end();
+  begin = context< Active >().remote_shards_to_reserve_backfill.begin();
+  end = context< Active >().remote_shards_to_reserve_backfill.end();
   assert(begin != end);
   for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
     //The primary never backfills itself
@@ -5778,6 +5794,18 @@ PG::RecoveryState::NotBackfilling::NotBackfilling(my_context ctx)
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/NotBackfilling")
 {
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result
+PG::RecoveryState::NotBackfilling::react(const RemoteBackfillReserved &evt)
+{
+  return discard_event();
+}
+
+boost::statechart::result
+PG::RecoveryState::NotBackfilling::react(const RemoteReservationRejected &evt)
+{
+  return discard_event();
 }
 
 void PG::RecoveryState::NotBackfilling::exit()
@@ -5973,7 +6001,7 @@ void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
 PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
-    acting_osd_it(context< Active >().sorted_actingbackfill_set.begin())
+    remote_recovery_reservation_it(context< Active >().remote_shards_to_reserve_recovery.begin())
 {
   context< RecoveryMachine >().log_enter(state_name);
   post_event(RemoteRecoveryReserved());
@@ -5983,28 +6011,26 @@ boost::statechart::result
 PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &evt) {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (acting_osd_it != context< Active >().sorted_actingbackfill_set.end()) {
-    // skip myself
-    if (*acting_osd_it == pg->pg_whoami)
-      ++acting_osd_it;
+  if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
+    assert(*remote_recovery_reservation_it != pg->pg_whoami);
   }
 
-  if (acting_osd_it != context< Active >().sorted_actingbackfill_set.end()) {
+  if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
     ConnectionRef con = pg->osd->get_con_osd_cluster(
-      acting_osd_it->osd, pg->get_osdmap()->get_epoch());
+      remote_recovery_reservation_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
       if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(
 	    MRecoveryReserve::REQUEST,
-	    spg_t(pg->info.pgid.pgid, acting_osd_it->shard),
+	    spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
 	    pg->get_osdmap()->get_epoch()),
 	  con.get());
       } else {
 	post_event(RemoteRecoveryReserved());
       }
     }
-    ++acting_osd_it;
+    ++remote_recovery_reservation_it;
   } else {
     post_event(AllRemotesReserved());
   }
@@ -6038,8 +6064,8 @@ void PG::RecoveryState::Recovering::release_reservations()
 
   // release remote reservations
   for (set<pg_shard_t>::const_iterator i =
-	 context< Active >().sorted_actingbackfill_set.begin();
-        i != context< Active >().sorted_actingbackfill_set.end();
+	 context< Active >().remote_shards_to_reserve_recovery.begin();
+        i != context< Active >().remote_shards_to_reserve_recovery.end();
         ++i) {
     if (*i == pg->pg_whoami) // skip myself
       continue;
@@ -6148,16 +6174,34 @@ void PG::RecoveryState::Clean::exit()
   pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
 }
 
+template <typename T>
+set<pg_shard_t> unique_osd_shard_set(const pg_shard_t & skip, const T &in)
+{
+  set<int> osds_found;
+  set<pg_shard_t> out;
+  for (typename T::const_iterator i = in.begin();
+       i != in.end();
+       ++i) {
+    if (*i != skip && !osds_found.count(i->osd)) {
+      osds_found.insert(i->osd);
+      out.insert(*i);
+    }
+  }
+  return out;
+}
+
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active"),
-    sorted_actingbackfill_set(
-      context< RecoveryMachine >().pg->actingbackfill.begin(),
-      context< RecoveryMachine >().pg->actingbackfill.end()),
-    sorted_backfill_set(
-      context< RecoveryMachine >().pg->backfill_targets.begin(),
-      context< RecoveryMachine >().pg->backfill_targets.end()),
+    remote_shards_to_reserve_recovery(
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->actingbackfill)),
+    remote_shards_to_reserve_backfill(
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->backfill_targets)),
     all_replicas_activated(false)
 {
   context< RecoveryMachine >().log_enter(state_name);
@@ -6248,11 +6292,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
     if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
-      pg->osd->clog.error() << pg->info.pgid << " has " << unfound
+      pg->osd->clog->error() << pg->info.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically marking lost but NOT IMPLEMENTED\n";
       //pg->mark_all_unfound_lost(*context< RecoveryMachine >().get_cur_transaction());
     } else
-      pg->osd->clog.error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
+      pg->osd->clog->error() << pg->info.pgid << " has " << unfound << " objects unfound and apparently lost\n";
   }
 
   if (!pg->snap_trimq.empty() &&

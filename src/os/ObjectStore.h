@@ -80,6 +80,11 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
   ::encode(*attrset, bl);
 }
 
+// Flag bits
+typedef uint32_t osflagbits_t;
+const int SKIP_JOURNAL_REPLAY = 1 << 0;
+const int SKIP_MOUNT_OMAP = 1 << 1;
+
 class ObjectStore {
 protected:
   string path;
@@ -93,11 +98,13 @@ public:
    * @param type type of store. This is a string from the configuration file.
    * @param data path (or other descriptor) for data
    * @param journal path (or other descriptor) for journal (optional)
+   * @param flags which filestores should check if applicable
    */
   static ObjectStore *create(CephContext *cct,
 			     const string& type,
 			     const string& data,
-			     const string& journal);
+			     const string& journal,
+			     osflagbits_t flag = 0);
 
   Logger *logger;
 
@@ -368,6 +375,12 @@ public:
       OP_COLL_MOVE_RENAME = 38,   // oldcid, oldoid, newcid, newoid
 
       OP_SETALLOCHINT = 39,  // cid, oid, object_size, write_size
+      OP_COLL_HINT = 40, // cid, type, bl
+    };
+
+    // Transaction hint type
+    enum {
+      COLL_HINT_EXPECTED_NUM_OBJECTS = 1,
     };
 
   private:
@@ -380,6 +393,7 @@ public:
     bool use_pool_override;
     bool replica;
     bool tolerate_collection_add_enoent;
+    void *osr; // NULL on replay
 
     list<Context *> on_applied;
     list<Context *> on_commit;
@@ -520,6 +534,14 @@ public:
     /// Number of operations in the transation
     int get_num_ops() {
       return ops;
+    }
+
+    void set_osr(void *s) {
+      osr = s;
+    }
+
+    void *get_osr() {
+      return osr;
     }
 
     /**
@@ -823,6 +845,24 @@ public:
       ::encode(cid, tbl);
       ops++;
     }
+
+    /**
+     * Give the collection a hint.
+     *
+     * @param cid  - collection id.
+     * @param type - hint type.
+     * @param hint - the hint payload, which contains the customized
+     *               data along with the hint type.
+     */
+     void collection_hint(coll_t cid, uint32_t type, const bufferlist& hint) {
+       __u32 op = OP_COLL_HINT;
+       ::encode(op, tbl);
+       ::encode(cid, tbl);
+       ::encode(type, tbl);
+       ::encode(hint, tbl);
+       ops++;
+     }
+
     /// remove the collection, the collection must be empty
     void remove_collection(coll_t cid) {
       __u32 op = OP_RMCOLL;
@@ -1027,13 +1067,13 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {}
+      tolerate_collection_add_enoent(false), osr(NULL) {}
 
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {
+      tolerate_collection_add_enoent(false), osr(NULL) {
       decode(dp);
     }
 
@@ -1041,7 +1081,7 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false) {
+      tolerate_collection_add_enoent(false), osr(NULL) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }

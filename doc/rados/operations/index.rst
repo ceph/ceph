@@ -16,8 +16,7 @@ and, monitoring an operating cluster.
 	operating
 	monitoring
 	monitoring-osd-pg
-	Authentication Overview <auth-intro>
-	Cephx Authentication <authentication>
+	user-management
 
 .. raw:: html 
 
@@ -34,6 +33,7 @@ CRUSH algorithm.
 	data-placement
 	pools
 	erasure-code-profile
+	erasure-code-lrc
 	cache-tiering
 	placement-groups
 	crush-map

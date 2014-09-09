@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 #include "include/int_types.h"
 
 #include "common/Mutex.h"
@@ -1243,7 +1244,6 @@ public:
     context->state_lock.Lock();
     uint64_t snap = context->snaps[to_remove];
     context->remove_snap(to_remove);
-    context->state_lock.Unlock();
 
     if (context->pool_snaps) {
       string snapname;
@@ -1267,6 +1267,7 @@ public:
 	assert(0);
       }
     }
+    context->state_lock.Unlock();
   }
 
   string getType()

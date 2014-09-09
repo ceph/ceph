@@ -27,9 +27,15 @@ function run() {
 
     setup $dir || return 1
     run_mon $dir a --public-addr 127.0.0.1 || return 1
-    for id in $(seq 0 4) ; do
+    # check that erasure code plugins are preloaded
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
+    grep 'load: jerasure.*lrc' $dir/a/log || return 1
+    for id in $(seq 0 10) ; do
         run_osd $dir $id || return 1
     done
+    # check that erasure code plugins are preloaded
+    CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.0.asok log flush || return 1
+    grep 'load: jerasure.*lrc' $dir/osd-0.log || return 1
     create_erasure_coded_pool ecpool || return 1
     FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for TEST_function in $FUNCTIONS ; do
@@ -61,15 +67,32 @@ function rados_put_get() {
     local dir=$1
     local poolname=$2
 
-    local payload=ABC
-    echo "$payload" > $dir/ORIGINAL
+    for marker in AAA BBB CCCC DDDD ; do
+        printf "%*s" 1024 $marker
+    done > $dir/ORIGINAL
 
+    #
+    # get and put an object, compare they are equal
+    #
     ./rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
     ./rados --pool $poolname get SOMETHING $dir/COPY || return 1
-
     diff $dir/ORIGINAL $dir/COPY || return 1
+    rm $dir/COPY
 
-    rm $dir/ORIGINAL $dir/COPY
+    #
+    # take out the first OSD used to store the object and
+    # check the object can still be retrieved, which implies
+    # recovery
+    #
+    local -a initial_osds=($(get_osds $poolname SOMETHING))
+    local last=$((${#initial_osds[@]} - 1))
+    ./ceph osd out ${initial_osds[$last]} || return 1
+    ! get_osds $poolname SOMETHING | grep '\<'${initial_osds[$last]}'\>' || return 1
+    ./rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+    ./ceph osd in ${initial_osds[$last]} || return 1
+
+    rm $dir/ORIGINAL
 }
 
 function plugin_exists() {
@@ -86,6 +109,43 @@ function plugin_exists() {
     fi
     ./ceph osd erasure-code-profile rm TESTPROFILE 
     return $status
+}
+
+function TEST_rados_put_get_lrc_advanced() {
+    local dir=$1
+    local poolname=pool-lrc
+    local profile=profile-lrc
+
+    ./ceph osd erasure-code-profile set $profile \
+        plugin=lrc \
+        mapping=DD_ \
+        ruleset-steps='[ [ "chooseleaf", "osd", 0 ] ]' \
+        layers='[ [ "DDc", "" ] ]'  || return 1
+    ./ceph osd pool create $poolname 12 12 erasure $profile \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    delete_pool $poolname
+    ./ceph osd erasure-code-profile rm $profile
+}
+
+function TEST_rados_put_get_lrc_kml() {
+    local dir=$1
+    local poolname=pool-lrc
+    local profile=profile-lrc
+
+    ./ceph osd erasure-code-profile set $profile \
+        plugin=lrc \
+        k=4 m=2 l=3 \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create $poolname 12 12 erasure $profile \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    delete_pool $poolname
+    ./ceph osd erasure-code-profile rm $profile
 }
 
 function TEST_rados_put_get_isa() {
@@ -111,6 +171,21 @@ function TEST_rados_put_get_jerasure() {
     local dir=$1
 
     rados_put_get $dir ecpool || return 1
+
+    local poolname=pool-jerasure
+    local profile=profile-jerasure
+
+    ./ceph osd erasure-code-profile set $profile \
+        plugin=jerasure \
+        k=4 m=2 \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create $poolname 12 12 erasure $profile \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    delete_pool $poolname
+    ./ceph osd erasure-code-profile rm $profile
 }
 
 function TEST_alignment_constraints() {
@@ -184,8 +259,10 @@ function TEST_chunk_mapping() {
     verify_chunk_mapping $dir ecpool 0 1 || return 1
 
     ./ceph osd erasure-code-profile set remap-profile \
-        ruleset-failure-domain=osd \
-        mapping='_DD' || return 1
+        plugin=lrc \
+        layers='[ [ "_DD", "" ] ]' \
+        mapping='_DD' \
+        ruleset-steps='[ [ "choose", "osd", 0 ] ]' || return 1
     ./ceph osd erasure-code-profile get remap-profile
     ./ceph osd pool create remap-pool 12 12 erasure remap-profile \
         || return 1
@@ -198,6 +275,7 @@ function TEST_chunk_mapping() {
     verify_chunk_mapping $dir remap-pool 1 2 || return 1
 
     delete_pool remap-pool
+    ./ceph osd erasure-code-profile rm remap-profile
 }
 
 main test-erasure-code

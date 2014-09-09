@@ -44,15 +44,21 @@ OPTION(err_to_syslog, OPT_BOOL, false)
 OPTION(log_flush_on_exit, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_stop_at_utilization, OPT_FLOAT, .97)  // stop logging at (near) full
 
-OPTION(clog_to_monitors, OPT_BOOL, true)
-OPTION(clog_to_syslog, OPT_BOOL, false)
-OPTION(clog_to_syslog_level, OPT_STR, "info")         // this level and above
-OPTION(clog_to_syslog_facility, OPT_STR, "daemon")
+// options will take k/v pairs, or single-item that will be assumed as general
+// default for all, regardless of channel.
+// e.g., "info" would be taken as the same as "default=info"
+// also, "default=daemon audit=local0" would mean
+//    "default all to 'daemon', override 'audit' with 'local0'
+OPTION(clog_to_monitors, OPT_STR, "default=true")
+OPTION(clog_to_syslog, OPT_STR, "false")
+OPTION(clog_to_syslog_level, OPT_STR, "info") // this level and above
+OPTION(clog_to_syslog_facility, OPT_STR, "default=daemon audit=local0")
 
-OPTION(mon_cluster_log_to_syslog, OPT_BOOL, false)
+OPTION(mon_cluster_log_to_syslog, OPT_STR, "default=false")
 OPTION(mon_cluster_log_to_syslog_level, OPT_STR, "info")   // this level and above
 OPTION(mon_cluster_log_to_syslog_facility, OPT_STR, "daemon")
-OPTION(mon_cluster_log_file, OPT_STR, "/var/log/ceph/$cluster.log")
+OPTION(mon_cluster_log_file, OPT_STR,
+    "default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
 OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 DEFAULT_SUBSYS(0, 5)
@@ -72,6 +78,7 @@ SUBSYS(striper, 0, 1)
 SUBSYS(objecter, 0, 1)
 SUBSYS(rados, 0, 5)
 SUBSYS(rbd, 0, 5)
+SUBSYS(rbd_replay, 0, 5)
 SUBSYS(journaler, 0, 5)
 SUBSYS(objectcacher, 0, 5)
 SUBSYS(client, 0, 5)
@@ -92,6 +99,7 @@ SUBSYS(finisher, 1, 1)
 SUBSYS(heartbeatmap, 1, 5)
 SUBSYS(perfcounter, 1, 5)
 SUBSYS(rgw, 1, 5)                 // log level for the Rados gateway
+SUBSYS(civetweb, 1, 10)
 SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
@@ -190,6 +198,8 @@ OPTION(mon_slurp_bytes, OPT_INT, 256*1024)    // limit size of slurp messages
 OPTION(mon_client_bytes, OPT_U64, 100ul << 20)  // client msg data allowed in memory (in bytes)
 OPTION(mon_daemon_bytes, OPT_U64, 400ul << 20)  // mds, osd message memory cap (in bytes)
 OPTION(mon_max_log_entries_per_event, OPT_INT, 4096)
+OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for reweight-by-pg command
+OPTION(mon_reweight_min_bytes_per_osd, OPT_U64, 100*1024*1024)   // min bytes per osd for reweight-by-utilization command
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
@@ -285,6 +295,7 @@ OPTION(objecter_tick_interval, OPT_DOUBLE, 5.0)
 OPTION(objecter_timeout, OPT_DOUBLE, 10.0)    // before we ask for a map
 OPTION(objecter_inflight_op_bytes, OPT_U64, 1024*1024*100) // max in-flight data (both directions)
 OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
+OPTION(objecter_completion_locks_per_session, OPT_U64, 32) // num of completion locks per each session, for serializing same object responses
 OPTION(journaler_allow_split_entries, OPT_BOOL, true)
 OPTION(journaler_write_head_interval, OPT_INT, 15)
 OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
@@ -295,6 +306,7 @@ OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40)
 OPTION(mds_cache_size, OPT_INT, 100000)
 OPTION(mds_cache_mid, OPT_FLOAT, .7)
+OPTION(mds_max_file_recover, OPT_U32, 32)
 OPTION(mds_mem_max, OPT_INT, 1048576)        // KB
 OPTION(mds_dir_max_commit_size, OPT_INT, 10) // MB
 OPTION(mds_decay_halflife, OPT_FLOAT, 5)
@@ -303,7 +315,8 @@ OPTION(mds_beacon_grace, OPT_FLOAT, 15)
 OPTION(mds_enforce_unique_name, OPT_BOOL, true)
 OPTION(mds_blacklist_interval, OPT_FLOAT, 24.0*60.0)  // how long to blacklist failed nodes
 OPTION(mds_session_timeout, OPT_FLOAT, 60)    // cap bits and leases time out if client idle
-OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // cap bits and leases time out if client idle
+OPTION(mds_revoke_cap_timeout, OPT_FLOAT, 60)    // detect clients which aren't revoking caps
+OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
@@ -440,6 +453,13 @@ OPTION(osd_pool_default_erasure_code_profile,
        "k=2 "
        "m=1 "
        ) // default properties of osd pool create
+OPTION(osd_erasure_code_plugins, OPT_STR,
+       "jerasure"
+       " lrc"
+#ifdef HAVE_BETTER_YASM_ELF64
+       " isa"
+#endif
+       ) // list of erasure code plugins
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_hit_set_bloom_fpp, OPT_FLOAT, .05)

@@ -32,7 +32,6 @@
 
 #include "osd/osd_types.h"
 #include "osd/OSD.h"
-#include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
 #include "msg/Dispatcher.h"
@@ -184,7 +183,6 @@ class TestStub : public Dispatcher
 
 class ClientStub : public TestStub
 {
-  OSDMap osdmap;
   ObjecterRef objecter;
   rngen_t gen;
 
@@ -226,8 +224,7 @@ class ClientStub : public TestStub
 
   virtual int _shutdown() {
     if (objecter) {
-      objecter->shutdown_locked();
-      objecter->shutdown_unlocked();
+      objecter->shutdown();
     }
     return 0;
   }
@@ -256,12 +253,12 @@ class ClientStub : public TestStub
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
 	    << messenger->get_myaddr() << dendl;
 
-    objecter.reset(new Objecter(cct, messenger.get(), &monc, &osdmap,
-				lock, timer, 0, 0));
+    objecter.reset(new Objecter(cct, messenger.get(), &monc, 0, 0));
     assert(objecter.get() != NULL);
     objecter->set_balanced_budget();
 
     monc.set_messenger(messenger.get());
+    objecter->init();
     messenger->add_dispatcher_head(this);
     messenger->start();
     monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD);
@@ -282,22 +279,18 @@ class ClientStub : public TestStub
     }
     monc.wait_auth_rotating(30.0);
 
-    objecter->init_unlocked();
+    objecter->set_client_incarnation(0);
+    objecter->start();
 
     lock.Lock();
     timer.init();
-    objecter->set_client_incarnation(0);
-    objecter->init_locked();
     monc.renew_subs();
 
-    while (osdmap.get_epoch() == 0) {
-      dout(1) << "ClientStub::" << __func__ << " waiting for osdmap" << dendl;
-      cond.Wait(lock);
-    }
-
     lock.Unlock();
-    dout(10) << "ClientStub::" << __func__ << " done" << dendl;
 
+    objecter->wait_for_osd_map();
+
+    dout(10) << "ClientStub::" << __func__ << " done" << dendl;
     return 0;
   }
 };
@@ -713,7 +706,7 @@ class OSDStub : public TestStub
       e.who = messenger->get_myinst();
       e.stamp = now;
       e.seq = seq++;
-      e.type = CLOG_DEBUG;
+      e.prio = CLOG_DEBUG;
       e.msg = "OSDStub::op_log";
       m->entries.push_back(e);
     }

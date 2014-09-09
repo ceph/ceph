@@ -186,7 +186,7 @@ Currently the only supported option is "revert", which will either roll back to
 a previous version of the object or (if it was a new object) forget about it
 entirely. To mark the "unfound" objects as "lost", execute the following::
 
-	ceph pg {pg-id} mark_unfound_lost revert
+	ceph pg {pg-id} mark_unfound_lost revert|delete
 	
 .. important:: Use this feature with caution, because it may confuse 
    applications that expect the object(s) to exist.

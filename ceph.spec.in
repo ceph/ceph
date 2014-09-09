@@ -16,6 +16,9 @@ License:	GPL-2.0
 Group:		System Environment/Base
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+%if 0%{?fedora} || 0%{?centos} || 0%{?rhel}
+Patch0:		init-ceph.in-fedora.patch
+%endif
 Requires:	librbd1 = %{version}-%{release}
 Requires:	librados2 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
@@ -51,14 +54,14 @@ BuildRequires:	libudev-devel
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	xfsprogs-devel
 BuildRequires:	yasm
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 BuildRequires:	snappy-devel
 %endif
 
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel}
+%if ! 0%{?rhel} || 0%{?fedora}
 BuildRequires:	sharutils
 %endif
 
@@ -175,8 +178,8 @@ managers such as Pacemaker.
 Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -199,8 +202,8 @@ Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
-%if 0%{?rhel_version} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+Obsoletes:	ceph-libs < %{version}-%{release}
 %endif
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -212,8 +215,9 @@ shared library allowing applications to manage these block devices.
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-%if 0%{?rhel} || 0%{?centos_version} || 0%{?fedora}
-Obsoletes:	ceph-libs
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+Obsoletes:	ceph-libs < %{version}-%{release}
+Obsoletes:	ceph-libcephfs
 %endif
 %description -n libcephfs1
 Ceph is a distributed network file system designed to provide excellent
@@ -250,6 +254,10 @@ License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
 Requires:	libcephfs1 = %{version}-%{release}
+%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+BuildRequires:	lttng-ust-devel
+BuildRequires:	libbabeltrace-devel
+%endif
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
 
@@ -276,6 +284,23 @@ BuildRequires:	junit4
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
+%package libs-compat
+Summary:	Meta package to include ceph libraries.
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Obsoletes:	ceph-libs
+Requires:	librados2 = %{version}-%{release}
+Requires:	librbd1 = %{version}-%{release}
+Requires:	libcephfs1 = %{version}-%{release}
+Provides:	ceph-libs
+
+%description libs-compat
+This is a meta package, that pulls in librados2, librbd1 and libcephfs1. It
+is included for backwards compatibility with distributions that depend on the
+former ceph-libs package, which is now split up into these three subpackages.
+Packages still depending on ceph-libs should be fixed to depend on librados2,
+librbd1 or libcephfs1 instead.
+
 %if 0%{?opensuse} || 0%{?suse_version}
 %debug_package
 %endif
@@ -285,6 +310,9 @@ This package contains the Java libraries for the Ceph File System.
 #################################################################################
 %prep
 %setup -q
+%if 0%{?fedora} || 0%{?rhel} || 0%{?centos}
+%patch0 -p1 -b .init
+%endif
 
 %build
 # Find jni.h
@@ -342,7 +370,7 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 # udev rules
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 %else
@@ -356,7 +384,7 @@ install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/9
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %endif
 
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 mv $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
 mv $RPM_BUILD_ROOT/sbin/mount.ceph $RPM_BUILD_ROOT/usr/sbin/mount.ceph
 mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
@@ -437,7 +465,7 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 %{_sbindir}/mount.ceph
 %else
 /sbin/mount.ceph
@@ -465,7 +493,7 @@ fi
 %{_libdir}/ceph/erasure-code/libec_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_test_jerasure*.so*
 %{_libdir}/ceph/erasure-code/libec_missing_entry_point.so*
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 /usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /usr/lib/udev/rules.d/95-ceph-osd.rules
 %else
@@ -542,7 +570,7 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/ceph-fuse
 %{_mandir}/man8/ceph-fuse.8*
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 %{_sbindir}/mount.fuse.ceph
 %else
 /sbin/mount.fuse.ceph
@@ -652,7 +680,7 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
-%if 0%{?rhel} >= 7
+%if 0%{?rhel} >= 7 || 0%{?fedora}
 /usr/lib/udev/rules.d/50-rbd.rules
 %else
 /lib/udev/rules.d/50-rbd.rules
@@ -711,8 +739,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_smalliobenchdumb
 %{_bindir}/ceph_smalliobenchfs
 %{_bindir}/ceph_smalliobenchrbd
-%{_bindir}/ceph_filestore_dump
-%{_bindir}/ceph_filestore_tool
+%{_bindir}/ceph_objectstore_tool
 %{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_*
 %{_bindir}/ceph_tpbench
@@ -720,6 +747,12 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-kvstore-tool
+%{_mandir}/man8/rbd-replay.8*
+%{_bindir}/rbd-replay
+%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%{_mandir}/man8/rbd-replay-prep.8*
+%{_bindir}/rbd-replay-prep
+%endif
 
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
@@ -729,5 +762,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+
+%files libs-compat
+# We need an empty %files list for ceph-libs-compat, to tell rpmbuild to actually
+# build this meta package.
 
 %changelog

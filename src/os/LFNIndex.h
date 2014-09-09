@@ -183,6 +183,12 @@ public:
     vector<ghobject_t> *ls
     );
 
+  /// @see CollectionIndex;
+  int pre_hash_collection(
+      uint32_t pg_num,
+      uint64_t expected_num_objs
+      );
+
   /// @see CollectionIndex
   int collection_list_partial(
     const ghobject_t &start,
@@ -251,6 +257,13 @@ protected:
   virtual int _collection_list(
     vector<ghobject_t> *ls ///< [out] Listed objects.
     ) = 0;
+
+  /// Pre-hash the collection with the given pg number and
+  /// expected number of objects in the collection.
+  virtual int _pre_hash_collection(
+      uint32_t pg_num,
+      uint64_t expected_num_objs
+      ) = 0;
 
   /// @see CollectionIndex
   virtual int _collection_list_partial(

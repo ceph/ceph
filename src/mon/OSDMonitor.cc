@@ -174,8 +174,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     // state, and we shouldn't want to work around it without knowing what
     // exactly happened.
     assert(latest_full > 0);
-    MonitorDBStore::Transaction t;
-    put_version_latest_full(&t, latest_full);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    put_version_latest_full(t, latest_full);
     mon->store->apply_transaction(t);
     dout(10) << __func__ << " updated the on-disk full map version to "
              << latest_full << dendl;
@@ -190,7 +190,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   // walk through incrementals
-  MonitorDBStore::Transaction *t = NULL;
+  MonitorDBStore::TransactionRef t;
   size_t tx_size = 0;
   while (version > osdmap.epoch) {
     bufferlist inc_bl;
@@ -203,8 +203,8 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     err = osdmap.apply_incremental(inc);
     assert(err == 0);
 
-    if (t == NULL)
-      t = new MonitorDBStore::Transaction;
+    if (!t)
+      t.reset(new MonitorDBStore::Transaction);
 
     // Write out the full map for all past epochs.  Encode the full
     // map with the same features as the incremental.  If we don't
@@ -230,16 +230,14 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     }
 
     if (tx_size > g_conf->mon_sync_max_payload_size*2) {
-      mon->store->apply_transaction(*t);
-      delete t;
-      t = NULL;
+      mon->store->apply_transaction(t);
+      t = MonitorDBStore::TransactionRef();
       tx_size = 0;
     }
   }
 
-  if (t != NULL) {
-    mon->store->apply_transaction(*t);
-    delete t;
+  if (t) {
+    mon->store->apply_transaction(t);
   }
 
   for (int o = 0; o < osdmap.get_max_osd(); o++) {
@@ -403,7 +401,7 @@ void OSDMonitor::on_active()
   }
 
   if (mon->is_leader())
-    mon->clog.info() << "osdmap " << osdmap << "\n"; 
+    mon->clog->info() << "osdmap " << osdmap << "\n"; 
 
   if (!mon->is_leader()) {
     list<MOSDFailure*> ls;
@@ -443,7 +441,8 @@ void OSDMonitor::update_logger()
  * The osds that will get a lower weight are those with with a utilization
  * percentage 'oload' percent greater than the average utilization.
  */
-int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
+int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
+					bool by_pg, const set<int64_t> *pools)
 {
   if (oload <= 100) {
     ostringstream oss;
@@ -452,48 +451,96 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
       "times <input-percentage>. For example, an argument of 200 would "
       "reweight OSDs which are twice as utilized as the average OSD.\n";
     out_str = oss.str();
-    dout(0) << "reweight_by_utilization: " << out_str << dendl;
     return -EINVAL;
   }
 
+  const PGMap &pgm = mon->pgmon()->pg_map;
+  vector<int> pgs_by_osd(osdmap.get_max_osd());
+  unsigned num_pg_copies = 0;
+
   // Avoid putting a small number (or 0) in the denominator when calculating
   // average_util
-  const PGMap &pgm = mon->pgmon()->pg_map;
-  if (pgm.osd_sum.kb < 1024) {
-    ostringstream oss;
-    oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
-      "across all osds!\n";
-    out_str = oss.str();
-    dout(0) << "reweight_by_utilization: " << out_str << dendl;
-    return -EDOM;
+  double average_util;
+  if (by_pg) {
+    // by pg mapping
+    double weight_sum = 0.0;      // sum up the crush weights
+    int num_osds = 0;
+    for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p =
+	   pgm.pg_stat.begin();
+	 p != pgm.pg_stat.end();
+	 ++p) {
+      if (pools && pools->count(p->first.pool()) == 0)
+	continue;
+      for (vector<int>::const_iterator q = p->second.acting.begin();
+	   q != p->second.acting.end();
+	   ++q) {
+	if (*q >= (int)pgs_by_osd.size())
+	  pgs_by_osd.resize(*q);
+	if (pgs_by_osd[*q] == 0) {
+	  weight_sum += osdmap.crush->get_item_weightf(*q);
+	  ++num_osds;
+	}
+	++pgs_by_osd[*q];
+	++num_pg_copies;
+      }
+    }
+
+    if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
+      ostringstream oss;
+      oss << "Refusing to reweight: we only have " << num_pg_copies
+	  << " PGs across " << num_osds << " osds!\n";
+      out_str = oss.str();
+      return -EDOM;
+    }
+
+    average_util = (double)num_pg_copies / weight_sum;
+  } else {
+    // by osd utilization
+    int num_osd = MIN(1, pgm.osd_stat.size());
+    if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
+      ostringstream oss;
+      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
+	  << " kb across all osds!\n";
+      out_str = oss.str();
+      return -EDOM;
+    }
+    if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
+	< g_conf->mon_reweight_min_bytes_per_osd) {
+      ostringstream oss;
+      oss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
+	  << " kb used across all osds!\n";
+      out_str = oss.str();
+      return -EDOM;
+    }
+
+    average_util = (double)pgm.osd_sum.kb_used / (double)pgm.osd_sum.kb;
   }
 
-  if (pgm.osd_sum.kb_used < 5 * 1024) {
-    ostringstream oss;
-    oss << "Refusing to reweight: we only have " << pgm.osd_sum << " kb "
-      "used across all osds!\n";
-    out_str = oss.str();
-    dout(0) << "reweight_by_utilization: " << out_str << dendl;
-    return -EDOM;
-  }
+  // adjust down only if we are above the threshold
+  double overload_util = average_util * (double)oload / 100.0;
 
-  float average_util = pgm.osd_sum.kb_used;
-  average_util /= pgm.osd_sum.kb;
-  float overload_util = average_util * oload / 100.0;
+  // but aggressively adjust weights up whenever possible.
+  double underload_util = average_util;
 
   ostringstream oss;
   char buf[128];
-  snprintf(buf, sizeof(buf), "average_util: %04f, overload_util: %04f. ",
+  snprintf(buf, sizeof(buf), "average %04f, overload %04f. ",
 	   average_util, overload_util);
   oss << buf;
   std::string sep;
-  oss << "overloaded osds: ";
+  oss << "reweighted: ";
   bool changed = false;
-  for (ceph::unordered_map<int,osd_stat_t>::const_iterator p = pgm.osd_stat.begin();
+  for (ceph::unordered_map<int,osd_stat_t>::const_iterator p =
+	 pgm.osd_stat.begin();
        p != pgm.osd_stat.end();
        ++p) {
-    float util = p->second.kb_used;
-    util /= p->second.kb;
+    float util;
+    if (by_pg) {
+      util = pgs_by_osd[p->first] / osdmap.crush->get_item_weightf(p->first);
+    } else {
+      util = (double)p->second.kb_used / (double)p->second.kb;
+    }
     if (util >= overload_util) {
       sep = ", ";
       // Assign a lower weight to overloaded OSDs. The current weight
@@ -503,18 +550,35 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str)
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       pending_inc.new_weight[p->first] = new_weight;
       char buf[128];
-      snprintf(buf, sizeof(buf), "%d [%04f -> %04f]", p->first,
+      snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
 	       (float)weight / (float)0x10000,
 	       (float)new_weight / (float)0x10000);
       oss << buf << sep;
       changed = true;
+    }
+    if (util <= underload_util) {
+      // assign a higher weight.. if we can.
+      unsigned weight = osdmap.get_weight(p->first);
+      unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
+      if (new_weight > 0x10000)
+	new_weight = 0x10000;
+      if (new_weight > weight) {
+	sep = ", ";
+	pending_inc.new_weight[p->first] = new_weight;
+	char buf[128];
+	snprintf(buf, sizeof(buf), "osd.%d [%04f -> %04f]", p->first,
+		 (float)weight / (float)0x10000,
+		 (float)new_weight / (float)0x10000);
+	oss << buf << sep;
+	changed = true;
+      }
     }
   }
   if (sep.empty()) {
     oss << "(none)";
   }
   out_str = oss.str();
-  dout(0) << "reweight_by_utilization: finished with " << out_str << dendl;
+  dout(10) << "reweight_by_utilization: finished with " << out_str << dendl;
   return changed;
 }
 
@@ -536,7 +600,7 @@ void OSDMonitor::create_pending()
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
  */
-void OSDMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
@@ -662,7 +726,8 @@ version_t OSDMonitor::get_trim_to()
   return 0;
 }
 
-void OSDMonitor::encode_trim_extra(MonitorDBStore::Transaction *tx, version_t first)
+void OSDMonitor::encode_trim_extra(MonitorDBStore::TransactionRef tx,
+				   version_t first)
 {
   dout(10) << __func__ << " including full map for e " << first << dendl;
   bufferlist bl;
@@ -916,7 +981,7 @@ bool OSDMonitor::prepare_mark_me_down(MOSDMarkMeDown *m)
   assert(osdmap.is_up(target_osd));
   assert(osdmap.get_addr(target_osd) == m->get_target().addr);
 
-  mon->clog.info() << "osd." << target_osd << " marked itself down\n";
+  mon->clog->info() << "osd." << target_osd << " marked itself down\n";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
   if (m->request_ack)
     wait_for_finished_proposal(new C_AckMarkedDown(this, m));
@@ -1062,7 +1127,7 @@ bool OSDMonitor::check_failure(utime_t now, int target_osd, failure_info_t& fi)
     dout(1) << " we have enough reports/reporters to mark osd." << target_osd << " down" << dendl;
     pending_inc.new_state[target_osd] = CEPH_OSD_UP;
 
-    mon->clog.info() << osdmap.get_inst(target_osd) << " failed ("
+    mon->clog->info() << osdmap.get_inst(target_osd) << " failed ("
 		     << fi.num_reports << " reports from " << (int)fi.reporters.size() << " peers after "
 		     << failed_for << " >= grace " << grace << ")\n";
     return true;
@@ -1086,7 +1151,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
   
   if (m->if_osd_failed()) {
     // add a report
-    mon->clog.debug() << m->get_target() << " reported failed by "
+    mon->clog->debug() << m->get_target() << " reported failed by "
 		      << m->get_orig_source_inst() << "\n";
     failure_info_t& fi = failure_info[target_osd];
     MOSDFailure *old = fi.add_report(reporter, failed_since, m);
@@ -1098,7 +1163,7 @@ bool OSDMonitor::prepare_failure(MOSDFailure *m)
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
-    mon->clog.debug() << m->get_target() << " failure report canceled by "
+    mon->clog->debug() << m->get_target() << " failure report canceled by "
 		      << m->get_orig_source_inst() << "\n";
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
@@ -1224,7 +1289,7 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
       osdmap.get_info(from).up_from > m->version) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(m, m->sb.current_epoch+1);
-    goto ignore;
+    return true;
   }
 
   // noup?
@@ -1380,7 +1445,7 @@ void OSDMonitor::_booted(MOSDBoot *m, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    mon->clog.info() << m->get_orig_source_inst() << " boot\n";
+    mon->clog->info() << m->get_orig_source_inst() << " boot\n";
   }
 
   send_latest(m, m->sb.current_epoch+1);
@@ -1431,7 +1496,7 @@ bool OSDMonitor::prepare_alive(MOSDAlive *m)
   int from = m->get_orig_source().num();
 
   if (0) {  // we probably don't care much about these
-    mon->clog.debug() << m->get_orig_source_inst() << " alive\n";
+    mon->clog->debug() << m->get_orig_source_inst() << " alive\n";
   }
 
   dout(7) << "prepare_alive want up_thru " << m->want << " have " << m->version
@@ -1903,7 +1968,7 @@ void OSDMonitor::tick()
 
 	  do_propose = true;
 	
-	  mon->clog.info() << "osd." << o << " out (down for " << down << ")\n";
+	  mon->clog->info() << "osd." << o << " out (down for " << down << ")\n";
 	} else
 	  continue;
       }
@@ -1992,7 +2057,7 @@ void OSDMonitor::handle_osd_timeouts(const utime_t &now,
     } else if (can_mark_down(i)) {
       utime_t diff = now - t->second;
       if (diff > timeo) {
-	mon->clog.info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
+	mon->clog->info() << "osd." << i << " marked down after no pg stats for " << diff << "seconds\n";
 	derr << "no osd or pg stats from osd." << i << " since " << t->second << ", " << diff
 	     << " seconds ago.  marking down" << dendl;
 	pending_inc.new_state[i] = CEPH_OSD_UP;
@@ -2939,7 +3004,7 @@ bool OSDMonitor::update_pools_status()
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
-    const char *pool_name = osdmap.get_pool_name(it->first);
+    const string& pool_name = osdmap.get_pool_name(it->first);
 
     bool pool_is_full =
       (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
@@ -2949,7 +3014,7 @@ bool OSDMonitor::update_pools_status()
       if (pool_is_full)
         continue;
 
-      mon->clog.info() << "pool '" << pool_name
+      mon->clog->info() << "pool '" << pool_name
                        << "' no longer full; removing FULL flag";
 
       update_pool_flags(it->first, pool.get_flags() & ~pg_pool_t::FLAG_FULL);
@@ -2960,12 +3025,12 @@ bool OSDMonitor::update_pools_status()
 
       if (pool.quota_max_bytes > 0 &&
           (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
-        mon->clog.warn() << "pool '" << pool_name << "' is full"
+        mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_bytes: "
                          << si_t(pool.quota_max_bytes) << ")";
       } else if (pool.quota_max_objects > 0 &&
 		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
-        mon->clog.warn() << "pool '" << pool_name << "' is full"
+        mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_objects: "
                          << pool.quota_max_objects << ")";
       } else {
@@ -2990,7 +3055,7 @@ void OSDMonitor::get_pools_health(
     pool_stat_t& stats = mon->pgmon()->pg_map.pg_pool_sum[it->first];
     object_stat_sum_t& sum = stats.stats.sum;
     const pg_pool_t &pool = it->second;
-    const char *pool_name = osdmap.get_pool_name(it->first);
+    const string& pool_name = osdmap.get_pool_name(it->first);
 
     if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
       // uncomment these asserts if/when we update the FULL flag on pg_stat update
@@ -3076,12 +3141,12 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
     return prepare_new_pool(m->name, m->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, ss);
   else
     return prepare_new_pool(m->name, session->auid, m->crush_rule, ruleset_name,
 			    0, 0,
                             erasure_code_profile,
-			    pg_pool_t::TYPE_REPLICATED, ss);
+			    pg_pool_t::TYPE_REPLICATED, 0, ss);
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -3229,27 +3294,36 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 					   map<string,string> *erasure_code_profile_map,
 					   stringstream &ss)
 {
-  int r = get_str_map(g_conf->osd_pool_default_erasure_code_profile,
-		      ss,
-		      erasure_code_profile_map);
+  int r = get_json_str_map(g_conf->osd_pool_default_erasure_code_profile,
+		           ss,
+		           erasure_code_profile_map);
   if (r)
     return r;
-  (*erasure_code_profile_map)["directory"] =
-    g_conf->osd_pool_default_erasure_code_directory;
-
+  assert((*erasure_code_profile_map).count("plugin"));
+  string default_plugin = (*erasure_code_profile_map)["plugin"];
+  map<string,string> user_map;
   for (vector<string>::const_iterator i = erasure_code_profile.begin();
        i != erasure_code_profile.end();
        ++i) {
     size_t equal = i->find('=');
-    if (equal == string::npos)
+    if (equal == string::npos) {
+      user_map[*i] = string();
       (*erasure_code_profile_map)[*i] = string();
-    else {
+    } else {
       const string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
+      user_map[key] = value;
       (*erasure_code_profile_map)[key] = value;
     }
   }
+
+  if (user_map.count("plugin") && user_map["plugin"] != default_plugin)
+    (*erasure_code_profile_map) = user_map;
+
+  if ((*erasure_code_profile_map).count("directory") == 0)
+    (*erasure_code_profile_map)["directory"] =
+      g_conf->osd_pool_default_erasure_code_directory;
 
   return 0;
 }
@@ -3321,11 +3395,38 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
   if (*crush_ruleset < 0) {
     switch (pool_type) {
     case pg_pool_t::TYPE_REPLICATED:
-      *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
-      if (*crush_ruleset < 0) {
-        // Errors may happen e.g. if no valid ruleset is available
-        ss << "No suitable CRUSH ruleset exists";
-        return *crush_ruleset;
+      {
+	if (ruleset_name == "") {
+	  //Use default ruleset
+	  *crush_ruleset = osdmap.crush->get_osd_pool_default_crush_replicated_ruleset(g_ceph_context);
+	  if (*crush_ruleset < 0) {
+	    // Errors may happen e.g. if no valid ruleset is available
+	    ss << "No suitable CRUSH ruleset exists";
+	    return *crush_ruleset;
+	  }
+	} else {
+	  int ret;
+	  ret = osdmap.crush->get_rule_id(ruleset_name);
+	  if (ret != -ENOENT) {
+	    // found it, use it
+	    *crush_ruleset = ret;
+	  } else {
+	    CrushWrapper newcrush;
+	    _get_pending_crush(newcrush);
+
+	    ret = newcrush.get_rule_id(ruleset_name);
+	    if (ret != -ENOENT) {
+	      // found it, wait for it to be proposed
+	      dout(20) << "prepare_pool_crush_ruleset: ruleset "
+		   << ruleset_name << " is pending, try again" << dendl;
+	      return -EAGAIN;
+	    } else {
+	      //Cannot find it , return error
+	      ss << "Specified ruleset " << ruleset_name << " doesn't exist";
+	      return ret;
+	    }
+	  }
+	}
       }
       break;
     case pg_pool_t::TYPE_ERASURE:
@@ -3372,6 +3473,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
  * @param pgp_num The pgp_num to use. If set to 0, will use the system default
  * @param erasure_code_profile The profile name in OSDMap to be used for erasure code
  * @param pool_type TYPE_ERASURE, TYPE_REP or TYPE_RAID4
+ * @param expected_num_objects expected number of objects on the pool
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -3382,6 +3484,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  unsigned pg_num, unsigned pgp_num,
 				 const string &erasure_code_profile,
                                  const unsigned pool_type,
+                                 const uint64_t expected_num_objects,
 				 stringstream &ss)
 {
   int r;
@@ -3418,6 +3521,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->size = size;
   pi->min_size = min_size;
   pi->crush_ruleset = crush_ruleset;
+  pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num ? pg_num : g_conf->osd_pool_default_pg_num);
   pi->set_pgp_num(pgp_num ? pgp_num : g_conf->osd_pool_default_pgp_num);
@@ -5138,42 +5242,56 @@ done:
     cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
     string erasure_code_profile;
     cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
-    if (erasure_code_profile == "")
-      erasure_code_profile = "default";
-    if (erasure_code_profile == "default") {
-      if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
-	if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
-	  dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
-	  goto wait;
-	}
 
-	map<string,string> profile_map;
-	err = osdmap.get_erasure_code_profile_default(g_ceph_context,
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (erasure_code_profile == "")
+	erasure_code_profile = "default";
+      //handle the erasure code profile
+      if (erasure_code_profile == "default") {
+	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
+	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
+	    dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+	    goto wait;
+	  }
+
+	  map<string,string> profile_map;
+	  err = osdmap.get_erasure_code_profile_default(g_ceph_context,
 						      profile_map,
 						      &ss);
-	if (err)
-	  goto reply;
-	dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
-	pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
-	goto wait;
+	  if (err)
+	    goto reply;
+	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
+	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
+	  goto wait;
+	}
       }
-    }
-
-    if (ruleset_name == "") {
-      if (erasure_code_profile == "default") {
-	ruleset_name = "erasure-code";
-      } else {
-	dout(1) << "implicitly use ruleset named after the pool: "
+      if (ruleset_name == "") {
+	if (erasure_code_profile == "default") {
+	  ruleset_name = "erasure-code";
+	} else {
+	  dout(1) << "implicitly use ruleset named after the pool: "
 		<< poolstr << dendl;
-	ruleset_name = poolstr;
+	  ruleset_name = poolstr;
+	}
       }
+    } else {
+      //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
+      ruleset_name = erasure_code_profile;
     }
 
+    int64_t expected_num_objects;
+    cmd_getval(g_ceph_context, cmdmap, "expected_num_objects", expected_num_objects, int64_t(0));
+    if (expected_num_objects < 0) {
+      ss << "'expected_num_objects' must be non-negative";
+      err = -EINVAL;
+      goto reply;
+    }
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1, // default crush rule
 			   ruleset_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
+                           (uint64_t)expected_num_objects,
 			   ss);
     if (err < 0) {
       switch(err) {
@@ -5715,14 +5833,42 @@ done:
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
     string out_str;
-    err = reweight_by_utilization(oload, out_str);
+    err = reweight_by_utilization(oload, out_str, false, NULL);
     if (err < 0) {
       ss << "FAILED reweight-by-utilization: " << out_str;
-    }
-    else if (err == 0) {
+    } else if (err == 0) {
       ss << "no change: " << out_str;
     } else {
       ss << "SUCCESSFUL reweight-by-utilization: " << out_str;
+      getline(ss, rs);
+      wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						get_last_committed() + 1));
+      return true;
+    }
+  } else if (prefix == "osd reweight-by-pg") {
+    int64_t oload;
+    cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
+    set<int64_t> pools;
+    vector<string> poolnamevec;
+    cmd_getval(g_ceph_context, cmdmap, "pools", poolnamevec);
+    for (unsigned j = 0; j < poolnamevec.size(); j++) {
+      int64_t pool = osdmap.lookup_pg_pool_name(poolnamevec[j]);
+      if (pool < 0) {
+	ss << "pool '" << poolnamevec[j] << "' does not exist";
+	err = -ENOENT;
+	goto reply;
+      }
+      pools.insert(pool);
+    }
+    string out_str;
+    err = reweight_by_utilization(oload, out_str, true,
+				  pools.size() ? &pools : NULL);
+    if (err < 0) {
+      ss << "FAILED reweight-by-pg: " << out_str;
+    } else if (err == 0) {
+      ss << "no change: " << out_str;
+    } else {
+      ss << "SUCCESSFUL reweight-by-pg: " << out_str;
       getline(ss, rs);
       wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 						get_last_committed() + 1));
@@ -5999,7 +6145,7 @@ bool OSDMonitor::prepare_pool_op_create(MPoolOp *m)
 int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
 				   ostream *ss)
 {
-  string poolstr = osdmap.get_pool_name(pool);
+  const string& poolstr = osdmap.get_pool_name(pool);
 
   // If the Pool is in use by CephFS, refuse to delete it
   MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
@@ -6017,9 +6163,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
   if (!p->tiers.empty()) {
     *ss << "pool '" << poolstr << "' has tiers";
     for(std::set<uint64_t>::iterator i = p->tiers.begin(); i != p->tiers.end(); ++i) {
-      const char *name = osdmap.get_pool_name(*i);
-      assert(name != NULL);
-      *ss << " " << name;
+      *ss << " " << osdmap.get_pool_name(*i);
     }
     return -EBUSY;
   }

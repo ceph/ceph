@@ -1079,7 +1079,11 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
-  return write_data(bl, write_ofs, phandle, exclusive);
+  int ret = write_data(bl, write_ofs, phandle, exclusive);
+  if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
+    bl.clear();
+  }
+  return ret;
 }
 
 

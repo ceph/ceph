@@ -80,7 +80,7 @@ void PGMonitor::on_active()
   update_logger();
 
   if (mon->is_leader())
-    mon->clog.info() << "pgmap " << pg_map << "\n";
+    mon->clog->info() << "pgmap " << pg_map << "\n";
 }
 
 void PGMonitor::update_logger()
@@ -486,7 +486,7 @@ void PGMonitor::apply_pgmap_delta(bufferlist& bl)
 }
 
 
-void PGMonitor::encode_pending(MonitorDBStore::Transaction *t)
+void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   version_t version = pending_inc.version;
   dout(10) << __func__ << " v " << version << dendl;
@@ -1258,7 +1258,7 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
   if (r < 0)
     return r;
-  if(wm.size() == 0)
+  if(wm.empty())
     return 0;
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
@@ -1304,7 +1304,7 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     int64_t pool_id = p->first;
     if ((pool_id < 0) || (pg_map.pg_pool_sum.count(pool_id) == 0))
       continue;
-    string pool_name = osdmap.get_pool_name(pool_id);
+    const string& pool_name = osdmap.get_pool_name(pool_id);
     pool_stat_t &stat = pg_map.pg_pool_sum[pool_id];
 
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
@@ -2010,7 +2010,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	!pg_map.pg_pool_sum.count(p->first))
       continue;
     bool nearfull = false;
-    const char *name = mon->osdmon()->osdmap.get_pool_name(p->first);
+    const string& name = mon->osdmon()->osdmap.get_pool_name(p->first);
     const pool_stat_t& st = pg_map.get_pg_pool_sum_stat(p->first);
     uint64_t ratio = p->second.cache_target_full_ratio_micro +
       ((1000000 - p->second.cache_target_full_ratio_micro) *

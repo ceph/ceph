@@ -65,6 +65,7 @@
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
+#include "include/str_map.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -141,7 +142,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   has_ever_joined(false),
   logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
   monmap(map),
-  clog(cct_, messenger, monmap, LogClient::FLAG_MON),
+  log_client(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
   auth_cluster_required(cct,
 			cct->_conf->auth_supported.length() ?
@@ -180,6 +181,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   routed_request_tid(0)
 {
   rank = -1;
+
+  clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
+  audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
+
+  update_log_clients();
 
   paxos = new Paxos(this, "paxos");
 
@@ -263,26 +269,44 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
+  string args;
+  for (cmdmap_t::iterator p = cmdmap.begin();
+       p != cmdmap.end(); ++p) {
+    if (p->first == "prefix")
+      continue;
+    if (!args.empty())
+      args += ", ";
+    args += cmd_vartype_stringify(p->second);
+  }
+  args = "[" + args + "]";
+
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": dispatch";
+
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
     if (f)
       f->flush(ss);
-  } else if (command == "quorum_status")
+  } else if (command == "quorum_status") {
     _quorum_status(f.get(), ss);
-  else if (command == "sync_force") {
+  } else if (command == "sync_force") {
     string validate;
     if ((!cmd_getval(g_ceph_context, cmdmap, "validate", validate)) ||
 	(validate != "--yes-i-really-mean-it")) {
       ss << "are you SURE? this will mean the monitor store will be erased "
             "the next time the monitor is restarted.  pass "
             "'--yes-i-really-mean-it' if you really do.";
-      return;
+      goto abort;
     }
     sync_force(f.get(), ss);
   } else if (command.find("add_bootstrap_peer_hint") == 0) {
-    _add_bootstrap_peer_hint(command, cmdmap, ss);
+    if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
+      goto abort;
   } else if (command.find("osdmonitor_prepare_command") == 0) {
-    _osdmonitor_prepare_command(cmdmap, ss);
+    if (!_osdmonitor_prepare_command(cmdmap, ss))
+      goto abort;
   } else if (command == "quorum enter") {
     elector.start_participating();
     start_election();
@@ -291,8 +315,20 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     start_election();
     elector.stop_participating();
     ss << "stopped responding to quorum, initiated new election";
-  } else
+  } else {
     assert(0 == "bad AdminSocket command binding");
+  }
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": finished";
+  return;
+
+abort:
+  audit_clog->info() << "from='admin socket' "
+                    << "entity='admin socket' "
+                    << "cmd=" << command << " "
+                    << "args=" << args << ": aborted";
 }
 
 void Monitor::handle_signal(int signum)
@@ -355,8 +391,8 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
 
     bufferlist bl;
     features->encode(bl);
-    MonitorDBStore::Transaction t;
-    t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
     store->apply_transaction(t);
   } else {
     bufferlist::iterator it = featuresbl.begin();
@@ -373,11 +409,11 @@ void Monitor::read_features()
   dout(10) << "required_features " << required_features << dendl;
 }
 
-void Monitor::write_features(MonitorDBStore::Transaction &t)
+void Monitor::write_features(MonitorDBStore::TransactionRef t)
 {
   bufferlist bl;
   features.encode(bl);
-  t.put(MONITOR_NAME, COMPAT_SET_LOC, bl);
+  t->put(MONITOR_NAME, COMPAT_SET_LOC, bl);
 }
 
 const char** Monitor::get_tracked_conf_keys() const
@@ -386,6 +422,11 @@ const char** Monitor::get_tracked_conf_keys() const
     "mon_lease",
     "mon_lease_renew_interval",
     "mon_lease_ack_timeout",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
     NULL
   };
   return KEYS;
@@ -395,6 +436,87 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
                                  const std::set<std::string> &changed)
 {
   sanitize_options();
+
+  dout(10) << __func__ << " " << changed << dendl;
+
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility")) {
+    update_log_clients();
+  }
+}
+
+void Monitor::update_log_client(
+    LogChannelRef lc, const string &name,
+    map<string,string> &log_to_monitors,
+    map<string,string> &log_to_syslog,
+    map<string,string> &log_channels,
+    map<string,string> &log_prios)
+{
+  bool to_monitors = (get_str_map_key(log_to_monitors, name,
+                                      &CLOG_CHANNEL_DEFAULT) == "true");
+  bool to_syslog = (get_str_map_key(log_to_syslog, name,
+                                    &CLOG_CHANNEL_DEFAULT) == "true");
+  string syslog_facility = get_str_map_key(log_channels, name,
+                                           &CLOG_CHANNEL_DEFAULT);
+  string prio = get_str_map_key(log_prios, name, &CLOG_CHANNEL_DEFAULT);
+
+  lc->set_log_to_monitors(to_monitors);
+  lc->set_log_to_syslog(to_syslog);
+  lc->set_syslog_facility(syslog_facility);
+  lc->set_log_channel(name);
+  lc->set_log_prio(prio);
+
+  dout(15) << __func__ << " " << name << "("
+           << " to_monitors: " << (to_monitors ? "true" : "false")
+           << " to_syslog: " << (to_syslog ? "true" : "false")
+           << " syslog_facility: " << syslog_facility
+           << " prio: " << prio << ")" << dendl;
+}
+
+void Monitor::update_log_clients()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  ostringstream oss;
+
+  int r = get_conf_str_map_helper(g_conf->clog_to_monitors, oss,
+                                  &log_to_monitors, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_monitors'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog, oss,
+                              &log_to_syslog, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog_facility, oss,
+                              &log_channel, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
+    return;
+  }
+
+  r = get_conf_str_map_helper(g_conf->clog_to_syslog_level, oss,
+                              &log_prio, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    derr << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
+    return;
+  }
+
+  update_log_client(clog, CLOG_CHANNEL_CLUSTER,
+                    log_to_monitors, log_to_syslog,
+                    log_channel, log_prio);
+  update_log_client(audit_clog, CLOG_CHANNEL_AUDIT,
+                    log_to_monitors, log_to_syslog,
+                    log_channel, log_prio);
 }
 
 int Monitor::sanitize_options()
@@ -404,7 +526,7 @@ int Monitor::sanitize_options()
   // mon_lease must be greater than mon_lease_renewal; otherwise we
   // may incur in leases expiring before they are renewed.
   if (g_conf->mon_lease <= g_conf->mon_lease_renew_interval) {
-    clog.error() << "mon_lease (" << g_conf->mon_lease
+    clog->error() << "mon_lease (" << g_conf->mon_lease
                  << ") must be greater "
                  << "than mon_lease_renew_interval ("
                  << g_conf->mon_lease_renew_interval << ")";
@@ -417,7 +539,7 @@ int Monitor::sanitize_options()
   // the monitors happened to be overloaded -- or even under normal load for
   // a small enough value.
   if (g_conf->mon_lease_ack_timeout <= g_conf->mon_lease) {
-    clog.error() << "mon_lease_ack_timeout ("
+    clog->error() << "mon_lease_ack_timeout ("
                  << g_conf->mon_lease_ack_timeout
                  << ") must be greater than mon_lease ("
                  << g_conf->mon_lease << ")";
@@ -678,6 +800,21 @@ void Monitor::init_paxos()
 void Monitor::refresh_from_paxos(bool *need_bootstrap)
 {
   dout(10) << __func__ << dendl;
+
+  bufferlist bl;
+  int r = store->get(MONITOR_NAME, "cluster_fingerprint", bl);
+  if (r >= 0) {
+    try {
+      bufferlist::iterator p = bl.begin();
+      ::decode(fingerprint, p);
+    }
+    catch (buffer::error& e) {
+      dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
+    }
+  } else {
+    dout(10) << __func__ << " no cluster_fingerprint" << dendl;
+  }
+
   for (int i = 0; i < PAXOS_NUM; ++i) {
     paxos_service[i]->refresh(need_bootstrap);
   }
@@ -717,9 +854,18 @@ void Monitor::update_logger()
 void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
+
   lock.Lock();
 
   state = STATE_SHUTDOWN;
+
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
+    dout(10) << __func__ << " flushing" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+    dout(10) << __func__ << " flushed" << dendl;
+  }
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
@@ -758,6 +904,8 @@ void Monitor::shutdown()
     cluster_logger = NULL;
   }
 
+  log_client.shutdown();
+
   // unlock before msgr shutdown...
   lock.Unlock();
 
@@ -766,6 +914,12 @@ void Monitor::shutdown()
 
 void Monitor::bootstrap()
 {
+  if (paxos->is_writing() || paxos->is_writing_previous()) {
+    dout(10) << "bootstrap flushing pending write" << dendl;
+    lock.Unlock();
+    store->flush();
+    lock.Lock();
+  }
   dout(10) << "bootstrap" << dendl;
 
   sync_reset_requester();
@@ -833,33 +987,37 @@ void Monitor::bootstrap()
   }
 }
 
-void Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
+bool Monitor::_osdmonitor_prepare_command(cmdmap_t& cmdmap, ostream& ss)
 {
   if (!is_leader()) {
     ss << "mon must be a leader";
-    return;
+    return false;
   }
 
   string cmd;
   cmd_getval(g_ceph_context, cmdmap, "prepare", cmd);
   cmdmap["prefix"] = cmdmap["prepare"];
-  
+
   OSDMonitor *monitor = osdmon();
   MMonCommand *m = static_cast<MMonCommand *>((new MMonCommand())->get());
-  if (monitor->prepare_command_impl(m, cmdmap))
+  bool r = true;
+  if (monitor->prepare_command_impl(m, cmdmap)) {
     ss << "true";
-  else
+  } else {
     ss << "false";
+    r = false;
+  }
   m->put();
+  return r;
 }
 
-void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
+bool Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss)
 {
   string addrstr;
   if (!cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
     ss << "unable to parse address string value '"
          << cmd_vartype_stringify(cmdmap["addr"]) << "'";
-    return;
+    return false;
   }
   dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '"
            << addrstr << "'" << dendl;
@@ -868,12 +1026,12 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss
   const char *end = 0;
   if (!addr.parse(addrstr.c_str(), &end)) {
     ss << "failed to parse addr '" << addrstr << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
-    return;
+    return false;
   }
 
   if (is_leader() || is_peon()) {
     ss << "mon already active; ignoring bootstrap hint";
-    return;
+    return true;
   }
 
   if (addr.get_port() == 0)
@@ -881,15 +1039,13 @@ void Monitor::_add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss
 
   extra_probe_peers.insert(addr);
   ss << "adding peer " << addr << " to list: " << extra_probe_peers;
+  return true;
 }
 
 // called by bootstrap(), or on leader|peon -> electing
 void Monitor::_reset()
 {
   dout(10) << __func__ << dendl;
-
-  assert(state == STATE_ELECTING ||
-	 state == STATE_PROBING);
 
   cancel_probe_timeout();
   timecheck_finish();
@@ -1018,14 +1174,14 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   if (sync_full) {
     // stash key state, and mark that we are syncing
-    MonitorDBStore::Transaction t;
-    sync_stash_critical_state(&t);
-    t.put("mon_sync", "in_sync", 1);
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    sync_stash_critical_state(t);
+    t->put("mon_sync", "in_sync", 1);
 
     sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
     dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
-    t.put("mon_sync", "last_committed_floor", sync_last_committed_floor);
+    t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);
 
     store->apply_transaction(t);
 
@@ -1056,7 +1212,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
   messenger->send_message(m, sync_provider);
 }
 
-void Monitor::sync_stash_critical_state(MonitorDBStore::Transaction *t)
+void Monitor::sync_stash_critical_state(MonitorDBStore::TransactionRef t)
 {
   dout(10) << __func__ << dendl;
   bufferlist backup_monmap;
@@ -1082,13 +1238,14 @@ void Monitor::sync_finish(version_t last_committed)
 
   if (sync_full) {
     // finalize the paxos commits
-    MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, sync_start_version, last_committed);
-    tx.put(paxos->get_name(), "last_committed", last_committed);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    paxos->read_and_prepare_transactions(tx, sync_start_version,
+					 last_committed);
+    tx->put(paxos->get_name(), "last_committed", last_committed);
 
     dout(30) << __func__ << " final tx dump:\n";
     JSONFormatter f(true);
-    tx.dump(&f);
+    tx->dump(&f);
     f.flush(*_dout);
     *_dout << dendl;
 
@@ -1097,10 +1254,10 @@ void Monitor::sync_finish(version_t last_committed)
 
   assert(g_conf->mon_sync_requester_kill_at != 8);
 
-  MonitorDBStore::Transaction t;
-  t.erase("mon_sync", "in_sync");
-  t.erase("mon_sync", "force_sync");
-  t.erase("mon_sync", "last_committed_floor");
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  t->erase("mon_sync", "in_sync");
+  t->erase("mon_sync", "force_sync");
+  t->erase("mon_sync", "last_committed_floor");
   store->apply_transaction(t);
 
   assert(g_conf->mon_sync_requester_kill_at != 9);
@@ -1233,16 +1390,17 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
   }
 
   MMonSync *reply = new MMonSync(MMonSync::OP_CHUNK, sp.cookie);
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
 
   int left = g_conf->mon_sync_max_payload_size;
   while (sp.last_committed < paxos->get_version() && left > 0) {
     bufferlist bl;
     sp.last_committed++;
     store->get(paxos->get_name(), sp.last_committed, bl);
-    tx.put(paxos->get_name(), sp.last_committed, bl);
+    tx->put(paxos->get_name(), sp.last_committed, bl);
     left -= bl.length();
-    dout(20) << __func__ << " including paxos state " << sp.last_committed << dendl;
+    dout(20) << __func__ << " including paxos state " << sp.last_committed
+	     << dendl;
   }
   reply->last_committed = sp.last_committed;
 
@@ -1254,9 +1412,11 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
 
   if ((sp.full && sp.synchronizer->has_next_chunk()) ||
       sp.last_committed < paxos->get_version()) {
-    dout(10) << __func__ << " chunk, through version " << sp.last_committed << " key " << sp.last_key << dendl;
+    dout(10) << __func__ << " chunk, through version " << sp.last_committed
+	     << " key " << sp.last_key << dendl;
   } else {
-    dout(10) << __func__ << " last chunk, through version " << sp.last_committed << " key " << sp.last_key << dendl;
+    dout(10) << __func__ << " last chunk, through version " << sp.last_committed
+	     << " key " << sp.last_key << dendl;
     reply->op = MMonSync::OP_LAST_CHUNK;
 
     assert(g_conf->mon_sync_provider_kill_at != 3);
@@ -1265,7 +1425,7 @@ void Monitor::handle_sync_get_chunk(MMonSync *m)
     sync_providers.erase(sp.cookie);
   }
 
-  ::encode(tx, reply->chunk_bl);
+  ::encode(*tx, reply->chunk_bl);
 
   m->get_connection()->send_message(reply);
 }
@@ -1321,12 +1481,12 @@ void Monitor::handle_sync_chunk(MMonSync *m)
   assert(state == STATE_SYNCHRONIZING);
   assert(g_conf->mon_sync_requester_kill_at != 5);
 
-  MonitorDBStore::Transaction tx;
-  tx.append_from_encoded(m->chunk_bl);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  tx->append_from_encoded(m->chunk_bl);
 
   dout(30) << __func__ << " tx dump:\n";
   JSONFormatter f(true);
-  tx.dump(&f);
+  tx->dump(&f);
   f.flush(*_dout);
   *_dout << dendl;
 
@@ -1336,13 +1496,14 @@ void Monitor::handle_sync_chunk(MMonSync *m)
 
   if (!sync_full) {
     dout(10) << __func__ << " applying recent paxos transactions as we go" << dendl;
-    MonitorDBStore::Transaction tx;
-    paxos->read_and_prepare_transactions(&tx, paxos->get_version() + 1, m->last_committed);
-    tx.put(paxos->get_name(), "last_committed", m->last_committed);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    paxos->read_and_prepare_transactions(tx, paxos->get_version() + 1,
+					 m->last_committed);
+    tx->put(paxos->get_name(), "last_committed", m->last_committed);
 
     dout(30) << __func__ << " tx dump:\n";
     JSONFormatter f(true);
-    tx.dump(&f);
+    tx->dump(&f);
     f.flush(*_dout);
     *_dout << dendl;
 
@@ -1638,25 +1799,24 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  _reset();
   state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
-
-  _reset();
 }
 
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
-  state = STATE_ELECTING;
   _reset();
+  state = STATE_ELECTING;
 
   logger->inc(l_mon_num_elections);
   logger->inc(l_mon_election_call);
 
   cancel_probe_timeout();
 
-  clog.info() << "mon." << name << " calling new monitor election\n";
+  clog->info() << "mon." << name << " calling new monitor election\n";
   elector.call_election();
 }
 
@@ -1704,7 +1864,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum_features = features;
   outside_quorum.clear();
 
-  clog.info() << "mon." << name << "@" << rank
+  clog->info() << "mon." << name << "@" << rank
 		<< " won leader election with quorum " << quorum << "\n";
 
   set_leader_supported_commands(cmdset, cmdsize);
@@ -1789,7 +1949,7 @@ void Monitor::apply_quorum_to_compatset_features()
     dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
     features = new_features;
 
-    MonitorDBStore::Transaction t;
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
     write_features(t);
     store->apply_transaction(t);
 
@@ -1819,9 +1979,9 @@ void Monitor::sync_force(Formatter *f, ostream& ss)
     free_formatter = true;
   }
 
-  MonitorDBStore::Transaction tx;
-  sync_stash_critical_state(&tx);
-  tx.put("mon_sync", "force_sync", 1);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  sync_stash_critical_state(tx);
+  tx->put("mon_sync", "force_sync", 1);
   store->apply_transaction(tx);
 
   f->open_object_section("sync_force");
@@ -2315,9 +2475,19 @@ void Monitor::handle_command(MMonCommand *m)
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
+    audit_clog->info() << "from='" << session->inst << "' "
+                      << "entity='" << session->auth_handler->get_entity_name()
+                      << "' cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
+
+  audit_clog->info() << "from='" << session->inst << "' "
+    << "entity='"
+    << (session->auth_handler ?
+        stringify(session->auth_handler->get_entity_name())
+        : "forwarded-request")
+    << "' cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
@@ -2365,6 +2535,11 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
+    while (paxos->is_writing() || paxos->is_writing_previous()) {
+      lock.Unlock();
+      store->flush();
+      lock.Lock();
+    }
     if (is_leader()) {
       int r = scrub();
       reply_command(m, r, "", rdata, 0);
@@ -2460,6 +2635,7 @@ void Monitor::handle_command(MMonCommand *m)
     if (!f)
       f.reset(new_formatter("json-pretty"));
     f->open_object_section("report");
+    f->dump_stream("cluster_fingerprint") << fingerprint;
     f->dump_string("version", ceph_version_to_str());
     f->dump_string("commit", git_version_to_str());
     f->dump_stream("timestamp") << ceph_clock_now(NULL);
@@ -3078,7 +3254,8 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       break;
 
     case MSG_LOGACK:
-      clog.handle_log_ack((MLogAck*)m);
+      log_client.handle_log_ack((MLogAck*)m);
+      m->put();
       break;
 
     // monmap
@@ -3471,9 +3648,9 @@ void Monitor::handle_timecheck_leader(MTimeCheck *m)
   ostringstream ss;
   health_status_t status = timecheck_status(ss, skew_bound, latency);
   if (status == HEALTH_ERR)
-    clog.error() << other << " " << ss.str() << "\n";
+    clog->error() << other << " " << ss.str() << "\n";
   else if (status == HEALTH_WARN)
-    clog.warn() << other << " " << ss.str() << "\n";
+    clog->warn() << other << " " << ss.str() << "\n";
 
   dout(10) << __func__ << " from " << other << " ts " << m->timestamp
 	   << " delta " << delta << " skew_bound " << skew_bound
@@ -3742,12 +3919,12 @@ int Monitor::scrub()
   assert(is_leader());
 
   if ((get_quorum_features() & CEPH_FEATURE_MON_SCRUB) == 0) {
-    clog.warn() << "scrub not supported by entire quorum\n";
+    clog->warn() << "scrub not supported by entire quorum\n";
     return -EOPNOTSUPP;
   }
 
   if (!scrub_result.empty()) {
-    clog.info() << "scrub already in progress\n";
+    clog->info() << "scrub already in progress\n";
     return -EBUSY;
   }
 
@@ -3842,13 +4019,13 @@ void Monitor::scrub_finish()
       continue;
     if (p->second != mine) {
       ++errors;
-      clog.error() << "scrub mismatch" << "\n";
-      clog.error() << " mon." << rank << " " << mine << "\n";
-      clog.error() << " mon." << p->first << " " << p->second << "\n";
+      clog->error() << "scrub mismatch" << "\n";
+      clog->error() << " mon." << rank << " " << mine << "\n";
+      clog->error() << " mon." << p->first << " " << p->second << "\n";
     }
   }
   if (!errors)
-    clog.info() << "scrub ok on " << quorum << ": " << mine << "\n";
+    clog->info() << "scrub ok on " << quorum << ": " << mine << "\n";
 
   scrub_reset();
 }
@@ -3926,7 +4103,27 @@ void Monitor::tick()
     finish_contexts(g_ceph_context, maybe_wait_for_quorum);
   }
 
+  if (is_leader() && paxos->is_active() && fingerprint.is_zero()) {
+    // this is only necessary on upgraded clusters.
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    prepare_new_fingerprint(t);
+    bufferlist tbl;
+    t->encode(tbl);
+    paxos->propose_new_value(tbl, new C_NoopContext);
+  }
+
   new_tick();
+}
+
+void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
+{
+  uuid_d nf;
+  nf.generate_random();
+  dout(10) << __func__ << " proposing cluster_fingerprint " << nf << dendl;
+
+  bufferlist bl;
+  ::encode(nf, bl);
+  t->put(MONITOR_NAME, "cluster_fingerprint", bl);
 }
 
 int Monitor::check_fsid()
@@ -3963,13 +4160,13 @@ int Monitor::check_fsid()
 
 int Monitor::write_fsid()
 {
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
   int r = write_fsid(t);
   store->apply_transaction(t);
   return r;
 }
 
-int Monitor::write_fsid(MonitorDBStore::Transaction &t)
+int Monitor::write_fsid(MonitorDBStore::TransactionRef t)
 {
   ostringstream ss;
   ss << monmap->get_fsid() << "\n";
@@ -3978,7 +4175,7 @@ int Monitor::write_fsid(MonitorDBStore::Transaction &t)
   bufferlist b;
   b.append(us);
 
-  t.put(MONITOR_NAME, "cluster_uuid", b);
+  t->put(MONITOR_NAME, "cluster_uuid", b);
   return 0;
 }
 
@@ -3988,7 +4185,7 @@ int Monitor::write_fsid(MonitorDBStore::Transaction &t)
  */
 int Monitor::mkfs(bufferlist& osdmapbl)
 {
-  MonitorDBStore::Transaction t;
+  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
 
   // verify cluster fsid
   int r = check_fsid();
@@ -3998,7 +4195,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist magicbl;
   magicbl.append(CEPH_MON_ONDISK_MAGIC);
   magicbl.append("\n");
-  t.put(MONITOR_NAME, "magic", magicbl);
+  t->put(MONITOR_NAME, "magic", magicbl);
 
 
   features = get_supported_features();
@@ -4008,7 +4205,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   bufferlist monmapbl;
   monmap->encode(monmapbl, CEPH_FEATURES_ALL);
   monmap->set_epoch(0);     // must be 0 to avoid confusing first MonmapMonitor::update_from_paxos()
-  t.put("mkfs", "monmap", monmapbl);
+  t->put("mkfs", "monmap", monmapbl);
 
   if (osdmapbl.length()) {
     // make sure it's a valid osdmap
@@ -4020,7 +4217,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
       derr << "error decoding provided osdmap: " << e.what() << dendl;
       return -EINVAL;
     }
-    t.put("mkfs", "osdmap", osdmapbl);
+    t->put("mkfs", "osdmap", osdmapbl);
   }
 
   if (is_keyring_required()) {
@@ -4058,7 +4255,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 
     bufferlist keyringbl;
     keyring.encode_plaintext(keyringbl);
-    t.put("mkfs", "keyring", keyringbl);
+    t->put("mkfs", "keyring", keyringbl);
   }
   write_fsid(t);
   store->apply_transaction(t);
@@ -4211,7 +4408,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 #define dout_prefix *_dout
 
 void Monitor::StoreConverter::_convert_finish_features(
-    MonitorDBStore::Transaction &t)
+    MonitorDBStore::TransactionRef t)
 {
   dout(20) << __func__ << dendl;
 
@@ -4235,7 +4432,7 @@ void Monitor::StoreConverter::_convert_finish_features(
   features.encode(features_bl);
 
   dout(20) << __func__ << " new features " << features << dendl;
-  t.put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
+  t->put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
 }
 
 
@@ -4330,11 +4527,11 @@ void Monitor::StoreConverter::_convert_monitor()
   assert(store->exists_bl_ss("feature_set"));
   assert(store->exists_bl_ss("election_epoch"));
 
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
 
   if (store->exists_bl_ss("joined")) {
     version_t joined = store->get_int("joined");
-    tx.put(MONITOR_NAME, "joined", joined);
+    tx->put(MONITOR_NAME, "joined", joined);
   }
 
   vector<string> keys;
@@ -4350,12 +4547,12 @@ void Monitor::StoreConverter::_convert_monitor()
     bufferlist bl;
     int r = store->get_bl_ss(bl, (*it).c_str(), 0);
     assert(r > 0);
-    tx.put(MONITOR_NAME, *it, bl);
+    tx->put(MONITOR_NAME, *it, bl);
   }
   version_t election_epoch = store->get_int("election_epoch");
-  tx.put(MONITOR_NAME, "election_epoch", election_epoch);
+  tx->put(MONITOR_NAME, "election_epoch", election_epoch);
 
-  assert(!tx.empty());
+  assert(!tx->empty());
   db->apply_transaction(tx);
   dout(10) << __func__ << " finished" << dendl;
 }
@@ -4400,9 +4597,9 @@ void Monitor::StoreConverter::_convert_machines(string machine)
     dout(20) << __func__ << " " << machine
 	     << " ver " << ver << " bl " << bl.length() << dendl;
 
-    MonitorDBStore::Transaction tx;
-    tx.put(machine, ver, bl);
-    tx.put(machine, "last_committed", ver);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    tx->put(machine, ver, bl);
+    tx->put(machine, "last_committed", ver);
 
     if (has_gv && store->exists_bl_sn(machine_gv.c_str(), ver)) {
       stringstream s;
@@ -4413,7 +4610,7 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       dout(20) << __func__ << " " << machine
 	       << " ver " << ver << " -> " << gv << dendl;
 
-      MonitorDBStore::Transaction paxos_tx;
+      MonitorDBStore::TransactionRef paxos_tx(new MonitorDBStore::Transaction);
 
       if (gvs.count(gv) == 0) {
         gvs.insert(gv);
@@ -4445,16 +4642,16 @@ void Monitor::StoreConverter::_convert_machines(string machine)
         bufferlist paxos_bl;
         int r = db->get("paxos", gv, paxos_bl);
         assert(r >= 0);
-        paxos_tx.append_from_encoded(paxos_bl);
+        paxos_tx->append_from_encoded(paxos_bl);
       }
       gv_map[gv].insert(make_pair(machine,ver));
 
       bufferlist tx_bl;
-      tx.encode(tx_bl);
-      paxos_tx.append_from_encoded(tx_bl);
+      tx->encode(tx_bl);
+      paxos_tx->append_from_encoded(tx_bl);
       bufferlist paxos_bl;
-      paxos_tx.encode(paxos_bl);
-      tx.put("paxos", gv, paxos_bl);
+      paxos_tx->encode(paxos_bl);
+      tx->put("paxos", gv, paxos_bl);
     }
     db->apply_transaction(tx);
   }
@@ -4463,10 +4660,10 @@ void Monitor::StoreConverter::_convert_machines(string machine)
   dout(20) << __func__ << " lc " << lc << " last_committed " << last_committed << dendl;
   assert(lc == last_committed);
 
-  MonitorDBStore::Transaction tx;
-  tx.put(machine, "first_committed", first_committed);
-  tx.put(machine, "last_committed", last_committed);
-  tx.put(machine, "conversion_first", first_committed);
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+  tx->put(machine, "first_committed", first_committed);
+  tx->put(machine, "last_committed", last_committed);
+  tx->put(machine, "conversion_first", first_committed);
 
   if (store->exists_bl_ss(machine.c_str(), "latest")) {
     bufferlist latest_bl_raw;
@@ -4478,7 +4675,7 @@ void Monitor::StoreConverter::_convert_machines(string machine)
       goto out;
     }
 
-    tx.put(machine, "latest", latest_bl_raw);
+    tx->put(machine, "latest", latest_bl_raw);
 
     bufferlist::iterator lbl_it = latest_bl_raw.begin();
     bufferlist latest_bl;
@@ -4489,10 +4686,10 @@ void Monitor::StoreConverter::_convert_machines(string machine)
     dout(20) << __func__ << " machine " << machine
 	     << " latest ver " << latest_ver << dendl;
 
-    tx.put(machine, "full_latest", latest_ver);
+    tx->put(machine, "full_latest", latest_ver);
     stringstream os;
     os << "full_" << latest_ver;
-    tx.put(machine, os.str(), latest_bl);
+    tx->put(machine, os.str(), latest_bl);
   }
 out:
   db->apply_transaction(tx);
@@ -4522,8 +4719,8 @@ void Monitor::StoreConverter::_convert_osdmap_full()
              << " bl " << bl.length() << " bytes" << dendl;
 
     string full_key = "full_" + stringify(ver);
-    MonitorDBStore::Transaction tx;
-    tx.put("osdmap", full_key, bl);
+    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
+    tx->put("osdmap", full_key, bl);
     db->apply_transaction(tx);
   }
   dout(10) << __func__ << " found " << err << " conversion errors!" << dendl;
@@ -4556,18 +4753,18 @@ void Monitor::StoreConverter::_convert_paxos()
 
   // erase all paxos versions between [first, last_gv[, with first being the
   // first gv in the map.
-  MonitorDBStore::Transaction tx;
+  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
   set<version_t>::iterator it = gvs.begin();
   dout(1) << __func__ << " first gv " << (*it)
 	  << " last gv " << last_gv << dendl;
   for (; it != gvs.end() && (*it < last_gv); ++it) {
-    tx.erase("paxos", *it);
+    tx->erase("paxos", *it);
   }
-  tx.put("paxos", "first_committed", last_gv);
-  tx.put("paxos", "last_committed", highest_gv);
-  tx.put("paxos", "accepted_pn", highest_accepted_pn);
-  tx.put("paxos", "last_pn", highest_last_pn);
-  tx.put("paxos", "conversion_first", last_gv);
+  tx->put("paxos", "first_committed", last_gv);
+  tx->put("paxos", "last_committed", highest_gv);
+  tx->put("paxos", "accepted_pn", highest_accepted_pn);
+  tx->put("paxos", "last_pn", highest_last_pn);
+  tx->put("paxos", "conversion_first", last_gv);
   db->apply_transaction(tx);
 
   dout(10) << __func__ << " finished" << dendl;

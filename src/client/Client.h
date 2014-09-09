@@ -53,7 +53,6 @@ using std::fstream;
 #include "osdc/ObjectCacher.h"
 
 class MDSMap;
-class OSDMap;
 class MonClient;
 
 class CephContext;
@@ -210,7 +209,6 @@ class Client : public Dispatcher {
 
   // cluster descriptors
   MDSMap *mdsmap;
-  OSDMap *osdmap;
 
   SafeTimer timer;
 
@@ -225,6 +223,7 @@ class Client : public Dispatcher {
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
+  Finisher objecter_finisher;
 
   Context *tick_event;
   utime_t last_cap_renew;
@@ -374,6 +373,8 @@ protected:
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
+  friend class C_C_Tick; // Asserts on client_lock
+  friend class C_Client_SyncCommit; // Asserts on client_lock
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -612,6 +613,49 @@ private:
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
+
+  /*
+   * These define virtual xattrs exposing the recursive directory
+   * statistics and layout metadata.
+   */
+  struct VXattr {
+	  const string name;
+	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
+	  bool readonly, hidden;
+	  bool (Client::*exists_cb)(Inode *in);
+  };
+
+  bool _vxattrcb_layout_exists(Inode *in);
+  size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_unit(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_stripe_count(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_object_size(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_layout_pool(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_entries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_files(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_subdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rentries(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rfiles(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
+
+  static const VXattr _dir_vxattrs[];
+  static const VXattr _file_vxattrs[];
+
+  static const VXattr *_get_vxattrs(Inode *in);
+  static const VXattr *_match_vxattr(Inode *in, const char *name);
+
+  size_t _file_vxattrs_name_size;
+  size_t _dir_vxattrs_name_size;
+  size_t _vxattrs_name_size(const VXattr *vxattrs) {
+	  if (vxattrs == _dir_vxattrs)
+		  return _dir_vxattrs_name_size;
+	  else if (vxattrs == _file_vxattrs)
+		  return _file_vxattrs_name_size;
+	  return 0;
+  }
 
 public:
   int mount(const std::string &mount_root);

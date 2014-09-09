@@ -23,9 +23,6 @@
 #include "include/ceph_features.h"
 #include "common/errno.h"
 
-#include <vector>
-using namespace std;
-
 /***
  *
  * MClientReply - container message for MDS reply to a client's MClientRequest

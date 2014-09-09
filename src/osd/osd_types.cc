@@ -500,8 +500,6 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
-const coll_t coll_t::META_COLL("meta");
-
 bool coll_t::is_temp(spg_t& pgid) const
 {
   const char *cstr(str.c_str());
@@ -813,6 +811,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("hit_set_count", hit_set_count);
   f->dump_unsigned("min_read_recency_for_promote", min_read_recency_for_promote);
   f->dump_unsigned("stripe_width", get_stripe_width());
+  f->dump_unsigned("expected_num_objects", expected_num_objects);
 }
 
 
@@ -1112,7 +1111,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(16, 5, bl);
+  ENCODE_START(17, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1153,12 +1152,13 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(erasure_code_profile, bl);
   ::encode(last_force_op_resend, bl);
   ::encode(min_read_recency_for_promote, bl);
+  ::encode(expected_num_objects, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(16, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(17, 5, 5, bl);
   ::decode(type, bl);
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
@@ -1266,6 +1266,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
     pg_pool_t def;
     min_read_recency_for_promote = def.min_read_recency_for_promote;
   }
+  if (struct_v >= 17) {
+    ::decode(expected_num_objects, bl);
+  } else {
+    expected_num_objects = 0;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
 }
@@ -1320,6 +1325,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_min_flush_age = 231;
   a.cache_min_evict_age = 2321;
   a.erasure_code_profile = "profile in osdmap";
+  a.expected_num_objects = 123456;
   o.push_back(new pg_pool_t(a));
 }
 
@@ -1367,6 +1373,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.min_read_recency_for_promote)
     out << " min_read_recency_for_promote " << p.min_read_recency_for_promote;
   out << " stripe_width " << p.get_stripe_width();
+  if (p.expected_num_objects)
+    out << " expected_num_objects " << p.expected_num_objects;
   return out;
 }
 

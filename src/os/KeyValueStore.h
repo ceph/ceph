@@ -597,6 +597,8 @@ class KeyValueStore : public ObjectStore,
                            BufferTransaction &t);
 
   // collections
+  int _collection_hint_expected_num_objs(coll_t cid, uint32_t pg_num,
+      uint64_t num_objs) const { return 0; }
   int _create_collection(coll_t c, BufferTransaction &t);
   int _destroy_collection(coll_t c, BufferTransaction &t);
   int _collection_add(coll_t c, coll_t ocid, const ghobject_t& oid,
