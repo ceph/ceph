@@ -223,6 +223,7 @@ enum {
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
   OPT_OLH_GET,
+  OPT_OLH_READLOG,
   OPT_QUOTA_SET,
   OPT_QUOTA_ENABLE,
   OPT_QUOTA_DISABLE,
@@ -387,6 +388,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "olh") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_OLH_GET;
+    if (strcmp(cmd, "readlog") == 0)
+      return OPT_OLH_READLOG;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -1896,8 +1899,7 @@ next:
     }   
   }
 
-  if (opt_cmd == OPT_OLH_GET /* || opt_cmd == OPT_OLH_SET */) {
-#warning clean up
+  if (opt_cmd == OPT_OLH_GET || opt_cmd == OPT_OLH_READLOG) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
@@ -1919,10 +1921,27 @@ next:
     rgw_obj obj(bucket, object);
     int ret = store->get_olh(obj, &olh);
     if (ret < 0) {
-      cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << dendl;
+      cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    encode_json("olh", olg, formatter);
+    encode_json("olh", olh, formatter);
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_OLH_READLOG) {
+    map<uint64_t, rgw_bucket_olh_log_entry> log;
+    bool is_truncated;
+
+    rgw_obj obj(bucket, object);
+    int ret = store->bucket_index_read_olh_log(NULL, obj, 0, &log, &is_truncated);
+    if (ret < 0) {
+      cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    formatter->open_object_section("result");
+    encode_json("is_truncated", is_truncated, formatter);
+    encode_json("log", log, formatter);
+    formatter->close_section();
     formatter->flush(cout);
   }
 
