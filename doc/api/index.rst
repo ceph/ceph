@@ -22,9 +22,17 @@ See `libcephfs (javadoc)`_.
 Ceph Block Device APIs
 ======================
 
-See `librbdpy`_. 
+See `librbdpy`_.
 
 .. _librbdpy: ../rbd/librbdpy
+
+
+Calamari APIs
+=============
+
+See `Calamari API`_.
+
+.. _Calamari API: http://ceph.com/calamari/docs/calamari_rest/index.html
 
 
 Ceph Object Store APIs
@@ -32,7 +40,7 @@ Ceph Object Store APIs
 
 - See `S3-compatible API`_.
 - See `Swift-compatible API`_.
-- See `Admin Ops API`_. 
+- See `Admin Ops API`_.
 
 .. _S3-compatible API: ../radosgw/s3/
 .. _Swift-compatible API: ../radosgw/swift/
