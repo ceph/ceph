@@ -3,6 +3,7 @@
 #include "msg/Message.h"
 #include "osd/OSD.h"
 #include "ClassHandler.h"
+#include "common/errno.h"
 
 #include <dlfcn.h>
 
