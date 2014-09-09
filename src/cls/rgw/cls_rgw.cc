@@ -29,6 +29,7 @@ cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_bucket_link_olh;
+cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
@@ -940,7 +941,7 @@ static int write_entry(cls_method_context_t hctx, T& entry, const string& key)
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
-  cls_rgw_link_olh_op op;
+  rgw_cls_link_olh_op op;
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(op, iter);
@@ -1050,6 +1051,54 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
     return ret;
   }
+
+  return 0;
+}
+
+static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_read_olh_log_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_read_olh_log(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  if (!op.olh.instance.empty()) {
+    CLS_LOG(1, "bad key passed in (non empty instance)");
+    return -EINVAL;
+  }
+
+  struct rgw_bucket_olh_entry olh_data_entry;
+  string olh_data_key;
+  encode_olh_data_key(op.olh, &olh_data_key);
+  int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  rgw_cls_read_olh_log_ret op_ret;
+
+#define MAX_OLH_LOG_ENTRIES 1000
+  map<uint64_t, rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log;
+
+  if (log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
+    op_ret.log = log;
+    op_ret.is_truncated = false;
+  } else {
+    map<uint64_t, rgw_bucket_olh_log_entry>::iterator iter = log.upper_bound(op.ver_marker);
+
+    for (int i = 0; i < MAX_OLH_LOG_ENTRIES && iter != log.end(); ++i, ++iter) {
+      op_ret.log[iter->first] = iter->second;
+    }
+    op_ret.is_truncated = (iter != log.end());
+  }
+
+  ::encode(op_ret, *out);
 
   return 0;
 }
@@ -1980,6 +2029,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
+  cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
+
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "dir_suggest_changes", CLS_METHOD_RD | CLS_METHOD_WR, rgw_dir_suggest_changes, &h_rgw_dir_suggest_changes);

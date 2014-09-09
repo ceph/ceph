@@ -145,12 +145,12 @@ struct rgw_cls_obj_complete_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
-struct cls_rgw_link_olh_op {
+struct rgw_cls_link_olh_op {
   cls_rgw_obj_key key;
   bool delete_marker;
   string op_tag;
 
-  cls_rgw_link_olh_op() : delete_marker(false) {}
+  rgw_cls_link_olh_op() : delete_marker(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -169,8 +169,58 @@ struct cls_rgw_link_olh_op {
   }
 
   void dump(Formatter *f) const;
+#warning implement me
 };
-WRITE_CLASS_ENCODER(cls_rgw_link_olh_op)
+WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
+
+struct rgw_cls_read_olh_log_op
+{
+  cls_rgw_obj_key olh;
+  uint64_t ver_marker;
+
+  rgw_cls_read_olh_log_op() : ver_marker(0) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(olh, bl);
+    ::encode(ver_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(olh, bl);
+    ::decode(ver_marker, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+#warning implement me
+};
+WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
+
+
+struct rgw_cls_read_olh_log_ret
+{
+  map<uint64_t, struct rgw_bucket_olh_log_entry> log;
+  bool is_truncated;
+
+  rgw_cls_read_olh_log_ret() : is_truncated(false) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(2, 2, bl);
+    ::encode(log, bl);
+    ::encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    ::decode(log, bl);
+    ::decode(is_truncated, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+#warning implement me
+};
+WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_ret)
 
 struct rgw_cls_list_op
 {
