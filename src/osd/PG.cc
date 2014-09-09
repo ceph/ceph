@@ -1481,12 +1481,6 @@ void PG::activate(ObjectStore::Transaction& t,
   } else {
     dout(10) << "activate - not complete, " << missing << dendl;
     pg_log.activate_not_complete(info);
-    if (is_primary()) {
-      dout(10) << "activate - starting recovery" << dendl;
-      osd->queue_for_recovery(this);
-      if (have_unfound())
-	discover_all_missing(query_map);
-    }
   }
     
   log_weirdness();
@@ -1651,6 +1645,10 @@ void PG::activate(ObjectStore::Transaction& t,
       build_might_have_unfound();
 
       state_set(PG_STATE_DEGRADED);
+      dout(10) << "activate - starting recovery" << dendl;
+      osd->queue_for_recovery(this);
+      if (have_unfound())
+	discover_all_missing(query_map);
     }
 
     // degraded?
