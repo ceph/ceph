@@ -107,8 +107,12 @@ int ClassHandler::_load_class(ClassData *cls)
 
     struct stat st;
     int r = ::stat(fname, &st);
-    if (r < 0)
-      return -errno;
+    if (r < 0) {
+      r = -errno;
+      dout(0) << __func__ << " could not stat class " << fname
+	      << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
 
     cls->handle = dlopen(fname, RTLD_NOW);
     if (!cls->handle) {
