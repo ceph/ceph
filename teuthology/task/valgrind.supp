@@ -14,6 +14,31 @@
    ...
 }
 {
+   tcmalloc: msync heap allocation points to uninit bytes (centos 6.5)
+   Memcheck:Param
+   msync(start)
+   obj:/lib64/libpthread-2.12.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
+   tcmalloc: msync heap allocation points to unaddressible bytes (centos 6.5 #2)
+   Memcheck:Param
+   msync(start)
+   obj:/lib64/libpthread-2.12.so
+   obj:/usr/lib64/libunwind.so.7.0.0
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
    tcmalloc: msync heap allocation points to uninit bytes (wheezy)
    Memcheck:Param
    msync(start)
