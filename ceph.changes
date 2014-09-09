@@ -1,4 +1,8 @@
 -------------------------------------------------------------------
+Thu Sep  9 23:56:23 UTC 2014 - osynge@suse.com
+- Systemd rcceph created
+
+-------------------------------------------------------------------
 Thu Sep  4 21:52:51 UTC 2014 - osynge@suse.com
 - Systemd connected to rpm hooks: %pre, %post, %preun, %postun
   * fix bnc#895063

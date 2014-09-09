@@ -1,0 +1,72 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 9 Sep 2014 22:02:22 +0200
+Subject: [PATCH] rcceph: wrapper for ceph systemd
+
+systemd is easy to use if you have a wrapper.
+message showing available paramters to rcceph.
+Also check for directories contianing mon/osd deamon settings.
+---
+ systemd/rcceph | 54 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+ create mode 100755 systemd/rcceph
+
+diff --git a/systemd/rcceph b/systemd/rcceph
+new file mode 100755
+index 0000000..247dd4e
+--- /dev/null
++++ b/systemd/rcceph
+@@ -0,0 +1,54 @@
++#! /bin/bash
++
++SYSTEMD_NO_WRAP=1 . /etc/rc.status
++rc_reset
++
++action=$1 ; shift
++cluster="ceph"
++config=$1 ; shift
++
++# Shared variables by many actions
++dir_mon="/var/lib/ceph/mon/"
++dir_osd="/var/lib/ceph/osd/"
++if test -d ${dir_mon} ; then
++lmon=`ls ${dir_mon} | grep ${cluster}`
++fi
++if test -d ${dir_osd} ; then
++losd=`ls ${dir_osd} | grep ${cluster}`
++fi
++prefix="${cluster}-"
++
++if test -n "$config" ; then
++	systemctl "${action}" "ceph-mon@${config}.service"
++else
++	case $action in
++    start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed  )
++        n=0
++        if test -n ${lmon} ; then
++            for s in ${lmon#=${prefix}} ; do
++                systemctl "${action}" ceph-mon@${s#$prefix}.service
++                rc_check
++                ((++n))
++            done
++        fi
++        if test -n ${lmon} ; then
++            for s in ${losd#=${prefix}} ; do
++                systemctl "${action}" ceph-osd@${s#$prefix}.service
++                rc_check
++                ((++n))
++            done
++        fi
++        if test $n -gt 0 ; then
++			rc_status
++		else
++			rc_status -u
++		fi
++    ;;
++	*)
++		echo "Invalid paramter : $action"
++        echo "Valid paramters  : start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed"
++	;;
++	esac
++fi
++rc_exit
++

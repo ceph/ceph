@@ -1,0 +1,56 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 9 Sep 2014 22:01:30 +0200
+Subject: [PATCH] Added a systemd target for ceph
+
+ceph now has a target structure for systemd
+---
+ systemd/ceph-mds@.service | 1 +
+ systemd/ceph-mon@.service | 1 +
+ systemd/ceph-osd@.service | 1 +
+ systemd/ceph.target       | 2 ++
+ 4 files changed, 5 insertions(+)
+ create mode 100644 systemd/ceph.target
+
+diff --git a/systemd/ceph-mds@.service b/systemd/ceph-mds@.service
+index 08bab79..234b2f6 100644
+--- a/systemd/ceph-mds@.service
++++ b/systemd/ceph-mds@.service
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=Ceph metadata server daemon
++PartOf=ceph.target
+ 
+ [Service]
+ EnvironmentFile=-/etc/sysconfig/ceph
+diff --git a/systemd/ceph-mon@.service b/systemd/ceph-mon@.service
+index 8ba0843..807ea57 100644
+--- a/systemd/ceph-mon@.service
++++ b/systemd/ceph-mon@.service
+@@ -7,6 +7,7 @@ Description=Ceph cluster monitor daemon
+ # configuration.
+ After=network-online.target
+ Wants=network-online.target
++PartOf=ceph.target
+ 
+ [Service]
+ EnvironmentFile=-/etc/sysconfig/ceph
+diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
+index 1811d7e..ad8fdd6 100644
+--- a/systemd/ceph-osd@.service
++++ b/systemd/ceph-osd@.service
+@@ -6,6 +6,7 @@ EnvironmentFile=-/etc/sysconfig/ceph
+ Environment=CLUSTER=ceph
+ ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
+ ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
++PartOf=ceph.target
+ 
+ [Install]
+ WantedBy=multi-user.target
+diff --git a/systemd/ceph.target b/systemd/ceph.target
+new file mode 100644
+index 0000000..fc103f2
+--- /dev/null
++++ b/systemd/ceph.target
+@@ -0,0 +1,2 @@
++[Unit]
++Description=ceph target allowing to start/stop all ceph*@.service instances at once

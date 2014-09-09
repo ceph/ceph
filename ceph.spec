@@ -93,7 +93,7 @@ BuildRequires:  python-virtualenv
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 BuildRequires:  systemd
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
@@ -118,6 +118,8 @@ Patch0018:      0018-MultiPatch-taken-from-trunk.patch
 Patch0019:      0019-Switch-off-systemd-detection.patch
 Patch0020:      0020-init-add-systemd-service-files.patch
 Patch0021:      0021-systemd-support-in-ceph-disk-activa.patch
+Patch0022:      0022-Added-a-systemd-target-for-ceph.patch
+Patch0023:      0023-rcceph-wrapper-for-ceph-systemd.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -361,6 +363,8 @@ This package contains Ceph benchmarks and test tools.
 %patch0019 -p1
 %patch0020 -p1
 %patch0021 -p1
+%patch0022 -p1
+%patch0023 -p1
 
 %build
 
@@ -449,13 +453,14 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 
 # systemd
-mkdir -p $RPM_BUILD_ROOT/usr/lib/systemd/system/
-install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
-install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
-install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT/usr/lib/systemd/system/
+mkdir -p $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
-
+install -m 0755 -D systemd/rcceph %{buildroot}%{_sbindir}/rcceph
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
@@ -576,6 +581,7 @@ fi
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
+%{_sbindir}/rcceph
 
 # systemd
 
@@ -584,10 +590,10 @@ fi
 %dir /usr/libexec
 %dir /usr/libexec/ceph
 /usr/libexec/ceph/ceph-osd-prestart.sh
-%dir /usr/lib/systemd/system/
-/usr/lib/systemd/system/ceph-osd@.service
-/usr/lib/systemd/system/ceph-mon@.service
-/usr/lib/systemd/system/ceph-mds@.service
+%{_unitdir}/ceph-osd@.service
+%{_unitdir}/ceph-mon@.service
+%{_unitdir}/ceph-mds@.service
+%{_unitdir}/ceph.target
 
 
 %dir %{_libdir}/rados-classes
@@ -773,7 +779,7 @@ fi
 #################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
-%if 0%{?suse_version} > 1220 
+%if 0%{?suse_version} > 1220
 %{_javadir}/libcephfs-test.jar
 %endif
 %{_javadir}/libcephfs.jar
