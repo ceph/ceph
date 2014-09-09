@@ -145,6 +145,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
     assert(i->xitem.get_list() == &sdata->ops_in_flight_sharded);
     i->xitem.remove_myself();
   }
+  i->_unregistered();
   utime_t now = ceph_clock_now(cct);
   history.insert(now, TrackedOpRef(i));
 }
@@ -294,8 +295,8 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
   op->mark_event("done");
-  op->_unregistered();
   if (!tracker->tracking_enabled) {
+    op->_unregistered();
     delete op;
     return;
   }
