@@ -91,6 +91,22 @@ int cls_rgw_list_op(IoCtx& io_ctx, const string& oid,
  return r;
 }
 
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
+                            bool delete_marker, const string& op_tag)
+{
+  bufferlist in, out;
+  struct cls_rgw_link_olh_op call;
+  call.key = key;
+  call.op_tag = op_tag;
+  call.delete_marker = delete_marker;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_link_olh", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
 				  rgw_bucket_dir_header *existing_header,
 				  rgw_bucket_dir_header *calculated_header)

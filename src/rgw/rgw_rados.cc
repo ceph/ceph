@@ -5120,6 +5120,32 @@ int RGWRados::olh_init_modification(rgw_obj& obj, string *tag)
   return 0;
 }
 
+int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj_instance, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::IoCtx index_ctx;
+  string oid;
+
+  int ret = open_bucket_index(bucket, index_ctx, oid);
+  if (ret < 0) {
+    return ret;
+  }
+
+  cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
+  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, delete_marker, op_tag);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
                            map<string, bufferlist> *attrset)
 {

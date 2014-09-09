@@ -1726,6 +1726,7 @@ public:
   int obj_operate(rgw_obj& obj, librados::ObjectReadOperation *op);
 
   int olh_init_modification(rgw_obj& obj, string *tag);
+  int bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag);
 
   int follow_olh(map<string, bufferlist>& attrset, rgw_obj& target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
