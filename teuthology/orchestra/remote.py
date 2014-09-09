@@ -60,9 +60,10 @@ class Remote(object):
         Attempts to re-establish connection. Returns True for success; False
         for failure.
         """
-        self.ssh.close()
+        if self.ssh is not None:
+            self.ssh.close()
         try:
-            self.ssh = self.connect()
+            self.connect()
             return self.is_online
         except Exception as e:
             log.debug(e)
@@ -111,6 +112,8 @@ class Remote(object):
 
         TODO refactor to move run.run here?
         """
+        if self.ssh is None:
+            self.reconnect()
         r = self._runner(client=self.ssh, name=self.shortname, **kwargs)
         r.remote = self
         return r
@@ -188,7 +191,7 @@ class Remote(object):
             raise NotImplementedError("sudo not supported")
 
         self._sftp_put_file(path, dest_path)
-        return 
+        return
 
     def get_file(self, path, sudo=False, dest_dir='/tmp'):
         """
