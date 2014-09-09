@@ -143,9 +143,6 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
 
-# Checks for architecture stuff
-AM_CONDITIONAL([ENABLE_FPU_NEON], [case $target_cpu in arm*) true;; *) false;; esac])
-
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
 AM_CONDITIONAL(COMPILER_HAS_VTA, [test "$HAS_VTA_SUPPORT" = 1])
@@ -545,7 +542,9 @@ AC_LANG_PUSH([C++])
 AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])
 AC_LANG_POP([C++])
 
-# Find supported SIMD / SSE extensions supported by the compiler
+# Find supported SIMD / NEON / SSE extensions supported by the compiler
+AX_ARM_FEATURES()
+AM_CONDITIONAL(HAVE_NEON, [ test "x$ax_cv_support_neon_ext" = "xyes"])
 AX_INTEL_FEATURES()
 AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
 AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])
