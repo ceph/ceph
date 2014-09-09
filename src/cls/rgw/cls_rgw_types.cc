@@ -1,6 +1,7 @@
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "common/Formatter.h"
+#include "common/ceph_json.h"
 
 
 void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_info*>& o)
@@ -106,6 +107,26 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+void rgw_bucket_olh_log_entry::dump(Formatter *f) const
+{
+  encode_json("epoch", epoch, f);
+  const char *op_str;
+  switch (op) {
+    case CLS_RGW_OLH_OP_LINK_OLH:
+      op_str = "link_olh";
+      break;
+    case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
+      op_str = "remove_instance";
+      break;
+    default:
+      op_str = "unknown";
+  }
+  encode_json("op", op_str, f);
+  encode_json("op_tag", op_tag, f);
+  encode_json("key", key, f);
+  encode_json("delete_marker", delete_marker, f);
 }
 
 void rgw_bi_log_entry::dump(Formatter *f) const
