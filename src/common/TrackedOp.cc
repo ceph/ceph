@@ -283,12 +283,13 @@ void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 			    utime_t time)
 {
-  stringstream ss;
-  op->_dump_op_descriptor_unlocked(ss);
-  dout(5) << //"reqid: " << op->get_reqid() <<
-	     ", seq: " << op->seq
+  dout(5);
+  *_dout  <<  "seq: " << op->seq
 	  << ", time: " << time << ", event: " << evt
-	  << ", op: " << ss.str() << dendl;
+	  << ", op: ";
+  op->_dump_op_descriptor_unlocked(*_dout);
+  *_dout << dendl;
+     
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
