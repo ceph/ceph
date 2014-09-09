@@ -379,8 +379,6 @@ int ErasureCodeIsaDefault::parse(const map<std::string,
 void
 ErasureCodeIsaDefault::prepare()
 {
-  Mutex::Locker lock(tcache.codec_tables_guard);
-
   // setup shared encoding table and coefficients
   unsigned char** p_enc_table =
     tcache.getEncodingTable(matrixtype, k, m);
@@ -392,13 +390,17 @@ ErasureCodeIsaDefault::prepare()
     dout(10) << "[ cache tables ] creating coeff for k=" <<
       k << " m=" << m << dendl;
     // build encoding coefficients which need to be computed once for each (k,m)
-    *p_enc_coeff = (unsigned char*) malloc(k * (m + k));
-    encode_coeff = *p_enc_coeff;
+    encode_coeff = (unsigned char*) malloc(k * (m + k));
 
     if (matrixtype == kVandermonde)
       gf_gen_rs_matrix(encode_coeff, k + m, k);
     if (matrixtype == kCauchy)
       gf_gen_cauchy1_matrix(encode_coeff, k + m, k);
+
+      // either our new created coefficients are stored or if they have been
+      // created in the meanwhile the locally allocated coefficients will be
+      // freed by setEncodingCoefficient
+    encode_coeff = tcache.setEncodingCoefficient(matrixtype, k, m, encode_coeff);
   } else {
     encode_coeff = *p_enc_coeff;
   }
@@ -407,9 +409,13 @@ ErasureCodeIsaDefault::prepare()
     dout(10) << "[ cache tables ] creating tables for k=" <<
       k << " m=" << m << dendl;
     // build encoding table which needs to be computed once for each (k,m)
-    *p_enc_table = (unsigned char*) malloc(k * (m + k)*32);
-    encode_tbls = *p_enc_table;
+    encode_tbls = (unsigned char*) malloc(k * (m + k)*32);
     ec_init_tables(k, m, &encode_coeff[k * k], encode_tbls);
+
+    // either our new created table is stored or if it has been
+    // created in the meanwhile the locally allocated table will be
+    // freed by setEncodingTable
+    encode_tbls = tcache.setEncodingTable(matrixtype, k, m, encode_tbls);
   } else {
     encode_tbls = *p_enc_table;
   }

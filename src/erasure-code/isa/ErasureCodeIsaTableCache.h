@@ -79,6 +79,12 @@ public:
   unsigned char** getEncodingTable(int matrix, int k, int m);
   unsigned char** getEncodingCoefficient(int matrix, int k, int m);
 
+  unsigned char** getEncodingTableNoLock(int matrix, int k, int m);
+  unsigned char** getEncodingCoefficientNoLock(int matrix, int k, int m);
+
+  unsigned char* setEncodingTable(int matrix, int k, int m, unsigned char*);
+  unsigned char* setEncodingCoefficient(int matrix, int k, int m, unsigned char*);
+
   int getDecodingTableCacheSize(int matrixtype = 0);
 
 private:
