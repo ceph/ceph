@@ -146,7 +146,7 @@ protected:
 
   utime_t initiated_at;
   list<pair<utime_t, string> > events; /// list of events and their times
-  Mutex lock; /// to protect the events list
+  mutable Mutex lock; /// to protect the events list
   string current; /// the current state the event is in
   uint64_t seq; /// a unique value set by the OpTracker
 
