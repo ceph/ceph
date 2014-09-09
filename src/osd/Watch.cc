@@ -323,12 +323,14 @@ void Watch::connect(ConnectionRef con)
   dout(10) << "connecting" << dendl;
   conn = con;
   OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
-  sessionref->wstate.addWatch(self.lock());
-  sessionref->put();
-  for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
-       i != in_progress_notifies.end();
-       ++i) {
-    send_notify(i->second);
+  if (sessionref) {
+    sessionref->wstate.addWatch(self.lock());
+    sessionref->put();
+    for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
+	 i != in_progress_notifies.end();
+	 ++i) {
+      send_notify(i->second);
+    }
   }
   unregister_cb();
 }
@@ -361,8 +363,10 @@ void Watch::discard_state()
   discarded = true;
   if (conn) {
     OSD::Session* sessionref(static_cast<OSD::Session*>(conn->get_priv()));
-    sessionref->wstate.removeWatch(self.lock());
-    sessionref->put();
+    if (sessionref) {
+      sessionref->wstate.removeWatch(self.lock());
+      sessionref->put();
+    }
     conn = ConnectionRef();
   }
   obc = ObjectContextRef();
