@@ -310,7 +310,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
 
 enum OLHLogOp {
-  CLS_RGW_OLH_OP_LINK_OLH = 1,
+  CLS_RGW_OLH_OP_LINK_OLH        = 1,
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 2,
 };
 
