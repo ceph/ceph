@@ -220,6 +220,11 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
+  virtual bool check_k(ostream *ss) const;
+  virtual bool check_w(ostream *ss) const;
+  virtual bool check_packetsize_set(ostream *ss) const;
+  virtual bool check_packetsize(ostream *ss) const;
+  virtual void revert_to_default(ostream *ss);
   virtual int parse(const map<std::string,std::string> &parameters,
 		    ostream *ss);
   virtual void prepare();
