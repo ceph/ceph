@@ -217,7 +217,7 @@ private:
   MOSDMap *build_incremental(epoch_t first, epoch_t last);
   void send_full(PaxosServiceMessage *m);
   void send_incremental(PaxosServiceMessage *m, epoch_t first);
-  void send_incremental(epoch_t first, entity_inst_t& dest, bool onetime);
+  void send_incremental(epoch_t first, MonSession *session, bool onetime);
 
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
 			      const set<int64_t> *pools);
