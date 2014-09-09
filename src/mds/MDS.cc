@@ -244,16 +244,25 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
         continue;
       }
 
+      Session *s = p->second;
+
       f->open_object_section("session");
       f->dump_int("id", p->first.num());
 
-      f->dump_int("num_leases", p->second->leases.size());
-      f->dump_int("num_caps", p->second->caps.size());
+      f->dump_int("num_leases", s->leases.size());
+      f->dump_int("num_caps", s->caps.size());
 
-      f->dump_string("state", p->second->get_state_name());
-      f->dump_int("replay_requests", is_clientreplay() ? p->second->get_request_count() : 0);
+      f->dump_string("state", s->get_state_name());
+      f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
       f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
-      f->dump_stream("inst") << p->second->info.inst;
+      f->dump_stream("inst") << s->info.inst;
+      f->dump_stream("inst") << s->info.inst;
+      f->open_object_section("client_metadata");
+      for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
+          i != s->info.client_metadata.end(); ++i) {
+        f->dump_string(i->first.c_str(), i->second);
+      }
+      f->close_section(); // client_metadata
       f->close_section(); //session
     }
     f->close_section(); //sessions
