@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -50,7 +51,6 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
     map<std::string,std::string> parameters;
     parameters["k"] = "2";
     parameters["m"] = "2";
-    parameters["w"] = "7";
     parameters["packetsize"] = "8";
     parameters["jerasure-per-chunk-alignment"] =
       per_chunk_alignments[per_chunk_alignment];

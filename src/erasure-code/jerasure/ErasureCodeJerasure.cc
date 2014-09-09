@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -451,6 +452,17 @@ void ErasureCodeJerasureLiberation::prepare()
 // 
 // ErasureCodeJerasureBlaumRoth
 //
+bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
+{
+  if (w <= 2 || !is_prime(w+1)) {
+    *ss <<  "w=" << w << " must be greater than two and "
+	<< "w+1 must be prime" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
 void ErasureCodeJerasureBlaumRoth::prepare()
 {
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
