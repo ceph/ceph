@@ -290,6 +290,10 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
     command_scrub_path(f, path);
+  } else if (command == "flush_path") {
+    string path;
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    command_flush_path(f, path);
   }
   f->flush(ss);
   delete f;
@@ -305,6 +309,19 @@ void MDS::command_scrub_path(Formatter *f, const string& path)
   }
   scond.wait();
   // scrub_dentry() finishers will dump the data for us; we're done!
+}
+
+void MDS::command_flush_path(Formatter *f, const string& path)
+{
+  C_SaferCond scond;
+  {
+    Mutex::Locker l(mds_lock);
+    mdcache->flush_dentry(path, &scond);
+  }
+  int r = scond.wait();
+  f->open_object_section("results");
+  f->dump_int("return_code", r);
+  f->close_section(); // results
 }
 
 void MDS::set_up_admin_socket()
@@ -326,6 +343,10 @@ void MDS::set_up_admin_socket()
                                      "scrub_path name=path,type=CephString",
                                      asok_hook,
                                      "scrub an inode and output results");
+  r = admin_socket->register_command("flush_path",
+                                     "flush_path name=path,type=CephString",
+                                     asok_hook,
+                                     "flush an inode (and its dirfrags)");
   assert(0 == r);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
