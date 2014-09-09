@@ -9,6 +9,7 @@ import os
 import time
 import requests
 import urllib
+from distutils.spawn import find_executable
 
 import teuthology
 from . import misc
@@ -23,6 +24,80 @@ logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
 
 is_vpm = lambda name: 'vpm' in name
 
+def get_distro_from_downburst():
+    """
+    Return a table of valid distros.
+
+    If downburst is in path use it.  If either downburst is unavailable,
+    or if downburst is unable to produce a json list, then use a default
+    table.
+    """
+    default_table = {u'rhel_minimal': [u'6.4', u'6.5'],
+                     u'fedora': [u'17', u'18', u'19', u'20'],
+                     u'centos': [u'6.3', u'6.4', u'6.5', u'7.0'],
+                     u'opensuse': [u'12.2'],
+                     u'rhel': [u'6.3', u'6.4', u'6.5', u'7.0', u'7beta'],
+                     u'centos_minimal': [u'6.4', u'6.5'],
+                     u'ubuntu': [u'8.04(hardy)', u'9.10(karmic)',
+                                 u'10.04(lucid)', u'10.10(maverick)',
+                                 u'11.04(natty)', u'11.10(oneiric)',
+                                 u'12.04(precise)', u'12.10(quantal)',
+                                 u'13.04(raring)', u'13.10(saucy)',
+                                 u'14.04(trusty)', u'utopic(utopic)'],
+                     u'sles': [u'11-sp2'],
+                     u'debian': [u'6.0', u'7.0']}
+    executable_cmd = find_executable('downburst')
+    if not executable_cmd:
+        log.info('Using default values for supported os_type/os_version')
+        return default_table
+    try:
+        p = subprocess.Popen([executable_cmd, 'list-json'],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
+        output, err = p.communicate()
+        downburst_data = json.loads(output)
+        return downburst_data
+    except OSError:
+        log.info('Using default values for supported os_type/os_version')
+        return default_table
+
+    
+def vps_version_or_type_valid(machine_type, os_type, os_version):
+    """
+    Check os-type and os-version parameters when locking a vps.
+    Os-type will always be set (defaults to ubuntu).
+   
+    In the case where downburst does not handle list-json (an older version
+    of downburst, for instance), a message is printed and this checking
+    is skipped (so that this code should behave as it did before this
+    check was added).
+    """
+    if not machine_type == 'vps':
+        return True
+    valid_os_and_version = get_distro_from_downburst()
+    if os_type not in valid_os_and_version:
+        log.error('os-type is invalid')
+        return False
+    if not validate_distro_version(os_version,
+                                   valid_os_and_version[os_type]):
+        log.error('os-version is invalid')
+        return False
+    return True
+
+def validate_distro_version(version, supported_versions):
+    """
+    Return True if the version is valid.  For Ubuntu, possible
+    supported version values are of the form '12.04 (precise)' where
+    either the number of the version name is acceptable.
+    """
+    if version in supported_versions:
+        return True
+    for parts in supported_versions:
+        part = parts.split('(') 
+        if len(part) == 2:
+            if version == part[0]:
+                return True
+            if version == part[1][0:len(part[1])-1]:
+                return True
 
 def main(ctx):
     if ctx.verbose:
@@ -158,6 +233,10 @@ def main(ctx):
         return 0
 
     elif ctx.lock:
+        if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
+                                         ctx.os_version):
+            log.error('Invalid os-type or version detected -- lock failed')
+            return 1
         for machine in machines:
             if not lock_one(machine, user, ctx.desc):
                 ret = 1
@@ -224,6 +303,10 @@ def main(ctx):
 
 
 def lock_many(ctx, num, machinetype, user=None, description=None):
+    if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
+                                     ctx.os_version):
+        log.error('Invalid os-type or version detected -- lock failed')
+        return
     machinetypes = misc.get_multi_machine_types(machinetype)
     if user is None:
         user = misc.get_user()
