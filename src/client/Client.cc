@@ -739,13 +739,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->flags |= I_COMPLETE | I_COMPLETE_ORDERED;
     if (in->dir) {
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_map.size() << " entries, marking all dentries null" << dendl;
-      for (map<string, Dentry*>::iterator p = in->dir->dentry_map.begin();
-	   p != in->dir->dentry_map.end();
+		     << in->dir->dentry_list.size() << " entries, marking all dentries null" << dendl;
+      for (xlist<Dentry*>::iterator p = in->dir->dentry_list.begin();
+	   !p.end();
 	   ++p) {
-	unlink(p->second, true, true);  // keep dir, keep dentry
+	unlink(*p, true, true);  // keep dir, keep dentry
       }
-      if (in->dir->dentry_map.empty())
+      if (in->dir->dentry_list.empty())
 	close_dir(in->dir);
     }
   }
@@ -914,8 +914,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(readdir_start);
-
     string dname;
     LeaseStat dlease;
     for (unsigned i=0; i<numdn; i++) {
@@ -925,36 +923,12 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
 
-      // remove any skipped names
-      while (pd != dir->dentry_map.end() && pd->first < dname) {
-	if (pd->first < dname &&
-	    fg.contains(diri->hash_dentry_name(pd->first))) {  // do not remove items in earlier frags
-	  Dentry *dn = pd->second;
-	  if (dn->inode) {
-	    ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
-	    ++pd;
-	    unlink(dn, true, true);  // keep dir, dentry
-	  } else {
-	    ++pd;
-	  }
-	} else {
-	  ++pd;
-	}
-      }
-
-      if (pd == dir->dentry_map.end())
-	ldout(cct, 15) << " pd is at end" << dendl;
-      else
-	ldout(cct, 15) << " pd is '" << pd->first << "' dn " << pd->second << dendl;
-
       Inode *in = add_update_inode(&ist, request->sent_stamp, session);
       Dentry *dn;
-      if (pd != dir->dentry_map.end() &&
-	  pd->first == dname) {
-	Dentry *olddn = pd->second;
-	if (pd->second->inode != in) {
+      if (diri->dir->dentries.count(dname)) {
+	Dentry *olddn = diri->dir->dentries[dname];
+	if (olddn->inode != in) {
 	  // replace incorrect dentry
-	  ++pd;  // we are about to unlink this guy, move past it.
 	  unlink(olddn, true, true);  // keep dir, dentry
 	  dn = link(dir, dname, in, olddn);
 	  assert(dn == olddn);
@@ -962,7 +936,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  // keep existing dn
 	  dn = olddn;
 	  touch_dn(dn);
-	  ++pd;  // move past the dentry we just touched.
+	  dn->item_dentry_list.move_to_back();
 	}
       } else {
 	// new dn
@@ -978,19 +952,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
-
-    // remove trailing names
-    if (end) {
-      while (pd != dir->dentry_map.end()) {
-	if (fg.contains(diri->hash_dentry_name(pd->first))) {
-	  ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
-	  Dentry *dn = pd->second;
-	  ++pd;
-	  unlink(dn, true, true); // keep dir, dentry
-	} else
-	  ++pd;
-      }
-    }
 
     if (dir->is_empty())
       close_dir(dir);
@@ -2307,7 +2268,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     // link to dir
     dn->dir = dir;
     dir->dentries[dn->name] = dn;
-    dir->dentry_map[dn->name] = dn;
+    dir->dentry_list.push_back(&dn->item_dentry_list);
     lru.lru_insert_mid(dn);    // mid or top?
 
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
@@ -2315,6 +2276,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   } else {
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
+    dn->item_dentry_list.move_to_back();
   }
 
   if (in) {    // link to inode
@@ -2372,7 +2334,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
-    dn->dir->dentry_map.erase(dn->name);
+    dn->item_dentry_list.remove_myself();
     if (dn->dir->is_empty() && !keepdir)
       close_dir(dn->dir);
     dn->dir = 0;
@@ -5418,21 +5380,26 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     return 0;
   }
 
-  map<string,Dentry*>::iterator pd;
+  xlist<Dentry*>::iterator pd = dir->dentry_list.begin();
   if (dirp->at_cache_name.length()) {
-    pd = dir->dentry_map.find(dirp->at_cache_name);
-    if (pd == dir->dentry_map.end())
-      return -EAGAIN;  // weird, i give up
+    ceph::unordered_map<string,Dentry*>::iterator it = dir->dentries.find(dirp->at_cache_name);
+    if (it == dir->dentries.end())
+      return -EAGAIN;
+    Dentry *dn = it->second;
+    pd = xlist<Dentry*>::iterator(&dn->item_dentry_list);
     ++pd;
-  } else {
-    pd = dir->dentry_map.begin();
   }
 
   string prev_name;
-  while (pd != dir->dentry_map.end()) {
-    Dentry *dn = pd->second;
+  while (!pd.end()) {
+    Dentry *dn = *pd;
     if (dn->inode == NULL) {
-      ldout(cct, 15) << " skipping null '" << pd->first << "'" << dendl;
+      ldout(cct, 15) << " skipping null '" << dn->name << "'" << dendl;
+      ++pd;
+      continue;
+    }
+    if (dn->cap_shared_gen != dir->parent_inode->shared_gen) {
+      ldout(cct, 15) << " skipping mismatch shared gen '" << dn->name << "'" << dendl;
       ++pd;
       continue;
     }
@@ -5440,11 +5407,11 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     struct stat st;
     struct dirent de;
     int stmask = fill_stat(dn->inode, &st);  
-    fill_dirent(&de, pd->first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
+    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
     uint64_t next_off = dn->offset + 1;
     ++pd;
-    if (pd == dir->dentry_map.end())
+    if (pd.end())
       next_off = dir_result_t::END;
 
     client_lock.Unlock();
