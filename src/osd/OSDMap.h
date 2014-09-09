@@ -696,6 +696,15 @@ public:
     return p->second;
   }
 
+  int64_t allocate_poolid(int64_t max) const {
+    for (int64_t i = 0; i <= max; i++)
+    {
+      if (!pools.count(i))
+       return i;
+    }
+    return max;
+  }
+
   int64_t get_pool_max() const {
     return pool_max;
   }
