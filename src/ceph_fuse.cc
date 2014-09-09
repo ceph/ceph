@@ -140,6 +140,8 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
+    client->set_metadata("mount_point", cfuse->get_mount_point());
+
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     r = messenger->start();
     if (r < 0) {
