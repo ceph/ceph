@@ -847,6 +847,7 @@ int KeyValueStore::mount()
     }
   }
   
+  superblock.backend = g_conf->keyvaluestore_backend;
   ret = read_superblock();
   if (ret < 0) {
     ret = -EINVAL;
@@ -872,7 +873,8 @@ int KeyValueStore::mount()
   assert(current_fd >= 0);
 
   {
-
+    if (superblock.backend.empty())
+      superblock.backend = g_conf->keyvaluestore_backend;
     KeyValueDB *store = KeyValueDB::create(g_ceph_context,
 					   superblock.backend,
 					   current_fn.c_str());
