@@ -5717,7 +5717,8 @@ void OSD::dispatch_op(OpRequestRef op)
   }
 }
 
-bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap) {
+bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
+{
   if (is_stopping()) {
     // we're shutting down, so drop the op
     return true;
@@ -5786,7 +5787,6 @@ void OSD::_dispatch(Message *m)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_dispatch " << m << " " << *m << dendl;
-  Session *session = NULL;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
@@ -5806,19 +5806,6 @@ void OSD::_dispatch(Message *m)
     break;
 
     // osd
-  case CEPH_MSG_SHUTDOWN:
-    session = static_cast<Session *>(m->get_connection()->get_priv());
-    if (!session ||
-	session->entity_name.is_mon() ||
-	session->entity_name.is_osd())
-      shutdown();
-    else dout(0) << "shutdown message from connection with insufficient privs!"
-		 << m->get_connection() << dendl;
-    m->put();
-    if (session)
-      session->put();
-    break;
-
   case MSG_PGSTATSACK:
     handle_pg_stats_ack(static_cast<MPGStatsAck*>(m));
     break;
