@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013, 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -234,8 +235,11 @@ class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
 public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
-  {}
+  {
+    DEFAULT_W = 6;
+  }
 
+  virtual bool check_w(ostream *ss) const;
   virtual void prepare();
 };
 
