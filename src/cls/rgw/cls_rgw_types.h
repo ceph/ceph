@@ -344,6 +344,7 @@ struct rgw_bucket_olh_log_entry {
     ::decode(delete_marker, bl);
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
