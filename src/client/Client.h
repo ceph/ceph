@@ -315,6 +315,10 @@ protected:
   int num_flushing_caps;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
 
+  // Optional extra metadata about me to send to the MDS
+  std::map<std::string, std::string> extra_meta;
+
+
   /* async block write barrier support */
   //map<uint64_t, BarrierContext* > barriers;
 
@@ -426,6 +430,8 @@ protected:
   Client(Messenger *m, MonClient *mc);
   ~Client();
   void tear_down_cache();
+
+  void set_metadata(std::string const &k, std::string const &v) {extra_meta[k] = v;}
 
   client_t get_nodeid() { return whoami; }
 

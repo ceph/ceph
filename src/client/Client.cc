@@ -1627,6 +1627,19 @@ void Client::get_session_metadata(std::map<std::string, std::string> *meta) cons
   } else {
     ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
   }
+
+  // Ceph entity id (the '0' in "client.0")
+  (*meta)["entity_id"] = cct->_conf->name.get_id();
+
+  // Iterate to emit warnings for any built in metadata fields being squashed
+  for (map<string, string>::const_iterator i = extra_meta.begin(); i != extra_meta.end(); ++i) {
+    if (meta->count(i->first)) {
+      ldout(cct, 1) << __func__ << " warning, overriding metadata field '" << i->first
+        << "' from '" << (*meta)[i->first] << "' to '" << i->second << "'" << dendl;
+    }
+
+    (*meta)[i->first] = i->second;
+  }
 }
 
 MetaSession *Client::_open_mds_session(int mds)
