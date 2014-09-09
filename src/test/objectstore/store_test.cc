@@ -1029,6 +1029,81 @@ TEST_P(StoreTest, HashCollisionTest) {
   store->apply_transaction(t);
 }
 
+TEST_P(StoreTest, ScrubTest) {
+  coll_t cid("blah");
+  int r;
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  string base = "aaaaa";
+  set<ghobject_t> created;
+  for (int i = 0; i < 1000; ++i) {
+    char buf[100];
+    sprintf(buf, "%d", i);
+    if (!(i % 5)) {
+      cerr << "Object " << i << std::endl;
+    }
+    ghobject_t hoid(hobject_t(string(buf) + base, string(), CEPH_NOSNAP, i, 0, ""));
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      r = store->apply_transaction(t);
+      ASSERT_EQ(r, 0);
+    }
+    created.insert(hoid);
+  }
+  vector<ghobject_t> objects;
+  r = store->collection_list(cid, objects);
+  ASSERT_EQ(r, 0);
+  set<ghobject_t> listed(objects.begin(), objects.end());
+  cerr << "listed.size() is " << listed.size() << " and created.size() is " << created.size() << std::endl;
+  ASSERT_TRUE(listed.size() == created.size());
+  objects.clear();
+  listed.clear();
+  ghobject_t current, next;
+  while (1) {
+    r = store->collection_list_partial(cid, current, 50, 60,
+                                       0, &objects, &next);
+    ASSERT_EQ(r, 0);
+    ASSERT_TRUE(sorted(objects));
+    for (vector<ghobject_t>::iterator i = objects.begin();
+         i != objects.end(); ++i) {
+      if (listed.count(*i))
+        cerr << *i << " repeated" << std::endl;
+      listed.insert(*i);
+    }
+    if (objects.size() < 50) {
+      ASSERT_TRUE(next.is_max());
+      break;
+    }
+    objects.clear();
+    current = next.get_boundary();
+  }
+  cerr << "listed.size() is " << listed.size() << std::endl;
+  ASSERT_TRUE(listed.size() == created.size());
+  for (set<ghobject_t>::iterator i = listed.begin();
+       i != listed.end();
+       ++i) {
+    ASSERT_TRUE(created.count(*i));
+  }
+
+  for (set<ghobject_t>::iterator i = created.begin();
+       i != created.end();
+       ++i) {
+    ObjectStore::Transaction t;
+    t.collection_remove(cid, *i);
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ObjectStore::Transaction t;
+  t.remove_collection(cid);
+  store->apply_transaction(t);
+}
+
+
 TEST_P(StoreTest, OMapTest) {
   coll_t cid("blah");
   ghobject_t hoid(hobject_t("tesomap", "", CEPH_NOSNAP, 0, 0, ""));
