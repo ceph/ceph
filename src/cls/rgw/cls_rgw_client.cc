@@ -97,7 +97,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
                             bool delete_marker, const string& op_tag)
 {
   bufferlist in, out;
-  struct cls_rgw_link_olh_op call;
+  struct rgw_cls_link_olh_op call;
   call.key = key;
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;
@@ -107,6 +107,36 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
     return r;
 
   return 0;
+}
+
+int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                        map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated)
+{
+  bufferlist in, out;
+  struct rgw_cls_read_olh_log_op call;
+  call.olh = olh;
+  call.ver_marker = ver_marker;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_read_olh_log", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_read_olh_log_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  if (log) {
+    *log = ret.log;
+  }
+  if (is_truncated) {
+    *is_truncated = ret.is_truncated;
+  }
+
+ return r;
 }
 
 int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
