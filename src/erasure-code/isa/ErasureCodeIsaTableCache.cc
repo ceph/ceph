@@ -143,9 +143,15 @@ ErasureCodeIsaTableCache::getDecodingTablesLru(int matrix_type)
 unsigned char**
 ErasureCodeIsaTableCache::getEncodingTable(int matrix, int k, int m)
 {
-  // the caller must hold the guard mutex:
-  // => Mutex::Locker lock(codec_tables_guard);
+  Mutex::Locker lock(codec_tables_guard);
+  return getEncodingTableNoLock(matrix,k,m);
+}
 
+// -----------------------------------------------------------------------------
+
+unsigned char**
+ErasureCodeIsaTableCache::getEncodingTableNoLock(int matrix, int k, int m)
+{
   // create a pointer to store an encoding table address
   if (!encoding_table[matrix][k][m]) {
     encoding_table[matrix][k][m] = new (unsigned char*);
@@ -159,15 +165,59 @@ ErasureCodeIsaTableCache::getEncodingTable(int matrix, int k, int m)
 unsigned char**
 ErasureCodeIsaTableCache::getEncodingCoefficient(int matrix, int k, int m)
 {
-  // the caller must hold the guard mutex:
-  // => Mutex::Locker lock(codec_tables_guard);
+  Mutex::Locker lock(codec_tables_guard);
+  return getEncodingCoefficientNoLock(matrix,k,m);
+}
 
+// -----------------------------------------------------------------------------
+
+unsigned char**
+ErasureCodeIsaTableCache::getEncodingCoefficientNoLock(int matrix, int k, int m)
+{
   // create a pointer to store an encoding coefficients adddress
   if (!encoding_coefficient[matrix][k][m]) {
     encoding_coefficient[matrix][k][m] = new (unsigned char*);
     *encoding_coefficient[matrix][k][m] = 0;
   }
   return encoding_coefficient[matrix][k][m];
+}
+
+// -----------------------------------------------------------------------------
+
+unsigned char*
+ErasureCodeIsaTableCache::setEncodingTable(int matrix, int k, int m, unsigned char* ec_in_table)
+{
+  Mutex::Locker lock(codec_tables_guard);
+  unsigned char** ec_out_table = getEncodingTableNoLock(matrix, k, m);
+  if (*ec_out_table) {
+    // somebody might have deposited this table in the meanwhile, so clean
+    // the input table and return the stored one
+    free (ec_in_table);
+    return *ec_out_table;
+  } else {
+    // we store the provided input table and return this one
+    *encoding_table[matrix][k][m] = ec_in_table;
+    return ec_in_table;
+  }
+}
+
+// -----------------------------------------------------------------------------
+
+unsigned char*
+ErasureCodeIsaTableCache::setEncodingCoefficient(int matrix, int k, int m, unsigned char* ec_in_coeff)
+{
+  Mutex::Locker lock(codec_tables_guard);
+  unsigned char** ec_out_coeff = getEncodingCoefficientNoLock(matrix, k, m);
+  if (*ec_out_coeff) {
+    // somebody might have deposited these coefficients in the meanwhile, so clean
+    // the input coefficients and return the stored ones
+    free (ec_in_coeff);
+    return *ec_out_coeff;
+  } else {
+    // we store the provided input coefficients and return these
+    *encoding_coefficient[matrix][k][m] = ec_in_coeff;
+    return ec_in_coeff;
+  }
 }
 
 // -----------------------------------------------------------------------------
