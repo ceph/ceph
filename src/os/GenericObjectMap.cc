@@ -121,10 +121,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   full_name.append(GHOBJECT_KEY_SEP_S);
 
   t = buf;
-  if (oid.hobj.pool == -1)
-    t += snprintf(t, end - t, "none");
-  else
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
+  t += snprintf(t, end - t, "%lld", (long long)oid.hobj.pool);
   full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
 
