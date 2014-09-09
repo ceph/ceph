@@ -376,6 +376,7 @@ private:
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
   void command_scrub_path(Formatter *f, const string& path);
+  void command_flush_path(Formatter *f, const string& path);
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,

@@ -340,7 +340,8 @@ enum {
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
 	CEPH_MDS_OP_EXPORTDIR  = 0x01501,
-	CEPH_MDS_OP_VALIDATE   = 0x01502
+	CEPH_MDS_OP_VALIDATE   = 0x01502,
+	CEPH_MDS_OP_FLUSH      = 0x01503
 };
 
 extern const char *ceph_mds_op_name(int op);
