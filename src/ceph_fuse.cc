@@ -154,6 +154,8 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_init_failed;
     }
     
+    client->update_metadata("mount_point", cfuse->get_mount_point());
+
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
     r = client->mount(g_conf->client_mountpoint.c_str());
