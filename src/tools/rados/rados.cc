@@ -1613,17 +1613,28 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       outstream = new ofstream(nargs[1]);
 
     {
+      if (formatter)
+        formatter->open_array_section("objects");
       try {
 	librados::NObjectIterator i = io_ctx.nobjects_begin();
 	librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
-	  // Only include namespace in output when wildcard specified
-	  if (wildcard)
-	    *outstream << i->get_nspace() << "\t";
-	  *outstream << i->get_oid();
-	  if (i->get_locator().size())
-	    *outstream << "\t" << i->get_locator();
-	  *outstream << std::endl;
+	  if (!formatter) {
+	    // Only include namespace in output when wildcard specified
+	    if (wildcard)
+	      *outstream << i->get_nspace() << "\t";
+	    *outstream << i->get_oid();
+	    if (i->get_locator().size())
+	      *outstream << "\t" << i->get_locator();
+	    *outstream << std::endl;
+	  } else {
+	    formatter->open_object_section("object");
+	    formatter->dump_string("namespace", i->get_nspace());
+	    formatter->dump_string("name", i->get_oid());
+	    if (i->get_locator().size())
+	      formatter->dump_string("locator", i->get_locator());
+	    formatter->close_section(); //object
+	  }
 	}
       }
       catch (const std::runtime_error& e) {
@@ -1631,6 +1642,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	ret = -1;
 	goto out;
       }
+    }
+    if (formatter) {
+      formatter->close_section(); //objects
+      formatter->flush(*outstream);
+      if (pretty_format)
+	*outstream << std::endl;
+      formatter->flush(*outstream);
     }
     if (!stdout)
       delete outstream;
