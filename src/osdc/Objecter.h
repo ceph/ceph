@@ -1480,7 +1480,7 @@ public:
   bool osdmap_full_flag() const;
   bool target_should_be_paused(op_target_t *op);
 
-  int calc_target(op_target_t *t);
+  int calc_target(op_target_t *t, bool any_change=false);
   int recalc_op_target(Op *op);
   bool recalc_linger_op_target(LingerOp *op);
 
