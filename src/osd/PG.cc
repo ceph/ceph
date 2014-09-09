@@ -2431,6 +2431,11 @@ void PG::init(
     dout(10) << __func__ << ": Setting backfill" << dendl;
     info.last_backfill = hobject_t();
     info.last_complete = info.last_update;
+
+    PGLogEntryHandler rollbacker;
+    pg_log_t empty;
+    pg_log.claim_log_and_clear_rollback_info(empty, &rollbacker);
+    rollbacker.apply(this, t);
     pg_log.mark_log_for_rewrite();
   }
 
