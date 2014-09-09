@@ -130,7 +130,7 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 {
   os_commit_latency.consume_next(
     logger.get_tavg_ms(
-      l_os_commit_lat));
+      l_os_j_lat));
   os_apply_latency.consume_next(
     logger.get_tavg_ms(
       l_os_apply_lat));
