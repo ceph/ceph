@@ -30,6 +30,7 @@ namespace librados
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
+  class RadosLocator;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
@@ -62,6 +63,23 @@ namespace librados
 
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
+
+
+  struct Location {
+    // -------------------------------------------------------------------------
+    int64_t OsdID; //< ID of the OSD hosting this object
+    int64_t PgSeed; //< Seed of the PG hosting this object
+    std::string IpString; //< Ip as string
+    std::string HostName; //< optional reverse DNS HostName for Ip
+    // -------------------------------------------------------------------------
+    void resolve(); //< try to reverse DNS an OSD IP and store in HostName
+    // -------------------------------------------------------------------------
+    std::string dump(bool showhost=false) const;
+  };
+
+  typedef struct Location location_t;
+  typedef std::vector<location_t>  location_vector_t;
+
 
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
@@ -874,6 +892,7 @@ namespace librados
 
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
     friend class libradosstriper::RadosStriper; // Striper needs to see our IoCtxImpl
+    friend class librados::RadosLocator; // Locator needs to see our IoCtxImpl
     friend class ObjectWriteOperation;  // copy_from needs to see our IoCtxImpl
 
     IoCtxImpl *io_ctx_impl;
@@ -934,6 +953,10 @@ namespace librados
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 
+    /* locating objects */
+    static bool locate(IoCtx &ioctx, const std::string &oid, location_vector_t &locations);
+    static std::string dump_location(location_t &location, bool reversedns=false);
+
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
@@ -949,7 +972,7 @@ namespace librados
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
 						callback_t cb_safe);
-    
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
     // We don't allow assignment or copying

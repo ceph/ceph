@@ -84,6 +84,7 @@ void usage(ostream& out)
 "   mksnap <snap-name>               create snap <snap-name>\n"
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
+"   locate [--dns] <obj-name>    locate an object in a pool (optionally do reverse dns)\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name]\n"
@@ -1196,6 +1197,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int run_length = 0;
 
   bool show_time = false;
+  bool reverse_dns = false;
 
   const char* run_name = NULL;
   const char* prefix = NULL;
@@ -1323,6 +1325,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     nspace = i->second;
   }
 
+  i = opts.find("dns");
+  if (i != opts.end()) {
+    reverse_dns = true;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -1988,8 +1994,28 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error creating " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-  }
+  } 
+  else if (strcmp(nargs[0], "locate") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    vector<const char *>::iterator iter = nargs.begin();
+    ++iter;
+    for (; iter != nargs.end(); ++iter) {
+      const string & oid = *iter;
 
+      librados::location_vector_t locations;
+      if (!librados::Rados::locate(io_ctx, oid, locations)) {
+        cerr << "failed to locate " << pool_name << "/" << oid << ": " << std::endl;
+        goto out;
+      } else {
+	location_vector_t::iterator it;
+	for (it=locations.begin(); it!=locations.end(); ++it)
+	{
+	  cout << librados::Rados::dump_location(*it, reverse_dns) << "\n";
+	}
+      }
+    }
+  }
   else if (strcmp(nargs[0], "tmap") == 0) {
     if (nargs.size() < 3)
       usage_exit();
@@ -2589,6 +2615,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--dns", (char*)NULL)) {
+      opts["dns"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
       opts["run-name"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
