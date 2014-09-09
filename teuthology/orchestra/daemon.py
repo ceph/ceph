@@ -32,8 +32,8 @@ class DaemonState(object):
         """
         Stop this daemon instance.
 
-        Note: this can raise a run.CommandFailedError,
-        run.CommandCrashedError, or run.ConnectionLostError.
+        Note: this can raise a CommandFailedError,
+        CommandCrashedError, or ConnectionLostError.
 
         :param timeout: timeout to pass to orchestra.run.wait()
         """

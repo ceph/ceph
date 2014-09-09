@@ -6,6 +6,7 @@ from cStringIO import StringIO
 import os
 from .. import connection, run
 from .util import assert_raises
+from teuthology.exceptions import CommandCrashedError, ConnectionLostError
 
 from pytest import skip
 
@@ -25,7 +26,7 @@ class TestIntegration():
     def test_crash(self):
         ssh = connection.connect(HOST)
         e = assert_raises(
-            run.CommandCrashedError,
+            CommandCrashedError,
             run.run,
             client=ssh,
             args=['sh', '-c', 'kill -ABRT $$'],
@@ -36,7 +37,7 @@ class TestIntegration():
     def test_lost(self):
         ssh = connection.connect(HOST)
         e = assert_raises(
-            run.ConnectionLostError,
+            ConnectionLostError,
             run.run,
             client=ssh,
             args=['sh', '-c', 'kill -ABRT $PPID'],

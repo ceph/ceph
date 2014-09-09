@@ -21,6 +21,8 @@ import re
 import tempfile
 
 from teuthology import safepath
+from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
+                                   ConnectionLostError)
 from .orchestra import run
 from .config import config
 from .contextutil import safe_while
@@ -806,7 +808,7 @@ def get_scratch_devices(remote):
                 ]
             )
             retval.append(dev)
-        except run.CommandFailedError:
+        except CommandFailedError:
             log.debug("get_scratch_devices: %s is in use" % dev)
     return retval
 
@@ -1074,9 +1076,9 @@ def stop_daemons_of_type(ctx, type_):
     for daemon in ctx.daemons.iter_daemons_of_role(type_):
         try:
             daemon.stop()
-        except (run.CommandFailedError,
-                run.CommandCrashedError,
-                run.ConnectionLostError):
+        except (CommandFailedError,
+                CommandCrashedError,
+                ConnectionLostError):
             exc_info = sys.exc_info()
             log.exception('Saw exception from %s.%s', daemon.role, daemon.id_)
     if exc_info != (None, None, None):

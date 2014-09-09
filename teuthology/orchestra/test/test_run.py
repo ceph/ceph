@@ -4,6 +4,8 @@ import fudge
 import logging
 
 from .. import run
+from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
+                                   ConnectionLostError)
 
 from .util import assert_raises
 
@@ -107,7 +109,7 @@ class TestRun(object):
         out.has_attr(channel=channel)
         channel.expects('recv_exit_status').with_args().returns(42)
         e = assert_raises(
-            run.CommandFailedError,
+            CommandFailedError,
             run.run,
             client=ssh,
             logger=logger,
@@ -163,7 +165,7 @@ class TestRun(object):
         out.has_attr(channel=channel)
         channel.expects('recv_exit_status').with_args().returns(-1)
         e = assert_raises(
-            run.CommandCrashedError,
+            CommandCrashedError,
             run.run,
             client=ssh,
             logger=logger,
@@ -218,7 +220,7 @@ class TestRun(object):
         transport.expects('getpeername').with_args().returns(('HOST', 22))
         transport.expects('is_active').with_args().returns(False)
         e = assert_raises(
-            run.ConnectionLostError,
+            ConnectionLostError,
             run.run,
             client=ssh,
             logger=logger,
@@ -280,7 +282,7 @@ class TestRun(object):
             )
         assert r.command == 'foo'
         e = assert_raises(
-            run.CommandFailedError,
+            CommandFailedError,
             r.wait,
             )
         assert r.returncode == 42
