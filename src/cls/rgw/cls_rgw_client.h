@@ -31,6 +31,9 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
                     const string& filter_prefix, uint32_t num_entries,
                     rgw_bucket_dir *dir, bool *is_truncated);
 
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
+                            bool delete_marker, const string& op_tag);
+
 int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
 				  rgw_bucket_dir_header *existing_header,
 				  rgw_bucket_dir_header *calculated_header);
