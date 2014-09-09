@@ -28,6 +28,7 @@ protected:
   static void cleanup_default_namespace(rados_ioctx_t ioctx);
   static rados_t s_cluster;
   static std::string pool_name;
+  static std::string nspace;
 
   virtual void SetUp();
   virtual void TearDown();

@@ -1856,6 +1856,12 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     return -ENOENT;
   }
 
+  if (s->con) {
+    ldout(cct, 20) << " revoking rx buffer for " << tid
+		   << " on " << s->con << dendl;
+    s->con->revoke_rx_buffer(tid);
+  }
+
   ldout(cct, 10) << __func__ << " tid " << tid << dendl;
   Op *op = p->second;
   if (op->onack) {
