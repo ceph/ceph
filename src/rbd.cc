@@ -2279,6 +2279,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
+  g_conf->set_val_or_die("rbd_cache_writethrough_until_flush", "false");
+
   /* get defaults from rbd_default_* options to keep behavior consistent with
      manual short-form options */
   if (!format_specified)
