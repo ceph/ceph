@@ -266,15 +266,10 @@ void Beacon::notify_health(MDS const *mds)
 
   // Detect clients failing to respond to modifications to capabilities in
   // CLIENT_CAPS messages.
-  std::list<const Capability*> late_caps;
-  mds->locker->get_late_cap_releases(&late_caps);
-  std::set<client_t> late_clients;
-  for (std::list<const Capability*>::iterator i =late_caps.begin(); i != late_caps.end(); ++i) {
-    const Capability *cap = *i;
-    late_clients.insert(cap->get_client());
-  }
-
-  for (std::set<client_t>::iterator i = late_clients.begin(); i != late_clients.end(); ++i) {
+  std::list<client_t> late_clients;
+  mds->locker->get_late_revoking_clients(&late_clients);
+  for (std::list<client_t>::iterator i = late_clients.begin();
+          i != late_clients.end(); ++i) {
     std::ostringstream oss;
     oss << "client." << *i << " failing to respond to capability release";
     MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
