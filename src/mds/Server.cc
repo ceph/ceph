@@ -226,6 +226,7 @@ void Server::handle_client_session(MClientSession *m)
 	   session->is_closing());
 
     session->info.client_metadata = m->client_meta;
+    session->set_client_metadata(m->client_meta);
     dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
       << session->info.client_metadata.size() << " metadata entries:" << dendl;
     for (map<string, string>::iterator i = session->info.client_metadata.begin();
