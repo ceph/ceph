@@ -1,5 +1,5 @@
 From: Owen Synge <osynge@suse.com>
-Date: Tue, 9 Sep 2014 22:01:30 +0200
+Date: Wed, 10 Sep 2014 10:12:13 +0200
 Subject: [PATCH] Added a systemd target for ceph
 
 ceph now has a target structure for systemd
@@ -35,17 +35,16 @@ index 8ba0843..807ea57 100644
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
 diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
-index 1811d7e..ad8fdd6 100644
+index 1811d7e..fc1d559 100644
 --- a/systemd/ceph-osd@.service
 +++ b/systemd/ceph-osd@.service
-@@ -6,6 +6,7 @@ EnvironmentFile=-/etc/sysconfig/ceph
- Environment=CLUSTER=ceph
- ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
- ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+@@ -1,5 +1,6 @@
+ [Unit]
+ Description=Ceph object storage daemon
 +PartOf=ceph.target
  
- [Install]
- WantedBy=multi-user.target
+ [Service]
+ EnvironmentFile=-/etc/sysconfig/ceph
 diff --git a/systemd/ceph.target b/systemd/ceph.target
 new file mode 100644
 index 0000000..fc103f2

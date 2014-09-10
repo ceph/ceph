@@ -117,9 +117,9 @@ Patch0017:      0017-Fix-disk-zap-sgdisk-invocation.patch
 Patch0018:      0018-MultiPatch-taken-from-trunk.patch
 Patch0019:      0019-Switch-off-systemd-detection.patch
 Patch0020:      0020-init-add-systemd-service-files.patch
-Patch0021:      0021-systemd-support-in-ceph-disk-activa.patch
-Patch0022:      0022-Added-a-systemd-target-for-ceph.patch
-Patch0023:      0023-rcceph-wrapper-for-ceph-systemd.patch
+Patch0021:      0021-Added-a-systemd-target-for-ceph.patch
+Patch0022:      0022-rcceph-wrapper-for-ceph-systemd.patch
+Patch0023:      0023-systemd-support-in-ceph-disk-activa.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################

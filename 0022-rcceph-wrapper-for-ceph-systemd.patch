@@ -1,5 +1,5 @@
 From: Owen Synge <osynge@suse.com>
-Date: Tue, 9 Sep 2014 22:02:22 +0200
+Date: Wed, 10 Sep 2014 10:13:36 +0200
 Subject: [PATCH] rcceph: wrapper for ceph systemd
 
 systemd is easy to use if you have a wrapper.
@@ -8,10 +8,10 @@ Also check for directories contianing mon/osd deamon settings.
 ---
  systemd/rcceph | 54 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 54 insertions(+)
- create mode 100755 systemd/rcceph
+ create mode 100644 systemd/rcceph
 
 diff --git a/systemd/rcceph b/systemd/rcceph
-new file mode 100755
+new file mode 100644
 index 0000000..247dd4e
 --- /dev/null
 +++ b/systemd/rcceph
