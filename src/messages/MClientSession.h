@@ -66,7 +66,18 @@ public:
   }
   void encode_payload(uint64_t features) { 
     ::encode(head, payload);
-    ::encode(client_meta, payload);
+    if (client_meta.empty()) {
+      // If we're not trying to send any metadata (always the case if
+      // we are a server) then send older-format message to avoid upsetting
+      // old kernel clients.
+      header.version = 1;
+      header.compat_version = 0;
+    } else {
+      header.version = 2;
+      header.compat_version = 0;
+      ::encode(client_meta, payload);
+    }
+
   }
 };
 
