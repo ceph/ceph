@@ -195,8 +195,10 @@ public:
       }
     }
 
-    if (_issued == _pending)
+    if (_issued == _pending) {
       item_revoking_caps.remove_myself();
+      item_client_revoking_caps.remove_myself();
+    }
     //check_rdcaps_list();
   }
   // we may get a release racing with revocations, which means our revokes will be ignored
@@ -231,6 +233,7 @@ public:
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
   xlist<Capability*>::item item_revoking_caps;
+  xlist<Capability*>::item item_client_revoking_caps;
 
   Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
     inode(i), client(c),
@@ -243,7 +246,8 @@ public:
     suppress(0), state(0),
     client_follows(0), client_xattr_version(0),
     client_inline_version(0),
-    item_session_caps(this), item_snaprealm_caps(this), item_revoking_caps(this) {
+    item_session_caps(this), item_snaprealm_caps(this),
+    item_revoking_caps(this), item_client_revoking_caps(this) {
     g_num_cap++;
     g_num_capa++;
   }
