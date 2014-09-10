@@ -5,8 +5,9 @@ Description=Ceph cluster monitor daemon
 #   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
 # these can be removed once ceph-mon will dynamically change network
 # configuration.
-After=network-online.target
-Wants=network-online.target
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=ceph.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
@@ -14,4 +15,4 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ceph.target
