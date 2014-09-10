@@ -2120,7 +2120,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     if (strncmp(s->http_auth, "AWS ", 4))
       return -EINVAL;
     string auth_str(s->http_auth + 4);
-    int pos = auth_str.find(':');
+    int pos = auth_str.rfind(':');
     if (pos < 0)
       return -EINVAL;
 
