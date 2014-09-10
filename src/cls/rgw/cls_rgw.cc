@@ -30,6 +30,7 @@ cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_bucket_link_olh;
 cls_method_handle_t h_rgw_bucket_read_olh_log;
+cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
@@ -1103,6 +1104,52 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   return 0;
 }
 
+static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_trim_olh_log_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_trim_olh_log(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  if (!op.olh.instance.empty()) {
+    CLS_LOG(1, "bad key passed in (non empty instance)");
+    return -EINVAL;
+  }
+
+  /* read olh entry */
+  struct rgw_bucket_olh_entry olh_data_entry;
+  string olh_data_key;
+  encode_olh_data_key(op.olh, &olh_data_key);
+  int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  /* remove all versions up to and including ver from the pending map */
+  map<uint64_t, rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log;
+  map<uint64_t, rgw_bucket_olh_log_entry>::iterator liter = log.begin();
+  while (liter != log.end() && liter->first <= op.ver) {
+    map<uint64_t, rgw_bucket_olh_log_entry>::iterator rm_iter = liter;
+    ++liter;
+    log.erase(rm_iter);
+  }
+
+  /* write the olh data entry */
+  ret = write_entry(hctx, olh_data_entry, olh_data_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  return 0;
+}
+
 int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(1, "rgw_dir_suggest_changes()");
@@ -2030,6 +2077,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
   cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
+  cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
 
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);

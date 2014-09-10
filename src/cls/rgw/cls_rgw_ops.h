@@ -206,13 +206,13 @@ struct rgw_cls_read_olh_log_ret
   rgw_cls_read_olh_log_ret() : is_truncated(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(1, 1, bl);
     ::encode(log, bl);
     ::encode(is_truncated, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+    DECODE_START(1, bl);
     ::decode(log, bl);
     ::decode(is_truncated, bl);
     DECODE_FINISH(bl);
@@ -221,6 +221,30 @@ struct rgw_cls_read_olh_log_ret
 #warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_ret)
+
+struct rgw_cls_trim_olh_log_op
+{
+  cls_rgw_obj_key olh;
+  uint64_t ver;
+
+  rgw_cls_trim_olh_log_op() : ver(0) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(olh, bl);
+    ::encode(ver, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(olh, bl);
+    ::decode(ver, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+#warning implement me
+};
+WRITE_CLASS_ENCODER(rgw_cls_trim_olh_log_op)
 
 struct rgw_cls_list_op
 {
