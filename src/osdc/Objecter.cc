@@ -3264,6 +3264,7 @@ void Objecter::handle_fs_stats_reply(MStatfsReply *m)
   } else {
     ldout(cct, 10) << "unknown request " << tid << dendl;
   }
+  m->put();
   ldout(cct, 10) << "done" << dendl;
 }
 
