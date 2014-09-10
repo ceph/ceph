@@ -1183,6 +1183,7 @@ struct object_stat_sum_t {
   int64_t num_whiteouts;
   int64_t num_objects_omap;
   int64_t num_objects_hit_set_archive;
+  int64_t num_bytes_hit_set_archive;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1199,7 +1200,8 @@ struct object_stat_sum_t {
       num_objects_dirty(0),
       num_whiteouts(0),
       num_objects_omap(0),
-      num_objects_hit_set_archive(0)
+      num_objects_hit_set_archive(0),
+      num_bytes_hit_set_archive(0)
   {}
 
   void floor(int64_t f) {
@@ -1226,6 +1228,7 @@ struct object_stat_sum_t {
     FLOOR(num_whiteouts);
     FLOOR(num_objects_omap);
     FLOOR(num_objects_hit_set_archive);
+    FLOOR(num_bytes_hit_set_archive);
 #undef FLOOR
   }
 
@@ -1260,6 +1263,7 @@ struct object_stat_sum_t {
     SPLIT(num_whiteouts);
     SPLIT(num_objects_omap);
     SPLIT(num_objects_hit_set_archive);
+    SPLIT(num_bytes_hit_set_archive);
 #undef SPLIT
   }
 
@@ -1396,6 +1400,7 @@ struct pg_stat_t {
   bool dirty_stats_invalid;
   bool omap_stats_invalid;
   bool hitset_stats_invalid;
+  bool hitset_bytes_stats_invalid;
 
   /// up, acting primaries
   int32_t up_primary;
@@ -1413,6 +1418,7 @@ struct pg_stat_t {
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
+      hitset_bytes_stats_invalid(false),
       up_primary(-1),
       acting_primary(-1)
   { }
