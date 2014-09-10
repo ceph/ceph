@@ -1,0 +1,66 @@
+#! /bin/bash
+
+### BEGIN INIT INFO
+# Provides:       ceph ceph-mon ceph-osd
+# Required-Start: $network $remote_fs
+# Required-Stop:  $network $remote_fs
+# Should-Start: network-remotefs
+# Should-Stop: network-remotefs
+# Default-Start:  3 5
+# Default-Stop:   0 1 2 6
+# Short-Description: Ceph is a distributed object, and block, storage platform
+# Description:    Ceph is a distributed object, block, and file storage platform
+### END INIT INFO
+
+SYSTEMD_NO_WRAP=1 . /etc/rc.status
+rc_reset
+
+action=$1 ; shift
+cluster="ceph"
+config=$1 ; shift
+
+# Shared variables by many actions
+dir_mon="/var/lib/ceph/mon/"
+dir_osd="/var/lib/ceph/osd/"
+if test -d ${dir_mon} ; then
+lmon=`ls ${dir_mon} | grep ${cluster}`
+fi
+if test -d ${dir_osd} ; then
+losd=`ls ${dir_osd} | grep ${cluster}`
+fi
+prefix="${cluster}-"
+
+if test -n "$config" ; then
+	systemctl "${action}" "ceph-mon@${config}.service"
+else
+	case $action in
+    start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed  )
+        n=0
+        if test -n ${lmon} ; then
+            for s in ${lmon#=${prefix}} ; do
+                systemctl "${action}" ceph-mon@${s#$prefix}.service
+                rc_check
+                ((++n))
+            done
+        fi
+        if test -n ${lmon} ; then
+            for s in ${losd#=${prefix}} ; do
+                systemctl "${action}" ceph-osd@${s#$prefix}.service
+                rc_check
+                ((++n))
+            done
+        fi
+        if test $n -gt 0 ; then
+			rc_status
+		else
+			rc_status -u
+		fi
+    ;;
+	*)
+		echo "Invalid paramter : $action"
+        echo "Valid paramters  : start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed"
+	;;
+	esac
+fi
+rc_exit
+
