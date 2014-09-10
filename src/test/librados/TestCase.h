@@ -33,6 +33,7 @@ protected:
   virtual void TearDown();
   rados_t cluster;
   rados_ioctx_t ioctx;
+  std::string nspace;
 };
 
 class RadosTestPP : public ::testing::Test {
@@ -50,7 +51,7 @@ protected:
   virtual void TearDown();
   librados::Rados &cluster;
   librados::IoCtx ioctx;
-  std::string ns;
+  std::string nspace;
 };
 
 class RadosTestParamPP : public ::testing::TestWithParam<const char*> {
@@ -69,7 +70,7 @@ protected:
   virtual void TearDown();
   librados::Rados &cluster;
   librados::IoCtx ioctx;
-  std::string ns;
+  std::string nspace;
 };
 
 class RadosTestEC : public RadosTest {
@@ -86,6 +87,7 @@ protected:
   virtual void TearDown();
   rados_t cluster;
   rados_ioctx_t ioctx;
+  std::string nspace;
   uint64_t alignment;
 };
 
@@ -103,8 +105,7 @@ protected:
   virtual void TearDown();
   librados::Rados &cluster;
   librados::IoCtx ioctx;
-  std::string ns;
+  std::string nspace;
   uint64_t alignment;
 };
-
 #endif

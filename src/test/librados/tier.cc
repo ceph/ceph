@@ -87,7 +87,7 @@ protected:
   virtual void SetUp() {
     RadosTestPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-    cache_ioctx.set_namespace(ns);
+    cache_ioctx.set_namespace(nspace);
   }
   virtual void TearDown() {
     RadosTestPP::TearDown();
@@ -2270,7 +2270,7 @@ protected:
   virtual void SetUp() {
     RadosTestECPP::SetUp();
     ASSERT_EQ(0, cluster.ioctx_create(cache_pool_name.c_str(), cache_ioctx));
-    cache_ioctx.set_namespace(ns);
+    cache_ioctx.set_namespace(nspace);
   }
   virtual void TearDown() {
     RadosTestECPP::TearDown();
