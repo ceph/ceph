@@ -269,14 +269,25 @@ void Beacon::notify_health(MDS const *mds)
   // Detect clients failing to respond to modifications to capabilities in
   // CLIENT_CAPS messages.
   {
-
     std::list<client_t> late_clients;
     mds->locker->get_late_revoking_clients(&late_clients);
     std::list<MDSHealthMetric> late_cap_metrics;
 
     for (std::list<client_t>::iterator i = late_clients.begin(); i != late_clients.end(); ++i) {
+
+      // client_t is equivalent to session.info.inst.name.num
+      // Construct an entity_name_t to lookup into SessionMap
+      entity_name_t ename(CEPH_ENTITY_TYPE_CLIENT, i->v);
+      Session const *s = mds->sessionmap.get_session(ename);
+      if (s == NULL) {
+        // Shouldn't happen, but not worth crashing if it does as this is
+        // just health-reporting code.
+        derr << "Client ID without session: " << i->v << dendl;
+        continue;
+      }
+
       std::ostringstream oss;
-      oss << "client." << *i << " failing to respond to capability release";
+      oss << "Client " << s->get_human_name() << " failing to respond to capability release";
       MDSHealthMetric m(MDS_HEALTH_CLIENT_LATE_RELEASE, HEALTH_WARN, oss.str());
       m.metadata["client_id"] = stringify(i->v);
       late_cap_metrics.push_back(m);
@@ -313,7 +324,7 @@ void Beacon::notify_health(MDS const *mds)
         if (session->recalled_at < cutoff) {
           dout(20) << "  exceeded timeout " << session->recalled_at << " vs. " << cutoff << dendl;
           std::ostringstream oss;
-        oss << "Client " << session->info.inst.name.num() << " failing to respond to cache pressure";
+        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
           m.metadata["client_id"] = session->info.inst.name.num();
           late_recall_metrics.push_back(m);
