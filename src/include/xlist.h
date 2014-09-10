@@ -61,8 +61,11 @@ private:
   int _size;
 
 public:
-  xlist(const xlist& other);
-  const xlist& operator=(const xlist& other);
+  xlist(const xlist& other) {
+    _front = other._front;
+    _back = other._back;
+    _size = other._size;
+  }
 
   xlist() : _front(0), _back(0), _size(0) {}
   ~xlist() { 
