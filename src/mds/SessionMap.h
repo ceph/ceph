@@ -303,6 +303,14 @@ public:
       return session_map[w];
     return 0;
   }
+  const Session* get_session(entity_name_t w) const {
+    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
+    if (p == session_map.end()) {
+      return NULL;
+    } else {
+      return p->second;
+    }
+  }
   Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;
     if (session_map.count(i.name)) {
