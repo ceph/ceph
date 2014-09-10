@@ -1513,7 +1513,7 @@ public:
   bool osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t);
+  int _calc_target(op_target_t *t, bool any_change=false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   RWLock::Context& lc);
 
