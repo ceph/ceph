@@ -654,7 +654,6 @@ void AsyncConnection::process()
               assert(0 == "old msgs despite reconnect_seq feature");
             goto fail;
           }
-          get();
           message->set_connection(this);
 
           // note last received message.
@@ -755,6 +754,7 @@ int AsyncConnection::_process_connection()
 
     case STATE_CONNECTING:
       {
+        assert(!policy.server);
         global_seq = async_msgr->get_global_seq();
         // close old socket.  this is safe because we stopped the reader thread above.
         if (sd >= 0)
@@ -1596,7 +1596,9 @@ int AsyncConnection::send_message(Message *m)
 
   Mutex::Locker l(lock);
   out_q[m->get_priority()].push_back(m);
-  if (sd > 0 && !open_write) {
+  if (state == STATE_STANDBY && !policy.server) {
+    _connect();
+  } else if (sd > 0 && !open_write) {
     center->create_file_event(sd, EVENT_WRITABLE, write_handler);
     open_write = true;
   }
@@ -1931,8 +1933,7 @@ void AsyncConnection::handle_write()
 
     r = _try_send(bl);
     if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send msg ack failed :"
-                                << strerror(errno) << dendl;
+      ldout(async_msgr->cct, 1) << __func__ << " send msg ack failed" << dendl;
       goto fail;
     } else if (r > 0) {
       return ;
@@ -1947,8 +1948,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 10) << __func__ << " try send msg " << m << dendl;
       r = _send(m);
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " send msg failed :"
-                                  << strerror(errno) << dendl;
+        ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
         goto fail;
       } else if (r > 0) {
         break;
@@ -1957,8 +1957,7 @@ void AsyncConnection::handle_write()
   } else {
     r = _try_send(bl);
     if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed :"
-                                << strerror(errno) << dendl;
+      ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;
       goto fail;
     }
   }
