@@ -8,7 +8,6 @@
 using namespace librados;
 
 std::string RadosTest::pool_name;
-std::string RadosTest::nspace;
 rados_t RadosTest::s_cluster = NULL;
 
 void RadosTest::SetUpTestCase()
@@ -26,7 +25,7 @@ void RadosTest::SetUp()
 {
   cluster = RadosTest::s_cluster;
   ASSERT_EQ(0, rados_ioctx_create(cluster, pool_name.c_str(), &ioctx));
-  nspace = get_temp_pool_name();
+  std::string nspace = get_temp_pool_name();
   rados_ioctx_set_namespace(ioctx, nspace.c_str());
   ASSERT_FALSE(rados_ioctx_pool_requires_alignment(ioctx));
 }
