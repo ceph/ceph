@@ -1729,8 +1729,11 @@ public:
   int bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag);
   int bucket_index_read_olh_log(rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
+  int bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver);
   int apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
-                    const string& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log);
+                    const string& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+                    uint64_t *plast_ver);
+  int update_olh(void *ctx, const string& bucket_owner, rgw_obj& obj, const string& obj_tag);
 
   int follow_olh(map<string, bufferlist>& attrset, rgw_obj& target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);

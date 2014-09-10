@@ -137,6 +137,20 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, 
  return r;
 }
 
+int cls_rgw_trim_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver)
+{
+  bufferlist in, out;
+  struct rgw_cls_trim_olh_log_op call;
+  call.olh = olh;
+  call.ver = ver;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_trim_olh_log", in, out);
+  if (r < 0)
+    return r;
+
+ return 0;
+}
+
 int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
 				  rgw_bucket_dir_header *existing_header,
 				  rgw_bucket_dir_header *calculated_header)
