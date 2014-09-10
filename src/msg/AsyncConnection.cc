@@ -63,12 +63,12 @@ class C_handle_dispatch : public EventCallback {
  public:
   C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
   void do_request(int id) {
-    msgr->ms_fast_preprocess(m);
-    if (msgr->ms_can_fast_dispatch(m)) {
-      msgr->ms_fast_dispatch(m);
-    } else {
+    //msgr->ms_fast_preprocess(m);
+    //if (msgr->ms_can_fast_dispatch(m)) {
+    //  msgr->ms_fast_dispatch(m);
+    //} else {
       msgr->ms_deliver_dispatch(m);
-    }
+    //}
   }
 };
 
@@ -101,7 +101,12 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m)
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false),
     got_bad_auth(false), authorizer(NULL),
-    state_buffer(4096), state_offset(0), net(cct), center(&m->center) { }
+    state_buffer(4096), state_offset(0), net(cct), center(&m->center)
+{
+  read_handler.reset(new C_handle_read(this));
+  write_handler.reset(new C_handle_write(this));
+  reset_handler.reset(new C_handle_reset(async_msgr, this));
+}
 
 AsyncConnection::~AsyncConnection()
 {
@@ -184,7 +189,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     assert(!outcoming_bl.length());
     connect_seq++;
     state = STATE_CONNECTING;
-    center->create_time_event(0, new C_handle_read(this));
+    center->create_time_event(0, read_handler);
     return 0;
   }
 
@@ -237,7 +242,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   if (!open_write && is_queued()) {
-    center->create_file_event(sd, EVENT_WRITABLE, new C_handle_write(this));
+    center->create_file_event(sd, EVENT_WRITABLE, write_handler);
     open_write = true;
   }
 
@@ -286,7 +291,7 @@ void AsyncConnection::process()
   int prev_state = state;
   Mutex::Locker l(lock);
   do {
-    ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
+    ldout(async_msgr->cct, 20) << __func__ << " state is " << get_state_name(state)
                                << ", prev state is " << get_state_name(prev_state) << dendl;
     prev_state = state;
     switch (state) {
@@ -656,9 +661,17 @@ void AsyncConnection::process()
           in_seq = message->get_seq();
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
-          center->create_time_event(0, new C_handle_dispatch(async_msgr, message));
-
           state = STATE_OPEN;
+
+          async_msgr->ms_fast_preprocess(message);
+          if (async_msgr->ms_can_fast_dispatch(message)) {
+            lock.Unlock();
+            async_msgr->ms_fast_dispatch(message);
+            lock.Lock();
+          } else {
+            center->create_time_event(0, EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
+          }
+
           break;
         }
 
@@ -757,7 +770,7 @@ int AsyncConnection::_process_connection()
         }
         net.set_socket_options(sd);
 
-        center->create_file_event(sd, EVENT_READABLE, new C_handle_read(this));
+        center->create_file_event(sd, EVENT_READABLE, read_handler);
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
@@ -1561,7 +1574,7 @@ void AsyncConnection::_connect()
 
   state = STATE_CONNECTING;
   // rescheduler connection in order to avoid lock dep
-  center->create_time_event(0, new C_handle_read(this));
+  center->create_time_event(0, read_handler);
 }
 
 void AsyncConnection::accept(int incoming)
@@ -1571,7 +1584,7 @@ void AsyncConnection::accept(int incoming)
 
   sd = incoming;
   state = STATE_ACCEPTING;
-  center->create_file_event(sd, EVENT_READABLE, new C_handle_read(this));
+  center->create_file_event(sd, EVENT_READABLE, read_handler);
   process();
 }
 
@@ -1584,7 +1597,7 @@ int AsyncConnection::send_message(Message *m)
   Mutex::Locker l(lock);
   out_q[m->get_priority()].push_back(m);
   if (sd > 0 && !open_write) {
-    center->create_file_event(sd, EVENT_WRITABLE, new C_handle_write(this));
+    center->create_file_event(sd, EVENT_WRITABLE, write_handler);
     open_write = true;
   }
   return 0;
@@ -1713,7 +1726,7 @@ void AsyncConnection::fault()
 
   uint64_t milliseconds = double(backoff) * 1000;
   // woke up again;
-  center->create_time_event(milliseconds, new C_handle_read(this));
+  center->create_time_event(milliseconds, read_handler);
 }
 
 void AsyncConnection::was_session_reset()
@@ -1740,7 +1753,7 @@ void AsyncConnection::was_session_reset()
 void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
-  center->create_time_event(0, new C_handle_reset(async_msgr, this));
+  center->create_time_event(0, reset_handler);
   shutdown_socket();
   discard_out_queue();
   outcoming_bl.clear();

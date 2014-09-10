@@ -187,7 +187,7 @@ int Processor::start()
   // start thread
   create();
   if (listen_sd >= 0)
-    center->create_file_event(listen_sd, EVENT_READABLE, new C_handle_accept(this));
+    center->create_file_event(listen_sd, EVENT_READABLE, EventCallbackRef(new C_handle_accept(this)));
 
   return 0;
 }
@@ -217,7 +217,7 @@ void *Processor::entry()
   while (!done) {
     ldout(msgr->cct,20) << __func__ << " calling poll" << dendl;
 
-    r = center->process_events(1000);
+    r = center->process_events(30000);
     if (r < 0) {
       ldout(msgr->cct,20) << __func__ << " process events failed: "
                           << cpp_strerror(errno) << dendl;
@@ -245,6 +245,7 @@ void Processor::stop()
   if (listen_sd >= 0) {
     ::shutdown(listen_sd, SHUT_RDWR);
   }
+  center->stop();
 
   // wait for thread to stop before closing the socket, to avoid
   // racing against fd re-use.

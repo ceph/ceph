@@ -216,6 +216,9 @@ class AsyncConnection : public Connection {
   Mutex lock;
   utime_t backoff;         // backoff time
   bool open_write;
+  EventCallbackRef read_handler;
+  EventCallbackRef write_handler;
+  EventCallbackRef reset_handler;
 
   // Tis section are temp variables used by state transition
 
