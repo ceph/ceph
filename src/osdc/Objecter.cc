@@ -1317,7 +1317,6 @@ void Objecter::close_session(OSDSession *s)
 
   osd_sessions.erase(s->osd);
   s->lock.unlock();
-  assert(s->get_nref() == 1);  // We reassigned any/all ops, so should be last ref
   put_session(s);
 
   // Assign any leftover ops to the homeless session
