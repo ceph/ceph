@@ -81,7 +81,15 @@ private:
   int importing_count;
   friend class SessionMap;
 
+  // Human (friendly) name is soft state generated from client metadata
+  void _update_human_name();
+  std::string human_name;
+
 public:
+
+  void decode(bufferlist::iterator &p);
+  void set_client_metadata(std::map<std::string, std::string> const &meta);
+  std::string get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
