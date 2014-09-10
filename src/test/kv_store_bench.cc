@@ -37,7 +37,8 @@ KvStoreBench::KvStoreBench()
   ops_in_flight(0),
   ops_in_flight_lock("KvStoreBench::ops_in_flight_lock"),
   rados_id("admin"),
-  pool_name("rbd")
+  pool_name("rbd"),
+  io_ctx_ready(false)
 {
   probs[25] = 'i';
   probs[50] = 'u';
@@ -47,9 +48,11 @@ KvStoreBench::KvStoreBench()
 
 KvStoreBench::~KvStoreBench()
 {
-  librados::ObjectWriteOperation owo;
-  owo.remove();
-  io_ctx.operate(client_name + ".done-setting", &owo);
+  if (io_ctx_ready) {
+    librados::ObjectWriteOperation owo;
+    owo.remove();
+    io_ctx.operate(client_name + ".done-setting", &owo);
+  }
   delete kvs;
 }
 
@@ -187,6 +190,7 @@ int KvStoreBench::setup(int argc, const char** argv) {
     rados.shutdown();
     return r;
   }
+  io_ctx_ready = true;
 
   if (clear_first) {
     librados::ObjectIterator it;
