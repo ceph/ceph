@@ -554,6 +554,9 @@ COMMAND("osd pool rmsnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
 	"remove snapshot <snap> from <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd pool ls " \
+	"name=detail,type=CephChoices,strings=detail,req=false", \
+	"list pools", "osd", "r", "cli,rest")
 COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
 	"name=pg_num,type=CephInt,range=0 " \
