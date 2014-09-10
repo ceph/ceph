@@ -113,6 +113,10 @@ public:
     m_image_name_map = map;
   }
 
+  void set_dump_perf_counters(bool dump_perf_counters) {
+    m_dump_perf_counters = dump_perf_counters;
+  }
+
   const ImageNameMap &image_name_map() const {
     return m_image_name_map;
   }
@@ -139,6 +143,7 @@ private:
   float m_latency_multiplier;
   bool m_readonly;
   ImageNameMap m_image_name_map;
+  bool m_dump_perf_counters;
 
   std::map<imagectx_id_t, librbd::Image*> m_images;
   boost::shared_mutex m_images_mutex;
