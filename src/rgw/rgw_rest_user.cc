@@ -30,10 +30,13 @@ void RGWOp_User_Info::execute()
   RGWUserAdminOpState op_state;
 
   std::string uid;
+  bool fetch_stats;
 
   RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_bool(s, "stats", false, &fetch_stats);
 
   op_state.set_user_id(uid);
+  op_state.set_fetch_stats(fetch_stats);
 
   http_ret = RGWUserAdminOp_User::info(store, op_state, flusher);
 }

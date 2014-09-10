@@ -134,6 +134,7 @@ struct RGWUserAdminOpState {
   __u8 suspended;
   __u8 system;
   __u8 exclusive;
+  __u8 fetch_stats;
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
@@ -273,6 +274,9 @@ struct RGWUserAdminOpState {
   void set_exclusive(__u8 is_exclusive) {
     exclusive = is_exclusive;
   }
+  void set_fetch_stats(__u8 is_fetch_stats) {
+    fetch_stats = is_fetch_stats;
+  }
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
     info = user_info;
@@ -411,6 +415,7 @@ struct RGWUserAdminOpState {
     suspended = 0;
     system = 0;
     exclusive = 0;
+    fetch_stats = 0;
     op_mask = 0;
 
     existing_user = false;
