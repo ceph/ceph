@@ -35,6 +35,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
                             bool delete_marker, const string& op_tag);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated);
+int cls_rgw_trim_olh_log(librados::IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver);
 
 int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
 				  rgw_bucket_dir_header *existing_header,
