@@ -37,7 +37,7 @@ KvStoreBench::KvStoreBench()
   ops_in_flight(0),
   ops_in_flight_lock("KvStoreBench::ops_in_flight_lock"),
   rados_id("admin"),
-  pool_name("data")
+  pool_name("rbd")
 {
   probs[25] = 'i';
   probs[50] = 'u';
