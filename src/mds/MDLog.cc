@@ -1045,7 +1045,9 @@ void MDLog::_replay_thread()
       le->_segment->end = journaler->get_read_pos();
       num_events++;
 
+      mds->mds_lock.Lock();
       le->replay(mds);
+      mds->mds_lock.Unlock();
     }
     delete le;
 
