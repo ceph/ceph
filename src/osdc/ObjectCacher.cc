@@ -540,8 +540,13 @@ void ObjectCacher::perf_start()
 
   plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit");
   plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss");
+  plb.add_u64_counter(l_objectcacher_cache_ops_partial_hit, "cache_ops_partial_hit");
+  plb.add_u64_counter(l_objectcacher_cache_ops_wait_cow, "cache_ops_wait_cow");
   plb.add_u64_counter(l_objectcacher_cache_bytes_hit, "cache_bytes_hit");
+  plb.add_u64_counter(l_objectcacher_cache_bytes_partial_hit, "cache_bytes_partial_hit");
   plb.add_u64_counter(l_objectcacher_cache_bytes_miss, "cache_bytes_miss");
+  plb.add_u64_counter(l_objectcacher_cache_bytes_rx, "cache_bytes_rx");
+  plb.add_u64_counter(l_objectcacher_cache_bytes_wait_cow, "cache_bytes_wait_cow");
   plb.add_u64_counter(l_objectcacher_data_read, "data_read");
   plb.add_u64_counter(l_objectcacher_data_written, "data_written");
   plb.add_u64_counter(l_objectcacher_data_flushed, "data_flushed");
@@ -1030,16 +1035,21 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   int error = 0;
   list<BufferHead*> hit_ls;
   uint64_t bytes_in_cache = 0;
-  uint64_t bytes_not_in_cache = 0;
+  uint64_t bytes_missing = 0;
+  uint64_t bytes_rx = 0;
   uint64_t total_bytes_read = 0;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ++ex_it) {
-    ldout(cct, 10) << "readx " << *ex_it << dendl;
-
     total_bytes_read += ex_it->length;
+  }
+
+  for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
+       ex_it != rd->extents.end();
+       ++ex_it) {
+    ldout(cct, 10) << "readx " << *ex_it << dendl;
 
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
@@ -1072,7 +1082,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	if (wait) {
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
-	  // FIXME: perfcounter!
+	  if (perfcounter && external_call) {
+	    perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
+	    perfcounter->inc(l_objectcacher_cache_bytes_wait_cow, total_bytes_read);
+	    perfcounter->inc(l_objectcacher_cache_ops_wait_cow);
+	  }
 	  return 0;
 	}
       }
@@ -1091,6 +1105,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       if (allzero) {
 	ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
 	delete rd;
+	if (perfcounter && external_call) {
+	  perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
+	  perfcounter->inc(l_objectcacher_cache_bytes_hit, total_bytes_read);
+	  perfcounter->inc(l_objectcacher_cache_ops_hit);
+	}
 	return -ENOENT;
       }
     }
@@ -1131,8 +1150,8 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
                      << " off " << bh_it->first << dendl;
 	    bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
           }
-          bytes_not_in_cache += bh_it->second->length();
         }
+	bytes_missing += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
 	success = false;
       }
 
@@ -1146,9 +1165,16 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
                    << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
         }
-        bytes_not_in_cache += bh_it->second->length();
+	bytes_rx += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
 	success = false;
       }      
+
+      // Count the bytes that were available in the cache, so we can track partial hits
+      for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
+           bh_it != hits.end();
+           ++bh_it) {
+	bytes_in_cache += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
+      }
     } else {
       assert(!hits.empty());
 
@@ -1160,7 +1186,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	if (bh_it->second->is_error() && bh_it->second->error)
 	  error = bh_it->second->error;
         hit_ls.push_back(bh_it->second);
-        bytes_in_cache += bh_it->second->length();
       }
 
       // create reverse map of buffer offset -> object for the eventual result.
@@ -1196,6 +1221,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  stripe_map[f_it->first].claim_append(bit);
 	}
 
+	bytes_in_cache += len;
         opos += len;
         bhoff += len;
         foff += len;
@@ -1221,12 +1247,20 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
        bhit != hit_ls.end();
        ++bhit) 
     touch_bh(*bhit);
-  
+
+  assert(bytes_in_cache + bytes_missing + bytes_rx == total_bytes_read);
+
   if (!success) {
     if (perfcounter && external_call) {
       perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-      perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
-      perfcounter->inc(l_objectcacher_cache_ops_miss);
+      if (bytes_in_cache > 0) {
+	perfcounter->inc(l_objectcacher_cache_ops_partial_hit);
+	perfcounter->inc(l_objectcacher_cache_bytes_partial_hit, bytes_in_cache);
+      } else {
+	perfcounter->inc(l_objectcacher_cache_ops_miss);
+      }
+      perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_missing);
+      perfcounter->inc(l_objectcacher_cache_bytes_rx, bytes_rx);
     }
     if (onfinish) {
       ldout(cct, 20) << "readx defer " << rd << dendl;
@@ -1238,7 +1272,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   }
   if (perfcounter && external_call) {
     perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-    perfcounter->inc(l_objectcacher_cache_bytes_hit, bytes_in_cache);
+    perfcounter->inc(l_objectcacher_cache_bytes_hit, total_bytes_read);
     perfcounter->inc(l_objectcacher_cache_ops_hit);
   }
 
