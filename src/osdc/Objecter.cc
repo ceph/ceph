@@ -1980,7 +1980,7 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   return p->raw_hash_to_pg(p->hash_key(key, ns));
 }
 
-int Objecter::_calc_target(op_target_t *t)
+int Objecter::_calc_target(op_target_t *t, bool any_change)
 {
   assert(rwlock.is_locked());
 
@@ -2041,7 +2041,8 @@ int Objecter::_calc_target(op_target_t *t)
   }
 
   if (t->pgid != pgid ||
-      is_pg_changed(t->primary, t->acting, primary, acting, t->used_replica) ||
+      is_pg_changed(
+	t->primary, t->acting, primary, acting, t->used_replica || any_change) ||
       force_resend) {
     t->pgid = pgid;
     t->acting = acting;
@@ -2239,7 +2240,7 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_wlocked());
 
-  int r = _calc_target(&linger_op->target);
+  int r = _calc_target(&linger_op->target, true);
   if (r == RECALC_OP_TARGET_NEED_RESEND) {
     ldout(cct, 10) << "recalc_linger_op_target tid " << linger_op->linger_id
 		   << " pgid " << linger_op->target.pgid
