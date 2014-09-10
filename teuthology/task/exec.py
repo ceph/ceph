@@ -16,9 +16,16 @@ def task(ctx, config):
         - kclient: [client.a]
         - exec:
             client.a:
-              - echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control
-              - echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control
+              - "echo 'module libceph +p' > /sys/kernel/debug/dynamic_debug/control"
+              - "echo 'module ceph +p' > /sys/kernel/debug/dynamic_debug/control"
         - interactive:
+
+    It stops and fails with the first command that does not return on success. It means
+    that if the first command fails, the second won't run at all.
+
+    To avoid confusion it is recommended to explicitly enclose the commands in 
+    double quotes. For instance if the command is false (without double quotes) it will
+    be interpreted as a boolean by the YAML parser.
 
     :param ctx: Context
     :param config: Configuration
