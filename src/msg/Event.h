@@ -40,6 +40,8 @@ class EventCallback {
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
+typedef ceph::shared_ptr<EventCallback> EventCallbackRef;
+
 struct FiredFileEvent {
   int fd;
   int mask;
@@ -47,14 +49,12 @@ struct FiredFileEvent {
 
 struct FiredTimeEvent {
   uint64_t id;
-  EventCallback *time_cb;
+  EventCallbackRef time_cb;
 };
 
 struct FiredEvent {
-  union {
-    FiredFileEvent file_event;
-    FiredTimeEvent time_event;
-  };
+  FiredFileEvent file_event;
+  FiredTimeEvent time_event;
   bool is_file;
 
   FiredEvent(): is_file(true) {}
@@ -73,16 +73,16 @@ class EventDriver {
 class EventCenter {
   struct FileEvent {
     int mask;
-    EventCallback *read_cb;
-    EventCallback *write_cb;
-    FileEvent(): mask(0), read_cb(NULL), write_cb(NULL) {}
+    EventCallbackRef read_cb;
+    EventCallbackRef write_cb;
+    FileEvent(): mask(0) {}
   };
 
   struct TimeEvent {
     uint64_t id;
-    EventCallback *time_cb;
+    EventCallbackRef time_cb;
 
-    TimeEvent(): id(0), time_cb(NULL) {}
+    TimeEvent(): id(0) {}
   };
 
   Mutex lock;
@@ -100,6 +100,7 @@ class EventCenter {
   int notify_receive_fd;
   int notify_send_fd;
   utime_t next_wake;
+  bool tp_stop;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -176,7 +177,6 @@ class EventCenter {
         }
       } else {
         e.time_event.time_cb->do_request(e.time_event.id);
-        delete e.time_event.time_cb;
       }
     }
     void _clear() {
@@ -188,14 +188,14 @@ class EventCenter {
   EventCenter(CephContext *c):
     lock("EventCenter::lock"), driver(NULL), cct(c), nevent(0), time_event_next_id(0),
     event_tp(c, "EventCenter::event_tp", c->_conf->ms_event_op_threads, "eventcenter_op_threads"),
-    notify_receive_fd(-1), notify_send_fd(-1),
+    notify_receive_fd(-1), notify_send_fd(-1),tp_stop(true),
     event_wq(this, c->_conf->ms_event_thread_timeout, c->_conf->ms_event_thread_suicide_timeout, &event_tp) {
     last_time = time(NULL);
   }
   ~EventCenter();
   int init(int nevent);
-  int create_file_event(int fd, int mask, EventCallback *ctxt);
-  uint64_t create_time_event(uint64_t milliseconds, EventCallback *ctxt);
+  int create_file_event(int fd, int mask, EventCallbackRef ctxt);
+  uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
   void delete_time_event(uint64_t id);
   int process_events(int timeout_milliseconds);

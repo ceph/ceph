@@ -47,7 +47,7 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
     op = cur_mask == EVENT_NONE ? EPOLL_CTL_ADD: EPOLL_CTL_MOD;
   }
 
-  ee.events = 0;
+  ee.events = EPOLLET;
   add_mask |= cur_mask; /* Merge old events */
   if (add_mask & EVENT_READABLE)
     ee.events |= EPOLLIN;
@@ -75,7 +75,7 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 
   int mask = cur_mask & (~delmask);
 
-  ee.events = EPOLLET;
+  ee.events = 0;
   if (mask & EVENT_READABLE) ee.events |= EPOLLIN;
   if (mask & EVENT_WRITABLE) ee.events |= EPOLLOUT;
   ee.data.u64 = 0; /* avoid valgrind warning */
