@@ -62,7 +62,7 @@ int EventCenter::init(int n)
   notify_send_fd = fds[1];
 
   nevent = n;
-  create_file_event(notify_receive_fd, EVENT_READABLE, new C_handle_notify());
+  create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify()));
   return 0;
 }
 
@@ -77,7 +77,7 @@ EventCenter::~EventCenter()
     ::close(notify_send_fd);
 }
 
-int EventCenter::create_file_event(int fd, int mask, EventCallback *ctxt)
+int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   int r;
   Mutex::Locker l(lock);
@@ -105,13 +105,9 @@ int EventCenter::create_file_event(int fd, int mask, EventCallback *ctxt)
 
   event->mask |= mask;
   if (mask & EVENT_READABLE) {
-    if (event->read_cb)
-      delete event->read_cb;
     event->read_cb = ctxt;
   }
   if (mask & EVENT_WRITABLE) {
-    if (event->write_cb)
-      delete event->write_cb;
     event->write_cb = ctxt;
   }
   ldout(cct, 10) << __func__ << " create event fd=" << fd << " mask=" << mask
@@ -130,12 +126,10 @@ void EventCenter::delete_file_event(int fd, int mask)
   driver->del_event(fd, event->mask, mask);
 
   if (mask & EVENT_READABLE && event->read_cb) {
-    delete event->read_cb;
-    event->read_cb = NULL;
+    event->read_cb.reset();
   }
   if (mask & EVENT_WRITABLE && event->write_cb) {
-    delete event->write_cb;
-    event->write_cb = NULL;
+    event->write_cb.reset();
   }
 
   event->mask = event->mask & (~mask);
@@ -145,7 +139,7 @@ void EventCenter::delete_file_event(int fd, int mask)
                  << " now mask is " << event->mask << dendl;
 }
 
-uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ctxt)
+uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallbackRef ctxt)
 {
   Mutex::Locker l(lock);
   uint64_t id = time_event_next_id++;
@@ -206,13 +200,17 @@ void EventCenter::start()
   ldout(cct, 1) << __func__ << dendl;
   Mutex::Locker l(lock);
   event_tp.start();
+  tp_stop = false;
 }
 
 void EventCenter::stop()
 {
   ldout(cct, 1) << __func__ << dendl;
   Mutex::Locker l(lock);
-  event_tp.stop();
+  if (!tp_stop) {
+    event_tp.stop();
+    tp_stop = true;
+  }
   char buf[1];
   buf[0] = 'c';
   // wake up "event_wait"
