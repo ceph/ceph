@@ -3,4 +3,4 @@ tasks:
     branch: giant
     clients:
       client.0:
-        - rados/test-upgrade-firefly.sh
+        - rados/test-upgrade-giant.sh
