@@ -29,15 +29,18 @@ command and many higher level interfaces, including `QEMU`_, `libvirt`_,
 Cephx Notes
 ===========
 
-When `cephx`_ is enabled,  you must specify a user and a secret file
-on the command line, or use the ``CEPH_ARGS`` environment variable
-to avoid re-entry of the following parameters. ::
+When `cephx`_ is enabled (it is by default), you must specify a user name or ID
+and a path to the keyring containing the corresponding key for the user. See
+`User Management`_ for details. You may also add the ``CEPH_ARGS`` environment
+variable to avoid re-entry of the following parameters. ::
 
-	rbd --id {user-name} --keyring=/path/to/secret [commands]
+	rbd --id {user-ID} --keyring=/path/to/secret [commands]
+	rbd --name {username} --keyring=/path/to/secret [commands]
 
 For example:: 
 
-	rbd --id client.admin --keyring=/etc/ceph/ceph.keyring [commands]
+	rbd --id admin --keyring=/etc/ceph/ceph.keyring [commands]
+	rbd --name client.admin --keyring=/etc/ceph/ceph.keyring [commands]
 
 .. tip:: Add the user and secret to the ``CEPH_ARGS`` environment 
    variable so that you don't need to enter them each time.
@@ -209,7 +212,7 @@ clone snapshots  from one pool to images in another pool.
    a user may create an image for a Linux distribution (e.g., Ubuntu 12.04), and 
    create a snapshot for it. Periodically, the user may update the image and create
    a new snapshot (e.g., ``sudo apt-get update``, ``sudo apt-get upgrade``,
-   ``sudo apt-get dist-upgrade`` followed by ``	rbd snap create``). As the image
+   ``sudo apt-get dist-upgrade`` followed by ``rbd snap create``). As the image
    matures, the user can clone any one of the snapshots.
 
 #. **Extended Template:** A more advanced use case includes extending a template
@@ -312,7 +315,8 @@ For example::
    a flattened image will take up more storage space than a layered clone.
 
 
-.. _cephx: ../../rados/operations/authentication/
+.. _cephx: ../../rados/configuration/auth-config-ref/
+.. _User Management: ../../operations/user-management
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/
