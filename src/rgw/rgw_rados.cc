@@ -1205,12 +1205,20 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
     if (r < 0) {
       return r;
     }
-  }
 
-  r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
-                          RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                          extra_params);
-  return r;
+    r = store->set_olh(obj_ctx, bucket_owner, ver_head_obj, false);
+    if (r < 0) {
+      return r;
+    }
+  } else {
+    r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
+                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+                            extra_params);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
 }
 
 class RGWWatcher : public librados::WatchCtx {
