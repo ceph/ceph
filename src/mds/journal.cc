@@ -3022,3 +3022,39 @@ void ENoOp::replay(MDS *mds)
 {
   dout(4) << "ENoOp::replay, " << pad_size << " bytes skipped in journal" << dendl;
 }
+
+/**
+ * If re-formatting an old journal that used absolute log position
+ * references as segment sequence numbers, use this function to update
+ * it.
+ *
+ * @param mds
+ * MDS instance, just used for logging
+ * @param old_to_new
+ * Map of old journal segment segment sequence numbers to new journal segment sequence numbers
+ *
+ * @return
+ * True if the event was modified.
+ */
+bool EMetaBlob::rewrite_truncate_finish(MDS const *mds,
+    std::map<log_segment_seq_t, log_segment_seq_t> const &old_to_new)
+{
+  bool modified = false;
+  map<inodeno_t, log_segment_seq_t> new_trunc_finish;
+  for (std::map<inodeno_t, log_segment_seq_t>::iterator i = truncate_finish.begin();
+      i != truncate_finish.end(); ++i) {
+    if (old_to_new.count(i->second)) {
+      dout(20) << __func__ << " applying segment seq mapping "
+        << i->second << " -> " << old_to_new.find(i->second)->second << dendl;
+      new_trunc_finish[i->first] = old_to_new.find(i->second)->second;
+      modified = true;
+    } else {
+      dout(20) << __func__ << " no segment seq mapping found for "
+        << i->second << dendl;
+      new_trunc_finish[i->first] = i->second;
+    }
+  }
+  truncate_finish = new_trunc_finish;
+
+  return modified;
+}
