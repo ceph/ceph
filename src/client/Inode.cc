@@ -11,6 +11,7 @@ ostream& operator<<(ostream &out, Inode &in)
 {
   out << in.vino() << "("
       << "ref=" << in._ref
+      << " ll_ref=" << in.ll_ref
       << " cap_refs=" << in.cap_refs
       << " open=" << in.open_by_mode
       << " mode=" << oct << in.mode << dec
