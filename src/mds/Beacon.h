@@ -57,6 +57,7 @@ class Beacon : public Dispatcher
   version_t               last_seq;          // last seq sent to monitor
   std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
   utime_t                 last_acked_stamp;  // last time we sent a beacon that got acked
+  utime_t last_mon_reconnect;
   bool was_laggy;
   utime_t laggy_until;
 
