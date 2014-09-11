@@ -402,8 +402,10 @@ protected:
 
   // trim cache.
   void trim_cache();
+  void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
+  void _invalidate_kernel_dcache();
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
