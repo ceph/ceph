@@ -25,7 +25,7 @@ Storage Clusters`_.
 A Ceph Storage Cluster consists of two types of daemons:
 
 - :term:`Ceph Monitor`
-- :term:s`Ceph OSD Daemon`
+- :term:`Ceph OSD Daemon`
 
 .. ditaa::  +---------------+ +---------------+
             |      OSDs     | |    Monitors   |
