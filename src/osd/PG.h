@@ -393,7 +393,8 @@ public:
     bool add_source_info(
       pg_shard_t source,           ///< [in] source
       const pg_info_t &oinfo,      ///< [in] info
-      const pg_missing_t &omissing ///< [in] (optional) missing
+      const pg_missing_t &omissing, ///< [in] (optional) missing
+      ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       ); ///< @return whether a new object location was discovered
 
     /// Uses osdmap to update structures for now down sources
@@ -519,6 +520,7 @@ public:
     C_Contexts *on_applied;
     C_Contexts *on_safe;
     ObjectStore::Transaction *transaction;
+    ThreadPool::TPHandle* handle;
     RecoveryCtx(map<int, map<spg_t, pg_query_t> > *query_map,
 		map<int,
 		    vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map,
@@ -531,7 +533,8 @@ public:
 	notify_list(notify_list),
 	on_applied(on_applied),
 	on_safe(on_safe),
-	transaction(transaction) {}
+	transaction(transaction),
+        handle(NULL) {}
 
     RecoveryCtx(BufferedRecoveryMessages &buf, RecoveryCtx &rctx)
       : query_map(&(buf.query_map)),
@@ -539,7 +542,8 @@ public:
 	notify_list(&(buf.notify_list)),
 	on_applied(rctx.on_applied),
 	on_safe(rctx.on_safe),
-	transaction(rctx.transaction) {}
+	transaction(rctx.transaction),
+        handle(NULL) {}
 
     void accept_buffered_messages(BufferedRecoveryMessages &m) {
       assert(query_map);
