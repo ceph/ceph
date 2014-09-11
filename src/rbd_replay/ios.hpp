@@ -35,14 +35,40 @@ typedef std::set<boost::shared_ptr<IO> > io_set_t;
 
 typedef std::map<action_id_t, boost::shared_ptr<IO> > io_map_t;
 
+/**
+   Calculates reachability of IOs in the dependency graph.
+   All IOs in \c deps which are not transitive dependencies of anything in \c base
+   is added to \c unreachable.
+   In other words, for every IO \c x in \c deps: if nothing in \c base depends on \c x,
+   and nothing in \c base has dependencies that depend on \c x, etc.,
+   then \c x is added to \c unreachable.
+   Note that \c unreachable is \em not cleared, so the same set can be used across multiple
+   calls to collect dependencies.
+   @param[in] deps IOs to search for
+   @param[in] base root set of IOs to search from
+   @param[out] unreachable collects unreachable IOs
+   @related IO
+*/
 void batch_unreachable_from(const io_set_t& deps, const io_set_t& base, io_set_t* unreachable);
 
+
+/**
+   Used by rbd-replay-prep for processing the raw trace.
+   Corresponds to the Action class, except that Actions are executed by rbd-replay,
+   and IOs are used by rbd-replay-prep for processing the raw trace.
+ */
 class IO : public boost::enable_shared_from_this<IO> {
 public:
   typedef boost::shared_ptr<IO> ptr;
 
   typedef boost::weak_ptr<IO> weak_ptr;
 
+  /**
+     @param ionum ID of this %IO
+     @param start_time time the %IO started, in nanoseconds
+     @param thread_id ID of the thread that issued the %IO
+     @param prev previously issued %IO on the same thread.  NULL for the first %IO on a thread.
+   */
   IO(action_id_t ionum,
      uint64_t start_time,
      thread_id_t thread_id,
@@ -73,12 +99,13 @@ public:
 
   void add_dependencies(const io_set_t& deps);
 
+  /**
+     Returns the completion's number of successors, or 0 if the %IO does not have a completion.
+   */
   uint64_t num_completion_successors() const {
     ptr c(m_completion.lock());
     return c ? c->m_num_successors : 0;
   }
-
-  void write_to(Ser& out, io_type iotype) const;
 
   virtual void write_to(Ser& out) const = 0;
 
@@ -106,12 +133,19 @@ public:
     return m_num_successors;
   }
 
-  void write_debug_base(std::ostream& out, std::string iotype) const;
-
   virtual void write_debug(std::ostream& out) const = 0;
 
-  // The result must be stored somewhere, or else m_completion will expire
+  /**
+     Creates the completion for this IO.
+     This may only be called once per IO, and may not be called on completion IOs.
+     The completion must be stored, or else m_completion will expire.
+   */
   ptr create_completion(uint64_t start_time, thread_id_t thread_id);
+
+protected:
+  void write_to(Ser& out, io_type iotype) const;
+
+  void write_debug_base(std::ostream& out, std::string iotype) const;
 
 private:
   action_id_t m_ionum;
@@ -123,6 +157,8 @@ private:
   ptr m_prev;
 };
 
+/// Used for dumping debug info.
+/// @related IO
 std::ostream& operator<<(std::ostream& out, IO::ptr io);
 
 
@@ -327,6 +363,7 @@ public:
   }
 };
 
+/// @related IO
 bool compare_io_ptrs_by_start_time(IO::ptr p1, IO::ptr p2);
 
 }
