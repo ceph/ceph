@@ -87,22 +87,31 @@ PGLSFilter::~PGLSFilter()
 
 static void log_subop_stats(
   PerfCounters *logger,
-  OpRequestRef op, int tag_inb, int tag_lat)
+  OpRequestRef op, int subop)
 {
   utime_t now = ceph_clock_now(g_ceph_context);
   utime_t latency = now;
   latency -= op->get_req()->get_recv_stamp();
 
-  uint64_t inb = op->get_req()->get_data().length();
 
   logger->inc(l_osd_sop);
-
-  logger->inc(l_osd_sop_inb, inb);
   logger->tinc(l_osd_sop_lat, latency);
+  logger->inc(subop);
 
-  if (tag_inb)
-    logger->inc(tag_inb, inb);
-  logger->tinc(tag_lat, latency);
+  if (subop != l_osd_sop_pull) {
+    uint64_t inb = op->get_req()->get_data().length();
+    logger->inc(l_osd_sop_inb, inb);
+    if (subop == l_osd_sop_w) {
+      logger->inc(l_osd_sop_w_inb, inb);
+      logger->tinc(l_osd_sop_w_lat, latency);
+    } else if (subop == l_osd_sop_push) {
+      logger->inc(l_osd_sop_push_inb, inb);
+      logger->tinc(l_osd_sop_push_lat, latency);
+    } else
+      assert("no support subop" == 0);
+  } else {
+    logger->tinc(l_osd_sop_pull_lat, latency);
+  }
 }
 
 struct OnReadComplete : public Context {
@@ -7951,8 +7960,7 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, commit, get_osdmap()->get_epoch());
   
-  log_subop_stats(get_parent()->get_logger(), rm->op,
-		  l_osd_sop_w_inb, l_osd_sop_w_lat);
+  log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }
 
 
@@ -8628,7 +8636,7 @@ struct C_OnPushCommit : public Context {
   C_OnPushCommit(ReplicatedPG *pg, OpRequestRef op) : pg(pg), op(op) {}
   void finish(int) {
     op->mark_event("committed");
-    log_subop_stats(pg->osd->logger, op, l_osd_push_inb, l_osd_sop_push_lat);
+    log_subop_stats(pg->osd->logger, op, l_osd_sop_push);
   }
 };
 
@@ -9017,7 +9025,7 @@ void ReplicatedBackend::sub_op_pull(OpRequestRef op)
     m->from,
     reply);
 
-  log_subop_stats(get_parent()->get_logger(), op, 0, l_osd_sop_pull_lat);
+  log_subop_stats(get_parent()->get_logger(), op, l_osd_sop_pull);
 }
 
 void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
