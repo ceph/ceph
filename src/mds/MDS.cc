@@ -2390,7 +2390,9 @@ void *MDS::ProgressThread::entry()
 {
   Mutex::Locker l(mds->mds_lock);
   while (true) {
-    while (!stopping && (mds->finished_queue.empty() && mds->waiting_for_nolaggy.empty())) {
+    while (!stopping &&
+	   mds->finished_queue.empty() &&
+	   (mds->waiting_for_nolaggy.empty() || mds->beacon.is_laggy())) {
       cond.Wait(mds->mds_lock);
     }
 
