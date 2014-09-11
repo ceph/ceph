@@ -20,6 +20,11 @@
 
 namespace rbd_replay {
 
+/**
+   Helper for serializing data in an architecture-indepdendent way.
+   Everything is written big-endian.
+   @see Deser
+*/
 class Ser {
 public:
   Ser(std::ostream &out);
