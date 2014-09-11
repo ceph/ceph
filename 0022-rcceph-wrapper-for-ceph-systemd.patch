@@ -5,18 +5,33 @@ Subject: [PATCH] rcceph: wrapper for ceph systemd
 systemd is easy to use if you have a wrapper.
 message showing available paramters to rcceph.
 Also check for directories contianing mon/osd deamon settings.
----
- systemd/rcceph | 54 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 54 insertions(+)
- create mode 100644 systemd/rcceph
+Added suport for chkconfig using LSB Header
 
-diff --git a/systemd/rcceph b/systemd/rcceph
+Signed off by osynge@suse.com
+---
+ systemd/ceph | 66 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+ create mode 100644 systemd/ceph
+
+diff --git a/systemd/ceph b/systemd/ceph
 new file mode 100644
-index 0000000..247dd4e
+index 0000000..e60dec6
 --- /dev/null
-+++ b/systemd/rcceph
-@@ -0,0 +1,54 @@
++++ b/systemd/ceph
+@@ -0,0 +1,66 @@
 +#! /bin/bash
++
++### BEGIN INIT INFO
++# Provides:       ceph ceph-mon ceph-osd
++# Required-Start: $network $remote_fs
++# Required-Stop:  $network $remote_fs
++# Should-Start: network-remotefs
++# Should-Stop: network-remotefs
++# Default-Start:  3 5
++# Default-Stop:   0 1 2 6
++# Short-Description: Ceph is a distributed object, and block, storage platform
++# Description:    Ceph is a distributed object, block, and file storage platform
++### END INIT INFO
 +
 +SYSTEMD_NO_WRAP=1 . /etc/rc.status
 +rc_reset

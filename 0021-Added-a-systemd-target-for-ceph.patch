@@ -3,44 +3,55 @@ Date: Wed, 10 Sep 2014 10:12:13 +0200
 Subject: [PATCH] Added a systemd target for ceph
 
 ceph now has a target structure for systemd
+set boot up sequence after network-online.target local-fs.target for mon osd and mds
+
+Signed of by Owen Synge - osynge@suse.com
 ---
- systemd/ceph-mds@.service | 1 +
- systemd/ceph-mon@.service | 1 +
- systemd/ceph-osd@.service | 1 +
+ systemd/ceph-mds@.service | 3 +++
+ systemd/ceph-mon@.service | 5 +++--
+ systemd/ceph-osd@.service | 3 +++
  systemd/ceph.target       | 2 ++
- 4 files changed, 5 insertions(+)
+ 4 files changed, 11 insertions(+), 2 deletions(-)
  create mode 100644 systemd/ceph.target
 
 diff --git a/systemd/ceph-mds@.service b/systemd/ceph-mds@.service
-index 08bab79..234b2f6 100644
+index 08bab79..1b5409a 100644
 --- a/systemd/ceph-mds@.service
 +++ b/systemd/ceph-mds@.service
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,8 @@
  [Unit]
  Description=Ceph metadata server daemon
++After=network-online.target local-fs.target
++Wants=network-online.target local-fs.target
 +PartOf=ceph.target
  
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
 diff --git a/systemd/ceph-mon@.service b/systemd/ceph-mon@.service
-index 8ba0843..807ea57 100644
+index 8ba0843..40a09d3 100644
 --- a/systemd/ceph-mon@.service
 +++ b/systemd/ceph-mon@.service
-@@ -7,6 +7,7 @@ Description=Ceph cluster monitor daemon
+@@ -5,8 +5,9 @@ Description=Ceph cluster monitor daemon
+ #   http://www.freedesktop.org/wiki/Software/systemd/NetworkTarget
+ # these can be removed once ceph-mon will dynamically change network
  # configuration.
- After=network-online.target
- Wants=network-online.target
+-After=network-online.target
+-Wants=network-online.target
++After=network-online.target local-fs.target
++Wants=network-online.target local-fs.target
 +PartOf=ceph.target
  
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
 diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
-index 1811d7e..fc1d559 100644
+index 1811d7e..c1ad7e5 100644
 --- a/systemd/ceph-osd@.service
 +++ b/systemd/ceph-osd@.service
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,8 @@
  [Unit]
  Description=Ceph object storage daemon
++After=network-online.target local-fs.target
++Wants=network-online.target local-fs.target
 +PartOf=ceph.target
  
  [Service]

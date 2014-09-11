@@ -460,8 +460,8 @@ install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
-install -m 0755 -D systemd/rcceph %{buildroot}%{_sbindir}/rcceph
-
+install -m 0755 -D systemd/ceph %{buildroot}/%{_initrddir}/ceph
+ln -sf %{_initrddir}/ceph  %{buildroot}/%{_sbindir}/rcceph 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
@@ -582,6 +582,7 @@ fi
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/rcceph
+%{_initrddir}/ceph
 
 # systemd
 

@@ -1,5 +1,11 @@
 -------------------------------------------------------------------
-Thu Sep  9 23:56:23 UTC 2014 - osynge@suse.com
+Thu Sep 11 17:55:08 UTC 2014 - osynge@suse.com
+- Added chkconfig suport to rcceph with LSB header.
+- systemd all ceph services boot later in process.
+  * After online.target local-fs.target
+
+-------------------------------------------------------------------
+Tue Sep  9 23:56:23 UTC 2014 - osynge@suse.com
 - Systemd rcceph created
 
 -------------------------------------------------------------------
