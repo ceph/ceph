@@ -20,6 +20,7 @@
 #include "../CInode.h"
 #include "../CDir.h"
 #include "../CDentry.h"
+#include "../LogSegment.h"
 
 #include "include/triple.h"
 #include "include/interval_set.h"
@@ -305,7 +306,7 @@ private:
 
   // inodes i've truncated
   list<inodeno_t> truncate_start;        // start truncate 
-  map<inodeno_t,uint64_t> truncate_finish;  // finished truncate (started in segment blah)
+  map<inodeno_t, log_segment_seq_t> truncate_finish;  // finished truncate (started in segment blah)
 
 public:
   vector<inodeno_t> destroyed_inodes;
@@ -374,6 +375,8 @@ private:
   void add_truncate_finish(inodeno_t ino, uint64_t segoff) {
     truncate_finish[ino] = segoff;
   }
+  
+  bool rewrite_truncate_finish(MDS const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
 
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);
