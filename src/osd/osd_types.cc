@@ -1263,8 +1263,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 16) {
     ::decode(min_read_recency_for_promote, bl);
   } else {
-    pg_pool_t def;
-    min_read_recency_for_promote = def.min_read_recency_for_promote;
+    min_read_recency_for_promote = 1;
   }
   if (struct_v >= 17) {
     ::decode(expected_num_objects, bl);
