@@ -850,6 +850,13 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   // write them to the new journal.
   int r = 0;
 
+  // In old format journals before event_seq was introduced, the serialized
+  // offset of a SubtreeMap message in the log is used as the unique ID for
+  // a log segment.  Because we change serialization, this will end up changing
+  // for us, so we have to explicitly update the fields that point back to that
+  // log segment.
+  std::map<log_segment_seq_t, log_segment_seq_t> segment_pos_rewrite;
+
   // The logic in here borrowed from replay_thread expects mds_lock to be held,
   // e.g. between checking readable and doing wait_for_readable so that journaler
   // state doesn't change in between.
@@ -879,10 +886,62 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
     // Read one serialized LogEvent
     assert(old_journal->is_readable());
     bufferlist bl;
+    uint64_t le_pos = old_journal->get_read_pos();
     bool r = old_journal->try_read_entry(bl);
     if (!r && old_journal->get_error())
       continue;
     assert(r);
+
+    // Update segment_pos_rewrite
+    LogEvent *le = LogEvent::decode(bl);
+    if (le) {
+      bool modified = false;
+
+      if (le->get_type() == EVENT_SUBTREEMAP ||
+          le->get_type() == EVENT_RESETJOURNAL) {
+        ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        if (sle == NULL || sle->event_seq == 0) {
+          // A non-explicit event seq: the effective sequence number 
+          // of this segment is it's position in the old journal and
+          // the new effective sequence number will be its position
+          // in the new journal.
+          segment_pos_rewrite[le_pos] = new_journal->get_write_pos();
+          dout(20) << __func__ << " discovered segment seq mapping "
+            << le_pos << " -> " << new_journal->get_write_pos() << dendl;
+        }
+      } else {
+        event_seq++;
+      }
+
+      // Rewrite segment references if necessary
+      EMetaBlob *blob = le->get_metablob();
+      if (blob) {
+        modified = blob->rewrite_truncate_finish(mds, segment_pos_rewrite);
+      }
+
+      // Zero-out expire_pos in subtreemap because offsets have changed
+      // (expire_pos is just an optimization so it's safe to eliminate it)
+      if (le->get_type() == EVENT_SUBTREEMAP) {
+        dout(20) << __func__ << " zeroing expire_pos in subtreemap event at " << le_pos << dendl;
+        ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        assert(sle != NULL);
+        sle->expire_pos = 0;
+        modified = true;
+      }
+
+      if (modified) {
+        bl.clear();
+        le->encode_with_header(bl);
+      }
+
+      delete le;
+    } else {
+      // Failure from LogEvent::decode, our job is to change the journal wrapper,
+      // not validate the contents, so pass it through.
+      dout(1) << __func__ << " transcribing un-decodable LogEvent at old position "
+        << old_journal->get_read_pos() << ", new position " << new_journal->get_write_pos()
+        << dendl;
+    }
 
     // Write (buffered, synchronous) one serialized LogEvent
     events_transcribed += 1;
