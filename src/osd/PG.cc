@@ -401,7 +401,7 @@ bool PG::search_for_missing(
 {
   unsigned num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing);
+    from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
   if (found_missing &&
@@ -441,7 +441,8 @@ bool PG::MissingLoc::readable_with_acting(
 bool PG::MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
-  const pg_missing_t &omissing)
+  const pg_missing_t &omissing,
+  ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
   // found items?
@@ -450,6 +451,9 @@ bool PG::MissingLoc::add_source_info(
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
+    if (handle) {
+      handle->reset_tp_timeout();
+    }
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
@@ -1622,7 +1626,7 @@ void PG::activate(ObjectStore::Transaction& t,
     // past intervals.
     might_have_unfound.clear();
     if (needs_recovery()) {
-      missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing());
+      missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(), ctx->handle);
       for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	   i != actingbackfill.end();
 	   ++i) {
@@ -1633,7 +1637,8 @@ void PG::activate(ObjectStore::Transaction& t,
 	missing_loc.add_source_info(
 	  *i,
 	  peer_info[*i],
-	  peer_missing[*i]);
+	  peer_missing[*i],
+          ctx->handle);
       }
       for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
 	   i != peer_missing.end();
