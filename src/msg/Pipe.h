@@ -27,6 +27,9 @@ class SimpleMessenger;
 class IncomingQueue;
 class DispatchQueue;
 
+
+#define MAX_RECV_LEN (128 * 1024)
+
   /**
    * The Pipe is the most complex SimpleMessenger component. It gets
    * two threads, one each for reading and writing on a socket it's handed
@@ -131,6 +134,11 @@ class DispatchQueue;
       return static_cast<Pipe*>(RefCountedObject::get());
     }
 
+    char *recv_buf;
+    int recv_max_prefetch;
+    int recv_ofs;
+    int recv_len;
+
     enum {
       STATE_ACCEPTING,
       STATE_CONNECTING,
@@ -157,7 +165,9 @@ class DispatchQueue;
       return get_state_name(state);
     }
 
+  private:
     int sd;
+  public:
     int port;
     int peer_type;
     entity_addr_t peer_addr;
@@ -300,9 +310,18 @@ class DispatchQueue;
     void discard_out_queue();
 
     void shutdown_socket() {
+      recv_reset();
       if (sd >= 0)
         ::shutdown(sd, SHUT_RDWR);
     }
+
+    void recv_reset() {
+      recv_len = 0;
+      recv_ofs = 0;
+    }
+    int do_recv(char *buf, size_t len, int flags);
+    int buffered_recv(char *buf, size_t len, int flags);
+    bool has_pending_data() { return recv_len > recv_ofs; }
 
     /**
      * do a blocking read of len bytes from socket
