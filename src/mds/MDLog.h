@@ -220,7 +220,7 @@ public:
     return segments.rbegin()->second;
   }
 
-  LogSegment *get_segment(uint64_t seq) {
+  LogSegment *get_segment(log_segment_seq_t seq) {
     if (segments.count(seq))
       return segments[seq];
     return NULL;
