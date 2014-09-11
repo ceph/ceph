@@ -207,10 +207,12 @@ bool Beacon::is_laggy()
     dout(5) << "is_laggy " << since << " > " << g_conf->mds_beacon_grace
 	    << " since last acked beacon" << dendl;
     was_laggy = true;
-    if (since > (g_conf->mds_beacon_grace*2)) {
+    if (since > (g_conf->mds_beacon_grace*2) &&
+	now > last_mon_reconnect + g_conf->mds_beacon_interval) {
       // maybe it's not us?
       dout(5) << "initiating monitor reconnect; maybe we're not the slow one"
               << dendl;
+      last_mon_reconnect = now;
       monc->reopen_session();
     }
     return true;
