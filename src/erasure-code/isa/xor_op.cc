@@ -18,9 +18,10 @@
 
 
 // -----------------------------------------------------------------------------
+
 void
 // -----------------------------------------------------------------------------
-byte_xor (unsigned char* cw, unsigned char* dw, unsigned char* ew)
+byte_xor(unsigned char* cw, unsigned char* dw, unsigned char* ew)
 // -----------------------------------------------------------------------------
 {
   while (cw < ew)
@@ -28,16 +29,17 @@ byte_xor (unsigned char* cw, unsigned char* dw, unsigned char* ew)
 }
 
 // -----------------------------------------------------------------------------
+
 void
 // -----------------------------------------------------------------------------
-vector_xor (vector_op_t* cw,
-	    vector_op_t* dw,
-	    vector_op_t* ew)
+vector_xor(vector_op_t* cw,
+           vector_op_t* dw,
+           vector_op_t* ew)
 // -----------------------------------------------------------------------------
 {
-  assert(is_aligned(cw,EC_ISA_VECTOR_OP_WORDSIZE));
-  assert(is_aligned(dw,EC_ISA_VECTOR_OP_WORDSIZE));
-  assert(is_aligned(ew,EC_ISA_VECTOR_OP_WORDSIZE));
+  assert(is_aligned(cw, EC_ISA_VECTOR_OP_WORDSIZE));
+  assert(is_aligned(dw, EC_ISA_VECTOR_OP_WORDSIZE));
+  assert(is_aligned(ew, EC_ISA_VECTOR_OP_WORDSIZE));
   while (cw < ew) {
     *dw++ ^= *cw++;
   }
@@ -45,12 +47,13 @@ vector_xor (vector_op_t* cw,
 
 
 // -----------------------------------------------------------------------------
+
 void
 // -----------------------------------------------------------------------------
-region_xor (unsigned char** src,
-	    unsigned char* parity,
-	    int src_size,
-	    unsigned size)
+region_xor(unsigned char** src,
+           unsigned char* parity,
+           int src_size,
+           unsigned size)
 {
   if (!size) {
     // nothing to do
@@ -62,7 +65,7 @@ region_xor (unsigned char** src,
     return;
   }
 
-  if (src_size==1) {
+  if (src_size == 1) {
     // just copy source to parity
     memcpy(parity, src[0], size);
     return;
@@ -74,13 +77,13 @@ region_xor (unsigned char** src,
   // region or vector XOR operations require aligned addresses
   // ----------------------------------------------------------
 
-  bool src_aligned=true;
-  for (int i=0; i< src_size; i++) {
+  bool src_aligned = true;
+  for (int i = 0; i < src_size; i++) {
     src_aligned &= is_aligned(src[i], EC_ISA_VECTOR_OP_WORDSIZE);
   }
 
-  if ( src_aligned &&
-       is_aligned(parity,EC_ISA_VECTOR_OP_WORDSIZE) ) {
+  if (src_aligned &&
+      is_aligned(parity, EC_ISA_VECTOR_OP_WORDSIZE)) {
 
 #ifdef __x86_64__
     if (ceph_arch_intel_sse2) {
@@ -88,51 +91,50 @@ region_xor (unsigned char** src,
       // use SSE2 region xor function
       // -----------------------------
       unsigned region_size =
-	( size / EC_ISA_VECTOR_SSE2_WORDSIZE ) * EC_ISA_VECTOR_SSE2_WORDSIZE;
+        (size / EC_ISA_VECTOR_SSE2_WORDSIZE) * EC_ISA_VECTOR_SSE2_WORDSIZE;
 
       size_left -= region_size;
       // 64-byte region xor
-      region_sse2_xor((char**)src, (char*)parity, src_size, region_size);
-    }
-    else
+      region_sse2_xor((char**) src, (char*) parity, src_size, region_size);
+    } else
 #endif
     {
       // --------------------------------------------
       // use region xor based on vector xor operation
       // --------------------------------------------
-      unsigned vector_words = size / EC_ISA_VECTOR_OP_WORDSIZE ;
-      unsigned vector_size = vector_words * EC_ISA_VECTOR_OP_WORDSIZE ;
+      unsigned vector_words = size / EC_ISA_VECTOR_OP_WORDSIZE;
+      unsigned vector_size = vector_words * EC_ISA_VECTOR_OP_WORDSIZE;
       memcpy(parity, src[0], vector_size);
 
       size_left -= vector_size;
       vector_op_t* p_vec = (vector_op_t*) parity;
-      for (int i=1; i< src_size; i++) {
-	vector_op_t* s_vec = (vector_op_t*) src[i];
-	vector_op_t* e_vec = s_vec + vector_words;
-	vector_xor( s_vec, p_vec, e_vec );
+      for (int i = 1; i < src_size; i++) {
+        vector_op_t* s_vec = (vector_op_t*) src[i];
+        vector_op_t* e_vec = s_vec + vector_words;
+        vector_xor(s_vec, p_vec, e_vec);
       }
     }
   }
 
-  if (size_left)
-  {
+  if (size_left) {
     // --------------------------------------------------
     // xor the not aligned part with byte-wise region xor
     // --------------------------------------------------
-    memcpy(parity+size-size_left, src[0]+size-size_left, size_left);
-    for (int i=1; i< src_size; i++) {
-      byte_xor( src[i]+size-size_left, parity+size-size_left, src[i]+size);
+    memcpy(parity + size - size_left, src[0] + size - size_left, size_left);
+    for (int i = 1; i < src_size; i++) {
+      byte_xor(src[i] + size - size_left, parity + size - size_left, src[i] + size);
     }
   }
 }
 
 // -----------------------------------------------------------------------------
+
 void
 // -----------------------------------------------------------------------------
-region_sse2_xor (char** src,
-		 char* parity,
-		 int src_size,
-		 unsigned size)
+region_sse2_xor(char** src,
+                char* parity,
+                int src_size,
+                unsigned size)
 // -----------------------------------------------------------------------------
 {
 #ifdef __x86_64__
@@ -142,7 +144,7 @@ region_sse2_xor (char** src,
   unsigned i;
   unsigned char* vbuf[256];
 
-  for (int v=0; v< src_size; v++) {
+  for (int v = 0; v < src_size; v++) {
     vbuf[v] = (unsigned char*) src[v];
   }
 
