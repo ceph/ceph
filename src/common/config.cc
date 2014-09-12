@@ -389,12 +389,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
-      set_val_or_die("pid_file", "");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("log_file", "");
-      set_val_or_die("pid_file", "");
       set_val_or_die("log_to_stderr", "true");
       set_val_or_die("err_to_stderr", "true");
       set_val_or_die("log_to_syslog", "false");
