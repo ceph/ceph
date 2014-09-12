@@ -154,7 +154,7 @@ typedef void *rados_config_t;
  *   before rados_nobjects_list_open() will list all objects in all
  *   namespaces.
  *
- * @warning changing any of these settings is not thread-safe -
+ * @warning Changing any of these settings is not thread-safe -
  * librados users must synchronize any of these changes on their own,
  * or use separate io contexts for each thread
  */
@@ -331,8 +331,8 @@ int rados_create2(rados_t *pcluster, const char *const clustername,
 int rados_create_with_context(rados_t *cluster, rados_config_t cct);
 
 /**
- * Ping the monitor with ID @p mon_id, storing the resulting reply in
- * @p buf (if specified) with a maximum size of @p len.
+ * Ping the monitor with ID mon_id, storing the resulting reply in
+ * buf (if specified) with a maximum size of len.
  *
  * The result buffer is allocated on the heap; the caller is
  * expected to release that memory with rados_buffer_free().  The
@@ -342,7 +342,7 @@ int rados_create_with_context(rados_t *cluster, rados_config_t cct);
  * @param      cluster    cluster handle
  * @param[in]  mon_id     ID of the monitor to ping
  * @param[out] outstr     double pointer with the resulting reply
- * @param[out] outstrlen  pointer with the size of the reply in @p outstr
+ * @param[out] outstrlen  pointer with the size of the reply in outstr
  */
 int rados_ping_monitor(rados_t cluster, const char *mon_id,
                        char **outstr, size_t *outstrlen);
@@ -971,15 +971,7 @@ int rados_ioctx_snap_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
 
 /**
- * Rollback an object to a pool snapshot *DEPRECATED*
- *
- * Deprecated interface which is not rados_ioctx_snap_rollback()
- * This function could go away in the future
- *
- * @param io the pool in which the object is stored
- * @param oid the name of the object to rollback
- * @param snapname which snapshot to rollback to
- * @returns 0 on success, negative error code on failure
+ * @warning Deprecated: Use rados_ioctx_snap_rollback() instead
  */
 int rados_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
@@ -1824,7 +1816,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @note BUG: watch timeout should be configurable
  * @note BUG: librados should provide a way for watchers to notice connection resets
  * @note BUG: the ver parameter does not work, and -ERANGE will never be returned
- *            (http://www.tracker.newdream.net/issues/2592)
+ *            (See URL tracker.ceph.com/issues/2592)
  *
  * @param io the pool the object is in
  * @param o the object to watch
