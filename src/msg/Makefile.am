@@ -8,8 +8,16 @@ noinst_HEADERS += \
 	msg/Dispatcher.h \
 	msg/Message.h \
 	msg/Messenger.h \
+	msg/Pipe.h \
+	msg/PipeConnection.h \
+	msg/AsyncConnection.h \
+	msg/SimpleMessenger.h \
+	msg/AsyncMessenger.h \
 	msg/SimplePolicyMessenger.h \
-	msg/msg_types.h
+	msg/msg_types.h \
+	msg/Event.h \
+	msg/EventEpoll.h \
+	msg/net_handler.h
 
 # simple
 libmsg_la_SOURCES += \
