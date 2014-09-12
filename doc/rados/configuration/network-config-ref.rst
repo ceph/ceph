@@ -73,8 +73,8 @@ IP Tables
 
 By default, daemons `bind`_ to ports within the ``6800:7100`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
-check the default ``iptables`` configuration. ::ports within the ``6800:7100``
-range. You may configure this range at your discretion.
+check the default ``iptables`` configuration. You may configure this range 
+at your discretion.
 
 	sudo iptables -L
 
