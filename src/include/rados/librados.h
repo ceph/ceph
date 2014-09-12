@@ -149,6 +149,8 @@ typedef void *rados_config_t;
  * - snapshot id to read from (see rados_ioctx_snap_set_read())
  * - object locator for all single-object operations (see
  *   rados_ioctx_locator_set_key())
+ * - namespace for all single-object operations (see
+ *   rados_ioctx_set_namespace())
  *
  * @warning changing any of these settings is not thread-safe -
  * librados users must synchronize any of these changes on their own,
