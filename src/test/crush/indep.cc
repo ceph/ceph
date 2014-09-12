@@ -51,18 +51,21 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
       }
     }
   }
-
-  crush_rule *rule = crush_make_rule(4, 0, 123, 1, 20);
-  assert(rule);
-  crush_rule_set_step(rule, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
-  crush_rule_set_step(rule, 1, CRUSH_RULE_TAKE, rootno, 0);
-  crush_rule_set_step(rule, 2,
-		      CRUSH_RULE_CHOOSELEAF_INDEP,
-		      CRUSH_CHOOSE_N,
-		      1);
-  crush_rule_set_step(rule, 3, CRUSH_RULE_EMIT, 0, 0);
-  int rno = crush_add_rule(c->crush, rule, -1);
-  c->set_rule_name(rno, "data");
+  int ret;
+  int ruleno = 0;
+  int ruleset = 0;
+  ruleno = ruleset;
+  ret = c->add_rule(4, ruleset, 123, 1, 20, ruleno);
+  assert(ret == ruleno);
+  ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
+  assert(ret == 0);
+  ret = c->set_rule_step(ruleno, 1, CRUSH_RULE_TAKE, rootno, 0);
+  assert(ret == 0);
+  ret = c->set_rule_step(ruleno, 2, CRUSH_RULE_CHOOSELEAF_INDEP, CRUSH_CHOOSE_N, 1);
+  assert(ret == 0);
+  ret = c->set_rule_step(ruleno, 3, CRUSH_RULE_EMIT, 0, 0);
+  assert(ret == 0);
+  c->set_rule_name(ruleno, "data");
 
   if (false) {
     Formatter *f = new_formatter("json-pretty");
@@ -140,7 +143,7 @@ TEST(CRUSH, indep_out_alt) {
   c->dump_tree(weight, &cout, NULL);
 
   // need more retries to get 9/9 hosts for x in 0..99
-  c->crush->choose_total_tries = 100;
+  c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
     c->do_rule(0, x, out, 9, weight);
@@ -166,7 +169,7 @@ TEST(CRUSH, indep_out_contig) {
     weight[i] = 0;
   c->dump_tree(weight, &cout, NULL);
 
-  c->crush->choose_total_tries = 100;
+  c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
     c->do_rule(0, x, out, 7, weight);
@@ -185,7 +188,7 @@ TEST(CRUSH, indep_out_contig) {
 
 TEST(CRUSH, indep_out_progressive) {
   CrushWrapper *c = build_indep_map(g_ceph_context, 3, 3, 3);
-  c->crush->choose_total_tries = 100;
+  c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
   c->dump_tree(tweight, &cout, NULL);
 
