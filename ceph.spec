@@ -120,6 +120,7 @@ Patch0020:      0020-init-add-systemd-service-files.patch
 Patch0021:      0021-Added-a-systemd-target-for-ceph.patch
 Patch0022:      0022-rcceph-wrapper-for-ceph-systemd.patch
 Patch0023:      0023-systemd-support-in-ceph-disk-activa.patch
+Patch0024:      0024-udev-rules-now-explicitly-specify-i.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -365,6 +366,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0021 -p1
 %patch0022 -p1
 %patch0023 -p1
+%patch0024 -p1
 
 %build
 
@@ -464,7 +466,8 @@ install -m 0755 -D systemd/ceph %{buildroot}/%{_initrddir}/ceph
 ln -sf %{_initrddir}/ceph  %{buildroot}/%{_sbindir}/rcceph 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
-install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+#install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd

@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Fri Sep 12 16:42:09 UTC 2014 - osynge@suse.com
+- Added patched 0024-udev-rules-now-explicitly-specify-i.patch
+  * udev rules now explicitly specify init system
+- Improved 0021-Added-a-systemd-target-for-ceph.patch
+  * Thanks to tserong@suse.com for correcting the target behaviour
+
+-------------------------------------------------------------------
 Thu Sep 11 17:55:08 UTC 2014 - osynge@suse.com
 - Added chkconfig suport to rcceph with LSB header.
 - systemd all ceph services boot later in process.

@@ -4,18 +4,19 @@ Subject: [PATCH] Added a systemd target for ceph
 
 ceph now has a target structure for systemd
 set boot up sequence after network-online.target local-fs.target for mon osd and mds
+Thanks to tserong@suse.com for correcting the target behaviour.
 
 Signed of by Owen Synge - osynge@suse.com
 ---
- systemd/ceph-mds@.service | 3 +++
- systemd/ceph-mon@.service | 5 +++--
- systemd/ceph-osd@.service | 3 +++
- systemd/ceph.target       | 2 ++
- 4 files changed, 11 insertions(+), 2 deletions(-)
+ systemd/ceph-mds@.service | 5 ++++-
+ systemd/ceph-mon@.service | 7 ++++---
+ systemd/ceph-osd@.service | 5 ++++-
+ systemd/ceph.target       | 4 ++++
+ 4 files changed, 16 insertions(+), 5 deletions(-)
  create mode 100644 systemd/ceph.target
 
 diff --git a/systemd/ceph-mds@.service b/systemd/ceph-mds@.service
-index 08bab79..1b5409a 100644
+index 08bab79..22a787d 100644
 --- a/systemd/ceph-mds@.service
 +++ b/systemd/ceph-mds@.service
 @@ -1,5 +1,8 @@
@@ -27,8 +28,14 @@ index 08bab79..1b5409a 100644
  
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
+@@ -7,4 +10,4 @@ Environment=CLUSTER=ceph
+ ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i
+ 
+ [Install]
+-WantedBy=multi-user.target
++WantedBy=ceph.target
 diff --git a/systemd/ceph-mon@.service b/systemd/ceph-mon@.service
-index 8ba0843..40a09d3 100644
+index 8ba0843..437ef4d 100644
 --- a/systemd/ceph-mon@.service
 +++ b/systemd/ceph-mon@.service
 @@ -5,8 +5,9 @@ Description=Ceph cluster monitor daemon
@@ -43,8 +50,14 @@ index 8ba0843..40a09d3 100644
  
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
+@@ -14,4 +15,4 @@ Environment=CLUSTER=ceph
+ ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i
+ 
+ [Install]
+-WantedBy=multi-user.target
++WantedBy=ceph.target
 diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
-index 1811d7e..c1ad7e5 100644
+index 1811d7e..edb24ad 100644
 --- a/systemd/ceph-osd@.service
 +++ b/systemd/ceph-osd@.service
 @@ -1,5 +1,8 @@
@@ -56,11 +69,19 @@ index 1811d7e..c1ad7e5 100644
  
  [Service]
  EnvironmentFile=-/etc/sysconfig/ceph
+@@ -8,4 +11,4 @@ ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
+ ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ 
+ [Install]
+-WantedBy=multi-user.target
++WantedBy=ceph.target
 diff --git a/systemd/ceph.target b/systemd/ceph.target
 new file mode 100644
-index 0000000..fc103f2
+index 0000000..60734ba
 --- /dev/null
 +++ b/systemd/ceph.target
-@@ -0,0 +1,2 @@
+@@ -0,0 +1,4 @@
 +[Unit]
 +Description=ceph target allowing to start/stop all ceph*@.service instances at once
++[Install]
++WantedBy=multi-user.target

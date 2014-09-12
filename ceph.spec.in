@@ -420,7 +420,8 @@ install -m 0755 -D systemd/ceph %{buildroot}/%{_initrddir}/ceph
 ln -sf %{_initrddir}/ceph  %{buildroot}/%{_sbindir}/rcceph 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
-install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+#install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
