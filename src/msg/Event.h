@@ -32,16 +32,31 @@
 
 class EventCenter;
 
-// Attention:
-// This event library use file description as index to search correspond event
-// in `events` and `fired_events`. So it's important to estimate a suitable
-// capacity in calling eventcenterInit(capacity).
+class EventCallback {
+
+ public:
+  virtual void do_request(int fd_id, int mask=0) = 0;
+  virtual ~EventCallback() {}       // we want a virtual destructor!!!
+};
+
+struct FiredFileEvent {
+  int fd;
+  int mask;
+};
+
+struct FiredTimeEvent {
+  uint64_t id;
+  EventCallback *time_cb;
+};
 
 struct FiredEvent {
-  int mask;
-  int fd;
+  union {
+    FiredFileEvent file_event;
+    FiredTimeEvent time_event;
+  };
+  bool is_file;
 
-  FiredEvent(): mask(0), fd(0) {}
+  FiredEvent(): is_file(true) {}
 };
 
 class EventDriver {
@@ -50,58 +65,69 @@ class EventDriver {
   virtual int init(int nevent) = 0;
   virtual int add_event(int fd, int cur_mask, int mask) = 0;
   virtual void del_event(int fd, int cur_mask, int del_mask) = 0;
-  virtual int event_wait(vector<FiredEvent> &fired_events, struct timeval *tp) = 0;
-};
-
-class EventCallback {
-
- public:
-  virtual void do_request(int fd, int mask) = 0;
-  virtual ~EventCallback() {}       // we want a virtual destructor!!!
+  virtual int event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tp) = 0;
+  virtual int resize_events(int newsize) = 0;
 };
 
 class EventCenter {
-  struct Event {
+  struct FileEvent {
     int mask;
     EventCallback *read_cb;
     EventCallback *write_cb;
-    Event(): mask(0), read_cb(NULL), write_cb(NULL) {}
+    FileEvent(): mask(0), read_cb(NULL), write_cb(NULL) {}
+  };
+
+  struct TimeEvent {
+    uint64_t id;
+    EventCallback *time_cb;
+
+    TimeEvent(): id(0), time_cb(NULL) {}
   };
 
   Mutex lock;
-  map<int, Event> events;
+  map<int, FileEvent> file_events;
+  map<utime_t, TimeEvent> time_events;
   EventDriver *driver;
   CephContext *cct;
   uint64_t nevent;
+  uint64_t time_event_next_id;
   ThreadPool event_tp;
+  time_t last_time; // last time process time event
 
-  Event *_get_event(int fd) {
-    map<int, Event>::iterator it = events.find(fd);
-    if (it != events.end()) {
+  int _process_time_events();
+  FileEvent *_get_file_event(int fd) {
+    map<int, FileEvent>::iterator it = file_events.find(fd);
+    if (it != file_events.end()) {
       return &it->second;
     }
     return NULL;
   }
+
   struct EventWQ : public ThreadPool::WorkQueueVal<FiredEvent> {
     EventCenter *center;
     // In order to ensure the file descriptor is unique in conn_queue,
     // pending is introduced to check
     //
-    // <File Descriptor>
-    deque<int> conn_queue;
-    // <File Descriptor, Mask>
+    deque<FiredEvent> conn_queue;
+    // used only by file event <File Descriptor, Mask>
     map<int, int> pending;
 
     EventWQ(EventCenter *c, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueueVal<FiredEvent>("Event::EventWQ", timeout, suicide_timeout, tp), center(c) {}
 
     void _enqueue(FiredEvent e) {
-      // Ensure only one thread process one file descriptor
-      map<int, int>::iterator it = pending.find(e.fd);
-      if (it != pending.end())
-        it->second |= e.mask;
-      else
-        pending[e.fd] = e.mask;
+      if (e.is_file) {
+        // Ensure only one thread process one file descriptor
+        map<int, int>::iterator it = pending.find(e.file_event.fd);
+        if (it != pending.end()) {
+          it->second |= e.file_event.mask;
+        } else {
+          pending[e.file_event.fd] = e.file_event.mask;
+          conn_queue.push_back(e);
+        }
+      } else {
+        conn_queue.push_back(e);
+      }
     }
     void _enqueue_front(FiredEvent e) {
       assert(0);
@@ -114,30 +140,36 @@ class EventCenter {
     }
     FiredEvent _dequeue() {
       assert(!conn_queue.empty());
-      FiredEvent e;
-      e.fd = conn_queue.front();
+      FiredEvent e = conn_queue.front();
       conn_queue.pop_front();
-      assert(pending.count(e.fd));
-      e.mask = pending[e.fd];
-      pending.erase(e.fd);
+      if (e.is_file) {
+        assert(pending.count(e.file_event.fd));
+        e.file_event.mask = pending[e.file_event.fd];
+        pending.erase(e.file_event.fd);
+      }
       return e;
     }
     void _process(FiredEvent e, ThreadPool::TPHandle &handle) {
-      int rfired = 0;
-      Event *event = center->get_event(e.fd);
-      if (!event)
-        return ;
+      if (e.is_file) {
+        int rfired = 0;
+        FileEvent *event = center->get_file_event(e.file_event.fd);
+        if (!event)
+          return ;
 
-      /* note the event->mask & mask & ... code: maybe an already processed
-       * event removed an element that fired and we still didn't
-       * processed, so we check if the event is still valid. */
-      if (event->mask & e.mask & EVENT_READABLE) {
-        rfired = 1;
-        event->read_cb->do_request(e.fd, e.mask);
-      }
-      if (event->mask & e.mask & EVENT_WRITABLE) {
-        if (!rfired || event->read_cb != event->write_cb)
-          event->write_cb->do_request(e.fd, e.mask);
+        /* note the event->mask & mask & ... code: maybe an already processed
+        * event removed an element that fired and we still didn't
+        * processed, so we check if the event is still valid. */
+        if (event->mask & e.file_event.mask & EVENT_READABLE) {
+          rfired = 1;
+          event->read_cb->do_request(e.file_event.fd, e.file_event.mask);
+        }
+        if (event->mask & e.file_event.mask & EVENT_WRITABLE) {
+          if (!rfired || event->read_cb != event->write_cb)
+            event->write_cb->do_request(e.file_event.fd, e.file_event.mask);
+        }
+      } else {
+        e.time_event.time_cb->do_request(e.time_event.id);
+        delete e.time_event.time_cb;
       }
     }
     void _clear() {
@@ -147,17 +179,21 @@ class EventCenter {
 
  public:
   EventCenter(CephContext *c):
-    lock("EventCenter::lock"), driver(NULL), cct(c), nevent(0),
+    lock("EventCenter::lock"), driver(NULL), cct(c), nevent(0), time_event_next_id(0),
     event_tp(c, "EventCenter::event_tp", c->_conf->ms_event_op_threads, "eventcenter_op_threads"),
-    event_wq(this, c->_conf->ms_event_thread_timeout, c->_conf->ms_event_thread_suicide_timeout, &event_tp) {}
+    event_wq(this, c->_conf->ms_event_thread_timeout, c->_conf->ms_event_thread_suicide_timeout, &event_tp) {
+    last_time = time(NULL);
+  }
   ~EventCenter();
   int init(int nevent);
-  int create_event(int fd, int mask, EventCallback *ctxt);
-  void delete_event(int fd, int mask);
+  int create_file_event(int fd, int mask, EventCallback *ctxt);
+  uint64_t create_time_event(uint64_t milliseconds, EventCallback *ctxt);
+  void delete_file_event(int fd, int mask);
+  void delete_time_event(uint64_t id);
   int process_events(int timeout_milliseconds);
-  Event *get_event(int fd) {
+  FileEvent *get_file_event(int fd) {
     Mutex::Locker l(lock);
-    return _get_event(fd);
+    return _get_file_event(fd);
   }
 };
 

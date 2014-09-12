@@ -30,7 +30,7 @@ class C_handle_read : public EventCallback {
 
  public:
   C_handle_read(AsyncConnection *c): conn(c) {}
-  void do_request(int fd, int mask) {
+  void do_request(int fd_or_id, int mask=0) {
     conn->process();
   }
 };
@@ -72,7 +72,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m)
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
     state(STATE_NONE), state_after_send(0), sd(-1),
-    lock("AsyncConnection::lock"), backoff(0),
+    lock("AsyncConnection::lock"),
     got_bad_auth(false), authorizer(NULL), state_offset(0), net(cct), center(&m->center) { }
 
 AsyncConnection::~AsyncConnection()
@@ -182,7 +182,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     // "r" is the remaining length
     sended += msglen - r;
     if (r > 0) {
-      center->create_event(sd, EVENT_WRITABLE, new C_handle_write(this));
+      center->create_file_event(sd, EVENT_WRITABLE, new C_handle_write(this));
       ldout(async_msgr->cct, 5) << __func__ << " remaining " << r
                           << " needed to be sent, creating event for writing"
                           << dendl;
@@ -199,7 +199,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   if (!outcoming_bl.length())
-    center->delete_event(sd, EVENT_WRITABLE);
+    center->delete_file_event(sd, EVENT_WRITABLE);
 
   return outcoming_bl.length();
 }
@@ -399,8 +399,8 @@ void AsyncConnection::process()
             ldout(async_msgr->cct,10) << __func__ << " wants " << 1 << " message from policy throttler "
                                 << policy.throttler_messages->get_current() << "/"
                                 << policy.throttler_messages->get_max() << dendl;
-            // FIXME: when to try it again?
-            if (policy.throttler_messages->get_or_fail())
+            // FIXME: may block
+            if (policy.throttler_messages->get())
               state = STATE_OPEN_MESSAGE_THROTTLE_BYTES;
           }
 
@@ -415,8 +415,8 @@ void AsyncConnection::process()
               ldout(async_msgr->cct,10) << __func__ << " wants " << message_size << " bytes from policy throttler "
                   << policy.throttler_bytes->get_current() << "/"
                   << policy.throttler_bytes->get_max() << dendl;
-              // FIXME: when to try it again?
-              if (policy.throttler_bytes->get_or_fail(message_size))
+              // FIXME: may block
+              if (policy.throttler_bytes->get(message_size))
                 state = STATE_OPEN_MESSAGE_READ_FRONT;
             }
           }
@@ -633,7 +633,7 @@ void AsyncConnection::process()
       case STATE_CLOSED:
       {
         ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
-        center->delete_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+        center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
         break;
       }
 
@@ -716,7 +716,7 @@ int AsyncConnection::_process_connection()
         }
         net.set_socket_options(sd);
 
-        center->create_event(sd, EVENT_READABLE, new C_handle_read(this));
+        center->create_file_event(sd, EVENT_READABLE, new C_handle_read(this));
         state = STATE_CONNECTING_WAIT_BANNER;
         break;
       }
@@ -1524,7 +1524,8 @@ void AsyncConnection::_connect()
   ldout(async_msgr->cct, 10) << __func__ << " " << connect_seq << dendl;
 
   state = STATE_CONNECTING;
-  process();
+  // rescheduler connection in order to avoid lock dep
+  center->create_time_event(0, new C_handle_read(this));
 }
 
 void AsyncConnection::accept(int incoming)
@@ -1533,7 +1534,8 @@ void AsyncConnection::accept(int incoming)
   assert(sd < 0);
 
   sd = incoming;
-  center->create_event(sd, EVENT_READABLE, new C_handle_read(this));
+  state = STATE_ACCEPTING;
+  center->create_file_event(sd, EVENT_READABLE, new C_handle_read(this));
   process();
 }
 
@@ -1624,7 +1626,7 @@ void AsyncConnection::fault()
   }
 
   shutdown_socket();
-  center->delete_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+  center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
   // requeue sent items
   requeue_sent();
@@ -1634,18 +1636,17 @@ void AsyncConnection::fault()
     return;
   }
 
-  //TODO we need to rescheduler connect again!!!
   if (state != STATE_CONNECTING) {
     if (policy.server) {
       ldout(async_msgr->cct, 0) << __func__ << " server, going to standby" << dendl;
       state = STATE_STANDBY;
     } else {
-      ldout(async_msgr->cct,0) << __func__ << " initiating reconnect" << dendl;
+      ldout(async_msgr->cct, 0) << __func__ << " initiating reconnect" << dendl;
       connect_seq++;
       state = STATE_CONNECTING;
     }
     backoff = utime_t();
-    ldout(async_msgr->cct,0) << __func__ << dendl;
+    ldout(async_msgr->cct, 0) << __func__ << dendl;
   } else {
     if (backoff == utime_t()) {
       backoff.set_from_double(async_msgr->cct->_conf->ms_initial_backoff);
@@ -1655,9 +1656,11 @@ void AsyncConnection::fault()
         backoff.set_from_double(async_msgr->cct->_conf->ms_max_backoff);
     }
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
-    // TODO wait!!!!!
-    ldout(async_msgr->cct, 10) << __func__ << " done waiting or woke up" << dendl;
   }
+
+  uint64_t milliseconds = double(backoff) * 1000;
+  // woke up again;
+  center->create_time_event(milliseconds, new C_handle_read(this));
 }
 
 void AsyncConnection::was_session_reset()

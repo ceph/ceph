@@ -186,7 +186,7 @@ int Processor::start()
 
   // start thread
   create();
-  center->create_event(listen_sd, EVENT_READABLE, new C_handle_accept(this));
+  center->create_file_event(listen_sd, EVENT_READABLE, new C_handle_accept(this));
 
   return 0;
 }
@@ -239,7 +239,7 @@ void Processor::stop()
   done = true;
   ldout(msgr->cct, 10) << __func__ << " processor" << dendl;
 
-  center->delete_event(listen_sd, EVENT_READABLE);
+  center->delete_file_event(listen_sd, EVENT_READABLE);
   if (listen_sd >= 0) {
     ::shutdown(listen_sd, SHUT_RDWR);
   }
@@ -274,7 +274,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     center(cct)
 {
   ceph_spin_init(&global_seq_lock);
-  _init_local_connection();
+  init_local_connection();
 }
 
 /**

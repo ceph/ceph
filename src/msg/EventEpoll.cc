@@ -91,7 +91,13 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
   }
 }
 
-int EpollDriver::event_wait(vector<FiredEvent> &fired_events, struct timeval *tvp)
+int EpollDriver::resize_events(int newsize)
+{
+  state->events = realloc(events, sizeof(struct epoll_event)*newsize);
+  return 0;
+}
+
+int EpollDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
   int retval, numevents = 0;
 
