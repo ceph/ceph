@@ -266,15 +266,12 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     processor(this, _nonce, &center),
-    nonce(_nonce),
     lock("AsyncMessenger::lock"),
-    center(cct), did_bind(false),
+    nonce(_nonce), did_bind(false),
     global_seq(0),
     cluster_protocol(0),
     local_connection(new AsyncConnection(cct, this)),
-    dispatch_throttler(cct, string("msgr_dispatch_throttler-") + mname,
-                       cct->_conf->ms_dispatch_throttle_bytes),
-    dispatch_queue(cct, this)
+    center(cct)
 {
   ceph_spin_init(&global_seq_lock);
   _init_local_connection();
@@ -292,7 +289,6 @@ AsyncMessenger::~AsyncMessenger()
 void AsyncMessenger::ready()
 {
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
-  dispatch_queue.start();
 
   lock.Lock();
   if (did_bind)
@@ -304,7 +300,6 @@ int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << "shutdown " << get_myaddr() << dendl;
   mark_down_all();
-  dispatch_queue.shutdown();
 
   // break ref cycles on the loopback connection
   local_connection->set_priv(NULL);
@@ -371,12 +366,6 @@ void AsyncMessenger::wait()
     return;
   }
   lock.Unlock();
-
-  if(dispatch_queue.is_started()) {
-    ldout(cct,10) << __func__ << ": waiting for dispatch queue" << dendl;
-    dispatch_queue.wait();
-    ldout(cct,10) << __func__ << ": dispatch queue is stopped" << dendl;
-  }
 
   // done!  clean up.
   if (did_bind) {
@@ -503,7 +492,19 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnection *con,
   if (my_inst.addr == dest_addr) {
     // local
     ldout(cct, 20) << __func__ << " " << *m << " local" << dendl;
-    dispatch_queue.local_delivery(m, m->get_priority());
+    m->set_connection(local_connection.get());
+    m->set_recv_stamp(ceph_clock_now(cct));
+    ms_fast_preprocess(m);
+    if (ms_can_fast_dispatch(m)) {
+      ms_fast_dispatch(m);
+    } else {
+      if (m->get_priority() >= CEPH_MSG_PRIO_LOW) {
+        ms_fast_dispatch(m);
+      } else {
+        ms_deliver_dispatch(m);
+      }
+    }
+
     return;
   }
 
@@ -550,7 +551,7 @@ void AsyncMessenger::mark_down_all()
     ldout(cct, 5) << __func__ << " accepting_conn " << p << dendl;
     p->mark_down();
     p->get();
-    dispatch_queue.queue_reset(p);
+    ms_deliver_handle_reset(p);
   }
   accepting_conns.clear();
 
@@ -561,7 +562,7 @@ void AsyncMessenger::mark_down_all()
     conns.erase(it);
     p->mark_down();
     p->get();
-    dispatch_queue.queue_reset(p);
+    ms_deliver_handle_reset(p);
   }
   lock.Unlock();
 }
@@ -574,7 +575,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
     ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
     _stop_conn(p);
     p->get();
-    dispatch_queue.queue_reset(p);
+    ms_deliver_handle_reset(p);
   } else {
     ldout(cct, 1) << __func__ << " " << addr << " -- pipe dne" << dendl;
   }
@@ -623,13 +624,4 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   ldout(cct, 1) << __func__ << " learned my addr " << my_inst.addr << dendl;
   _init_local_connection();
   lock.Unlock();
-}
-
-void AsyncMessenger::dispatch_throttle_release(uint64_t msize) {
-  if (msize) {
-    ldout(cct,10) << __func__ << " " << msize << " to dispatch throttler "
-                  << dispatch_throttler.get_current() << "/"
-                  << dispatch_throttler.get_max() << dendl;
-    dispatch_throttler.put(msize);
-  }
 }
