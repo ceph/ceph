@@ -117,7 +117,6 @@ void EventCenter::delete_file_event(int fd, int mask)
     file_events.erase(fd);
 }
 
-
 uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ctxt)
 {
   Mutex::Locker l(lock);
@@ -129,13 +128,14 @@ uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ct
   expire = ceph_clock_now(cct);
   expire.copy_to_timeval(&tv);
   tv.tv_sec += milliseconds / 1000;
-  tv.tv_usec += milliseconds * 1000;
+  tv.tv_usec += (milliseconds % 1000) * 1000;
   expire.set_from_timeval(&tv);
 
   event.id = id;
   event.time_cb = ctxt;
   time_to_ids[expire] = id;
   time_events[id] = event;
+  ldout(cct, 10) << __func__ << " id=" << id << " trigger time is " << expire << dendl;
 
   return id;
 }
@@ -153,11 +153,20 @@ void EventCenter::delete_time_event(uint64_t id)
   }
 }
 
-int EventCenter::_process_time_events()
+void EventCenter::stop()
 {
+  ldout(cct, 1) << __func__ << dendl;
+  Mutex::Locker l(lock);
+  event_tp.stop();
+}
+
+int EventCenter::process_time_events()
+{
+  Mutex::Locker l(lock);
   int processed = 0;
   time_t now = time(NULL);
   utime_t cur = ceph_clock_now(cct);
+  ldout(cct, 10) << __func__ << " cur time is " << cur << dendl;
 
   /* If the system clock is moved to the future, and then set back to the
    * right value, time events may be delayed in a random way. Often this
@@ -187,6 +196,8 @@ int EventCenter::_process_time_events()
       e.time_event.time_cb = time_events[it->second].time_cb;
       e.is_file = false;
       event_wq.queue(e);
+      ldout(cct, 10) << __func__ << " queue time event: id=" << it->second << " time is "
+                     << it->first << dendl;
       processed++;
       ++it;
       time_to_ids.erase(prev);
@@ -205,27 +216,30 @@ int EventCenter::process_events(int timeout_millionseconds)
   int numevents;
   bool trigger_time = false;
 
+  utime_t period, shortest, now = ceph_clock_now(cct);
+  now.copy_to_timeval(&tv);
   if (timeout_millionseconds > 0) {
-    tv.tv_sec = timeout_millionseconds / 1000;
-    tv.tv_usec = (timeout_millionseconds % 1000) * 1000;
+    tv.tv_sec += timeout_millionseconds / 1000;
+    tv.tv_usec += (timeout_millionseconds % 1000) * 1000;
   }
-  else {
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-  }
+  shortest.set_from_timeval(&tv);
 
-  Mutex::Locker l(lock);
-  utime_t shortest = utime_t(&tv);
-  for (map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
-        it != time_to_ids.end(); ++it) {
-    if (shortest > it->first) {
+  {
+    Mutex::Locker l(lock);
+    map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
+    if (it != time_to_ids.end() && shortest > it->first) {
+      ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
-      break;
+      period = now - shortest;
+      period.copy_to_timeval(&tv);
+    } else {
+      tv.tv_sec = timeout_millionseconds / 1000;
+      tv.tv_usec = (timeout_millionseconds % 1000) * 1000;
     }
   }
-  shortest.copy_to_timeval(&tv);
 
+  ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   for (int j = 0; j < numevents; j++) {
@@ -236,7 +250,7 @@ int EventCenter::process_events(int timeout_millionseconds)
   }
 
   if (trigger_time)
-    numevents += _process_time_events();
+    numevents += process_time_events();
 
   return numevents;
 }
