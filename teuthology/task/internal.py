@@ -228,10 +228,8 @@ def connect(ctx, config):
             ctx.cluster.add(rem, rem.name)
 
 
-@contextlib.contextmanager
 def push_inventory(ctx, config):
     if not teuth_config.lock_server:
-        yield
         return
 
     def push():
@@ -240,7 +238,6 @@ def push_inventory(ctx, config):
             lock.update_inventory(info)
     try:
         push()
-        yield
     except Exception:
         log.exception("Error pushing inventory")
 
