@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug rgw: 20
