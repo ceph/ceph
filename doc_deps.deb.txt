@@ -5,5 +5,4 @@ doxygen
 ditaa
 libxml2-dev
 libxslt-dev
-dot
 graphviz
