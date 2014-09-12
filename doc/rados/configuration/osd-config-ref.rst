@@ -90,6 +90,33 @@ that Ceph uses the entire partition for the journal.
 :Default: ``$libdir/rados-classes``
 
 
+.. index:: OSD; file system
+File System Settings
+====================
+Ceph builds and mounts file systems which are used for Ceph OSDs.
+
+``osd mkfs options {fs-type}`` 
+
+:Description: Options used when creating a new Ceph OSD of type {fs-type}.
+
+:Type: String
+:Default for xfs: ``-f``
+:Default for other file systems: {empty string}
+
+For example::
+  ``osd mkfs options xfs = -f -d agcount=24``
+
+``osd mount options {fs-type}`` 
+
+:Description: Options used when mounting a Ceph OSD of type {fs-type}.
+
+:Type: String
+:Default for xfs: ``rw,noatime,inode64``
+:Default for other file systems: ``rw, noatime``
+
+For example::
+  ``osd mount options xfs = rw, noatime, inode64, nobarrier, logbufs=8``
+
 
 .. index:: OSD; journal settings
 
