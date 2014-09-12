@@ -24,6 +24,7 @@
 #endif
 
 #include "include/Context.h"
+#include "include/unordered_map.h"
 #include "common/WorkQueue.h"
 
 #define EVENT_NONE 0
@@ -86,7 +87,10 @@ class EventCenter {
 
   Mutex lock;
   map<int, FileEvent> file_events;
-  map<utime_t, TimeEvent> time_events;
+  // The second element is id
+  map<utime_t, uint64_t> time_to_ids;
+  // The first element is id
+  unordered_map<uint64_t, TimeEvent> time_events;
   EventDriver *driver;
   CephContext *cct;
   uint64_t nevent;
