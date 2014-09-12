@@ -275,6 +275,7 @@ private:
     if (!p->second->is_connected()) {
       // FIXME
       p->second->put();
+      conns.erase(p);
       return NULL;
     }
     return p->second;

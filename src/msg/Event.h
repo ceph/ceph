@@ -36,7 +36,7 @@ class EventCenter;
 class EventCallback {
 
  public:
-  virtual void do_request(int fd_id, int mask=0) = 0;
+  virtual void do_request(int fd_or_id) = 0;
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
@@ -82,7 +82,7 @@ class EventCenter {
     uint64_t id;
     EventCallback *time_cb;
 
-    TimeEvent(): id(0), time_cb(NULL) {}
+    TimeEvent(): id(0), fd(0), time_cb(NULL) {}
   };
 
   Mutex lock;
@@ -98,7 +98,7 @@ class EventCenter {
   ThreadPool event_tp;
   time_t last_time; // last time process time event
 
-  int _process_time_events();
+  int process_time_events();
   FileEvent *_get_file_event(int fd) {
     map<int, FileEvent>::iterator it = file_events.find(fd);
     if (it != file_events.end()) {
@@ -165,11 +165,11 @@ class EventCenter {
         * processed, so we check if the event is still valid. */
         if (event->mask & e.file_event.mask & EVENT_READABLE) {
           rfired = 1;
-          event->read_cb->do_request(e.file_event.fd, e.file_event.mask);
+          event->read_cb->do_request(e.file_event.fd);
         }
         if (event->mask & e.file_event.mask & EVENT_WRITABLE) {
           if (!rfired || event->read_cb != event->write_cb)
-            event->write_cb->do_request(e.file_event.fd, e.file_event.mask);
+            event->write_cb->do_request(e.file_event.fd);
         }
       } else {
         e.time_event.time_cb->do_request(e.time_event.id);
@@ -195,6 +195,7 @@ class EventCenter {
   void delete_file_event(int fd, int mask);
   void delete_time_event(uint64_t id);
   int process_events(int timeout_milliseconds);
+  void stop();
   FileEvent *get_file_event(int fd) {
     Mutex::Locker l(lock);
     return _get_file_event(fd);

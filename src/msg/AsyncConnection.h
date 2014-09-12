@@ -53,7 +53,7 @@ class AsyncConnection : public Connection {
     if (reply.authorizer_len) {
       reply_bl.append(authorizer_reply.c_str(), authorizer_reply.length());
     }
-    int r = try_send(reply_bl);
+    int r = _try_send(reply_bl);
     if (r < 0)
       return -1;
 
@@ -125,11 +125,6 @@ class AsyncConnection : public Connection {
     policy.lossy = true;
   }
 
-  int try_send(bufferlist bl, bool send=true) {
-    Mutex::Locker l(lock);
-    return _try_send(bl, send);
-  }
-
   void handle_write();
   void process();
 
@@ -170,6 +165,44 @@ class AsyncConnection : public Connection {
     STATE_WAIT,       // just wait for racing connection
     STATE_FAULT
   };
+
+  static const char *get_state_name(int state) {
+      const char* const statenames[] = {"STATE_NONE",
+                                        "STATE_OPEN",
+                                        "STATE_OPEN_KEEPALIVE2",
+                                        "STATE_OPEN_KEEPALIVE2_ACK",
+                                        "STATE_OPEN_TAG_ACK",
+                                        "STATE_OPEN_MESSAGE_HEADER",
+                                        "STATE_OPEN_MESSAGE_THROTTLE_MESSAGE",
+                                        "STATE_OPEN_MESSAGE_THROTTLE_BYTES",
+                                        "STATE_OPEN_MESSAGE_READ_FRONT",
+                                        "STATE_OPEN_MESSAGE_READ_MIDDLE",
+                                        "STATE_OPEN_MESSAGE_READ_DATA_PREPARE",
+                                        "STATE_OPEN_MESSAGE_READ_DATA",
+                                        "STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH",
+                                        "STATE_OPEN_TAG_CLOSE",
+                                        "STATE_WAIT_SEND",
+                                        "STATE_CONNECTING",
+                                        "STATE_CONNECTING_WAIT_BANNER",
+                                        "STATE_CONNECTING_WAIT_IDENTIFY_PEER",
+                                        "STATE_CONNECTING_SEND_CONNECT_MSG",
+                                        "STATE_CONNECTING_WAIT_CONNECT_REPLY",
+                                        "STATE_CONNECTING_WAIT_CONNECT_REPLY_AUTH",
+                                        "STATE_CONNECTING_WAIT_ACK_SEQ",
+                                        "STATE_CONNECTING_READY",
+                                        "STATE_ACCEPTING",
+                                        "STATE_ACCEPTING_HANDLE_CONNECT",
+                                        "STATE_ACCEPTING_WAIT_BANNER_ADDR",
+                                        "STATE_ACCEPTING_WAIT_CONNECT_MSG",
+                                        "STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH",
+                                        "STATE_ACCEPTING_WAIT_SEQ",
+                                        "STATE_ACCEPTING_READY",
+                                        "STATE_STANDBY",
+                                        "STATE_CLOSED",
+                                        "STATE_WAIT",
+                                        "STATE_FAULT"};
+      return statenames[state];
+  }
 
   CephContext *cc;
   AsyncMessenger *async_msgr;
