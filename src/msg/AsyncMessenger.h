@@ -267,6 +267,9 @@ private:
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
+  Cond  stop_cond;
+  bool stopped;
+
   AsyncConnectionRef _lookup_conn(const entity_addr_t& k) {
     assert(lock.is_locked());
     ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator p = conns.find(k);
@@ -274,7 +277,6 @@ private:
       return NULL;
     if (!p->second->is_connected()) {
       // FIXME
-      p->second->put();
       conns.erase(p);
       return NULL;
     }
@@ -318,8 +320,6 @@ public:
 
   void accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    if (conns.count(conn->get_peer_addr()))
-      delete conns[conn->get_peer_addr()];
     conns[conn->peer_addr] = conn;
     accepting_conns.erase(conn);
   }
