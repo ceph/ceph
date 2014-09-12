@@ -1842,6 +1842,7 @@ void AsyncConnection::handle_ack(uint64_t seq)
 
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 {
+  assert(lock.is_locked());
   bufferlist bl;
 
   utime_t t = ceph_clock_now(async_msgr->cct);
@@ -1861,7 +1862,7 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
     bl.append(CEPH_MSGR_TAG_KEEPALIVE);
   }
 
-  try_send(bl, false);
+  _try_send(bl, false);
 }
 
 void AsyncConnection::handle_write()
