@@ -84,23 +84,27 @@ static void handle_fatal_signal(int signum)
   dout_emergency(buf);
   pidfile_remove();
 
-  // TODO: don't use an ostringstream here. It could call malloc(), which we
-  // don't want inside a signal handler.
-  // Also fix the backtrace code not to allocate memory.
-  BackTrace bt(0);
-  ostringstream oss;
-  bt.print(oss);
-  dout_emergency(oss.str());
+  // avoid recursion back into logging code if that is where
+  // we got the SEGV.
+  if (!g_ceph_context->_log->is_inside_log_lock()) {
+    // TODO: don't use an ostringstream here. It could call malloc(), which we
+    // don't want inside a signal handler.
+    // Also fix the backtrace code not to allocate memory.
+    BackTrace bt(0);
+    ostringstream oss;
+    bt.print(oss);
+    dout_emergency(oss.str());
 
-  // dump to log.  this uses the heap extensively, but we're better
-  // off trying than not.
-  derr << buf << std::endl;
-  bt.print(*_dout);
-  *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	 << "is needed to interpret this.\n"
-	 << dendl;
+    // dump to log.  this uses the heap extensively, but we're better
+    // off trying than not.
+    derr << buf << std::endl;
+    bt.print(*_dout);
+    *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
+	   << "is needed to interpret this.\n"
+	   << dendl;
 
-  g_ceph_context->_log->dump_recent();
+    g_ceph_context->_log->dump_recent();
+  }
 
   reraise_fatal(signum);
 }
