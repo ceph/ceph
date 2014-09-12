@@ -34,7 +34,7 @@ class C_handle_accept : public EventCallback {
 
  public:
   C_handle_accept(Processor *p): p(p) {}
-  void do_request(int fd, int mask) {
+  void do_request(int fd) {
     p->accept();
   }
 };
@@ -216,7 +216,7 @@ void *Processor::entry()
   while (!done) {
     ldout(msgr->cct,20) << __func__ << " calling poll" << dendl;
 
-    r = center->process_events(500);
+    r = center->process_events(30000);
     if (r < 0) {
       ldout(msgr->cct,20) << __func__ << " process events failed: "
                           << cpp_strerror(errno) << dendl;
@@ -374,6 +374,8 @@ void AsyncMessenger::wait()
     did_bind = false;
     ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
   }
+
+  center.stop();
 
   // close all pipes
   lock.Lock();

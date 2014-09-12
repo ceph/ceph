@@ -18,7 +18,7 @@
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
   return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
         << " sd=" << sd << " :" << port
-        << " s=" << state
+        << " s=" << get_state_name(state)
         << " pgs=" << peer_global_seq
         << " cs=" << connect_seq
         << " l=" << policy.lossy
@@ -29,9 +29,12 @@ class C_handle_read : public EventCallback {
   AsyncConnection *conn;
 
  public:
-  C_handle_read(AsyncConnection *c): conn(c) {}
-  void do_request(int fd_or_id, int mask=0) {
+  C_handle_read(AsyncConnection *c): conn(c) {
+    conn->get();
+  }
+  void do_request(int fd) {
     conn->process();
+    conn->put();
   }
 };
 
@@ -39,9 +42,26 @@ class C_handle_write : public EventCallback {
   AsyncConnection *conn;
 
  public:
-  C_handle_write(AsyncConnection *c): conn(c) {}
-  void do_request(int fd, int mask) {
+  C_handle_write(AsyncConnection *c): conn(c) {
+    conn->get();
+  }
+  void do_request(int fd) {
     conn->handle_write();
+    conn->put();
+  }
+};
+
+class C_handle_reset : public EventCallback {
+  AsyncMessenger *msgr;
+  AsyncConnection *conn;
+
+ public:
+  C_handle_reset(AsyncMessenger *m, AsyncConnection *c): msgr(m), conn(c) {
+    conn->get();
+  }
+  void do_request(int id) {
+    msgr->ms_deliver_handle_reset(conn);
+    conn->put();
   }
 };
 
@@ -228,7 +248,7 @@ int AsyncConnection::read_until(uint64_t needed, bufferptr &p)
   do {
     r = read_bulk(sd, p.c_str()+offset, left);
     if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " read failed, state is " << state << dendl;
+      ldout(async_msgr->cct, 1) << __func__ << " read failed, state is " << get_state_name(state) << dendl;
       return -1;
     } else if (r == left) {
       state_offset = 0;
@@ -240,7 +260,7 @@ int AsyncConnection::read_until(uint64_t needed, bufferptr &p)
 
   state_offset = offset;
   ldout(async_msgr->cct, 20) << __func__ << " read " << r << " bytes, state is "
-                      << state << dendl;
+                      << get_state_name(state) << dendl;
   return needed - offset;
 }
 
@@ -248,17 +268,19 @@ void AsyncConnection::process()
 {
   int r = 0;
   int prev_state;
-  assert(!lock.is_locked());
   Mutex::Locker l(lock);
   do {
     prev_state = state;
+    ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
+                               << ", prev state is " << get_state_name(prev_state) << dendl;
     switch (state) {
       case STATE_OPEN:
         {
           char tag = -1;
           r = read_bulk(sd, &tag, sizeof(tag));
           if (r < 0) {
-            ldout(async_msgr->cct, 1) << __func__ << " read tag failed, state is " << state << dendl;
+            ldout(async_msgr->cct, 1) << __func__ << " read tag failed, state is "
+                                      << get_state_name(state) << dendl;
             goto fail;
           } else if (r == 0) {
             break;
@@ -1170,7 +1192,7 @@ int AsyncConnection::_process_connection()
 
     default:
       {
-        lderr(async_msgr->cct) << __func__ << " bad state" << state << dendl;
+        lderr(async_msgr->cct) << __func__ << " bad state" << get_state_name(state) << dendl;
         assert(0);
       }
   }
@@ -1705,8 +1727,7 @@ void AsyncConnection::was_session_reset()
 void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
-  get();
-  async_msgr->ms_deliver_handle_reset(this);
+  center->create_time_event(0, new C_handle_reset(async_msgr, this));
   shutdown_socket();
   discard_out_queue();
   outcoming_bl.clear();
