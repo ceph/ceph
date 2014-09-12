@@ -93,8 +93,8 @@ class AsyncConnection : public Connection {
   ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() {
-    Mutex::Locker l(lock);
-    return state != STATE_CLOSED;
+    // FIXME?
+    return true;
   }
 
   // Only call when AsyncConnection first construct
@@ -106,15 +106,12 @@ class AsyncConnection : public Connection {
   }
   // Only call when AsyncConnection first construct
   void accept(int sd);
-  int send_message(Message *m) {
-    Mutex::Locker l(lock);
-    out_q[m->get_priority()].push_back(m);
-    return 0;
-  }
+  int send_message(Message *m);
 
   void send_keepalive() {
     Mutex::Locker l(lock);
-    _send_keepalive_or_ack();
+    if (state == STATE_OPEN)
+      _send_keepalive_or_ack();
   }
   void mark_down() {
     Mutex::Locker l(lock);
@@ -163,7 +160,6 @@ class AsyncConnection : public Connection {
     STATE_STANDBY,
     STATE_CLOSED,
     STATE_WAIT,       // just wait for racing connection
-    STATE_FAULT
   };
 
   static const char *get_state_name(int state) {
@@ -219,6 +215,7 @@ class AsyncConnection : public Connection {
   list<Message*> sent;
   Mutex lock;
   utime_t backoff;         // backoff time
+  bool open_write;
 
   // Tis section are temp variables used by state transition
 
@@ -227,13 +224,14 @@ class AsyncConnection : public Connection {
   utime_t throttle_stamp;
   uint64_t msg_left;
   ceph_msg_header current_header;
+  bufferlist data_buf;
   bufferlist::iterator data_blp;
   bufferlist front, middle, data;
   ceph_msg_connect connect_msg;
-  ceph_msg_connect_reply connect_reply;
   // Connecting state
   bool got_bad_auth;
   AuthAuthorizer *authorizer;
+  ceph_msg_connect_reply connect_reply;
   // Accepting state
   entity_addr_t socket_addr;
   CryptoKey session_key;

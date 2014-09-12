@@ -46,7 +46,6 @@ int EventCenter::init(int n)
   }
 
   nevent = n;
-  event_tp.start();
   return 0;
 }
 
@@ -93,6 +92,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallback *ctxt)
       delete event->write_cb;
     event->write_cb = ctxt;
   }
+  ldout(cct, 10) << __func__ << " create event fd=" << fd << " mask=" << mask
+                 << " now mask is " << event->mask << dendl;
   return 0;
 }
 
@@ -101,26 +102,43 @@ void EventCenter::delete_file_event(int fd, int mask)
   Mutex::Locker l(lock);
 
   EventCenter::FileEvent *event = _get_file_event(fd);
-  driver->del_event(fd, event ? event->mask: EVENT_NONE, mask);
-  if (!event) {
-    file_events[fd] = EventCenter::FileEvent();
-    event = &file_events[fd];
-  }
+  if (!event)
+    return ;
 
-  if (event->read_cb)
+  driver->del_event(fd, event->mask, mask);
+
+  if (mask & EVENT_READABLE && event->read_cb) {
     delete event->read_cb;
-  if (event->write_cb)
+    event->read_cb = NULL;
+  }
+  if (mask & EVENT_WRITABLE && event->write_cb) {
     delete event->write_cb;
+    event->write_cb = NULL;
+  }
 
   event->mask = event->mask & (~mask);
   if (event->mask == EVENT_NONE)
     file_events.erase(fd);
+  ldout(cct, 10) << __func__ << " delete fd=" << fd << " mask=" << mask
+                 << " now mask is " << event->mask << dendl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ctxt)
 {
   Mutex::Locker l(lock);
   uint64_t id = time_event_next_id++;
+
+  ldout(cct, 10) << __func__ << " id=" << id << " expire time=" << milliseconds << dendl;
+  // Direct dispatch
+  if (milliseconds == 0) {
+    FiredEvent e;
+    e.time_event.id = id;
+    e.time_event.time_cb = ctxt;
+    e.is_file = false;
+    event_wq.queue(e);
+    return id;
+  }
+
   EventCenter::TimeEvent event;
   utime_t expire;
   struct timeval tv;
@@ -135,7 +153,6 @@ uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ct
   event.time_cb = ctxt;
   time_to_ids[expire] = id;
   time_events[id] = event;
-  ldout(cct, 10) << __func__ << " id=" << id << " trigger time is " << expire << dendl;
 
   return id;
 }
@@ -148,9 +165,17 @@ void EventCenter::delete_time_event(uint64_t id)
     if (it->second == id) {
       time_to_ids.erase(it);
       time_events.erase(id);
+      ldout(cct, 10) << __func__ << " id=" << id << dendl;
       return ;
     }
   }
+}
+
+void EventCenter::start()
+{
+  ldout(cct, 1) << __func__ << dendl;
+  Mutex::Locker l(lock);
+  event_tp.start();
 }
 
 void EventCenter::stop()
@@ -226,6 +251,11 @@ int EventCenter::process_events(int timeout_millionseconds)
 
   {
     Mutex::Locker l(lock);
+    for (map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
+          it != time_to_ids.end(); ++it) {
+      ldout(cct, 10) << __func__ << " time_to_ids " << it->first << " id=" << it->second << dendl;
+    }
+
     map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
     if (it != time_to_ids.end() && shortest > it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
@@ -247,6 +277,7 @@ int EventCenter::process_events(int timeout_millionseconds)
     e.file_event = fired_events[j];
     e.is_file = true;
     event_wq.queue(e);
+    ldout(cct, 10) << __func__ << " event_wq queue fd is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
 
   if (trigger_time)

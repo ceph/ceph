@@ -82,7 +82,7 @@ class EventCenter {
     uint64_t id;
     EventCallback *time_cb;
 
-    TimeEvent(): id(0), fd(0), time_cb(NULL) {}
+    TimeEvent(): id(0), time_cb(NULL) {}
   };
 
   Mutex lock;
@@ -195,6 +195,7 @@ class EventCenter {
   void delete_file_event(int fd, int mask);
   void delete_time_event(uint64_t id);
   int process_events(int timeout_milliseconds);
+  void start();
   void stop();
   FileEvent *get_file_event(int fd) {
     Mutex::Locker l(lock);

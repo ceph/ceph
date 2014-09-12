@@ -186,7 +186,8 @@ int Processor::start()
 
   // start thread
   create();
-  center->create_file_event(listen_sd, EVENT_READABLE, new C_handle_accept(this));
+  if (listen_sd >= 0)
+    center->create_file_event(listen_sd, EVENT_READABLE, new C_handle_accept(this));
 
   return 0;
 }
@@ -216,7 +217,7 @@ void *Processor::entry()
   while (!done) {
     ldout(msgr->cct,20) << __func__ << " calling poll" << dendl;
 
-    r = center->process_events(30000);
+    r = center->process_events(1000);
     if (r < 0) {
       ldout(msgr->cct,20) << __func__ << " process events failed: "
                           << cpp_strerror(errno) << dendl;
@@ -239,7 +240,8 @@ void Processor::stop()
   done = true;
   ldout(msgr->cct, 10) << __func__ << " processor" << dendl;
 
-  center->delete_file_event(listen_sd, EVENT_READABLE);
+  if (listen_sd >= 0)
+    center->delete_file_event(listen_sd, EVENT_READABLE);
   if (listen_sd >= 0) {
     ::shutdown(listen_sd, SHUT_RDWR);
   }
@@ -269,12 +271,13 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     lock("AsyncMessenger::lock"),
     nonce(_nonce), did_bind(false),
     global_seq(0),
-    cluster_protocol(0),
+    cluster_protocol(0), stopped(true),
     local_connection(new AsyncConnection(cct, this)),
     center(cct)
 {
   ceph_spin_init(&global_seq_lock);
   init_local_connection();
+  center.init(5000);
 }
 
 /**
@@ -291,18 +294,20 @@ void AsyncMessenger::ready()
   ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
 
   lock.Lock();
-  if (did_bind)
-    processor.start();
+  processor.start();
   lock.Unlock();
 }
 
 int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << "shutdown " << get_myaddr() << dendl;
+  center.stop();
   mark_down_all();
 
   // break ref cycles on the loopback connection
   local_connection->set_priv(NULL);
+  stop_cond.Signal();
+  stopped = true;
   return 0;
 }
 
@@ -330,6 +335,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << __func__ << " rebind avoid " << avoid_ports << dendl;
   assert(did_bind);
+  center.stop();
   processor.stop();
   mark_down_all();
   return processor.rebind(avoid_ports);
@@ -345,6 +351,7 @@ int AsyncMessenger::start()
 
   assert(!started);
   started = true;
+  stopped = false;
 
   if (!did_bind) {
     my_inst.addr.nonce = nonce;
@@ -353,8 +360,7 @@ int AsyncMessenger::start()
 
   lock.Unlock();
 
-  // FIXME
-  center.init(5000);
+  center.start();
   return 0;
 }
 
@@ -365,17 +371,15 @@ void AsyncMessenger::wait()
     lock.Unlock();
     return;
   }
+  if (!stopped)
+    stop_cond.Wait(lock);
   lock.Unlock();
 
   // done!  clean up.
-  if (did_bind) {
-    ldout(cct,20) << __func__ << ": stopping processor thread" << dendl;
-    processor.stop();
-    did_bind = false;
-    ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
-  }
-
-  center.stop();
+  ldout(cct,20) << __func__ << ": stopping processor thread" << dendl;
+  processor.stop();
+  did_bind = false;
+  ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
   // close all pipes
   lock.Lock();
@@ -447,12 +451,6 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
-  // set envelope
-  m->get_header().src = get_myname();
-
-  if (!m->get_priority())
-    m->set_priority(get_default_send_priority());
-
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
                 << dest.addr << " -- " << *m << " -- ?+"
                 << m->get_data().length() << " " << m << dendl;
