@@ -401,6 +401,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   }
 
   // Store health
+  dout(20) << __func__ << " got health from gid " << gid << " with " << m->get_health().metrics.size() << " metrics." << dendl;
   pending_daemon_health[gid] = m->get_health();
 
   // boot?
@@ -587,22 +588,25 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
       message << "mds" << rank << ": " << j->message;
       summary.push_back(std::make_pair(j->sev, message.str()));
 
-      // There is no way for us to clealy associate detail entries with summary entries (#7192), so
-      // we duplicate the summary message in the detail string and tag the metadata on.
-      std::ostringstream detail_message;
-      detail_message << message.str();
-      if (j->metadata.size()) {
-        detail_message << "(";
-        std::map<std::string, std::string>::iterator k = j->metadata.begin();
-        while (k != j->metadata.end()) {
-          detail_message << k->first << ": " << k->second;
-          if (boost::next(k) != j->metadata.end()) {
-            detail_message << ", ";
+      if (detail) {
+        // There is no way for us to clealy associate detail entries with summary entries (#7192), so
+        // we duplicate the summary message in the detail string and tag the metadata on.
+        std::ostringstream detail_message;
+        detail_message << message.str();
+        if (j->metadata.size()) {
+          detail_message << "(";
+          std::map<std::string, std::string>::iterator k = j->metadata.begin();
+          while (k != j->metadata.end()) {
+            detail_message << k->first << ": " << k->second;
+            if (boost::next(k) != j->metadata.end()) {
+              detail_message << ", ";
+            }
+            ++k;
           }
+          detail_message << ")";
         }
-        detail_message << ")";
+        detail->push_back(std::make_pair(j->sev, detail_message.str()));
       }
-      detail->push_back(std::make_pair(j->sev, detail_message.str()));
     }
   }
 }
