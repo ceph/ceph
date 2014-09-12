@@ -1324,6 +1324,14 @@ TEST(BufferList, rebuild_page_aligned) {
   }
   {
     bufferlist bl;
+    bufferptr ptr(buffer::create_page_aligned(1));
+    char *p = ptr.c_str();
+    bl.append(ptr);
+    bl.rebuild_page_aligned();
+    EXPECT_EQ(p, bl.buffers().front().c_str());
+  }
+  {
+    bufferlist bl;
     {
       bufferptr ptr(buffer::create_page_aligned(CEPH_PAGE_SIZE));
       EXPECT_TRUE(ptr.is_page_aligned());
