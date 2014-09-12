@@ -1,4 +1,0 @@
-
-* The librados::clone_info_t::HEAD constant has been replaced with librados::SNAP_HEAD, with
-  a different value that matches the internal constants.  This only affects the brand-new
-  list_snaps() interface that was introduced in v0.59.
