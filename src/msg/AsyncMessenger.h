@@ -106,11 +106,11 @@ public:
   void set_addr_unknowns(entity_addr_t& addr);
 
   int get_dispatch_queue_len() {
-    return dispatch_queue.get_queue_len();
+    return 0;
   }
 
   double get_dispatch_queue_max_age(utime_t now) {
-    return dispatch_queue.get_max_age(now);
+    return 0;
   }
   /** @} Accessors */
 
@@ -280,7 +280,7 @@ private:
     return p->second;
   }
 
-  void *_stop_conn(AsyncConnection *c) {
+  void _stop_conn(AsyncConnection *c) {
     assert(lock.is_locked());
     if (c) {
       c->mark_down();
@@ -301,11 +301,7 @@ public:
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
 
-  /// Throttle preventing us from building up a big backlog waiting for dispatch
-  Throttle dispatch_throttler;
-
   EventCenter center;
-  DispatchQueue dispatch_queue;
 
   /**
    * @defgroup AsyncMessenger internals
@@ -375,13 +371,6 @@ public:
     Mutex::Locker l(lock);
     _init_local_connection();
   }
-
-  /**
-   * Release memory accounting back to the dispatch throttler.
-   *
-   * @param msize The amount of memory to release.
-   */
-  void dispatch_throttle_release(uint64_t msize);
 
   /**
    * @} // AsyncMessenger Internals

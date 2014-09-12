@@ -65,7 +65,7 @@ class DispatchQueue {
   };
     
   CephContext *cct;
-  Messenger *msgr;
+  SimpleMessenger *msgr;
   Mutex lock;
   Cond cond;
 
@@ -191,7 +191,7 @@ class DispatchQueue {
   void shutdown();
   bool is_started() {return dispatch_thread.is_started();}
 
-  DispatchQueue(CephContext *cct, Messenger *msgr)
+  DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
     : cct(cct), msgr(msgr),
       lock("SimpleMessenger::DispatchQeueu::lock"), 
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
