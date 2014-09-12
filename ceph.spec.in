@@ -9,14 +9,14 @@
 # common
 #################################################################################
 Name:		ceph
-Version:	@VERSION@
-Release:	@RPM_RELEASE@%{?dist}
+Version:	latest_suse+git.2235aa9
+Release:	0%{?dist}
 Epoch:		1
 Summary:	User space components of the Ceph file system
 License:	GPL-2.0
 Group:		System Environment/Base
 URL:		http://ceph.com/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+Source0:	http://ceph.com/download/%{name}-%{version}.tar.xz
 %if 0%{?fedora} || 0%{?centos} || 0%{?rhel}
 Patch0:		init-ceph.in-fedora.patch
 %endif
@@ -37,7 +37,7 @@ Requires:	cryptsetup
 Requires(post):	binutils
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
-BuildRequires:  bzip2-devel
+BuildRequires:  libbz2-devel
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
 BuildRequires:	hdparm
@@ -64,7 +64,7 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
-%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora} || 0%{?suse_version}
 BuildRequires:	snappy-devel
 %endif
 
@@ -355,28 +355,6 @@ former ceph-libs package, which is now split up into these three subpackages.
 Packages still depending on ceph-libs should be fixed to depend on librados2,
 librbd1 or libcephfs1 instead.
 
-%package devel-compat
-Summary:	Compatibility package for Ceph headers
-Group:		Development/Libraries
-License:	LGPL-2.0
-Obsoletes:	ceph-devel
-Requires:	%{name} = %{epoch}:%{version}-%{release}
-Requires:	librados2-devel = %{epoch}:%{version}-%{release}
-Requires:	libradosstriper1-devel = %{epoch}:%{version}-%{release}
-Requires:	librbd1-devel = %{epoch}:%{version}-%{release}
-Requires:	libcephfs1-devel = %{epoch}:%{version}-%{release}
-Requires:	libcephfs_jni1-devel = %{epoch}:%{version}-%{release}
-Provides:	ceph-devel
-%description devel-compat
-This is a compatibility package to accommodate ceph-devel split into
-librados2-devel, librbd1-devel and libcephfs1-devel. Packages still depending
-on ceph-devel should be fixed to depend on librados2-devel, librbd1-devel,
-libcephfs1-devel or libradosstriper1-devel instead.
-
-%if 0%{?opensuse} || 0%{?suse_version}
-%debug_package
-%endif
-
 #################################################################################
 # common
 #################################################################################
@@ -473,12 +451,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
-
-%if %{defined suse_version}
-# Fedora seems to have some problems with this macro, use it only on SUSE
-%fdupes -s $RPM_BUILD_ROOT/%{python_sitelib}
-%fdupes %buildroot
-%endif
 
 %clean
 rm -rf $RPM_BUILD_ROOT
