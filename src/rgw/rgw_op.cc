@@ -1575,21 +1575,14 @@ int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWA
 static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data, off_t ofs,
                                  MD5 *hash, bool need_to_wait)
 {
-  const unsigned char *data_ptr = (hash ? (const unsigned char *)data.c_str() : NULL);
   bool again;
-  uint64_t len = data.length();
 
   do {
     void *handle;
 
-    int ret = processor->handle_data(data, ofs, &handle, &again);
+    int ret = processor->handle_data(data, ofs, hash, &handle, &again);
     if (ret < 0)
       return ret;
-
-    if (hash) {
-      hash->Update(data_ptr, len);
-      hash = NULL; /* only calculate hash once */
-    }
 
     ret = processor->throttle_data(handle, need_to_wait);
     if (ret < 0)
@@ -1728,6 +1721,7 @@ void RGWPutObj::execute()
   }
 
   if (need_calc_md5) {
+    processor->complete_hash(&hash);
     hash.Final(m);
 
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
