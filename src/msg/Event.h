@@ -97,6 +97,9 @@ class EventCenter {
   uint64_t time_event_next_id;
   ThreadPool event_tp;
   time_t last_time; // last time process time event
+  int notify_receive_fd;
+  int notify_send_fd;
+  utime_t next_wake;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -185,6 +188,7 @@ class EventCenter {
   EventCenter(CephContext *c):
     lock("EventCenter::lock"), driver(NULL), cct(c), nevent(0), time_event_next_id(0),
     event_tp(c, "EventCenter::event_tp", c->_conf->ms_event_op_threads, "eventcenter_op_threads"),
+    notify_receive_fd(-1), notify_send_fd(-1),
     event_wq(this, c->_conf->ms_event_thread_timeout, c->_conf->ms_event_thread_suicide_timeout, &event_tp) {
     last_time = time(NULL);
   }

@@ -75,7 +75,7 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 
   int mask = cur_mask & (~delmask);
 
-  ee.events = 0;
+  ee.events = EPOLLET;
   if (mask & EVENT_READABLE) ee.events |= EPOLLIN;
   if (mask & EVENT_WRITABLE) ee.events |= EPOLLOUT;
   ee.data.u64 = 0; /* avoid valgrind warning */

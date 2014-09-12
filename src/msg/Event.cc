@@ -20,6 +20,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "Event "
 
+class C_handle_notify : public EventCallback {
+ public:
+  C_handle_notify() {}
+  void do_request(int fd_or_id) {
+  }
+};
+
 int EventCenter::init(int n)
 {
   // can't init multi times
@@ -45,7 +52,17 @@ int EventCenter::init(int n)
     return r;
   }
 
+  int fds[2];
+  if (pipe(fds) < 0) {
+    lderr(cct) << __func__ << " can't create notify pipe" << dendl;
+    return -1;
+  }
+
+  notify_receive_fd = fds[0];
+  notify_send_fd = fds[1];
+
   nevent = n;
+  create_file_event(notify_receive_fd, EVENT_READABLE, new C_handle_notify());
   return 0;
 }
 
@@ -53,6 +70,11 @@ EventCenter::~EventCenter()
 {
   if (driver)
     delete driver;
+
+  if (notify_receive_fd > 0)
+    ::close(notify_receive_fd);
+  if (notify_send_fd > 0)
+    ::close(notify_send_fd);
 }
 
 int EventCenter::create_file_event(int fd, int mask, EventCallback *ctxt)
@@ -154,6 +176,14 @@ uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallback *ct
   time_to_ids[expire] = id;
   time_events[id] = event;
 
+  if (expire < next_wake) {
+    char buf[1];
+    buf[0] = 'c';
+    // wake up "event_wait"
+    int n = write(notify_send_fd, buf, 1);
+    // FIXME ?
+    assert(n == 1);
+  }
   return id;
 }
 
@@ -183,6 +213,12 @@ void EventCenter::stop()
   ldout(cct, 1) << __func__ << dendl;
   Mutex::Locker l(lock);
   event_tp.stop();
+  char buf[1];
+  buf[0] = 'c';
+  // wake up "event_wait"
+  int n = write(notify_send_fd, buf, 1);
+  // FIXME ?
+  assert(n == 1);
 }
 
 int EventCenter::process_time_events()
@@ -267,6 +303,8 @@ int EventCenter::process_events(int timeout_millionseconds)
       tv.tv_sec = timeout_millionseconds / 1000;
       tv.tv_usec = (timeout_millionseconds % 1000) * 1000;
     }
+
+    next_wake = shortest;
   }
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;

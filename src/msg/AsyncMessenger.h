@@ -143,6 +143,8 @@ public:
    * @{
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) {
+          Mutex::Locker l(lock);
+
     return _send_message(m, dest);
   }
 

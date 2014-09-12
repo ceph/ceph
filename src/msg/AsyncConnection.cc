@@ -63,7 +63,12 @@ class C_handle_dispatch : public EventCallback {
  public:
   C_handle_dispatch(AsyncMessenger *msgr, Message *m): msgr(msgr), m(m) {}
   void do_request(int id) {
-    msgr->ms_deliver_dispatch(m);
+    msgr->ms_fast_preprocess(m);
+    if (msgr->ms_can_fast_dispatch(m)) {
+      msgr->ms_fast_dispatch(m);
+    } else {
+      msgr->ms_deliver_dispatch(m);
+    }
   }
 };
 
@@ -651,12 +656,7 @@ void AsyncConnection::process()
           in_seq = message->get_seq();
           ldout(async_msgr->cct, 10) << __func__ << " got message " << message->get_seq()
                                << " " << message << " " << *message << dendl;
-          async_msgr->ms_fast_preprocess(message);
-          if (async_msgr->ms_can_fast_dispatch(message)) {
-            async_msgr->ms_fast_dispatch(message);
-          } else {
-            center->create_time_event(0, new C_handle_dispatch(async_msgr, message));
-          }
+          center->create_time_event(0, new C_handle_dispatch(async_msgr, message));
 
           state = STATE_OPEN;
           break;
