@@ -151,6 +151,15 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   if (!send)
     return 0;
 
+  // standby?
+  if (is_queued() && state == STATE_STANDBY && !policy.server) {
+    assert(!outcoming_bl.length());
+    connect_seq++;
+    state = STATE_CONNECTING;
+    center->create_time_event(0, new C_handle_read(this));
+    return 0;
+  }
+
   if (state == STATE_CLOSED) {
     ldout(async_msgr->cct, 1) << __func__ << " connection is closed" << dendl;
     return -EINTR;
@@ -630,24 +639,31 @@ void AsyncConnection::process()
           break;
         }
 
+      case STATE_STANDBY:
+        {
+          ldout(async_msgr->cct,20) << __func__ << " enter STANDY" << dendl;
+
+          break;
+        }
+
       case STATE_CLOSED:
-      {
-        ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
-        center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-        break;
-      }
+        {
+          ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
+          center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+          break;
+        }
 
       case STATE_FAULT:
-      {
-        ldout(async_msgr->cct, 20) << __func__ << " socket is in error" << dendl;
-        break;
-      }
+        {
+          ldout(async_msgr->cct, 20) << __func__ << " socket is in error" << dendl;
+          break;
+        }
 
       default:
-      {
-        if (_process_connection() < 0)
-          goto fail;
-      }
+        {
+          if (_process_connection() < 0)
+            goto fail;
+        }
     }
 
 fail:
@@ -1630,6 +1646,7 @@ void AsyncConnection::fault()
 
   // requeue sent items
   requeue_sent();
+  outcoming_bl.clear();
   if (policy.standby && !is_queued()) {
     ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
