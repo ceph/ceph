@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 #include "common/errno.h"
+#include "Event.h"
 
 #ifdef HAVE_EPOLL
-#include "EventEpoll.h""
+#include "EventEpoll.h"
 #else
 #ifdef HAVE_KQUEUE
 #include "EventKqueue.h"
@@ -24,6 +25,7 @@ int EventCenter::init(int n)
 #else
   driver = new SelectDriver(cct);
 #endif
+#endif
 
   if (!driver) {
     lderr(cct) << __func__ << " failed to create event driver " << dendl;
@@ -41,7 +43,7 @@ int EventCenter::init(int n)
   return 0;
 }
 
-EventCenter::~EventCenter();
+EventCenter::~EventCenter()
 {
   if (driver)
     delete driver;
@@ -50,41 +52,50 @@ EventCenter::~EventCenter();
 int EventCenter::create_event(int fd, int mask, EventCallback *ctxt)
 {
   Mutex::Locker l(lock);
-  if (events.size() > center->nevent) {
+  if (events.size() > nevent) {
     lderr(cct) << __func__ << " event count is exceed." << dendl;
     return -ERANGE;
   }
 
-  int r = driver->add_event(fd, mask);
+  EventCenter::Event *event = _get_event(fd);
+
+  int r = driver->add_event(fd, event ? event->mask: EVENT_NONE, mask);
   if (r < 0)
     return r;
 
-  if (events.find(fd) == events.end()) {
+  if (!event) {
     events[fd] = EventCenter::Event();
+    event = &events[fd];
   }
 
-  EventCenter::Event *event = &events[fd];
-
   event->mask |= mask;
-  if (mask & EVENT_READABLE)
+  if (mask & EVENT_READABLE) {
+    if (event->read_cb)
+      delete event->read_cb;
     event->read_cb = ctxt;
-  if (mask & EVENT_WRITABLE)
+  }
+  if (mask & EVENT_WRITABLE) {
+    if (event->write_cb)
+      delete event->write_cb;
     event->write_cb = ctxt;
+  }
   return 0;
 }
 
-void delete_event(int fd, int mask)
+void EventCenter::delete_event(int fd, int mask)
 {
   Mutex::Locker l(lock);
-  if (event->mask == EVENT_NONE)
-    return;
 
-  driver->del_event(fd, mask);
-  struct event *event = &events[fd];
+  EventCenter::Event *event = _get_event(fd);
+  driver->del_event(fd, event ? event->mask: EVENT_NONE, mask);
+  if (!event) {
+    events[fd] = EventCenter::Event();
+    event = &events[fd];
+  }
 
-  if (mask & EVENT_READABLE)
+  if (event->read_cb)
     delete event->read_cb;
-  if (mask & EVENT_WRITABLE)
+  if (event->write_cb)
     delete event->write_cb;
 
   event->mask = event->mask & (~mask);
@@ -92,10 +103,10 @@ void delete_event(int fd, int mask)
     events.erase(fd);
 }
 
-int process_events(int timeout_millionseconds)
+int EventCenter::process_events(int timeout_millionseconds)
 {
   struct timeval tv;
-  int j, processed, numevents, mask, fd, rfired;
+  int j, processed, numevents;
 
   if (timeout_millionseconds > 0) {
     tv.tv_sec = timeout_millionseconds / 1000;
@@ -110,7 +121,7 @@ int process_events(int timeout_millionseconds)
   vector<FiredEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   for (j = 0; j < numevents; j++)
-    event_wq.queue(fired_events[i]);
+    event_wq.queue(fired_events[j]);
 
   return numevents;
 }

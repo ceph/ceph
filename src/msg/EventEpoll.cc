@@ -1,3 +1,4 @@
+#include "common/errno.h"
 #include "EventEpoll.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -7,11 +8,11 @@
 
 int EpollDriver::init(int nevent)
 {
-  events = malloc(sizeof(struct epoll_event)*nevent);
+  events = (struct epoll_event*)malloc(sizeof(struct epoll_event)*nevent);
   if (!events) {
     lderr(cct) << __func__ << " unable to malloc memory: "
-                       << cpp_strerror(errno) << dendl;
-    return -error;
+                           << cpp_strerror(errno) << dendl;
+    return -errno;
   }
   memset(events, 0, sizeof(struct epoll_event)*nevent);
 
@@ -19,13 +20,13 @@ int EpollDriver::init(int nevent)
   if (epfd == -1) {
     lderr(cct) << __func__ << " unable to do epoll_create: "
                        << cpp_strerror(errno) << dendl;
-    return -error;
+    return -errno;
   }
 
   return 0;
 }
 
-int EpollDriver::add_event(int fd, int mask)
+int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
 {
   struct epoll_event ee;
   /* If the fd was already monitored for some event, we need a MOD
@@ -34,30 +35,29 @@ int EpollDriver::add_event(int fd, int mask)
   map<int, int>::iterator it = fds.find(fd);
   if (it == fds.end()) {
     op = EPOLL_CTL_ADD;
-    if (deleted_fds.length()) {
-      pos = deleted.fds.front();
-      deleted.fds.pop_front();
+    if (deleted_fds.size()) {
+      pos = deleted_fds.front();
+      deleted_fds.pop_front();
     } else {
       fds[fd] = pos = next_pos;
       next_pos++;
     }
   } else {
-    pos = it->second;
-    op = events[pos].mask == EVENT_NONE ? EPOLL_CTL_ADD : EPOLL_CTL_MOD;
+    op = cur_mask == EVENT_NONE ? EPOLL_CTL_ADD: EPOLL_CTL_MOD;
   }
 
   ee.events = 0;
-  mask |= events[pos].mask; /* Merge old events */
-  if (mask & EVENT_READABLE)
+  add_mask |= cur_mask; /* Merge old events */
+  if (add_mask & EVENT_READABLE)
     ee.events |= EPOLLIN;
-  if (mask & EVENT_WRITABLE)
+  if (add_mask & EVENT_WRITABLE)
     ee.events |= EPOLLOUT;
   ee.data.u64 = 0; /* avoid valgrind warning */
   ee.data.fd = fd;
   if (epoll_ctl(epfd, op, fd, &ee) == -1) {
     lderr(cct) << __func__ << " unable to add event: "
                        << cpp_strerror(errno) << dendl;
-    return -error;
+    return -errno;
   }
   return 0;
 }
@@ -67,7 +67,7 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
   struct epoll_event ee;
   map<int, int>::iterator it = fds.find(fd);
   if (it == fds.end())
-    return 0;
+    return ;
 
   int mask = cur_mask & (~delmask);
 
@@ -91,7 +91,7 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
   }
 }
 
-int EpollDriver::event_wait(FiredEvent &fired_events, struct timeval *tvp)
+int EpollDriver::event_wait(vector<FiredEvent> &fired_events, struct timeval *tvp)
 {
   int retval, numevents = 0;
 

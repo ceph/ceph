@@ -29,9 +29,9 @@ class EpollDriver : public EventDriver {
   }
 
   int init(int nevent);
-  int add_event(int fd, int mask);
+  int add_event(int fd, int cur_mask, int add_mask);
   void del_event(int fd, int cur_mask, int del_mask);
-  int event_wait(FiredEvent &fired_events, struct timeval *tp);
+  int event_wait(vector<FiredEvent> &fired_events, struct timeval *tp);
 };
 
 #endif

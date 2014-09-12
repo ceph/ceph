@@ -143,7 +143,6 @@ class AsyncConnection : public Connection {
     STATE_OPEN_MESSAGE_HEADER,
     STATE_OPEN_MESSAGE_THROTTLE_MESSAGE,
     STATE_OPEN_MESSAGE_THROTTLE_BYTES,
-    STATE_OPEN_MESSAGE_THROTTLE_DISPATCH,
     STATE_OPEN_MESSAGE_READ_FRONT,
     STATE_OPEN_MESSAGE_READ_MIDDLE,
     STATE_OPEN_MESSAGE_READ_DATA_PREPARE,
@@ -182,10 +181,8 @@ class AsyncConnection : public Connection {
   int state_after_send;
   int sd;
   int port;
-  uint64_t conn_id;
   Messenger::Policy policy;
   map<int, list<Message*> > out_q;  // priority queue for outbound msgs
-  DispatchQueue *in_q;
   list<Message*> sent;
   Mutex lock;
   utime_t backoff;         // backoff time

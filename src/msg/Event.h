@@ -8,7 +8,7 @@
 #endif
 
 // We use epoll, kqueue, evport, select in descending order by performance.
-#ifdef __linux__
+#if defined(__linux__)
 #define HAVE_EPOLL 1
 #endif
 
@@ -48,9 +48,9 @@ class EventDriver {
  public:
   virtual ~EventDriver() {}       // we want a virtual destructor!!!
   virtual int init(int nevent) = 0;
-  virtual int add_event(int fd, int mask) = 0;
-  virtual void delete_event(int fd, int del_mask) = 0;
-  virtual int event_wait(FiredEvent &fired_events, struct timeval *tp) = 0;
+  virtual int add_event(int fd, int cur_mask, int mask) = 0;
+  virtual void del_event(int fd, int cur_mask, int del_mask) = 0;
+  virtual int event_wait(vector<FiredEvent> &fired_events, struct timeval *tp) = 0;
 };
 
 class EventCallback {
@@ -72,16 +72,14 @@ class EventCenter {
   map<int, Event> events;
   EventDriver *driver;
   CephContext *cct;
-  int nevent;
+  uint64_t nevent;
   ThreadPool event_tp;
 
-  Event *get_event(int fd) {
-    Mutex::Locker l(lock);
+  Event *_get_event(int fd) {
     map<int, Event>::iterator it = events.find(fd);
     if (it != events.end()) {
       return &it->second;
     }
-
     return NULL;
   }
   struct EventWQ : public ThreadPool::WorkQueueVal<FiredEvent> {
@@ -155,8 +153,12 @@ class EventCenter {
   ~EventCenter();
   int init(int nevent);
   int create_event(int fd, int mask, EventCallback *ctxt);
-  int delete_event(int fd, int mask);
+  void delete_event(int fd, int mask);
   int process_events(int timeout_milliseconds);
+  Event *get_event(int fd) {
+    Mutex::Locker l(lock);
+    return _get_event(fd);
+  }
 };
 
 #endif
