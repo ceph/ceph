@@ -1,6 +1,8 @@
 check_SCRIPTS += \
 	test/erasure-code/test-erasure-code.sh
 
+noinst_HEADERS += \
+	test/erasure-code/ceph_erasure_code_benchmark.h
 ceph_erasure_code_benchmark_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/ceph_erasure_code_benchmark.cc
