@@ -187,3 +187,25 @@ TEST(Log, ManyGather)
   log.flush();
   log.stop();
 }
+
+void do_segv()
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 20, 1);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/big");
+  log.reopen_log_file();
+
+  log.inject_segv();
+  Entry *e = new Entry(ceph_clock_now(NULL), pthread_self(), 10, 1);
+  log.submit_entry(e);  // this should segv
+
+  log.flush();
+  log.stop();
+}
+
+TEST(Log, InternalSegv)
+{
+  ASSERT_DEATH(do_segv(), ".*");
+}
