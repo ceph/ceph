@@ -19,3 +19,7 @@
 	path = src/rocksdb
 	url = git://github.com/ceph/rocksdb
 	ignore = dirty
+[submodule "ceph-erasure-code-corpus"]
+	path = ceph-erasure-code-corpus
+	url = https://github.com/ceph/ceph-erasure-code-corpus.git
+
