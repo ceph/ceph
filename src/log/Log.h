@@ -26,6 +26,9 @@ class Log : private Thread
   pthread_cond_t m_cond_loggers;
   pthread_cond_t m_cond_flusher;
 
+  pthread_t m_queue_mutex_holder;
+  pthread_t m_flush_mutex_holder;
+
   EntryQueue m_new;    ///< new entries
   EntryQueue m_recent; ///< recent (less new) entries we've already written at low detail
 
@@ -38,6 +41,8 @@ class Log : private Thread
   bool m_stop;
 
   int m_max_new, m_max_recent;
+
+  bool m_inject_segv;
 
   void *entry();
 
@@ -68,6 +73,12 @@ public:
 
   void start();
   void stop();
+
+  /// true if the log lock is held by our thread
+  bool is_inside_log_lock();
+
+  /// induce a segv on the next log event
+  void inject_segv();
 };
 
 }
