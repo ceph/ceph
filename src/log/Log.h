@@ -42,6 +42,8 @@ class Log : private Thread
 
   int m_max_new, m_max_recent;
 
+  bool m_inject_segv;
+
   void *entry();
 
   void _flush(EntryQueue *q, EntryQueue *requeue, bool crash);
@@ -74,6 +76,9 @@ public:
 
   /// true if the log lock is held by our thread
   bool is_inside_log_lock();
+
+  /// induce a segv on the next log event
+  void inject_segv();
 };
 
 }

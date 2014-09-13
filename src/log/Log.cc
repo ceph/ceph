@@ -45,7 +45,8 @@ Log::Log(SubsystemMap *s)
     m_stderr_log(1), m_stderr_crash(-1),
     m_stop(false),
     m_max_new(DEFAULT_MAX_NEW),
-    m_max_recent(DEFAULT_MAX_RECENT)
+    m_max_recent(DEFAULT_MAX_RECENT),
+    m_inject_segv(false)
 {
   int ret;
 
@@ -144,6 +145,9 @@ void Log::submit_entry(Entry *e)
 {
   pthread_mutex_lock(&m_queue_mutex);
   m_queue_mutex_holder = pthread_self();
+
+  if (m_inject_segv)
+    *(int *)(0) = 0xdead;
 
   // wait for flush to catch up
   while (m_new.m_len > m_max_new)
@@ -351,6 +355,11 @@ bool Log::is_inside_log_lock()
   return
     pthread_self() == m_queue_mutex_holder ||
     pthread_self() == m_flush_mutex_holder;
+}
+
+void Log::inject_segv()
+{
+  m_inject_segv = true;
 }
 
 } // ceph::log::
