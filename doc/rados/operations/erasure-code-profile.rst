@@ -21,39 +21,27 @@ same size as the data chunk, i.e. 1MB). The raw space overhead is only
 40% and the object will not be lost even if four OSDs break at the
 same time.
 
+.. _list of available plugins:
+
+.. toctree::
+	:maxdepth: 1
+
+	erasure-code-jerasure
+	erasure-code-isa
+	erasure-code-lrc
+
 osd erasure-code-profile set
 ============================
 
 To create a new erasure code profile::
 
 	ceph osd erasure-code-profile set {name} \
-             [{k=data-chunks}] \
-             [{m=coding-chunks}] \
              [{directory=directory}] \
              [{plugin=plugin}] \
              [{key=value} ...] \
              [--force]
 
 Where:
-
-``{k=data-chunks}``
-
-:Description: Each object is split in **data-chunks** parts,
-              each stored on a different OSD.
-
-:Type: Integer
-:Required: No. 
-:Default: 2
-
-``{m=coding-chunks}``
-
-:Description: Compute **coding chunks** for each object and store them
-              on different OSDs. The number of coding chunks is also
-              the number of OSDs that can be down without losing data.
-
-:Type: Integer
-:Required: No. 
-:Default: 1
 
 ``{directory=directory}``
 
@@ -67,7 +55,8 @@ Where:
 ``{plugin=plugin}``
 
 :Description: Use the erasure code **plugin** to compute coding chunks
-              and recover missing chunks.
+              and recover missing chunks. See the `list of available
+              plugins`_ for more information.
 
 :Type: String
 :Required: No. 
