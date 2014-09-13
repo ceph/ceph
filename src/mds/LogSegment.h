@@ -33,9 +33,11 @@ class CDentry;
 class MDS;
 struct MDSlaveUpdate;
 
+typedef uint64_t log_segment_seq_t;
+
 class LogSegment {
  public:
-  const uint64_t seq;
+  const log_segment_seq_t seq;
   uint64_t offset, end;
   int num_events;
 

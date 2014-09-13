@@ -345,7 +345,7 @@ private:
   void handle_signal(int signum);
 
   // who am i etc
-  int get_nodeid() { return whoami; }
+  int get_nodeid() const { return whoami; }
   uint64_t get_metadata_pool() { return mdsmap->get_metadata_pool(); }
   MDSMap *get_mds_map() { return mdsmap; }
 
