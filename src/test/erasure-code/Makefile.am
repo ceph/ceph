@@ -13,6 +13,14 @@ bin_DEBUGPROGRAMS += ceph_erasure_code_benchmark
 noinst_HEADERS += \
 	test/erasure-code/ceph_erasure_code_benchmark.h
 
+ceph_erasure_code_non_regression_SOURCES = \
+	test/erasure-code/ceph_erasure_code_non_regression.cc
+ceph_erasure_code_non_regression_LDADD = $(LIBOSD) $(LIBCOMMON) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
+if LINUX
+ceph_erasure_code_non_regression_LDADD += -ldl
+endif
+noinst_PROGRAMS += ceph_erasure_code_non_regression
+
 ceph_erasure_code_SOURCES = \
 	test/erasure-code/ceph_erasure_code.cc
 ceph_erasure_code_LDADD = $(LIBOSD) $(LIBCOMMON) $(BOOST_PROGRAM_OPTIONS_LIBS) $(CEPH_GLOBAL)
