@@ -1990,12 +1990,12 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
   }
 
   // recovery
-  stringstream rss;
-  pg_map.overall_recovery_summary(NULL, &rss);
-  if (!rss.str().empty()) {
-    summary.push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
+  list<string> sl;
+  pg_map.overall_recovery_summary(NULL, &sl);
+  for (list<string>::iterator p = sl.begin(); p != sl.end(); ++p) {
+    summary.push_back(make_pair(HEALTH_WARN, "recovery " + *p));
     if (detail)
-      detail->push_back(make_pair(HEALTH_WARN, "recovery " + rss.str()));
+      detail->push_back(make_pair(HEALTH_WARN, "recovery " + *p));
   }
   
   // full/nearfull

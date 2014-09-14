@@ -2776,19 +2776,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->open_object_section("recovery");
       }
 
-      stringstream rss, tss;
-      pg_map.pool_recovery_summary(f.get(), &rss, poolid);
-      if (!f && !rss.str().empty())
-        tss << "  " << rss.str() << "\n";
+      list<string> sl;
+      stringstream tss;
+      pg_map.pool_recovery_summary(f.get(), &sl, poolid);
+      if (!f && !sl.empty()) {
+	for (list<string>::iterator p = sl.begin(); p != sl.end(); ++p)
+	  tss << "  " << *p << "\n";
+      }
 
       if (f) {
         f->close_section();
         f->open_object_section("recovery_rate");
       }
 
-      rss.clear();
-      rss.str("");
-
+      ostringstream rss;
       pg_map.pool_recovery_rate_summary(f.get(), &rss, poolid);
       if (!f && !rss.str().empty())
         tss << "  recovery io " << rss.str() << "\n";
