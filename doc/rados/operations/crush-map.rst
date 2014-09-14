@@ -878,6 +878,34 @@ Where:
 :Required: Yes
 :Example: ``osd.0``
 
+Add a Bucket
+============
+
+To add a bucket in the CRUSH map of a running cluster, execute the ``ceph osd crush add-bucket`` command::
+
+	ceph osd crush add-bucket {bucket-name} {bucket-type}
+
+Where:
+
+``bucket-name``
+
+:Description: The full name of the bucket.
+:Type: String
+:Required: Yes
+:Example: ``rack12``
+
+
+``bucket-type``
+
+:Description: The type of the bucket. The type must already exist in the hierarchy.
+:Type: String
+:Required: Yes
+:Example: ``rack``
+
+
+The following example adds the ``rack12`` bucket to the hierarchy::
+
+	ceph osd crush add-bucket rack12 rack
 
 Move a Bucket
 =============
@@ -903,7 +931,27 @@ Where:
 :Required: No
 :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
+Remove a Bucket
+===============
 
+To remove a bucket from the CRUSH map hierarchy, execute the following::
+
+	ceph osd crush remove {bucket-name}
+
+.. note:: A bucket must be empty before removing it from the CRUSH hierarchy.
+
+Where:
+
+``bucket-name``
+
+:Description: The name of the bucket that you'd like to remove.
+:Type: String
+:Required: Yes
+:Example: ``rack12``
+
+The following example removes the ``rack12`` bucket from the hierarchy::
+
+	ceph osd crush remove rack12
 
 Tunables
 ========
