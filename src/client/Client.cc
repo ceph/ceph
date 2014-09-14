@@ -1872,6 +1872,7 @@ void Client::handle_client_reply(MClientReply *reply)
       // have to return ESTALE
     } else {
       request->caller_cond->Signal();
+      reply->put();
       return;
     }
     ldout(cct, 20) << "have to return ESTALE" << dendl;
