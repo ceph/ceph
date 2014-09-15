@@ -242,6 +242,7 @@ public:
   map<int, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
+  void get_session_metadata(std::map<std::string, std::string> *meta) const;
   bool have_open_session(int mds);
   void got_mds_push(MetaSession *s);
   MetaSession *_get_mds_session(int mds, Connection *con);  ///< return session for mds *and* con; null otherwise
@@ -313,6 +314,10 @@ protected:
   xlist<Inode*> delayed_caps, cap_list;
   int num_flushing_caps;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
+
+  // Optional extra metadata about me to send to the MDS
+  std::map<std::string, std::string> extra_meta;
+
 
   /* async block write barrier support */
   //map<uint64_t, BarrierContext* > barriers;
@@ -425,6 +430,8 @@ protected:
   Client(Messenger *m, MonClient *mc);
   ~Client();
   void tear_down_cache();
+
+  void set_metadata(std::string const &k, std::string const &v) {extra_meta[k] = v;}
 
   client_t get_nodeid() { return whoami; }
 

@@ -80,7 +80,22 @@ private:
   uint64_t state_seq;
   int importing_count;
   friend class SessionMap;
+
+  // Human (friendly) name is soft state generated from client metadata
+  void _update_human_name();
+  std::string human_name;
+
 public:
+
+  void decode(bufferlist::iterator &p);
+  void set_client_metadata(std::map<std::string, std::string> const &meta);
+  std::string get_human_name() const {return human_name;}
+
+  // Ephemeral state for tracking progress of capability recalls
+  utime_t recalled_at;  // When was I asked to SESSION_RECALL?
+  uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
+  uint32_t recall_release_count;  // How many caps have I actually revoked?
+
   session_info_t info;                         ///< durable bits
 
   ConnectionRef connection;
@@ -92,6 +107,9 @@ public:
   size_t get_request_count();
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
+
+  void notify_cap_release(size_t n_caps);
+  void notify_recall_sent(int const new_limit);
 
   inodeno_t next_ino() {
     if (info.prealloc_inos.empty())
@@ -203,6 +221,7 @@ public:
 
   Session() : 
     state(STATE_CLOSED), state_seq(0), importing_count(0),
+    recalled_at(), recall_count(0), recall_release_count(0),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
     cap_push_seq(0),
@@ -284,6 +303,14 @@ public:
       return session_map[w];
     return 0;
   }
+  const Session* get_session(entity_name_t w) const {
+    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
+    if (p == session_map.end()) {
+      return NULL;
+    } else {
+      return p->second;
+    }
+  }
   Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;
     if (session_map.count(i.name)) {
@@ -323,8 +350,8 @@ public:
       if (p->second->info.inst.name.is_client())
 	s.insert(p->second->info.inst.name.num());
   }
-  void get_client_session_set(set<Session*>& s) {
-    for (ceph::unordered_map<entity_name_t,Session*>::iterator p = session_map.begin();
+  void get_client_session_set(set<Session*>& s) const {
+    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
 	 p != session_map.end();
 	 ++p)
       if (p->second->info.inst.name.is_client())
