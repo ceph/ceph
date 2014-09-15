@@ -565,8 +565,11 @@ public:
     obj_ctx = _o;
     return 0;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
+  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, bool *again) = 0;
   virtual int throttle_data(void *handle, bool need_to_wait) = 0;
+  virtual void complete_hash(MD5 *hash) {
+    assert(0);
+  }
   virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
   CephContext *ctx();
@@ -583,7 +586,7 @@ class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
 
 protected:
   int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
+  int handle_data(bufferlist& bl, off_t ofs, MD5 *hash /* NULL expected */, void **phandle, bool *again);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
@@ -673,7 +676,8 @@ public:
   void set_extra_data_len(uint64_t len) {
     extra_data_len = len;
   }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
+  virtual int handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, bool *again);
+  virtual void complete_hash(MD5 *hash);
   bufferlist& get_extra_data() { return extra_data_bl; }
 };
 
