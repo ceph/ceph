@@ -97,6 +97,8 @@ def lock_machines(ctx, config):
 
         newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
                                       ctx.archive)
+        if not newly_locked and not isinstance(newly_locked, list):
+            raise RuntimeError('Invalid parameters specified')
         if len(newly_locked) == how_many:
             vmlist = []
             for lmach in newly_locked:
