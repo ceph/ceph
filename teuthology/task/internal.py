@@ -16,7 +16,6 @@ from teuthology import lock
 from teuthology import misc
 from teuthology import provision
 from teuthology.config import config as teuth_config
-from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
 
 log = logging.getLogger(__name__)
@@ -213,9 +212,6 @@ def connect(ctx, config):
                 key = None
         except (AttributeError, KeyError):
             pass
-        if key.startswith('ssh-rsa ') or key.startswith('ssh-dss '):
-            if misc.is_vm(t):
-                key = None
         remotes.append(
             remote.Remote(name=t, host_key=key, keep_alive=True, console=None))
     ctx.cluster = cluster.Cluster()
@@ -577,30 +573,16 @@ def vm_setup(ctx, config):
     """
     Look for virtual machines and handle their initialization
     """
-    with parallel() as p:
-        editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
-        for rem in ctx.cluster.remotes.iterkeys():
-            mname = rem.shortname
-            if misc.is_vm(mname):
-                r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
-                        stdout=StringIO(),
-                        check_status=False,)
-                if r.returncode != 0:
-                    p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
-                    _, err = p2.communicate()
-                    if err:
-                        log.info("Edit of /etc/sudoers failed: %s", err)
-                    p.spawn(_handle_vm_init, rem)
-
-def _handle_vm_init(remote_):
-    """
-    Initialize a remote vm by downloading and running ceph_qa_chef.
-    """
-    log.info('Running ceph_qa_chef on %s', remote_)
-    remote_.run(args=['wget', '-q', '-O-',
-            'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
-            run.Raw('|'),
-            'sh',
-        ])
-
+    editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
+    for rem in ctx.cluster.remotes.iterkeys():
+        mname = rem.shortname
+        if misc.is_vm(mname):
+            r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
+                    stdout=StringIO(),
+                    check_status=False,)
+            if r.returncode != 0:
+                p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
+                p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
+                _, err = p2.communicate()
+                if err:
+                    log.info("Edit of /etc/sudoers failed: %s", err)
