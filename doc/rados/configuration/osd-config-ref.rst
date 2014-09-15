@@ -399,16 +399,15 @@ priority than requests to read or write data.
 
 ``osd backfill scan min`` 
 
-:Description: The scan interval in seconds for backfill operations when cluster 
-              load is low.
+:Description: The minimum number of objects per backfill scan.
+
 :Type: 32-bit Integer
 :Default: ``64`` 
 
 
 ``osd backfill scan max`` 
 
-:Description: The maximum scan interval in seconds for backfill operations 
-              irrespective of cluster load.
+:Description: The maximum number of objects per backfill scan.
 
 :Type: 32-bit Integer
 :Default: ``512`` 
