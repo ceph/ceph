@@ -145,6 +145,8 @@ def parse_cmdargs(args=None, target=''):
                         help='client id for authentication')
     parser.add_argument('--name', '-n', dest='client_name',
                         help='client name for authentication')
+    parser.add_argument('--keyring', '-k', dest='keyring',
+                        help='ceph keyring file for authentication')
     parser.add_argument('--cluster', help='cluster name')
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
@@ -613,10 +615,14 @@ def main():
     if parsed_args.cluster:
         clustername = parsed_args.cluster
 
+    conf={}
+    if parsed_args.keyring:
+        conf['keyring']=parsed_args.keyring
+    
     try:
         cluster_handle = rados.Rados(name=name, clustername=clustername,
                                      conf_defaults=conf_defaults,
-                                     conffile=conffile)
+                                     conffile=conffile,conf=conf)
         retargs = cluster_handle.conf_parse_argv(childargs)
     except rados.Error as e:
         print >> sys.stderr, 'Error initializing cluster client: {0}'.\
