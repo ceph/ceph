@@ -862,7 +862,7 @@ int Pipe::connect()
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
-    ldout(msgr->cct,0) << "connect protocol error (bad banner) on peer " << paddr << dendl;
+    ldout(msgr->cct,0) << "connect protocol error (bad banner) on peer " << peer_addr << dendl;
     goto fail;
   }
 
