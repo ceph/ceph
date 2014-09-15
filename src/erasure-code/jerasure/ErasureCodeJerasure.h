@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013, 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -220,6 +221,11 @@ public:
                                char **coding,
                                int blocksize);
   virtual unsigned get_alignment() const;
+  virtual bool check_k(ostream *ss) const;
+  virtual bool check_w(ostream *ss) const;
+  virtual bool check_packetsize_set(ostream *ss) const;
+  virtual bool check_packetsize(ostream *ss) const;
+  virtual void revert_to_default(ostream *ss);
   virtual int parse(const map<std::string,std::string> &parameters,
 		    ostream *ss);
   virtual void prepare();
@@ -229,8 +235,11 @@ class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
 public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
-  {}
+  {
+    DEFAULT_W = 6;
+  }
 
+  virtual bool check_w(ostream *ss) const;
   virtual void prepare();
 };
 
