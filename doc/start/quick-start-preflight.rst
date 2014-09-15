@@ -6,12 +6,12 @@
 
 Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin
 :term:`node` and a 3-node :term:`Ceph Storage Cluster` to explore the basics of
-Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy`` admin
-node and three Ceph Nodes (or virtual machines) that will host your Ceph Storage
-Cluster. Before proceeding any further, see `OS Recommendations`_ to verify that
-you have a supported distribution and version of Linux. We recommend deploying
-Ceph such that you use a single Linux distribution and version across the
-cluster. 
+Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy`` 
+admin node and three Ceph Nodes (or virtual machines) that will host your Ceph 
+Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to 
+verify that you have a supported distribution and version of Linux. When 
+you use a single Linux distribution and version across the cluster, it will 
+make it easier for you to troubleshoot issues that arise in production. 
 
 In the descriptions below, :term:`Node` refers to a single machine.
 
@@ -51,7 +51,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 Red Hat Package Manager (RPM)
 -----------------------------
 
-For Red Hat(rhel6), CentOS (el6), and Fedora 17-19 (f17-f19) perform the
+For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
 following steps:
 
 #. Add the package to your repository. Open a text editor and create a
@@ -62,9 +62,9 @@ following steps:
 
    Paste the following example code. Replace ``{ceph-release}`` with
    the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
-   with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6`` for
-   Red Hat 6, ``fc18`` or ``fc19`` for Fedora 18 or Fedora 19, and ``sles11``
-   for SLES 11). Finally, save the contents to the
+   with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6.5`` for
+   Red Hat 6.5, ``rhel7`` for Red Hat 7, and ``fc19`` or ``fc20`` for Fedora 19
+   or Fedora 20. Finally, save the contents to the 
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
 	[ceph-noarch]
@@ -141,13 +141,12 @@ this is **NOT** recommended). To use ``ceph-deploy --username {username}``, the
 user you specify must have password-less SSH access to the Ceph node, as
 ``ceph-deploy`` will not prompt you for a password.
 
-We recommend creating a Ceph user on **ALL** Ceph nodes in the cluster. While 
-we recommend a uniform user name across the cluster for ease of use 
-(not required), we recommend avoiding obvious user names, because hackers 
-typically use obvious usernames with brute force hacks (e.g., ``root``, 
-``admin``, ``{productname}``). The following procedure, substituting 
-``{username}`` for a user name you define, describes how to create a user 
-with passwordless ``sudo``.
+We recommend creating a Ceph user on **ALL** Ceph nodes in the cluster. A
+uniform user name across the cluster may improve ease of use  (not required),
+but you should avoid obvious user names, because hackers typically use them with
+brute force hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following
+procedure, substituting  ``{username}`` for the user name you define, describes
+how to create a user  with passwordless ``sudo``.
 
 #. Create a user on each Ceph Node. ::
 
