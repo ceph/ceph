@@ -49,7 +49,9 @@ class LogSegment;
 class SimpleLock;
 class ScatterLock;
 class LocalLock;
+
 class MDCache;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 
 #include "SimpleLock.h"
 
@@ -194,6 +196,9 @@ public:
 
   void remove_client_cap(CInode *in, client_t client);
 
+  void get_late_revoking_clients(std::list<client_t> *result) const;
+  bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
+
  protected:
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
@@ -206,7 +211,10 @@ public:
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
 
+  // Maintain a global list to quickly find if any caps are late revoking
   xlist<Capability*> revoking_caps;
+  // Maintain a per-client list to find clients responsible for late ones quickly
+  std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
 
   // local
 public:
