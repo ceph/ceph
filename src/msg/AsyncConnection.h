@@ -219,6 +219,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef read_handler;
   EventCallbackRef write_handler;
   EventCallbackRef reset_handler;
+  EventCallbackRef remote_reset_handler;
 
   // Tis section are temp variables used by state transition
 
