@@ -482,7 +482,7 @@ int main(int argc, const char **argv)
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
-    if (preload_erasure_code() < -1)
+    if (preload_erasure_code() < 0)
       prefork.exit(1);
   }
 
