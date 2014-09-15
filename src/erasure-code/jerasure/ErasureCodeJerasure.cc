@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -372,6 +373,56 @@ unsigned ErasureCodeJerasureLiberation::get_alignment() const
   return alignment;
 }
 
+bool ErasureCodeJerasureLiberation::check_k(ostream *ss) const
+{
+  if (k > w) {
+    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_w(ostream *ss) const
+{
+  if (w <= 2 || !is_prime(w)) {
+    *ss <<  "w=" << w << " must be greater than two and be prime" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_packetsize_set(ostream *ss) const
+{
+  if (packetsize == 0) {
+    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+bool ErasureCodeJerasureLiberation::check_packetsize(ostream *ss) const
+{
+  if ((packetsize%(sizeof(int))) != 0) {
+    *ss << "packetsize=" << packetsize
+	<< " must be a multiple of sizeof(int) = " << sizeof(int) << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
+void ErasureCodeJerasureLiberation::revert_to_default(ostream *ss)
+{
+  *ss << "reverting to k=" << DEFAULT_K << ", w="
+      << DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << std::endl;
+  k = DEFAULT_K;
+  w = DEFAULT_W;
+  packetsize = DEFAULT_PACKETSIZE;
+}
+
 int ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &parameters,
 					 ostream *ss)
 {
@@ -379,29 +430,14 @@ int ErasureCodeJerasureLiberation::parse(const map<std::string,std::string> &par
   err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
-  if (k > w) {
-    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
+  if (!check_k(ss))
     error = true;
-  }
-  if (w <= 2 || !is_prime(w)) {
-    *ss <<  "w=" << w << " must be greater than two and be prime" << std::endl;
+  if (!check_w(ss))
     error = true;
-  }
-  if (packetsize == 0) {
-    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
+  if (!check_packetsize_set(ss) || !check_packetsize(ss))
     error = true;
-  }
-  if ((packetsize%(sizeof(int))) != 0) {
-    *ss << "packetsize=" << packetsize
-	<< " must be a multiple of sizeof(int) = " << sizeof(int) << std::endl;
-    error = true;
-  }
   if (error) {
-    *ss << "reverting to k=" << DEFAULT_K << ", w="
-	<< DEFAULT_W << ", packetsize=" << DEFAULT_PACKETSIZE << std::endl;
-    k = DEFAULT_K;
-    w = DEFAULT_W;
-    packetsize = DEFAULT_PACKETSIZE;
+    revert_to_default(ss);
     err = -EINVAL;
   }
   return err;
@@ -416,6 +452,17 @@ void ErasureCodeJerasureLiberation::prepare()
 // 
 // ErasureCodeJerasureBlaumRoth
 //
+bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
+{
+  if (w <= 2 || !is_prime(w+1)) {
+    *ss <<  "w=" << w << " must be greater than two and "
+	<< "w+1 must be prime" << std::endl;
+    return false;
+  } else {
+    return true;
+  }
+}
+
 void ErasureCodeJerasureBlaumRoth::prepare()
 {
   bitmatrix = blaum_roth_coding_bitmatrix(k, w);
@@ -434,19 +481,12 @@ int ErasureCodeJerasureLiber8tion::parse(const map<std::string,std::string> &par
   err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
-  if (k > w) {
-    *ss << "k=" << k << " must be less than or equal to w=" << w << std::endl;
+  if (!check_k(ss))
     error = true;
-  }
-  if (packetsize == 0) {
-    *ss << "packetsize=" << packetsize << " must be set" << std::endl;
+  if (!check_packetsize_set(ss))
     error = true;
-  }
   if (error) {
-    *ss << "reverting to k=" << DEFAULT_K << ", packetsize="
-	<< DEFAULT_PACKETSIZE << std::endl;
-    k = DEFAULT_K;
-    packetsize = DEFAULT_PACKETSIZE;
+    revert_to_default(ss);
     err = -EINVAL;
   }
   return err;
