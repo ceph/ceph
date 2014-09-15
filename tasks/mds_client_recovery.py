@@ -189,6 +189,10 @@ class TestClientRecovery(unittest.TestCase):
         a = time.time()
         cap_waiter.wait()
         b = time.time()
+
+        # Should have succeeded
+        self.assertEqual(cap_waiter.exitstatus, 0)
+
         cap_waited = b - a
         log.info("cap_waiter waited {0}s".format(cap_waited))
         self.assertTrue(self.mds_session_timeout / 2.0 <= cap_waited <= self.mds_session_timeout * 2.0,
