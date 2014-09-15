@@ -1,6 +1,9 @@
+from StringIO import StringIO
 import logging
-import os
+from teuthology.orchestra.run import CommandFailedError
+from teuthology import misc
 
+from teuthology.orchestra import remote as orchestra_remote
 from teuthology.orchestra import run
 from .mount import CephFSMount
 
@@ -8,9 +11,15 @@ log = logging.getLogger(__name__)
 
 
 class KernelMount(CephFSMount):
-    def __init__(self, mons, test_dir, client_id, client_remote):
+    def __init__(self, mons, test_dir, client_id, client_remote,
+                 ipmi_user, ipmi_password, ipmi_domain):
         super(KernelMount, self).__init__(test_dir, client_id, client_remote)
         self.mons = mons
+
+        self.mounted = False
+        self.ipmi_user = ipmi_user
+        self.ipmi_password = ipmi_password
+        self.ipmi_domain = ipmi_domain
 
     def write_secret_file(self, remote, role, keyring, filename):
         """
@@ -63,36 +72,122 @@ class KernelMount(CephFSMount):
             ],
         )
 
+        self.client_remote.run(
+            args=['sudo', 'chmod', '1777', self.mountpoint])
+
+        self.mounted = True
+
     def umount(self):
         log.debug('Unmounting client client.{id}...'.format(id=self.client_id))
-        mnt = os.path.join(self.test_dir, 'mnt.{id}'.format(id=self.client_id))
         self.client_remote.run(
             args=[
                 'sudo',
                 'umount',
-                mnt,
+                self.mountpoint,
             ],
         )
         self.client_remote.run(
             args=[
                 'rmdir',
                 '--',
-                mnt,
+                self.mountpoint,
             ],
         )
+        self.mounted = False
 
     def cleanup(self):
         pass
 
-    def umount_wait(self):
-        pass
+    def umount_wait(self, force=False):
+        """
+        Unlike the fuse client, the kernel client's umount is immediate
+        """
+        try:
+            self.umount()
+        except CommandFailedError:
+            if not force:
+                raise
+
+            self.kill()
+            self.kill_cleanup()
+
+        self.mounted = False
 
     def is_mounted(self):
-        return True
+        return self.mounted
 
     def wait_until_mounted(self):
-        pass
+        """
+        Unlike the fuse client, the kernel client is up and running as soon
+        as the initial mount() function returns.
+        """
+        assert self.mounted
 
     def teardown(self):
         super(KernelMount, self).teardown()
-        self.umount()
+        if self.mounted:
+            self.umount()
+
+    def kill(self):
+        """
+        The Ceph kernel client doesn't have a mechanism to kill itself (doing
+        that in side the kernel would be weird anyway), so we reboot the whole node
+        to get the same effect.
+
+        We use IPMI to reboot, because we don't want the client to send any
+        releases of capabilities.
+        """
+
+        con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
+                                                self.ipmi_user,
+                                                self.ipmi_password,
+                                                self.ipmi_domain)
+        con.power_off()
+
+        self.mounted = False
+
+    def kill_cleanup(self):
+        assert not self.mounted
+
+        con = orchestra_remote.getRemoteConsole(self.client_remote.hostname,
+                                                self.ipmi_user,
+                                                self.ipmi_password,
+                                                self.ipmi_domain)
+        con.power_on()
+
+        # Wait for node to come back up after reboot
+        misc.reconnect(None, 300, [self.client_remote])
+
+        # Remove mount directory
+        self.client_remote.run(
+            args=[
+                'rmdir',
+                '--',
+                self.mountpoint,
+            ],
+        )
+
+    def get_global_id(self):
+        """
+        Look up the CephFS client ID for this mount, using debugfs.
+        """
+
+        assert self.mounted
+
+        pyscript = """
+import glob
+import os
+
+def get_global_id(client_entity_id):
+    for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+        mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
+        return mds_sessions_lines[0].split()[1]
+    raise RuntimeError("Client {{0}} debugfs path not found".format(client_entity_id))
+
+print get_global_id("{entity_id}")
+""".format(entity_id=self.client_id)
+
+        p = self.client_remote.run(args=[
+            'sudo', 'python', '-c', pyscript
+        ], stdout=StringIO())
+        return int(p.stdout.getvalue().strip())

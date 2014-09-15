@@ -57,7 +57,16 @@ def task(ctx, config):
 
     mounts = {}
     for id_, remote in clients:
-        kernel_mount = KernelMount(mons, test_dir, id_, remote)
+        kernel_mount = KernelMount(
+            mons,
+            test_dir,
+            id_,
+            remote,
+            ctx.teuthology_config.get('ipmi_user', None),
+            ctx.teuthology_config.get('ipmi_password', None),
+            ctx.teuthology_config.get('ipmi_domain', None)
+        )
+
         mounts[id_] = kernel_mount
 
         kernel_mount.mount()

@@ -7,6 +7,7 @@ exceed the limits of how many caps/inodes they should hold.
 import contextlib
 import logging
 import time
+from unittest import SkipTest
 
 from teuthology.orchestra.run import CommandFailedError
 
@@ -86,10 +87,15 @@ class TestClientLimits(CephFSTestCase):
     def setUp(self):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
+        if not self.mount_a.is_mounted():
+            self.mount_a.mount()
+            self.mount_a.wait_until_mounted()
+
+        if not self.mount_b.is_mounted():
+            self.mount_b.mount()
+            self.mount_b.wait_until_mounted()
+
+        self.mount_a.run_shell(["rm", "-rf", "*"])
 
     def tearDown(self):
         self.fs.clear_firewall()
@@ -182,6 +188,10 @@ class TestClientLimits(CephFSTestCase):
         metric to that effect.
         """
 
+        # The debug hook to inject the failure only exists in the fuse client
+        if not isinstance(self.mount_a, FuseMount):
+            raise SkipTest("Require FUSE client to inject client release failure")
+
         self.set_conf('client.{0}'.format(self.mount_a.client_id), 'client inject release failure', 'true')
         self.mount_a.teardown()
         self.mount_a.mount()
@@ -223,9 +233,11 @@ def task(ctx, config):
     mount_a = ctx.mounts.values()[0]
     mount_b = ctx.mounts.values()[1]
 
-    if not isinstance(mount_a, FuseMount):
-        # TODO: make kclient mount capable of all the same test tricks as ceph_fuse
-        raise RuntimeError("Require FUSE clients")
+    if not isinstance(mount_a, FuseMount) or not isinstance(mount_b, FuseMount):
+        # kclient kill() power cycles nodes, so requires clients to each be on
+        # their own node
+        if mount_a.client_remote.hostname == mount_b.client_remote.hostname:
+            raise RuntimeError("kclient clients must be on separate nodes")
 
     # Stash references on ctx so that we can easily debug in interactive mode
     # =======================================================================
