@@ -123,7 +123,9 @@ Where:
 
 ``[erasure-code-profile=profile]``
 
-:Description: For **erasure** pools only. Use the erasure code **profile**. It 
+.. _erasure code profile: ../erasure-code-profile
+
+:Description: For **erasure** pools only. Use the `erasure code profile`_. It
               must be an existing profile as defined by 
               **osd erasure-code-profile set**.
 
