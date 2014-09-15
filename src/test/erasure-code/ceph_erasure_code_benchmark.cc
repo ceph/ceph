@@ -164,9 +164,12 @@ int ErasureCodeBench::decode()
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   ErasureCodeInterfaceRef erasure_code;
-  int code = instance.factory(plugin, parameters, &erasure_code, cerr);
-  if (code)
+  stringstream messages;
+  int code = instance.factory(plugin, parameters, &erasure_code, messages);
+  if (code) {
+    cerr << messages.str() << endl;
     return code;
+  }
   int k = atoi(parameters["k"].c_str());
   int m = atoi(parameters["m"].c_str());
 
