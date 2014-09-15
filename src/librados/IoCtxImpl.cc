@@ -815,7 +815,7 @@ int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
   ::ObjectOperation rd;
   rd.hit_set_ls(pls, NULL);
   object_locator_t oloc(poolid);
-  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL, NULL);
   return 0;
 }
 
@@ -831,7 +831,7 @@ int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
   ::ObjectOperation rd;
   rd.hit_set_get(utime_t(stamp, 0), pbl, 0);
   object_locator_t oloc(poolid);
-  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL);
+  objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL, NULL);
   return 0;
 }
 
