@@ -2290,15 +2290,15 @@ void Objecter::_finish_op(Op *op)
   if (op->budgeted)
     put_op_budget(op);
 
+  if (op->ontimeout) {
+    timer.cancel_event(op->ontimeout);
+  }
+
   _session_op_remove(op->session, op);
 
   logger->dec(l_osdc_op_active);
 
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
-
-  if (op->ontimeout) {
-    timer.cancel_event(op->ontimeout);
-  }
 
   inflight_ops.dec();
 
