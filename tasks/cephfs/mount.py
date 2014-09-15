@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 import logging
 import datetime
+import time
 from textwrap import dedent
 import os
 from teuthology.orchestra import run
@@ -101,6 +102,10 @@ class CephFSMount(object):
             'sudo', 'daemon-helper', 'kill', 'python', '-c', pyscript
         ], wait=False, stdin=run.PIPE)
 
+    def run_shell(self, args):
+        args = ["cd", self.mountpoint, run.Raw('&&')] + args
+        return self.client_remote.run(args=args)
+
     def open_background(self, basename="background_file"):
         """
         Open a file for writing, then block such that the client
@@ -124,6 +129,23 @@ class CephFSMount(object):
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
         return rproc
+
+    def wait_for_visible(self, basename="background_file", timeout=30):
+        i = 0
+        while i < timeout:
+            r = self.client_remote.run(args=[
+                'sudo', 'ls', os.path.join(self.mountpoint, basename)
+            ], check_status=False)
+            if r.exitstatus == 0:
+                log.debug("File {0} became visible from {1} after {2}s".format(
+                    basename, self.client_id, i))
+                return
+            else:
+                time.sleep(1)
+                i += 1
+
+        raise RuntimeError("Timed out after {0}s waiting for {1} to become visible from {2}".format(
+            i, basename, self.client_id))
 
     def write_background(self, basename="background_file"):
         """
