@@ -414,7 +414,7 @@ function test_mon_mds()
   expect_false ceph mds set allow_new_snaps taco
 
   # we should never be able to add EC pools as data or metadata pools
-  # create an ec-pool
+  # create an ec-pool...
   ceph osd pool create mds-ec-pool 10 10 erasure
   set +e
   ceph mds add_data_pool mds-ec-pool 2>$TMPFILE
@@ -441,6 +441,39 @@ function test_mon_mds()
   ceph fs new cephfs mds-ec-pool mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
+
+  # ... however if we create a cache tier in front of the EC pool, we should
+  # be permitted to use it...
+  ceph osd pool create mds-tier 2
+  ceph osd tier add mds-ec-pool mds-tier
+  ceph osd tier set-overlay mds-ec-pool mds-tier
+  ceph osd tier cache-mode mds-tier writeback
+  tier_poolnum=$(ceph osd dump | grep "pool.* 'mds-tier" | awk '{print $2;}')
+
+  set -e
+  ceph fs new cephfs fs_metadata mds-ec-pool
+  ceph fs rm cephfs --yes-i-really-mean-it
+
+  # ... but we should be forbidden from using the cache pool in the FS directly.
+  set +e
+  ceph mds newfs $metadata_poolnum $tier_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  ceph mds newfs $tier_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  ceph mds newfs $tier_poolnum $tier_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  ceph fs new cephfs fs_metadata mds-tier 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  ceph fs new cephfs mds-tier fs_data 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  ceph fs new cephfs mds-tier mds-tier 2>$TMPFILE
+  check_response 'in use as a cache tier' $? 22
+  set -e
+
+  # Clean up tier + EC pools
+  ceph osd tier remove-overlay mds-ec-pool
+  ceph osd tier remove mds-ec-pool mds-tier
+  ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
   ceph mds stat
