@@ -32,7 +32,9 @@
  */
 enum mds_metric_t {
   MDS_HEALTH_NULL = 0,
-  MDS_HEALTH_TRIM = 1
+  MDS_HEALTH_TRIM = 1,
+  MDS_HEALTH_CLIENT_RECALL = 2,
+  MDS_HEALTH_CLIENT_LATE_RELEASE = 3
 };
 
 /**
@@ -74,6 +76,11 @@ struct MDSHealthMetric
     DECODE_FINISH(bl);
   }
 
+  bool operator==(MDSHealthMetric const &other) const
+  {
+    return (type == other.type && sev == other.sev && message == other.message);
+  }
+
   MDSHealthMetric() : type(MDS_HEALTH_NULL), sev(HEALTH_OK) {}
   MDSHealthMetric(mds_metric_t type_, health_status_t sev_, std::string const &message_)
     : type(type_), sev(sev_), message(message_) {}
@@ -99,6 +106,11 @@ struct MDSHealth
     DECODE_START(1, bl);
     ::decode(metrics, bl);
     DECODE_FINISH(bl);
+  }
+
+  bool operator==(MDSHealth const &other) const
+  {
+    return metrics == other.metrics;
   }
 };
 WRITE_CLASS_ENCODER(MDSHealth)

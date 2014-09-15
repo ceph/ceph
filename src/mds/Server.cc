@@ -781,6 +781,12 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   }
 }
 
+
+/**
+ * Call this when the MDCache is oversized, to send requests to the clients
+ * to trim some caps, and consequently unpin some inodes in the MDCache so
+ * that it can trim too.
+ */
 void Server::recall_client_state(float ratio)
 {
   int max_caps_per_client = (int)(g_conf->mds_cache_size * .8);
@@ -806,15 +812,15 @@ void Server::recall_client_state(float ratio)
 	     << dendl;
 
     if (session->caps.size() > min_caps_per_client) {	
-      int newlim = (int)(session->caps.size() * ratio);
-      if (newlim > max_caps_per_client)
-	newlim = max_caps_per_client;
-      MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
-      m->head.max_caps = newlim;
-      mds->send_message_client(m, session);
+      int newlim = MIN((int)(session->caps.size() * ratio), max_caps_per_client);
+      if (session->caps.size() > newlim) {
+          MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
+          m->head.max_caps = newlim;
+          mds->send_message_client(m, session);
+          session->notify_recall_sent(newlim);
+      }
     }
   }
- 
 }
 
 

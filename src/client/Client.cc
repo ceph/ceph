@@ -2472,8 +2472,17 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 	   << " dropping " << ccap_string(dropping)
 	   << dendl;
 
-  cap->issued &= retain;
-  cap->implemented &= cap->issued | used;
+  if (cct->_conf->client_inject_release_failure && revoking) {
+    // Simulated bug:
+    //  - tell the server we think issued is whatever they issued plus whatever we implemented
+    //  - leave what we have implemented in place
+    ldout(cct, 20) << __func__ << " injecting failure to release caps" << dendl;
+    cap->issued = cap->issued | cap->implemented;
+  } else {
+    // Normal behaviour
+    cap->issued &= retain;
+    cap->implemented &= cap->issued | used;
+  }
 
   uint64_t flush_tid = 0;
   snapid_t follows = 0;
@@ -3152,10 +3161,11 @@ void Client::trim_caps(MetaSession *s, int max)
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
-  while (s->caps.size() > max && !p.end()) {
+  while ((s->caps.size() - trimmed) > max && !p.end()) {
     Cap *cap = *p;
     s->s_cap_iterator = cap;
     Inode *in = cap->inode;
+
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       int mine = cap->issued | cap->implemented;
       int oissued = in->auth_cap ? in->auth_cap->issued : 0;
@@ -3169,15 +3179,29 @@ void Client::trim_caps(MetaSession *s, int max)
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
       set<Dentry*>::iterator q = in->dn_set.begin();
+      in->get();
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
-	if (dn->lru_is_expireable())
+	if (dn->lru_is_expireable()) {
+          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+            // Only issue one of these per DN for inodes in root: handle
+            // others more efficiently by calling for root-child DNs at
+            // the end of this function.
+            _schedule_invalidate_dentry_callback(dn, true);
+          }
 	  trim_dentry(dn);
-	else
+
+        } else {
+          ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
+        }
       }
-      if (all)
+      if (all && in->ino != MDS_INO_ROOT) {
+        ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
+      }
+
+      put_inode(in);
     }
 
     ++p;
@@ -3188,14 +3212,21 @@ void Client::trim_caps(MetaSession *s, int max)
   }
   s->s_cap_iterator = NULL;
 
+
   // notify kernel to invalidate top level directory entries. As a side effect,
   // unused inodes underneath these entries get pruned.
   if (dentry_invalidate_cb && s->caps.size() > max) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
+    assert(root);
+    if (root->dir) {
+      for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+           p != root->dir->dentries.end();
+           ++p) {
+        if (p->second->inode)
+          _schedule_invalidate_dentry_callback(p->second, false);
+      }
+    } else {
+      // This seems unnatural, as long as we are holding caps they must be on
+      // some descendent of the root, so why don't we have the root open?
     }
   }
 }
@@ -4167,7 +4198,12 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        ++p) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      p->second->con->send_message(p->second->release);
+      if (cct->_conf->client_inject_release_failure) {
+        ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
+        p->second->release->put();
+      } else {
+        p->second->con->send_message(p->second->release);
+      }
       p->second->release = 0;
     }
   }

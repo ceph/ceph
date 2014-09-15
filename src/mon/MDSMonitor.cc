@@ -319,6 +319,14 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
     return false;  // need to update map
   }
 
+  // Comparing known daemon health with m->get_health()
+  // and return false (i.e. require proposal) if they
+  // do not match, to update our stored
+  if (!(pending_daemon_health[gid] == m->get_health())) {
+    dout(20) << __func__ << " health metrics for gid " << gid << " were updated" << dendl;
+    return false;
+  }
+
  ignore:
   // note time and reply
   _note_beacon(m);

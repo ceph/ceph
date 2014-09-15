@@ -99,6 +99,7 @@ void Locker::dispatch(Message *m)
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
     handle_client_caps(static_cast<MClientCaps*>(m));
+
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
     handle_client_cap_release(static_cast<MClientCapRelease*>(m));
@@ -1940,6 +1941,7 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 	int op = (before & ~after) ? CEPH_CAP_OP_REVOKE : CEPH_CAP_OP_GRANT;
 	if (op == CEPH_CAP_OP_REVOKE) {
 		revoking_caps.push_back(&cap->item_revoking_caps);
+		revoking_caps_by_client[cap->get_client()].push_back(&cap->item_client_revoking_caps);
 		cap->set_last_revoke_stamp(ceph_clock_now(g_ceph_context));
 		cap->reset_num_revoke_warnings();
 	}
@@ -3121,8 +3123,15 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     return;
   }
 
-  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p)
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+
+  for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     _do_cap_release(client, inodeno_t((uint64_t)p->ino) , p->cap_id, p->migrate_seq, p->seq);
+  }
+
+  if (session) {
+    session->notify_cap_release(m->caps.size());
+  }
 
   m->put();
 }
@@ -3203,27 +3212,91 @@ void Locker::remove_client_cap(CInode *in, client_t client)
   try_eval(in, CEPH_CAP_LOCKS);
 }
 
+
+/**
+ * Return true if any currently revoking caps exceed the
+ * mds_revoke_cap_timeout threshold.
+ */
+bool Locker::any_late_revoking_caps(xlist<Capability*> const &revoking) const
+{
+    xlist<Capability*>::const_iterator p = revoking.begin();
+    if (p.end()) {
+      // No revoking caps at the moment
+      return false;
+    } else {
+      utime_t now = ceph_clock_now(g_ceph_context);
+      utime_t age = now - (*p)->get_last_revoke_stamp();
+      if (age <= g_conf->mds_revoke_cap_timeout) {
+          return false;
+      } else {
+          return true;
+      }
+    }
+}
+
+
+void Locker::get_late_revoking_clients(std::list<client_t> *result) const
+{
+  if (!any_late_revoking_caps(revoking_caps)) {
+    // Fast path: no misbehaving clients, execute in O(1)
+    return;
+  }
+
+  // Slow path: execute in O(N_clients)
+  std::map<client_t, xlist<Capability*> >::const_iterator client_rc_iter;
+  for (client_rc_iter = revoking_caps_by_client.begin();
+       client_rc_iter != revoking_caps_by_client.end(); ++client_rc_iter) {
+    xlist<Capability*> const &client_rc = client_rc_iter->second;
+    bool any_late = any_late_revoking_caps(client_rc);
+    if (any_late) {
+        result->push_back(client_rc_iter->first);
+    }
+  }
+}
+
+// Hard-code instead of surfacing a config settings because this is
+// really a hack that should go away at some point when we have better
+// inspection tools for getting at detailed cap state (#7316)
+#define MAX_WARN_CAPS 100
+
 void Locker::caps_tick()
 {
   utime_t now = ceph_clock_now(g_ceph_context);
 
+  dout(20) << __func__ << " " << revoking_caps.size() << " revoking caps" << dendl;
+
+  int i = 0;
   for (xlist<Capability*>::iterator p = revoking_caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
 
     utime_t age = now - cap->get_last_revoke_stamp();
-    if (age <= g_conf->mds_revoke_cap_timeout)
+    dout(20) << __func__ << " age = " << age << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+    if (age <= g_conf->mds_revoke_cap_timeout) {
+      dout(20) << __func__ << " age below timeout " << g_conf->mds_revoke_cap_timeout << dendl;
       break;
+    } else {
+      ++i;
+      if (i > MAX_WARN_CAPS) {
+        dout(1) << __func__ << " more than " << MAX_WARN_CAPS << " caps are late"
+          << "revoking, ignoring subsequent caps" << dendl;
+        break;
+      }
+    }
     // exponential backoff of warning intervals
     if (age > g_conf->mds_revoke_cap_timeout * (1 << cap->get_num_revoke_warnings())) {
       cap->inc_num_revoke_warnings();
       stringstream ss;
-      ss << "client." << cap->get_client() << " isn't responding to MClientCaps(revoke), ino "
+      ss << "client." << cap->get_client() << " isn't responding to mclientcaps(revoke), ino "
 	 << cap->get_inode()->ino() << " pending " << ccap_string(cap->pending())
 	 << " issued " << ccap_string(cap->issued()) << ", sent " << age << " seconds ago\n";
       mds->clog->warn() << ss.str();
+      dout(20) << __func__ << " " << ss.str() << dendl;
+    } else {
+      dout(20) << __func__ << " silencing log message (backoff) for " << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
     }
   }
 }
+
 
 void Locker::handle_client_lease(MClientLease *m)
 {
