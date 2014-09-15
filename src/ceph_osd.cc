@@ -473,7 +473,7 @@ int main(int argc, const char **argv)
     return -1;
   global_init_chdir(g_ceph_context);
 
-  if (preload_erasure_code() < -1)
+  if (preload_erasure_code() < 0)
     return -1;
 
   osd = new OSD(g_ceph_context,
