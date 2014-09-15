@@ -3875,14 +3875,15 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->onfinish)
     c->onfinish->complete(r);
 
+  if (c->ontimeout) {
+    timer.cancel_event(c->ontimeout);
+  }
+
   OSDSession *s = c->session;
   s->lock.get_write();
   _session_command_op_remove(c->session, c);
   s->lock.unlock();
 
-  if (c->ontimeout) {
-    timer.cancel_event(c->ontimeout);
-  }
   c->put();
 
   logger->dec(l_osdc_command_active);
