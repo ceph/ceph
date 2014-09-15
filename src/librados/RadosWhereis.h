@@ -11,13 +11,13 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifndef CEPH_LIBRADOS_RADOSLOCATOR_H
-#define CEPH_LIBRADOS_RADOSLOCATOR_H
+#ifndef CEPH_LIBRADOS_RADOSWHEREIS_H
+#define CEPH_LIBRADOS_RADOSWHEREIS_H
 
 #include <stdio.h>
 
 /**
- * @file RadosLocator.h
+ * @file RadosWhereis.h
  *
  * @brief Class providing a function to retrieve a vector of locations
  *
@@ -28,21 +28,21 @@
 
 namespace librados {
 class IoCtx;
-class RadosLocator {
+class RadosWhereis {
 public:
 
-  RadosLocator(IoCtx &_io) : io(_io)
+  RadosWhereis(IoCtx &_io) : io(_io)
   {
   };
 
   virtual
-  ~RadosLocator()
+  ~RadosWhereis()
   {
   };
 
   bool
-  locate(const std::string &oio,
-         location_vector_t &locations
+  whereis(const std::string &oio,
+         whereis_vector_t &locations
          );
 
 private:

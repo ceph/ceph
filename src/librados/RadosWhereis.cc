@@ -15,11 +15,16 @@
 // -----------------------------------------------------------------------------
 #include "librados/IoCtxImpl.h"
 #include "include/rados/librados.hpp"
-#include "RadosLocator.h"
+#include "common/Formatter.h"
+#include "RadosWhereis.h"
+#include <string>
+#include <iostream>
+#include <boost/asio.hpp>
+
 // -----------------------------------------------------------------------------
 
 /**
- * @file RadosLocator.cc
+ * @file RadosWhereis.cc
  *
  * @brief Class providing a function to retrieve a vector of locations
  *
@@ -27,50 +32,53 @@
  * a given object in a given IO context (pool).
  */
 
+
+
 // -----------------------------------------------------------------------------
 void
-librados::Location::resolve()
+librados::whereis::resolve()
 {
-  std::string tcmd="dig -x "; tcmd += IpString; tcmd += " +short 2>/dev/null";
-  FILE* fd = popen(tcmd.c_str(),"r");
-  if (fd) {
-    char response[256];
-    response[0]=0;
-    size_t nread = fread(response,1, sizeof(response),fd);
-    if (nread>1)
-      response[nread-2]=0;
-    if (strlen(response))
-      HostName = response;
-    fclose(fd);
-  }
+  // translate ip's using boost asio
+  boost::asio::ip::address ipa = boost::asio::ip::address::from_string(IpString);    
+  boost::asio::ip::tcp::endpoint ep;
+  ep.address(ipa);
+  
+  boost::asio::io_service io_service;
+  boost::asio::ip::tcp::resolver resolver(io_service);
+  
+  boost::asio::ip::tcp::resolver::iterator itr = resolver.resolve(ep);
+  boost::asio::ip::tcp::resolver::iterator end;
+  
+  for (int i = 1; itr != end; itr++, i++) 
+    HostNames.push_back(itr->host_name());
 }
 
 // -----------------------------------------------------------------------------
-std::string
-librados::Location::dump(bool showhost) const
+void
+librados::whereis::dump(bool showhost, void* ext_formatter ) const
 {
-  char p[1024];
+  Formatter* formatter = static_cast<Formatter*> (ext_formatter);
+
+  formatter->open_object_section("whereis");
+  formatter->dump_int("osd-id", OsdID);
+  formatter->dump_int("pg-seed", PgSeed);
+  formatter->dump_string("ip", IpString);
+  formatter->dump_string("state", OsdState);
   if (showhost) {
-    snprintf(p, sizeof (p),
-	     "osd-id=%04ld pg-seed=%04ld ip=%s hostname=%s",
-	     OsdID,
-	     PgSeed,
-	     IpString.c_str(),
-	     HostName.length() ? HostName.c_str() : "<unresolved>");
-  } else {
-    snprintf(p, sizeof (p),
-	     "osd-id=%04ld pg-seed=%04ld ip=%s",
-	     OsdID,
-	     PgSeed,
-	     IpString.c_str());
+    std::vector<std::string>::const_iterator it;
+    for (it=HostNames.begin(); it!=HostNames.end(); ++it) {
+      formatter->open_array_section("host");
+      formatter->dump_string("name",it->c_str());
+      formatter->close_section();
+    }
   }
-  return std::string(p);
+  formatter->close_section();
 }
 
 // -----------------------------------------------------------------------------
 bool
-librados::RadosLocator::locate(const std::string &oname,
-                               location_vector_t &locations
+librados::RadosWhereis::whereis(const std::string &oname,
+                               whereis_vector_t &locations
                                )
 {
   librados::IoCtxImpl *ctx = io.io_ctx_impl;
@@ -101,10 +109,17 @@ librados::RadosLocator::locate(const std::string &oname,
     std::string host = hostaddr.str().c_str();
     host.erase(host.rfind(":"));
 
-    location_t new_location;
+    whereis_t new_location;
     new_location.IpString = host;
     new_location.OsdID = acting[i];
     new_location.PgSeed = pgid.ps();
+
+    if ( (osdmap->get_state(acting[i]) & CEPH_OSD_UP) && 
+         (osdmap->get_weight(acting[i])) )
+      new_location.OsdState="active";
+    else
+      new_location.OsdState="inactive";
+
     locations.push_back(new_location);
   }
 
@@ -114,16 +129,26 @@ librados::RadosLocator::locate(const std::string &oname,
 
 
 bool
-librados::Rados::locate(IoCtx &ioctx, const std::string &oid, location_vector_t &locations)
+librados::Rados::whereis(IoCtx &ioctx, const std::string &oid, whereis_vector_t &locations)
 {
-  RadosLocator locator(ioctx);
-  return locator.locate(oid,locations);
+  RadosWhereis locator(ioctx);
+  return locator.whereis(oid,locations);
 }
 
 std::string
-librados::Rados::dump_location(location_t &location, bool reversedns)
+librados::Rados::dump_whereis(whereis_t &location, bool reversedns, void* formatter)
 {
   if (reversedns)
     location.resolve();
-  return location.dump(reversedns);
+  
+  if (formatter) {
+    location.dump(reversedns,formatter);
+    return "";
+  } else {
+    JSONFormatter tmp_formatter(true);
+    location.dump(reversedns, (dynamic_cast<void *>(&tmp_formatter)));
+    std::stringstream s;
+    tmp_formatter.flush(s);
+    return s.str().c_str();
+  }
 }

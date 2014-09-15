@@ -84,7 +84,7 @@ void usage(ostream& out)
 "   mksnap <snap-name>               create snap <snap-name>\n"
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
-"   locate [--dns] <obj-name>    locate an object in a pool (optionally do reverse dns)\n"
+"   whereis [--dns] <obj-name>       where is an object stored in a pool (optionally do reverse dns)\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name]\n"
@@ -1995,7 +1995,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
   } 
-  else if (strcmp(nargs[0], "locate") == 0) {
+  else if (strcmp(nargs[0], "whereis") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     vector<const char *>::iterator iter = nargs.begin();
@@ -2003,15 +2003,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     for (; iter != nargs.end(); ++iter) {
       const string & oid = *iter;
 
-      librados::location_vector_t locations;
-      if (!librados::Rados::locate(io_ctx, oid, locations)) {
+      librados::whereis_vector_t locations;
+      if (!librados::Rados::whereis(io_ctx, oid, locations)) {
         cerr << "failed to locate " << pool_name << "/" << oid << ": " << std::endl;
         goto out;
       } else {
-	location_vector_t::iterator it;
-	for (it=locations.begin(); it!=locations.end(); ++it)
-	{
-	  cout << librados::Rados::dump_location(*it, reverse_dns) << "\n";
+	whereis_vector_t::iterator it;
+	for (it=locations.begin(); it!=locations.end(); ++it) {
+	  if (!formatter) {
+	    formatter = new JSONFormatter(true);
+	  }
+	  librados::Rados::dump_whereis(*it, reverse_dns, static_cast<void*>(formatter));
+	  formatter->flush(cout);
+	  cout << "\n";
 	}
       }
     }

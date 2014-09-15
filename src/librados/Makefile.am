@@ -4,7 +4,7 @@ librados_la_SOURCES = \
 	librados/IoCtxImpl.cc \
 	librados/snap_set_diff.cc \
 	librados/RadosXattrIter.cc \
-        librados/RadosLocator.cc
+        librados/RadosWhereis.cc
 
 # We need this to avoid basename conflicts with the librados build tests in test/Makefile.am
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
@@ -28,5 +28,5 @@ noinst_HEADERS += \
 	librados/PoolAsyncCompletionImpl.h \
 	librados/RadosClient.h \
 	librados/RadosXattrIter.h \
-        librados/RadosLocator.h
+        librados/RadosWhereis.h
 
