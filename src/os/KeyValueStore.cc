@@ -295,10 +295,11 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
     StripObjectMap::StripObjectHeaderRef *strip_header,
     bool create_if_missing)
 {
+  uniq_id uid = make_pair(cid, oid);
   StripObjectMap::StripObjectHeaderRef header;
   int r = 0;
 
-  StripHeaderMap::iterator it = strip_headers.find(make_pair(cid, oid));
+  StripHeaderMap::iterator it = strip_headers.find(uid);
   if (it != strip_headers.end()) {
 
     if (!it->second->deleted) {
@@ -325,9 +326,9 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
     return r;
   }
 
-  strip_headers[make_pair(cid, oid)] = header;
+  strip_headers[uid] = header;
   if (strip_header)
-    *strip_header = strip_headers[make_pair(cid, oid)];
+    *strip_header = header;
   return r;
 }
 
