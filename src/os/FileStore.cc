@@ -230,23 +230,9 @@ int FileStore::lfn_open(coll_t cid,
 	   oid.generation == ghobject_t::NO_GEN ));
   assert(outfd);
   int r = 0;
-
   bool need_lock = true;
-  if (!replaying) {
-    *outfd = fdcache.lookup(oid);
-    if (*outfd) {
-      if (!index) {
-        return 0;
-      } else {
-        if (!((*index).index)) {
-          r = get_index(cid, index);
-          return r;
-        }
-      }
-    }
-  }
-
   int flags = O_RDWR;
+
   if (create)
     flags |= O_CREAT;
 
@@ -254,7 +240,6 @@ int FileStore::lfn_open(coll_t cid,
   if (!index) {
     index = &index2;
   }
-
   if (!((*index).index)) {
     r = get_index(cid, index);
   } else {
@@ -266,6 +251,16 @@ int FileStore::lfn_open(coll_t cid,
   if (need_lock) {
     ((*index).index)->access_lock.get_write();
   }
+  if (!replaying) {
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      if (need_lock) {
+        ((*index).index)->access_lock.put_write();
+      }
+      return 0;
+    }
+  }
+
 
   IndexedPath path2;
   IndexedPath *path = &path2;
