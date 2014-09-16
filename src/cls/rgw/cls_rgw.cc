@@ -2077,7 +2077,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
   cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
-  cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
+  cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
 
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);
