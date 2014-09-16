@@ -271,6 +271,10 @@ public:
     return data_pools.count(poolid);
   }
 
+  bool pool_in_use(int64_t poolid) const {
+    return get_enabled() && (is_data_pool(poolid) || metadata_pool == poolid);
+  }
+
   const std::map<uint64_t,mds_info_t>& get_mds_info() { return mds_info; }
   const mds_info_t& get_mds_info_gid(uint64_t gid) {
     assert(mds_info.count(gid));

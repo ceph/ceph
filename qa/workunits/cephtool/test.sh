@@ -452,6 +452,16 @@ function test_mon_mds()
 
   set -e
   ceph fs new cephfs fs_metadata mds-ec-pool
+
+  # While a FS exists using the tiered pools, I should not be allowed
+  # to remove the tier
+  set +e
+  ceph osd tier remove-overlay mds-ec-pool 2>$TMPFILE
+  check_response 'in use by CephFS' $? 16
+  ceph osd tier remove mds-ec-pool mds-tier 2>$TMPFILE
+  check_response 'in use by CephFS' $? 16
+  set -e
+
   ceph fs rm cephfs --yes-i-really-mean-it
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
@@ -473,6 +483,20 @@ function test_mon_mds()
   # Clean up tier + EC pools
   ceph osd tier remove-overlay mds-ec-pool
   ceph osd tier remove mds-ec-pool mds-tier
+
+  # Create a FS using the 'cache' pool now that it's no longer a tier
+  ceph fs new cephfs fs_metadata mds-tier
+
+  # We should be forbidden from using this pool as a tier now that
+  # it's in use for CephFS
+  set +e
+  ceph osd tier add mds-ec-pool mds-tier 2>$TMPFILE
+  check_response 'in use by CephFS' $? 16
+  set -e
+
+  ceph fs rm cephfs --yes-i-really-mean-it
+
+
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
 
