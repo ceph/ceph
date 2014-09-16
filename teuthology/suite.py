@@ -72,6 +72,10 @@ def main(args):
     if owner:
         job_config.owner = owner
 
+    # Interpret any relative paths as being relative to ceph-qa-suite (absolute
+    # paths are unchanged by this)
+    base_yaml_paths = [os.path.join(suite_repo_path, b) for b in base_yaml_paths]
+
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
         base_yaml.write(str(job_config))
