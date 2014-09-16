@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -5045,6 +5046,7 @@ done:
       goto reply;
     }
 
+    bool implicit_ruleset_creation = false;
     string ruleset_name;
     cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
     string erasure_code_profile;
@@ -5073,6 +5075,7 @@ done:
 	}
       }
       if (ruleset_name == "") {
+	implicit_ruleset_creation = true;
 	if (erasure_code_profile == "default") {
 	  ruleset_name = "erasure-code";
 	} else {
@@ -5084,6 +5087,17 @@ done:
     } else {
       //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
       ruleset_name = erasure_code_profile;
+    }
+
+    if (!implicit_ruleset_creation && ruleset_name != "") {
+      int ruleset;
+      err = get_crush_ruleset(ruleset_name, &ruleset, ss);
+      if (err == -EAGAIN) {
+	wait_for_finished_proposal(new C_RetryMessage(this, m));
+	return true;
+      }
+      if (err)
+	goto reply;
     }
 
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
