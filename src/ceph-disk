@@ -89,7 +89,7 @@ MOUNT_OPTIONS = dict(
     # issues with ext4 before the xatts-in-leveldb work, and it seemed
     # that user_xattr helped
     ext4='noatime,user_xattr',
-    xfs='noatime',
+    xfs='noatime,inode64',
     )
 
 MKFS_ARGS = dict(
