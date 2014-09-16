@@ -3270,6 +3270,14 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 
   /* messages we, the Monitor class, need to deal with
    * but may be sent by clients. */
+
+  if (!s->is_capable("mon", MON_CAP_R)) {
+    dout(5) << __func__ << " " << m->get_source_inst()
+            << " not enough caps for " << *m << " -- dropping"
+            << dendl;
+    goto drop;
+  }
+
   dealt_with = true;
   switch (m->get_type()) {
 
@@ -3297,6 +3305,13 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   }
   if (dealt_with)
     return;
+
+  if (!src_is_mon) {
+    dout(1) << __func__ << " unexpected monitor message from"
+            << " non-monitor entity " << m->get_source_inst()
+            << " " << *m << " -- dropping" << dendl;
+    goto drop;
+  }
 
   /* messages that should only be sent by another monitor */
   dealt_with = true;
@@ -3400,8 +3415,12 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   }
   if (!dealt_with) {
     dout(1) << "dropping unexpected " << *m << dendl;
-    m->put();
+    goto drop;
   }
+  return;
+
+drop:
+  m->put();
 }
 
 void Monitor::handle_ping(MPing *m)
