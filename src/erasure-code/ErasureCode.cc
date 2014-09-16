@@ -66,10 +66,9 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
     pad.zero();
     prepared->push_back(pad);
   }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
+
+  bufferptr coding(blocksize * m);
   prepared->push_back(coding);
-  prepared->rebuild_page_aligned();
   return 0;
 }
 
