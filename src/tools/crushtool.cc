@@ -729,6 +729,10 @@ int main(int argc, const char **argv)
   }
 
   if (test) {
+    if (tester.get_min_rep() < 1 || tester.get_max_rep() < 1) {
+      cerr << me << " --test requires --num-rep with a value > 0 " << std::endl;
+      exit(1);
+    }
     if (tester.get_output_utilization_all() ||
 	tester.get_output_utilization())
       tester.set_output_statistics(true);
