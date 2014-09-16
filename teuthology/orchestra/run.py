@@ -90,7 +90,7 @@ class RemoteProcess(object):
                 # command either died due to a signal, or the connection
                 # was lost
                 transport = self.client.get_transport()
-                if not transport.is_active():
+                if transport is None or not transport.is_active():
                     # look like we lost the connection
                     raise ConnectionLostError(command=self.command)
 
