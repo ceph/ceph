@@ -1,8 +1,9 @@
-
+from StringIO import StringIO
 import contextlib
 import logging
 from teuthology import misc
 
+from tasks.workunit import task as workunit
 from tasks.ceph import write_conf
 from cephfs.filesystem import Filesystem
 
@@ -75,6 +76,15 @@ def task(ctx, config):
         mount.create_files()
         mount.check_files()  # sanity, this should always pass
 
+        # Run a more substantial workunit so that the length of the log to be
+        # coverted is going span at least a few segments
+        workunit(ctx, {
+            'clients': {
+                "client.{0}".format(client_id): ["suites/fsstress.sh"],
+            },
+            "timeout": "3h"
+        })
+
     # Modify the ceph.conf to ask the MDS to use the new journal format.
     ctx.ceph.conf['mds']['mds journal format'] = new_journal_version
     write_conf(ctx)
@@ -97,6 +107,29 @@ def task(ctx, config):
         raise RuntimeError("Journal was not upgraded, version should be {0} but is {1}".format(
             new_journal_version, journal_version()
         ))
+
+    # Verify that cephfs-journal-tool can now read the rewritten journal
+    proc = mount.client_remote.run(
+        args=["cephfs-journal-tool", "journal", "inspect"],
+        stdout=StringIO())
+    if not proc.stdout.getvalue().strip().endswith(": OK"):
+        raise RuntimeError("Unexpected journal-tool result: '{0}'".format(
+            proc.stdout.getvalue()
+        ))
+
+    mount.client_remote.run(
+        args=["sudo", "cephfs-journal-tool", "event", "get", "json", "--path", "/tmp/journal.json"])
+    proc = mount.client_remote.run(
+        args=[
+            "python",
+            "-c",
+            "import json; print len(json.load(open('/tmp/journal.json')))"
+        ],
+        stdout=StringIO())
+    event_count = int(proc.stdout.getvalue().strip())
+    if event_count < 1000:
+        # Approximate value of "lots", expected from having run fsstress
+        raise RuntimeError("Unexpectedly few journal events: {0}".format(event_count))
 
     # Leave all MDSs and clients running for any child tasks
     for mount in ctx.mounts.values():
