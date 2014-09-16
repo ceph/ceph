@@ -930,7 +930,7 @@ int main(int argc, char **argv)
  * Local Variables:
  * compile-command: "cd ../.. ; make -j4 &&
  *   make unittest_erasure_code_isa &&
- *   valgrind --tool=memcheck --leak-check=full \
+ *   libtool --mode=execute valgrind --tool=memcheck --leak-check=full \
  *      ./unittest_erasure_code_isa \
  *      --gtest_filter=*.* --log-to-stderr=true --debug-osd=20"
  * End:
