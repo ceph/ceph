@@ -93,10 +93,12 @@ static CompatSet get_kv_supported_compat_set() {
 int StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
                                       KeyValueDB::Transaction t)
 {
-  strip_header->header->data.clear();
-  ::encode(*strip_header, strip_header->header->data);
+  if (strip_header->updated) {
+    strip_header->header->data.clear();
+    ::encode(*strip_header, strip_header->header->data);
 
-  set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
+    set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
+  }
   return 0;
 }
 
@@ -113,6 +115,7 @@ int StripObjectMap::create_strip_header(const coll_t &cid,
   tmp->oid = oid;
   tmp->cid = cid;
   tmp->header = header;
+  tmp->updated = true;
   if (strip_header)
     *strip_header = tmp;
 
@@ -123,7 +126,7 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
                                         const ghobject_t &oid,
                                         StripObjectHeaderRef *strip_header)
 {
-  if (cid != coll_t()) {
+  {
     Mutex::Locker l(lock);
     pair<coll_t, StripObjectHeaderRef> p;
     if (caches.lookup(oid, &p)) {
@@ -148,8 +151,10 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
     ::decode(*tmp, bliter);
   }
 
-  if (tmp->strip_size == 0)
+  if (tmp->strip_size == 0) {
     tmp->strip_size = default_strip_size;
+    tmp->updated = true;
+  }
 
   tmp->oid = oid;
   tmp->cid = cid;
@@ -219,7 +224,9 @@ void StripObjectMap::clone_wrap(StripObjectHeaderRef old_header,
   tmp->strip_size = old_header->strip_size;
   tmp->max_size = old_header->max_size;
   tmp->bits = old_header->bits;
+  tmp->updated = true;
   old_header->header = new_origin_header;
+  old_header->updated = true;
 
   if (target_header)
     *target_header = tmp;
@@ -238,6 +245,7 @@ void StripObjectMap::rename_wrap(StripObjectHeaderRef old_header, const coll_t &
   tmp->header = old_header->header;
   tmp->oid = oid;
   tmp->cid = cid;
+  tmp->updated = true;
 
   if (new_header)
     *new_header = tmp;
@@ -1731,6 +1739,7 @@ int KeyValueStore::_remove(coll_t cid, const ghobject_t& oid,
 
   header->max_size = 0;
   header->bits.clear();
+  header->updated = true;
   r = t.clear_buffer(header);
 
   dout(10) << __func__ << " " << cid << "/" << oid << " = " << r << dendl;
@@ -1809,6 +1818,7 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
 
   header->bits.resize(size/header->strip_size+1);
   header->max_size = size;
+  header->updated = true;
 
   dout(10) << __func__ << " " << cid << "/" << oid << " size " << size << " = "
            << r << dendl;
@@ -1912,6 +1922,7 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
   }
   assert(bl_offset == len);
 
+  header->updated = true;
   t.set_buffer_keys(header, OBJECT_STRIP_PREFIX, values);
   dout(10) << __func__ << " " << header->cid << "/" << header->oid << " "
            << offset << "~" << len << " = " << r << dendl;
