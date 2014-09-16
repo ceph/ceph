@@ -112,6 +112,11 @@ EOF
 }
 
 function auth_cephx_key() {
+    if [ -f /etc/ceph/keyring ] ; then
+	echo "Please move /etc/ceph/keyring away for testing!"
+	return 1
+    fi  
+
     local key=$(./ceph-authtool --gen-print-key)
 
     if mon_mkfs --key='corrupted key' ; then
