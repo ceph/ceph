@@ -562,14 +562,11 @@ private:
 
   struct C_Readahead : public Context {
     Client *client;
-    Inode *inode;
-    C_Readahead(Client *c, Inode *i)
+    Fh *f;
+    C_Readahead(Client *c, Fh *f)
       : client(c),
-	inode(i) { }
-    void finish(int r) {
-      lsubdout(client->cct, client, 20) << "C_Readahead on " << inode << dendl;
-      client->put_cap_ref(inode, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-    }
+	f(f) { }
+    void finish(int r);
   };
 
   int _read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl, bool *checkeof);
