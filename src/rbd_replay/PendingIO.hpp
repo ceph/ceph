@@ -18,8 +18,15 @@
 #include <boost/enable_shared_from_this.hpp>
 #include "actions.hpp"
 
+/// Do not call outside of rbd_replay::PendingIO.
+extern "C"
+void rbd_replay_pending_io_callback(librbd::completion_t cb, void *arg);
+
 namespace rbd_replay {
 
+/**
+   A PendingIO is an I/O operation that has been started but not completed.
+*/
 class PendingIO : public boost::enable_shared_from_this<PendingIO> {
 public:
   typedef boost::shared_ptr<PendingIO> ptr;
@@ -28,8 +35,6 @@ public:
             ActionCtx &worker);
 
   ~PendingIO();
-
-  void completed(librbd::completion_t cb);
 
   action_id_t id() const {
     return m_id;
@@ -44,6 +49,10 @@ public:
   }
 
 private:
+  void completed(librbd::completion_t cb);
+
+  friend void ::rbd_replay_pending_io_callback(librbd::completion_t cb, void *arg);
+
   const action_id_t m_id;
   ceph::bufferlist m_bl;
   librbd::RBD::AioCompletion *m_completion;

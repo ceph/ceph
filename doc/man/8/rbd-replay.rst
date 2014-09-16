@@ -41,6 +41,14 @@ Options
    Add a rule to map image names in the trace to image names in the replay cluster.
    A rule of image1@snap1=image2@snap2 would map snap1 of image1 to snap2 of image2.
 
+.. option:: --dump-perf-counters
+
+   **Experimental**
+   Dump performance counters to standard out before an image is closed.
+   Performance counters may be dumped multiple times if multiple images are closed,
+   or if the same image is opened and closed multiple times.
+   Performance counters and their meaning may change between versions.
+
 
 Examples
 ========

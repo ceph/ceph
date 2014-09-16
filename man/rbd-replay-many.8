@@ -1,8 +1,8 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD-REPLAY-PREP" "8" "August 21, 2014" "dev" "Ceph"
+.TH "RBD-REPLAY-MANY" "8" "September 04, 2014" "dev" "Ceph"
 .SH NAME
-rbd-replay-prep \- prepare captured rados block device (RBD) workloads for replay
+rbd-replay-many \- replay a rados block device (RBD) workload on several clients
 .
 .nr rst2man-indent-level 0
 .
@@ -59,39 +59,70 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 ..
 .SH SYNOPSIS
 .nf
-\fBrbd\-replay\-prep\fP [ \-\-window \fIseconds\fP ] [ \-\-anonymize ] \fItrace_dir\fP \fIreplay_file\fP
+\fBrbd\-replay\-many\fP [ \fIoptions\fP ] \-\-original\-image \fIname\fP \fIhost1\fP [ \fIhost2\fP [ ... ] ] \-\- \fIrbd_replay_args\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBrbd\-replay\-prep\fP processes raw rados block device (RBD) traces to prepare them for \fBrbd\-replay\fP\&.
+\fBrbd\-replay\-many\fP is a utility for replaying a rados block device (RBD) workload on several clients.
+Although all clients use the same workload, they replay against separate images.
+This matches normal use of librbd, where each original client is a VM with its own image.
+.sp
+Configuration and replay files are not automatically copied to clients.
+Replay images must already exist.
 .SH OPTIONS
 .INDENT 0.0
 .TP
-.B \-\-window seconds
-Requests further apart than \(aqseconds\(aq seconds are assumed to be independent.
+.B \-\-original\-image name
+Specifies the name (and snap) of the originally traced image.
+Necessary for correct name mapping.
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-\-anonymize
-Anonymizes image and snap names.
+.B \-\-image\-prefix prefix
+Prefix of image names to replay against.
+Specifying \-\-image\-prefix=foo results in clients replaying against foo\-0, foo\-1, etc.
+Defaults to the original image name.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-exec program
+Path to the rbd\-replay executable.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-delay seconds
+Delay between starting each client.  Defaults to 0.
 .UNINDENT
 .SH EXAMPLES
 .sp
-To prepare workload1\-trace for replay:
+Typical usage:
 .INDENT 0.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-rbd\-replay\-prep workload1\-trace/ust/uid/1000/64\-bit workload1
+rbd\-replay\-many host\-0 host\-1 \-\-original\-image=image \-\- \-c ceph.conf replay.bin
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+This results in the following commands being executed:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ssh host\-0 \(aqrbd\-replay\(aq \-\-map\-image \(aqimage=image\-0\(aq \-c ceph.conf replay.bin
+ssh host\-1 \(aqrbd\-replay\(aq \-\-map\-image \(aqimage=image\-1\(aq \-c ceph.conf replay.bin
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBrbd\-replay\-prep\fP is part of the Ceph distributed storage system. Please refer to
+\fBrbd\-replay\-many\fP is part of the Ceph distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
