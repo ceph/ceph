@@ -3405,27 +3405,7 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 	    return *crush_ruleset;
 	  }
 	} else {
-	  int ret;
-	  ret = osdmap.crush->get_rule_id(ruleset_name);
-	  if (ret != -ENOENT) {
-	    // found it, use it
-	    *crush_ruleset = ret;
-	  } else {
-	    CrushWrapper newcrush;
-	    _get_pending_crush(newcrush);
-
-	    ret = newcrush.get_rule_id(ruleset_name);
-	    if (ret != -ENOENT) {
-	      // found it, wait for it to be proposed
-	      dout(20) << "prepare_pool_crush_ruleset: ruleset "
-		   << ruleset_name << " is pending, try again" << dendl;
-	      return -EAGAIN;
-	    } else {
-	      //Cannot find it , return error
-	      ss << "Specified ruleset " << ruleset_name << " doesn't exist";
-	      return ret;
-	    }
-	  }
+	  return get_crush_ruleset(ruleset_name, crush_ruleset, ss);
 	}
       }
       break;
@@ -3464,6 +3444,35 @@ int OSDMonitor::prepare_pool_crush_ruleset(const unsigned pool_type,
 
   return 0;
 }
+
+int OSDMonitor::get_crush_ruleset(const string &ruleset_name,
+				  int *crush_ruleset,
+				  stringstream &ss)
+{
+  int ret;
+  ret = osdmap.crush->get_rule_id(ruleset_name);
+  if (ret != -ENOENT) {
+    // found it, use it
+    *crush_ruleset = ret;
+  } else {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    ret = newcrush.get_rule_id(ruleset_name);
+    if (ret != -ENOENT) {
+      // found it, wait for it to be proposed
+      dout(20) << __func__ << ": ruleset " << ruleset_name
+	       << " try again" << dendl;
+      return -EAGAIN;
+    } else {
+      //Cannot find it , return error
+      ss << "specified ruleset " << ruleset_name << " doesn't exist";
+      return ret;
+    }
+  }
+  return 0;
+}
+
 /**
  * @param name The name of the new pool
  * @param auid The auid of the pool owner. Can be -1
@@ -5238,6 +5247,7 @@ done:
       goto reply;
     }
 
+    bool implicit_ruleset_creation = false;
     string ruleset_name;
     cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
     string erasure_code_profile;
@@ -5266,6 +5276,7 @@ done:
 	}
       }
       if (ruleset_name == "") {
+	implicit_ruleset_creation = true;
 	if (erasure_code_profile == "default") {
 	  ruleset_name = "erasure-code";
 	} else {
@@ -5277,6 +5288,17 @@ done:
     } else {
       //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
       ruleset_name = erasure_code_profile;
+    }
+
+    if (!implicit_ruleset_creation && ruleset_name != "") {
+      int ruleset;
+      err = get_crush_ruleset(ruleset_name, &ruleset, ss);
+      if (err == -EAGAIN) {
+	wait_for_finished_proposal(new C_RetryMessage(this, m));
+	return true;
+      }
+      if (err)
+	goto reply;
     }
 
     int64_t expected_num_objects;
