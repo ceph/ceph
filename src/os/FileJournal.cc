@@ -927,14 +927,11 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 void FileJournal::align_bl(off64_t pos, bufferlist& bl)
 {
   // make sure list segments are page aligned
-  if (directio && (!bl.is_page_aligned() ||
-		   !bl.is_n_page_sized())) {
-    bl.rebuild_page_aligned();
-    if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
-	(pos & ~CEPH_PAGE_MASK) != 0)
-      dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
+  if (directio) {
     assert((bl.length() & ~CEPH_PAGE_MASK) == 0);
     assert((pos & ~CEPH_PAGE_MASK) == 0);
+    if (!bl.is_page_aligned() || !bl.is_n_page_sized())
+      bl.rebuild_page_aligned();
   }
 }
 
