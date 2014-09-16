@@ -1229,6 +1229,9 @@ protected:
 
   friend struct C_Copyfrom;
 
+  // -- promote --
+  map<hobject_t, utime_t> promote_in_flight;
+
   // -- flush --
   map<hobject_t, FlushOpRef> flush_ops;
 
