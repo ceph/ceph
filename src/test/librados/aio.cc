@@ -1935,6 +1935,7 @@ TEST(LibRadosAioEC, RoundTripAppend) {
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
+  rados_aio_release(my_completion4);
   delete[] buf;
   delete[] buf2;
   delete[] buf3;
