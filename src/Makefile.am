@@ -191,6 +191,7 @@ EXTRA_DIST += \
 	ceph-rest-api \
 	ceph-crush-location \
 	mount.fuse.ceph \
+	rbd-replay-many \
 	rbdmap \
 	yasm-wrapper
 
@@ -623,7 +624,8 @@ bin_SCRIPTS += \
 	ceph-debugpack \
 	ceph-rbdnamer \
 	ceph-post-file \
-	ceph-crush-location
+	ceph-crush-location \
+	rbd-replay-many
 
 BUILT_SOURCES += init-ceph
 

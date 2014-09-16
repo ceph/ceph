@@ -9,7 +9,10 @@
 #include <boost/thread/condition.hpp>
 #include <boost/thread/mutex.hpp>
 
-// Taken from http://www.boost.org/doc/libs/1_55_0/libs/circular_buffer/example/circular_buffer_bound_example.cpp
+/**
+   Blocking, fixed-capacity, thread-safe FIFO queue useful for communicating between threads.
+   This code was taken from the Boost docs: http://www.boost.org/doc/libs/1_55_0/libs/circular_buffer/example/circular_buffer_bound_example.cpp
+ */
 template <class T>
 class BoundedBuffer {
 public:
@@ -21,6 +24,10 @@ public:
   explicit BoundedBuffer(size_type capacity) : m_unread(0), m_container(capacity) {
   }
 
+  /**
+     Inserts an element into the queue.
+     Blocks if the queue is full.
+   */
   void push_front(typename boost::call_traits<value_type>::param_type item) {
     // `param_type` represents the "best" way to pass a parameter of type `value_type` to a method.
     boost::mutex::scoped_lock lock(m_mutex);
@@ -31,6 +38,10 @@ public:
     m_not_empty.notify_one();
   }
 
+  /**
+     Removes an element from the queue.
+     Blocks if the queue is empty.
+  */
   void pop_back(value_type* pItem) {
     boost::mutex::scoped_lock lock(m_mutex);
     m_not_empty.wait(lock, boost::bind(&BoundedBuffer<value_type>::is_not_empty, this));
