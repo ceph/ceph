@@ -7,12 +7,12 @@ import contextlib
 import logging
 import time
 import unittest
+from teuthology.orchestra import run
 
-from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.task import interactive
 from cephfs.filesystem import Filesystem
-from tasks.ceph_fuse import get_client_configs, FuseMount
+from tasks.ceph_fuse import FuseMount
 
 
 log = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class TestClientRecovery(unittest.TestCase):
         self.mount_a.wait_until_mounted()
         self.mount_b.wait_until_mounted()
 
-        self.mount_a.run_shell(["rm", "-rf", "*"])
+        self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
 
     def tearDown(self):
         self.fs.clear_firewall()
