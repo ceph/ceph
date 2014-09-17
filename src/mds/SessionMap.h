@@ -81,7 +81,15 @@ private:
   int importing_count;
   friend class SessionMap;
 
+  // Human (friendly) name is soft state generated from client metadata
+  void _update_human_name();
+  std::string human_name;
+
 public:
+
+  void decode(bufferlist::iterator &p);
+  void set_client_metadata(std::map<std::string, std::string> const &meta);
+  std::string get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
@@ -294,6 +302,14 @@ public:
     if (session_map.count(w))
       return session_map[w];
     return 0;
+  }
+  const Session* get_session(entity_name_t w) const {
+    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
+    if (p == session_map.end()) {
+      return NULL;
+    } else {
+      return p->second;
+    }
   }
   Session* get_or_add_session(const entity_inst_t& i) {
     Session *s;

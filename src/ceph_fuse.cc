@@ -134,6 +134,12 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     cfuse = new CephFuse(client, fd[1]);
 
+    r = cfuse->init(newargc, newargv);
+    if (r != 0) {
+      cerr << "ceph-fuse[" << getpid() << "]: fuse failed to initialize" << std::endl;
+      goto out_messenger_start_failed;
+    }
+
     cout << "ceph-fuse[" << getpid() << "]: starting ceph client" << std::endl;
     r = messenger->start();
     if (r < 0) {
@@ -148,6 +154,8 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_init_failed;
     }
     
+    client->update_metadata("mount_point", cfuse->get_mount_point());
+
     // start up fuse
     // use my argc, argv (make sure you pass a mount point!)
     r = client->mount(g_conf->client_mountpoint.c_str());
@@ -156,9 +164,9 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_shutdown;
     }
 
-    r = cfuse->init(newargc, newargv);
+    r = cfuse->start();
     if (r != 0) {
-      cerr << "ceph-fuse[" << getpid() << "]: fuse failed to initialize" << std::endl;
+      cerr << "ceph-fuse[" << getpid() << "]: fuse failed to start" << std::endl;
       goto out_client_unmount;
     }
     cerr << "ceph-fuse[" << getpid() << "]: starting fuse" << std::endl;
