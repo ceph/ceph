@@ -38,6 +38,9 @@ class Remote(object):
         self.name = name
         if '@' in name:
             (self.user, hostname) = name.split('@')
+            # Temporary workaround for 'hostname --fqdn' not working on some
+            # machines
+            self._hostname = hostname
         else:
             # os.getlogin() doesn't work on non-login shells. The following
             # should work on any unix system
