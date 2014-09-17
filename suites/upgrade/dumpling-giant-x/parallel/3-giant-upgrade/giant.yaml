@@ -18,4 +18,4 @@ tasks:
        client.0:
 # client.1 will be upgraded as well as it'ss on the same host as client.0
    - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
-   - print: "**** done install.upgrade client.1 to as well the version from teuthology-suite arg"
+   - print: "**** done install.upgrade client.1 as well to the version from teuthology-suite arg"
