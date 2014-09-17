@@ -73,7 +73,7 @@ public:
   vector<Step> ruleset_steps;
 
   ErasureCodeLrc() :
-    ruleset_root("default")
+    data_chunk_count(0), ruleset_root("default")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }
