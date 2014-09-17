@@ -1838,10 +1838,10 @@ int main(int argc, char **argv)
   pd.add("object", 1).add("objcmd", 1).add("arg1", 1).add("arg2", 1);
 
   po::variables_map vm;
+  try {
   po::parsed_options parsed =
    po::command_line_parser(argc, argv).options(all).allow_unregistered().positional(pd).run();
   po::store( parsed, vm);
-  try {
     po::notify(vm);
   }
   catch(...) {
