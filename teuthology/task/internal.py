@@ -16,6 +16,7 @@ from teuthology import lock
 from teuthology import misc
 from teuthology import provision
 from teuthology.config import config as teuth_config
+from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
 
 log = logging.getLogger(__name__)
@@ -573,16 +574,34 @@ def vm_setup(ctx, config):
     """
     Look for virtual machines and handle their initialization
     """
-    editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
-    for rem in ctx.cluster.remotes.iterkeys():
-        mname = rem.shortname
-        if misc.is_vm(mname):
-            r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
-                    stdout=StringIO(),
-                    check_status=False,)
-            if r.returncode != 0:
-                p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
-                _, err = p2.communicate()
-                if err:
-                    log.info("Edit of /etc/sudoers failed: %s", err)
+    all_tasks = [x.keys()[0] for x in ctx.config['tasks']]
+    need_chef = False
+    if 'chef' in all_tasks or 'kernel' in all_tasks:
+        need_chef = True
+    with parallel() as p:
+        editinfo = os.path.join(os.path.dirname(__file__),'edit_sudoers.sh')
+        for rem in ctx.cluster.remotes.iterkeys():
+            mname = rem.shortname
+            if misc.is_vm(mname):
+                r = rem.run(args=['test', '-e', '/ceph-qa-ready',],
+                        stdout=StringIO(),
+                        check_status=False,)
+                if r.returncode != 0:
+                    p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
+                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
+                    _, err = p2.communicate()
+                    if err:
+                        log.info("Edit of /etc/sudoers failed: %s", err)
+                    if need_chef:
+                        p.spawn(_download_and_run_chef, rem)
+
+def _download_and_run_chef(remote_):
+    """
+    Run ceph_qa_chef.
+    """
+    log.info('Running ceph_qa_chef on %s', remote_)
+    remote_.run(args=['wget', '-q', '-O-',
+            'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
+            run.Raw('|'),
+            'sh',
+        ])
