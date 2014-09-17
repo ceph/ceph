@@ -728,6 +728,9 @@ struct RGWObjState {
   bool prefetch_data;
   bool keep_tail;
   bool is_olh;
+
+  /* important! don't forget to update copy constructor */
+
   RGWObjVersionTracker objv_tracker;
 
   map<string, bufferlist> attrset;
@@ -757,6 +760,7 @@ struct RGWObjState {
     }
     prefetch_data = rhs.prefetch_data;
     keep_tail = rhs.keep_tail;
+    is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
   }
 
@@ -1318,6 +1322,8 @@ class RGWRados
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
+  int get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+                           RGWObjState **target_state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
   int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {

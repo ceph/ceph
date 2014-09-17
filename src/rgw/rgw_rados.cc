@@ -3954,13 +3954,35 @@ static bool is_olh(map<string, bufferlist>& attrs)
   return (iter != attrs.end());
 }
 
+int RGWRados::get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+                                   RGWObjState **target_state, RGWObjVersionTracker *objv_tracker)
+{
+  assert(olh_state->is_olh);
+
+  rgw_obj target;
+  int r = RGWRados::follow_olh((void *)rctx, olh_state, obj, &target); /* might return -EAGAIN */
+  if (r < 0) {
+    return r;
+  }
+  r = get_obj_state(rctx, target, target_state, objv_tracker, false);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWRados::get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
-  if (s->has_attrs)
+  if (s->has_attrs) {
+    if (s->is_olh && follow_olh) {
+      return get_olh_target_state(rctx, obj, s, state, objv_tracker);
+    }
     return 0;
+  }
 
   int r = raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv_tracker);
   if (r == -ENOENT) {
@@ -4021,15 +4043,7 @@ int RGWRados::get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **
     s->is_olh = true;
 
     if (follow_olh) {
-      rgw_obj target;
-      r = RGWRados::follow_olh((void *)rctx, s, obj, &target); /* might return -EAGAIN */
-      if (r < 0) {
-        return r;
-      }
-      r = get_obj_state(rctx, target, state, objv_tracker, false);
-      if (r < 0) {
-        return r;
-      }
+      return get_olh_target_state(rctx, obj, s, state, objv_tracker);
     }
   }
 
