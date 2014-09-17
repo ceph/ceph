@@ -959,6 +959,45 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
 
 
 /**
+ * Return 0 if the pool is suitable for use with CephFS, or
+ * in case of errors return a negative error code, and populate
+ * the passed stringstream with an explanation.
+ */
+int MDSMonitor::_check_pool(
+    const int64_t pool_id,
+    std::stringstream *ss) const
+{
+  assert(ss != NULL);
+
+  const pg_pool_t *pool = mon->osdmon()->osdmap.get_pg_pool(pool_id);
+  if (!pool) {
+    *ss << "pool id '" << pool_id << "' does not exist";
+    return -ENOENT;
+  }
+
+  const string& pool_name = mon->osdmon()->osdmap.get_pool_name(pool_id);
+
+  if (pool->is_erasure()) {
+    // EC pools are only acceptable with a cache tier overlay
+    if (!pool->has_tiers() || !pool->has_read_tier() || !pool->has_write_tier()) {
+      *ss << "pool '" << pool_name << "' (id '" << pool_id << "')"
+         << " is an erasure-code pool";
+      return -EINVAL;
+    }
+  }
+
+  if (pool->is_tier()) {
+    *ss << " pool '" << pool_name << "' (id '" << pool_id
+      << "') is already in use as a cache tier.";
+    return -EINVAL;
+  }
+
+  // Nothing special about this pool, so it is permissible
+  return 0;
+}
+
+
+/**
  * Handle a command for creating or removing a filesystem.
  *
  * @return true if such a command was found, else false to
@@ -990,30 +1029,13 @@ bool MDSMonitor::management_command(
       return true;
     }
  
-    // Check that the requested pools exist
-    const pg_pool_t *p = mon->osdmon()->osdmap.get_pg_pool(data);
-    if (!p) {
-      ss << "pool id '" << data << "' does not exist";
-      r = -ENOENT;
-      return true;
-    } else if (p->is_erasure()) {
-      const string& pn = mon->osdmon()->osdmap.get_pool_name(data);
-      ss << "pool '" << pn << "' (id '" << data << "')"
-         << " is an erasure-code pool";
-      r = -EINVAL;
+    r = _check_pool(data, &ss);
+    if (r) {
       return true;
     }
 
-    p = mon->osdmon()->osdmap.get_pg_pool(metadata);
-    if (!p) {
-      ss << "pool id '" << metadata << "' does not exist";
-      r = -ENOENT;
-      return true;
-    } else if (p->is_erasure()) {
-      const string& pn = mon->osdmon()->osdmap.get_pool_name(metadata);
-      ss << "pool '" << pn << "' (id '" << metadata << "')"
-         << " is an erasure-code pool";
-      r = -EINVAL;
+    r = _check_pool(metadata, &ss);
+    if (r) {
       return true;
     }
 
@@ -1100,15 +1122,13 @@ bool MDSMonitor::management_command(
       request_proposal(mon->osdmon());
     }
 
-    if (data_pool->is_erasure()) {
-      ss << "data pool '" << data_name << " is an erasure-code pool";
-      r = -EINVAL;
+    r = _check_pool(data, &ss);
+    if (r) {
       return true;
     }
 
-    if (metadata_pool->is_erasure()) {
-      ss << "metadata pool '" << metadata_name << " is an erasure-code pool";
-      r = -EINVAL;
+    r = _check_pool(metadata, &ss);
+    if (r) {
       return true;
     }
 
