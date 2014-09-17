@@ -19,8 +19,9 @@
 
 #include "messages/MMDSBeacon.h"
 #include "mon/MonClient.h"
-#include "mds/MDS.h"
 #include "mds/MDLog.h"
+#include "mds/MDS.h"
+#include "mds/MDSMap.h"
 #include "mds/Locker.h"
 
 #include "Beacon.h"
@@ -33,6 +34,8 @@
 Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock), name(name_)
 {
+  want_state = MDSMap::STATE_NULL;
+  last_send = 0;
   last_seq = 0;
   sender = NULL;
   was_laggy = false;
