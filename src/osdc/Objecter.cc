@@ -2290,15 +2290,15 @@ void Objecter::_finish_op(Op *op)
   if (op->budgeted)
     put_op_budget(op);
 
+  if (op->ontimeout) {
+    timer.cancel_event(op->ontimeout);
+  }
+
   _session_op_remove(op->session, op);
 
   logger->dec(l_osdc_op_active);
 
   assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
-
-  if (op->ontimeout) {
-    timer.cancel_event(op->ontimeout);
-  }
 
   inflight_ops.dec();
 
@@ -3875,14 +3875,15 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->onfinish)
     c->onfinish->complete(r);
 
+  if (c->ontimeout) {
+    timer.cancel_event(c->ontimeout);
+  }
+
   OSDSession *s = c->session;
   s->lock.get_write();
   _session_command_op_remove(c->session, c);
   s->lock.unlock();
 
-  if (c->ontimeout) {
-    timer.cancel_event(c->ontimeout);
-  }
   c->put();
 
   logger->dec(l_osdc_command_active);
