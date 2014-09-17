@@ -21,6 +21,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
+#include <sys/utsname.h>
 
 #if defined(__linux__)
 #include <linux/falloc.h>
@@ -420,6 +421,8 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+
+  populate_metadata();
 
   client_lock.Lock();
   initialized = true;
@@ -1611,6 +1614,42 @@ MetaSession *Client::_get_or_open_mds_session(int mds)
   return _open_mds_session(mds);
 }
 
+/**
+ * Populate a map of strings with client-identifying metadata,
+ * such as the hostname.  Call this once at initialization.
+ */
+void Client::populate_metadata()
+{
+  // Hostname
+  struct utsname u;
+  int r = uname(&u);
+  if (r >= 0) {
+    metadata["hostname"] = u.nodename;
+    ldout(cct, 20) << __func__ << " read hostname '" << u.nodename << "'" << dendl;
+  } else {
+    ldout(cct, 1) << __func__ << " failed to read hostname (" << cpp_strerror(r) << ")" << dendl;
+  }
+
+  // Ceph entity id (the '0' in "client.0")
+  metadata["entity_id"] = cct->_conf->name.get_id();
+}
+
+/**
+ * Optionally add or override client metadata fields.
+ */
+void Client::update_metadata(std::string const &k, std::string const &v)
+{
+  Mutex::Locker l(client_lock);
+  assert(initialized);
+
+  if (metadata.count(k)) {
+    ldout(cct, 1) << __func__ << " warning, overriding metadata field '" << k
+      << "' from '" << metadata[k] << "' to '" << v << "'" << dendl;
+  }
+
+  metadata[k] = v;
+}
+
 MetaSession *Client::_open_mds_session(int mds)
 {
   ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
@@ -1622,7 +1661,9 @@ MetaSession *Client::_open_mds_session(int mds)
   session->con = messenger->get_connection(session->inst);
   session->state = MetaSession::STATE_OPENING;
   mds_sessions[mds] = session;
-  session->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_OPEN));
+  MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
+  m->client_meta = metadata;
+  session->con->send_message(m);
   return session;
 }
 
@@ -2472,8 +2513,17 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 	   << " dropping " << ccap_string(dropping)
 	   << dendl;
 
-  cap->issued &= retain;
-  cap->implemented &= cap->issued | used;
+  if (cct->_conf->client_inject_release_failure && revoking) {
+    // Simulated bug:
+    //  - tell the server we think issued is whatever they issued plus whatever we implemented
+    //  - leave what we have implemented in place
+    ldout(cct, 20) << __func__ << " injecting failure to release caps" << dendl;
+    cap->issued = cap->issued | cap->implemented;
+  } else {
+    // Normal behaviour
+    cap->issued &= retain;
+    cap->implemented &= cap->issued | used;
+  }
 
   uint64_t flush_tid = 0;
   snapid_t follows = 0;
@@ -3152,10 +3202,11 @@ void Client::trim_caps(MetaSession *s, int max)
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
-  while (s->caps.size() > max && !p.end()) {
+  while ((s->caps.size() - trimmed) > max && !p.end()) {
     Cap *cap = *p;
     s->s_cap_iterator = cap;
     Inode *in = cap->inode;
+
     if (in->caps.size() > 1 && cap != in->auth_cap) {
       int mine = cap->issued | cap->implemented;
       int oissued = in->auth_cap ? in->auth_cap->issued : 0;
@@ -3169,15 +3220,29 @@ void Client::trim_caps(MetaSession *s, int max)
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
       set<Dentry*>::iterator q = in->dn_set.begin();
+      in->get();
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
-	if (dn->lru_is_expireable())
+	if (dn->lru_is_expireable()) {
+          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+            // Only issue one of these per DN for inodes in root: handle
+            // others more efficiently by calling for root-child DNs at
+            // the end of this function.
+            _schedule_invalidate_dentry_callback(dn, true);
+          }
 	  trim_dentry(dn);
-	else
+
+        } else {
+          ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
+        }
       }
-      if (all)
+      if (all && in->ino != MDS_INO_ROOT) {
+        ldout(cct, 20) << __func__ << " counting as trimmed: " << *in << dendl;
 	trimmed++;
+      }
+
+      put_inode(in);
     }
 
     ++p;
@@ -3188,14 +3253,21 @@ void Client::trim_caps(MetaSession *s, int max)
   }
   s->s_cap_iterator = NULL;
 
+
   // notify kernel to invalidate top level directory entries. As a side effect,
   // unused inodes underneath these entries get pruned.
   if (dentry_invalidate_cb && s->caps.size() > max) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
+    assert(root);
+    if (root->dir) {
+      for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+           p != root->dir->dentries.end();
+           ++p) {
+        if (p->second->inode)
+          _schedule_invalidate_dentry_callback(p->second, false);
+      }
+    } else {
+      // This seems unnatural, as long as we are holding caps they must be on
+      // some descendent of the root, so why don't we have the root open?
     }
   }
 }
@@ -4167,7 +4239,12 @@ void Client::flush_cap_releases()
        p != mds_sessions.end();
        ++p) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-      p->second->con->send_message(p->second->release);
+      if (cct->_conf->client_inject_release_failure) {
+        ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
+        p->second->release->put();
+      } else {
+        p->second->con->send_message(p->second->release);
+      }
       p->second->release = 0;
     }
   }

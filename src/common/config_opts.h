@@ -136,6 +136,7 @@ OPTION(ms_inject_delay_max, OPT_DOUBLE, 1)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE, 0)   // seconds
 OPTION(ms_dump_on_send, OPT_BOOL, false)           // hexdump msg to log on send
+OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump undecodeable messages at
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
@@ -280,6 +281,7 @@ OPTION(client_oc_max_objects, OPT_INT, 1000)      // max objects in cache
 OPTION(client_debug_force_sync_read, OPT_BOOL, false)     // always read synchronously (go to osds)
 OPTION(client_debug_inject_tick_delay, OPT_INT, 0) // delay the client tick for a number of seconds
 OPTION(client_max_inline_size, OPT_U64, 4096)
+OPTION(client_inject_release_failure, OPT_BOOL, false)  // synthetic client bug for testing
 // note: the max amount of "in flight" dirty data is roughly (max - target)
 OPTION(fuse_use_invalidate_cb, OPT_BOOL, false) // use fuse 2.8+ invalidate callback to keep page cache consistent
 OPTION(fuse_allow_other, OPT_BOOL, true)
@@ -316,8 +318,10 @@ OPTION(mds_enforce_unique_name, OPT_BOOL, true)
 OPTION(mds_blacklist_interval, OPT_FLOAT, 24.0*60.0)  // how long to blacklist failed nodes
 OPTION(mds_session_timeout, OPT_FLOAT, 60)    // cap bits and leases time out if client idle
 OPTION(mds_revoke_cap_timeout, OPT_FLOAT, 60)    // detect clients which aren't revoking caps
+OPTION(mds_recall_state_timeout, OPT_FLOAT, 60)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT, 30)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT, 300) // autoclose idle session
+OPTION(mds_health_summarize_threshold, OPT_INT, 10) // collapse N-client health metrics to a single 'many'
 OPTION(mds_reconnect_timeout, OPT_FLOAT, 45)  // seconds to wait for clients during mds restart
 	      //  make it (mds_session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT, 5)

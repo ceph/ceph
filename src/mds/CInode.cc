@@ -2573,6 +2573,7 @@ void CInode::remove_client_cap(client_t client)
   
   cap->item_session_caps.remove_myself();
   cap->item_revoking_caps.remove_myself();
+  cap->item_client_revoking_caps.remove_myself();
   containing_realm->remove_cap(client, cap);
   
   if (client == loner_cap)
