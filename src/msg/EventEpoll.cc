@@ -23,6 +23,8 @@ int EpollDriver::init(int nevent)
     return -errno;
   }
 
+  size = nevent;
+
   return 0;
 }
 
@@ -31,21 +33,8 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
   struct epoll_event ee;
   /* If the fd was already monitored for some event, we need a MOD
    * operation. Otherwise we need an ADD operation. */
-  int op, pos;
-  map<int, int>::iterator it = fds.find(fd);
-  if (it == fds.end()) {
-    op = EPOLL_CTL_ADD;
-    if (deleted_fds.size()) {
-      pos = deleted_fds.front();
-      deleted_fds.pop_front();
-    } else {
-      pos = next_pos;
-      next_pos++;
-    }
-    fds[fd] = pos;
-  } else {
-    op = cur_mask == EVENT_NONE ? EPOLL_CTL_ADD: EPOLL_CTL_MOD;
-  }
+  int op;
+  op = cur_mask == EVENT_NONE ? EPOLL_CTL_ADD: EPOLL_CTL_MOD;
 
   ee.events = EPOLLET;
   add_mask |= cur_mask; /* Merge old events */
@@ -69,10 +58,6 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
 void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 {
   struct epoll_event ee;
-  map<int, int>::iterator it = fds.find(fd);
-  if (it == fds.end())
-    return ;
-
   int mask = cur_mask & (~delmask);
 
   ee.events = 0;
@@ -92,12 +77,6 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
       lderr(cct) << __func__ << " epoll_ctl: delete fd=" << fd
                  << " failed." << cpp_strerror(errno) << dendl;
     }
-
-    if (next_pos == it->second)
-      next_pos--;
-    else
-      deleted_fds.push_back(it->second);
-    fds.erase(fd);
   }
   ldout(cct, 10) << __func__ << " del event fd=" << fd << " cur mask=" << mask
                  << dendl;
@@ -105,6 +84,7 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 
 int EpollDriver::resize_events(int newsize)
 {
+  size = newsize;
   events = (struct epoll_event*)realloc(events, sizeof(struct epoll_event)*newsize);
   return 0;
 }
@@ -113,7 +93,7 @@ int EpollDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval
 {
   int retval, numevents = 0;
 
-  retval = epoll_wait(epfd, events, next_pos,
+  retval = epoll_wait(epfd, events, size,
                       tvp ? (tvp->tv_sec*1000 + tvp->tv_usec/1000) : -1);
   if (retval > 0) {
     int j;

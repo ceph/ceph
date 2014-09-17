@@ -86,7 +86,7 @@ class EventCenter {
   };
 
   Mutex lock;
-  map<int, FileEvent> file_events;
+  unordered_map<int, FileEvent> file_events;
   // The second element is id
   map<utime_t, uint64_t> time_to_ids;
   // The first element is id
@@ -104,7 +104,7 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
-    map<int, FileEvent>::iterator it = file_events.find(fd);
+    unordered_map<int, FileEvent>::iterator it = file_events.find(fd);
     if (it != file_events.end()) {
       return &it->second;
     }
@@ -118,7 +118,7 @@ class EventCenter {
     //
     deque<FiredEvent> conn_queue;
     // used only by file event <File Descriptor, Mask>
-    map<int, int> pending;
+    unordered_map<int, int> pending;
 
     EventWQ(EventCenter *c, time_t timeout, time_t suicide_timeout, ThreadPool *tp)
       : ThreadPool::WorkQueueVal<FiredEvent>("Event::EventWQ", timeout, suicide_timeout, tp), center(c) {}
@@ -126,7 +126,7 @@ class EventCenter {
     void _enqueue(FiredEvent e) {
       if (e.is_file) {
         // Ensure only one thread process one file descriptor
-        map<int, int>::iterator it = pending.find(e.file_event.fd);
+        unordered_map<int, int>::iterator it = pending.find(e.file_event.fd);
         if (it != pending.end()) {
           it->second |= e.file_event.mask;
         } else {
@@ -151,7 +151,6 @@ class EventCenter {
       FiredEvent e = conn_queue.front();
       conn_queue.pop_front();
       if (e.is_file) {
-        assert(pending.count(e.file_event.fd));
         e.file_event.mask = pending[e.file_event.fd];
         pending.erase(e.file_event.fd);
       }
@@ -180,7 +179,6 @@ class EventCenter {
       }
     }
     void _clear() {
-      assert(conn_queue.empty());
     }
   } event_wq;
 
