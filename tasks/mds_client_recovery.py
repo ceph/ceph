@@ -7,12 +7,12 @@ import contextlib
 import logging
 import time
 import unittest
+from teuthology.orchestra import run
 
-from teuthology import misc
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.task import interactive
 from cephfs.filesystem import Filesystem
-from tasks.ceph_fuse import get_client_configs, FuseMount
+from tasks.ceph_fuse import FuseMount
 
 
 log = logging.getLogger(__name__)
@@ -38,7 +38,9 @@ class TestClientRecovery(unittest.TestCase):
         self.mount_a.mount()
         self.mount_b.mount()
         self.mount_a.wait_until_mounted()
-        self.mount_a.wait_until_mounted()
+        self.mount_b.wait_until_mounted()
+
+        self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
 
     def tearDown(self):
         self.fs.clear_firewall()
@@ -180,30 +182,42 @@ class TestClientRecovery(unittest.TestCase):
         # Capability release from stale session
         # =====================================
         cap_holder = self.mount_a.open_background()
+
+        # Wait for the file to be visible from another client, indicating
+        # that mount_a has completed its network ops
+        self.mount_b.wait_for_visible()
+
+        # Simulate client death
         self.mount_a.kill()
 
-        # Now, after mds_session_timeout seconds, the waiter should
-        # complete their operation when the MDS marks the holder's
-        # session stale.
-        cap_waiter = self.mount_b.write_background()
-        a = time.time()
-        cap_waiter.wait()
-        b = time.time()
-        cap_waited = b - a
-        log.info("cap_waiter waited {0}s".format(cap_waited))
-        self.assertTrue(self.mds_session_timeout / 2.0 <= cap_waited <= self.mds_session_timeout * 2.0,
-                        "Capability handover took {0}, expected approx {1}".format(
-                            cap_waited, self.mds_session_timeout
-                        ))
-
-        cap_holder.stdin.close()
         try:
-            cap_holder.wait()
-        except CommandFailedError:
-            # We killed it, so it raises an error
-            pass
+            # Now, after mds_session_timeout seconds, the waiter should
+            # complete their operation when the MDS marks the holder's
+            # session stale.
+            cap_waiter = self.mount_b.write_background()
+            a = time.time()
+            cap_waiter.wait()
+            b = time.time()
 
-        self.mount_a.kill_cleanup()
+            # Should have succeeded
+            self.assertEqual(cap_waiter.exitstatus, 0)
+
+            cap_waited = b - a
+            log.info("cap_waiter waited {0}s".format(cap_waited))
+            self.assertTrue(self.mds_session_timeout / 2.0 <= cap_waited <= self.mds_session_timeout * 2.0,
+                            "Capability handover took {0}, expected approx {1}".format(
+                                cap_waited, self.mds_session_timeout
+                            ))
+
+            cap_holder.stdin.close()
+            try:
+                cap_holder.wait()
+            except CommandFailedError:
+                # We killed it, so it raises an error
+                pass
+        finally:
+            # teardown() doesn't quite handle this case cleanly, so help it out
+            self.mount_a.kill_cleanup()
 
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
@@ -216,37 +230,44 @@ class TestClientRecovery(unittest.TestCase):
         # and then immediately kill it.
         cap_holder = self.mount_a.open_background()
         mount_a_client_id = self.mount_a.get_client_id()
+
+        # Wait for the file to be visible from another client, indicating
+        # that mount_a has completed its network ops
+        self.mount_b.wait_for_visible()
+
+        # Simulate client death
         self.mount_a.kill()
 
-        # The waiter should get stuck waiting for the capability
-        # held on the MDS by the now-dead client A
-        cap_waiter = self.mount_b.write_background()
-        time.sleep(5)
-        self.assertFalse(cap_waiter.finished)
-
-        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
-        # Now, because I evicted the old holder of the capability, it should
-        # immediately get handed over to the waiter
-        a = time.time()
-        cap_waiter.wait()
-        b = time.time()
-        cap_waited = b - a
-        log.info("cap_waiter waited {0}s".format(cap_waited))
-        # This is the check that it happened 'now' rather than waiting
-        # for the session timeout
-        self.assertLess(cap_waited, self.mds_session_timeout / 2.0,
-                        "Capability handover took {0}, expected less than {1}".format(
-                            cap_waited, self.mds_session_timeout / 2.0
-                        ))
-
-        cap_holder.stdin.close()
         try:
-            cap_holder.wait()
-        except CommandFailedError:
-            # We killed it, so it raises an error
-            pass
+            # The waiter should get stuck waiting for the capability
+            # held on the MDS by the now-dead client A
+            cap_waiter = self.mount_b.write_background()
+            time.sleep(5)
+            self.assertFalse(cap_waiter.finished)
 
-        self.mount_a.kill_cleanup()
+            self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+            # Now, because I evicted the old holder of the capability, it should
+            # immediately get handed over to the waiter
+            a = time.time()
+            cap_waiter.wait()
+            b = time.time()
+            cap_waited = b - a
+            log.info("cap_waiter waited {0}s".format(cap_waited))
+            # This is the check that it happened 'now' rather than waiting
+            # for the session timeout
+            self.assertLess(cap_waited, self.mds_session_timeout / 2.0,
+                            "Capability handover took {0}, expected less than {1}".format(
+                                cap_waited, self.mds_session_timeout / 2.0
+                            ))
+
+            cap_holder.stdin.close()
+            try:
+                cap_holder.wait()
+            except CommandFailedError:
+                # We killed it, so it raises an error
+                pass
+        finally:
+            self.mount_a.kill_cleanup()
 
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
