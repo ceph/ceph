@@ -74,11 +74,9 @@ class TestIntegration():
             )
         assert r.stdout.getvalue() == 'yup\n'
 
-    def test_distro(self):
+    def test_os(self):
         rem = remote.Remote(HOST)
-        assert rem.distro.distributor
-        assert rem.distro.name
-        assert rem.distro.description
-        assert rem.distro.release
-        assert rem.distro.codename
-        assert rem.distro.package_type
+        assert rem.os.name
+        assert rem.os.id
+        assert rem.os.version
+        assert rem.os.version_id

@@ -139,35 +139,72 @@ class TestRemote(object):
 
 
 class TestDistribution(object):
-    lsb_centos = dedent("""
-        LSB Version:    :base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch:graphics-4.0-amd64:graphics-4.0-noarch:printing-4.0-amd64:printing-4.0-noarch
-        Distributor ID: CentOS
-        Description:    CentOS release 6.5 (Final)
-        Release:        6.5
-        Codename:       Final
+    str_centos = dedent("""
+        NAME="CentOS Linux"
+        VERSION="7 (Core)"
+        ID="centos"
+        ID_LIKE="rhel fedora"
+        VERSION_ID="7"
+        PRETTY_NAME="CentOS Linux 7 (Core)"
+        ANSI_COLOR="0;31"
+        CPE_NAME="cpe:/o:centos:centos:7"
+        HOME_URL="https://www.centos.org/"
+        BUG_REPORT_URL="https://bugs.centos.org/"
     """)
 
-    lsb_ubuntu = dedent("""
-        Distributor ID: Ubuntu
-        Description:    Ubuntu 12.04.4 LTS
-        Release:        12.04
-        Codename:       precise
+    str_ubuntu = dedent("""
+        NAME="Ubuntu"
+        VERSION="12.04.4 LTS, Precise Pangolin"
+        ID=ubuntu
+        ID_LIKE=debian
+        PRETTY_NAME="Ubuntu precise (12.04.4 LTS)"
+        VERSION_ID="12.04"
+    """)
+
+    str_rhel = dedent("""
+        NAME="Red Hat Enterprise Linux Server"
+        VERSION="7.0 (Maipo)"
+        ID="rhel"
+        ID_LIKE="fedora"
+        VERSION_ID="7.0"
+        PRETTY_NAME="Red Hat Enterprise Linux Server 7.0 (Maipo)"
+        ANSI_COLOR="0;31"
+        CPE_NAME="cpe:/o:redhat:enterprise_linux:7.0:GA:server"
+        HOME_URL="https://www.redhat.com/"
+        BUG_REPORT_URL="https://bugzilla.redhat.com/"
+
+        REDHAT_BUGZILLA_PRODUCT="Red Hat Enterprise Linux 7"
+        REDHAT_BUGZILLA_PRODUCT_VERSION=7.0
+        REDHAT_SUPPORT_PRODUCT="Red Hat Enterprise Linux"
+        REDHAT_SUPPORT_PRODUCT_VERSION=7.0
     """)
 
     def test_centos(self):
-        d = remote.Distribution(self.lsb_centos)
-        assert d.distributor == 'CentOS'
-        assert d.description == 'CentOS release 6.5 (Final)'
-        assert d.release == '6.5'
-        assert d.codename == 'Final'
-        assert d.name == 'centos'
-        assert d.package_type == 'rpm'
+        os = remote.OS(self.str_centos)
+        assert os.name == 'CentOS Linux'
+        assert os.version == '7 (Core)'
+        assert os.id == 'centos'
+        assert os.id_like == 'rhel fedora'
+        assert os.pretty_name == 'CentOS Linux 7 (Core)'
+        assert os.version_id == '7'
+        assert os.package_type == 'rpm'
 
     def test_ubuntu(self):
-        d = remote.Distribution(self.lsb_ubuntu)
-        assert d.distributor == 'Ubuntu'
-        assert d.description == 'Ubuntu 12.04.4 LTS'
-        assert d.release == '12.04'
-        assert d.codename == 'precise'
-        assert d.name == 'ubuntu'
-        assert d.package_type == 'deb'
+        os = remote.OS(self.str_ubuntu)
+        assert os.name == 'Ubuntu'
+        assert os.version == '12.04.4 LTS, Precise Pangolin'
+        assert os.id == 'ubuntu'
+        assert os.id_like == 'debian'
+        assert os.pretty_name == 'Ubuntu precise (12.04.4 LTS)'
+        assert os.version_id == '12.04'
+        assert os.package_type == 'deb'
+
+    def test_rhel(self):
+        os = remote.OS(self.str_rhel)
+        assert os.name == 'Red Hat Enterprise Linux Server'
+        assert os.version == '7.0 (Maipo)'
+        assert os.id == 'rhel'
+        assert os.id_like == 'fedora'
+        assert os.pretty_name == 'Red Hat Enterprise Linux Server 7.0 (Maipo)'
+        assert os.version_id == '7.0'
+        assert os.package_type == 'rpm'
