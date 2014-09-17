@@ -44,15 +44,15 @@ int main(int argc, char **argv) {
   vector<string> ceph_option_strings;
   po::variables_map vm;
   try {
-  po::parsed_options parsed =
-    po::command_line_parser(argc, argv).options(desc).positional(p).allow_unregistered().run();
-  po::store(
-    parsed,
-    vm);
+    po::parsed_options parsed =
+      po::command_line_parser(argc, argv).options(desc).positional(p).allow_unregistered().run();
+    po::store(
+	      parsed,
+	      vm);
     po::notify(vm);
 
-  ceph_option_strings = po::collect_unrecognized(parsed.options,
-						 po::include_positional);
+    ceph_option_strings = po::collect_unrecognized(parsed.options,
+						   po::include_positional);
   } catch(po::error &e) {
     std::cerr << e.what() << std::endl;
     return 1;

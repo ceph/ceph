@@ -219,10 +219,10 @@ int ErasureCodeBench::decode()
 int main(int argc, char** argv) {
   ErasureCodeBench ecbench;
   try {
-  int err = ecbench.setup(argc, argv);
-  if (err)
-    return err;
-  return ecbench.run();
+    int err = ecbench.setup(argc, argv);
+    if (err)
+      return err;
+    return ecbench.run();
   } catch(po::error &e) {
     cerr << e.what() << endl; 
     return 1;
