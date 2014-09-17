@@ -83,6 +83,9 @@ int main(int argc, char **argv)
 
     ceph_option_strings = po::collect_unrecognized(parsed.options,
 						   po::include_positional);
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
+    return 1;
   }
   vector<const char *> ceph_options, def_args;
   ceph_options.reserve(ceph_option_strings.size());
