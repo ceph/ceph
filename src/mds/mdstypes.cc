@@ -551,17 +551,18 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
  */
 void session_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(inst, bl);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
+  ::encode(client_metadata, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -577,6 +578,9 @@ void session_info_t::decode(bufferlist::iterator& p)
   ::decode(used_inos, p);
   prealloc_inos.insert(used_inos);
   used_inos.clear();
+  if (struct_v >= 4) {
+    ::decode(client_metadata, p);
+  }
   DECODE_FINISH(p);
 }
 
