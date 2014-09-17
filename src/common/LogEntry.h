@@ -75,6 +75,8 @@ struct LogEntry {
   string msg;
   string channel;
 
+  LogEntry() : seq(0) {}
+
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
   void log_to_syslog(string level, string facility);
