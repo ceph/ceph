@@ -10,16 +10,12 @@
 
 class EpollDriver : public EventDriver {
   int epfd;
-  // map "fd" to the pos of "events"
-  map<int, int> fds;
-  // used to store the deleted position
-  list<int> deleted_fds;
-  int next_pos;
   struct epoll_event *events;
   CephContext *cct;
+  int size;
 
  public:
-  EpollDriver(CephContext *c): epfd(-1), next_pos(0), events(NULL), cct(c) {}
+  EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c) {}
   virtual ~EpollDriver() {
     if (epfd != -1)
       close(epfd);
