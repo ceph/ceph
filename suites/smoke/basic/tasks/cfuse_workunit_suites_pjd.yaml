@@ -2,6 +2,9 @@ tasks:
 - install:
 - ceph:
     fs: xfs
+    conf:
+      debug mds: 20
+      debug client: 20
 - ceph-fuse:
 - workunit:
     clients:
