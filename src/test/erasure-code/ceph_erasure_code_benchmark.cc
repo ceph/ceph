@@ -223,6 +223,9 @@ int main(int argc, char** argv) {
   if (err)
     return err;
   return ecbench.run();
+  } catch(po::error &e) {
+    cerr << e.what() << endl; 
+    return 1;
   }
 }
 
