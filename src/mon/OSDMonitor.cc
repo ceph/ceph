@@ -5420,18 +5420,11 @@ done:
     assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
     assert(tp);
-    if (p->tiers.count(tierpool_id)) {
-      assert(tp->tier_of == pool_id);
-      err = 0;
-      ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
+
+    if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
       goto reply;
     }
-    if (tp->is_tier()) {
-      ss << "tier pool '" << tierpoolstr << "' is already a tier of '"
-	 << osdmap.get_pool_name(tp->tier_of) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
+
     // make sure new tier is empty
     string force_nonempty;
     cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
@@ -5478,6 +5471,11 @@ done:
     assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
     assert(tp);
+
+    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+      goto reply;
+    }
+
     if (p->tiers.count(tierpool_id) == 0) {
       ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
       err = 0;
@@ -5552,6 +5550,11 @@ done:
       err = -EINVAL;
       goto reply;
     }
+
+    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+      goto reply;
+    }
+
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->read_tier = overlaypool_id;
@@ -5577,6 +5580,11 @@ done:
       ss << "there is now (or already was) no overlay for '" << poolstr << "'";
       goto reply;
     }
+
+    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
+      goto reply;
+    }
+
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->clear_read_tier();
@@ -5716,18 +5724,11 @@ done:
     assert(p);
     const pg_pool_t *tp = osdmap.get_pg_pool(tierpool_id);
     assert(tp);
-    if (p->tiers.count(tierpool_id)) {
-      assert(tp->tier_of == pool_id);
-      err = 0;
-      ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
+
+    if (!_check_become_tier(tierpool_id, tp, pool_id, p, &err, &ss)) {
       goto reply;
     }
-    if (tp->is_tier()) {
-      ss << "tier pool '" << tierpoolstr << "' is already a tier of '"
-	 << osdmap.get_pool_name(tp->tier_of) << "'";
-      err = -EINVAL;
-      goto reply;
-    }
+
     int64_t size = 0;
     if (!cmd_getval(g_ceph_context, cmdmap, "size", size)) {
       ss << "unable to parse 'size' value '"
@@ -6149,8 +6150,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
 
   // If the Pool is in use by CephFS, refuse to delete it
   MDSMap const &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
-  if (pending_mdsmap.get_enabled() && (pending_mdsmap.is_data_pool(pool) ||
-      pending_mdsmap.get_metadata_pool() == pool)) {
+  if (pending_mdsmap.pool_in_use(pool)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
   }
@@ -6169,6 +6169,75 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
   }
   *ss << "pool '" << poolstr << "' removed";
   return 0;
+}
+
+/**
+ * Check if it is safe to add a tier to a base pool
+ *
+ * @return
+ * True if the operation should proceed, false if we should abort here
+ * (abort doesn't necessarily mean error, could be idempotency)
+ */
+bool OSDMonitor::_check_become_tier(
+    const int64_t tier_pool_id, const pg_pool_t *tier_pool,
+    const int64_t base_pool_id, const pg_pool_t *base_pool,
+    int *err,
+    ostream *ss) const
+{
+  const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
+  const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
+
+  const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
+  if (pending_mdsmap.pool_in_use(tier_pool_id)) {
+    *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
+    *err = -EBUSY;
+    return false;
+  }
+
+  if (base_pool->tiers.count(tier_pool_id)) {
+    assert(tier_pool->tier_of == base_pool_id);
+    *err = 0;
+    *ss << "pool '" << tier_pool_name << "' is now (or already was) a tier of '"
+      << base_pool_name << "'";
+    return false;
+  }
+
+  if (tier_pool->is_tier()) {
+    *ss << "tier pool '" << tier_pool_name << "' is already a tier of '"
+       << osdmap.get_pool_name(tier_pool->tier_of) << "'";
+    *err = -EINVAL;
+    return false;
+  }
+
+  *err = 0;
+  return true;
+}
+
+
+/**
+ * Check if it is safe to remove a tier from this base pool
+ *
+ * @return
+ * True if the operation should proceed, false if we should abort here
+ * (abort doesn't necessarily mean error, could be idempotency)
+ */
+bool OSDMonitor::_check_remove_tier(
+    const int64_t base_pool_id, const pg_pool_t *base_pool,
+    int *err, ostream *ss) const
+{
+  const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
+
+  // If the pool is in use by CephFS, then refuse to remove its
+  // tier
+  const MDSMap &pending_mdsmap = mon->mdsmon()->pending_mdsmap;
+  if (pending_mdsmap.pool_in_use(base_pool_id)) {
+    *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
+    *err = -EBUSY;
+    return false;
+  }
+
+  *err = 0;
+  return true;
 }
 
 int OSDMonitor::_prepare_remove_pool(int64_t pool, ostream *ss)

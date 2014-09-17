@@ -21,6 +21,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -200,7 +201,7 @@ void SessionMap::decode(bufferlist::iterator& p)
       Session *s = get_or_add_session(inst);
       if (s->is_closed())
 	set_state(s, Session::STATE_OPEN);
-      s->info.decode(p);
+      s->decode(p);
     }
 
     DECODE_FINISH(p);
@@ -341,3 +342,81 @@ void SessionMap::touch_session(Session *session)
   session->last_cap_renew = ceph_clock_now(g_ceph_context);
 }
 
+/**
+ * Capped in response to a CEPH_MSG_CLIENT_CAPRELEASE message,
+ * with n_caps equal to the number of caps that were released
+ * in the message.  Used to update state about how many caps a
+ * client has released since it was last instructed to RECALL_STATE.
+ */
+void Session::notify_cap_release(size_t n_caps)
+{
+  if (!recalled_at.is_zero()) {
+    recall_release_count += n_caps;
+    if (recall_release_count >= recall_count) {
+      recalled_at = utime_t();
+      recall_count = 0;
+      recall_release_count = 0;
+    }
+  }
+}
+
+/**
+ * Called when a CEPH_MSG_CLIENT_SESSION->CEPH_SESSION_RECALL_STATE
+ * message is sent to the client.  Update our recall-related state
+ * in order to generate health metrics if the session doesn't see
+ * a commensurate number of calls to ::notify_cap_release
+ */
+void Session::notify_recall_sent(int const new_limit)
+{
+  if (recalled_at.is_zero()) {
+    // Entering recall phase, set up counters so we can later
+    // judge whether the client has respected the recall request
+    recalled_at = ceph_clock_now(g_ceph_context);
+    assert (new_limit < caps.size());  // Behaviour of Server::recall_client_state
+    recall_count = caps.size() - new_limit;
+    recall_release_count = 0;
+  }
+}
+
+void Session::set_client_metadata(map<string, string> const &meta)
+{
+  info.client_metadata = meta;
+
+  _update_human_name();
+}
+
+/**
+ * Use client metadata to generate a somewhat-friendlier
+ * name for the client than its session ID.
+ *
+ * This is *not* guaranteed to be unique, and any machine
+ * consumers of session-related output should always use
+ * the session ID as a primary capacity and use this only
+ * as a presentation hint.
+ */
+void Session::_update_human_name()
+{
+  if (info.client_metadata.count("hostname")) {
+    // Happy path, refer to clients by hostname
+    human_name = info.client_metadata["hostname"];
+    if (info.client_metadata.count("entity_id")) {
+      EntityName entity;
+      entity.set_id(info.client_metadata["entity_id"]);
+      if (!entity.has_default_id()) {
+        // When a non-default entity ID is set by the user, assume they
+        // would like to see it in references to the client
+        human_name += std::string(":") + entity.get_id();
+      }
+    }
+  } else {
+    // Fallback, refer to clients by ID e.g. client.4567
+    human_name = stringify(info.inst.name.num());
+  }
+}
+
+void Session::decode(bufferlist::iterator &p)
+{
+  info.decode(p);
+
+  _update_human_name();
+}

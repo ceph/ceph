@@ -720,7 +720,7 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
       lderr(cct) << "failed to decode message of type " << type
 		 << " v" << header.version
 		 << ": " << e.what() << dendl;
-      ldout(cct, 30) << "dump: \n";
+      ldout(cct, cct->_conf->ms_dump_corrupt_message_level) << "dump: \n";
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)

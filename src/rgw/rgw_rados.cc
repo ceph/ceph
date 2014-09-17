@@ -905,8 +905,10 @@ int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oi
   return 0;
 }
 
-int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, void **phandle, bool *again)
+int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, MD5 *hash, void **phandle, bool *again)
 {
+  assert(!hash);
+
   *again = false;
 
   if (ofs != _ofs)
@@ -1033,7 +1035,7 @@ int RGWPutObjProcessor_Atomic::write_data(bufferlist& bl, off_t ofs, void **phan
   return RGWPutObjProcessor_Aio::handle_obj_data(cur_obj, bl, ofs - cur_part_ofs, ofs, phandle, exclusive);
 }
 
-int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again)
+int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash, void **phandle, bool *again)
 {
   *again = false;
 
@@ -1067,7 +1069,10 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   if (!data_ofs && !immutable_head()) {
     first_chunk.claim(bl);
     obj_len = (uint64_t)first_chunk.length();
-    int r = prepare_next_part(first_chunk.length());
+    if (hash) {
+      hash->Update((const byte *)first_chunk.c_str(), obj_len);
+    }
+    int r = prepare_next_part(obj_len);
     if (r < 0) {
       return r;
     }
@@ -1079,11 +1084,19 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
+  if (hash) {
+    hash->Update((const byte *)bl.c_str(), bl.length());
+  }
   int ret = write_data(bl, write_ofs, phandle, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
     bl.clear();
   }
   return ret;
+}
+
+void RGWPutObjProcessor_Atomic::complete_hash(MD5 *hash)
+{
+  hash->Update((const byte *)pending_data_bl.c_str(), pending_data_bl.length());
 }
 
 
@@ -3045,7 +3058,7 @@ public:
 
     do {
       void *handle;
-      int ret = processor->handle_data(bl, ofs, &handle, &again);
+      int ret = processor->handle_data(bl, ofs, NULL, &handle, &again);
       if (ret < 0)
         return ret;
 
@@ -3510,7 +3523,7 @@ int RGWRados::copy_obj_data(void *ctx,
     do {
       void *handle;
 
-      ret = processor.handle_data(bl, ofs, &handle, &again);
+      ret = processor.handle_data(bl, ofs, NULL, &handle, &again);
       if (ret < 0) {
         return ret;
       }
