@@ -1843,9 +1843,9 @@ int main(int argc, char **argv)
    po::command_line_parser(argc, argv).options(all).allow_unregistered().positional(pd).run();
   po::store( parsed, vm);
     po::notify(vm);
-  }
-  catch(...) {
-    usage(desc);
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
+    return 1;
   }
 
   if (vm.count("help")) {
