@@ -137,7 +137,7 @@ int main(int argc, char **argv) {
   po::variables_map vm;
   try {
   po::parsed_options parsed =
-    po::command_line_parser(argc, argv).options(desc).positional(p).run();
+    po::command_line_parser(argc, argv).options(desc).positional(p).allow_unregistered().run();
   po::store(
     parsed,
     vm);
