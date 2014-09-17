@@ -1107,6 +1107,15 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *o
   }
   head_obj.init(bucket, obj_str);
 
+  if (versioned_object) {
+#define OBJ_INSTANCE_LEN 32
+    char buf[OBJ_INSTANCE_LEN + 1];
+
+    gen_rand_base64(store->ctx(), buf, OBJ_INSTANCE_LEN);
+
+    head_obj.set_instance(buf);
+  }
+
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest, bucket, head_obj);
@@ -1187,33 +1196,15 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
+  r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
+                          RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
+                          extra_params);
+  if (r < 0) {
+    return r;
+  }
+
   if (versioned_object) {
-    rgw_obj ver_head_obj(head_obj.bucket, head_obj.get_orig_obj());
-    ver_head_obj.set_ns(head_obj.ns);
-    ver_head_obj.set_instance("instance");
-
-#define OBJ_INSTANCE_LEN 32
-    char buf[OBJ_INSTANCE_LEN + 1];
-
-    gen_rand_base64(store->ctx(), buf, OBJ_INSTANCE_LEN);
-
-    ver_head_obj.set_instance(buf);
-
-    r = store->put_obj_meta(NULL, ver_head_obj, obj_len, attrs,
-                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                            extra_params);
-    if (r < 0) {
-      return r;
-    }
-
-    r = store->set_olh(obj_ctx, bucket_owner, ver_head_obj, false);
-    if (r < 0) {
-      return r;
-    }
-  } else {
-    r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
-                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                            extra_params);
+    r = store->set_olh(obj_ctx, bucket_owner, head_obj, false);
     if (r < 0) {
       return r;
     }
