@@ -141,8 +141,8 @@ int main(int argc, char **argv) {
     parsed,
     vm);
     po::notify(vm);
-  } catch (...) {
-    cout << desc << std::endl;
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
     return 1;
   }
 
