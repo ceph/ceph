@@ -245,6 +245,14 @@ private:
   bool prepare_pgtemp(class MOSDPGTemp *m);
 
   int _check_remove_pool(int64_t pool, const pg_pool_t *pi, ostream *ss);
+  bool _check_become_tier(
+      int64_t tier_pool_id, const pg_pool_t *tier_pool,
+      int64_t base_pool_id, const pg_pool_t *base_pool,
+      int *err, ostream *ss) const;
+  bool _check_remove_tier(
+      int64_t base_pool_id, const pg_pool_t *base_pool,
+      int *err, ostream *ss) const;
+
   int _prepare_remove_pool(int64_t pool, ostream *ss);
   int _prepare_rename_pool(int64_t pool, string newname);
 

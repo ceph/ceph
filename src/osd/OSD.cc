@@ -4335,6 +4335,7 @@ void OSD::ms_handle_connect(Connection *con)
       send_pg_stats(ceph_clock_now(cct));
 
       monc->sub_want("osd_pg_creates", 0, CEPH_SUBSCRIBE_ONETIME);
+      monc->sub_want("osdmap", osdmap->get_epoch(), CEPH_SUBSCRIBE_ONETIME);
       monc->renew_subs();
     }
   }
