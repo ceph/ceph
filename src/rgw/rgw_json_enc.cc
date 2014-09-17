@@ -602,6 +602,7 @@ void rgw_obj::dump(Formatter *f) const
   encode_json("key", loc, f);
   encode_json("ns", ns, f);
   encode_json("object", object, f);
+  encode_json("instance", instance, f);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
