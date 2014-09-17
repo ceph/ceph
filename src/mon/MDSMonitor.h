@@ -139,6 +139,8 @@ private:
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;
+
+  int _check_pool(const int64_t pool_id, std::stringstream *ss) const;
 };
 
 #endif
