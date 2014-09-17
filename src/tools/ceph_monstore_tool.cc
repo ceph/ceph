@@ -134,12 +134,12 @@ int main(int argc, char **argv) {
   p.add("version", 1);
 
   po::variables_map vm;
+  try {
   po::parsed_options parsed =
     po::command_line_parser(argc, argv).options(desc).positional(p).run();
   po::store(
     parsed,
     vm);
-  try {
     po::notify(vm);
   } catch (...) {
     cout << desc << std::endl;

@@ -82,7 +82,9 @@ int main(int argc, char **argv)
      "num write threads")
     ;
 
+  vector<string> ceph_option_strings;
   po::variables_map vm;
+  try {
   po::parsed_options parsed =
     po::command_line_parser(argc, argv).options(desc).allow_unregistered().run();
   po::store(
@@ -90,9 +92,10 @@ int main(int argc, char **argv)
     vm);
   po::notify(vm);
 
+  ceph_option_strings = po::collect_unrecognized(parsed.options,
+						 po::include_positional);
+  }
   vector<const char *> ceph_options, def_args;
-  vector<string> ceph_option_strings = po::collect_unrecognized(
-    parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
