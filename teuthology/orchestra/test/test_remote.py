@@ -154,6 +154,18 @@ class TestDistribution(object):
         BUG_REPORT_URL="https://bugs.centos.org/"
     """)
 
+    str_debian = dedent("""
+        PRETTY_NAME="Debian GNU/Linux 7 (wheezy)"
+        NAME="Debian GNU/Linux"
+        VERSION_ID="7"
+        VERSION="7 (wheezy)"
+        ID=debian
+        ANSI_COLOR="1;31"
+        HOME_URL="http://www.debian.org/"
+        SUPPORT_URL="http://www.debian.org/support/"
+        BUG_REPORT_URL="http://bugs.debian.org/"
+    """)
+
     str_ubuntu = dedent("""
         NAME="Ubuntu"
         VERSION="12.04.4 LTS, Precise Pangolin"
@@ -190,6 +202,16 @@ class TestDistribution(object):
         assert os.pretty_name == 'CentOS Linux 7 (Core)'
         assert os.version_id == '7'
         assert os.package_type == 'rpm'
+
+    def test_debian(self):
+        os = remote.OS(self.str_debian)
+        assert os.name == 'Debian GNU/Linux'
+        assert os.version == '7 (wheezy)'
+        assert os.id == 'debian'
+        assert os.id_like == ''
+        assert os.pretty_name == 'Debian GNU/Linux 7 (wheezy)'
+        assert os.version_id == '7'
+        assert os.package_type == 'deb'
 
     def test_ubuntu(self):
         os = remote.OS(self.str_ubuntu)

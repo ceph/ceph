@@ -328,8 +328,8 @@ class OS(object):
             self.package_type = "rpm"
 
     def _get_value(self, name):
-        regex = name + '=(.+)'
-        match = re.search(regex, self._os_release_str)
+        regex = '^%s=(.+)' % name
+        match = re.search(regex, self._os_release_str, flags=re.M)
         if match:
             return match.groups()[0].strip('"\'')
         return ''
