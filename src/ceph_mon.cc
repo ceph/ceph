@@ -293,6 +293,26 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
+  {
+    // check fs stats. don't start if it's critically close to full.
+    ceph_data_stats_t stats;
+    int err = get_fs_stats(stats, g_conf->mon_data.c_str());
+    if (err < 0) {
+      cerr << "error checking monitor data's fs stats: " << cpp_strerror(err)
+           << std::endl;
+      exit(-err);
+    }
+    if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
+      cerr << "error: monitor data filesystem reached concerning levels of"
+           << " available storage space (available: "
+           << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
+           << ")\nyou may adjust 'mon data avail crit' to a lower value"
+           << " to make this go away (default: " << g_conf->mon_data_avail_crit
+           << "%)\n" << std::endl;
+      exit(ENOSPC);
+    }
+  }
+
   // -- mkfs --
   if (mkfs) {
 
