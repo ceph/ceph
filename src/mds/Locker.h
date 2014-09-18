@@ -88,7 +88,7 @@ public:
 		     set<SimpleLock*> &rdlocks,
 		     set<SimpleLock*> &wrlocks,
 		     set<SimpleLock*> &xlocks,
-		     map<SimpleLock*,int> *remote_wrlocks=NULL,
+		     map<SimpleLock*,mds_rank_t> *remote_wrlocks=NULL,
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblock=false);
 
@@ -127,8 +127,8 @@ public:
   bool wrlock_start(SimpleLock *lock, MDRequestRef& mut, bool nowait=false);
   void wrlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue);
 
-  void remote_wrlock_start(SimpleLock *lock, int target, MDRequestRef& mut);
-  void remote_wrlock_finish(SimpleLock *lock, int target, MutationImpl *mut);
+  void remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut);
+  void remote_wrlock_finish(SimpleLock *lock, mds_rank_t target, MutationImpl *mut);
 
   bool xlock_start(SimpleLock *lock, MDRequestRef& mut);
   void _finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue);
@@ -163,7 +163,6 @@ public:
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, MLock *m);
-  void _scatter_replica_lock(ScatterLock *lock, int auth);
   bool scatter_scatter_fastpath(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);

@@ -239,15 +239,15 @@ public:
   client_t whoami;
 
   // mds sessions
-  map<int, MetaSession*> mds_sessions;  // mds -> push seq
+  map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
   void get_session_metadata(std::map<std::string, std::string> *meta) const;
-  bool have_open_session(int mds);
+  bool have_open_session(mds_rank_t mds);
   void got_mds_push(MetaSession *s);
-  MetaSession *_get_mds_session(int mds, Connection *con);  ///< return session for mds *and* con; null otherwise
-  MetaSession *_get_or_open_mds_session(int mds);
-  MetaSession *_open_mds_session(int mds);
+  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
+  MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
   void _kick_stale_sessions();
@@ -258,7 +258,6 @@ public:
   // mds requests
   ceph_tid_t last_tid, last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
-  set<int>                 failed_mds;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -271,14 +270,14 @@ public:
 
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
 			 Inode **ptarget, bool *pcreated, int uid, int gid);
-  void encode_cap_releases(MetaRequest *request, int mds);
+  void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
-			   int mds, int drop,
+			   mds_rank_t mds, int drop,
 			   int unless,int force=0);
   void encode_dentry_release(Dentry *dn, MetaRequest *req,
-			     int mds, int drop, int unless);
-  int choose_target_mds(MetaRequest *req);
-  void connect_mds_targets(int mds);
+			     mds_rank_t mds, int drop, int unless);
+  mds_rank_t choose_target_mds(MetaRequest *req);
+  void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session);
   MClientRequest *build_client_request(MetaRequest *request);
   void kick_requests(MetaSession *session);

@@ -243,7 +243,7 @@ void MDSTableClient::resend_prepares()
   }
 }
 
-void MDSTableClient::handle_mds_failure(int who)
+void MDSTableClient::handle_mds_failure(mds_rank_t who)
 {
   if (who != mds->mdsmap->get_tableserver())
     return; // do nothing.

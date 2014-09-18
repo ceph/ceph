@@ -50,25 +50,25 @@ class MDBalancer {
   set<dirfrag_t>   split_queue, merge_queue;
 
   // per-epoch scatter/gathered info
-  map<int, mds_load_t>  mds_load;
-  map<int, float>       mds_meta_load;
-  map<int, map<int, float> > mds_import_map;
+  map<mds_rank_t, mds_load_t>  mds_load;
+  map<mds_rank_t, float>       mds_meta_load;
+  map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
 
   // per-epoch state
   double          my_load, target_load;
-  map<int,double> my_targets;
-  map<int,double> imported;
-  map<int,double> exported;
+  map<mds_rank_t,double> my_targets;
+  map<mds_rank_t,double> imported;
+  map<mds_rank_t,double> exported;
 
-  map<int32_t, int> old_prev_targets;  // # iterations they _haven't_ been targets
+  map<mds_rank_t, int> old_prev_targets;  // # iterations they _haven't_ been targets
   bool check_targets();
 
-  double try_match(int ex, double& maxex,
-                   int im, double& maxim);
-  double get_maxim(int im) {
+  double try_match(mds_rank_t ex, double& maxex,
+                   mds_rank_t im, double& maxim);
+  double get_maxim(mds_rank_t im) {
     return target_load - mds_meta_load[im] - imported[im];
   }
-  double get_maxex(int ex) {
+  double get_maxex(mds_rank_t ex) {
     return mds_meta_load[ex] - target_load - exported[ex];    
   }
 
