@@ -71,7 +71,9 @@ if LINUX
 libec_jerasure_sse3_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
 
+if HAVE_SSSE3
 erasure_codelib_LTLIBRARIES += libec_jerasure_sse3.la
+endif
 
 libec_jerasure_sse4_la_SOURCES = ${jerasure_sources}
 libec_jerasure_sse4_la_CFLAGS = ${AM_CFLAGS}  \
@@ -98,7 +100,9 @@ if LINUX
 libec_jerasure_sse4_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
 
+if HAVE_SSE4_PCLMUL
 erasure_codelib_LTLIBRARIES += libec_jerasure_sse4.la
+endif
 
 libec_jerasure_la_SOURCES = \
 	erasure-code/jerasure/ErasureCodePluginSelectJerasure.cc
