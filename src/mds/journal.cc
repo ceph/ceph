@@ -1615,6 +1615,7 @@ void ESession::replay(MDS *mds)
     if (open) {
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);
+      session->set_client_metadata(client_metadata);
       dout(10) << " opened session " << session->info.inst << dendl;
     } else {
       session = mds->sessionmap.get_session(client_inst.name);
@@ -1651,19 +1652,20 @@ void ESession::replay(MDS *mds)
 
 void ESession::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(stamp, bl);
   ::encode(client_inst, bl);
   ::encode(open, bl);
   ::encode(cmapv, bl);
   ::encode(inos, bl);
   ::encode(inotablev, bl);
+  ::encode(client_metadata, bl);
   ENCODE_FINISH(bl);
 }
 
 void ESession::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 2)
     ::decode(stamp, bl);
   ::decode(client_inst, bl);
@@ -1671,6 +1673,9 @@ void ESession::decode(bufferlist::iterator &bl)
   ::decode(cmapv, bl);
   ::decode(inos, bl);
   ::decode(inotablev, bl);
+  if (struct_v >= 4) {
+    ::decode(client_metadata, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1681,6 +1686,12 @@ void ESession::dump(Formatter *f) const
   f->dump_int("client map version", cmapv);
   f->dump_stream("inos") << inos;
   f->dump_int("inotable version", inotablev);
+  f->open_object_section("client_metadata");
+  for (map<string, string>::const_iterator i = client_metadata.begin();
+      i != client_metadata.end(); ++i) {
+    f->dump_string(i->first.c_str(), i->second);
+  }
+  f->close_section();  // client_metadata
 }
 
 void ESession::generate_test_instances(list<ESession*>& ls)

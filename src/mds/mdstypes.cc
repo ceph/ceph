@@ -620,6 +620,11 @@ void session_info_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+
+  for (map<string, string>::const_iterator i = client_metadata.begin();
+      i != client_metadata.end(); ++i) {
+    f->dump_string(i->first.c_str(), i->second);
+  }
 }
 
 void session_info_t::generate_test_instances(list<session_info_t*>& ls)
