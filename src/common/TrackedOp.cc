@@ -30,6 +30,7 @@ static ostream& _prefix(std::ostream* _dout)
 
 void OpHistory::on_shutdown()
 {
+  Mutex::Locker history_lock(ops_history_lock);
   arrived.clear();
   duration.clear();
   shutdown = true;
@@ -39,6 +40,8 @@ void OpHistory::insert(utime_t now, TrackedOpRef op)
 {
   if (shutdown)
     return;
+
+  Mutex::Locker history_lock(ops_history_lock);
   duration.insert(make_pair(op->get_duration(), op));
   arrived.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
@@ -65,6 +68,7 @@ void OpHistory::cleanup(utime_t now)
 
 void OpHistory::dump_ops(utime_t now, Formatter *f)
 {
+  Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
   f->open_object_section("OpHistory");
   f->dump_int("num to keep", history_size);
@@ -86,24 +90,29 @@ void OpHistory::dump_ops(utime_t now, Formatter *f)
 
 void OpTracker::dump_historic_ops(Formatter *f)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
   utime_t now = ceph_clock_now(cct);
   history.dump_ops(now, f);
 }
 
 void OpTracker::dump_ops_in_flight(Formatter *f)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
   f->open_object_section("ops_in_flight"); // overall dump
-  f->dump_int("num_ops", ops_in_flight.size());
+  uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
   utime_t now = ceph_clock_now(cct);
-  for (xlist<TrackedOp*>::iterator p = ops_in_flight.begin(); !p.end(); ++p) {
-    f->open_object_section("op");
-    (*p)->dump(now, f);
-    f->close_section(); // this TrackedOp
+  for (uint32_t i = 0; i < num_optracker_shards; i++) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[i];
+    assert(NULL != sdata); 
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);    
+    for (xlist<TrackedOp*>::iterator p = sdata->ops_in_flight_sharded.begin(); !p.end(); ++p) {
+      f->open_object_section("op");
+      (*p)->dump(now, f);
+      f->close_section(); // this TrackedOp
+      total_ops_in_flight++;
+    }
   }
   f->close_section(); // list of TrackedOps
+  f->dump_int("num_ops", total_ops_in_flight);
   f->close_section(); // overall dump
 }
 
@@ -111,9 +120,16 @@ void OpTracker::register_inflight_op(xlist<TrackedOp*>::item *i)
 {
   if (!tracking_enabled)
     return;
-  Mutex::Locker locker(ops_in_flight_lock);
-  ops_in_flight.push_back(i);
-  ops_in_flight.back()->seq = seq++;
+
+  uint64_t current_seq = seq.inc();
+  uint32_t shard_index = current_seq % num_optracker_shards;
+  ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
+  assert(NULL != sdata);
+  {
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    sdata->ops_in_flight_sharded.push_back(i);
+    sdata->ops_in_flight_sharded.back()->seq = current_seq;
+  }
 }
 
 void OpTracker::unregister_inflight_op(TrackedOp *i)
@@ -121,63 +137,94 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   // caller checks;
   assert(tracking_enabled);
 
-  Mutex::Locker locker(ops_in_flight_lock);
-  assert(i->xitem.get_list() == &ops_in_flight);
+  uint32_t shard_index = i->seq % num_optracker_shards;
+  ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
+  assert(NULL != sdata);
+  {
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    assert(i->xitem.get_list() == &sdata->ops_in_flight_sharded);
+    i->xitem.remove_myself();
+  }
+  i->_unregistered();
   utime_t now = ceph_clock_now(cct);
-  i->xitem.remove_myself();
   history.insert(now, TrackedOpRef(i));
 }
 
 bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
-  if (!ops_in_flight.size()) // this covers tracking_enabled, too
-    return false;
-
   utime_t now = ceph_clock_now(cct);
   utime_t too_old = now;
   too_old -= complaint_time;
+  utime_t oldest_op;
+  uint64_t total_ops_in_flight = 0;
+  bool got_first_op = false;
 
-  utime_t oldest_secs = now - ops_in_flight.front()->get_initiated();
+  for (uint32_t i = 0; i < num_optracker_shards; i++) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[i];
+    assert(NULL != sdata);
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    if (!sdata->ops_in_flight_sharded.empty()) {
+      utime_t oldest_op_tmp = sdata->ops_in_flight_sharded.front()->get_initiated();
+      if (!got_first_op) {
+        oldest_op = oldest_op_tmp;
+        got_first_op = true;
+      } else if (oldest_op_tmp < oldest_op) {
+        oldest_op = oldest_op_tmp;
+      }
+    } 
+    total_ops_in_flight += sdata->ops_in_flight_sharded.size();
+  }
+      
+  if (0 == total_ops_in_flight)
+    return false;
 
-  dout(10) << "ops_in_flight.size: " << ops_in_flight.size()
+  utime_t oldest_secs = now - oldest_op;
+
+  dout(10) << "ops_in_flight.size: " << total_ops_in_flight
            << "; oldest is " << oldest_secs
            << " seconds old" << dendl;
 
   if (oldest_secs < complaint_time)
     return false;
 
-  xlist<TrackedOp*>::iterator i = ops_in_flight.begin();
   warning_vector.reserve(log_threshold + 1);
 
   int slow = 0;     // total slow
   int warned = 0;   // total logged
-  while (!i.end() && (*i)->get_initiated() < too_old) {
-    slow++;
+  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[iter];
+    assert(NULL != sdata);
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+    if (sdata->ops_in_flight_sharded.empty())
+      continue;
+    xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();    
+    while (!i.end() && (*i)->get_initiated() < too_old) {
+      slow++;
 
-    // exponential backoff of warning intervals
-    if (((*i)->get_initiated() +
+      // exponential backoff of warning intervals
+      if (((*i)->get_initiated() +
 	 (complaint_time * (*i)->warn_interval_multiplier)) < now) {
       // will warn
-      if (warning_vector.empty())
-	warning_vector.push_back("");
-      warned++;
-      if (warned > log_threshold)
-        break;
+        if (warning_vector.empty())
+          warning_vector.push_back("");
+        warned++;
+        if (warned > log_threshold)
+          break;
 
-      utime_t age = now - (*i)->get_initiated();
-      stringstream ss;
-      ss << "slow request " << age << " seconds old, received at "
-         << (*i)->get_initiated() << ": ";
-      (*i)->_dump_op_descriptor_unlocked(ss);
-      ss << " currently "
-	 << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
-      warning_vector.push_back(ss.str());
+        utime_t age = now - (*i)->get_initiated();
+        stringstream ss;
+        ss << "slow request " << age << " seconds old, received at "
+           << (*i)->get_initiated() << ": ";
+        (*i)->_dump_op_descriptor_unlocked(ss);
+        ss << " currently "
+	   << ((*i)->current.size() ? (*i)->current : (*i)->state_string());
+        warning_vector.push_back(ss.str());
 
-      // only those that have been shown will backoff
-      (*i)->warn_interval_multiplier *= 2;
+        // only those that have been shown will backoff
+        (*i)->warn_interval_multiplier *= 2;
+      }
+      ++i;
     }
-    ++i;
   }
 
   // only summarize if we warn about any.  if everything has backed
@@ -194,28 +241,34 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector)
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 {
-  Mutex::Locker locker(ops_in_flight_lock);
-
   h->clear();
 
   utime_t now = ceph_clock_now(NULL);
   unsigned bin = 30;
   uint32_t lb = 1 << (bin-1);  // lower bound for this bin
   int count = 0;
-  for (xlist<TrackedOp*>::iterator i = ops_in_flight.begin(); !i.end(); ++i) {
-    utime_t age = now - (*i)->get_initiated();
-    uint32_t ms = (long)(age * 1000.0);
-    if (ms >= lb) {
-      count++;
-      continue;
+  
+  for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
+    ShardedTrackingData* sdata = sharded_in_flight_list[iter];
+    assert(NULL != sdata);
+    Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
+
+    for (xlist<TrackedOp*>::iterator i = sdata->ops_in_flight_sharded.begin();
+                                                               !i.end(); ++i) {
+      utime_t age = now - (*i)->get_initiated();
+      uint32_t ms = (long)(age * 1000.0);
+      if (ms >= lb) {
+        count++;
+        continue;
+      }
+      if (count)
+        h->set_bin(bin, count);
+      while (lb > ms) {
+        bin--;
+        lb >>= 1;
+      }
+      count = 1;
     }
-    if (count)
-      h->set_bin(bin, count);
-    while (lb > ms) {
-      bin--;
-      lb >>= 1;
-    }
-    count = 1;
   }
   if (count)
     h->set_bin(bin, count);
@@ -231,18 +284,19 @@ void OpTracker::mark_event(TrackedOp *op, const string &dest, utime_t time)
 void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 			    utime_t time)
 {
-  stringstream ss;
-  op->_dump_op_descriptor_unlocked(ss);
-  dout(5) << //"reqid: " << op->get_reqid() <<
-	     ", seq: " << op->seq
+  dout(5);
+  *_dout  <<  "seq: " << op->seq
 	  << ", time: " << time << ", event: " << evt
-	  << ", op: " << ss.str() << dendl;
+	  << ", op: ";
+  op->_dump_op_descriptor_unlocked(*_dout);
+  *_dout << dendl;
+     
 }
 
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
   op->mark_event("done");
-  op->_unregistered();
   if (!tracker->tracking_enabled) {
+    op->_unregistered();
     delete op;
     return;
   }
