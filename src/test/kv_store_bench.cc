@@ -420,9 +420,7 @@ int KvStoreBench::test_teuthology_aio(next_gen_t distr,
       break;
     }
 
-    if (cb_args) {
-      delete cb_args;
-    }
+    delete cb_args;
   }
 
   while(ops_in_flight > 0) {
