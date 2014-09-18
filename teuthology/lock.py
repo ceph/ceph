@@ -60,12 +60,12 @@ def get_distro_from_downburst():
         log.info('Using default values for supported os_type/os_version')
         return default_table
 
-    
+
 def vps_version_or_type_valid(machine_type, os_type, os_version):
     """
     Check os-type and os-version parameters when locking a vps.
     Os-type will always be set (defaults to ubuntu).
-   
+
     In the case where downburst does not handle list-json (an older version
     of downburst, for instance), a message is printed and this checking
     is skipped (so that this code should behave as it did before this
@@ -92,7 +92,7 @@ def validate_distro_version(version, supported_versions):
     if version in supported_versions:
         return True
     for parts in supported_versions:
-        part = parts.split('(') 
+        part = parts.split('(')
         if len(part) == 2:
             if version == part[0]:
                 return True
@@ -504,42 +504,39 @@ def ssh_keyscan(hostnames):
     p.wait()
 
     keys_dict = dict()
+    for line in p.stderr.readlines():
+        if not line.startswith('#'):
+            log.error(line)
     for line in p.stdout.readlines():
         host, key = line.strip().split(' ', 1)
         keys_dict[host] = key
     return keys_dict
 
 
-def updatekeys(ctx):
-    loglevel = logging.INFO
-    if ctx.verbose:
-        loglevel = logging.DEBUG
-
+def updatekeys(args):
+    loglevel = logging.DEBUG if args['--verbose'] else logging.INFO
     logging.basicConfig(
         level=loglevel,
     )
+    all_ = args['--all']
+    if all_:
+        machines = []
+    elif args['<machine>']:
+        machines = [misc.canonicalize_hostname(m, user=None)
+                    for m in args['<machine>']]
+    elif args['--targets']:
+        targets = args['--targets']
+        with file(targets) as f:
+            docs = yaml.safe_load_all(f)
+            for doc in docs:
+                machines = [n for n in doc.get('targets', dict()).iterkeys()]
 
-    misc.read_config(ctx)
-
-    machines = [misc.canonicalize_hostname(m, user=None) for m in ctx.machines]
-
-    if ctx.targets:
-        try:
-            with file(ctx.targets) as f:
-                g = yaml.safe_load_all(f)
-                for new in g:
-                    if 'targets' in new:
-                        for t in new['targets'].iterkeys():
-                            machines.append(t)
-        except IOError as e:
-            raise argparse.ArgumentTypeError(str(e))
-
-    return do_update_keys(machines)
+    return do_update_keys(machines, all_)
 
 
-def do_update_keys(machines):
+def do_update_keys(machines, all_=False):
     reference = list_locks(keyed_by_name=True)
-    if not machines:
+    if all_:
         machines = reference.keys()
     keys_dict = ssh_keyscan(machines)
     return push_new_keys(keys_dict, reference)
