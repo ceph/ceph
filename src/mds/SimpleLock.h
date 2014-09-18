@@ -359,14 +359,15 @@ public:
   }
 
   // gather set
-  static set<int> empty_gather_set;
+  static set<int32_t> empty_gather_set;
 
-  const set<int>& get_gather_set() const {
+  // int32_t: <0 is client, >=0 is MDS rank
+  const set<int32_t>& get_gather_set() const {
     return have_more() ? more()->gather_set : empty_gather_set;
   }
 
   void init_gather() {
-    for (map<int,unsigned>::const_iterator p = parent->replicas_begin();
+    for (map<mds_rank_t,unsigned>::const_iterator p = parent->replicas_begin();
 	 p != parent->replicas_end(); 
 	 ++p)
       more()->gather_set.insert(p->first);
@@ -374,14 +375,14 @@ public:
   bool is_gathering() const {
     return have_more() && !more()->gather_set.empty();
   }
-  bool is_gathering(int i) const {
+  bool is_gathering(int32_t i) const {
     return have_more() && more()->gather_set.count(i);
   }
   void clear_gather() {
     if (have_more())
       more()->gather_set.clear();
   }
-  void remove_gather(int i) {
+  void remove_gather(int32_t i) {
     if (have_more())
       more()->gather_set.erase(i);
   }
@@ -552,7 +553,7 @@ public:
   void decode(bufferlist::iterator& p) {
     DECODE_START(2, p);
     ::decode(state, p);
-    set<int> g;
+    set<__s32> g;
     ::decode(g, p);
     if (!g.empty())
       more()->gather_set.swap(g);

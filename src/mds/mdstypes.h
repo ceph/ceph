@@ -24,6 +24,7 @@
 #include <boost/pool/pool.hpp>
 #include "include/assert.h"
 #include "include/hash_namespace.h"
+#include <boost/serialization/strong_typedef.hpp>
 
 
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
@@ -68,6 +69,12 @@
 #define MDS_TRAVERSE_FORWARD       1
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
+
+
+BOOST_STRONG_TYPEDEF(int32_t, mds_rank_t)
+BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
+extern const mds_gid_t MDS_GID_NONE;
+extern const mds_rank_t MDS_RANK_NONE;
 
 
 extern long g_num_ino, g_num_dir, g_num_dn, g_num_cap;
@@ -1040,14 +1047,16 @@ class SimpleLock;
 
 class MDSCacheObject;
 
+typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 // -- authority delegation --
 // directory authority types
 //  >= 0 is the auth mds
-#define CDIR_AUTH_PARENT   -1   // default
-#define CDIR_AUTH_UNKNOWN  -2
-#define CDIR_AUTH_DEFAULT   pair<int,int>(-1, -2)
-#define CDIR_AUTH_UNDEF     pair<int,int>(-2, -2)
+#define CDIR_AUTH_PARENT   mds_rank_t(-1)   // default
+#define CDIR_AUTH_UNKNOWN  mds_rank_t(-2)
+#define CDIR_AUTH_DEFAULT   mds_authority_t(CDIR_AUTH_PARENT, CDIR_AUTH_UNKNOWN)
+#define CDIR_AUTH_UNDEF     mds_authority_t(CDIR_AUTH_UNKNOWN, CDIR_AUTH_UNKNOWN)
 //#define CDIR_AUTH_ROOTINODE pair<int,int>( 0, -2)
+
 
 
 /*
@@ -1181,7 +1190,7 @@ class MDSCacheObject {
 
   // --------------------------------------------
   // authority
-  virtual pair<int,int> authority() = 0;
+  virtual mds_authority_t authority() = 0;
   bool is_ambiguous_auth() {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
@@ -1294,29 +1303,29 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce; // [replica] defined on replica
-  std::map<int,unsigned>	replica_map;   // [auth] mds -> nonce
+  std::map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
 
  public:
   bool is_replicated() { return !replica_map.empty(); }
-  bool is_replica(int mds) { return replica_map.count(mds); }
+  bool is_replica(mds_rank_t mds) { return replica_map.count(mds); }
   int num_replicas() { return replica_map.size(); }
-  unsigned add_replica(int mds) {
+  unsigned add_replica(mds_rank_t mds) {
     if (replica_map.count(mds)) 
       return ++replica_map[mds];  // inc nonce
     if (replica_map.empty()) 
       get(PIN_REPLICATED);
     return replica_map[mds] = 1;
   }
-  void add_replica(int mds, unsigned nonce) {
+  void add_replica(mds_rank_t mds, unsigned nonce) {
     if (replica_map.empty()) 
       get(PIN_REPLICATED);
     replica_map[mds] = nonce;
   }
-  unsigned get_replica_nonce(int mds) {
+  unsigned get_replica_nonce(mds_rank_t mds) {
     assert(replica_map.count(mds));
     return replica_map[mds];
   }
-  void remove_replica(int mds) {
+  void remove_replica(mds_rank_t mds) {
     assert(replica_map.count(mds));
     replica_map.erase(mds);
     if (replica_map.empty())
@@ -1327,11 +1336,11 @@ protected:
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  std::map<int,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  std::map<int,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const std::map<int,unsigned>& get_replicas() { return replica_map; }
-  void list_replicas(std::set<int>& ls) {
-    for (std::map<int,unsigned>::const_iterator p = replica_map.begin();
+  std::map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
+  std::map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
+  const std::map<mds_rank_t,unsigned>& get_replicas() { return replica_map; }
+  void list_replicas(std::set<mds_rank_t>& ls) {
+    for (std::map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
 	 p != replica_map.end();
 	 ++p) 
       ls.insert(p->first);

@@ -159,10 +159,10 @@ class MDS : public Dispatcher, public md_config_obs_t {
   AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   string name;
-  int whoami;
+  mds_rank_t whoami;
   int incarnation;
 
-  int standby_for_rank;
+  mds_rank_t standby_for_rank;
   MDSMap::DaemonState standby_type;  // one of STANDBY_REPLAY, ONESHOT_REPLAY
   string standby_for_name;
   bool standby_replaying;  // true if current replay pass is in standby-replay mode
@@ -206,11 +206,11 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   list<MDSInternalContextBase*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
   list<MDSInternalContextBase*> replay_queue;
-  map<int, list<MDSInternalContextBase*> > waiting_for_active_peer;
+  map<mds_rank_t, list<MDSInternalContextBase*> > waiting_for_active_peer;
   list<Message*> waiting_for_nolaggy;
   map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
 
-  map<int,version_t> peer_mdsmap_epoch;
+  map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
   ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
@@ -218,7 +218,7 @@ class MDS : public Dispatcher, public md_config_obs_t {
   void wait_for_active(MDSInternalContextBase *c) { 
     waiting_for_active.push_back(c); 
   }
-  void wait_for_active_peer(int who, MDSInternalContextBase *c) { 
+  void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
     waiting_for_active_peer[who].push_back(c);
   }
   void wait_for_replay(MDSInternalContextBase *c) { 
@@ -345,12 +345,12 @@ private:
   void handle_signal(int signum);
 
   // who am i etc
-  int get_nodeid() const { return whoami; }
+  mds_rank_t get_nodeid() const { return whoami; }
   uint64_t get_metadata_pool() { return mdsmap->get_metadata_pool(); }
   MDSMap *get_mds_map() { return mdsmap; }
 
-  void send_message_mds(Message *m, int mds);
-  void forward_message_mds(Message *req, int mds);
+  void send_message_mds(Message *m, mds_rank_t mds);
+  void forward_message_mds(Message *req, mds_rank_t mds);
 
   void send_message_client_counted(Message *m, client_t client);
   void send_message_client_counted(Message *m, Session *session);
@@ -428,8 +428,8 @@ private:
   void stopping_start();
   void stopping_done();
 
-  void handle_mds_recovery(int who);
-  void handle_mds_failure(int who);
+  void handle_mds_recovery(mds_rank_t who);
+  void handle_mds_failure(mds_rank_t who);
 
   void suicide();
   void respawn();

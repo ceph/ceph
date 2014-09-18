@@ -42,7 +42,7 @@ void SnapServer::reset_state()
 
 // SERVER
 
-void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, int bymds)
+void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 {
   bufferlist::iterator p = bl.begin();
   __u32 op;

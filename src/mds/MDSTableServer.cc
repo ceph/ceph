@@ -54,7 +54,7 @@ public:
 void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
-  int from = req->get_source().num();
+  mds_rank_t from = mds_rank_t(req->get_source().num());
   bufferlist bl = req->bl;
 
   _prepare(req->bl, req->reqid, from);
@@ -77,7 +77,7 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
-  mds->send_message_mds(reply, req->get_source().num());
+  mds->send_message_mds(reply, mds_rank_t(req->get_source().num()));
   req->put();
 }
 
@@ -107,7 +107,7 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
       return;
 
     _note_commit(tid);
-    mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, -1, 
+    mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, MDS_RANK_NONE, 
 						    tid, version),
 				   new C_Commit(this, req));
   }
@@ -132,7 +132,7 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
   assert(g_conf->mds_kill_mdstable_at != 6);
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
-  mds->send_message_mds(reply, req->get_source().num());
+  mds->send_message_mds(reply, mds_rank_t(req->get_source().num()));
   req->put();
 }
 
@@ -146,7 +146,7 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
   assert(pending_for_mds.count(tid));
   _rollback(tid);
   _note_rollback(tid);
-  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, -1, 
+  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, MDS_RANK_NONE, 
 						  tid, version));
   req->put();
 }
@@ -159,7 +159,7 @@ void MDSTableServer::do_server_update(bufferlist& bl)
 {
   dout(10) << "do_server_update len " << bl.length() << dendl;
   _server_update(bl);
-  ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, -1, 0, version);
+  ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, MDS_RANK_NONE, 0, version);
   mds->mdlog->start_entry(le);
   le->mutation = bl;
   mds->mdlog->submit_entry(le);
@@ -168,14 +168,14 @@ void MDSTableServer::do_server_update(bufferlist& bl)
 
 // recovery
 
-void MDSTableServer::finish_recovery(set<int>& active)
+void MDSTableServer::finish_recovery(set<mds_rank_t>& active)
 {
   dout(7) << "finish_recovery" << dendl;
-  for (set<int>::iterator p = active.begin(); p != active.end(); ++p)
+  for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
     handle_mds_recovery(*p);  // resend agrees for everyone.
 }
 
-void MDSTableServer::handle_mds_recovery(int who)
+void MDSTableServer::handle_mds_recovery(mds_rank_t who)
 {
   dout(7) << "handle_mds_recovery mds." << who << dendl;
 
