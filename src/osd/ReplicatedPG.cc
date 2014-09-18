@@ -11374,6 +11374,11 @@ bool ReplicatedPG::agent_work(int start_max)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    if (obc->is_request_pending()) {
+      dout(20) << __func__ << " skip (request pending) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
 
     // be careful flushing omap to an EC pool.
     if (base_pool->is_erasure() &&
