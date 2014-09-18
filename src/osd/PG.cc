@@ -1232,7 +1232,15 @@ void PG::activate(ObjectStore::Transaction& t,
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(get_osdmap()->get_epoch(), info);
 	}
-      } else if (pg_log.get_tail() > pi.last_update || pi.last_backfill == hobject_t()) {
+      } else if (pg_log.get_tail() > pi.last_update ||
+		 pi.last_backfill == hobject_t() ||
+		 // if we started backfill before with a different
+		 // purged_snaps, but snaps changed, we have to
+		 // restart.  this should generally never happen
+		 // because we don't trim snaps unless clean, but it
+		 // could.
+		 (pi.last_backfill != hobject_t::get_max() &&
+		  pi.purged_snaps != info.purged_snaps)) {
 	// backfill
 	osd->clog.info() << info.pgid << " restarting backfill on osd." << peer
 			 << " from (" << pi.log_tail << "," << pi.last_update << "] " << pi.last_backfill
@@ -1243,6 +1251,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_backfill = hobject_t();
 	pi.history = info.history;
 	pi.stats.stats.clear();
+
+	// initialize peer with our purged_snaps.
+	pi.purged_snaps = info.purged_snaps;
 
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
 
