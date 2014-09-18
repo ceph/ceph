@@ -88,8 +88,8 @@ struct PGLog {
       assert(rollback_info_trimmed_to_riter == log.rbegin());
 
       log = o.log;
-      rollback_info_trimmed_to = head;
       head = o.head;
+      rollback_info_trimmed_to = head;
       tail = o.tail;
       index();
     }
