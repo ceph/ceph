@@ -10,6 +10,8 @@
  * License version 2.1, as published by the Free Software 
  * Foundation.  See file COPYING.
  */
+#ifndef CEPH_UTIL_H
+#define CEPH_UTIL_H
 
 // is buf~len completely zero (in 8-byte chunks)
 
@@ -18,3 +20,4 @@
 bool buf_is_zero(const char *buf, size_t len);
 
 int64_t unit_to_bytesize(string val, ostream *pss);
+#endif /* CEPH_UTIL_H */
