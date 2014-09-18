@@ -249,7 +249,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   // trim already sent for outcoming_bl
   if (sended) {
     bufferlist bl;
-    bl.splice(sended, outcoming_bl.length()-sended, &outcoming_bl);
+    outcoming_bl.splice(sended, outcoming_bl.length()-sended, &bl);
     bl.swap(outcoming_bl);
   }
 
