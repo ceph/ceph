@@ -868,6 +868,10 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
+    if (max_last_epoch_started_found < i->second.history.last_epoch_started) {
+      min_last_update_acceptable = eversion_t::max();
+      max_last_epoch_started_found = i->second.history.last_epoch_started;
+    }
     if (max_last_epoch_started_found < i->second.last_epoch_started) {
       min_last_update_acceptable = eversion_t::max();
       max_last_epoch_started_found = i->second.last_epoch_started;
@@ -877,7 +881,8 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
 	min_last_update_acceptable = i->second.last_update;
     }
   }
-  assert(min_last_update_acceptable != eversion_t::max());
+  if (min_last_update_acceptable == eversion_t::max())
+    return infos.end();
 
   map<pg_shard_t, pg_info_t>::const_iterator best = infos.end();
   // find osd with newest last_update (oldest for ec_pool).
@@ -1269,11 +1274,19 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       ss);
   dout(10) << ss.str() << dendl;
 
-  // This might cause a problem if min_size is large
-  // and we need to backfill more than 1 osd.  Older
-  // code would only include 1 backfill osd and now we
-  // have the resize above.
-  if (want_acting_backfill.size() < pool.info.min_size) {
+  unsigned num_want_acting = 0;
+  for (vector<int>::iterator i = want.begin();
+       i != want.end();
+       ++i) {
+    if (*i != CRUSH_ITEM_NONE)
+      ++num_want_acting;
+  }
+  assert(want_acting_backfill.size() - want_backfill.size() == num_want_acting);
+
+  // This is a bit of a problem, if we allow the pg to go active with
+  // want.size() < min_size, we won't consider the pg to have been
+  // maybe_went_rw in build_prior.
+  if (num_want_acting < pool.info.min_size) {
     want_acting.clear();
     return false;
   }
