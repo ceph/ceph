@@ -1276,11 +1276,19 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       ss);
   dout(10) << ss.str() << dendl;
 
-  // This might cause a problem if min_size is large
-  // and we need to backfill more than 1 osd.  Older
-  // code would only include 1 backfill osd and now we
-  // have the resize above.
-  if (want_acting_backfill.size() < pool.info.min_size) {
+  unsigned num_want_acting = 0;
+  for (vector<int>::iterator i = want.begin();
+       i != want.end();
+       ++i) {
+    if (*i != CRUSH_ITEM_NONE)
+      ++num_want_acting;
+  }
+  assert(want_acting_backfill.size() - want_backfill.size() == num_want_acting);
+
+  // This is a bit of a problem, if we allow the pg to go active with
+  // want.size() < min_size, we won't consider the pg to have been
+  // maybe_went_rw in build_prior.
+  if (num_want_acting < pool.info.min_size) {
     want_acting.clear();
     return false;
   }
