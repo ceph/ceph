@@ -38,6 +38,7 @@ using std::fstream;
 //#include "barrier.h"
 
 #include "mds/mdstypes.h"
+#include "mds/MDSMap.h"
 
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
@@ -85,6 +86,16 @@ enum {
   l_c_last,
 };
 
+
+struct CommandOp
+{
+  ConnectionRef con;
+  mds_gid_t     mds_gid;
+  ceph_tid_t    tid;
+  Context      *on_finish;
+  bufferlist   *outbl;
+  std::string  *outs;
+};
 
 
 // ============================================
@@ -242,6 +253,13 @@ public:
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
+  // MDS command state
+  std::map<ceph_tid_t, CommandOp> commands;
+  void handle_command_reply(MCommandReply *m);
+  int resolve_mds(
+      const std::string &mds_spec,
+      std::vector<mds_gid_t> *targets);
+
   void get_session_metadata(std::map<std::string, std::string> *meta) const;
   bool have_open_session(mds_rank_t mds);
   void got_mds_push(MetaSession *s);
@@ -286,6 +304,7 @@ public:
   void handle_client_reply(MClientReply *reply);
 
   bool   initialized;
+  bool   authenticated;
   bool   mounted;
   bool   unmounting;
 
@@ -424,6 +443,7 @@ protected:
   void ms_handle_remote_reset(Connection *con);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
 
+  int authenticate();
 
  public:
   void set_filer_flags(int flags);
@@ -669,6 +689,12 @@ private:
 public:
   int mount(const std::string &mount_root);
   void unmount();
+
+  int mds_command(
+    const std::string &mds_spec,
+    const std::vector<std::string>& cmd,
+    const bufferlist& inbl,
+    bufferlist *poutbl, std::string *prs, Context *onfinish);
 
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf);
