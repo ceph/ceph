@@ -465,7 +465,7 @@ void Paxos::handle_last(MMonPaxos *last)
   peer_first_committed[from] = last->first_committed;
   peer_last_committed[from] = last->last_committed;
 
-  if (last->first_committed > last_committed+1) {
+  if (last->first_committed > last_committed + 1) {
     dout(5) << __func__
             << " mon." << from
 	    << " lowest version is too high for our last committed"
@@ -487,7 +487,7 @@ void Paxos::handle_last(MMonPaxos *last)
   for (map<int,version_t>::iterator p = peer_last_committed.begin();
        p != peer_last_committed.end();
        ++p) {
-    if (p->second < first_committed && first_committed > 1) {
+    if (p->second + 1 < first_committed && first_committed > 1) {
       dout(5) << __func__
 	      << " peon " << p->first
 	      << " last_committed (" << p->second
