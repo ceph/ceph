@@ -236,7 +236,7 @@ void Server::handle_client_session(MClientSession *m)
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
-    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv),
+    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
 			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
     break;
