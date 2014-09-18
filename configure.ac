@@ -547,6 +547,8 @@ AC_LANG_POP([C++])
 
 # Find supported SIMD / SSE extensions supported by the compiler
 AX_INTEL_FEATURES()
+AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
+AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])
 
 # kinetic osd backend?
 AC_ARG_WITH([kinetic],
