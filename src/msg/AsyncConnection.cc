@@ -1606,7 +1606,8 @@ void AsyncConnection::accept(int incoming)
   sd = incoming;
   state = STATE_ACCEPTING;
   center->create_file_event(sd, EVENT_READABLE, read_handler);
-  process();
+  // rescheduler connection in order to avoid lock dep
+  center->create_time_event(0, read_handler);
 }
 
 int AsyncConnection::send_message(Message *m)
