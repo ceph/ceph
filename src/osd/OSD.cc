@@ -2773,7 +2773,11 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 {
   Session *session = static_cast<Session*>(
     op->get_req()->get_connection()->get_priv());
-  assert(session);
+  if (!session) {
+    // we'll just drop this op
+    return NULL;
+  }
+
   // get_pg_or_queue_for_pg is only called from the fast_dispatch path where
   // the session_dispatch_lock must already be held.
   assert(session->session_dispatch_lock.is_locked());
@@ -5494,6 +5498,12 @@ void OSD::ms_fast_dispatch(Message *m)
     m->put();
     return;
   }
+  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
+  if (!session) {
+    // we probably raced with someone calling mark_down on our connection
+    m->put();
+    return;
+  }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
   {
 #ifdef WITH_LTTNG
@@ -5503,8 +5513,6 @@ void OSD::ms_fast_dispatch(Message *m)
         reqid.name._num, reqid.tid, reqid.inc);
   }
   OSDMapRef nextmap = service.get_nextmap_reserved();
-  Session *session = static_cast<Session*>(m->get_connection()->get_priv());
-  assert(session);
   {
     Mutex::Locker l(session->session_dispatch_lock);
     update_waiting_for_pg(session, nextmap);
@@ -5521,10 +5529,12 @@ void OSD::ms_fast_preprocess(Message *m)
     if (m->get_type() == CEPH_MSG_OSD_MAP) {
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       Session *s = static_cast<Session*>(m->get_connection()->get_priv());
-      s->received_map_lock.Lock();
-      s->received_map_epoch = mm->get_last();
-      s->received_map_lock.Unlock();
-      s->put();
+      if (s) {
+	s->received_map_lock.Lock();
+	s->received_map_epoch = mm->get_last();
+	s->received_map_lock.Unlock();
+	s->put();
+      }
     }
   }
 }
@@ -5718,7 +5728,8 @@ void OSD::dispatch_op(OpRequestRef op)
   }
 }
 
-bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap) {
+bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
+{
   if (is_stopping()) {
     // we're shutting down, so drop the op
     return true;
@@ -5728,6 +5739,10 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap) {
   if (msg_epoch > osdmap->get_epoch()) {
     Session *s = static_cast<Session*>(op->get_req()->
 				       get_connection()->get_priv());
+    if (!s) {
+      // drop the op if the session was nuked
+      return true;
+    }
     s->received_map_lock.Lock();
     epoch_t received_epoch = s->received_map_epoch;
     s->received_map_lock.Unlock();
@@ -5787,7 +5802,6 @@ void OSD::_dispatch(Message *m)
 {
   assert(osd_lock.is_locked());
   dout(20) << "_dispatch " << m << " " << *m << dendl;
-  Session *session = NULL;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
 
@@ -5807,19 +5821,6 @@ void OSD::_dispatch(Message *m)
     break;
 
     // osd
-  case CEPH_MSG_SHUTDOWN:
-    session = static_cast<Session *>(m->get_connection()->get_priv());
-    if (!session ||
-	session->entity_name.is_mon() ||
-	session->entity_name.is_osd())
-      shutdown();
-    else dout(0) << "shutdown message from connection with insufficient privs!"
-		 << m->get_connection() << dendl;
-    m->put();
-    if (session)
-      session->put();
-    break;
-
   case MSG_PGSTATSACK:
     handle_pg_stats_ack(static_cast<MPGStatsAck*>(m));
     break;
