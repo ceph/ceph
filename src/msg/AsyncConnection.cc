@@ -107,12 +107,12 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
-AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m)
+AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c)
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false),
     got_bad_auth(false), authorizer(NULL),
-    state_buffer(4096), state_offset(0), net(cct), center(&m->center)
+    state_buffer(4096), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
   write_handler.reset(new C_handle_write(this));
@@ -1607,7 +1607,7 @@ void AsyncConnection::accept(int incoming)
   state = STATE_ACCEPTING;
   center->create_file_event(sd, EVENT_READABLE, read_handler);
   // rescheduler connection in order to avoid lock dep
-  center->create_time_event(0, read_handler);
+  process();
 }
 
 int AsyncConnection::send_message(Message *m)
