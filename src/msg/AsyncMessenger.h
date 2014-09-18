@@ -36,10 +36,9 @@ class Processor : public Thread {
   bool done;
   int listen_sd;
   uint64_t nonce;
-  EventCenter *center;
 
   public:
-  Processor(AsyncMessenger *r, uint64_t n, EventCenter *c) : msgr(r), done(false), listen_sd(-1), nonce(n), center(c) {}
+  Processor(AsyncMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
 
   void *entry();
   void stop();
@@ -47,6 +46,19 @@ class Processor : public Thread {
   int rebind(const set<int>& avoid_port);
   int start();
   void accept();
+};
+
+class Worker : public Thread {
+  AsyncMessenger *msgr;
+  bool done;
+
+ public:
+  EventCenter center;
+  Worker(AsyncMessenger *m, CephContext *c): msgr(m), done(false), center(c) {
+    center.init(5000);
+  }
+  void *entry();
+  void stop();
 };
 
 
@@ -167,7 +179,10 @@ public:
    */
 
   Connection *create_anon_connection() {
-    return new AsyncConnection(cct, this);
+    Mutex::Locker l(lock);
+    Worker *w = workers[conn_id % workers.size()];
+    conn_id++;
+    return new AsyncConnection(cct, this, &w->center);
   }
 
   /**
@@ -226,6 +241,9 @@ private:
   int _send_message(Message *m, const entity_inst_t& dest);
 
  private:
+  vector<Worker*> workers;
+  int conn_id;
+
   Processor processor;
   friend class Processor;
 
@@ -264,6 +282,7 @@ private:
    *
    * These are not yet in the conns map.
    */
+  // FIXME clear up
   set<AsyncConnectionRef> accepting_conns;
 
   /// internal cluster protocol version, if any, for talking to entities of the same type.
@@ -277,11 +296,6 @@ private:
     ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator p = conns.find(k);
     if (p == conns.end())
       return NULL;
-    if (!p->second->is_connected()) {
-      // FIXME
-      conns.erase(p);
-      return NULL;
-    }
     return p->second;
   }
 
@@ -305,8 +319,6 @@ public:
 
   /// con used for sending messages to ourselves
   ConnectionRef local_connection;
-
-  EventCenter center;
 
   /**
    * @defgroup AsyncMessenger internals

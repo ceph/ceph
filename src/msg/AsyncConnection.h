@@ -87,7 +87,7 @@ class AsyncConnection : public Connection {
   }
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c);
   ~AsyncConnection();
 
   ostream& _conn_prefix(std::ostream *_dout);

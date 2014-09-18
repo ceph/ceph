@@ -80,7 +80,6 @@ EventCenter::~EventCenter()
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   int r;
-  Mutex::Locker l(lock);
   if (file_events.size() > nevent) {
     int new_size = nevent << 2;
     ldout(cct, 10) << __func__ << " event count exceed " << nevent << ", expand to " << new_size << dendl;
@@ -117,8 +116,6 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 
 void EventCenter::delete_file_event(int fd, int mask)
 {
-  Mutex::Locker l(lock);
-
   EventCenter::FileEvent *event = _get_file_event(fd);
   if (!event)
     return ;
@@ -141,20 +138,9 @@ void EventCenter::delete_file_event(int fd, int mask)
 
 uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallbackRef ctxt)
 {
-  Mutex::Locker l(lock);
   uint64_t id = time_event_next_id++;
 
   ldout(cct, 10) << __func__ << " id=" << id << " expire time=" << milliseconds << dendl;
-  // Direct dispatch
-  if (milliseconds == 0) {
-    FiredEvent e;
-    e.time_event.id = id;
-    e.time_event.time_cb = ctxt;
-    e.is_file = false;
-    event_wq.queue(e);
-    return id;
-  }
-
   EventCenter::TimeEvent event;
   utime_t expire;
   struct timeval tv;
@@ -171,19 +157,13 @@ uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallbackRef 
   time_events[id] = event;
 
   if (expire < next_wake) {
-    char buf[1];
-    buf[0] = 'c';
-    // wake up "event_wait"
-    int n = write(notify_send_fd, buf, 1);
-    // FIXME ?
-    assert(n == 1);
+    wakeup();
   }
   return id;
 }
 
 void EventCenter::delete_time_event(uint64_t id)
 {
-  Mutex::Locker l(lock);
   for (map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
        it != time_to_ids.end(); it++) {
     if (it->second == id) {
@@ -195,21 +175,9 @@ void EventCenter::delete_time_event(uint64_t id)
   }
 }
 
-void EventCenter::start()
+void EventCenter::wakeup()
 {
   ldout(cct, 1) << __func__ << dendl;
-  Mutex::Locker l(lock);
-  event_tp.start();
-  tp_stop = false;
-}
-
-void EventCenter::stop()
-{
-  ldout(cct, 1) << __func__ << dendl;
-  if (!tp_stop) {
-    event_tp.stop();
-    tp_stop = true;
-  }
   char buf[1];
   buf[0] = 'c';
   // wake up "event_wait"
@@ -220,7 +188,6 @@ void EventCenter::stop()
 
 int EventCenter::process_time_events()
 {
-  Mutex::Locker l(lock);
   int processed = 0;
   time_t now = time(NULL);
   utime_t cur = ceph_clock_now(cct);
@@ -249,13 +216,9 @@ int EventCenter::process_time_events()
        it != time_to_ids.end(); ) {
     prev = it;
     if (cur >= it->first) {
-      FiredEvent e;
-      e.time_event.id = it->second;
-      e.time_event.time_cb = time_events[it->second].time_cb;
-      e.is_file = false;
-      event_wq.queue(e);
       ldout(cct, 10) << __func__ << " queue time event: id=" << it->second << " time is "
                      << it->first << dendl;
+      time_events[it->second].time_cb->do_request(it->first);
       processed++;
       ++it;
       time_to_ids.erase(prev);
@@ -283,7 +246,6 @@ int EventCenter::process_events(int timeout_millionseconds)
   shortest.set_from_timeval(&tv);
 
   {
-    Mutex::Locker l(lock);
     for (map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
           it != time_to_ids.end(); ++it) {
       ldout(cct, 10) << __func__ << " time_to_ids " << it->first << " id=" << it->second << dendl;
@@ -308,15 +270,48 @@ int EventCenter::process_events(int timeout_millionseconds)
   vector<FiredFileEvent> fired_events;
   numevents = driver->event_wait(fired_events, &tv);
   for (int j = 0; j < numevents; j++) {
-    FiredEvent e;
-    e.file_event = fired_events[j];
-    e.is_file = true;
-    event_wq.queue(e);
-    ldout(cct, 10) << __func__ << " event_wq queue fd is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
+    int rfired = 0;
+    FileEvent *event = _get_file_event(fired_events[j].fd);
+    if (!event)
+      continue;
+
+    /* note the event->mask & mask & ... code: maybe an already processed
+    * event removed an element that fired and we still didn't
+    * processed, so we check if the event is still valid. */
+    if (event->mask & fired_events[j].mask & EVENT_READABLE) {
+      rfired = 1;
+      event->read_cb->do_request(fired_events[j].fd);
+    }
+    event = _get_file_event(fired_events[j].fd);
+    if (!event)
+      continue;
+
+    if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
+      if (!rfired || event->read_cb != event->write_cb)
+        event->write_cb->do_request(fired_events[j].fd);
+    }
+
+    ldout(cct, 20) << __func__ << " event_wq queue fd is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
 
   if (trigger_time)
     numevents += process_time_events();
 
+  {
+    Mutex::Locker l(lock);
+    while (!external_events.empty()) {
+      EventCallbackRef e = external_events.front();
+      external_events.pop_front();
+      e->do_request(0);
+    }
+  }
   return numevents;
+}
+
+void EventCenter::dispatch_event_external(EventCallbackRef e)
+{
+  lock.Lock();
+  external_events.push_back(e);
+  lock.Unlock();
+  wakeup();
 }

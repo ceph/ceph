@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <iostream>
 #include <fstream>
-
+#include <poll.h>
 
 #include "AsyncMessenger.h"
 
@@ -22,20 +22,34 @@ static ostream& _prefix(std::ostream *_dout, AsyncMessenger *m) {
 }
 
 static ostream& _prefix(std::ostream *_dout, Processor *p) {
-  return *_dout << "-- ";
+  return *_dout << "-- Processor";
 }
 
-/*******************
- * EventCallBack
- */
+static ostream& _prefix(std::ostream *_dout, Worker *w) {
+  return *_dout << "--";
+}
 
 class C_handle_accept : public EventCallback {
-  Processor *p;
+  AsyncConnectionRef conn;
+  int fd;
 
  public:
-  C_handle_accept(Processor *p): p(p) {}
-  void do_request(int fd) {
-    p->accept();
+  C_handle_accept(AsyncConnectionRef c, int s): conn(c), fd(s) {}
+  void do_request(int id) {
+    conn->accept(fd);
+  }
+};
+
+class C_handle_connect : public EventCallback {
+  AsyncConnectionRef conn;
+  const entity_addr_t addr;
+  int type;
+
+ public:
+  C_handle_connect(AsyncConnectionRef c, const entity_addr_t &d, int t)
+      :conn(c), addr(d), type(t) {}
+  void do_request(int id) {
+    conn->connect(addr, type);
   }
 };
 
@@ -50,7 +64,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   // bind to a socket
   ldout(msgr->cct, 10) << __func__ << dendl;
 
-  int family, flags;
+  int family;
   switch (bind_addr.get_family()) {
   case AF_INET:
   case AF_INET6:
@@ -134,14 +148,6 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
 
-  if ((flags = fcntl(listen_sd, F_GETFL, 0)) < 0 ||
-      fcntl(listen_sd, F_SETFL, flags | O_NONBLOCK) < 0) {
-    rc = -errno;
-    lderr(msgr->cct) << __func__ << " unable to setnonblock on " << listen_addr
-                     << ": " << cpp_strerror(rc) << dendl;
-    return rc;
-  }
-
   msgr->set_myaddr(bind_addr);
   if (bind_addr != entity_addr_t())
     msgr->learned_addr(bind_addr);
@@ -186,42 +192,45 @@ int Processor::start()
 
   // start thread
   create();
-  if (listen_sd >= 0)
-    center->create_file_event(listen_sd, EVENT_READABLE, EventCallbackRef(new C_handle_accept(this)));
 
   return 0;
-}
-
-void Processor::accept()
-{
-  ldout(msgr->cct, 10) << __func__ << " starting" << dendl;
-  // accept
-  entity_addr_t addr;
-  socklen_t slen = sizeof(addr.ss_addr());
-  int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
-  if (sd >= 0) {
-    ldout(msgr->cct,10) << __func__ << " incoming on sd " << sd << dendl;
-
-    msgr->add_accept(sd);
-  } else {
-    ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
-                       << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-  }
 }
 
 void *Processor::entry()
 {
   ldout(msgr->cct, 10) << __func__ << " starting" << dendl;
-  int r;
+  int errors = 0;
 
+  struct pollfd pfd;
+  pfd.fd = listen_sd;
+  pfd.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
   while (!done) {
-    ldout(msgr->cct,20) << __func__ << " calling poll" << dendl;
+    ldout(msgr->cct, 20) << __func__ << " calling poll" << dendl;
+    int r = poll(&pfd, 1, -1);
+    if (r < 0)
+      break;
+    ldout(msgr->cct,20) << __func__ << " poll got " << r << dendl;
 
-    r = center->process_events(30000);
-    if (r < 0) {
-      ldout(msgr->cct,20) << __func__ << " process events failed: "
-                          << cpp_strerror(errno) << dendl;
-      // TODO do something?
+    if (pfd.revents & (POLLERR | POLLNVAL | POLLHUP))
+      break;
+
+    ldout(msgr->cct,10) << __func__ << " pfd.revents=" << pfd.revents << dendl;
+    if (done) break;
+
+    // accept
+    entity_addr_t addr;
+    socklen_t slen = sizeof(addr.ss_addr());
+    int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
+    if (sd >= 0) {
+      errors = 0;
+      ldout(msgr->cct,10) << __func__ << "accepted incoming on sd " << sd << dendl;
+
+      msgr->add_accept(sd);
+    } else {
+      ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+      if (++errors > 4)
+        break;
     }
   }
 
@@ -238,14 +247,11 @@ void *Processor::entry()
 void Processor::stop()
 {
   done = true;
-  ldout(msgr->cct, 10) << __func__ << " processor" << dendl;
+  ldout(msgr->cct,10) << __func__ << dendl;
 
-  if (listen_sd >= 0)
-    center->delete_file_event(listen_sd, EVENT_READABLE);
   if (listen_sd >= 0) {
     ::shutdown(listen_sd, SHUT_RDWR);
   }
-  center->stop();
 
   // wait for thread to stop before closing the socket, to avoid
   // racing against fd re-use.
@@ -260,6 +266,31 @@ void Processor::stop()
   done = false;
 }
 
+void Worker::stop()
+{
+  ldout(msgr->cct, 10) << __func__ << dendl;
+  done = true;
+  center.wakeup();
+}
+
+void *Worker::entry()
+{
+  ldout(msgr->cct, 10) << __func__ << " starting" << dendl;
+  int r;
+
+  while (!done) {
+    ldout(msgr->cct, 20) << __func__ << " calling event process" << dendl;
+
+    r = center.process_events(30000);
+    if (r < 0) {
+      ldout(msgr->cct,20) << __func__ << " process events failed: "
+                          << cpp_strerror(errno) << dendl;
+      // TODO do something?
+    }
+  }
+
+  return 0;
+}
 
 /*******************
  * AsyncMessenger
@@ -268,17 +299,20 @@ void Processor::stop()
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
-    processor(this, _nonce, &center),
+    conn_id(0),
+    processor(this, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), did_bind(false),
     global_seq(0),
-    cluster_protocol(0), stopped(true),
-    local_connection(new AsyncConnection(cct, this)),
-    center(cct)
+    cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
+  for (int i = 0; i < cct->_conf->ms_event_op_threads; ++i) {
+    Worker *w = new Worker(this, cct);
+    workers.push_back(w);
+  }
+  local_connection = new AsyncConnection(cct, this, &workers[0]->center);
   init_local_connection();
-  center.init(5000);
 }
 
 /**
@@ -302,10 +336,12 @@ void AsyncMessenger::ready()
 int AsyncMessenger::shutdown()
 {
   ldout(cct,10) << __func__ << "shutdown " << get_myaddr() << dendl;
-  center.stop();
+  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
+    (*it)->stop();
   mark_down_all();
 
   // break ref cycles on the loopback connection
+  processor.stop();
   local_connection->set_priv(NULL);
   stop_cond.Signal();
   stopped = true;
@@ -336,7 +372,11 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << __func__ << " rebind avoid " << avoid_ports << dendl;
   assert(did_bind);
-  center.stop();
+  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
+    (*it)->stop();
+    (*it)->join();
+  }
+
   processor.stop();
   mark_down_all();
   return processor.rebind(avoid_ports);
@@ -359,9 +399,10 @@ int AsyncMessenger::start()
     _init_local_connection();
   }
 
-  lock.Unlock();
+  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
+    (*it)->create();
 
-  center.start();
+  lock.Unlock();
   return 0;
 }
 
@@ -374,6 +415,9 @@ void AsyncMessenger::wait()
   }
   if (!stopped)
     stop_cond.Wait(lock);
+
+  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
+    (*it)->join();
   lock.Unlock();
 
   // done!  clean up.
@@ -402,9 +446,11 @@ void AsyncMessenger::wait()
 AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this);
-  conn->accept(sd);
+  Worker *w = workers[conn_id % workers.size()];
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
+  w->center.dispatch_event_external(EventCallbackRef(new C_handle_accept(conn, sd)));
   accepting_conns.insert(conn);
+  conn_id++;
   lock.Unlock();
   return conn;
 }
@@ -418,10 +464,12 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
                  << ", creating connection and registering" << dendl;
 
   // create connection
-  AsyncConnectionRef conn = new AsyncConnection(cct, this);
-  conn->connect(addr, type);
+  Worker *w = workers[conn_id % workers.size()];
+  AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
+  w->center.dispatch_event_external(EventCallbackRef(new C_handle_connect(conn, addr, type)));
   assert(!conns.count(addr));
   conns[addr] = conn;
+  conn_id++;
 
   return conn;
 }
