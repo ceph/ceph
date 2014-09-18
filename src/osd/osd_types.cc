@@ -2871,7 +2871,7 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 void pg_log_t::dump(Formatter *f) const
 {
   f->dump_stream("head") << head;
-  f->dump_stream("tail") << head;
+  f->dump_stream("tail") << tail;
   f->open_array_section("log");
   for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
