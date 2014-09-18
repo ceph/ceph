@@ -332,6 +332,7 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
   CInode *in = new CInode(this);
   in->inode.ino = ino;
   in->inode.version = 1;
+  in->inode.xattr_version = 1;
   in->inode.mode = 0500 | mode;
   in->inode.size = 0;
   in->inode.ctime = 

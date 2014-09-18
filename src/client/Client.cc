@@ -687,7 +687,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->nlink = st->nlink;
     }
 
-    if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+    if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
 	st->xattrbl.length() &&
 	st->xattr_version > in->xattr_version) {
       bufferlist::iterator p = st->xattrbl.begin();
@@ -7508,7 +7508,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
-  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     string n(name);
     r = -ENODATA;
@@ -7544,7 +7544,7 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();

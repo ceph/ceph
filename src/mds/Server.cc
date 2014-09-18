@@ -2020,6 +2020,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   }
 
   in->inode.version = 1;
+  in->inode.xattr_version = 1;
   in->inode.nlink = 1;   // FIXME
 
   in->inode.mode = mode;

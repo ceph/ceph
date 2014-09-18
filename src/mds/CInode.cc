@@ -2953,13 +2953,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   // xattr
   i = pxattr ? pi:oi;
-  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
-    cap->client_xattr_version == i->xattr_version &&
-    snapid == CEPH_NOSNAP;
 
   // xattr
   bufferlist xbl;
-  if (!had_latest_xattrs) {
+  if ((!cap && !no_caps) ||
+      (cap && cap->client_xattr_version < i->xattr_version) ||
+      (getattr_caps & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);
