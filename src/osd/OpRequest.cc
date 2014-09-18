@@ -51,6 +51,7 @@ void OpRequest::_dump(utime_t now, Formatter *f) const
   }
   {
     f->open_array_section("events");
+    Mutex::Locker l(lock);
     for (list<pair<utime_t, string> >::const_iterator i = events.begin();
 	 i != events.end();
 	 ++i) {
