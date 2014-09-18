@@ -44,7 +44,11 @@ struct rbd_image {
 	char *image_name;
 	struct rbd_image *next;
 };
-struct rbd_image *rbd_images;
+struct rbd_image_data {
+    struct rbd_image *images;
+    void *buf;
+};
+struct rbd_image_data rbd_image_data;
 
 struct rbd_openimage {
 	char *image_name;
@@ -69,15 +73,16 @@ int in_opendir;
 
 /* prototypes */
 int connect_to_cluster(rados_t *pcluster);
-void enumerate_images(struct rbd_image **head);
+void enumerate_images(struct rbd_image_data *data);
 int open_rbd_image(const char *image_name);
 int find_openrbd(const char *path);
 
 void simple_err(const char *msg, int err);
 
 void
-enumerate_images(struct rbd_image **head)
+enumerate_images(struct rbd_image_data *data)
 {
+	struct rbd_image **head = &data->images;
 	char *ibuf = NULL;
 	size_t ibuf_len = 0;
 	struct rbd_image *im, *next;
@@ -91,6 +96,8 @@ enumerate_images(struct rbd_image **head)
 			im = next;
 		}
 		*head = NULL;
+		free(data->buf);
+		data->buf = NULL;
 	}
 
 	ret = rbd_list(ioctx, ibuf, &ibuf_len);
@@ -127,6 +134,7 @@ enumerate_images(struct rbd_image **head)
 		}
 	}
 	fprintf(stderr, "\n");
+	data->buf = ibuf;
 }
 
 int
@@ -154,8 +162,8 @@ open_rbd_image(const char *image_name)
 	if (image_name == (char *)NULL) 
 		return -1;
 
-	// relies on caller to keep rbd_images up to date
-	for (im = rbd_images; im != NULL; im = im->next) {
+	// relies on caller to keep rbd_image_data up to date
+	for (im = rbd_image_data.images; im != NULL; im = im->next) {
 		if (strcmp(im->image_name, image_name) == 0) {
 			break;
 		}
@@ -199,7 +207,7 @@ iter_images(void *cookie,
 
 	pthread_mutex_lock(&readdir_lock);
 
-	for (im = rbd_images; im != NULL; im = im->next)
+	for (im = rbd_image_data.images; im != NULL; im = im->next)
 		iter(cookie, im->image_name);
 	pthread_mutex_unlock(&readdir_lock);
 }
@@ -214,7 +222,7 @@ static int count_images(void)
 	unsigned int count = 0;
 
 	pthread_mutex_lock(&readdir_lock);
-	enumerate_images(&rbd_images);
+	enumerate_images(&rbd_image_data);
 	pthread_mutex_unlock(&readdir_lock);
 
 	iter_images(&count, count_images_cb);
@@ -253,7 +261,7 @@ static int rbdfs_getattr(const char *path, struct stat *stbuf)
 
 	if (!in_opendir) {
 		pthread_mutex_lock(&readdir_lock);
-		enumerate_images(&rbd_images);
+		enumerate_images(&rbd_image_data);
 		pthread_mutex_unlock(&readdir_lock);
 	}
 	fd = open_rbd_image(path + 1);
@@ -287,7 +295,7 @@ static int rbdfs_open(const char *path, struct fuse_file_info *fi)
 		return -ENOENT;
 
 	pthread_mutex_lock(&readdir_lock);
-	enumerate_images(&rbd_images);
+	enumerate_images(&rbd_image_data);
 	pthread_mutex_unlock(&readdir_lock);
 	fd = open_rbd_image(path + 1);
 	if (fd < 0)
@@ -385,7 +393,7 @@ static int rbdfs_statfs(const char *path, struct statvfs *buf)
 	num[0] = 1;
 	num[1] = 0;
 	pthread_mutex_lock(&readdir_lock);
-	enumerate_images(&rbd_images);
+	enumerate_images(&rbd_image_data);
 	pthread_mutex_unlock(&readdir_lock);
 	iter_images(num, rbdfs_statfs_image_cb);
 
@@ -419,7 +427,7 @@ static int rbdfs_opendir(const char *path, struct fuse_file_info *fi)
 	// only one directory, so global "in_opendir" flag should be fine
 	pthread_mutex_lock(&readdir_lock);
 	in_opendir++;
-	enumerate_images(&rbd_images);
+	enumerate_images(&rbd_image_data);
 	pthread_mutex_unlock(&readdir_lock);
 	return 0;
 }
