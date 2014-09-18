@@ -205,7 +205,7 @@ bool MDSMonitor::preprocess_query(PaxosServiceMessage *m)
 
 void MDSMonitor::_note_beacon(MMDSBeacon *m)
 {
-  uint64_t gid = m->get_global_id();
+  mds_gid_t gid = mds_gid_t(m->get_global_id());
   version_t seq = m->get_seq();
 
   dout(15) << "_note_beacon " << *m << " noting time" << dendl;
@@ -216,7 +216,7 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 {
   MDSMap::DaemonState state = m->get_state();
-  uint64_t gid = m->get_global_id();
+  mds_gid_t gid = m->get_global_id();
   version_t seq = m->get_seq();
   MDSMap::mds_info_t info;
 
@@ -343,7 +343,7 @@ bool MDSMonitor::preprocess_beacon(MMDSBeacon *m)
 bool MDSMonitor::preprocess_offload_targets(MMDSLoadTargets* m)
 {
   dout(10) << "preprocess_offload_targets " << *m << " from " << m->get_orig_source() << dendl;
-  uint64_t gid;
+  mds_gid_t gid;
   
   // check privileges, ignore message if fails
   MonSession *session = m->get_session();
@@ -398,7 +398,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
   // -- this is an update --
   dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source_inst() << dendl;
   entity_addr_t addr = m->get_orig_source_inst().addr;
-  uint64_t gid = m->get_global_id();
+  mds_gid_t gid = m->get_global_id();
   MDSMap::DaemonState state = m->get_state();
   version_t seq = m->get_seq();
 
@@ -417,7 +417,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     // zap previous instance of this name?
     if (g_conf->mds_enforce_unique_name) {
       bool failed_mds = false;
-      while (uint64_t existing = pending_mdsmap.find_mds_gid_by_name(m->get_name())) {
+      while (mds_gid_t existing = pending_mdsmap.find_mds_gid_by_name(m->get_name())) {
         if (!mon->osdmon()->is_writeable()) {
           mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
           return false;
@@ -531,7 +531,7 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
 
 bool MDSMonitor::prepare_offload_targets(MMDSLoadTargets *m)
 {
-  uint64_t gid = m->global_id;
+  mds_gid_t gid = m->global_id;
   if (pending_mdsmap.mds_info.count(gid)) {
     dout(10) << "prepare_offload_targets " << gid << " " << m->targets << dendl;
     pending_mdsmap.mds_info[gid].export_targets = m->targets;
@@ -577,7 +577,7 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
   mdsmap.get_health(summary, detail);
 
   // For each MDS GID...
-  for (std::map<uint64_t, MDSMap::mds_info_t>::const_iterator i = pending_mdsmap.mds_info.begin();
+  for (std::map<mds_gid_t, MDSMap::mds_info_t>::const_iterator i = pending_mdsmap.mds_info.begin();
       i != pending_mdsmap.mds_info.end(); ++i) {
     // Decode MDSHealth
     bufferlist bl;
@@ -733,8 +733,8 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
     if (whostr == "*") {
       r = -ENOENT;
-      const map<uint64_t, MDSMap::mds_info_t> mds_info = mdsmap.get_mds_info();
-      for (map<uint64_t, MDSMap::mds_info_t>::const_iterator i = mds_info.begin();
+      const map<mds_gid_t, MDSMap::mds_info_t> mds_info = mdsmap.get_mds_info();
+      for (map<mds_gid_t, MDSMap::mds_info_t>::const_iterator i = mds_info.begin();
 	   i != mds_info.end();
 	   ++i) {
 	m->cmd = args_vec;
@@ -748,8 +748,9 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       }
     } else {
       errno = 0;
-      long who = strtol(whostr.c_str(), 0, 10);
-      if (!errno && who >= 0) {
+      long who_l = strtol(whostr.c_str(), 0, 10);
+      if (!errno && who_l >= 0) {
+        mds_rank_t who = mds_rank_t(who_l);
 	if (mdsmap.is_up(who)) {
 	  m->cmd = args_vec;
 	  mon->send_command(mdsmap.get_inst(who), m->cmd);
@@ -837,7 +838,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     return false;
 }
 
-void MDSMonitor::fail_mds_gid(uint64_t gid)
+void MDSMonitor::fail_mds_gid(mds_gid_t gid)
 {
   assert(pending_mdsmap.mds_info.count(gid));
   MDSMap::mds_info_t& info = pending_mdsmap.mds_info[gid];
@@ -868,7 +869,7 @@ void MDSMonitor::fail_mds_gid(uint64_t gid)
 int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 {
   std::string err;
-  int w = strict_strtoll(arg.c_str(), 10, &err);
+  unsigned long long rank_or_gid = strict_strtoll(arg.c_str(), 10, &err);
   if (!err.empty()) {
     // Try to interpret the arg as an MDS name
     const MDSMap::mds_info_t *mds_info = mdsmap.find_by_name(arg);
@@ -876,7 +877,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
       ss << "Can't find any MDS named '" << arg << "'";
       return -ENOENT;
     }
-    w = mds_info->rank;
+    rank_or_gid = (unsigned long long)(mds_info->rank);
   }
 
   if (!mon->osdmon()->is_writeable()) {
@@ -884,17 +885,17 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
  }
 
   bool failed_mds_gid = false;
-  if (pending_mdsmap.up.count(w)) {
-    uint64_t gid = pending_mdsmap.up[w];
+  if (pending_mdsmap.up.count(mds_rank_t(rank_or_gid))) {
+    mds_gid_t gid = pending_mdsmap.up[mds_rank_t(rank_or_gid)];
     if (pending_mdsmap.mds_info.count(gid)) {
       fail_mds_gid(gid);
       failed_mds_gid = true;
     }
-    ss << "failed mds." << w;
-  } else if (pending_mdsmap.mds_info.count(w)) {
-    fail_mds_gid(w);
+    ss << "failed mds." << rank_or_gid;
+  } else if (pending_mdsmap.mds_info.count(mds_gid_t(rank_or_gid))) {
+    fail_mds_gid(mds_gid_t(rank_or_gid));
     failed_mds_gid = true;
-    ss << "failed mds gid " << w;
+    ss << "failed mds gid " << rank_or_gid;
   }
 
   if (failed_mds_gid) {
@@ -1208,10 +1209,12 @@ bool MDSMonitor::filesystem_command(
   cmd_getval(g_ceph_context, cmdmap, "who", whostr);
   if (prefix == "mds stop" ||
       prefix == "mds deactivate") {
-    int who = parse_pos_long(whostr.c_str(), &ss);
-    if (who < 0) {
+
+    int who_i = parse_pos_long(whostr.c_str(), &ss);
+    if (who_i < 0) {
       return true;
     }
+    mds_rank_t who = mds_rank_t(who_i);
     if (!pending_mdsmap.is_active(who)) {
       r = -EEXIST;
       ss << "mds." << who << " not active (" 
@@ -1223,12 +1226,12 @@ bool MDSMonitor::filesystem_command(
       ss << "can't tell the root (" << pending_mdsmap.get_root()
 	 << ") or tableserver (" << pending_mdsmap.get_tableserver()
 	 << " to deactivate unless it is the last mds in the cluster";
-    } else if (pending_mdsmap.get_num_in_mds() <= pending_mdsmap.get_max_mds()) {
+    } else if (pending_mdsmap.get_num_in_mds() <= size_t(pending_mdsmap.get_max_mds())) {
       r = -EBUSY;
       ss << "must decrease max_mds or else MDS will immediately reactivate";
     } else {
       r = 0;
-      uint64_t gid = pending_mdsmap.up[who];
+      mds_gid_t gid = pending_mdsmap.up[who];
       ss << "telling mds." << who << " " << pending_mdsmap.mds_info[gid].addr << " to deactivate";
       pending_mdsmap.mds_info[gid].state = MDSMap::STATE_STOPPING;
     }
@@ -1337,7 +1340,7 @@ bool MDSMonitor::filesystem_command(
     }
 
   } else if (prefix == "mds set_state") {
-    int64_t gid;
+    mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
@@ -1370,7 +1373,7 @@ bool MDSMonitor::filesystem_command(
     }
 
   } else if (prefix == "mds rm") {
-    int64_t gid;
+    mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
@@ -1393,16 +1396,17 @@ bool MDSMonitor::filesystem_command(
       return true;
     }
   } else if (prefix == "mds rmfailed") {
-    int64_t w;
-    if (!cmd_getval(g_ceph_context, cmdmap, "who", w)) {
+    int w_i;
+    if (!cmd_getval(g_ceph_context, cmdmap, "who", w_i)) {
       ss << "error parsing 'who' value '"
          << cmd_vartype_stringify(cmdmap["who"]) << "'";
       r = -EINVAL;
       return true;
     }
-    pending_mdsmap.failed.erase(w);
+    mds_rank_t who = mds_rank_t(w_i);
+    pending_mdsmap.failed.erase(who);
     stringstream ss;
-    ss << "removed failed mds." << w;
+    ss << "removed failed mds." << who;
     r = 0;
     return true;
   } else if (prefix == "mds cluster_down") {
@@ -1556,13 +1560,13 @@ void MDSMonitor::tick()
   if (!mon->is_leader()) return;
 
   // expand mds cluster (add new nodes to @in)?
-  while (pending_mdsmap.get_num_in_mds() < pending_mdsmap.get_max_mds() &&
+  while (pending_mdsmap.get_num_in_mds() < size_t(pending_mdsmap.get_max_mds()) &&
 	 !pending_mdsmap.is_degraded()) {
-    int mds = 0;
+    mds_rank_t mds = mds_rank_t(0);
     string name;
     while (pending_mdsmap.is_in(mds))
       mds++;
-    uint64_t newgid = pending_mdsmap.find_replacement_for(mds, name);
+    mds_gid_t newgid = pending_mdsmap.find_replacement_for(mds, name);
     if (!newgid)
       break;
 
@@ -1587,7 +1591,7 @@ void MDSMonitor::tick()
   cutoff -= g_conf->mds_beacon_grace;
 
   // make sure last_beacon is fully populated
-  for (map<uint64_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
+  for (map<mds_gid_t,MDSMap::mds_info_t>::iterator p = pending_mdsmap.mds_info.begin();
        p != pending_mdsmap.mds_info.end();
        ++p) {
     if (last_beacon.count(p->first) == 0) {
@@ -1604,9 +1608,9 @@ void MDSMonitor::tick()
 
     bool propose_osdmap = false;
 
-    map<uint64_t, beacon_info_t>::iterator p = last_beacon.begin();
+    map<mds_gid_t, beacon_info_t>::iterator p = last_beacon.begin();
     while (p != last_beacon.end()) {
-      uint64_t gid = p->first;
+      mds_gid_t gid = p->first;
       utime_t since = p->second.stamp;
       uint64_t seq = p->second.seq;
       ++p;
@@ -1628,11 +1632,11 @@ void MDSMonitor::tick()
       
       // are we in?
       // and is there a non-laggy standby that can take over for us?
-      uint64_t sgid;
+      mds_gid_t sgid;
       if (info.rank >= 0 &&
 	  info.state != MDSMap::STATE_STANDBY &&
 	  info.state != MDSMap::STATE_STANDBY_REPLAY &&
-	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != 0) {
+	  (sgid = pending_mdsmap.find_replacement_for(info.rank, info.name)) != MDS_GID_NONE) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(10) << " replacing " << gid << " " << info.addr << " mds." << info.rank << "." << info.inc
 		 << " " << ceph_mds_state_name(info.state)
@@ -1711,15 +1715,14 @@ void MDSMonitor::tick()
   }
 
   // have a standby take over?
-  set<int> failed;
+  set<mds_rank_t> failed;
   pending_mdsmap.get_failed_mds_set(failed);
   if (!failed.empty()) {
-    set<int>::iterator p = failed.begin();
+    set<mds_rank_t>::iterator p = failed.begin();
     while (p != failed.end()) {
-      int f = *p++;
-      uint64_t sgid;
+      mds_rank_t f = *p++;
       string name;  // FIXME
-      sgid = pending_mdsmap.find_replacement_for(f, name);
+      mds_gid_t sgid = pending_mdsmap.find_replacement_for(f, name);
       if (sgid) {
 	MDSMap::mds_info_t& si = pending_mdsmap.mds_info[sgid];
 	dout(0) << " taking over failed mds." << f << " with " << sgid << "/" << si.name << " " << si.addr << dendl;
@@ -1736,7 +1739,7 @@ void MDSMonitor::tick()
 
   // have a standby follow someone?
   if (failed.empty()) {
-    for (map<uint64_t,MDSMap::mds_info_t>::iterator j = pending_mdsmap.mds_info.begin();
+    for (map<mds_gid_t,MDSMap::mds_info_t>::iterator j = pending_mdsmap.mds_info.begin();
 	 j != pending_mdsmap.mds_info.end();
 	 ++j) {
       MDSMap::mds_info_t& info = j->second;
@@ -1759,7 +1762,7 @@ void MDSMonitor::tick()
       }
 
       // check everyone
-      for (map<uint64_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
+      for (map<mds_gid_t,MDSMap::mds_info_t>::iterator i = pending_mdsmap.mds_info.begin();
 	   i != pending_mdsmap.mds_info.end();
 	   ++i) {
 	if (i->second.rank >= 0 && pending_mdsmap.is_followable(i->second.rank)) {
@@ -1785,7 +1788,7 @@ void MDSMonitor::tick()
 bool MDSMonitor::try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo)
 {
   // someone else already following?
-  uint64_t lgid = pending_mdsmap.find_standby_for(ainfo.rank, ainfo.name);
+  mds_gid_t lgid = pending_mdsmap.find_standby_for(ainfo.rank, ainfo.name);
   if (lgid) {
     MDSMap::mds_info_t& sinfo = pending_mdsmap.mds_info[lgid];
     dout(20) << " mds." << ainfo.rank

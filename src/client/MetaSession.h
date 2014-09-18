@@ -10,6 +10,7 @@
 #include "include/xlist.h"
 
 #include "messages/MClientCapRelease.h"
+#include "mds/MDSMap.h"
 
 struct Cap;
 struct Inode;
@@ -18,7 +19,7 @@ struct MetaRequest;
 class MClientCapRelease;
 
 struct MetaSession {
-  int mds_num;
+  mds_rank_t mds_num;
   ConnectionRef con;
   version_t seq;
   uint64_t cap_gen;

@@ -95,7 +95,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 								      m->cct->_conf->auth_supported :
 								      m->cct->_conf->auth_service_required)),
   name(n),
-  whoami(-1), incarnation(0),
+  whoami(MDS_RANK_NONE), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(MDSMap::STATE_NULL),
   standby_replaying(false),
@@ -460,7 +460,7 @@ void MDS::send_message(Message *m, Connection *c)
 }
 
 
-void MDS::send_message_mds(Message *m, int mds)
+void MDS::send_message_mds(Message *m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
@@ -479,7 +479,7 @@ void MDS::send_message_mds(Message *m, int mds)
   messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
-void MDS::forward_message_mds(Message *m, int mds)
+void MDS::forward_message_mds(Message *m, mds_rank_t mds)
 {
   assert(mds != whoami);
 
@@ -680,7 +680,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
     standby_type = wanted_state;
   }
 
-  standby_for_rank = g_conf->mds_standby_for_rank;
+  standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
   standby_for_name.assign(g_conf->mds_standby_for_name);
 
   if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
@@ -886,7 +886,7 @@ void MDS::handle_command(MMonCommand *m)
   } else if (m->cmd[0] == "export_dir") {
     if (m->cmd.size() == 3) {
       filepath fp(m->cmd[1].c_str());
-      int target = atoi(m->cmd[2].c_str());
+      mds_rank_t target = mds_rank_t(atoi(m->cmd[2].c_str()));
       if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
 	CInode *in = mdcache->cache_traverse(fp);
 	if (in) {
@@ -925,11 +925,11 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // note source's map version
   if (m->get_source().is_mds() && 
-      peer_mdsmap_epoch[m->get_source().num()] < epoch) {
+      peer_mdsmap_epoch[mds_rank_t(m->get_source().num())] < epoch) {
     dout(15) << " peer " << m->get_source()
 	     << " has mdsmap epoch >= " << epoch
 	     << dendl;
-    peer_mdsmap_epoch[m->get_source().num()] = epoch;
+    peer_mdsmap_epoch[mds_rank_t(m->get_source().num())] = epoch;
   }
 
   // is it new?
@@ -966,14 +966,14 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
-  whoami = mdsmap->get_rank_gid(monc->get_global_id());
-  state = mdsmap->get_state_gid(monc->get_global_id());
-  incarnation = mdsmap->get_inc_gid(monc->get_global_id());
+  whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
+  state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
+  incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
   dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(state) << dendl;
 
   // mark down any failed peers
-  for (map<uint64_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
+  for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
        p != oldmap->get_mds_info().end();
        ++p) {
     if (mdsmap->get_mds_info().count(p->first) == 0) {
@@ -1008,7 +1008,7 @@ void MDS::handle_mds_map(MMDSMap *m)
         state == MDSMap::STATE_ONESHOT_REPLAY) {
       // fill in whoami from standby-for-rank. If we let this be changed
       // the logic used to set it here will need to be adjusted.
-      whoami = mdsmap->get_mds_info_gid(monc->get_global_id()).standby_for_rank;
+      whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
     } else {
       if (want_state == MDSMap::STATE_STANDBY) {
         dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
@@ -1021,7 +1021,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       } else {
 	// did i get kicked by someone else?
 	if (g_conf->mds_enforce_unique_name) {
-	  if (uint64_t existing = mdsmap->find_mds_gid_by_name(name)) {
+	  if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
 	    MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
 	    if (i.global_id > monc->get_global_id()) {
 	      dout(1) << "handle_mds_map i (" << addr
@@ -1109,7 +1109,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (is_resolve() || is_reconnect() || is_rejoin() ||
       is_clientreplay() || is_active() || is_stopping()) {
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
-      set<int> resolve;
+      set<mds_rank_t> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
@@ -1131,14 +1131,14 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     if (oldstate >= MDSMap::STATE_REJOIN) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
-      set<int> olddis, dis;
+      set<mds_rank_t> olddis, dis;
       oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
       oldmap->get_mds_set(olddis, MDSMap::STATE_CLIENTREPLAY);
       oldmap->get_mds_set(olddis, MDSMap::STATE_REJOIN);
       mdsmap->get_mds_set(dis, MDSMap::STATE_ACTIVE);
       mdsmap->get_mds_set(dis, MDSMap::STATE_CLIENTREPLAY);
       mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
-      for (set<int>::iterator p = dis.begin(); p != dis.end(); ++p)
+      for (set<mds_rank_t>::iterator p = dis.begin(); p != dis.end(); ++p)
 	if (*p != whoami &&            // not me
 	    olddis.count(*p) == 0) {  // newly so?
 	  mdcache->kick_discovers(*p);
@@ -1153,12 +1153,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   // did someone go active?
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
       (is_clientreplay() || is_active() || is_stopping())) {
-    set<int> oldactive, active;
+    set<mds_rank_t> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
-    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p) 
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
 	handle_mds_recovery(*p);
@@ -1167,10 +1167,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   // did someone fail?
   if (true) {
     // new failed?
-    set<int> oldfailed, failed;
+    set<mds_rank_t> oldfailed, failed;
     oldmap->get_failed_mds_set(oldfailed);
     mdsmap->get_failed_mds_set(failed);
-    for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
+    for (set<mds_rank_t>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
 	handle_mds_failure(*p);
@@ -1178,9 +1178,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     
     // or down then up?
     //  did their addr/inst change?
-    set<int> up;
+    set<mds_rank_t> up;
     mdsmap->get_up_mds_set(up);
-    for (set<int>::iterator p = up.begin(); p != up.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) 
       if (oldmap->have_inst(*p) &&
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
@@ -1189,10 +1189,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
-    set<int> oldstopped, stopped;
+    set<mds_rank_t> oldstopped, stopped;
     oldmap->get_stopped_mds_set(oldstopped);
     mdsmap->get_stopped_mds_set(stopped);
-    for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
       if (oldstopped.count(*p) == 0)      // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
@@ -1403,7 +1403,7 @@ void MDS::starting_done()
 void MDS::calc_recovery_set()
 {
   // initialize gather sets
-  set<int> rs;
+  set<mds_rank_t> rs;
   mdsmap->get_recovery_mds_set(rs);
   rs.erase(whoami);
   mdcache->set_recovery_set(rs);
@@ -1669,7 +1669,7 @@ void MDS::recovery_done(int oldstate)
   
   // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
-    set<int> active;
+    set<mds_rank_t> active;
     mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
     snapserver->finish_recovery(active);
   }
@@ -1688,7 +1688,7 @@ void MDS::recovery_done(int oldstate)
   mdcache->populate_mydir();
 }
 
-void MDS::handle_mds_recovery(int who) 
+void MDS::handle_mds_recovery(mds_rank_t who) 
 {
   dout(5) << "handle_mds_recovery mds." << who << dendl;
   
@@ -1702,7 +1702,7 @@ void MDS::handle_mds_recovery(int who)
   waiting_for_active_peer.erase(who);
 }
 
-void MDS::handle_mds_failure(int who)
+void MDS::handle_mds_failure(mds_rank_t who)
 {
   if (who == whoami) {
     dout(5) << "handle_mds_failure for myself; not doing anything" << dendl;
@@ -1998,7 +1998,7 @@ bool MDS::is_stale_message(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
-    int from = m->get_source().num();
+    mds_rank_t from = mds_rank_t(m->get_source().num());
     if (!mdsmap->have_inst(from) ||
 	mdsmap->get_inst(from) != m->get_source_inst() ||
 	mdsmap->is_down(from)) {
@@ -2118,7 +2118,7 @@ bool MDS::_dispatch(Message *m)
   if (el > 30.0 &&
     el < 60.0)*/
   for (int i=0; i<g_conf->mds_thrash_exports; i++) {
-    set<int> s;
+    set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
     if (s.size() < 2 || mdcache->get_num_inodes() < 10) 
@@ -2141,10 +2141,10 @@ bool MDS::_dispatch(Message *m)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
 
-    int dest;
+    mds_rank_t dest;
     do {
       int k = rand() % s.size();
-      set<int>::iterator p = s.begin();
+      set<mds_rank_t>::iterator p = s.begin();
       while (k--) ++p;
       dest = *p;
     } while (dest == whoami);

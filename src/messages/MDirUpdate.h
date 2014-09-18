@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
-  int32_t from_mds;
+  mds_rank_t from_mds;
   dirfrag_t dirfrag;
   int32_t dir_rep;
   int32_t discover;
@@ -27,7 +27,7 @@ class MDirUpdate : public Message {
   filepath path;
 
  public:
-  int get_source_mds() const { return from_mds; }
+  mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   int get_dir_rep() const { return dir_rep; }
   const set<int>& get_dir_rep_by() const { return dir_rep_by; } 
@@ -39,7 +39,7 @@ class MDirUpdate : public Message {
   }
 
   MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
-  MDirUpdate(int f, 
+  MDirUpdate(mds_rank_t f, 
 	     dirfrag_t dirfrag,
              int dir_rep,
              set<int>& dir_rep_by,
