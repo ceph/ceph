@@ -206,7 +206,6 @@ void EventCenter::start()
 void EventCenter::stop()
 {
   ldout(cct, 1) << __func__ << dendl;
-  Mutex::Locker l(lock);
   if (!tp_stop) {
     event_tp.stop();
     tp_stop = true;

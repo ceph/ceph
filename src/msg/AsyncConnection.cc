@@ -253,6 +253,9 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     bl.swap(outcoming_bl);
   }
 
+  ldout(async_msgr->cct, 20) << __func__ << " send bytes " << sended
+                             << " remaining bytes " << outcoming_bl.length() << dendl;
+
   if (!open_write && is_queued()) {
     center->create_file_event(sd, EVENT_WRITABLE, write_handler);
     open_write = true;
@@ -1054,6 +1057,12 @@ int AsyncConnection::_process_connection()
         async_msgr->ms_deliver_handle_connect(this);
         async_msgr->ms_deliver_handle_fast_connect(this);
 
+        // message may in queue between last _try_send and connection ready
+        if (!open_write && is_queued()) {
+          center->create_file_event(sd, EVENT_WRITABLE, write_handler);
+          open_write = true;
+        }
+
         // reset connect state variables
         got_bad_auth = false;
         delete authorizer;
@@ -1718,7 +1727,8 @@ void AsyncConnection::fault()
   }
 
   if (state != STATE_CONNECTING) {
-    if (policy.server) {
+    // policy maybe empty when state is in accept
+    if (policy.server || (state >= STATE_ACCEPTING && state < STATE_ACCEPTING_WAIT_SEQ)) {
       ldout(async_msgr->cct, 0) << __func__ << " server, going to standby" << dendl;
       state = STATE_STANDBY;
     } else {
@@ -1727,7 +1737,6 @@ void AsyncConnection::fault()
       state = STATE_CONNECTING;
     }
     backoff = utime_t();
-    ldout(async_msgr->cct, 0) << __func__ << dendl;
   } else {
     if (backoff == utime_t()) {
       backoff.set_from_double(async_msgr->cct->_conf->ms_initial_backoff);
