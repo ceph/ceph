@@ -27,7 +27,7 @@ class MCommand : public Message {
 
   MCommand()
     : Message(MSG_MON_COMMAND) {}
-  MCommand(uuid_d &f)
+  MCommand(const uuid_d &f)
     : Message(MSG_COMMAND),
       fsid(f) { }
 
