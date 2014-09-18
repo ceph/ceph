@@ -118,7 +118,7 @@ protected:
          ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
        } else {
          ASSERT_EQ(0, ioctx.stat(oid, &rados_size, &mtime));
-         uint64_t offset = object_start_off;
+         uint64_t offset;
          uint64_t stripe_size = stripe_count * stripe_unit;
          uint64_t set_size = stripe_count * object_size;
          uint64_t len = 0;
