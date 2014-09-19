@@ -78,9 +78,11 @@ namespace ceph {
 	assert(s == SECSuccess);
       }
       void Update (const byte *input, size_t length) {
-	SECStatus s;
-	s = PK11_DigestOp(ctx, input, length);
-	assert(s == SECSuccess);
+        if (length) {
+	  SECStatus s;
+	  s = PK11_DigestOp(ctx, input, length);
+	  assert(s == SECSuccess);
+        }
       }
       void Final (byte *digest) {
 	SECStatus s;
