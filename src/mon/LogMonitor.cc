@@ -178,7 +178,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     summary.version++;
   }
 
-  dout(10) << __func__ << " logging for "
+  dout(15) << __func__ << " logging for "
            << channel_blog.size() << " channels" << dendl;
   for(map<string,bufferlist>::iterator p = channel_blog.begin();
       p != channel_blog.end(); ++p) {
@@ -642,11 +642,11 @@ void LogMonitor::update_log_channels()
 
 void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
 {
-  generic_dout(10) << __func__ << " expand map: " << m << dendl;
+  generic_dout(20) << __func__ << " expand map: " << m << dendl;
   for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
     m[p->first] = expand_channel_meta(p->second, p->first);
   }
-  generic_dout(10) << __func__ << " expanded map: " << m << dendl;
+  generic_dout(20) << __func__ << " expanded map: " << m << dendl;
 }
 
 string LogMonitor::log_channel_info::expand_channel_meta(
