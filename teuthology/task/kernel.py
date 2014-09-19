@@ -290,7 +290,18 @@ def download_kernel(ctx, config):
                     continue
                 output.close()
                 err_mess.close()
-                proc = role_remote.run(args=['sudo', 'yum', 'install', '-y', kernel_url], wait=False)
+                proc = role_remote.run(
+                    args=[
+                        'sudo',
+                        'rpm',
+                        '-ivh',
+                        '--oldpackage',
+                        '--replacefiles',
+                        '--replacepkgs', 
+                        kernel_url
+                        ],
+                    wait=False
+                    )
                 procs[role_remote.name] = proc
                 continue
 
