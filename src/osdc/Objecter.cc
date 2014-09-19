@@ -581,8 +581,12 @@ bool Objecter::ms_dispatch(Message *m)
     return true;
 
   case MSG_COMMAND_REPLY:
-    handle_command_reply(static_cast<MCommandReply*>(m));
-    return true;
+    if (m->get_source().type() == CEPH_ENTITY_TYPE_OSD) {
+      handle_command_reply(static_cast<MCommandReply*>(m));
+      return true;
+    } else {
+      return false;
+    }
 
   case MSG_GETPOOLSTATSREPLY:
     handle_get_pool_stats_reply(static_cast<MGetPoolStatsReply*>(m));
