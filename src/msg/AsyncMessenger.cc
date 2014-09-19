@@ -22,7 +22,7 @@ static ostream& _prefix(std::ostream *_dout, AsyncMessenger *m) {
 }
 
 static ostream& _prefix(std::ostream *_dout, Processor *p) {
-  return *_dout << "-- Processor";
+  return *_dout << " Processor -- ";
 }
 
 static ostream& _prefix(std::ostream *_dout, Worker *w) {
@@ -191,7 +191,8 @@ int Processor::start()
   ldout(msgr->cct, 1) << __func__ << " start" << dendl;
 
   // start thread
-  create();
+  if (listen_sd > 0)
+    create();
 
   return 0;
 }
@@ -466,6 +467,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
   // create connection
   Worker *w = workers[conn_id % workers.size()];
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
+  conn->connect(addr, type);
   w->center.dispatch_event_external(EventCallbackRef(new C_handle_connect(conn, addr, type)));
   assert(!conns.count(addr));
   conns[addr] = conn;

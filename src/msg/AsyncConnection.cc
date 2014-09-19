@@ -83,6 +83,17 @@ class C_handle_dispatch : public EventCallback {
   }
 };
 
+class C_handle_stop : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_stop(AsyncConnection *c): conn(c) {}
+  void do_request(int id) {
+    conn->stop();
+  }
+};
+
+
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
@@ -110,7 +121,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c)
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
     state(STATE_NONE), state_after_send(0), sd(-1),
-    lock("AsyncConnection::lock"), open_write(false),
+    lock("AsyncConnection::lock"), open_write(false), keepalive(false),
     got_bad_auth(false), authorizer(NULL),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
@@ -1595,7 +1606,8 @@ void AsyncConnection::_connect()
 
   state = STATE_CONNECTING;
   // rescheduler connection in order to avoid lock dep
-  center->create_time_event(0, read_handler);
+  // may called by external thread(send_message)
+  center->dispatch_event_external(read_handler);
 }
 
 void AsyncConnection::accept(int incoming)
@@ -1622,8 +1634,7 @@ int AsyncConnection::send_message(Message *m)
   if ((state == STATE_STANDBY || state == STATE_CLOSED) && !policy.server) {
     _connect();
   } else if (sd > 0 && !open_write) {
-    center->create_file_event(sd, EVENT_WRITABLE, write_handler);
-    open_write = true;
+    center->dispatch_event_external(write_handler);
   }
   return 0;
 }
@@ -1768,6 +1779,12 @@ void AsyncConnection::was_session_reset()
 
   in_seq = 0;
   connect_seq = 0;
+}
+
+void AsyncConnection::mark_down()
+{
+  Mutex::Locker l(lock);
+  center->dispatch_event_external(EventCallbackRef(new C_handle_stop(this)));
 }
 
 // Who call "_stop():
@@ -1915,6 +1932,13 @@ void AsyncConnection::handle_ack(uint64_t seq)
   }
 }
 
+void AsyncConnection::send_keepalive()
+{
+  Mutex::Locker l(lock);
+  keepalive = true;
+  center->dispatch_event_external(write_handler);
+}
+
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
 {
   assert(lock.is_locked());
@@ -1948,6 +1972,11 @@ void AsyncConnection::handle_write()
   bufferlist bl;
   int r;
   if (state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE) {
+    if (keepalive) {
+      _send_keepalive_or_ack();
+      keepalive = false;
+    }
+
     if (in_seq > in_seq_acked) {
       ceph_le64 s;
       s = in_seq;
