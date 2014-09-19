@@ -85,7 +85,6 @@ class AsyncConnection : public Connection {
     }
     return m;
   }
-
  public:
   AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c);
   ~AsyncConnection();
@@ -108,22 +107,12 @@ class AsyncConnection : public Connection {
   void accept(int sd);
   int send_message(Message *m);
 
-  void send_keepalive() {
-    Mutex::Locker l(lock);
-    if (state == STATE_OPEN)
-      _send_keepalive_or_ack();
-  }
-  void mark_down() {
-    Mutex::Locker l(lock);
-    _stop();
-  }
+  void send_keepalive();
+  void mark_down();
   void mark_disposable() {
     Mutex::Locker l(lock);
     policy.lossy = true;
   }
-
-  void handle_write();
-  void process();
 
  private:
   enum {
@@ -220,6 +209,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
+  bool keepalive;
 
   // Tis section are temp variables used by state transition
 
@@ -248,6 +238,15 @@ class AsyncConnection : public Connection {
   NetHandler net;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
+
+ public:
+  // used by eventcallback
+  void handle_write();
+  void process();
+  void stop() {
+    Mutex::Locker l(lock);
+    _stop();
+  }
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
