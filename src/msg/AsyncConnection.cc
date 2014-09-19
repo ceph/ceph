@@ -498,6 +498,7 @@ void AsyncConnection::process()
             }
           }
 
+          throttle_stamp = ceph_clock_now(msgr->cct);
           state = STATE_OPEN_MESSAGE_READ_FRONT;
           break;
         }
