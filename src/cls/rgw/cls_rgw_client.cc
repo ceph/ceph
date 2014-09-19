@@ -101,46 +101,6 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   return r;
 }
 
-int cls_rgw_bucket_index_init_op(librados::IoCtx& io_ctx,
-        const vector<string>& bucket_objs, uint32_t max_aio)
-{
-  int ret = 0;
-  vector<string>::const_iterator iter = bucket_objs.begin();
-  BucketIndexAioManager manager;
-  // Issue *max_aio* requests, all subsequent requests are issued upon
-  // pending request finishing
-  for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_index_init_op(io_ctx, *iter, &manager);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions, r = 0;
-  while (manager.wait_for_completions(-EEXIST, &num_completions, &r)) {
-    if (r >= 0 && ret >= 0) {
-      for(int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_index_init_op(io_ctx, *iter, &manager);
-        if(issue_ret < 0) {
-          ret = issue_ret;
-          break;
-        }
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-  }
-
-  if (ret < 0) {
-    // Do best effort removal
-    vector<string>::const_iterator citer = bucket_objs.begin();
-    for(; citer != iter; ++citer) {
-      io_ctx.remove(*citer);
-    }
-  }
-
-  return ret;
-}
-
 static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
     const string& oid, uint64_t timeout, BucketIndexAioManager *manager) {
   bufferlist in;
@@ -158,14 +118,12 @@ static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
   return r;
 }
 
-int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx, const vector<string>& bucket_objs,
-    uint64_t tag_timeout, uint32_t max_aio)
-{
+int CLSRGWConcurrentIO::operator()() {
   int ret = 0;
   vector<string>::const_iterator iter = bucket_objs.begin();
   BucketIndexAioManager manager;
   for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_set_tag_timeout_op(io_ctx, *iter, tag_timeout, &manager);
+    ret = issue_op(*iter);
     if (ret < 0)
       break;
   }
@@ -174,7 +132,7 @@ int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx, const vector<string>
   while (manager.wait_for_completions(0, &num_completions, &r)) {
     if (r >= 0 && ret >= 0) {
       for(int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_set_tag_timeout_op(io_ctx, *iter, tag_timeout, &manager);
+        int issue_ret = issue_op(*iter);
         if(issue_ret < 0) {
           ret = issue_ret;
           break;
@@ -184,7 +142,30 @@ int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx, const vector<string>
       ret = r;
     }
   }
+
+  if (ret < 0) {
+    cleanup();
+  }
   return ret;
+}
+
+int CLSRGWIssueBucketIndexInit::issue_op(const string& obj)
+{
+  issued_objs.push_back(obj);
+  return issue_bucket_index_init_op(io_ctx, obj, &manager);
+}
+
+void CLSRGWIssueBucketIndexInit::cleanup()
+{
+  // Do best effort removal
+  for (vector<string>::iterator iter = issued_objs.begin(); iter != issued_objs.end(); ++iter) {
+    io_ctx.remove(*iter);
+  }
+}
+
+int CLSRGWIssueSetTagTimeout::issue_op(const string& obj)
+{
+  return issue_bucket_set_tag_timeout_op(io_ctx, obj, tag_timeout, &manager);
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
