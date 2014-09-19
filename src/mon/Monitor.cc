@@ -2321,9 +2321,9 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
                                const map<string,string>& param_str_map,
                                const MonCommand *this_cmd) {
 
-  bool cmd_r = (this_cmd->req_perms.find('r') != string::npos);
-  bool cmd_w = (this_cmd->req_perms.find('w') != string::npos);
-  bool cmd_x = (this_cmd->req_perms.find('x') != string::npos);
+  bool cmd_r = this_cmd->requires_perm('r');
+  bool cmd_w = this_cmd->requires_perm('w');
+  bool cmd_x = this_cmd->requires_perm('x');
 
   bool capable = s->caps.is_capable(g_ceph_context, s->inst.name,
                                     module, prefix, param_str_map,
