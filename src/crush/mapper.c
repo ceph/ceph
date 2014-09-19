@@ -673,9 +673,9 @@ int crush_do_rule(const struct crush_map *map,
 		  int *scratch)
 {
 	int result_len;
-	int *a = scratch;
-	int *b = scratch + result_max;
-	int *c = scratch + result_max*2;
+	int *a;
+	int *b;
+	int *c;
 	int recurse_to_leaf;
 	int *w;
 	int wsize = 0;
@@ -686,6 +686,7 @@ int crush_do_rule(const struct crush_map *map,
 	__u32 step;
 	int i, j;
 	int numrep;
+	int max_rep;
 	/*
 	 * the original choose_total_tries value was off by one (it
 	 * counted "retries" and not "tries").  add one.
@@ -707,6 +708,10 @@ int crush_do_rule(const struct crush_map *map,
 	}
 
 	rule = map->rules[ruleno];
+	max_rep = rule->mask.max_size;
+	a = scratch;
+	b = scratch + max_rep;
+	c = scratch + max_rep*2;
 	result_len = 0;
 	w = a;
 	o = b;

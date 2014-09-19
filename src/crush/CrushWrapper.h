@@ -915,7 +915,14 @@ public:
 	       const vector<__u32>& weight) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
-    int scratch[maxout * 3];
+
+    if ((__u32)rule >= crush->max_rules) {
+        return;
+    }
+
+    struct crush_rule *rule_ptr = crush->rules[rule];
+    int max_rep = rule_ptr->mask.max_size;
+    int scratch[max_rep * 3];
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
     if (numrep < 0)
       numrep = 0;
