@@ -1025,7 +1025,7 @@ void GenericObjectMap::remove_header(const coll_t &cid,
 }
 
 void GenericObjectMap::set_header(const coll_t &cid, const ghobject_t &oid,
-                                  _Header header, KeyValueDB::Transaction t)
+                                  _Header &header, KeyValueDB::Transaction t)
 {
   dout(20) << __func__ << " setting " << header.seq
            << " cid " << cid << " oid " << oid << " parent seq "
