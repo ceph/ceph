@@ -468,7 +468,6 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
   Worker *w = workers[conn_id % workers.size()];
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
   conn->connect(addr, type);
-  w->center.dispatch_event_external(EventCallbackRef(new C_handle_connect(conn, addr, type)));
   assert(!conns.count(addr));
   conns[addr] = conn;
   conn_id++;
