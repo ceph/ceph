@@ -51,12 +51,10 @@ def get_distro_from_downburst():
         log.info('Using default values for supported os_type/os_version')
         return default_table
     try:
-        p = subprocess.Popen([executable_cmd, 'list-json'],
-                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
-        output, err = p.communicate()
+        output = subprocess.check_output([executable_cmd, 'list-json'])
         downburst_data = json.loads(output)
         return downburst_data
-    except OSError:
+    except (subprocess.CalledProcessError, OSError):
         log.info('Using default values for supported os_type/os_version')
         return default_table
 
