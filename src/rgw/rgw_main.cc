@@ -93,6 +93,8 @@ struct RGWRequest
   RGWRequest() : id(0), s(NULL), op(NULL) {
   }
 
+  virtual ~RGWRequest() {}
+
   void init_state(req_state *_s) {
     s = _s;
   }
