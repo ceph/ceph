@@ -1084,11 +1084,11 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, MD5 *hash,
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
-  if (hash) {
-    hash->Update((const byte *)bl.c_str(), bl.length());
-  }
   int ret = write_data(bl, write_ofs, phandle, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
+    if (hash) {
+      hash->Update((const byte *)bl.c_str(), bl.length());
+    }
     bl.clear();
   }
   return ret;
