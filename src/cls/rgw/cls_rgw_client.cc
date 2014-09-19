@@ -191,35 +191,9 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
   return r;
 }
 
-int cls_rgw_list_op(IoCtx& io_ctx, const string& start_obj,
-        const string& filter_prefix, uint32_t num_entries,
-        map<string, struct rgw_cls_list_ret>& list_results, uint32_t max_aio)
+int CLSRGWIssueBucketList::issue_op()
 {
-  int ret = 0;
-  BucketIndexAioManager manager;
-  map<string, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
-  for (; iter != list_results.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_list_op(io_ctx, iter->first, start_obj, filter_prefix, num_entries, &manager, &iter->second);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions, r = 0;
-  while (manager.wait_for_completions(0, &num_completions, &r)) {
-    if (r >= 0 && ret >= 0) {
-      for (int i = 0; i < num_completions && iter != list_results.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_list_op(io_ctx, iter->first, start_obj, filter_prefix, num_entries, &manager, &iter->second);
-        if (issue_ret < 0) {
-          ret = issue_ret;
-          break;
-        }
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-  }
-
-  return ret;
+  return issue_bucket_list_op(io_ctx, iter->first, start_obj, filter_prefix, num_entries, &manager, &iter->second);
 }
 
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager,
@@ -237,33 +211,9 @@ static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, Bucket
   return r;
 }
 
-int cls_rgw_bucket_check_index_op(IoCtx& io_ctx,
-    map<string, struct rgw_cls_check_index_ret>& bucket_objs_ret, uint32_t max_aio)
+int CLSRGWIssueBucketCheck::issue_op()
 {
-  int ret = 0;
-  BucketIndexAioManager manager;
-  map<string, struct rgw_cls_check_index_ret>::iterator iter = bucket_objs_ret.begin();
-  for (; iter != bucket_objs_ret.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions, r = 0;
-  while (manager.wait_for_completions(0, &num_completions, &r)) {
-    if (r >= 0 && ret >= 0) {
-      for (int i = 0; i < num_completions && iter != bucket_objs_ret.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
-        if (issue_ret < 0) {
-          ret = issue_ret;
-          break;
-        }
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-  }
-  return ret;
+  return issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
 }
 
 static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
@@ -280,33 +230,9 @@ static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
   return r;
 }
 
-int cls_rgw_bucket_rebuild_index_op(IoCtx& io_ctx, const vector<string>& bucket_objs,
-    uint32_t max_aio)
+int CLSRGWIssueBucketRebuild::issue_op()
 {
-  int ret = 0;
-  BucketIndexAioManager manager;
-  vector<string>::const_iterator iter = bucket_objs.begin();
-  for (; iter != bucket_objs.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions, r = 0;
-  while (manager.wait_for_completions(0, &num_completions, &r)) {
-    if (r >= 0 && ret >= 0) {
-      for (int i = 0; i < num_completions && iter != bucket_objs.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
-        if (issue_ret < 0) {
-          ret = issue_ret;
-          break;
-        }
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-  }
-  return ret;
+  return issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
 }
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
@@ -320,33 +246,9 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec("rgw", "dir_suggest_changes", updates);
 }
 
-int cls_rgw_get_dir_header(IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
-    uint32_t max_aio)
+int CLSRGWIssueGetDirHeader::issue_op()
 {
-  int ret = 0;
-  BucketIndexAioManager manager;
-  map<string, rgw_cls_list_ret>::iterator iter = dir_headers.begin();
-  for (; iter != dir_headers.end() && max_aio-- > 0; ++iter) {
-    ret = issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
-    if (ret < 0)
-      break;
-  }
-
-  int num_completions, r = 0;
-  while (manager.wait_for_completions(0, &num_completions, &r)) {
-    if (r >= 0 && ret >= 0) {
-      for (int i = 0; i < num_completions && iter != dir_headers.end(); ++i, ++iter) {
-        int issue_ret = issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
-        if (issue_ret < 0) {
-          ret = issue_ret;
-          break;
-        }
-      }
-    } else if (ret >= 0) {
-      ret = r;
-    }
-  }
-  return ret;
+  return issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
