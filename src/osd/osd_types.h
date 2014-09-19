@@ -2977,6 +2977,9 @@ public:
       *requeue_snaptrimmer = true;
     }
   }
+  bool is_request_pending() {
+    return (rwstate.count > 0);
+  }
 
   ObjectContext()
     : ssc(NULL),
