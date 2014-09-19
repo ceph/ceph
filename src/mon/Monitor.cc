@@ -2475,20 +2475,26 @@ void Monitor::handle_command(MMonCommand *m)
     forward_request_leader(m);
     return;
   }
+
+  bool cmd_is_rw =
+    (mon_cmd->requires_perm('w') || mon_cmd->requires_perm('x'));
+
   // validate user's permissions for requested command
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-    audit_clog->info() << "from='" << session->inst << "' "
-                      << "entity='" << session->auth_handler->get_entity_name()
-                      << "' cmd=" << m->cmd << ":  access denied";
+    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+      << "from='" << session->inst << "' "
+      << "entity='" << session->auth_handler->get_entity_name()
+      << "' cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
 
-  audit_clog->info() << "from='" << session->inst << "' "
+  (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+    << "from='" << session->inst << "' "
     << "entity='"
     << (session->auth_handler ?
         stringify(session->auth_handler->get_entity_name())
