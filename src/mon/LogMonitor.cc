@@ -150,6 +150,9 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       }
 
       string log_file = channels.get_log_file(channel);
+      dout(20) << __func__ << " logging for channel '" << channel
+               << "' to file '" << log_file << "'" << dendl;
+
       if (!log_file.empty()) {
         string log_file_level = channels.get_log_file_level(channel);
         if (log_file_level.empty()) {
