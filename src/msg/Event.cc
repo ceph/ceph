@@ -218,7 +218,7 @@ int EventCenter::process_time_events()
     if (cur >= it->first) {
       ldout(cct, 10) << __func__ << " queue time event: id=" << it->second << " time is "
                      << it->first << dendl;
-      time_events[it->second].time_cb->do_request(it->first);
+      time_events[it->second].time_cb->do_request(it->second);
       processed++;
       ++it;
       time_to_ids.erase(prev);
