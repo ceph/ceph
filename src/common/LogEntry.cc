@@ -188,7 +188,10 @@ void LogEntry::decode(bufferlist::iterator& bl)
   if (struct_v >= 3) {
     ::decode(channel, bl);
   } else {
-    channel = CLOG_CHANNEL_DEFAULT;
+    // prior to having logging channels we only had a cluster log.
+    // Ensure we keep that appearance when the other party has no
+    // clue of what a 'channel' is.
+    channel = CLOG_CHANNEL_CLUSTER;
   }
   DECODE_FINISH(bl);
 }
