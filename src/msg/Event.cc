@@ -246,11 +246,6 @@ int EventCenter::process_events(int timeout_millionseconds)
   shortest.set_from_timeval(&tv);
 
   {
-    for (map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
-          it != time_to_ids.end(); ++it) {
-      ldout(cct, 10) << __func__ << " time_to_ids " << it->first << " id=" << it->second << dendl;
-    }
-
     map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
     if (it != time_to_ids.end() && shortest > it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
@@ -291,7 +286,7 @@ int EventCenter::process_events(int timeout_millionseconds)
         event->write_cb->do_request(fired_events[j].fd);
     }
 
-    ldout(cct, 20) << __func__ << " event_wq queue fd is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
+    ldout(cct, 20) << __func__ << " event_wq process is " << fired_events[j].fd << " mask is " << fired_events[j].mask << dendl;
   }
 
   if (trigger_time)
