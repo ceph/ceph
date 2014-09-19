@@ -462,11 +462,16 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
       r = ::stat(path->path(), &st);
       if (r < 0) {
 	r = -errno;
-	assert(!m_filestore_fail_eio || r != -EIO);
+	if (r == -ENOENT) {
+	  wbthrottle.clear_object(o); // should be only non-cache ref
+	  fdcache.clear(o);
+	} else {
+	  assert(!m_filestore_fail_eio || r != -EIO);
+	}
 	return r;
-      }
-      if (st.st_nlink == 1)
+      } else if (st.st_nlink == 1) {
 	force_clear_omap = true;
+      }
     }
     if (force_clear_omap) {
       dout(20) << __func__ << ": clearing omap on " << o
