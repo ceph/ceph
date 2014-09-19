@@ -4,6 +4,7 @@
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_types.h"
+#include "cls_rgw_ops.h"
 #include "common/RefCountedObj.h"
 
 /*
@@ -116,7 +117,7 @@ class CLSRGWConcurrentIO {
 protected:
   librados::IoCtx& io_ctx;
   T& objs_container;
-  typename T::const_iterator iter;
+  typename T::iterator iter;
   uint32_t max_aio;
   BucketIndexAioManager manager;
 
@@ -126,7 +127,7 @@ protected:
   virtual int valid_ret_code() { return 0; }
 
 public:
-  CLSRGWConcurrentIO(librados::IoCtx& ioc, vector<string>& _objs_container,
+  CLSRGWConcurrentIO(librados::IoCtx& ioc, T& _objs_container,
                      uint32_t _max_aio) : io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio) {}
   virtual ~CLSRGWConcurrentIO() {}
 
@@ -168,7 +169,8 @@ protected:
   void cleanup();
 public:
   CLSRGWIssueBucketIndexInit(librados::IoCtx& ioc, vector<string>& _bucket_objs,
-                     uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+                     uint32_t _max_aio) :
+    CLSRGWConcurrentIO<vector<string> >(ioc, _bucket_objs, _max_aio) {}
 };
 
 class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO<vector<string> > {
@@ -177,8 +179,9 @@ protected:
   int issue_op();
 public:
   CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, vector<string>& _bucket_objs,
-                     uint32_t _max_aio, uint64_t _tag_timeout) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio),
-                                                        tag_timeout(_tag_timeout) {}
+                     uint32_t _max_aio, uint64_t _tag_timeout) :
+    CLSRGWConcurrentIO<vector<string> >(ioc, _bucket_objs, _max_aio),
+    tag_timeout(_tag_timeout) {}
 };
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
@@ -204,10 +207,21 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
  *
  * Return 0 on success, a failure code otherwise.
 */
-int cls_rgw_list_op(librados::IoCtx& io_ctx, const string & start_obj,
-                    const string& filter_prefix, uint32_t num_entries,
-                    map<string, struct rgw_cls_list_ret>& list_results,
-                    uint32_t max_aio);
+
+class CLSRGWIssueBucketList : public CLSRGWConcurrentIO<map<string, rgw_cls_list_ret> > {
+  string start_obj;
+  string filter_prefix;
+  uint32_t num_entries;
+protected:
+  int issue_op();
+public:
+  CLSRGWIssueBucketList(librados::IoCtx& io_ctx, const string& _start_obj,
+                        const string& _filter_prefix, uint32_t _num_entries,
+                        map<string, struct rgw_cls_list_ret>& list_results,
+                        uint32_t max_aio) :
+  CLSRGWConcurrentIO<map<string, rgw_cls_list_ret> > (io_ctx, list_results, max_aio),
+  start_obj(_start_obj), filter_prefix(_filter_prefix), num_entries(_num_entries) {}
+};
 
 /**
  * Check the bucket index.
@@ -218,11 +232,32 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string & start_obj,
  *
  * Return 0 on success, a failure code otherwise.
  */
-int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx,
-    map<string, struct rgw_cls_check_index_ret>& bucket_objs_ret, uint32_t max_aio);
-int cls_rgw_bucket_rebuild_index_op(librados::IoCtx& io_ctx, const vector<string>& bucket_objs,
-    uint32_t max_aio);
-  
+class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO<map<string, struct rgw_cls_check_index_ret> > {
+protected:
+  int issue_op();
+public:
+  CLSRGWIssueBucketCheck(librados::IoCtx& ioc, map<string, struct rgw_cls_check_index_ret>& bucket_objs_ret,
+                     uint32_t _max_aio) :
+    CLSRGWConcurrentIO<map<string, struct rgw_cls_check_index_ret> >(ioc, bucket_objs_ret, _max_aio) {}
+};
+
+class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO<vector<string> > {
+protected:
+  int issue_op();
+public:
+  CLSRGWIssueBucketRebuild(librados::IoCtx& io_ctx, vector<string>& bucket_objs,
+                           uint32_t max_aio) : CLSRGWConcurrentIO<vector<string> >(io_ctx, bucket_objs, max_aio) {}
+};
+
+class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO<map<string, rgw_cls_list_ret> > {
+protected:
+  int issue_op();
+public:
+  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
+                          uint32_t max_aio) :
+    CLSRGWConcurrentIO<map<string, rgw_cls_list_ret> >(io_ctx, dir_headers, max_aio) {}
+};
+
 int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
     uint32_t max_aio);
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx);

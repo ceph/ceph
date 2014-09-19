@@ -3876,7 +3876,7 @@ int RGWRados::bucket_check_index(rgw_bucket& bucket,
   if (ret < 0)
     return ret;
 
-  ret = cls_rgw_bucket_check_index_op(index_ctx, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio);
+  ret = CLSRGWIssueBucketCheck(index_ctx, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
   if (ret < 0)
     return ret;
 
@@ -3898,7 +3898,7 @@ int RGWRados::bucket_rebuild_index(rgw_bucket& bucket)
   if (r < 0)
     return r;
 
-  return cls_rgw_bucket_rebuild_index_op(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio);
+  return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 
@@ -6266,7 +6266,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const str
   if (r < 0)
     return r;
 
-  r = cls_rgw_list_op(index_ctx, start, prefix, num_entries, list_results, cct->_conf->rgw_bucket_index_max_aio);
+  r = CLSRGWIssueBucketList(index_ctx, start, prefix, num_entries, list_results, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;
 
@@ -6558,7 +6558,7 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_
   if (r < 0)
     return r;
 
-  r = cls_rgw_get_dir_header(index_ctx, list_results, cct->_conf->rgw_bucket_index_max_aio);
+  r = CLSRGWIssueGetDirHeader(index_ctx, list_results, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;
 
