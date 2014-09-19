@@ -2380,7 +2380,7 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket)
   vector<string> bucket_objs;
   get_bucket_index_objects(dir_oid, bucket_index_max_shards, bucket_objs);
 
-  return cls_rgw_bucket_index_init_op(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio);
+  return CLSRGWIssueBucketIndexInit(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 /**
@@ -6249,7 +6249,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
   if (r < 0)
     return r;
 
-  return cls_rgw_bucket_set_tag_timeout(index_ctx, bucket_objs, timeout, cct->_conf->rgw_bucket_index_max_aio);
+  return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix,
