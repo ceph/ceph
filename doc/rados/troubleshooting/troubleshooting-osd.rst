@@ -6,7 +6,8 @@ Before troubleshooting your OSDs, check your monitors and network first. If
 you execute ``ceph health`` or ``ceph -s`` on the command line and Ceph returns
 a health status, the return of a status means that the monitors have a quorum.
 If you don't have a monitor quorum or if there are errors with the monitor
-status, address the monitor issues first. Check your networks to ensure they
+status, `address the monitor issues first <../troubleshooting-mon>`_. 
+Check your networks to ensure they
 are running properly, because networks may have a significant impact on OSD
 operation and performance.
 
@@ -96,14 +97,14 @@ maintenance, set the cluster to ``noout`` first::
 Once the cluster is set to ``noout``, you can begin stopping the OSDs within the
 failure domain that requires maintenance work. ::
 
-	ceph osd stop osd.{num}
+	stop ceph-osd id={num}
 
 .. note:: Placement groups within the OSDs you stop will become ``degraded``
    while you are addressing issues with within the failure domain.
 
 Once you have completed your maintenance, restart the OSDs. ::
 
-	ceph osd start osd.{num}
+	start ceph-osd id={num}
 
 Finally, you must unset the cluster from ``noout``. ::
 
