@@ -111,20 +111,46 @@ public:
 /* bucket index */
 void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
 
-/**
- * Init bucket index objects.
- *
- * io_ctx      - IO context for rados.
- * bucket_objs - a lit of bucket index objects.
- * max_io      - the maximum number of AIO (for throttling).
- *
- * Reutrn 0 on success, a failure code otherwise.
- */
-int cls_rgw_bucket_index_init_op(librados::IoCtx &io_ctx,
-        const vector<string>& bucket_objs, uint32_t max_aio);
+class CLSRGWConcurrentIO {
+protected:
+  librados::IoCtx& io_ctx;
+  vector<string>& bucket_objs;
+  uint32_t max_aio;
+  BucketIndexAioManager manager;
 
-int cls_rgw_bucket_set_tag_timeout(librados::IoCtx& io_ctx,
-    const vector<string>& bucket_objs, uint64_t tag_timeout, uint32_t max_aio);
+  virtual int issue_op(const string& obj) = 0;
+
+  virtual void cleanup() {}
+  virtual int valid_ret_code() { return 0; }
+
+public:
+  CLSRGWConcurrentIO(librados::IoCtx& ioc, vector<string>& _bucket_objs,
+                     uint32_t _max_aio) : io_ctx(ioc), bucket_objs(_bucket_objs), max_aio(_max_aio) {}
+  virtual ~CLSRGWConcurrentIO() {}
+
+  int operator()();
+};
+
+class CLSRGWIssueBucketIndexInit : public CLSRGWConcurrentIO {
+  vector<string> issued_objs;
+protected:
+  int issue_op(const string& obj);
+  int valid_ret_code() { return -EEXIST; }
+  void cleanup();
+public:
+  CLSRGWIssueBucketIndexInit(librados::IoCtx& ioc, vector<string>& _bucket_objs,
+                     uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+};
+
+class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
+  uint64_t tag_timeout;
+protected:
+  int issue_op(const string& obj);
+public:
+  CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, vector<string>& _bucket_objs,
+                     uint32_t _max_aio, uint64_t _tag_timeout) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio),
+                                                        tag_timeout(_tag_timeout) {}
+};
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                string& name, string& locator, bool log_op);
