@@ -3367,7 +3367,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	osd_op.outdata.claim(bl);
 	if (r < 0)
 	  result = r;
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+	else
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(bl.length(), 10);
 	ctx->delta_stats.num_rd++;
 	dout(10) << " map_extents done on object " << soid << dendl;
       }
