@@ -38,6 +38,9 @@ def main(args):
     kernel_flavor = args['--flavor']
     teuthology_branch = args['--teuthology-branch']
     machine_type = args['--machine-type']
+    if 'multi' in machine_type:
+        schedule_fail("'multi' is not a valid machine_type. " +
+                      "Maybe you want 'plana,mira,burnupi' or similar")
     distro = args['--distro']
     suite_branch = args['--suite-branch']
     suite_dir = args['--suite-dir']
