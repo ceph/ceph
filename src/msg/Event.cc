@@ -298,12 +298,15 @@ int EventCenter::process_events(int timeout_millionseconds)
     numevents += process_time_events();
 
   {
-    Mutex::Locker l(lock);
+    lock.Lock();
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       external_events.pop_front();
+      lock.Unlock();
       e->do_request(0);
+      lock.Lock();
     }
+    lock.Unlock();
   }
   return numevents;
 }
