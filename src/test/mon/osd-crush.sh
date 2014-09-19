@@ -39,7 +39,7 @@ function TEST_crush_rule_create_simple() {
     local dir=$1
     ./ceph --format xml osd crush rule dump replicated_ruleset | \
         egrep '<op>take</op><item>[^<]+</item><item_name>default</item_name>' | \
-        grep '<op>chooseleaf_firstn</op><num>0</num><type>host</type>' || return 1
+        grep '<op>choose_firstn</op><num>0</num><type>osd</type>' || return 1
     local ruleset=ruleset0
     local root=host1
     ./ceph osd crush add-bucket $root host
