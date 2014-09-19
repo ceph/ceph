@@ -1456,7 +1456,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       if (r >= 0) {
 	bufferlist::iterator bp = bl.begin();
 	::decode(hinfo, bp);
-	assert(hinfo.get_total_chunk_size() == (unsigned)st.st_size);
+	assert(hinfo.get_total_chunk_size() == (uint64_t)st.st_size);
       } else {
 	assert(0 == "missing hash attr");
       }
