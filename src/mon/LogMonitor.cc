@@ -634,6 +634,7 @@ void LogMonitor::update_log_channels()
     return;
   }
 
+  channels.expand_channel_meta();
 }
 
 void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
