@@ -6,6 +6,7 @@ from paramiko import ChannelFile
 
 import gevent
 import gevent.event
+import socket
 import pipes
 import logging
 import shutil
@@ -309,7 +310,10 @@ def run(
     :param name: Human readable name (probably hostname) of the destination
                  host
     """
-    (host, port) = client.get_transport().getpeername()
+    try:
+        (host, port) = client.get_transport().getpeername()
+    except socket.error:
+        raise ConnectionLostError(command=quote(args))
 
     if name is None:
         name = host

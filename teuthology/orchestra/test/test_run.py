@@ -2,6 +2,7 @@ from cStringIO import StringIO
 
 import fudge
 import logging
+import socket
 
 from .. import run
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
@@ -219,6 +220,27 @@ class TestRun(object):
         transport = ssh.expects('get_transport').with_args().returns_fake()
         transport.expects('getpeername').with_args().returns(('HOST', 22))
         transport.expects('is_active').with_args().returns(False)
+        e = assert_raises(
+            ConnectionLostError,
+            run.run,
+            client=ssh,
+            logger=logger,
+            args=['foo'],
+            )
+
+        assert e.command == 'foo'
+        assert str(e) == "SSH connection was lost: 'foo'"
+
+    @fudge.with_fakes
+    def test_run_status_lost_socket(self):
+        fudge.clear_expectations()
+        ssh = fudge.Fake('SSHConnection')
+        out = fudge.Fake('ChannelFile').is_a_stub()
+        logger = fudge.Fake('logger').is_a_stub()
+        channel = fudge.Fake('channel')
+        out.has_attr(channel=channel)
+        transport = ssh.expects('get_transport').with_args().returns_fake()
+        transport.expects('getpeername').with_args().raises(socket.error)
         e = assert_raises(
             ConnectionLostError,
             run.run,
