@@ -136,19 +136,19 @@ void EventCenter::delete_file_event(int fd, int mask)
                  << " now mask is " << event->mask << dendl;
 }
 
-uint64_t EventCenter::create_time_event(uint64_t milliseconds, EventCallbackRef ctxt)
+uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
 {
   uint64_t id = time_event_next_id++;
 
-  ldout(cct, 10) << __func__ << " id=" << id << " expire time=" << milliseconds << dendl;
+  ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
   EventCenter::TimeEvent event;
   utime_t expire;
   struct timeval tv;
 
   expire = ceph_clock_now(cct);
   expire.copy_to_timeval(&tv);
-  tv.tv_sec += milliseconds / 1000;
-  tv.tv_usec += (milliseconds % 1000) * 1000;
+  tv.tv_sec += microseconds / 1000000;
+  tv.tv_usec += microseconds % 1000000;
   expire.set_from_timeval(&tv);
 
   event.id = id;
@@ -231,7 +231,7 @@ int EventCenter::process_time_events()
   return processed;
 }
 
-int EventCenter::process_events(int timeout_millionseconds)
+int EventCenter::process_events(int timeout_microseconds)
 {
   struct timeval tv;
   int numevents;
@@ -239,23 +239,28 @@ int EventCenter::process_events(int timeout_millionseconds)
 
   utime_t period, shortest, now = ceph_clock_now(cct);
   now.copy_to_timeval(&tv);
-  if (timeout_millionseconds > 0) {
-    tv.tv_sec += timeout_millionseconds / 1000;
-    tv.tv_usec += (timeout_millionseconds % 1000) * 1000;
+  if (timeout_microseconds > 0) {
+    tv.tv_sec += timeout_microseconds / 1000000;
+    tv.tv_usec += timeout_microseconds % 1000000;
   }
   shortest.set_from_timeval(&tv);
 
   {
     map<utime_t, uint64_t>::iterator it = time_to_ids.begin();
-    if (it != time_to_ids.end() && shortest > it->first) {
+    if (it != time_to_ids.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
       shortest = it->first;
       trigger_time = true;
-      period = now - shortest;
-      period.copy_to_timeval(&tv);
+      if (shortest > now) {
+        period = now - shortest;
+        period.copy_to_timeval(&tv);
+      } else {
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+      }
     } else {
-      tv.tv_sec = timeout_millionseconds / 1000;
-      tv.tv_usec = (timeout_millionseconds % 1000) * 1000;
+      tv.tv_sec = timeout_microseconds / 1000000;
+      tv.tv_usec = timeout_microseconds % 1000000;
     }
 
     next_wake = shortest;

@@ -282,7 +282,7 @@ void *Worker::entry()
   while (!done) {
     ldout(msgr->cct, 20) << __func__ << " calling event process" << dendl;
 
-    r = center.process_events(30000);
+    r = center.process_events(30000000);
     if (r < 0) {
       ldout(msgr->cct,20) << __func__ << " process events failed: "
                           << cpp_strerror(errno) << dendl;

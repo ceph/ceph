@@ -695,7 +695,7 @@ void AsyncConnection::process()
             async_msgr->ms_fast_dispatch(message);
             lock.Lock();
           } else {
-            center->create_time_event(0, EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
+            center->create_time_event(1, EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
           }
 
           break;
@@ -1765,9 +1765,8 @@ void AsyncConnection::fault()
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
   }
 
-  uint64_t milliseconds = double(backoff) * 1000;
   // woke up again;
-  center->create_time_event(milliseconds, read_handler);
+  center->create_time_event(backoff, read_handler);
 }
 
 void AsyncConnection::was_session_reset()
