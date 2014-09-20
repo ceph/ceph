@@ -9,6 +9,7 @@ libmon_la_SOURCES = \
 	mon/PaxosService.cc \
 	mon/OSDMonitor.cc \
 	mon/MDSMonitor.cc \
+	mon/MonitorDBStore.cc \
 	mon/MonmapMonitor.cc \
 	mon/PGMonitor.cc \
 	mon/LogMonitor.cc \
