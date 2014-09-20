@@ -7,11 +7,10 @@ class Dir {
  public:
   Inode    *parent_inode;  // my inode
   ceph::unordered_map<string, Dentry*> dentries;
-  map<string, Dentry*> dentry_map;
+  xlist<Dentry*> dentry_list;
   uint64_t release_count;
-  uint64_t max_offset;
 
-  Dir(Inode* in) : release_count(0), max_offset(2) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };

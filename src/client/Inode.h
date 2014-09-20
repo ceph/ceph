@@ -70,6 +70,7 @@ struct CapSnap {
 
 // inode flags
 #define I_COMPLETE 1
+#define I_COMPLETE_ORDERED 2
 
 struct Inode {
   CephContext *cct;
