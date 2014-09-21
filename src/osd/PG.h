@@ -1643,8 +1643,8 @@ public:
       Active(my_context ctx);
       void exit();
 
-      const set<pg_shard_t> sorted_actingbackfill_set;
-      const set<pg_shard_t> sorted_backfill_set;
+      const set<pg_shard_t> remote_shards_to_reserve_recovery;
+      const set<pg_shard_t> remote_shards_to_reserve_backfill;
       bool all_replicas_activated;
 
       typedef boost::mpl::list <
@@ -1813,7 +1813,7 @@ public:
 	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
 	boost::statechart::transition< AllRemotesReserved, Recovering >
 	> reactions;
-      set<pg_shard_t>::const_iterator acting_osd_it;
+      set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
       WaitRemoteRecoveryReserved(my_context ctx);
       boost::statechart::result react(const RemoteRecoveryReserved &evt);
       void exit();

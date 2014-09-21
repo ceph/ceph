@@ -5833,7 +5833,7 @@ void PG::RecoveryState::Backfilling::exit()
 PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/WaitRemoteBackfillReserved"),
-    backfill_osd_it(context< Active >().sorted_backfill_set.begin())
+    backfill_osd_it(context< Active >().remote_shards_to_reserve_backfill.begin())
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
@@ -5846,7 +5846,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (backfill_osd_it != context< Active >().sorted_backfill_set.end()) {
+  if (backfill_osd_it != context< Active >().remote_shards_to_reserve_backfill.end()) {
     //The primary never backfills itself
     assert(*backfill_osd_it != pg->pg_whoami);
     ConnectionRef con = pg->osd->get_con_osd_cluster(
@@ -5888,8 +5888,8 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteReservationReje
 
   // Send REJECT to all previously acquired reservations
   set<pg_shard_t>::const_iterator it, begin, end, next;
-  begin = context< Active >().sorted_backfill_set.begin();
-  end = context< Active >().sorted_backfill_set.end();
+  begin = context< Active >().remote_shards_to_reserve_backfill.begin();
+  end = context< Active >().remote_shards_to_reserve_backfill.end();
   assert(begin != end);
   for (next = it = begin, ++next ; next != backfill_osd_it; ++it, ++next) {
     //The primary never backfills itself
@@ -6151,7 +6151,7 @@ void PG::RecoveryState::WaitLocalRecoveryReserved::exit()
 PG::RecoveryState::WaitRemoteRecoveryReserved::WaitRemoteRecoveryReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active/WaitRemoteRecoveryReserved"),
-    acting_osd_it(context< Active >().sorted_actingbackfill_set.begin())
+    remote_recovery_reservation_it(context< Active >().remote_shards_to_reserve_recovery.begin())
 {
   context< RecoveryMachine >().log_enter(state_name);
   post_event(RemoteRecoveryReserved());
@@ -6161,28 +6161,26 @@ boost::statechart::result
 PG::RecoveryState::WaitRemoteRecoveryReserved::react(const RemoteRecoveryReserved &evt) {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (acting_osd_it != context< Active >().sorted_actingbackfill_set.end()) {
-    // skip myself
-    if (*acting_osd_it == pg->pg_whoami)
-      ++acting_osd_it;
+  if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
+    assert(*remote_recovery_reservation_it != pg->pg_whoami);
   }
 
-  if (acting_osd_it != context< Active >().sorted_actingbackfill_set.end()) {
+  if (remote_recovery_reservation_it != context< Active >().remote_shards_to_reserve_recovery.end()) {
     ConnectionRef con = pg->osd->get_con_osd_cluster(
-      acting_osd_it->osd, pg->get_osdmap()->get_epoch());
+      remote_recovery_reservation_it->osd, pg->get_osdmap()->get_epoch());
     if (con) {
       if (con->has_feature(CEPH_FEATURE_RECOVERY_RESERVATION)) {
 	pg->osd->send_message_osd_cluster(
           new MRecoveryReserve(
 	    MRecoveryReserve::REQUEST,
-	    spg_t(pg->info.pgid.pgid, acting_osd_it->shard),
+	    spg_t(pg->info.pgid.pgid, remote_recovery_reservation_it->shard),
 	    pg->get_osdmap()->get_epoch()),
 	  con.get());
       } else {
 	post_event(RemoteRecoveryReserved());
       }
     }
-    ++acting_osd_it;
+    ++remote_recovery_reservation_it;
   } else {
     post_event(AllRemotesReserved());
   }
@@ -6216,8 +6214,8 @@ void PG::RecoveryState::Recovering::release_reservations()
 
   // release remote reservations
   for (set<pg_shard_t>::const_iterator i =
-	 context< Active >().sorted_actingbackfill_set.begin();
-        i != context< Active >().sorted_actingbackfill_set.end();
+	 context< Active >().remote_shards_to_reserve_recovery.begin();
+        i != context< Active >().remote_shards_to_reserve_recovery.end();
         ++i) {
     if (*i == pg->pg_whoami) // skip myself
       continue;
@@ -6326,16 +6324,34 @@ void PG::RecoveryState::Clean::exit()
   pg->osd->recoverystate_perf->tinc(rs_clean_latency, dur);
 }
 
+template <typename T>
+set<pg_shard_t> unique_osd_shard_set(const pg_shard_t & skip, const T &in)
+{
+  set<int> osds_found;
+  set<pg_shard_t> out;
+  for (typename T::const_iterator i = in.begin();
+       i != in.end();
+       ++i) {
+    if (*i != skip && !osds_found.count(i->osd)) {
+      osds_found.insert(i->osd);
+      out.insert(*i);
+    }
+  }
+  return out;
+}
+
 /*---------Active---------*/
 PG::RecoveryState::Active::Active(my_context ctx)
   : my_base(ctx),
     NamedState(context< RecoveryMachine >().pg->cct, "Started/Primary/Active"),
-    sorted_actingbackfill_set(
-      context< RecoveryMachine >().pg->actingbackfill.begin(),
-      context< RecoveryMachine >().pg->actingbackfill.end()),
-    sorted_backfill_set(
-      context< RecoveryMachine >().pg->backfill_targets.begin(),
-      context< RecoveryMachine >().pg->backfill_targets.end()),
+    remote_shards_to_reserve_recovery(
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->actingbackfill)),
+    remote_shards_to_reserve_backfill(
+      unique_osd_shard_set(
+	context< RecoveryMachine >().pg->pg_whoami,
+	context< RecoveryMachine >().pg->backfill_targets)),
     all_replicas_activated(false)
 {
   context< RecoveryMachine >().log_enter(state_name);
