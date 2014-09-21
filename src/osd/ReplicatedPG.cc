@@ -9339,6 +9339,13 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
   // adjust info to backfill
   info.last_backfill = hobject_t();
   dirty_info = true;
+
+
+  // clear log
+  PGLogEntryHandler rollbacker;
+  pg_log.clear_can_rollback_to(&rollbacker);
+  rollbacker.apply(this, t);
+
   write_if_dirty(*t);
 
   on_shutdown();
