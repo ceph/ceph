@@ -216,6 +216,10 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     return 0;
   }
 
+  if (state == STATE_STANDBY) {
+    ldout(async_msgr->cct, 1) << __func__ << " connection is standby" << dendl;
+    return 0;
+  }
   if (state == STATE_CLOSED) {
     ldout(async_msgr->cct, 1) << __func__ << " connection is closed" << dendl;
     return -EINTR;
@@ -2012,9 +2016,7 @@ void AsyncConnection::handle_write()
         break;
       }
     }
-  } else if (state != STATE_CONNECTING &&
-             state != STATE_CLOSED &&
-             state != STATE_STANDBY) { // send_message may call this even if socket is closed
+  } else if (state != STATE_CONNECTING) {
     r = _try_send(bl);
     if (r < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;
