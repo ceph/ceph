@@ -79,15 +79,11 @@ class EventCenter {
   deque<EventCallbackRef> external_events;
   unordered_map<int, FileEvent> file_events;
   EventDriver *driver;
-  // The second element is id
-  map<utime_t, uint64_t> time_to_ids;
-  // The first element is id
-  unordered_map<uint64_t, TimeEvent> time_events;
+  map<utime_t, list<TimeEvent> > time_events;
   uint64_t time_event_next_id;
   time_t last_time; // last time process time event
   int notify_receive_fd;
   int notify_send_fd;
-  utime_t next_wake;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -112,7 +108,6 @@ class EventCenter {
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
-  void delete_time_event(uint64_t id);
   int process_events(int timeout_microseconds);
   void wakeup();
 
