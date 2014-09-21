@@ -2037,10 +2037,6 @@ void MDS::_advance_queues()
     ls.swap(finished_queue);
     while (!ls.empty()) {
       dout(10) << " finish " << ls.front() << dendl;
-
-      dout(1) << "trigger:  " << this << dendl;
-      dout(1) << "          " << this->mds_lock.is_locked() << dendl;
-      dout(1) << "          " << this->mds_lock.is_locked_by_me() << dendl;
       ls.front()->complete(0);
       ls.pop_front();
 
