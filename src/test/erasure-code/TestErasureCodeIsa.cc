@@ -344,7 +344,7 @@ DecodeAndVerify(ErasureCodeIsaDefault& Isa, map<int, bufferlist> &degraded, set<
 
   for (int i = 0; i < (int) decoded.size(); i++) {
     // compare all the buffers with their original
-    ok |= strncmp(decoded[i].c_str(), enc[i].c_str(), length);
+    ok |= memcmp(decoded[i].c_str(), enc[i].c_str(), length);
   }
 
   return ok;
@@ -415,7 +415,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   unsigned length = encoded[0].length();
 
   for (int i = 0; i < k; i++) {
-    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+    EXPECT_EQ(0, memcmp(encoded[i].c_str(), in.c_str() + (i * length), length));
   }
 
   buffer::ptr enc[k + m];
@@ -542,7 +542,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   unsigned length = encoded[0].length();
 
   for (int i = 0; i < k; i++) {
-    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+    EXPECT_EQ(0, memcmp(encoded[i].c_str(), in.c_str() + (i * length), length));
   }
 
   buffer::ptr enc[k + m];
@@ -669,7 +669,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   unsigned length = encoded[0].length();
 
   for (int i = 0; i < k; i++) {
-    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+    EXPECT_EQ(0, memcmp(encoded[i].c_str(), in.c_str() + (i * length), length));
   }
 
   buffer::ptr enc[k + m];
@@ -795,7 +795,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   unsigned length = encoded[0].length();
 
   for (int i = 0; i < k; i++) {
-    EXPECT_EQ(0, strncmp(encoded[i].c_str(), in.c_str() + (i * length), length));
+    EXPECT_EQ(0, memcmp(encoded[i].c_str(), in.c_str() + (i * length), length));
   }
 
   buffer::ptr enc[k + m];
