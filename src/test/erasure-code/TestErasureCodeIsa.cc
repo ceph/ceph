@@ -24,18 +24,11 @@
 
 ErasureCodeIsaTableCache tcache;
 
-
-template <typename T>
 class IsaErasureCodeTest : public ::testing::Test {
 public:
 };
 
-typedef ::testing::Types<
-ErasureCodeIsaDefault
-> IsaTypes;
-TYPED_TEST_CASE(IsaErasureCodeTest, IsaTypes);
-
-TYPED_TEST(IsaErasureCodeTest, encode_decode)
+TEST_F(IsaErasureCodeTest, encode_decode)
 {
   TypeParam Isa(tcache);
   map<std::string, std::string> parameters;
@@ -191,9 +184,9 @@ TYPED_TEST(IsaErasureCodeTest, encode_decode)
   }
 }
 
-TYPED_TEST(IsaErasureCodeTest, minimum_to_decode)
+TEST_F(IsaErasureCodeTest, minimum_to_decode)
 {
-  TypeParam Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "2";
   parameters["m"] = "2";
@@ -287,7 +280,7 @@ TYPED_TEST(IsaErasureCodeTest, minimum_to_decode)
   }
 }
 
-TEST(IsaErasureCodeTest, encode)
+TEST_F(IsaErasureCodeTest, encode)
 {
   ErasureCodeIsaDefault Isa(tcache);
   map<std::string, std::string> parameters;
@@ -357,12 +350,12 @@ DecodeAndVerify(ErasureCodeIsaDefault& Isa, map<int, bufferlist> &degraded, set<
   return ok;
 }
 
-TYPED_TEST(IsaErasureCodeTest, isa_vandermonde_exhaustive)
+TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the vandermonde matrix
 
-  TypeParam Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "12";
   parameters["m"] = "4";
@@ -483,11 +476,11 @@ TYPED_TEST(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   EXPECT_EQ(2506, tcache.getDecodingTableCacheSize()); // 3 entries from (2,2) test and 2503 from (12,4)
 }
 
-TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)
+TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
-  TypeParam Isa(tcache,ErasureCodeIsaDefault::kCauchy);
+  ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
   map<std::string, std::string> parameters;
   parameters["k"] = "12";
   parameters["m"] = "4";
@@ -610,11 +603,11 @@ TYPED_TEST(IsaErasureCodeTest, isa_cauchy_exhaustive)
   EXPECT_EQ(2516, tcache.getDecodingTableCacheSize(ErasureCodeIsaDefault::kCauchy));
 }
 
-TYPED_TEST(IsaErasureCodeTest, isa_cauchy_cache_trash)
+TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (12,4) configuration using the cauchy matrix
-  TypeParam Isa(tcache,ErasureCodeIsaDefault::kCauchy);
+  ErasureCodeIsaDefault Isa(tcache,ErasureCodeIsaDefault::kCauchy);
   map<std::string, std::string> parameters;
   parameters["k"] = "16";
   parameters["m"] = "4";
@@ -737,12 +730,12 @@ TYPED_TEST(IsaErasureCodeTest, isa_cauchy_cache_trash)
   EXPECT_EQ(2516, tcache.getDecodingTableCacheSize(ErasureCodeIsaDefault::kCauchy));
 }
 
-TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
+TEST_F(IsaErasureCodeTest, isa_xor_codec)
 {
   // Test all possible failure scenarios and reconstruction cases for
   // a (4,1) RAID-5 like configuration 
 
-  TypeParam Isa(tcache);
+  ErasureCodeIsaDefault Isa(tcache);
   map<std::string, std::string> parameters;
   parameters["k"] = "4";
   parameters["m"] = "1";
@@ -835,7 +828,7 @@ TYPED_TEST(IsaErasureCodeTest, isa_xor_codec)
   EXPECT_EQ(5, cnt_cf);
 }
 
-TEST(IsaErasureCodeTest, create_ruleset)
+TEST_F(IsaErasureCodeTest, create_ruleset)
 {
   CrushWrapper *c = new CrushWrapper;
   c->create();
