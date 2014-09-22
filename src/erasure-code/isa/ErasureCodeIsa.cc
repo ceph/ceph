@@ -84,10 +84,16 @@ unsigned int
 ErasureCodeIsa::get_chunk_size(unsigned int object_size) const
 {
   unsigned alignment = get_alignment();
-  unsigned tail = object_size % alignment;
-  unsigned padded_length = object_size + (tail ? (alignment - tail) : 0);
-  assert(padded_length % k == 0);
-  return padded_length / k;
+  unsigned chunk_size = ( object_size + k - 1 ) / k;
+  dout(20) << "get_chunk_size: chunk_size " << chunk_size
+           << " must be modulo " << alignment << dendl;
+  unsigned modulo = chunk_size % alignment;
+  if (modulo) {
+    dout(10) << "get_chunk_size: " << chunk_size
+             << " padded to " << chunk_size + alignment - modulo << dendl;
+    chunk_size += alignment - modulo;
+  }
+  return chunk_size;
 }
 
 // -----------------------------------------------------------------------------
@@ -326,7 +332,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 unsigned
 ErasureCodeIsaDefault::get_alignment() const
 {
-  return k * EC_ISA_ADDRESS_ALIGNMENT;
+  return EC_ISA_ADDRESS_ALIGNMENT;
 }
 
 // -----------------------------------------------------------------------------
