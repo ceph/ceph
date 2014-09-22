@@ -2,7 +2,7 @@
 This module is a thin wrapper around libcephfs.
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_ulong, \
-    create_string_buffer, byref, Structure
+    create_string_buffer, byref, Structure, pointer, c_char
 from ctypes.util import find_library
 import errno
 
@@ -206,7 +206,7 @@ class LibCephFS(object):
         return (major.value, minor.value, extra.value)
 
     def conf_get(self, option):
-        self.require_state("configuring", "connected")
+        self.require_state("configuring", "initialized", "mounted")
         if not isinstance(option, str):
             raise TypeError('option must be a string')
         length = 20
@@ -224,7 +224,7 @@ class LibCephFS(object):
                 raise make_ex(ret, "error calling conf_get")
 
     def conf_set(self, option, val):
-        self.require_state("configuring", "connected")
+        self.require_state("configuring", "initialized", "mounted")
         if not isinstance(option, str):
             raise TypeError('option must be a string')
         if not isinstance(val, str):
@@ -234,8 +234,17 @@ class LibCephFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling conf_set")
 
-    def mount(self):
+    def init(self):
         self.require_state("configuring")
+        ret = self.libcephfs.ceph_init(self.cluster)
+        if ret != 0:
+            raise make_ex(ret, "error calling ceph_init")
+        self.state = "initialized"
+
+    def mount(self):
+        if self.state == "configuring":
+            self.init()
+        self.require_state("initialized")
         ret = self.libcephfs.ceph_mount(self.cluster, "/")
         if ret != 0:
             raise make_ex(ret, "error calling ceph_mount")
@@ -362,3 +371,34 @@ class LibCephFS(object):
             c_char_p(path))
         if ret < 0:
             raise make_ex(ret, "error in unlink: %s" % path)
+
+    def mds_command(self, mds_spec, args, input_data):
+        """
+        :return 3-tuple of output status int, output status string, output data
+        """
+
+        cmdarr = (c_char_p * len(args))(*args)
+
+        outbufp = pointer(pointer(c_char()))
+        outbuflen = c_long()
+        outsp = pointer(pointer(c_char()))
+        outslen = c_long()
+
+        ret = self.libcephfs.ceph_mds_command(
+                self.cluster,
+                c_char_p(mds_spec),
+                cmdarr,
+                len(args),
+                c_char_p(input_data), len(input_data),
+                outbufp, byref(outbuflen),
+                outsp, byref(outslen)
+        )
+
+        my_outbuf = outbufp.contents[:(outbuflen.value)]
+        my_outs = outsp.contents[:(outslen.value)]
+        if outbuflen.value:
+            self.libcephfs.ceph_buffer_free(outbufp.contents)
+        if outslen.value:
+            self.libcephfs.ceph_buffer_free(outsp.contents)
+
+        return (ret, my_outbuf, my_outs)
