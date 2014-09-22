@@ -1,9 +1,11 @@
+if ENABLE_SERVER
 if LINUX
 libcls_kvs_la_SOURCES = key_value_store/cls_kvs.cc
 libcls_kvs_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_kvs_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_kvs.la
-endif
+endif # LINUX
+endif # ENABLE_SERVER
 
 noinst_HEADERS += \
 	key_value_store/key_value_structure.h \

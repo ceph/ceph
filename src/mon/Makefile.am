@@ -2,6 +2,7 @@ libmon_types_la_SOURCES = \
 	mon/PGMap.cc
 noinst_LTLIBRARIES += libmon_types.la
 
+if ENABLE_SERVER
 libmon_la_SOURCES = \
 	mon/Monitor.cc \
 	mon/Paxos.cc \
@@ -19,6 +20,7 @@ libmon_la_SOURCES = \
 	mon/ConfigKeyService.cc
 libmon_la_LIBADD = $(LIBAUTH) $(LIBCOMMON) $(LIBOS) $(LIBMON_TYPES)
 noinst_LTLIBRARIES += libmon.la
+endif
 
 noinst_HEADERS += \
 	mon/AuthMonitor.h \
