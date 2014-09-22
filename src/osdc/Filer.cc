@@ -242,6 +242,7 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size, utime_t mt
 // -----------------------
 
 struct PurgeRange {
+  Mutex lock;
   inodeno_t ino;
   ceph_file_layout layout;
   SnapContext snapc;
@@ -250,6 +251,11 @@ struct PurgeRange {
   int flags;
   Context *oncommit;
   int uncommitted;
+  PurgeRange(inodeno_t i, ceph_file_layout& l, const SnapContext& sc,
+	     uint64_t fo, uint64_t no, utime_t t, int fl, Context *fin) :
+	  lock("Filer::PurgeRange"), ino(i), layout(l), snapc(sc),
+	  first(fo), num(no), mtime(t), flags(fl), oncommit(fin),
+	  uncommitted(0) {}
 };
 
 int Filer::purge_range(inodeno_t ino,
@@ -272,17 +278,8 @@ int Filer::purge_range(inodeno_t ino,
     return 0;
   }
 
-  // lots!  let's do this in pieces.
-  PurgeRange *pr = new PurgeRange;
-  pr->ino = ino;
-  pr->layout = *layout;
-  pr->snapc = snapc;
-  pr->first = first_obj;
-  pr->num = num_obj;
-  pr->mtime = mtime;
-  pr->flags = flags;
-  pr->oncommit = oncommit;
-  pr->uncommitted = 0;
+  PurgeRange *pr = new PurgeRange(ino, *layout, snapc, first_obj,
+				  num_obj, mtime, flags, oncommit);
 
   _do_purge_range(pr, 0);
   return 0;
@@ -299,12 +296,14 @@ struct C_PurgeRange : public Context {
 
 void Filer::_do_purge_range(PurgeRange *pr, int fin)
 {
+  pr->lock.Lock();
   pr->uncommitted -= fin;
   ldout(cct, 10) << "_do_purge_range " << pr->ino << " objects " << pr->first << "~" << pr->num
 	   << " uncommitted " << pr->uncommitted << dendl;
 
   if (pr->num == 0 && pr->uncommitted == 0) {
     pr->oncommit->complete(0);
+    pr->lock.Unlock();
     delete pr;
     return;
   }
@@ -322,6 +321,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
     pr->num--;
     max--;
   }
+  pr->lock.Unlock();
 }
 
 
