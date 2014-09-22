@@ -288,46 +288,44 @@ TEST_F(IsaErasureCodeTest, encode)
   parameters["m"] = "2";
   Isa.init(parameters);
 
-  unsigned alignment = Isa.get_alignment();
+  unsigned aligned_object_size = Isa.get_alignment() * 2;
   {
     //
     // When the input bufferlist needs to be padded because
     // it is not properly aligned, it is padded with zeros.
     //
     bufferlist in;
-    map<int, bufferlist> encoded;
-    int want_to_encode[] = {0, 1, 2, 3};
-    int trail_length = 2;
-    in.append(string(alignment + trail_length, 'X'));
-    EXPECT_EQ(0, Isa.encode(set<int>(want_to_encode, want_to_encode + 4),
-                            in,
-                            &encoded));
+    map<int,bufferlist> encoded;
+    int want_to_encode[] = { 0, 1, 2, 3 };
+    int trail_length = 1;
+    in.append(string(aligned_object_size + trail_length, 'X'));
+    EXPECT_EQ(0, Isa.encode(set<int>(want_to_encode, want_to_encode+4),
+				 in,
+				 &encoded));
     EXPECT_EQ(4u, encoded.size());
-    for (int i = 0; i < 4; i++)
-      EXPECT_EQ(alignment, encoded[i].length());
     char *last_chunk = encoded[1].c_str();
+    int length =encoded[1].length();
     EXPECT_EQ('X', last_chunk[0]);
-    EXPECT_EQ('\0', last_chunk[trail_length]);
+    EXPECT_EQ('\0', last_chunk[length - trail_length]);
   }
 
   {
     //
     // When only the first chunk is required, the encoded map only
-    // contains the first chunk. Although the encode
+    // contains the first chunk. Although the Isa encode
     // internally allocated a buffer because of padding requirements
     // and also computes the coding chunks, they are released before
     // the return of the method, as shown when running the tests thru
     // valgrind (there is no leak).
     //
     bufferlist in;
-    map<int, bufferlist> encoded;
+    map<int,bufferlist> encoded;
     set<int> want_to_encode;
     want_to_encode.insert(0);
-    int trail_length = 2;
-    in.append(string(alignment + trail_length, 'X'));
+    int trail_length = 1;
+    in.append(string(aligned_object_size + trail_length, 'X'));
     EXPECT_EQ(0, Isa.encode(want_to_encode, in, &encoded));
     EXPECT_EQ(1u, encoded.size());
-    EXPECT_EQ(alignment, encoded[0].length());
   }
 }
 
