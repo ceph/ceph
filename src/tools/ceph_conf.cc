@@ -18,7 +18,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#include "mon/AuthMonitor.h"
+#include "mon/MonMap.h"
 #include "common/ConfUtils.h"
 #include "global/global_init.h"
 #include "common/entity_name.h"
