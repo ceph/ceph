@@ -1099,7 +1099,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
       break;
     }
     /* is it a 'create bucket' request? */
-    if ((s->op == OP_PUT) && s->object_str.size() == 0)
+    if (op_obj->get_type() == RGW_OP_CREATE_BUCKET)
       return 0;
     only_bucket = true;
     break;
