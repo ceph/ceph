@@ -18,6 +18,7 @@
 #include "include/stringify.h"
 #include "global/global_init.h"
 #include "erasure-code/isa/ErasureCodeIsa.h"
+#include "erasure-code/isa/xor_op.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
 #include "gtest/gtest.h"
@@ -277,6 +278,40 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
                                        &minimum));
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(0u, minimum.count(3));
+  }
+}
+
+TEST_F(IsaErasureCodeTest, chunk_size)
+{
+  {
+    ErasureCodeIsaDefault Isa(tcache);
+    map<std::string, std::string> parameters;
+    parameters["k"] = "2";
+    parameters["m"] = "1";
+    Isa.init(parameters);
+    int k = 2;
+
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT * 2, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k + 1));
+  }
+  {
+    ErasureCodeIsaDefault Isa(tcache);
+    map<std::string, std::string> parameters;
+    parameters["k"] = "3";
+    parameters["m"] = "1";
+    Isa.init(parameters);
+    int k = 3;
+
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
+    ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT * 2, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k + 1));
+    int object_size = EC_ISA_ADDRESS_ALIGNMENT * k * 1024 + 1;
+    ASSERT_NE(0, object_size % k);
+    ASSERT_NE(0, object_size % EC_ISA_ADDRESS_ALIGNMENT);
+    int chunk_size = Isa.get_chunk_size(object_size);
+    ASSERT_EQ(0, chunk_size % EC_ISA_ADDRESS_ALIGNMENT);
+    ASSERT_GT(chunk_size, (chunk_size * k) - object_size);
   }
 }
 
