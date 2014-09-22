@@ -205,6 +205,10 @@ Rados object in state %s." % (self.state))
                 raise Error("Unexpected error")
         else:
             self.librados = CDLL(librados_path)
+
+        self.parsed_args = []
+        self.conf_defaults = conf_defaults
+        self.conffile = conffile
         self.cluster = c_void_p()
         self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
@@ -312,6 +316,7 @@ Rados object in state %s." % (self.state))
         # list to eliminate any missing args
 
         retargs = [a for a in cretargs if a is not None]
+        self.parsed_args = args
         return retargs
 
     def conf_parse_env(self, var='CEPH_ARGS'):
