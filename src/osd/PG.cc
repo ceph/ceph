@@ -1553,6 +1553,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.hit_set = info.hit_set;
 	pi.stats.stats.clear();
 
+	// initialize peer with our purged_snaps.
+	pi.purged_snaps = info.purged_snaps;
+
 	m = new MOSDPGLog(
 	  i->shard, pg_whoami.shard,
 	  get_osdmap()->get_epoch(), pi);
