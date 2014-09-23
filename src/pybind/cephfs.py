@@ -165,6 +165,14 @@ class LibCephFS(object):
         if ret != 0:
             raise make_ex(ret, "error calling conf_read_file")
 
+    def conf_parse_argv(self, argv):
+        self.require_state("configuring")
+        c_argv = (c_char_p * len(argv))(*argv)
+        ret = self.libcephfs.ceph_conf_parse_argv(
+                self.cluster, len(argv), c_argv)
+        if ret != 0:
+            raise make_ex(ret, "error calling conf_parse_argv")
+
     def shutdown(self):
         """
         Unmount and destroy the ceph mount handle.
