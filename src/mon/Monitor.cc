@@ -279,11 +279,15 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
     args += cmd_vartype_stringify(p->second);
   }
   args = "[" + args + "]";
+ 
+  bool read_only = false;
+  if (command == "mon_status" || command == "quorum_status") {
+    read_only = true;
+  }
 
-  audit_clog->info() << "from='admin socket' "
-                    << "entity='admin socket' "
-                    << "cmd=" << command << " "
-                    << "args=" << args << ": dispatch";
+  (read_only ? audit_clog->debug() : audit_clog->info())
+    << "from='admin socket' entity='admin socket' "
+    << "cmd='" << command << "' args=" << args << ": dispatch";
 
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
@@ -318,17 +322,19 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
   } else {
     assert(0 == "bad AdminSocket command binding");
   }
-  audit_clog->info() << "from='admin socket' "
-                    << "entity='admin socket' "
-                    << "cmd=" << command << " "
-                    << "args=" << args << ": finished";
+  (read_only ? audit_clog->debug() : audit_clog->info())
+    << "from='admin socket' "
+    << "entity='admin socket' "
+    << "cmd=" << command << " "
+    << "args=" << args << ": finished";
   return;
 
 abort:
-  audit_clog->info() << "from='admin socket' "
-                    << "entity='admin socket' "
-                    << "cmd=" << command << " "
-                    << "args=" << args << ": aborted";
+  (read_only ? audit_clog->debug() : audit_clog->info())
+    << "from='admin socket' "
+    << "entity='admin socket' "
+    << "cmd=" << command << " "
+    << "args=" << args << ": aborted";
 }
 
 void Monitor::handle_signal(int signum)
@@ -2315,9 +2321,9 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
                                const map<string,string>& param_str_map,
                                const MonCommand *this_cmd) {
 
-  bool cmd_r = (this_cmd->req_perms.find('r') != string::npos);
-  bool cmd_w = (this_cmd->req_perms.find('w') != string::npos);
-  bool cmd_x = (this_cmd->req_perms.find('x') != string::npos);
+  bool cmd_r = this_cmd->requires_perm('r');
+  bool cmd_w = this_cmd->requires_perm('w');
+  bool cmd_x = this_cmd->requires_perm('x');
 
   bool capable = s->caps.is_capable(g_ceph_context, s->inst.name,
                                     module, prefix, param_str_map,
@@ -2469,20 +2475,26 @@ void Monitor::handle_command(MMonCommand *m)
     forward_request_leader(m);
     return;
   }
+
+  bool cmd_is_rw =
+    (mon_cmd->requires_perm('w') || mon_cmd->requires_perm('x'));
+
   // validate user's permissions for requested command
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
   if (!_allowed_command(session, module, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-    audit_clog->info() << "from='" << session->inst << "' "
-                      << "entity='" << session->auth_handler->get_entity_name()
-                      << "' cmd=" << m->cmd << ":  access denied";
+    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+      << "from='" << session->inst << "' "
+      << "entity='" << session->auth_handler->get_entity_name()
+      << "' cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
 
-  audit_clog->info() << "from='" << session->inst << "' "
+  (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
+    << "from='" << session->inst << "' "
     << "entity='"
     << (session->auth_handler ?
         stringify(session->auth_handler->get_entity_name())

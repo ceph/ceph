@@ -1012,6 +1012,10 @@ struct MonCommand {
     ::decode_array_nohead(*cmds, *size, bl);
     DECODE_FINISH(bl);
   }
+
+  bool requires_perm(char p) const {
+    return (req_perms.find(p) != string::npos); 
+  }
 };
 WRITE_CLASS_ENCODER(MonCommand)
 
