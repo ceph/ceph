@@ -3207,7 +3207,7 @@ void pg_missing_t::split_into(
   for (map<hobject_t, item>::iterator i = missing.begin();
        i != missing.end();
        ) {
-    if ((i->first.hash & mask) == child_pgid.m_seed) {
+    if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
       omissing->add(i->first, i->second.need, i->second.have);
       rm(i++);
     } else {
@@ -4427,7 +4427,7 @@ void ScrubMap::dump(Formatter *f) const
   for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
     f->dump_string("name", p->first.oid.name);
-    f->dump_unsigned("hash", p->first.hash);
+    f->dump_unsigned("hash", p->first.get_hash());
     f->dump_string("key", p->first.get_key());
     f->dump_int("snapid", p->first.snap);
     p->second.dump(f);
