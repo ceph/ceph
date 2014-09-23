@@ -110,7 +110,13 @@ struct CompatSet {
     }
   };
 
-  FeatureSet compat, ro_compat, incompat;
+  // These features have no impact on the read / write status
+  FeatureSet compat;
+  // If any of these features are missing, read is possible ( as long
+  // as no incompat feature is missing ) but it is not possible to write
+  FeatureSet ro_compat;
+  // If any of these features are missing, read or write is not possible
+  FeatureSet incompat;
 
   CompatSet(FeatureSet& _compat, FeatureSet& _ro_compat, FeatureSet& _incompat) :
     compat(_compat), ro_compat(_ro_compat), incompat(_incompat) {}
