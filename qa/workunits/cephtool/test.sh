@@ -5,6 +5,24 @@ set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
 SUDO=${SUDO:-sudo}
 
+function check_no_osd_down()
+{
+    ! ceph osd dump | grep ' down '
+}
+
+function wait_no_osd_down()
+{
+  for i in $(seq 1 300) ; do
+    if ! check_no_osd_down ; then
+      echo "waiting for osd(s) to come back up"
+      sleep 1
+    else
+      break
+    fi
+  done
+  check_no_osd_down
+}
+
 function get_pg()
 {
 	local pool obj map_output pg
@@ -249,12 +267,12 @@ function test_tiering()
   ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of[ \t]\+$poolB_id"
 
   ceph osd tier remove basepoolA cache5 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of" || exit 1
   ceph osd tier remove basepoolB cache6 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of" || exit 1
 
-  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers"
-  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers"
+  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers" || exit 1
+  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers" || exit 1
 
   ceph osd pool delete cache6 cache6 --yes-i-really-really-mean-it
   ceph osd pool delete cache5 cache5 --yes-i-really-really-mean-it
@@ -583,17 +601,8 @@ function test_mon_osd()
 
   ceph osd thrash 10
   ceph osd down `seq 0 31`  # force everything down so that we can trust up
-  # make sure everything gets back up+in.
-  for ((i=0; i < 100; i++)); do
-    if ceph osd dump | grep ' down '; then
-      echo "waiting for osd(s) to come back up"
-      sleep 10
-    else
-      break
-    fi
-  done
-  ! ceph osd dump | grep ' down '
-  
+  wait_no_osd_down
+
   # if you have more osds than this you are on your own
   for f in `seq 0 31`; do
     ceph osd in $f || true
@@ -1078,6 +1087,8 @@ function usage()
 
 tests_to_run=()
 
+sanity_check=true
+
 while [[ $# -gt 0 ]]; do
   opt=$1
 
@@ -1087,6 +1098,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--asok-does-not-need-root" )
       SUDO=""
+      ;;
+    "--no-sanity-check" )
+      sanity_check=false
       ;;
     "-t" )
       shift
@@ -1114,11 +1128,20 @@ if [[ ${#tests_to_run[@]} -eq 0 ]]; then
   tests_to_run=("${TESTS[@]}")
 fi
 
+if $sanity_check ; then
+    wait_no_osd_down
+fi
 for i in ${tests_to_run[@]}; do
+  if $sanity_check ; then
+      check_no_osd_down
+  fi
   set -x
-  test_${i} ;
+  test_${i}
   set +x
 done
+if $sanity_check ; then
+    check_no_osd_down
+fi
 
 set -x
 
