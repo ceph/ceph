@@ -117,7 +117,6 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
 
 int ErasureCodeCommand::run() {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  instance.disable_dlclose = true;
   ErasureCodeInterfaceRef erasure_code;
   int code = instance.factory(parameters["plugin"],
 			      parameters,
