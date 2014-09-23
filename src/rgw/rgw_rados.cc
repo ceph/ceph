@@ -1676,6 +1676,15 @@ int RGWRados::open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx& da
   return 0;
 }
 
+void RGWRados::build_bucket_index_marker(const string& shard_name, const string& shard_marker,
+      string *marker) {
+  if (marker) {
+    *marker = shard_name;
+    marker->append(BucketIndexShardsManager::KEY_VALUE_SEPARATOR);
+    marker->append(shard_marker);
+  }
+}
+
 int RGWRados::open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx& index_ctx)
 {
   int r = open_bucket_pool_ctx(bucket.name, bucket.index_pool, index_ctx);
@@ -5479,10 +5488,10 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *m
   for(; iter != headers.end(); ++iter) {
     accumulate_raw_stats(iter->second, stats);
     snprintf(buf, sizeof(buf), "%lu", iter->second.ver);
-    ver_mgr.add_item(iter->first, string(buf));
+    ver_mgr.add(iter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", iter->second.master_ver);
-    master_ver_mgr.add_item(iter->first, string(buf));
-    marker_mgr.add_item(iter->first, iter->second.max_marker);
+    master_ver_mgr.add(iter->first, string(buf));
+    marker_mgr.add(iter->first, iter->second.max_marker);
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
@@ -6096,22 +6105,80 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
 int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max,
                                   std::list<rgw_bi_log_entry>& result, bool *truncated)
 {
+  ldout(cct, 20) << __func__ << bucket << " marker " << marker << " max " << max << dendl;
   result.clear();
 
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  map<string, cls_rgw_bi_log_list_ret> bi_log_lists;
+  int r = open_bucket_index(bucket, index_ctx, bi_log_lists);
   if (r < 0)
     return r;
 
-  std::list<rgw_bi_log_entry> entries;
-  int ret = cls_rgw_bi_log_list(index_ctx, oid, marker, max - result.size(), entries, truncated);
-  if (ret < 0)
-    return ret;
+  BucketIndexShardsManager marker_mgr;
+  bool has_shards = (bi_log_lists.size() > 1);
+  // If there are multiple shards for the bucket index object, the marker
+  // should have the pattern '{shard_oid_1}#{shard_marker_1},{shard_oid_2}#
+  // {shard_marker_2}...', if there is no sharding, the bi_log_list should
+  // only contain one record, and the key is the bucket index object id.
+  r = marker_mgr.from_string(marker, has_shards, bi_log_lists.begin()->first);
+  if (r < 0)
+    return r;
+ 
+  r = CLSRGWIssueBILogList(index_ctx, marker_mgr, max, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
+  if (r < 0)
+    return r;
 
-  std::list<rgw_bi_log_entry>::iterator iter;
-  for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    result.push_back(*iter);
+  vector<list<rgw_bi_log_entry>::iterator> vcurrents;
+  vector<list<rgw_bi_log_entry>::iterator> vends;
+  vector<string> vnames;
+  if (truncated) {
+    *truncated = false;
+  }
+  map<string, cls_rgw_bi_log_list_ret>::iterator miter = bi_log_lists.begin();
+  for (; miter != bi_log_lists.end(); ++miter) {
+    vnames.push_back(miter->first);
+    vcurrents.push_back(miter->second.entries.begin());
+    vends.push_back(miter->second.entries.end());
+    if (truncated) {
+      *truncated = (*truncated || miter->second.truncated);
+    }
+  }
+
+  bool has_more = true;
+  while (result.size() < max && has_more) {
+    has_more = false;
+    for (size_t i = 0;
+        result.size() < max && i < vcurrents.size() && vcurrents[i] != vends[i];
+        ++vcurrents[i], ++i) {
+      if (vcurrents[i] != vends[i]) {
+        rgw_bi_log_entry& entry = *(vcurrents[i]);
+        if (has_shards) {
+          // Put the shard name as part of the ID, so that caller can easy find out
+          // the next marker
+          string tmp_id;
+          build_bucket_index_marker(vnames[i], entry.id, &tmp_id);
+          entry.id.swap(tmp_id);
+        }
+        marker_mgr.add(vnames[i], entry.id);
+        result.push_back(entry);
+        has_more = true;
+      }
+    }
+  }
+
+  for (size_t i = 0; i < vcurrents.size(); ++i) {
+    if (truncated) {
+      *truncated = (*truncated || (vcurrents[i] != vends[i]));
+    }
+  }
+
+  // Refresh marker, if there are multiple shards, the output will look like
+  // '{shard_oid_1}#{shard_marker_1},{shard_oid_2}#{shard_marker_2}...',
+  // if there is no sharding, the simply marker (without oid) is returned
+  if (has_shards) {
+    marker_mgr.to_string(&marker);
+  } else {
+    marker = result.rbegin()->id;
   }
 
   return 0;
