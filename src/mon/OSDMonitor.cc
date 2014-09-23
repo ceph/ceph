@@ -5,6 +5,7 @@
  *
  * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -1259,7 +1260,16 @@ bool OSDMonitor::preprocess_boot(MOSDBoot *m)
   if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
        CEPH_FEATURE_OSD_ERASURE_CODES) &&
       !(m->get_connection()->get_features() & CEPH_FEATURE_OSD_ERASURE_CODES)) {
-    dout(0) << __func__ << " osdmap requires Erasure Codes but osd at "
+    dout(0) << __func__ << " osdmap requires erasure code but osd at "
+            << m->get_orig_source_inst()
+            << " doesn't announce support -- ignore" << dendl;
+    goto ignore;
+  }
+
+  if ((osdmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL) &
+       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) &&
+      !(m->get_connection()->get_features() & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2)) {
+    dout(0) << __func__ << " osdmap requires erasure code plugins v2 but osd at "
             << m->get_orig_source_inst()
             << " doesn't announce support -- ignore" << dendl;
     goto ignore;
@@ -4500,6 +4510,13 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     err = parse_erasure_code_profile(profile, &profile_map, ss);
     if (err)
       goto reply;
+    if (profile_map.find("plugin") == profile_map.end()) {
+      ss << "erasure-code-profile " << profile_map
+	 << " must contain a plugin entry" << std::endl;
+      err = -EINVAL;
+      goto reply;
+    }
+    string plugin = profile_map["plugin"];
 
     if (osdmap.has_erasure_code_profile(name)) {
       if (osdmap.get_erasure_code_profile(name) == profile_map) {
@@ -4517,6 +4534,13 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       dout(20) << "erasure code profile " << name << " try again" << dendl;
       goto wait;
     } else {
+      if (plugin == "isa" || plugin == "lrc") {
+	err = check_cluster_features(CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2, ss);
+	if (err == -EAGAIN)
+	  goto wait;
+	if (err)
+	  goto reply;
+      }
       dout(20) << "erasure code profile " << name << " set" << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
     }

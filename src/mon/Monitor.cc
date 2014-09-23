@@ -353,6 +353,7 @@ CompatSet Monitor::get_supported_features()
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
 }
@@ -1949,7 +1950,9 @@ void Monitor::apply_quorum_to_compatset_features()
   if (quorum_features & CEPH_FEATURE_OSDMAP_ENC) {
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
   }
-
+  if (quorum_features & CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2) {
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
+  }
   if (new_features.compare(features) != 0) {
     CompatSet diff = features.unsupported(new_features);
     dout(1) << __func__ << " enabling new quorum features: " << diff << dendl;
@@ -1971,6 +1974,9 @@ void Monitor::apply_compatset_features_to_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC)) {
     required_features |= CEPH_FEATURE_OSDMAP_ENC;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2)) {
+    required_features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
