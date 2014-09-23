@@ -3669,12 +3669,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  name,
 	  &(osd_op.outdata));
 	if (r >= 0) {
-	  op.xattr.value_len = r;
+	  op.xattr.value_len = osd_op.outdata.length();
 	  result = 0;
-	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(r, 10);
-	  ctx->delta_stats.num_rd++;
+	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
 	} else
 	  result = r;
+
+	ctx->delta_stats.num_rd++;
       }
       break;
 
