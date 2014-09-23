@@ -7867,11 +7867,17 @@ boost::statechart::result ReplicatedPG::NotTrimming::react(const SnapTrim&)
   // Primary trimming
   if (pg->snap_trimq.empty()) {
     return discard_event();
+  } else if (g_conf->osd_snap_trim_max > 0 &&
+	     context< SnapTrimmer >().num_trimmed >= g_conf->osd_snap_trim_max) {
+    dout(10) << "NotTrimming throttling" << dendl;
+    pg->queue_snap_trim();
+    return discard_event();
   } else {
     context<SnapTrimmer>().snap_to_trim = pg->snap_trimq.range_start();
     dout(10) << "NotTrimming: trimming "
 	     << pg->snap_trimq.range_start()
 	     << dendl;
+    context< SnapTrimmer >().num_trimmed++;
     post_event(SnapTrim());
     return transit<TrimmingObjects>();
   }

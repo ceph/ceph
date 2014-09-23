@@ -417,6 +417,7 @@ OPTION(osd_op_thread_timeout, OPT_INT, 15)
 OPTION(osd_recovery_thread_timeout, OPT_INT, 30)
 OPTION(osd_snap_trim_thread_timeout, OPT_INT, 60*60*1)
 OPTION(osd_snap_trim_sleep, OPT_FLOAT, 0)
+OPTION(osd_snap_trim_max, OPT_INT, 16)            // max number of snaps to trim per SnapTrimmer context
 OPTION(osd_scrub_thread_timeout, OPT_INT, 60)
 OPTION(osd_scrub_finalize_thread_timeout, OPT_INT, 60*10)
 OPTION(osd_remove_thread_timeout, OPT_INT, 60*60)
