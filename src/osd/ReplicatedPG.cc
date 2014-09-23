@@ -12154,7 +12154,7 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   context<SnapTrimmer>().need_share_pg_info = true;
 
   // Back to the start
-  post_event(SnapTrim());
+  pg->queue_snap_trim();
   return transit< NotTrimming >();
 }
 
