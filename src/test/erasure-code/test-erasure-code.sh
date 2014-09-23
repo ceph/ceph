@@ -204,14 +204,6 @@ function TEST_alignment_constraints() {
     rm $dir/ORIGINAL
 }
 
-function get_osds() {
-    local poolname=$1
-    local objectname=$2
-
-    ./ceph osd map $poolname $objectname | \
-       perl -p -e 's/.*up \(\[(.*?)\].*/$1/; s/,/ /g'
-}
-
 function chunk_size() {
     local stripe_width=$(./ceph-conf --show-config-value osd_pool_erasure_code_stripe_width)
     eval local $(./ceph osd erasure-code-profile get default | grep k=)

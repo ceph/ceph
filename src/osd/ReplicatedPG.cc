@@ -7182,6 +7182,7 @@ void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
     if (get_osdmap()->is_blacklisted(ea)) {
       dout(10) << "watch: Found blacklisted watcher for " << ea << dendl;
       assert(j->second->get_pg() == this);
+      j->second->unregister_cb();
       handle_watch_timeout(j->second);
     }
   }

@@ -262,7 +262,6 @@ function test_tiering()
   ceph osd pool delete basepoolA basepoolA --yes-i-really-really-mean-it
 }
 
-
 function test_auth()
 {
   ceph auth add client.xx mon allow osd "allow *"
@@ -287,6 +286,66 @@ function test_auth()
   ceph auth del client.xx
 }
 
+function test_auth_profiles()
+{
+  ceph auth add client.xx-profile-ro mon 'allow profile read-only'
+  ceph auth add client.xx-profile-rw mon 'allow profile read-write'
+  ceph auth add client.xx-profile-rd mon 'allow profile role-definer'
+
+  ceph auth export > client.xx.keyring
+
+  # read-only is allowed all read-only commands (auth excluded)
+  ceph -n client.xx-profile-ro -k client.xx.keyring status
+  ceph -n client.xx-profile-ro -k client.xx.keyring osd dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring pg dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring mon dump
+  ceph -n client.xx-profile-ro -k client.xx.keyring mds dump
+  # read-only gets access denied for rw commands or auth commands
+  ceph -n client.xx-profile-ro -k client.xx.keyring log foo >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-ro -k client.xx.keyring osd set noout >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-ro -k client.xx.keyring auth list >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  # read-write is allowed for all read-write commands (except auth)
+  ceph -n client.xx-profile-rw -k client.xx.keyring status
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring pg dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring mon dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring mds dump
+  # read-only gets access denied for rw commands or auth commands
+  ceph -n client.xx-profile-rw -k client.xx.keyring log foo
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd set noout
+  ceph -n client.xx-profile-rw -k client.xx.keyring osd unset noout
+  ceph -n client.xx-profile-rw -k client.xx.keyring auth list >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  # role-definer is solely allowed 'auth' commands
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth list
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth export
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth add client.xx-profile-foo
+  ceph -n client.xx-profile-rd -k client.xx.keyring status >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring osd dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring pg dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring mon dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring mds dump >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  # read-only gets access denied for rw commands or auth commands
+  ceph -n client.xx-profile-rd -k client.xx.keyring log foo >& $TMPFILE || true
+  check_response "EACCES: access denied"
+  ceph -n client.xx-profile-rd -k client.xx.keyring osd set noout >& $TMPFILE || true
+  check_response "EACCES: access denied"
+
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-ro
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rw
+  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rd
+  rm -f client.xx.keyring
+}
 
 function test_mon_misc()
 {
@@ -601,7 +660,9 @@ function test_mon_osd()
 
   ceph osd dump | grep 'osd.0 up'
   ceph osd find 1
+  ceph --format plain osd find 1 # falls back to json-pretty
   ceph osd metadata 1 | grep 'distro'
+  ceph --format plain osd metadata 1 | grep 'distro' # falls back to json-pretty
   ceph osd out 0
   ceph osd dump | grep 'osd.0.*out'
   ceph osd in 0
@@ -1044,6 +1105,7 @@ TESTS=(
   mon_injectargs_SI
   tiering
   auth
+  auth_profiles
   mon_misc
   mon_mds
   mon_mon
