@@ -86,10 +86,10 @@ void DataHealthService::get_health(
 
     health_status_t health_status = HEALTH_OK;
     string health_detail;
-    if (stats.latest_avail_percent <= g_conf->mon_data_avail_crit) {
+    if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
       health_status = HEALTH_ERR;
       health_detail = "low disk space, shutdown imminent";
-    } else if (stats.latest_avail_percent <= g_conf->mon_data_avail_warn) {
+    } else if (stats.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
       health_status = HEALTH_WARN;
       health_detail = "low disk space";
     }
@@ -110,7 +110,7 @@ void DataHealthService::get_health(
       stringstream ss;
       ss << "mon." << mon_name << " " << health_detail;
       summary.push_back(make_pair(health_status, ss.str()));
-      ss << " -- " <<  stats.latest_avail_percent << "% avail";
+      ss << " -- " <<  stats.fs_stats.avail_percent << "% avail";
       if (detail)
 	detail->push_back(make_pair(health_status, ss.str()));
     }
@@ -151,23 +151,18 @@ int DataHealthService::update_store_stats(DataStats &ours)
 
 int DataHealthService::update_stats()
 {
-  struct statfs stbuf;
-  int err = ::statfs(g_conf->mon_data.c_str(), &stbuf);
-  if (err < 0) {
-    derr << __func__ << " statfs error: " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-
   entity_inst_t our_inst = mon->messenger->get_myinst();
   DataStats& ours = stats[our_inst];
 
-  ours.kb_total = stbuf.f_blocks * stbuf.f_bsize / 1024;
-  ours.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
-  ours.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
-  ours.latest_avail_percent = (((float)ours.kb_avail/ours.kb_total)*100);
-  dout(0) << __func__ << " avail " << ours.latest_avail_percent << "%"
-          << " total " << ours.kb_total << " used " << ours.kb_used << " avail " << ours.kb_avail
-          << dendl;
+  int err = get_fs_stats(ours.fs_stats, g_conf->mon_data.c_str());
+  if (err < 0) {
+    derr << __func__ << " get_fs_stats error: " << cpp_strerror(err) << dendl;
+    return err;
+  }
+  dout(0) << __func__ << " avail " << ours.fs_stats.avail_percent << "%"
+          << " total " << prettybyte_t(ours.fs_stats.byte_total)
+          << ", used " << prettybyte_t(ours.fs_stats.byte_used)
+          << ", avail " << prettybyte_t(ours.fs_stats.byte_avail) << dendl;
   ours.last_update = ceph_clock_now(g_ceph_context);
 
   return update_store_stats(ours);
@@ -213,7 +208,7 @@ void DataHealthService::service_tick()
 
   DataStats &ours = stats[mon->messenger->get_myinst()];
 
-  if (ours.latest_avail_percent <= g_conf->mon_data_avail_crit) {
+  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_crit) {
     derr << "reached critical levels of available space on local monitor storage"
          << " -- shutdown!" << dendl;
     force_shutdown();
@@ -224,12 +219,12 @@ void DataHealthService::service_tick()
   // consumed in-between reports to assess if it's worth to log this info,
   // otherwise we may very well contribute to the consumption of the
   // already low available disk space.
-  if (ours.latest_avail_percent <= g_conf->mon_data_avail_warn) {
-    if (ours.latest_avail_percent != last_warned_percent)
+  if (ours.fs_stats.avail_percent <= g_conf->mon_data_avail_warn) {
+    if (ours.fs_stats.avail_percent != last_warned_percent)
       mon->clog->warn()
 	<< "reached concerning levels of available space on local monitor storage"
-	<< " (" << ours.latest_avail_percent << "% free)\n";
-    last_warned_percent = ours.latest_avail_percent;
+	<< " (" << ours.fs_stats.avail_percent << "% free)\n";
+    last_warned_percent = ours.fs_stats.avail_percent;
   } else {
     last_warned_percent = 0;
   }
