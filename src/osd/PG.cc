@@ -1244,6 +1244,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.history = info.history;
 	pi.stats.stats.clear();
 
+	// initialize peer with our purged_snaps.
+	pi.purged_snaps = info.purged_snaps;
+
 	m = new MOSDPGLog(get_osdmap()->get_epoch(), pi);
 
 	// send some recent log, so that op dup detection works well.
