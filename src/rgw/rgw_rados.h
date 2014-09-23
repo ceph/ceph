@@ -1261,6 +1261,8 @@ class RGWRados
   template<typename T>
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       map<string, T>& bucket_objs);
+  void build_bucket_index_marker(const string& shard_name, const string& shard_marker,
+      string *marker);
 
   struct GetObjState {
     librados::IoCtx io_ctx;

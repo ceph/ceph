@@ -2,10 +2,25 @@
 #define CEPH_CLS_RGW_CLIENT_H
 
 #include "include/types.h"
+#include "include/str_list.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_types.h"
 #include "cls_rgw_ops.h"
 #include "common/RefCountedObj.h"
+
+// Forward declaration
+class BucketIndexAioManager;
+
+/*
+ * Bucket index AIO request argument, this is used to pass a argument
+ * to callback.
+ */
+struct BucketIndexAioArg : public RefCountedObject {
+  BucketIndexAioArg(int _id, BucketIndexAioManager* _manager) :
+    id(_id), manager(_manager) {}
+  int id;
+  BucketIndexAioManager* manager;
+};
 
 /*
  * This class manages AIO completions. This class is not completely thread-safe,
@@ -19,12 +34,21 @@ private:
   int next;
   Mutex lock;
   Cond cond;
-public:
   /*
-   * Create a new instance.
+   * Callback implementation for AIO request.
    */
-  BucketIndexAioManager() : pendings(), completions(), next(0),
-      lock("BucketIndexAioManager::lock"), cond() {}
+  static void bucket_index_op_completion_cb(void* cb, void* arg) {
+    BucketIndexAioArg* cb_arg = (BucketIndexAioArg*) arg;
+    cb_arg->manager->do_completion(cb_arg->id);
+    cb_arg->put();
+  }
+
+  /*
+   * Get next request ID. This method is not thread-safe.
+   *
+   * Return next request ID.
+   */
+  int get_next() { return next++; }
 
   /*
    * Add a new pending AIO completion instance.
@@ -36,18 +60,17 @@ public:
     Mutex::Locker l(lock);
     pendings[id] = completion;
   }
+public:
+  /*
+   * Create a new instance.
+   */
+  BucketIndexAioManager() : pendings(), completions(), next(0),
+      lock("BucketIndexAioManager::lock"), cond() {}
 
   /*
    * Do completion for the given AIO request.
    */
   void do_completion(int id);
-
-  /*
-   * Get next request ID. This method is not thread-safe.
-   *
-   * Return next request ID.
-   */
-  int get_next() { return next++; }
 
   /*
    * Wait for AIO completions.
@@ -59,17 +82,32 @@ public:
    * Return false if there is no pending AIO, true otherwise.
    */
   bool wait_for_completions(int valid_ret_code, int *num_completions, int *ret_code);
-};
 
-/*
- * Bucket index AIO request argument, this is used to pass a argument
- * to callback.
- */
-struct BucketIndexAioArg : public RefCountedObject {
-  BucketIndexAioArg(int _id, BucketIndexAioManager* _manager) :
-    id(_id), manager(_manager) {}
-  int id;
-  BucketIndexAioManager* manager;
+  /**
+   * Do aio read operation.
+   */
+  bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectReadOperation *op) {
+    BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
+    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+    int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
+    if (r >= 0) {
+      add_pending(arg->id, c);
+    }
+    return r;
+  }
+
+  /**
+   * Do aio write operation.
+   */
+  bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectWriteOperation *op) {
+    BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
+    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
+    int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
+    if (r >= 0) {
+      add_pending(arg->id, c);
+    }
+    return r;
+  }
 };
 
 class RGWGetDirHeader_CB : public RefCountedObject {
@@ -82,12 +120,23 @@ class BucketIndexShardsManager {
 private:
   // Per shard setting manager, for example, marker.
   map<string, string> value_by_shards;
-  const static char KEY_VALUE_SEPARATOR = '#';
-  const static char SHARDS_SEPARATOR = ',';
 public:
-  void add_item(const string& shard, const string& value) {
+  const static string KEY_VALUE_SEPARATOR;
+  const static string SHARDS_SEPARATOR;
+
+  void add(const string& shard, const string& value) {
     value_by_shards[shard] = value;
   }
+
+  const string& get(const string& shard, const string& default_value) {
+    map<string, string>::iterator iter = value_by_shards.find(shard);
+    return (iter == value_by_shards.end() ? default_value : iter->second);
+  }
+
+  bool empty() {
+    return value_by_shards.empty();
+  }
+
   void to_string(string *out) const {
     if (out) {
       map<string, string>::const_iterator iter = value_by_shards.begin();
@@ -98,14 +147,33 @@ public:
         for (; iter != value_by_shards.end(); ++iter) {
           if (out->length()) {
             // Not the first item, append a separator first
-            out->append(1, SHARDS_SEPARATOR);
+            out->append(SHARDS_SEPARATOR);
           }
           out->append(iter->first);
-          out->append(1, KEY_VALUE_SEPARATOR);
+          out->append(KEY_VALUE_SEPARATOR);
           out->append(iter->second);
         }
       }
     }
+  }
+
+  int from_string(const string& composed_marker, bool has_shards, const string& oid) {
+    value_by_shards.clear();
+    if (!has_shards) {
+      add(oid, composed_marker);
+    } else {
+      list<string> shards;
+      get_str_list(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
+      list<string>::const_iterator iter = shards.begin();
+      for (; iter != shards.end(); ++iter) {
+        size_t pos = iter->find(KEY_VALUE_SEPARATOR);
+        if (pos == string::npos)
+          return -EINVAL;
+        string name = iter->substr(0, pos);
+        value_by_shards[name] = iter->substr(pos + 1, iter->length() - pos - 1);
+      }
+    }
+    return 0;
   }
 };
 
@@ -223,6 +291,18 @@ public:
   start_obj(_start_obj), filter_prefix(_filter_prefix), num_entries(_num_entries) {}
 };
 
+class CLSRGWIssueBILogList : public CLSRGWConcurrentIO<map<string, cls_rgw_bi_log_list_ret> > {
+  BucketIndexShardsManager& marker_mgr;
+  uint32_t max;
+protected:
+  int issue_op();
+public:
+  CLSRGWIssueBILogList(librados::IoCtx& io_ctx, BucketIndexShardsManager& _marker_mgr, uint32_t _max,
+      map<string, struct cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
+    CLSRGWConcurrentIO<map<string, cls_rgw_bi_log_list_ret> >(io_ctx, bi_log_lists, max_aio),
+    marker_mgr(_marker_mgr), max(_max) {}
+};
+
 /**
  * Check the bucket index.
  *
@@ -266,10 +346,6 @@ void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist
 
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
 
-/* bucket index log */
-
-int cls_rgw_bi_log_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
-                    list<rgw_bi_log_entry>& entries, bool *truncated);
 int cls_rgw_bi_log_trim(librados::IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker);
 
 /* usage logging */
