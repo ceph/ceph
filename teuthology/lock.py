@@ -24,6 +24,7 @@ logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
 
 is_vpm = lambda name: 'vpm' in name
 
+
 def get_distro_from_downburst():
     """
     Return a table of valid distros.
@@ -59,7 +60,7 @@ def get_distro_from_downburst():
         return default_table
 
 
-def vps_version_or_type_valid(machine_type, os_type, os_version):
+def validate_os_type_and_version(ctx, machine_type):
     """
     Check os-type and os-version parameters when locking a vps.
     Os-type will always be set (defaults to ubuntu).
@@ -72,14 +73,17 @@ def vps_version_or_type_valid(machine_type, os_type, os_version):
     if not machine_type == 'vps':
         return True
     valid_os_and_version = get_distro_from_downburst()
+    os_type = misc.get_distro(ctx)
     if os_type not in valid_os_and_version:
-        log.error('os-type is invalid')
+        log.error("os-type '%s' is invalid", os_type)
         return False
+    os_version = misc.get_distro_version(ctx)
     if not validate_distro_version(os_version,
                                    valid_os_and_version[os_type]):
         log.error('os-version is invalid')
         return False
     return True
+
 
 def validate_distro_version(version, supported_versions):
     """
@@ -96,6 +100,7 @@ def validate_distro_version(version, supported_versions):
                 return True
             if version == part[1][0:len(part[1])-1]:
                 return True
+
 
 def main(ctx):
     if ctx.verbose:
@@ -231,8 +236,7 @@ def main(ctx):
         return 0
 
     elif ctx.lock:
-        if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
-                                         ctx.os_version):
+        if not validate_os_type_and_version(ctx, ctx.machine_type):
             log.error('Invalid os-type or version detected -- lock failed')
             return 1
         for machine in machines:
@@ -259,7 +263,7 @@ def main(ctx):
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
         result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user,
-                           ctx.desc)
+                           ctx.desc, ctx.os_type, ctx.os_version)
         if not result:
             ret = 1
         else:
@@ -300,22 +304,29 @@ def main(ctx):
     return ret
 
 
-def lock_many(ctx, num, machinetype, user=None, description=None):
-    if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
-                                     ctx.os_version):
+def lock_many(ctx, num, machine_type, user=None, description=None,
+              os_type=None, os_version=None):
+    if not validate_os_type_and_version(ctx, machine_type):
         log.error('Invalid os-type or version detected -- lock failed')
         return
-    machinetypes = misc.get_multi_machine_types(machinetype)
+    machinetypes = misc.get_multi_machine_types(machine_type)
     if user is None:
         user = misc.get_user()
-    for machinetype in machinetypes:
+    for machine_type in machinetypes:
         uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
         data = dict(
             locked_by=user,
             count=num,
-            machine_type=machinetype,
+            machine_type=machine_type,
             description=description,
         )
+        # Only query for os_type/os_version if non-vps, since in that case we
+        # just create them.
+        if machine_type != 'vps':
+            if os_type:
+                data['os_type'] = os_type
+            if os_version:
+                data['os_version'] = os_version
         response = requests.post(
             uri,
             data=json.dumps(data),
@@ -326,7 +337,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
                         machine['ssh_pub_key'] for machine in response.json()}
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
-            if machinetype == 'vps':
+            if machine_type == 'vps':
                 ok_machs = {}
                 for machine in machines:
                     if provision.create_if_vm(ctx, machine):
@@ -339,11 +350,11 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
             return machines
         elif response.status_code == 503:
             log.error('Insufficient nodes available to lock %d %s nodes.',
-                      num, machinetype)
+                      num, machine_type)
             log.error(response.text)
         else:
             log.error('Could not lock %d %s nodes, reason: unknown.',
-                      num, machinetype)
+                      num, machine_type)
     return []
 
 
