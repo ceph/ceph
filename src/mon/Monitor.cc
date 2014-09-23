@@ -2481,6 +2481,13 @@ void Monitor::handle_command(MMonCommand *m)
     forward_request_leader(m);
     return;
   }
+  
+  /* what we perceive as being the service the command falls under */
+  string service(mon_cmd->module);
+
+  dout(25) << __func__ << " prefix='" << prefix
+           << "' module='" << module
+           << "' service='" << service << "'" << dendl;
 
   bool cmd_is_rw =
     (mon_cmd->requires_perm('w') || mon_cmd->requires_perm('x'));
@@ -2488,7 +2495,7 @@ void Monitor::handle_command(MMonCommand *m)
   // validate user's permissions for requested command
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
-  if (!_allowed_command(session, module, prefix, cmdmap,
+  if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
