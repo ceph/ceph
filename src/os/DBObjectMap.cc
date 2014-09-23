@@ -154,7 +154,7 @@ string DBObjectMap::ghobject_key(const ghobject_t &oid)
     t += snprintf(t, end - t, ".none");
   else
     t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.hobj.pool);
-  snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
 
   if (oid.generation != ghobject_t::NO_GEN ||
       oid.shard_id != shard_id_t::NO_SHARD) {
@@ -184,7 +184,7 @@ string DBObjectMap::ghobject_key_v0(coll_t c, const ghobject_t &oid)
     t += snprintf(t, end - t, ".snapdir");
   else
     t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  snprintf(t, end - t, ".%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
   out += string(snap_with_hash);
   return out;
 }
