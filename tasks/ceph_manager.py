@@ -129,7 +129,10 @@ class Thrasher:
             if len(self.dead_osds) > 1 and random.random() < self.chance_move_pg:
                 exp_osd = random.choice(self.dead_osds[:-1])
                 (exp_remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=exp_osd)).remotes.iterkeys()
-            prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
+            if 'keyvaluestore_backend' in self.ceph_manager.ctx.ceph.conf['osd']:
+                prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} --type keyvaluestore-dev ".format(fpath=FSPATH, jpath=JPATH)
+            else:
+                prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
             cmd = (prefix + "--op list-pgs").format(id=exp_osd)
             proc = exp_remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
             if proc.exitstatus:
