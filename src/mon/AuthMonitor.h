@@ -124,6 +124,16 @@ private:
     pending_auth.push_back(inc);
   }
 
+  bool valid_caps(const vector<string>& caps, ostream *out) {
+    for (vector<string>::const_iterator p = caps.begin();
+         p != caps.end(); p += 2) {
+      MonCap tmp;
+      if (!tmp.parse(*(p+1), out))
+        return false;
+    }
+    return true;
+  }
+
   void on_active();
   bool should_propose(double& delay);
   void create_initial();
