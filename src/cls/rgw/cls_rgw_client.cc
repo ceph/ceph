@@ -9,6 +9,9 @@
 
 using namespace librados;
 
+const string BucketIndexShardsManager::KEY_VALUE_SEPARATOR = "#";
+const string BucketIndexShardsManager::SHARDS_SEPARATOR = ",";
+
 /**
  * This class represents the bucket index object operation callback context.
  */
@@ -34,15 +37,6 @@ public:
     }
   }
 };
-
-/*
- * Callback implementation for AIO request.
- */
-static void bucket_index_op_completion_cb(void* cb, void* arg) {
-  BucketIndexAioArg* cb_arg = (BucketIndexAioArg*) arg;
-  cb_arg->manager->do_completion(cb_arg->id);
-  cb_arg->put();
-}
 
 void BucketIndexAioManager::do_completion(int id) {
   Mutex::Locker l(lock);
@@ -93,12 +87,7 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   librados::ObjectWriteOperation op;
   op.create(true);
   op.exec("rgw", "bucket_init_index", in);
-  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
-  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
-  int r = io_ctx.aio_operate(oid, c, &op);
-  if (r >= 0)
-    manager->add_pending(arg->id, c);
-  return r;
+  return manager->aio_operate(io_ctx, oid, &op);
 }
 
 static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
@@ -109,13 +98,7 @@ static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
   ::encode(call, in);
   ObjectWriteOperation op;
   op.exec("rgw", "bucket_set_tag_timeout", in);
-  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
-  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
-  int r = io_ctx.aio_operate(oid, c, &op);
-  if (r >= 0) {
-    manager->add_pending(arg->id, c);
-  }
-  return r;
+  return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketIndexInit::issue_op()
@@ -182,18 +165,31 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 
   librados::ObjectReadOperation op;
   op.exec("rgw", "bucket_list", in, new ClsBucketIndexOpCtx<struct rgw_cls_list_ret>(pdata, NULL));
-
-  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
-  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
-  int r = io_ctx.aio_operate(oid, c, &op, NULL);
-  if (r >= 0)
-    manager->add_pending(arg->id, c);
-  return r;
+  return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketList::issue_op()
 {
   return issue_bucket_list_op(io_ctx, iter->first, start_obj, filter_prefix, num_entries, &manager, &iter->second);
+}
+
+static bool issue_bi_log_list_op(librados::IoCtx& io_ctx,
+    const string& oid, BucketIndexShardsManager& marker_mgr, uint32_t max, BucketIndexAioManager *manager,
+    struct cls_rgw_bi_log_list_ret *pdata) {
+  bufferlist in;
+  cls_rgw_bi_log_list_op call;
+  call.marker = marker_mgr.get(oid, "");
+  call.max = max;
+  ::encode(call, in);
+
+  librados::ObjectReadOperation op;
+  op.exec("rgw", "bi_log_list", in, new ClsBucketIndexOpCtx<struct cls_rgw_bi_log_list_ret>(pdata, NULL));
+  return manager->aio_operate(io_ctx, oid, &op);
+}
+
+int CLSRGWIssueBILogList::issue_op()
+{
+  return issue_bi_log_list_op(io_ctx, iter->first, marker_mgr, max, &manager, &iter->second);
 }
 
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager,
@@ -202,13 +198,7 @@ static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, Bucket
   librados::ObjectReadOperation op;
   op.exec("rgw", "bucket_check_index", in, new ClsBucketIndexOpCtx<struct rgw_cls_check_index_ret>(
         pdata, NULL));
-  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
-  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
-  int r = io_ctx.aio_operate(oid, c, &op, NULL);
-  if (r >= 0) {
-    manager->add_pending(arg->id, c);
-  }
-  return r;
+  return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketCheck::issue_op()
@@ -221,13 +211,7 @@ static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
   bufferlist in;
   librados::ObjectWriteOperation op;
   op.exec("rgw", "bucket_rebuild_index", in);
-  BucketIndexAioArg *arg = new BucketIndexAioArg(manager->get_next(), manager);
-  AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
-  int r = io_ctx.aio_operate(oid, c, &op);
-  if (r >= 0) {
-    manager->add_pending(arg->id, c);
-  }
-  return r;
+  return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketRebuild::issue_op()
@@ -287,34 +271,6 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
     return r;
 
   return 0;
-}
-
-int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max,
-                    list<rgw_bi_log_entry>& entries, bool *truncated)
-{
-  bufferlist in, out;
-  cls_rgw_bi_log_list_op call;
-  call.marker = marker;
-  call.max = max;
-  ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "bi_log_list", in, out);
-  if (r < 0)
-    return r;
-
-  cls_rgw_bi_log_list_ret ret;
-  try {
-    bufferlist::iterator iter = out.begin();
-    ::decode(ret, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  entries = ret.entries;
-
-  if (truncated)
-    *truncated = ret.truncated;
-
- return r;
 }
 
 int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker)
