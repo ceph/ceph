@@ -4,7 +4,6 @@ import logging
 from teuthology import misc
 
 from tasks.workunit import task as workunit
-from tasks.ceph import write_conf
 from cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
@@ -56,12 +55,7 @@ def task(ctx, config):
     old_journal_version = JOURNAL_FORMAT_LEGACY
     new_journal_version = JOURNAL_FORMAT_RESILIENT
 
-    # Set config so that journal will be created in older format
-    if 'mds' not in ctx.ceph.conf:
-        ctx.ceph.conf['mds'] = {}
-    ctx.ceph.conf['mds']['mds journal format'] = old_journal_version
-    write_conf(ctx)  # XXX because we don't have the ceph task's config object, if they
-                     # used a different config path this won't work.
+    fs.set_ceph_conf('mds', 'mds journal format', old_journal_version)
 
     # Create a filesystem using the older journal format.
     for mount in ctx.mounts.values():
@@ -86,8 +80,7 @@ def task(ctx, config):
         })
 
     # Modify the ceph.conf to ask the MDS to use the new journal format.
-    ctx.ceph.conf['mds']['mds journal format'] = new_journal_version
-    write_conf(ctx)
+    fs.set_ceph_conf('mds', 'mds journal format', new_journal_version)
 
     # Restart the MDS.
     fs.mds_fail_restart()

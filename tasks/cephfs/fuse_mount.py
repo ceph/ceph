@@ -120,6 +120,7 @@ class FuseMount(CephFSMount):
 
     def umount(self):
         try:
+            log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
             self.client_remote.run(
                 args=[
                     'sudo',
@@ -222,10 +223,7 @@ class FuseMount(CephFSMount):
             ],
         )
 
-    # FIXME: bad naming scheme to call this client_id and also have the
-    # 'client_id' attr which is something completely different.  This
-    # is what a MonSession calls global_id.
-    def get_client_id(self):
+    def get_global_id(self):
         """
         Look up the CephFS client ID for this mount
         """
