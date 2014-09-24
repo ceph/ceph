@@ -6046,16 +6046,23 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t m
 int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, string& end_marker)
 {
   librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
+  vector<string> bucket_objs;
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
   if (r < 0)
     return r;
 
-  int ret = cls_rgw_bi_log_trim(index_ctx, oid, start_marker, end_marker);
-  if (ret < 0)
-    return ret;
+  bool has_shards = bucket_objs.size() > 1;
+  BucketIndexShardsManager start_marker_mgr;
+  r = start_marker_mgr.from_string(start_marker, has_shards, bucket_objs.front());
+  if (r < 0)
+    return r;
+  BucketIndexShardsManager end_marker_mgr;
+  r = end_marker_mgr.from_string(end_marker, has_shards, bucket_objs.front()); 
+  if (r < 0)
+    return r;
 
-  return 0;
+  return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
+      cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)

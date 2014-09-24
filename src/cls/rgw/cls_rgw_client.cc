@@ -46,11 +46,19 @@ void BucketIndexAioManager::do_completion(int id) {
   completions.push_back(iter->second);
   pendings.erase(iter);
 
+  // If the caller needs a list of finished objects, store them
+  // for further processing
+  map<int, string>::iterator miter = pending_objs.find(id);
+  if (miter != pending_objs.end()) {
+    completion_objs.push_back(miter->second);
+    pending_objs.erase(miter);
+  }
+
   cond.Signal();
 }
 
 bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
-    int *num_completions, int *ret_code) {
+    int *num_completions, int *ret_code, vector<string> *objs) {
   lock.Lock();
   if (pendings.empty() && completions.empty()) {
     lock.Unlock();
@@ -61,8 +69,12 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
 
   // Clear the completed AIOs
   list<librados::AioCompletion*>::iterator iter = completions.begin();
-  for (; iter != completions.end(); ++iter) {
+  list<string>::iterator liter = completion_objs.begin();
+  for (; iter != completions.end() && liter != completion_objs.end(); ++iter, ++liter) {
     int r = (*iter)->get_return_value();
+    if (objs && r == 0) {
+      objs->push_back(*liter);
+    }
     if (ret_code && (r < 0 && r != valid_ret_code))
       (*ret_code) = r;
     (*iter)->release();
@@ -192,6 +204,24 @@ int CLSRGWIssueBILogList::issue_op()
   return issue_bi_log_list_op(io_ctx, iter->first, marker_mgr, max, &manager, &iter->second);
 }
 
+static bool issue_bi_log_trim(librados::IoCtx& io_ctx,
+    string& oid, BucketIndexShardsManager& start_marker_mgr,
+    BucketIndexShardsManager& end_marker_mgr, BucketIndexAioManager *manager) {
+  bufferlist in;
+  cls_rgw_bi_log_trim_op call;
+  call.start_marker = start_marker_mgr.get(oid, "");
+  call.end_marker = end_marker_mgr.get(oid, "");
+  ::encode(call, in);
+  ObjectWriteOperation op;
+  op.exec("rgw", "bi_log_trim", in);
+  return manager->aio_operate(io_ctx, oid, &op);
+}
+
+int CLSRGWIssueBILogTrim::issue_op()
+{
+  return issue_bi_log_trim(io_ctx, *iter, start_marker_mgr, end_marker_mgr, &manager);
+}
+
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager,
     struct rgw_cls_check_index_ret *pdata) {
   bufferlist in;
@@ -269,28 +299,6 @@ int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB 
   c->release();
   if (r < 0)
     return r;
-
-  return 0;
-}
-
-int cls_rgw_bi_log_trim(IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker)
-{
-  do {
-    int r;
-    bufferlist in, out;
-    cls_rgw_bi_log_trim_op call;
-    call.start_marker = start_marker;
-    call.end_marker = end_marker;
-    ::encode(call, in);
-    r = io_ctx.exec(oid, "rgw", "bi_log_trim", in, out);
-
-    if (r == -ENODATA)
-      break;
-
-    if (r < 0)
-      return r;
-
-  } while (1);
 
   return 0;
 }
