@@ -708,7 +708,9 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
 #define MAX_LIST_OBJS 100
     int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker, NULL,
                                 objs, common_prefixes,
-                                true, no_ns, true, &is_truncated, NULL);
+                                true, no_ns, true,
+                                false,
+                                &is_truncated, NULL);
     if (r < 0)
       return r;
 
@@ -1160,7 +1162,7 @@ void RGWListBucket::execute()
   rgw_obj_key *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
 
   ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, &is_truncated, NULL);
+                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, false, &is_truncated, NULL);
 }
 
 int RGWGetBucketLogging::verify_permission()
@@ -3056,7 +3058,7 @@ void RGWListBucketMultiparts::execute()
   }
   marker_meta = marker.get_meta();
   ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, NULL, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, true, &is_truncated, &mp_filter);
+                               !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, true, false, &is_truncated, &mp_filter);
   if (!objs.empty()) {
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;

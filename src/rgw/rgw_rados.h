@@ -1474,6 +1474,7 @@ public:
   virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
                    const rgw_obj_key& marker, rgw_obj_key *next_marker, std::vector<RGWObjEnt>& result,
                    map<string, bool>& common_prefixes, bool get_content_type, string& ns, bool enforce_ns,
+                   bool list_versions,
                    bool *is_truncated, RGWAccessListFilter *filter);
 
   virtual int create_pool(rgw_bucket& bucket);

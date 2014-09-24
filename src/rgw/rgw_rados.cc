@@ -2190,6 +2190,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 			   const rgw_obj_key& marker, rgw_obj_key *next_marker, vector<RGWObjEnt>& result,
                            map<string, bool>& common_prefixes,
 			   bool get_content_type, string& ns, bool enforce_ns,
+                           bool list_versions,
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
   int count = 0;
@@ -2252,10 +2253,15 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
     std::map<rgw_obj_key, RGWObjEnt>::iterator eiter;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
       rgw_obj_key obj = eiter->first;
+      RGWObjEnt& entry = eiter->second;
       rgw_obj_key key = obj;
       string instance;
 
       bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns);
+
+      if (!list_versions && !entry.key.instance.empty()) {
+        continue;
+      }
 
       if (enforce_ns && !check_ns) {
         if (!ns.empty()) {
