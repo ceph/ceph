@@ -26,6 +26,7 @@ libmds_la_SOURCES = \
 	mds/snap.cc \
 	mds/SessionMap.cc \
 	mds/MDSContext.cc \
+	mds/MDSAuthCaps.cc \
 	mds/MDLog.cc \
 	common/TrackedOp.cc
 libmds_la_LIBADD = $(LIBOSDC)
@@ -53,6 +54,7 @@ noinst_HEADERS += \
 	mds/MDS.h \
 	mds/Beacon.h \
 	mds/MDSContext.h \
+	mds/MDSAuthCaps.h \
 	mds/MDSMap.h \
 	mds/MDSTable.h \
 	mds/MDSTableServer.h \
