@@ -291,6 +291,7 @@ static int is_out(const struct crush_map *map,
  * @type: the type of item to choose
  * @out: pointer to output vector
  * @outpos: our position in that vector
+ * @out_size: size of the out vector
  * @tries: number of attempts to make
  * @recurse_tries: number of attempts to have recursive chooseleaf make
  * @local_retries: localized retries
@@ -305,6 +306,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       const __u32 *weight, int weight_max,
 			       int x, int numrep, int type,
 			       int *out, int outpos,
+			       int out_size,
 			       unsigned int tries,
 			       unsigned int recurse_tries,
 			       unsigned int local_retries,
@@ -323,6 +325,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 	int item = 0;
 	int itemtype;
 	int collide, reject;
+	int count = out_size;
 
 	dprintk("CHOOSE%s bucket %d x %d outpos %d numrep %d tries %d recurse_tries %d local_retries %d local_fallback_retries %d parent_r %d\n",
 		recurse_to_leaf ? "_LEAF" : "",
@@ -330,7 +333,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 		tries, recurse_tries, local_retries, local_fallback_retries,
 		parent_r);
 
-	for (rep = outpos; rep < numrep; rep++) {
+	for (rep = outpos; rep < numrep && count > 0 ; rep++) {
 		/* keep trying until we get a non-out, non-colliding item */
 		ftotal = 0;
 		skip_rep = 0;
@@ -404,7 +407,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 map->buckets[-1-item],
 							 weight, weight_max,
 							 x, outpos+1, 0,
-							 out2, outpos,
+							 out2, outpos, count,
 							 recurse_tries, 0,
 							 local_retries,
 							 local_fallback_retries,
@@ -464,6 +467,7 @@ reject:
 		dprintk("CHOOSE got %d\n", item);
 		out[outpos] = item;
 		outpos++;
+		count--;
 
 		if (map->choose_tries && ftotal <= map->choose_total_tries)
 			map->choose_tries[ftotal]++;
@@ -793,6 +797,7 @@ int crush_do_rule(const struct crush_map *map,
 						x, numrep,
 						curstep->arg2,
 						o+osize, j,
+						result_max-osize,
 						choose_tries,
 						recurse_tries,
 						choose_local_retries,
