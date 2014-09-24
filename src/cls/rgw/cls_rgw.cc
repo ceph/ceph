@@ -251,7 +251,8 @@ static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
   if (key.instance.empty()) {
     *index_key = key.name;
   } else {
-    *index_key = BI_BUCKET_OBJ_INSTANCE_INDEX;
+    *index_key = BI_PREFIX_CHAR;
+    index_key->append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
     index_key->append(key.name);
     string delim("\0i", 2);
     index_key->append(delim);
@@ -261,7 +262,8 @@ static void encode_obj_index_key(const cls_rgw_obj_key& key, string *index_key)
 
 static void encode_olh_data_key(const cls_rgw_obj_key& key, string *index_key)
 {
-  *index_key = BI_BUCKET_OLH_DATA_INDEX;
+  *index_key = BI_PREFIX_CHAR;
+  index_key->append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
   index_key->append(key.name);
 }
 
@@ -984,36 +986,38 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  bool need_remove_olh_listing = (ret != -ENOENT && olh_data_entry.exists && op.delete_marker);
+  if (ret != -ENOENT) {
+    /* previous instance is no longer the latest, need to update */
+    string prev_key;
+    encode_obj_index_key(olh_data_entry.key, &prev_key);
 
-  string olh_list_key;
-  encode_obj_index_key(olh_key, &olh_list_key);
-  if (need_remove_olh_listing) {
-    ret = cls_cxx_map_remove_key(hctx, olh_list_key);
+    struct rgw_bucket_dir_entry prev_instance_entry;
+    ret = read_index_entry(hctx, prev_key, &prev_instance_entry);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: read_index_entry() reading previous instance %s ret=%d", prev_key.c_str(), ret);
+      return ret;
+    }
+
+    prev_instance_entry.flags &= ~RGW_BUCKET_DIRENT_FLAG_CURRENT;
+    ret = write_entry(hctx, prev_instance_entry, prev_key);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: write_entry() prev_key=%s ret=%d", prev_key.c_str(), ret);
+      return ret;
+    }
   }
 
-  if (ret == -ENOENT) {
-    /* remove original list entry if exists */
+  /* need to remove the plain object listing key anyway */
+  string plain_key;
+  encode_obj_index_key(olh_key, &plain_key);
+  ret = read_index_entry(hctx, instance_key, &instance_entry);
+  if (ret >= 0) {
 #warning handle overwrite of non-olh object
-
-    /* generate a new tag for olh entry */
-#warning fixme
+    ret = cls_cxx_map_remove_key(hctx, plain_key);
   }
 
   olh_data_entry.epoch++;
   olh_data_entry.exists = !op.delete_marker;
   olh_data_entry.key = op.key;
-
-  /* write the olh list entry */
-  if (!op.delete_marker) {
-    struct rgw_bucket_dir_entry olh_list_entry = instance_entry;
-    olh_list_entry.flags |= RGW_BUCKET_DIRENT_FLAG_OLH;
-    ret = write_entry(hctx, olh_list_entry, olh_list_key);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: write_entry() key=%s ret=%d", olh_list_key.c_str(), ret);
-      return ret;
-    }
-  }
 
   if (instance_entry.ver.epoch > 0) {
     string list_key;
@@ -1026,6 +1030,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
   }
+
+  instance_entry.flags |= (RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT);
 
   string instance_list_key;
 
