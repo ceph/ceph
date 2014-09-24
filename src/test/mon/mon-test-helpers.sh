@@ -42,6 +42,7 @@ function run_mon() {
     ./ceph-mon \
         --id $id \
         --paxos-propose-interval=0.1 \
+        --osd-crush-chooseleaf-type=0 \
         --osd-pool-default-erasure-code-directory=.libs \
         --debug-mon 20 \
         --debug-ms 20 \

@@ -99,6 +99,7 @@ class Notify {
   /// removes the timeout callback, called on completion or cancellation
   void unregister_cb();
 public:
+
   string gen_dbg_prefix() {
     stringstream ss;
     ss << "Notify(" << make_pair(cookie, notify_id) << " "
@@ -173,15 +174,15 @@ class Watch {
   /// Registers the timeout callback with watch_timer
   void register_cb();
 
-  /// Unregisters the timeout callback
-  void unregister_cb();
-
   /// send a Notify message when connected for notif
   void send_notify(NotifyRef notif);
 
   /// Cleans up state on discard or remove (including Connection state, obc)
   void discard_state();
 public:
+  /// Unregisters the timeout callback
+  void unregister_cb();
+
   /// NOTE: must be called with pg lock held
   ~Watch();
 

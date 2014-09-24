@@ -42,6 +42,7 @@ private:
     map<string,string> syslog_level;
     map<string,string> syslog_facility;
     map<string,string> log_file;
+    map<string,string> expanded_log_file;
     map<string,string> log_file_level;
 
     void clear() {
@@ -49,14 +50,19 @@ private:
       syslog_level.clear();
       syslog_facility.clear();
       log_file.clear();
+      expanded_log_file.clear();
       log_file_level.clear();
     }
 
+    /** expands $channel meta variable on all maps *EXCEPT* log_file
+     *
+     * We won't expand the log_file map meta variables here because we
+     * intend to do that selectively during get_log_file()
+     */
     void expand_channel_meta() {
       expand_channel_meta(log_to_syslog);
       expand_channel_meta(syslog_level);
       expand_channel_meta(syslog_facility);
-      expand_channel_meta(log_file);
       expand_channel_meta(log_file_level);
     }
     void expand_channel_meta(map<string,string> &m);
@@ -79,14 +85,21 @@ private:
     }
 
     string get_log_file(const string &channel) {
-      string fname;
-      if (log_file.count(channel) == 0) {
-        log_file[channel] = expand_channel_meta(
-                              get_str_map_key(log_file, channel,
-                                              &CLOG_CHANNEL_DEFAULT),
-                              channel);
+      generic_dout(25) << __func__ << " for channel '"
+                       << channel << "'" << dendl;
+
+      if (expanded_log_file.count(channel) == 0) {
+        string fname = expand_channel_meta(
+            get_str_map_key(log_file, channel,
+              &CLOG_CHANNEL_DEFAULT),
+            channel);
+        expanded_log_file[channel] = fname;
+
+        generic_dout(20) << __func__ << " for channel '"
+                         << channel << "' expanded to '"
+                         << fname << "'" << dendl;
       }
-      return log_file[channel];
+      return expanded_log_file[channel];
     }
 
     string get_log_file_level(const string &channel) {

@@ -150,6 +150,9 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       }
 
       string log_file = channels.get_log_file(channel);
+      dout(20) << __func__ << " logging for channel '" << channel
+               << "' to file '" << log_file << "'" << dendl;
+
       if (!log_file.empty()) {
         string log_file_level = channels.get_log_file_level(channel);
         if (log_file_level.empty()) {
@@ -175,7 +178,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     summary.version++;
   }
 
-  dout(10) << __func__ << " logging for "
+  dout(15) << __func__ << " logging for "
            << channel_blog.size() << " channels" << dendl;
   for(map<string,bufferlist>::iterator p = channel_blog.begin();
       p != channel_blog.end(); ++p) {
@@ -634,15 +637,16 @@ void LogMonitor::update_log_channels()
     return;
   }
 
+  channels.expand_channel_meta();
 }
 
 void LogMonitor::log_channel_info::expand_channel_meta(map<string,string> &m)
 {
-  generic_dout(10) << __func__ << " expand map: " << m << dendl;
+  generic_dout(20) << __func__ << " expand map: " << m << dendl;
   for (map<string,string>::iterator p = m.begin(); p != m.end(); ++p) {
     m[p->first] = expand_channel_meta(p->second, p->first);
   }
-  generic_dout(10) << __func__ << " expanded map: " << m << dendl;
+  generic_dout(20) << __func__ << " expanded map: " << m << dendl;
 }
 
 string LogMonitor::log_channel_info::expand_channel_meta(

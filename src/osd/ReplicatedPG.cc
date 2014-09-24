@@ -7182,6 +7182,7 @@ void ReplicatedPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
     if (get_osdmap()->is_blacklisted(ea)) {
       dout(10) << "watch: Found blacklisted watcher for " << ea << dendl;
       assert(j->second->get_pg() == this);
+      j->second->unregister_cb();
       handle_watch_timeout(j->second);
     }
   }
@@ -9546,6 +9547,13 @@ void ReplicatedPG::on_removal(ObjectStore::Transaction *t)
   // adjust info to backfill
   info.last_backfill = hobject_t();
   dirty_info = true;
+
+
+  // clear log
+  PGLogEntryHandler rollbacker;
+  pg_log.clear_can_rollback_to(&rollbacker);
+  rollbacker.apply(this, t);
+
   write_if_dirty(*t);
 
   on_shutdown();
