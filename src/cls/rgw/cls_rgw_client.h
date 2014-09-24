@@ -31,6 +31,8 @@ class BucketIndexAioManager {
 private:
   map<int, librados::AioCompletion*> pendings;
   list<librados::AioCompletion*> completions;
+  map<int, string> pending_objs;
+  list<string> completion_objs;
   int next;
   Mutex lock;
   Cond cond;
@@ -49,23 +51,29 @@ private:
    * Return next request ID.
    */
   int get_next() { return next++; }
-
+    
   /*
    * Add a new pending AIO completion instance.
    *
    * @param id         - the request ID.
    * @param completion - the AIO completion instance.
+   * @param oid        - the object id associated with the object, if it is NULL, we don't
+   *                     track the object id per callback.
    */
-  void add_pending(int id, librados::AioCompletion* completion) {
+  void add_pending(int id, librados::AioCompletion* completion, string *oid = NULL) {
     Mutex::Locker l(lock);
     pendings[id] = completion;
+    if (oid) {
+      pending_objs[id] = *oid;
+    }
   }
 public:
   /*
    * Create a new instance.
    */
-  BucketIndexAioManager() : pendings(), completions(), next(0),
-      lock("BucketIndexAioManager::lock"), cond() {}
+  BucketIndexAioManager() : pendings(), completions(), pending_objs(), completion_objs(),
+  next(0), lock("BucketIndexAioManager::lock"), cond() {}
+
 
   /*
    * Do completion for the given AIO request.
@@ -78,10 +86,12 @@ public:
    * valid_ret_code  - valid AIO return code.
    * num_completions - number of completions.
    * ret_code        - return code of failed AIO.
+   * objs            - a list of objects that has been finished the AIO.
    *
    * Return false if there is no pending AIO, true otherwise.
    */
-  bool wait_for_completions(int valid_ret_code, int *num_completions, int *ret_code);
+  bool wait_for_completions(int valid_ret_code, int *num_completions, int *ret_code,
+      vector<string> *objs);
 
   /**
    * Do aio read operation.
@@ -193,6 +203,12 @@ protected:
 
   virtual void cleanup() {}
   virtual int valid_ret_code() { return 0; }
+  // Return true if multiple rounds of OPs might be needed, this happens when
+  // OP needs to be re-send until a certain code is returned.
+  virtual bool need_multiple_rounds() { return false; }
+  // Add a new object to the end of the container.
+  virtual void add_object(const string& oid) {}
+  virtual void reset_container(vector<string>& objs) {}
 
 public:
   CLSRGWConcurrentIO(librados::IoCtx& ioc, T& _objs_container,
@@ -209,7 +225,8 @@ public:
     }
 
     int num_completions, r = 0;
-    while (manager.wait_for_completions(0, &num_completions, &r)) {
+    vector<string> objs;
+    while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, &objs)) {
       if (r >= 0 && ret >= 0) {
         for(int i = 0; i < num_completions && iter != objs_container.end(); ++i, ++iter) {
           int issue_ret = issue_op();
@@ -220,6 +237,11 @@ public:
         }
       } else if (ret >= 0) {
         ret = r;
+      }
+      if (need_multiple_rounds() && iter == objs_container.end() && !objs.empty()) {
+        // For those objects which need another round, use them to reset
+        // the container
+        reset_container(objs);
       }
     }
 
@@ -303,6 +325,27 @@ public:
     marker_mgr(_marker_mgr), max(_max) {}
 };
 
+class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO<vector<string> > {
+  BucketIndexShardsManager& start_marker_mgr;
+  BucketIndexShardsManager& end_marker_mgr;
+protected:
+  int issue_op();
+  // Trim until -ENODATA is returned.
+  int valid_ret_code() { return -ENODATA; }
+  bool need_multiple_rounds() { return true; }
+  void add_object(const string& oid) { objs_container.push_back(oid); }
+  void reset_container(vector<string>& objs) {
+    objs_container.swap(objs);
+    iter = objs_container.begin();
+    objs.clear();
+  }
+public:
+  CLSRGWIssueBILogTrim(librados::IoCtx& io_ctx, BucketIndexShardsManager& _start_marker_mgr,
+      BucketIndexShardsManager& _end_marker_mgr, vector<string>& _bucket_objs, uint32_t max_aio) :
+    CLSRGWConcurrentIO<vector<string> >(io_ctx, _bucket_objs, max_aio),
+    start_marker_mgr(_start_marker_mgr), end_marker_mgr(_end_marker_mgr) {}
+};
+
 /**
  * Check the bucket index.
  *
@@ -345,8 +388,6 @@ int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDir
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
 
 void cls_rgw_suggest_changes(librados::ObjectWriteOperation& o, bufferlist& updates);
-
-int cls_rgw_bi_log_trim(librados::IoCtx& io_ctx, string& oid, string& start_marker, string& end_marker);
 
 /* usage logging */
 int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
