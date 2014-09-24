@@ -450,6 +450,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     uint64_t ver;
     decode_list_index_key(kiter->first, &key, &ver);
 
+    if (!op.list_versions && (!entry.is_current() || !entry.exists)) {
+      continue;
+    }
     m[key] = entry;
 
     CLS_LOG(20, "got entry %s[%s] m.size()=%d\n", key.name.c_str(), key.instance.c_str(), (int)m.size());
