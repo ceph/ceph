@@ -288,12 +288,13 @@ class TestIoctx(object):
             with lock:
                 retval[0] = buf
                 lock.notify()
-        self.ioctx.write("foo", "bar")
-        self.ioctx.aio_read("foo", 3, 0, cb)
+        payload = "bar\000frob"
+        self.ioctx.write("foo", payload)
+        self.ioctx.aio_read("foo", len(payload), 0, cb)
         with lock:
             while retval[0] is None:
                 lock.wait()
-        eq(retval[0], "bar")
+        eq(retval[0], payload)
         [i.remove() for i in self.ioctx.list_objects()]
 
 class TestObject(object):
