@@ -1302,10 +1302,12 @@ public:
   struct MNotifyRec : boost::statechart::event< MNotifyRec > {
     pg_shard_t from;
     pg_notify_t notify;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify) :
-      from(from), notify(notify) {}
+    uint64_t features;
+    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+      from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
-      *out << "MNotifyRec from " << from << " notify: " << notify;
+      *out << "MNotifyRec from " << from << " notify: " << notify
+        << " features: 0x" << hex << features << dec;
     }
   };
 
@@ -1988,10 +1990,15 @@ public:
   PG(const PG& rhs);
   PG& operator=(const PG& rhs);
   const spg_t pg_id;
+  uint64_t peer_features;
 
  public:
   const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
+
+  void reset_peer_features() { peer_features = (uint64_t)-1; }
+  uint64_t get_min_peer_features() { return peer_features; }
+  void apply_peer_features(uint64_t f) { peer_features &= f; }
 
   void init_primary_up_acting(
     const vector<int> &newup,
