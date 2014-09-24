@@ -103,6 +103,12 @@ public:
     cct = c;
   }
 
+  void dump_weak_refs() {
+    lderr(cct) << "leaked refs:\n";
+    dump_weak_refs(*_dout);
+    *_dout << dendl;
+  }
+
   void dump_weak_refs(ostream& out) {
     for (typename map<K, WeakVPtr>::iterator p = weak_refs.begin();
 	 p != weak_refs.end();
