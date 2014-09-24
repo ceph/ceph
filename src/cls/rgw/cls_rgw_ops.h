@@ -251,18 +251,20 @@ struct rgw_cls_list_op
   cls_rgw_obj_key start_obj;
   uint32_t num_entries;
   string filter_prefix;
+  bool list_versions;
 
-  rgw_cls_list_op() : num_entries(0) {}
+  rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(4, 4, bl);
+    ENCODE_START(5, 4, bl);
     ::encode(num_entries, bl);
     ::encode(filter_prefix, bl);
     ::encode(start_obj, bl);
+    ::encode(list_versions, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
     if (struct_v < 4) {
       ::decode(start_obj.name, bl);
     }
@@ -271,6 +273,8 @@ struct rgw_cls_list_op
       ::decode(filter_prefix, bl);
     if (struct_v >= 4)
       ::decode(start_obj, bl);
+    if (struct_v >= 5)
+      ::decode(list_versions, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

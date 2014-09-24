@@ -303,6 +303,8 @@ struct rgw_bucket_dir_entry {
     DECODE_FINISH(bl);
   }
 
+  bool is_current() { return (flags & RGW_BUCKET_DIRENT_FLAG_CURRENT) != 0; }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
