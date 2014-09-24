@@ -2245,7 +2245,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
     std::map<rgw_obj_key, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, ent_map,
+    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, list_versions, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -3582,7 +3582,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
 
   do {
 #define NUM_ENTRIES 1000
-    r = cls_bucket_list(bucket, marker, prefix, NUM_ENTRIES, ent_map,
+    r = cls_bucket_list(bucket, marker, prefix, NUM_ENTRIES, true, ent_map,
                         &is_truncated, &marker);
     if (r < 0)
       return r;
@@ -6366,7 +6366,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix,
-		              uint32_t num, map<rgw_obj_key, RGWObjEnt>& m,
+		              uint32_t num, bool list_versions, map<rgw_obj_key, RGWObjEnt>& m,
 			      bool *is_truncated, rgw_obj_key *last_entry,
 			      bool (*force_check_filter)(const string&  name))
 {
@@ -6380,7 +6380,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
 
   struct rgw_bucket_dir dir;
   cls_rgw_obj_key start_key(start.name, start.instance);
-  r = cls_rgw_list_op(index_ctx, oid, start_key, prefix, num, &dir, is_truncated);
+  r = cls_rgw_list_op(index_ctx, oid, start_key, prefix, num, list_versions, &dir, is_truncated);
   if (r < 0)
     return r;
 
