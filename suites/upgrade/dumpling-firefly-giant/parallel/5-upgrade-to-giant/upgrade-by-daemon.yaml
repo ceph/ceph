@@ -2,7 +2,8 @@ upgrade-sequence:
    sequential:
    - install.upgrade:
        mon.a:
-   - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
+         branch: giant
+   - print: "**** done install.upgrade mon.a to giant ****"
    - ceph.restart:
        daemons: [mon.a]
        wait-for-healthy: true
@@ -19,7 +20,8 @@ upgrade-sequence:
         - ceph osd crush tunables firefly
    - install.upgrade:
        mon.b:
-   - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"
+         branch: giant
+   - print: "**** done install.upgrade mon.b to giant ****"
    - ceph.restart:
        daemons: [mon.b, mon.c]
        wait-for-healthy: true
