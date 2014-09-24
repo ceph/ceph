@@ -846,7 +846,7 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
   int r = comp->get_return_value();
   printf("return value is: %d\n", r);
   assert(r == TEST_IO_SIZE);
-  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
+  assert(memcmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
   printf("finished read\n");
   comp->release();
 }
@@ -860,7 +860,7 @@ void read_test_data(librbd::Image& image, const char *expected, off_t off, size_
   assert(read >= 0);
   printf("read: %u\n", (unsigned int) read);
   printf("read: %s\nexpected: %s\n", bl.c_str(), expected);
-  assert(strncmp(bl.c_str(), expected, expected_len) == 0);
+  assert(memcmp(bl.c_str(), expected, expected_len) == 0);
 }
 
 TEST(LibRBD, TestIOPP) 
