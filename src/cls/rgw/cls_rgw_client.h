@@ -28,7 +28,7 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
 
 int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
                     const cls_rgw_obj_key& start_obj,
-                    const string& filter_prefix, uint32_t num_entries,
+                    const string& filter_prefix, uint32_t num_entries, bool list_versions,
                     rgw_bucket_dir *dir, bool *is_truncated);
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,

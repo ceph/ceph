@@ -737,7 +737,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   while (is_truncated) {
     map<rgw_obj_key, RGWObjEnt> result;
 
-    int r = store->cls_bucket_list(bucket, marker, prefix, 1000, result,
+    int r = store->cls_bucket_list(bucket, marker, prefix, 1000, true, result,
              &is_truncated, &marker,
              bucket_object_check_filter);
 
