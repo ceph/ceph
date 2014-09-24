@@ -935,14 +935,13 @@ static int write_entry(cls_method_context_t hctx, T& entry, const string& key)
  * deletion marker case. We have a few entries that we need to take care of. For object 'foo',
  * instance BAR, we'd update the following (not actual encoding):
  *  - olh data: [BI_BUCKET_OLH_DATA_INDEX]foo
- *  - olh list entry: foo
  *  - object instance data: [BI_BUCKET_OBJ_INSTANCE_INDEX]foo,BAR
  *  - object instance list entry: foo,123,BAR
  *
  *  The instance list entry needs to be ordered by newer to older, so we generate an appropriate
  *  number string that follows the name.
- *  A deletion marker won't have object instance data, but will have a list entry. If a deletion
- *  marker is at the top, we'll remove the olh list entry.
+ *  The top instance for each object is marked appropriately.
+ *  We generate instance entry for deletion markers here, as they are not created prior.
  */
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -956,7 +955,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  if (!op.delete_marker && op.key.instance.empty()) {
+  if (op.key.instance.empty()) {
     CLS_LOG(1, "bad key passed in (instance empty)");
     return -EINVAL;
   }
@@ -967,17 +966,17 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   string instance_key;
   struct rgw_bucket_dir_entry instance_entry;
 
+  encode_obj_index_key(op.key, &instance_key);
   if (!op.delete_marker) {
-    encode_obj_index_key(op.key, &instance_key);
     int ret = read_index_entry(hctx, instance_key, &instance_entry);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: read_index_entry() key=%s ret=%d", instance_key.c_str(), ret);
       return ret;
     }
   } else {
-    /* a deletion marker */
+    /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = op.key;
-    instance_entry.exists = false;
+    instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
   }
 
   struct rgw_bucket_olh_entry olh_data_entry;
@@ -1011,15 +1010,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   /* need to remove the plain object listing key anyway */
   string plain_key;
+  struct rgw_bucket_dir_entry plain_entry;
   encode_obj_index_key(olh_key, &plain_key);
-  ret = read_index_entry(hctx, instance_key, &instance_entry);
+  ret = read_index_entry(hctx, plain_key, &plain_entry);
   if (ret >= 0) {
 #warning handle overwrite of non-olh object
     ret = cls_cxx_map_remove_key(hctx, plain_key);
   }
 
   olh_data_entry.epoch++;
-  olh_data_entry.exists = !op.delete_marker;
+  olh_data_entry.delete_marker = op.delete_marker;
   olh_data_entry.key = op.key;
 
   if (instance_entry.ver.epoch > 0) {
@@ -1034,15 +1034,23 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
+  instance_entry.ver.epoch = olh_data_entry.epoch;
   instance_entry.flags |= (RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT);
 
   string instance_list_key;
 
-  /* write a new list entry for the object instance */
+  /* write the instance entry */
+  ret = write_entry(hctx, instance_entry, instance_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", instance_key.c_str(), ret);
+    return ret;
+  }
+
+   /* write a new list entry for the object instance */
   get_list_index_key(instance_entry, &instance_list_key);
   ret = write_entry(hctx, instance_entry, instance_list_key);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", instance_list_key.c_str(), ret);
+    CLS_LOG(0, "ERROR: write_entry() instance_list_key=%s ret=%d", instance_list_key.c_str(), ret);
     return ret;
   }
 
