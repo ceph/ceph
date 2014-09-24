@@ -314,7 +314,7 @@ public:
   void set_payload(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl);
+    payload.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
@@ -322,16 +322,16 @@ public:
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    middle.claim(bl);
+    middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
   bufferlist& get_middle() { return middle; }
 
-  void set_data(const bufferlist &d) {
+  void set_data(const bufferlist &bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    data = d;
+    data.share(bl);
     if (byte_throttler)
       byte_throttler->take(data.length());
   }

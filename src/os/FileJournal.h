@@ -54,7 +54,7 @@ public:
     TrackedOpRef tracked_op;
     write_item(uint64_t s, bufferlist& b, int al, TrackedOpRef opref) :
       seq(s), alignment(al), tracked_op(opref) {
-      bl.claim(b);
+      bl.claim(b, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
     }
     write_item() : seq(0), alignment(0) {}
   };
