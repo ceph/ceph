@@ -243,7 +243,8 @@ struct cls_rgw_obj_key {
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
 
-#define RGW_BUCKET_DIRENT_FLAG_OLH         0x1
+#define RGW_BUCKET_DIRENT_FLAG_VER         0x1    /* a versioned object instance */
+#define RGW_BUCKET_DIRENT_FLAG_CURRENT     0x2    /* the last object instance of a versioned object */
 
 struct rgw_bucket_dir_entry {
   cls_rgw_obj_key key;
@@ -302,7 +303,6 @@ struct rgw_bucket_dir_entry {
     DECODE_FINISH(bl);
   }
 
-  bool is_olh() { return (flags & RGW_BUCKET_DIRENT_FLAG_OLH) != 0; }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
