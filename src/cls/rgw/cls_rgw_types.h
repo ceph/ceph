@@ -243,8 +243,9 @@ struct cls_rgw_obj_key {
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
 
-#define RGW_BUCKET_DIRENT_FLAG_VER         0x1    /* a versioned object instance */
-#define RGW_BUCKET_DIRENT_FLAG_CURRENT     0x2    /* the last object instance of a versioned object */
+#define RGW_BUCKET_DIRENT_FLAG_VER           0x1    /* a versioned object instance */
+#define RGW_BUCKET_DIRENT_FLAG_CURRENT       0x2    /* the last object instance of a versioned object */
+#define RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER 0x4    /* delete marker */
 
 struct rgw_bucket_dir_entry {
   cls_rgw_obj_key key;
@@ -352,17 +353,17 @@ WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
 struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
-  bool exists;
+  bool delete_marker;
   uint64_t epoch;
   map<uint64_t, struct rgw_bucket_olh_log_entry> pending_log;
   string tag;
 
-  rgw_bucket_olh_entry() : exists(false), epoch(0) {}
+  rgw_bucket_olh_entry() : delete_marker(false), epoch(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(key, bl);
-    ::encode(exists, bl);
+    ::encode(delete_marker, bl);
     ::encode(epoch, bl);
     ::encode(pending_log, bl);
     ::encode(tag, bl);
@@ -371,7 +372,7 @@ struct rgw_bucket_olh_entry {
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(key, bl);
-    ::decode(exists, bl);
+    ::decode(delete_marker, bl);
     ::decode(epoch, bl);
     ::decode(pending_log, bl);
     ::decode(tag, bl);
