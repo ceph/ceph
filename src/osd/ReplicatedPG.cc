@@ -5182,8 +5182,9 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
 void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 {
   ConnectionRef conn(ctx->op->get_req()->get_connection());
-  boost::intrusive_ptr<OSD::Session> session(
-    (OSD::Session *)conn->get_priv());
+  boost::intrusive_ptr<OSD::Session> session((OSD::Session *)conn->get_priv());
+  if (!session.get())
+    return;
   session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
   entity_name_t entity = ctx->reqid.name;
 
