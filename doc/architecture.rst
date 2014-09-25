@@ -32,7 +32,7 @@ A Ceph Storage Cluster consists of two types of daemons:
             +---------------+ +---------------+
 
 A Ceph Monitor maintains a master copy of the cluster map. A cluster of Ceph
-monitors ensures high availability should a monitor daemon fail. Storage cluster
+monitors who ensures high availability should monitor OSD daemon. Storage cluster
 clients retrieve a copy of the cluster map from the Ceph Monitor.
 
 A Ceph OSD Daemon checks its own state and the state of other OSDs and reports 
