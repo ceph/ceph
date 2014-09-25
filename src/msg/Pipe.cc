@@ -220,9 +220,19 @@ void *Pipe::DelayedDelivery::entry()
       active_flush = true;
     }
     if (pipe->in_q->can_fast_dispatch(m)) {
-      delay_lock.Unlock();
-      pipe->in_q->fast_dispatch(m);
-      delay_lock.Lock();
+      if (!stop_fast_dispatching_flag) {
+        delay_dispatching = true;
+        delay_lock.Unlock();
+        pipe->in_q->fast_dispatch(m);
+        delay_lock.Lock();
+        delay_dispatching = false;
+        if (stop_fast_dispatching_flag) {
+          // we need to let the stopping thread proceed
+          delay_cond.Signal();
+          delay_lock.Unlock();
+          delay_lock.Lock();
+        }
+      }
     } else {
       pipe->in_q->enqueue(m, m->get_priority(), pipe->conn_id);
     }
@@ -231,6 +241,15 @@ void *Pipe::DelayedDelivery::entry()
   lgeneric_subdout(pipe->msgr->cct, ms, 20) << pipe->_pipe_prefix(_dout) << "DelayedDelivery::entry stop" << dendl;
   return NULL;
 }
+
+void Pipe::DelayedDelivery::stop_fast_dispatching() {
+  Mutex::Locker l(delay_lock);
+  stop_fast_dispatching_flag = true;
+  // we can't block if we're the delay thread; see Pipe::stop_and_wait()
+  while (delay_dispatching && !am_self())
+    delay_cond.Wait(delay_lock);
+}
+
 
 int Pipe::accept()
 {
@@ -1407,7 +1426,11 @@ void Pipe::stop_and_wait()
   // dispatch method calls mark_down() on itself, it can block here
   // waiting for the reader_dispatching flag to clear... which will
   // clearly never happen.  Avoid the situation by skipping the wait
-  // if we are marking our *own* connect down.
+  // if we are marking our *own* connect down. Do the same for the
+  // delayed dispatch thread.
+  if (delay_thread) {
+    delay_thread->stop_fast_dispatching();
+  }
   while (reader_running &&
 	 reader_dispatching &&
 	 !reader_thread.am_self())
