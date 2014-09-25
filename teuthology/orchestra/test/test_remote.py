@@ -141,7 +141,7 @@ class TestRemote(object):
 
 
 class TestDistribution(object):
-    str_centos = dedent("""
+    str_centos_7_os_release = dedent("""
         NAME="CentOS Linux"
         VERSION="7 (Core)"
         ID="centos"
@@ -154,7 +154,14 @@ class TestDistribution(object):
         BUG_REPORT_URL="https://bugs.centos.org/"
     """)
 
-    str_debian = dedent("""
+    str_debian_7_lsb_release = dedent("""
+        Distributor ID: Debian
+        Description:    Debian GNU/Linux 7.1 (wheezy)
+        Release:        7.1
+        Codename:       wheezy
+    """)
+
+    str_debian_7_os_release = dedent("""
         PRETTY_NAME="Debian GNU/Linux 7 (wheezy)"
         NAME="Debian GNU/Linux"
         VERSION_ID="7"
@@ -166,7 +173,14 @@ class TestDistribution(object):
         BUG_REPORT_URL="http://bugs.debian.org/"
     """)
 
-    str_ubuntu = dedent("""
+    str_ubuntu_12_04_lsb_release = dedent("""
+        Distributor ID: Ubuntu
+        Description:    Ubuntu 12.04.4 LTS
+        Release:        12.04
+        Codename:       precise
+    """)
+
+    str_ubuntu_12_04_os_release = dedent("""
         NAME="Ubuntu"
         VERSION="12.04.4 LTS, Precise Pangolin"
         ID=ubuntu
@@ -175,7 +189,23 @@ class TestDistribution(object):
         VERSION_ID="12.04"
     """)
 
-    str_rhel = dedent("""
+    str_rhel_6_4_lsb_release = dedent("""
+        LSB Version:    :base-4.0-amd64:base-4.0-noarch:core-4.0-amd64:core-4.0-noarch:graphics-4.0-amd64:graphics-4.0-noarch:printing-4.0-amd64:printing-4.0-noarch
+        Distributor ID: RedHatEnterpriseServer
+        Description:    Red Hat Enterprise Linux Server release 6.4 (Santiago)
+        Release:        6.4
+        Codename:       Santiago
+    """)
+
+    str_rhel_7_lsb_release = dedent("""
+        LSB Version:    :core-4.1-amd64:core-4.1-noarch:cxx-4.1-amd64:cxx-4.1-noarch:desktop-4.1-amd64:desktop-4.1-noarch:languages-4.1-amd64:languages-4.1-noarch:printing-4.1-amd64:printing-4.1-noarch
+        Distributor ID: RedHatEnterpriseServer
+        Description:    Red Hat Enterprise Linux Server release 7.0 (Maipo)
+        Release:        7.0
+        Codename:       Maipo
+    """)
+
+    str_rhel_7_os_release = dedent("""
         NAME="Red Hat Enterprise Linux Server"
         VERSION="7.0 (Maipo)"
         ID="rhel"
@@ -193,42 +223,50 @@ class TestDistribution(object):
         REDHAT_SUPPORT_PRODUCT_VERSION=7.0
     """)
 
-    def test_centos(self):
-        os = remote.OS(self.str_centos)
-        assert os.name == 'CentOS Linux'
-        assert os.version == '7 (Core)'
-        assert os.id == 'centos'
-        assert os.id_like == 'rhel fedora'
-        assert os.pretty_name == 'CentOS Linux 7 (Core)'
-        assert os.version_id == '7'
+    def test_centos_7_os_release(self):
+        os = remote.OS.from_os_release(self.str_centos_7_os_release)
+        assert os.name == 'centos'
+        assert os.version == '7'
         assert os.package_type == 'rpm'
 
-    def test_debian(self):
-        os = remote.OS(self.str_debian)
-        assert os.name == 'Debian GNU/Linux'
-        assert os.version == '7 (wheezy)'
-        assert os.id == 'debian'
-        assert os.id_like == ''
-        assert os.pretty_name == 'Debian GNU/Linux 7 (wheezy)'
-        assert os.version_id == '7'
+    def test_debian_7_lsb_release(self):
+        os = remote.OS.from_lsb_release(self.str_debian_7_lsb_release)
+        assert os.name == 'debian'
+        assert os.version == '7.1'
         assert os.package_type == 'deb'
 
-    def test_ubuntu(self):
-        os = remote.OS(self.str_ubuntu)
-        assert os.name == 'Ubuntu'
-        assert os.version == '12.04.4 LTS, Precise Pangolin'
-        assert os.id == 'ubuntu'
-        assert os.id_like == 'debian'
-        assert os.pretty_name == 'Ubuntu precise (12.04.4 LTS)'
-        assert os.version_id == '12.04'
+    def test_debian_7_os_release(self):
+        os = remote.OS.from_os_release(self.str_debian_7_os_release)
+        assert os.name == 'debian'
+        assert os.version == '7'
         assert os.package_type == 'deb'
 
-    def test_rhel(self):
-        os = remote.OS(self.str_rhel)
-        assert os.name == 'Red Hat Enterprise Linux Server'
-        assert os.version == '7.0 (Maipo)'
-        assert os.id == 'rhel'
-        assert os.id_like == 'fedora'
-        assert os.pretty_name == 'Red Hat Enterprise Linux Server 7.0 (Maipo)'
-        assert os.version_id == '7.0'
+    def test_ubuntu_12_04_lsb_release(self):
+        os = remote.OS.from_lsb_release(self.str_ubuntu_12_04_lsb_release)
+        assert os.name == 'ubuntu'
+        assert os.version == '12.04'
+        assert os.package_type == 'deb'
+
+    def test_ubuntu_12_04_os_release(self):
+        os = remote.OS.from_os_release(self.str_ubuntu_12_04_os_release)
+        assert os.name == 'ubuntu'
+        assert os.version == '12.04'
+        assert os.package_type == 'deb'
+
+    def test_rhel_6_4_lsb_release(self):
+        os = remote.OS.from_lsb_release(self.str_rhel_6_4_lsb_release)
+        assert os.name == 'rhel'
+        assert os.version == '6.4'
+        assert os.package_type == 'rpm'
+
+    def test_rhel_7_lsb_release(self):
+        os = remote.OS.from_lsb_release(self.str_rhel_7_lsb_release)
+        assert os.name == 'rhel'
+        assert os.version == '7.0'
+        assert os.package_type == 'rpm'
+
+    def test_rhel_7_os_release(self):
+        os = remote.OS.from_os_release(self.str_rhel_7_os_release)
+        assert os.name == 'rhel'
+        assert os.version == '7.0'
         assert os.package_type == 'rpm'

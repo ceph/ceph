@@ -77,6 +77,4 @@ class TestIntegration():
     def test_os(self):
         rem = remote.Remote(HOST)
         assert rem.os.name
-        assert rem.os.id
         assert rem.os.version
-        assert rem.os.version_id

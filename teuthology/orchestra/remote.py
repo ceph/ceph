@@ -250,9 +250,14 @@ class Remote(object):
     @property
     def os(self):
         if not hasattr(self, '_os'):
-            os_info = self.run(args=['cat', '/etc/os-release'],
-                               stdout=StringIO(), stderr=StringIO())
-            self._os = OS(os_info.stdout.getvalue().strip())
+            proc = self.run(args=['cat', '/etc/os-release'], stdout=StringIO(),
+                            stderr=StringIO(), check_status=False)
+            if proc.exitstatus == 0:
+                self._os = OS.from_os_release(proc.stdout.getvalue().strip())
+            else:
+                proc = self.run(args=['lsb_release', '-a'], stdout=StringIO(),
+                                stderr=StringIO())
+                self._os = OS.from_lsb_release(proc.stdout.getvalue().strip())
         return self._os
 
     @property
@@ -277,8 +282,8 @@ class Remote(object):
         node['name'] = self.hostname
         node['user'] = self.user
         node['arch'] = self.arch
-        node['os_type'] = self.os.id
-        node['os_version'] = self.os.version_id
+        node['os_type'] = self.os.name
+        node['os_version'] = self.os.version
         node['ssh_pub_key'] = self.host_key
         node['up'] = True
         return node
@@ -286,56 +291,94 @@ class Remote(object):
 
 class OS(object):
     """
-    Parse /etc/os-release and populate attributes
+    Class that parses either /etc/os-release or the output of 'lsb_release -a'
+    and provides OS name and version information.
 
-    Given output like:
-        NAME="Ubuntu"
-        VERSION="12.04.4 LTS, Precise Pangolin"
-        ID=ubuntu
-        ID_LIKE=debian
-        PRETTY_NAME="Ubuntu precise (12.04.4 LTS)"
-        VERSION_ID="12.04"
-
-    Attributes will be:
-        name = 'Ubuntu'
-        version = '12.04.4 LTS, Precise Pangolin'
-        id = 'ubuntu'
-        id_like = 'debian'
-        pretty_name = 'Ubuntu precise (12.04.4 LTS)'
-        version_id = '12.04'
-    Additionally, we set the package type:
-        package_type = 'deb'
+    Must be initialized with OS.from_lsb_release or OS.from_os_release
     """
 
-    __slots__ = ['_os_release_str', 'name', 'version', 'id', 'id_like',
-                 'pretty_name', 'version_id', 'package_type']
+    __slots__ = ['name', 'version', 'package_type']
 
-    _deb_distros = ('debian')
-    _rpm_distros = ('fedora', 'rhel', 'rhel fedora', 'suse')
+    _deb_distros = ('debian', 'ubuntu')
+    _rpm_distros = ('fedora', 'rhel', 'centos', 'suse')
 
-    def __init__(self, os_release_str):
-        self._os_release_str = os_release_str.strip()
-        self.name = self._get_value('NAME')
-        self.version = self._get_value('VERSION')
-        self.id = self._get_value('ID')
-        self.id_like = self._get_value('ID_LIKE')
-        self.pretty_name = self._get_value('PRETTY_NAME')
-        self.version_id = self._get_value('VERSION_ID')
+    def __init__(self):
+        pass
 
-        if self.id_like in self._deb_distros:
-            self.package_type = "deb"
-        elif self.id_like in self._rpm_distros:
-            self.package_type = "rpm"
+    @classmethod
+    def from_lsb_release(cls, lsb_release_str):
+        """
+        Parse /etc/os-release and populate attributes
 
-    def _get_value(self, name):
-        regex = '^%s=(.+)' % name
-        match = re.search(regex, self._os_release_str, flags=re.M)
+        Given output like:
+            Distributor ID: Ubuntu
+            Description:    Ubuntu 12.04.4 LTS
+            Release:        12.04
+            Codename:       precise
+
+        Attributes will be:
+            name = 'ubuntu'
+            version = '12.04'
+        Additionally, we set the package type:
+            package_type = 'deb'
+        """
+        obj = cls()
+        str_ = lsb_release_str.strip()
+        name = obj._get_value(str_, 'Distributor ID')
+        if name == 'RedHatEnterpriseServer':
+            name = 'rhel'
+        obj.name = name.lower()
+
+        obj.version = obj._get_value(str_, 'Release')
+
+        if obj.name in cls._deb_distros:
+            obj.package_type = "deb"
+        elif obj.name in cls._rpm_distros:
+            obj.package_type = "rpm"
+
+        return obj
+
+    @classmethod
+    def from_os_release(cls, os_release_str):
+        """
+        Parse /etc/os-release and populate attributes
+
+        Given output like:
+            NAME="Ubuntu"
+            VERSION="12.04.4 LTS, Precise Pangolin"
+            ID=ubuntu
+            ID_LIKE=debian
+            PRETTY_NAME="Ubuntu precise (12.04.4 LTS)"
+            VERSION_ID="12.04"
+
+        Attributes will be:
+            name = 'ubuntu'
+            version = '12.04'
+        Additionally, we set the package type:
+            package_type = 'deb'
+        """
+        obj = cls()
+        str_ = os_release_str.strip()
+        obj.name = cls._get_value(str_, 'ID').lower()
+        obj.version = cls._get_value(str_, 'VERSION_ID')
+
+        if obj.name in cls._deb_distros:
+            obj.package_type = "deb"
+        elif obj.name in cls._rpm_distros:
+            obj.package_type = "rpm"
+
+        return obj
+
+    @staticmethod
+    def _get_value(str_, name):
+        regex = '^%s[:=](.+)' % name
+        match = re.search(regex, str_, flags=re.M)
         if match:
-            return match.groups()[0].strip('"\'')
+            return match.groups()[0].strip(' \t"\'')
         return ''
 
     def __str__(self):
-        return " ".join([self.id, self.version_id]).strip()
+        return " ".join([self.name, self.version]).strip()
 
 
 def getShortName(name):
