@@ -15,6 +15,7 @@ from datetime import datetime
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
+LIBRADOS_ALL_NSPACES = '\001'
 
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
@@ -765,7 +766,7 @@ class ObjectIterator(object):
     def __init__(self, ioctx):
         self.ioctx = ioctx
         self.ctx = c_void_p()
-        ret = run_in_thread(self.ioctx.librados.rados_objects_list_open,
+        ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_open,
                             (self.ioctx.io, byref(self.ctx)))
         if ret < 0:
             raise make_ex(ret, "error iterating over the objects in ioctx '%s'" \
@@ -783,15 +784,15 @@ class ObjectIterator(object):
         """
         key = c_char_p()
         locator = c_char_p()
-        nspace = c_char_p("")
-        ret = run_in_thread(self.ioctx.librados.rados_objects_list_next,
-                            (self.ctx, byref(key), byref(locator)))
+        nspace = c_char_p()
+        ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_next,
+                            (self.ctx, byref(key), byref(locator), byref(nspace)))
         if ret < 0:
             raise StopIteration()
         return Object(self.ioctx, key.value, locator.value, nspace.value)
 
     def __del__(self):
-        run_in_thread(self.ioctx.librados.rados_objects_list_close, (self.ctx,))
+        run_in_thread(self.ioctx.librados.rados_nobjects_list_close, (self.ctx,))
 
 class XattrIterator(object):
     """Extended attribute iterator"""
