@@ -784,6 +784,11 @@ ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDAD
 ceph_test_rados_api_list_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_list
 
+ceph_test_rados_api_nlist_SOURCES = test/librados/nlist.cc
+ceph_test_rados_api_nlist_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_nlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_nlist
+
 ceph_test_rados_api_pool_SOURCES = test/librados/pool.cc
 ceph_test_rados_api_pool_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_pool_CXXFLAGS = $(UNITTEST_CXXFLAGS)

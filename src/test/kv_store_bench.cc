@@ -193,11 +193,11 @@ int KvStoreBench::setup(int argc, const char** argv) {
   io_ctx_ready = true;
 
   if (clear_first) {
-    librados::ObjectIterator it;
-    for (it = io_ctx.objects_begin(); it != io_ctx.objects_end(); ++it) {
+    librados::NObjectIterator it;
+    for (it = io_ctx.nobjects_begin(); it != io_ctx.nobjects_end(); ++it) {
       librados::ObjectWriteOperation rm;
       rm.remove();
-      io_ctx.operate(it->first, &rm);
+      io_ctx.operate(it->get_oid(), &rm);
     }
   }
 
