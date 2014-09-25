@@ -13,9 +13,9 @@ To create a new *jerasure* erasure code profile::
 
         ceph osd erasure-code-profile set {name} \
              plugin=isa \
-             k={data-chunks} \
-             m={coding-chunks} \
              technique={reed_sol_van|cauchy} \
+             [k={data-chunks}] \
+             [m={coding-chunks}] \
              [ruleset-root={root}] \
              [ruleset-failure-domain={bucket-type}] \
              [directory={directory}] \
@@ -29,8 +29,8 @@ Where:
               each stored on a different OSD.
 
 :Type: Integer
-:Required: Yes.
-:Example: 4
+:Required: No.
+:Default: 7
 
 ``m={coding-chunks}``
 
@@ -39,8 +39,8 @@ Where:
               the number of OSDs that can be down without losing data.
 
 :Type: Integer
-:Required: Yes.
-:Example: 2
+:Required: No.
+:Default: 3
 
 ``technique={reed_sol_van|cauchy}``
 
