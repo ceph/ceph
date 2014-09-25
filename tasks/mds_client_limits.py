@@ -131,6 +131,7 @@ class TestClientLimits(CephFSTestCase):
 
         self.fs.set_ceph_conf('mds', 'mds cache size', cache_size)
         self.fs.mds_restart()
+        self.fs.wait_for_daemons()
 
         mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir/mount_a" if use_subdir else "mount_a"
