@@ -138,7 +138,7 @@ def task(ctx, config):
                 remote.run(
                     args=[
                         'sudo',
-                        'lsof', '-V',
+                        'lsof', '-V', '+D',
                         '{mnt}'.format(mnt=mnt),
                         ],
                     check_status=False
