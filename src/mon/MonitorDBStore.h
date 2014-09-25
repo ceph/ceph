@@ -21,7 +21,6 @@
 #include <boost/scoped_ptr.hpp>
 #include <sstream>
 #include "os/KeyValueDB.h"
-#include "os/LevelDBStore.h"
 
 #include "include/assert.h"
 #include "common/Formatter.h"
@@ -29,7 +28,7 @@
 
 class MonitorDBStore
 {
-  boost::scoped_ptr<LevelDBStore> db;
+  boost::scoped_ptr<KeyValueDB> db;
   bool do_dump;
   int dump_fd;
 
@@ -522,11 +521,14 @@ class MonitorDBStore
     os << path.substr(0, path.size() - pos) << "/store.db";
     string full_path = os.str();
 
-    LevelDBStore *db_ptr = new LevelDBStore(g_ceph_context, full_path);
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context,
+					    "leveldb",
+					    full_path);
     if (!db_ptr) {
-      derr << __func__ << " error initializing level db back storage in "
-		<< full_path << dendl;
-      assert(0 != "MonitorDBStore: error initializing level db back storage");
+      derr << __func__ << " error initializing "
+	   << "leveldb" << " db back storage in "
+	   << full_path << dendl;
+      assert(0 != "MonitorDBStore: error initializing keyvaluedb back storage");
     }
     db.reset(db_ptr);
 
@@ -542,7 +544,7 @@ class MonitorDBStore
       }
     }
   }
-  MonitorDBStore(LevelDBStore *db_ptr) :
+  MonitorDBStore(KeyValueDB *db_ptr) :
     db(0), do_dump(false), dump_fd(-1) {
     db.reset(db_ptr);
   }
