@@ -95,10 +95,8 @@ def lock_machines(ctx, config):
             else:
                 assert 0, 'not enough machines free'
 
-        os_type = misc.get_distro(ctx)
-        os_version = misc.get_distro_version(ctx)
         newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
-                                      ctx.archive, os_type, os_version)
+                                      ctx.archive)
         if not newly_locked and not isinstance(newly_locked, list):
             raise RuntimeError('Invalid parameters specified')
         if len(newly_locked) == how_many:
