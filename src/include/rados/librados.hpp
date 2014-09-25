@@ -30,6 +30,8 @@ namespace librados
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
+  class ListObjectImpl;
+  struct NObjectIteratorImpl;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
@@ -63,6 +65,57 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
+  class ListObject
+  {
+  public:
+    const std::string& get_nspace() const;
+    const std::string& get_oid() const;
+    const std::string& get_locator() const;
+
+    ListObject();
+    ~ListObject();
+    ListObject( const ListObject&);
+    ListObject& operator=(const ListObject& rhs);
+  private:
+    ListObject(ListObjectImpl *impl);
+
+    friend class NObjectIteratorImpl;
+    friend std::ostream& operator<<(std::ostream& out, const ListObject& lop);
+
+    ListObjectImpl *impl;
+  };
+  std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
+
+  class NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
+  public:
+    static const NObjectIterator __EndObjectIterator;
+    NObjectIterator(): impl(NULL) {}
+    ~NObjectIterator();
+    NObjectIterator(const NObjectIterator &rhs);
+    NObjectIterator& operator=(const NObjectIterator& rhs);
+
+    bool operator==(const NObjectIterator& rhs) const;
+    bool operator!=(const NObjectIterator& rhs) const;
+    const ListObject& operator*() const;
+    const ListObject* operator->() const;
+    NObjectIterator &operator++(); // Preincrement
+    NObjectIterator operator++(int); // Postincrement
+    friend class IoCtx;
+    friend class NObjectIteratorImpl;
+
+    /// get current hash position of the iterator, rounded to the current pg
+    uint32_t get_pg_hash_position() const;
+
+    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    uint32_t seek(uint32_t pos);
+
+  private:
+    NObjectIterator(ObjListCtx *ctx_);
+    void get_next();
+    NObjectIteratorImpl *impl;
+  };
+
+  // DEPRECATED; Use NObjectIterator
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
   public:
     static const ObjectIterator __EndObjectIterator;
@@ -662,6 +715,13 @@ namespace librados
 
 
     /// Start enumerating objects for a pool
+    NObjectIterator nobjects_begin();
+    /// Start enumerating objects for a pool starting from a hash position
+    NObjectIterator nobjects_begin(uint32_t start_hash_position);
+    /// Iterator indicating the end of a pool
+    const NObjectIterator& nobjects_end() const;
+
+    // DEPRECATED
     ObjectIterator objects_begin();
     /// Start enumerating objects for a pool starting from a hash position
     ObjectIterator objects_begin(uint32_t start_hash_position);

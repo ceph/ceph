@@ -2052,10 +2052,10 @@ bool KvFlatBtreeAsync::is_consistent() {
   io_ctx.operate(index_name, &oro, NULL);
   if (err < 0){
     //probably because the index doesn't exist - this might be ok.
-    for (librados::ObjectIterator oit = io_ctx.objects_begin();
-        oit != io_ctx.objects_end(); ++oit) {
+    for (librados::NObjectIterator oit = io_ctx.nobjects_begin();
+        oit != io_ctx.nobjects_end(); ++oit) {
       //if this executes, there are floating objects.
-      cerr << "Not consistent! found floating object " << oit->first
+      cerr << "Not consistent! found floating object " << oit->get_oid()
              << std::endl;
       ret = false;
     }
@@ -2116,9 +2116,9 @@ bool KvFlatBtreeAsync::is_consistent() {
 
   //make sure that an object exists iff it either is the index
   //or is listed in the index
-  for (librados::ObjectIterator oit = io_ctx.objects_begin();
-      oit != io_ctx.objects_end(); ++oit) {
-    string name = oit->first;
+  for (librados::NObjectIterator oit = io_ctx.nobjects_begin();
+      oit != io_ctx.nobjects_end(); ++oit) {
+    string name = oit->get_oid();
     if (name != index_name && onames.count(name) == 0
 	&& special_names.count(name) == 0) {
       cerr << "Not consistent! found floating object " << name << std::endl;

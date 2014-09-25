@@ -2677,6 +2677,145 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 }
 
 
+uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
+				     uint32_t pos)
+{
+  RWLock::RLocker rl(rwlock);
+  pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
+  ldout(cct, 10) << "list_objects_seek " << list_context
+		 << " pos " << pos << " -> " << actual << dendl;
+  list_context->current_pg = actual.ps();
+  list_context->cookie = collection_list_handle_t();
+  list_context->at_end_of_pg = false;
+  list_context->at_end_of_pool = false;
+  list_context->current_pg_epoch = 0;
+  return list_context->current_pg;
+}
+
+void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
+{
+  ldout(cct, 10) << "list_objects" << dendl;
+  ldout(cct, 20) << " pool_id " << list_context->pool_id
+	   << " pool_snap_seq " << list_context->pool_snap_seq
+	   << " max_entries " << list_context->max_entries
+	   << " list_context " << list_context
+	   << " onfinish " << onfinish
+	   << " list_context->current_pg " << list_context->current_pg
+	   << " list_context->cookie " << list_context->cookie << dendl;
+
+  if (list_context->at_end_of_pg) {
+    list_context->at_end_of_pg = false;
+    ++list_context->current_pg;
+    list_context->current_pg_epoch = 0;
+    list_context->cookie = collection_list_handle_t();
+    if (list_context->current_pg >= list_context->starting_pg_num) {
+      list_context->at_end_of_pool = true;
+      ldout(cct, 20) << " no more pgs; reached end of pool" << dendl;
+    } else {
+      ldout(cct, 20) << " move to next pg " << list_context->current_pg << dendl;
+    }
+  }
+  if (list_context->at_end_of_pool) {
+    // release the listing context's budget once all
+    // OPs (in the session) are finished
+    put_nlist_context_budget(list_context);
+
+    onfinish->complete(0);
+    return;
+  }
+
+  rwlock.get_read();
+  const pg_pool_t *pool = osdmap->get_pg_pool(list_context->pool_id);
+  int pg_num = pool->get_pg_num();
+  rwlock.unlock();
+
+  if (list_context->starting_pg_num == 0) {     // there can't be zero pgs!
+    list_context->starting_pg_num = pg_num;
+    ldout(cct, 20) << pg_num << " placement groups" << dendl;
+  }
+  if (list_context->starting_pg_num != pg_num) {
+    // start reading from the beginning; the pgs have changed
+    ldout(cct, 10) << " pg_num changed; restarting with " << pg_num << dendl;
+    list_context->current_pg = 0;
+    list_context->cookie = collection_list_handle_t();
+    list_context->current_pg_epoch = 0;
+    list_context->starting_pg_num = pg_num;
+  }
+  assert(list_context->current_pg <= pg_num);
+
+  ObjectOperation op;
+  op.pg_nls(list_context->max_entries, list_context->filter, list_context->cookie,
+	     list_context->current_pg_epoch);
+  list_context->bl.clear();
+  C_NList *onack = new C_NList(list_context, onfinish, this);
+  object_locator_t oloc(list_context->pool_id, list_context->nspace);
+
+  pg_read(list_context->current_pg, oloc, op,
+	  &list_context->bl, 0, onack, &onack->epoch, &list_context->ctx_budget);
+}
+
+void Objecter::_nlist_reply(NListContext *list_context, int r,
+			   Context *final_finish, epoch_t reply_epoch)
+{
+  ldout(cct, 10) << "_list_reply" << dendl;
+
+  bufferlist::iterator iter = list_context->bl.begin();
+  pg_nls_response_t response;
+  bufferlist extra_info;
+  ::decode(response, iter);
+  if (!iter.end()) {
+    ::decode(extra_info, iter);
+  }
+  list_context->cookie = response.handle;
+  if (!list_context->current_pg_epoch) {
+    // first pgls result, set epoch marker
+    ldout(cct, 20) << " first pgls piece, reply_epoch is "
+		   << reply_epoch << dendl;
+    list_context->current_pg_epoch = reply_epoch;
+  }
+
+  int response_size = response.entries.size();
+  ldout(cct, 20) << " response.entries.size " << response_size
+		 << ", response.entries " << response.entries << dendl;
+  list_context->extra_info.append(extra_info);
+  if (response_size) {
+    list_context->list.merge(response.entries);
+  }
+
+  // if the osd returns 1 (newer code), or no entries, it means we
+  // hit the end of the pg.
+  if (response_size == 0 || r == 1) {
+    ldout(cct, 20) << " at end of pg" << dendl;
+    list_context->at_end_of_pg = true;
+  } else {
+    // there is more for this pg; get it?
+    if (response_size < list_context->max_entries) {
+      list_context->max_entries -= response_size;
+      list_nobjects(list_context, final_finish);
+      return;
+    }
+  }
+  if (!list_context->list.empty()) {
+    ldout(cct, 20) << " returning results so far" << dendl;
+    // release the listing context's budget once all
+    // OPs (in the session) are finished
+    put_nlist_context_budget(list_context);
+    final_finish->complete(0);
+    return;
+  }
+
+  // continue!
+  list_nobjects(list_context, final_finish);
+}
+
+void Objecter::put_nlist_context_budget(NListContext *list_context) {
+    if (list_context->ctx_budget >= 0) {
+      ldout(cct, 10) << " release listing context's budget " << list_context->ctx_budget << dendl;
+      put_op_budget_bytes(list_context->ctx_budget);
+      list_context->ctx_budget = -1;
+    }
+  }
+
 uint32_t Objecter::list_objects_seek(ListContext *list_context,
 				     uint32_t pos)
 {
