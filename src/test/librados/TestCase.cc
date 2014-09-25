@@ -37,6 +37,7 @@ void RadosTestNS::TearDown()
 void RadosTestNS::cleanup_all_objects(rados_ioctx_t ioctx)
 {
   // remove all objects to avoid polluting other tests
+  rados_ioctx_snap_set_read(ioctx, LIBRADOS_SNAP_HEAD);
   rados_ioctx_set_namespace(ioctx, LIBRADOS_ALL_NSPACES);
   rados_list_ctx_t list_ctx;
   ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
@@ -82,6 +83,7 @@ void RadosTestPPNS::TearDown()
 void RadosTestPPNS::cleanup_all_objects(librados::IoCtx ioctx)
 {
   // remove all objects to avoid polluting other tests
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(all_nspaces);
   for (NObjectIterator it = ioctx.nobjects_begin();
        it != ioctx.nobjects_end(); ++it) {
@@ -161,6 +163,7 @@ void RadosTestParamPPNS::TearDown()
 void RadosTestParamPPNS::cleanup_all_objects(librados::IoCtx ioctx)
 {
   // remove all objects to avoid polluting other tests
+  ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(all_nspaces);
   for (NObjectIterator it = ioctx.nobjects_begin();
        it != ioctx.nobjects_end(); ++it) {
@@ -253,6 +256,7 @@ void RadosTest::SetUp()
 void RadosTest::TearDown()
 {
   cleanup_default_namespace(ioctx);
+  cleanup_namespace(ioctx, nspace);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -260,7 +264,13 @@ void RadosTest::cleanup_default_namespace(rados_ioctx_t ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
-  rados_ioctx_set_namespace(ioctx, "");
+  cleanup_namespace(ioctx, "");
+}
+
+void RadosTest::cleanup_namespace(rados_ioctx_t ioctx, std::string ns)
+{
+  rados_ioctx_snap_set_read(ioctx, LIBRADOS_SNAP_HEAD);
+  rados_ioctx_set_namespace(ioctx, ns.c_str());
   rados_list_ctx_t list_ctx;
   ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
   int r;
@@ -299,6 +309,7 @@ void RadosTestPP::SetUp()
 void RadosTestPP::TearDown()
 {
   cleanup_default_namespace(ioctx);
+  cleanup_namespace(ioctx, nspace);
   ioctx.close();
 }
 
@@ -306,7 +317,13 @@ void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
-  ioctx.set_namespace("");
+  cleanup_namespace(ioctx, "");
+}
+
+void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
+{
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.set_namespace(ns);
   for (NObjectIterator it = ioctx.nobjects_begin();
        it != ioctx.nobjects_end(); ++it) {
     ioctx.locator_set_key(it->get_locator());
@@ -380,6 +397,7 @@ void RadosTestParamPP::SetUp()
 void RadosTestParamPP::TearDown()
 {
   cleanup_default_namespace(ioctx);
+  cleanup_namespace(ioctx, nspace);
   ioctx.close();
 }
 
@@ -387,7 +405,13 @@ void RadosTestParamPP::cleanup_default_namespace(librados::IoCtx ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
-  ioctx.set_namespace("");
+  cleanup_namespace(ioctx, "");
+}
+
+void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
+{
+  ioctx.snap_set_read(librados::SNAP_HEAD);
+  ioctx.set_namespace(ns);
   for (NObjectIterator it = ioctx.nobjects_begin();
        it != ioctx.nobjects_end(); ++it) {
     ioctx.locator_set_key(it->get_locator());
@@ -423,6 +447,7 @@ void RadosTestEC::SetUp()
 void RadosTestEC::TearDown()
 {
   cleanup_default_namespace(ioctx);
+  cleanup_namespace(ioctx, nspace);
   rados_ioctx_destroy(ioctx);
 }
 
@@ -453,6 +478,7 @@ void RadosTestECPP::SetUp()
 void RadosTestECPP::TearDown()
 {
   cleanup_default_namespace(ioctx);
+  cleanup_namespace(ioctx, nspace);
   ioctx.close();
 }
 

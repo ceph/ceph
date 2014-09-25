@@ -121,6 +121,7 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static void cleanup_default_namespace(rados_ioctx_t ioctx);
+  static void cleanup_namespace(rados_ioctx_t ioctx, std::string ns);
   static rados_t s_cluster;
   static std::string pool_name;
 
@@ -139,6 +140,7 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   static void cleanup_default_namespace(librados::IoCtx ioctx);
+  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
   static librados::Rados s_cluster;
   static std::string pool_name;
 
@@ -157,6 +159,7 @@ public:
   static void TearDownTestCase();
 protected:
   static void cleanup_default_namespace(librados::IoCtx ioctx);
+  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
   static librados::Rados s_cluster;
   static std::string pool_name;
   static std::string cache_pool_name;
