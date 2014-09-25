@@ -300,22 +300,38 @@ def main(ctx):
     return ret
 
 
-def lock_many(ctx, num, machinetype, user=None, description=None):
+def lock_many(ctx, num, machine_type, user=None, description=None):
+    if user is None:
+        user = misc.get_user()
+
     if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
                                      ctx.os_version):
         log.error('Invalid os-type or version detected -- lock failed')
         return
-    machinetypes = misc.get_multi_machine_types(machinetype)
-    if user is None:
-        user = misc.get_user()
-    for machinetype in machinetypes:
+
+    # In the for loop below we can safely query for all bare-metal machine_type
+    # values at once. So, if we're being asked for 'plana,mira,burnupi', do it
+    # all in one shot. If we are passed 'plana,mira,burnupi,vps', do one query
+    # for 'plana,mira,burnupi' and one for 'vps'
+    machine_types_list = misc.get_multi_machine_types(machine_type)
+    if 'vps' in machine_types_list:
+        machine_types_non_vps = list(machine_types_list)
+        machine_types_non_vps.remove('vps')
+        machine_types_non_vps = '|'.join(machine_types_non_vps)
+        machine_types = [machine_types_non_vps, 'vps']
+    else:
+        machine_types_str = '|'.join(machine_types_list)
+        machine_types = [machine_types_str, ]
+
+    for machine_type in machine_types:
         uri = os.path.join(config.lock_server, 'nodes', 'lock_many', '')
         data = dict(
             locked_by=user,
             count=num,
-            machine_type=machinetype,
+            machine_type=machine_type,
             description=description,
         )
+        log.debug("lock_many request: %s", repr(data))
         response = requests.post(
             uri,
             data=json.dumps(data),
@@ -326,7 +342,7 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
                         machine['ssh_pub_key'] for machine in response.json()}
             log.debug('locked {machines}'.format(
                 machines=', '.join(machines.keys())))
-            if machinetype == 'vps':
+            if machine_type == 'vps':
                 ok_machs = {}
                 for machine in machines:
                     if provision.create_if_vm(ctx, machine):
@@ -339,11 +355,11 @@ def lock_many(ctx, num, machinetype, user=None, description=None):
             return machines
         elif response.status_code == 503:
             log.error('Insufficient nodes available to lock %d %s nodes.',
-                      num, machinetype)
+                      num, machine_type)
             log.error(response.text)
         else:
             log.error('Could not lock %d %s nodes, reason: unknown.',
-                      num, machinetype)
+                      num, machine_type)
     return []
 
 
