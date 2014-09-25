@@ -6250,6 +6250,7 @@ int ReplicatedPG::start_flush(
   if (dsnapc2.seq > dsnapc.seq && dsnapc2.seq < snapc.seq) {
     ObjectOperation o;
     o.remove();
+    osd->objecter_lock.Lock();
     osd->objecter->mutate(
       soid.oid,
       base_oloc,
@@ -6261,6 +6262,7 @@ int ReplicatedPG::start_flush(
        CEPH_OSD_FLAG_ENFORCE_SNAPC),
       NULL,
       NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
+    osd->objecter_lock.Unlock();
   }
 
   FlushOpRef fop(new FlushOp);
