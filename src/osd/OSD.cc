@@ -7164,21 +7164,26 @@ void OSD::do_notifies(
 	 notify_list.begin();
        it != notify_list.end();
        ++it) {
-    if (!curmap->is_up(it->first))
+    if (!curmap->is_up(it->first)) {
+      dout(20) << __func__ << " skipping down osd." << it->first << dendl;
       continue;
+    }
     ConnectionRef con = service.get_con_osd_cluster(
       it->first, curmap->get_epoch());
-    if (!con)
+    if (!con) {
+      dout(20) << __func__ << " skipping osd." << it->first
+	       << " (NULL con)" << dendl;
       continue;
+    }
     service.share_map_peer(it->first, con.get(), curmap);
     if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      dout(7) << "do_notify osd " << it->first
+      dout(7) << __func__ << " osd " << it->first
 	      << " on " << it->second.size() << " PGs" << dendl;
       MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
 					 it->second);
       con->send_message(m);
     } else {
-      dout(7) << "do_notify osd " << it->first
+      dout(7) << __func__ << " osd " << it->first
 	      << " sending separate messages" << dendl;
       for (vector<pair<pg_notify_t, pg_interval_map_t> >::iterator i =
 	     it->second.begin();
@@ -7204,22 +7209,27 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
   for (map<int, map<spg_t,pg_query_t> >::iterator pit = query_map.begin();
        pit != query_map.end();
        ++pit) {
-    if (!curmap->is_up(pit->first))
+    if (!curmap->is_up(pit->first)) {
+      dout(20) << __func__ << " skipping down osd." << pit->first << dendl;
       continue;
+    }
     int who = pit->first;
     ConnectionRef con = service.get_con_osd_cluster(who, curmap->get_epoch());
-    if (!con)
+    if (!con) {
+      dout(20) << __func__ << " skipping osd." << who
+	       << " (NULL con)" << dendl;
       continue;
+    }
     service.share_map_peer(who, con.get(), curmap);
     if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
-      dout(7) << "do_queries querying osd." << who
+      dout(7) << __func__ << " querying osd." << who
 	      << " on " << pit->second.size() << " PGs" << dendl;
       MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
       con->send_message(m);
     } else {
-      dout(7) << "do_queries querying osd." << who
-	      << " sending saperate messages "
-	      << " on " << pit->second.size() << " PGs" << dendl;
+      dout(7) << __func__ << " querying osd." << who
+	      << " sending seperate messages on " << pit->second.size()
+	      << " PGs" << dendl;
       for (map<spg_t, pg_query_t>::iterator i = pit->second.begin();
 	   i != pit->second.end();
 	   ++i) {
@@ -7242,18 +7252,23 @@ void OSD::do_infos(map<int,
 	 info_map.begin();
        p != info_map.end();
        ++p) { 
-    if (!curmap->is_up(p->first))
+    if (!curmap->is_up(p->first)) {
+      dout(20) << __func__ << " skipping down osd." << p->first << dendl;
       continue;
+    }
     for (vector<pair<pg_notify_t,pg_interval_map_t> >::iterator i = p->second.begin();
 	 i != p->second.end();
 	 ++i) {
-      dout(20) << "Sending info " << i->first.info
+      dout(20) << __func__ << " sending info " << i->first.info
 	       << " to shard " << p->first << dendl;
     }
     ConnectionRef con = service.get_con_osd_cluster(
       p->first, curmap->get_epoch());
-    if (!con)
+    if (!con) {
+      dout(20) << __func__ << " skipping osd." << p->first
+	       << " (NULL con)" << dendl;
       continue;
+    }
     service.share_map_peer(p->first, con.get(), curmap);
     if (con->has_feature(CEPH_FEATURE_INDEP_PG_MAP)) {
       MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
