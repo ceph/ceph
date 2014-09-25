@@ -419,7 +419,7 @@ EOF
 	        $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
-		    --cap mds allow \
+		    --cap mds 'allow *' \
 		    $keyring_fn
 
 		# build a fresh fs monmap, mon fs
