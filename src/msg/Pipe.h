@@ -79,13 +79,17 @@ class DispatchQueue;
       int flush_count;
       bool active_flush;
       bool stop_delayed_delivery;
+      bool delay_dispatching; // we are in fast dispatch now
+      bool stop_fast_dispatching_flag; // we need to stop fast dispatching
 
     public:
       DelayedDelivery(Pipe *p)
 	: pipe(p),
 	  delay_lock("Pipe::DelayedDelivery::delay_lock"), flush_count(0),
 	  active_flush(false),
-	  stop_delayed_delivery(false) { }
+	  stop_delayed_delivery(false),
+	  delay_dispatching(false),
+	  stop_fast_dispatching_flag(false) { }
       ~DelayedDelivery() {
 	discard();
       }
@@ -116,6 +120,11 @@ class DispatchQueue;
         Mutex::Locker l(delay_lock);
         pipe = new_owner;
       }
+      /**
+       * We need to stop fast dispatching before we need to stop putting
+       * normal messages into the DispatchQueue.
+       */
+      void stop_fast_dispatching();
     } *delay_thread;
     friend class DelayedDelivery;
 
