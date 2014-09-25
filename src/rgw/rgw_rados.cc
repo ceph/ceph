@@ -1673,7 +1673,7 @@ int RGWRados::open_bucket_index_ctx(rgw_bucket& bucket, librados::IoCtx& index_c
  */
 int RGWRados::list_buckets_init(RGWAccessHandle *handle)
 {
-  librados::ObjectIterator *state = new librados::ObjectIterator(root_pool_ctx.objects_begin());
+  librados::NObjectIterator *state = new librados::NObjectIterator(root_pool_ctx.nobjects_begin());
   *handle = (RGWAccessHandle)state;
   return 0;
 }
@@ -1686,15 +1686,15 @@ int RGWRados::list_buckets_init(RGWAccessHandle *handle)
  */
 int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 {
-  librados::ObjectIterator *state = (librados::ObjectIterator *)*handle;
+  librados::NObjectIterator *state = (librados::NObjectIterator *)*handle;
 
   do {
-    if (*state == root_pool_ctx.objects_end()) {
+    if (*state == root_pool_ctx.nobjects_end()) {
       delete state;
       return -ENOENT;
     }
 
-    obj.name = (*state)->first;
+    obj.name = (*state)->get_oid();
     (*state)++;
   } while (obj.name[0] == '.'); /* skip all entries starting with '.' */
 
@@ -1707,7 +1707,7 @@ int RGWRados::list_buckets_next(RGWObjEnt& obj, RGWAccessHandle *handle)
 struct log_list_state {
   string prefix;
   librados::IoCtx io_ctx;
-  librados::ObjectIterator obit;
+  librados::NObjectIterator obit;
 };
 
 int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
@@ -1720,7 +1720,7 @@ int RGWRados::log_list_init(const string& prefix, RGWAccessHandle *handle)
     return r;
   }
   state->prefix = prefix;
-  state->obit = state->io_ctx.objects_begin();
+  state->obit = state->io_ctx.nobjects_begin();
   *handle = (RGWAccessHandle)state;
   return 0;
 }
@@ -1729,16 +1729,16 @@ int RGWRados::log_list_next(RGWAccessHandle handle, string *name)
 {
   log_list_state *state = static_cast<log_list_state *>(handle);
   while (true) {
-    if (state->obit == state->io_ctx.objects_end()) {
+    if (state->obit == state->io_ctx.nobjects_end()) {
       delete state;
       return -ENOENT;
     }
     if (state->prefix.length() &&
-	state->obit->first.find(state->prefix) != 0) {
+	state->obit->get_oid().find(state->prefix) != 0) {
       state->obit++;
       continue;
     }
-    *name = state->obit->first;
+    *name = state->obit->get_oid();
     state->obit++;
     break;
   }
@@ -5767,13 +5767,13 @@ int RGWRados::distribute(const string& key, bufferlist& bl)
 int RGWRados::pool_iterate_begin(rgw_bucket& bucket, RGWPoolIterCtx& ctx)
 {
   librados::IoCtx& io_ctx = ctx.io_ctx;
-  librados::ObjectIterator& iter = ctx.iter;
+  librados::NObjectIterator& iter = ctx.iter;
 
   int r = open_bucket_data_ctx(bucket, io_ctx);
   if (r < 0)
     return r;
 
-  iter = io_ctx.objects_begin();
+  iter = io_ctx.nobjects_begin();
 
   return 0;
 }
@@ -5782,17 +5782,17 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
   librados::IoCtx& io_ctx = ctx.io_ctx;
-  librados::ObjectIterator& iter = ctx.iter;
+  librados::NObjectIterator& iter = ctx.iter;
 
-  if (iter == io_ctx.objects_end())
+  if (iter == io_ctx.nobjects_end())
     return -ENOENT;
 
   uint32_t i;
 
-  for (i = 0; i < num && iter != io_ctx.objects_end(); ++i, ++iter) {
+  for (i = 0; i < num && iter != io_ctx.nobjects_end(); ++i, ++iter) {
     RGWObjEnt e;
 
-    string oid = iter->first;
+    string oid = iter->get_oid();
     ldout(cct, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
     // fill it in with initial values; we may correct later
@@ -5804,7 +5804,7 @@ int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<RGWObjEnt>&
   }
 
   if (is_truncated)
-    *is_truncated = (iter != io_ctx.objects_end());
+    *is_truncated = (iter != io_ctx.nobjects_end());
 
   return objs.size();
 }

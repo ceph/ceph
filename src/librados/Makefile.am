@@ -26,4 +26,5 @@ noinst_HEADERS += \
 	librados/IoCtxImpl.h \
 	librados/PoolAsyncCompletionImpl.h \
 	librados/RadosClient.h \
-	librados/RadosXattrIter.h
+	librados/RadosXattrIter.h \
+	librados/ListObjectImpl.h
