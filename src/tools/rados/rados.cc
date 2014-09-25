@@ -43,6 +43,7 @@ using namespace librados;
 
 #include "cls/lock/cls_lock_client.h"
 #include "include/compat.h"
+#include "common/hobject.h"
 
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
@@ -163,6 +164,12 @@ void usage(ostream& out)
 "   -N namespace\n"
 "   --namespace=namespace\n"
 "        specify the namespace to use for the object\n"
+"   --all\n"
+"        Use with ls to list objects in all namespaces\n"
+"        Put in CEPH_ARGS environment variable to make this the default\n"
+"   --default\n"
+"        Use with ls to list objects in default namespace\n"
+"        Takes precedence over --all in case --all is in environment\n"
 "\n"
 "BENCH OPTIONS:\n"
 "   -t N\n"
@@ -393,20 +400,21 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
     cerr << "cannot open target pool: " << target_pool << std::endl;
     return ret;
   }
-  librados::ObjectIterator i = src_ctx.objects_begin();
-  librados::ObjectIterator i_end = src_ctx.objects_end();
+  librados::NObjectIterator i = src_ctx.nobjects_begin();
+  librados::NObjectIterator i_end = src_ctx.nobjects_end();
   for (; i != i_end; ++i) {
-    string oid = i->first;
-    string locator = i->second;
-    if (i->second.size())
-      cout << src_pool << ":" << oid << "(@" << locator << ")" << " => "
-           << target_pool << ":" << oid << "(@" << locator << ")" << std::endl;
-    else
-      cout << src_pool << ":" << oid << " => "
-           << target_pool << ":" << oid << std::endl;
-
+    string nspace = i->get_nspace();
+    string oid = i->get_oid();
+    string locator = i->get_locator();
+    stringstream name;
+    name << nspace << "/" << oid;
+    if (locator.size())
+        name << "(@" << locator << ")";
+    cout << src_pool << ":" << name  << " => "
+      << target_pool << ":" << name << std::endl;
 
     target_ctx.locator_set_key(locator);
+    target_ctx.set_namespace(nspace);
     ret = do_copy(src_ctx, oid.c_str(), target_ctx, oid.c_str());
     if (ret < 0) {
       cerr << "error copying object: " << cpp_strerror(errno) << std::endl;
@@ -845,7 +853,7 @@ class RadosBencher : public ObjBencher {
   librados::AioCompletion **completions;
   librados::Rados& rados;
   librados::IoCtx& io_ctx;
-  librados::ObjectIterator oi;
+  librados::NObjectIterator oi;
   bool iterator_valid;
 protected:
   int completions_init(int concurrentios) {
@@ -907,11 +915,11 @@ protected:
     int count = 0;
 
     if (!iterator_valid) {
-      oi = io_ctx.objects_begin();
+      oi = io_ctx.nobjects_begin();
       iterator_valid = true;
     }
 
-    librados::ObjectIterator ei = io_ctx.objects_end();
+    librados::NObjectIterator ei = io_ctx.nobjects_end();
 
     if (oi == ei) {
       iterator_valid = false;
@@ -920,7 +928,7 @@ protected:
 
     objects->clear();
     for ( ; oi != ei && count < num; ++oi) {
-      objects->push_back(oi->first);
+      objects->push_back(oi->get_oid());
       ++count;
     }
 
@@ -1143,29 +1151,30 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
 {
   int errors = 0;
   try {
-    librados::ObjectIterator i = io_ctx.objects_begin();
-    librados::ObjectIterator i_end = io_ctx.objects_end();
+    librados::NObjectIterator i = io_ctx.nobjects_begin();
+    librados::NObjectIterator i_end = io_ctx.nobjects_end();
     for (; i != i_end; ++i) {
       int r;
-      cout << i->first << "\t" << i->second << std::endl;
-      if (i->second.size()) {
-	io_ctx.locator_set_key(i->second);
+      cout << i->get_nspace() << "\t" << i->get_oid() << "\t" << i->get_locator() << std::endl;
+      if (i->get_locator().size()) {
+	io_ctx.locator_set_key(i->get_locator());
       } else {
 	io_ctx.locator_set_key(string());
       }
+      io_ctx.set_namespace(i->get_nspace());
       if (blocking)
-	r = do_cache_flush(io_ctx, i->first);
+	r = do_cache_flush(io_ctx, i->get_oid());
       else
-	r = do_cache_try_flush(io_ctx, i->first);
+	r = do_cache_try_flush(io_ctx, i->get_oid());
       if (r < 0) {
-	cerr << "failed to flush " << i->first << ": "
+	cerr << "failed to flush " << i->get_nspace() << "/" << i->get_oid() << ": "
 	     << cpp_strerror(r) << std::endl;
 	++errors;
 	continue;
       }
-      r = do_cache_evict(io_ctx, i->first);
+      r = do_cache_evict(io_ctx, i->get_oid());
       if (r < 0) {
-	cerr << "failed to evict " << i->first << ": "
+	cerr << "failed to evict " << i->get_nspace() << "/" << i->get_oid() << ": "
 	     << cpp_strerror(r) << std::endl;
 	++errors;
 	continue;
@@ -1210,6 +1219,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int run_length = 0;
 
   bool show_time = false;
+  bool wildcard = false;
 
   const char* run_name = NULL;
   const char* prefix = NULL;
@@ -1424,8 +1434,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   if (oloc.size()) {
     io_ctx.locator_set_key(oloc);
   }
-  if (!nspace.empty()) {
+  // Use namespace from command line if specified
+  if (opts.find("namespace") != opts.end()) {
     io_ctx.set_namespace(nspace);
+  // Use wildcard if --all specified and --default NOT specified
+  } else if (opts.find("all") != opts.end() && opts.find("default") == opts.end()) {
+    // Only the ls should ever set namespace to special value
+    wildcard = true;
   }
   if (snapid != CEPH_NOSNAP) {
     string name;
@@ -1576,6 +1591,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
 
+    if (wildcard)
+      io_ctx.set_namespace(all_nspaces);
     bool stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
     ostream *outstream;
     if(stdout)
@@ -1585,13 +1602,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     {
       try {
-	librados::ObjectIterator i = io_ctx.objects_begin();
-	librados::ObjectIterator i_end = io_ctx.objects_end();
+	librados::NObjectIterator i = io_ctx.nobjects_begin();
+	librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
-	  if (i->second.size())
-	    *outstream << i->first << "\t" << i->second << std::endl;
-	  else
-	    *outstream << i->first << std::endl;
+	  // Only include namespace in output when wildcard specified
+	  if (wildcard)
+	    *outstream << i->get_nspace() << "\t";
+	  *outstream << i->get_oid();
+	  if (i->get_locator().size())
+	    *outstream << "\t" << i->get_locator();
+	  *outstream << std::endl;
 	}
       }
       catch (const std::runtime_error& e) {
@@ -2718,6 +2738,10 @@ int main(int argc, const char **argv)
       opts["lock-type"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-N", "--namespace", (char*)NULL)) {
       opts["namespace"] = val;
+    } else if (ceph_argparse_flag(args, i, "--all", (char*)NULL)) {
+      opts["all"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--default", (char*)NULL)) {
+      opts["default"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();
