@@ -80,7 +80,7 @@ def validate_os_type_and_version(ctx, machine_type):
     os_version = misc.get_distro_version(ctx)
     if not validate_distro_version(os_version,
                                    valid_os_and_version[os_type]):
-        log.error('os-version is invalid')
+        log.error("os-version '%s' is invalid", os_version)
         return False
     return True
 
