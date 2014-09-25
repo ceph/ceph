@@ -326,7 +326,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 unsigned
 ErasureCodeIsaDefault::get_alignment() const
 {
-  return k * EC_ISA_VECTOR_OP_WORDSIZE;
+  return k * EC_ISA_ADDRESS_ALIGNMENT;
 }
 
 // -----------------------------------------------------------------------------
