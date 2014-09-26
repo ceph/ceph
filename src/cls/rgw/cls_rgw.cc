@@ -450,7 +450,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     uint64_t ver;
     decode_list_index_key(kiter->first, &key, &ver);
 
-    if (!op.list_versions && (!entry.is_current() || !entry.exists)) {
+    if (!op.list_versions && !entry.is_visible()) {
       continue;
     }
     m[key] = entry;

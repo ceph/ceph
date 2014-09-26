@@ -304,7 +304,15 @@ struct rgw_bucket_dir_entry {
     DECODE_FINISH(bl);
   }
 
-  bool is_current() { return (flags & RGW_BUCKET_DIRENT_FLAG_CURRENT) != 0; }
+  bool is_current() {
+    int test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
+    return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
+           (flags & test_flags) == test_flags;
+  }
+  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
+  bool is_visible() {
+    return is_current() && !is_delete_marker();
+  }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
