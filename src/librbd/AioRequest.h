@@ -72,12 +72,15 @@ namespace librbd {
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
 		   false),
 	m_buffer_extents(be),
-	m_tried_parent(false), m_sparse(sparse) {
+	m_tried_parent(false), m_sparse(sparse),
+	m_state(LIBRBD_AIO_READ_FLAT) {
+      guard_read();
     }
     virtual ~AioRead() {}
     ssize_t write_cor();
     virtual bool should_complete(int r);
     virtual int send();
+    void guard_read();
 
     ceph::bufferlist &data() {
       return m_read_data;
@@ -90,6 +93,30 @@ namespace librbd {
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
+
+    /**
+     * Reads go through the following state machine to deal with
+     * layering:
+     *
+     *                          need copyup
+     * LIBRBD_AIO_WRITE_GUARD ---------------> LIBRBD_AIO_WRITE_COPYUP
+     *           |                                       |
+     *           v                                       |
+     *         done <------------------------------------/
+     *           ^
+     *           |
+     * LIBRBD_AIO_WRITE_FLAT
+     *
+     * Reads start in LIBRBD_AIO_READ_GUARD or _FLAT, depending on
+     * whether there is a parent or not.
+     */
+    enum read_state_d {
+      LIBRBD_AIO_READ_GUARD,
+      LIBRBD_AIO_READ_COPYUP,
+      LIBRBD_AIO_READ_FLAT
+    };
+
+    read_state_d m_state;
   };
 
   class AbstractWrite : public AioRequest {

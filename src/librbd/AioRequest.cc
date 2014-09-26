@@ -71,100 +71,82 @@ namespace librbd {
 
   /** read **/
 
-  //copy-on-read: after read entire object, just write it into child
-  ssize_t AioRead::write_cor()
+  void AioRead::guard_read()
   {
-    ldout(m_ictx->cct, 20) << "write_cor" << dendl;
-    int ret = 0;
+    RWLock::RLocker l(m_ictx->snap_lock);
+    RWLock::RLocker l2(m_ictx->parent_lock);
 
-    m_ictx->snap_lock.get_read();
-    ::SnapContext snapc = m_ictx->snapc;
-    m_ictx->snap_lock.put_read();
+    vector<pair<uint64_t,uint64_t> > image_extents;
+    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                            m_object_no, 0, m_ictx->layout.fl_object_size,
+                            image_extents);
 
-    librados::ObjectWriteOperation copyup_cor;
-    copyup_cor.exec("rbd", "copyup", m_entire_object);
-
-    std::vector<librados::snap_t> m_snaps;
-    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
-                it != snapc.snaps.end(); ++it) {
-      m_snaps.push_back(it->val);
+    uint64_t image_overlap = 0;
+    m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+    uint64_t object_overlap =
+      m_ictx->prune_parent_extents(image_extents, image_overlap);
+    if (object_overlap) {
+      ldout(m_ictx->cct, 20) << __func__ << " guarding read" << dendl;
+      m_state = LIBRBD_AIO_READ_GUARD;
     }
-
-    librados::AioCompletion *cor_completion =
-        librados::Rados::aio_create_completion(m_ictx, librbd::cor_completion_callback, NULL);
-
-    xlist<librados::AioCompletion *>::item *comp =
-       new xlist<librados::AioCompletion *>::item(cor_completion);
-
-    m_ictx->add_cor_completion(comp);//add cor_completion to xlist
-    //asynchronously write object
-    ret = m_ictx->md_ctx.aio_operate(m_oid, cor_completion, &copyup_cor, snapc.seq.val, m_snaps);
-
-    return ret;
   }
 
   bool AioRead::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
-			   << " r = " << r << dendl;
-
-    //get copy-on-read option and check image if read_only
     bool cor = (m_ictx->cct->_conf->rbd_clone_copy_on_read) && (!m_ictx->read_only);
-    ldout(m_ictx->cct, 20) << "should_complete cor = " << cor << " read_only = " << m_ictx->read_only << dendl;
+    ldout(m_ictx->cct, 20) << "AioRead::should_complete " << this
+                           << " " << m_oid << " " << m_object_off
+                           << "~" << m_object_len << " r = " << r
+                           << " cor = " << cor
+                           << " readonly = " << m_ictx->read_only
+                           << dendl;
 
-    if (!m_tried_parent && r == -ENOENT) {
-      RWLock::RLocker l(m_ictx->snap_lock);
-      RWLock::RLocker l2(m_ictx->parent_lock);
+    bool finished = true;
 
-      // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
+    switch (m_state) {
+    case LIBRBD_AIO_READ_GUARD:
+      ldout(m_ictx->cct, 20) << "should_complete " << this
+                             << " READ_CHECK_GUARD" << dendl;
 
-      uint64_t image_overlap = 0;
-      r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
-      if (r < 0) {
-	assert(0 == "FIXME");
-      }
-      uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
-      if (object_overlap) {
-	m_tried_parent = true;
-       if (cor) {//copy-on-read option  
-           vector<pair<uint64_t,uint64_t> > extend_image_extents;
-           //extend range to entire object
-           Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-                           m_object_no, 0, m_ictx->layout.fl_object_size,
-                           extend_image_extents);
-           //read entire object from parent , and put it in m_entire_object
-           read_from_parent_cor(extend_image_extents);
-       } else {
-           read_from_parent(image_extents);
-       }
-	return false;
-      }
-    }
+      if (!m_tried_parent && r == -ENOENT) {
+        RWLock::RLocker l(m_ictx->snap_lock);
+        RWLock::RLocker l2(m_ictx->parent_lock);
 
-    if (cor) {//copy-on-read option
-      //if read entire object from parent success
-      if (m_tried_parent && r > 0) {
+        // calculate reverse mapping onto the image
         vector<pair<uint64_t,uint64_t> > image_extents;
         Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-                            m_object_no, m_object_off, m_object_len,
-                            image_extents);
+			        m_object_no, m_object_off, m_object_len,
+			        image_extents);
+
         uint64_t image_overlap = 0;
-        int r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+        r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
         if (r < 0) {
           assert(0 == "FIXME");
         }
-	m_ictx->prune_parent_extents(image_extents, image_overlap);
-	// copy the read range to m_read_data
-	m_read_data.substr_of(m_entire_object, m_object_off, m_object_len);
-	write_cor();
+        uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
+        if (object_overlap) {
+          m_tried_parent = true;
+          read_from_parent(image_extents);
+          finished = false;
+        }
       }
+      break;
+    case LIBRBD_AIO_READ_COPYUP:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_COPYUP" << dendl;
+      // This is the extra step for copy-on-read: extract target content from entire_object
+      // and asynchronously copyup. It is different from copy-on-write as asynchronous copyup 
+      // won't return immediately, so the state won't goback to LIBRBD_AIO_READ_GUARD.
+      break;
+    case LIBRBD_AIO_READ_FLAT:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_FLAT" << dendl;
+      // The read contect should be deposit in m_read_data
+      break;
+    default:
+      lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
+      assert(0);
     }
 
-    return true;
+    return finished;
   }
 
   int AioRead::send() {
