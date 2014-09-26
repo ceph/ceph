@@ -2830,6 +2830,58 @@ stats_out:
     rdata.append("\n");
     r = 0;
 
+  } else if (prefix == "osd pool ls") {
+    stringstream oss;
+    string poolstr;
+    int64_t pool_id = -1;
+    bool one_pool = false;
+    if (cmd_getval(g_ceph_context, cmdmap, "name", poolstr)) {
+      pool_id = osdmap.lookup_pg_pool_name(poolstr);
+      if (pool_id < 0) {
+        ss << "unrecognised pool '" << poolstr << "'";
+        r = -ENOENT;
+        goto reply;
+      }
+      one_pool = true;
+    }
+
+    if (f) {
+      f->open_array_section("pools");
+    }
+
+    for (map<int64_t,pg_pool_t>::const_iterator p = osdmap.get_pools().begin();
+         p != osdmap.get_pools().end();
+         ++p) {
+
+      if (one_pool) {
+        assert(pool_id >= 0);
+      } else {
+        pool_id = p->first;
+        poolstr = osdmap.get_pool_name(pool_id);
+      }
+
+      if (f) {
+        f->open_object_section("pool");
+        f->dump_string("pool_name", poolstr.c_str());
+        f->dump_int("pool_id", pool_id);
+        p->second.dump(f.get());
+        f->close_section();
+      } else {
+        oss << "pool " << pool_id
+            << " '" << poolstr << "' "
+            << p->second << "\n";
+      }
+      if (one_pool)
+        break;
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+      rdata.append("\n");
+    } else {
+      rdata.append(oss);
+    }
+
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
@@ -5879,7 +5931,6 @@ done:
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					      get_last_committed() + 1));
     return true;
-
   } else if (prefix == "osd reweight-by-utilization") {
     int64_t oload;
     cmd_getval(g_ceph_context, cmdmap, "oload", oload, int64_t(120));
