@@ -1647,7 +1647,7 @@ void RGWPutObj::execute()
 
   perfcounter->inc(l_rgw_put);
   ret = -EINVAL;
-  if (!s->object) {
+  if (s->object_str.empty()) {
     goto done;
   }
 
@@ -1928,7 +1928,7 @@ done:
 
 int RGWPutMetadata::verify_permission()
 {
-  if (s->object) {
+  if (!s->object_str.empty()) {
     if (!verify_object_permission(s, RGW_PERM_WRITE))
       return -EACCES;
   } else {
@@ -1963,7 +1963,7 @@ void RGWPutMetadata::execute()
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
   /* no need to track object versioning, need it for bucket's data only */
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
+  RGWObjVersionTracker *ptracker = (!s->object_str.empty() ? NULL : &s->bucket_info.objv_tracker);
 
   if (s->object) {
     /* check if obj exists, read orig attrs */
@@ -2007,7 +2007,7 @@ void RGWPutMetadata::execute()
     cors_config.encode(cors_bl);
     attrs[RGW_ATTR_CORS] = cors_bl;
   }
-  if (s->object) {
+  if (!s->object_str.empty()) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
   } else {
     ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
@@ -2067,7 +2067,7 @@ void RGWDeleteObj::execute()
 {
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object_str);
-  if (s->object) {
+  if (!s->object_str.empty()) {
     store->set_atomic(s->obj_ctx, obj);
     ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
   }
@@ -2260,7 +2260,7 @@ void RGWCopyObj::execute()
 int RGWGetACLs::verify_permission()
 {
   bool perm;
-  if (s->object) {
+  if (!s->object_str.empty()) {
     perm = verify_object_permission(s, RGW_PERM_READ_ACP);
   } else {
     perm = verify_bucket_permission(s, RGW_PERM_READ_ACP);
@@ -2279,7 +2279,7 @@ void RGWGetACLs::pre_exec()
 void RGWGetACLs::execute()
 {
   stringstream ss;
-  RGWAccessControlPolicy *acl = (s->object ? s->object_acl : s->bucket_acl);
+  RGWAccessControlPolicy *acl = (!s->object_str.empty() ? s->object_acl : s->bucket_acl);
   RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(acl);
   s3policy->to_xml(ss);
   acls = ss.str();
@@ -2290,7 +2290,7 @@ void RGWGetACLs::execute()
 int RGWPutACLs::verify_permission()
 {
   bool perm;
-  if (s->object) {
+  if (!s->object_str.empty()) {
     perm = verify_object_permission(s, RGW_PERM_WRITE_ACP);
   } else {
     perm = verify_bucket_permission(s, RGW_PERM_WRITE_ACP);
@@ -2376,14 +2376,14 @@ void RGWPutACLs::execute()
     *_dout << dendl;
   }
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
+  RGWObjVersionTracker *ptracker = (!s->object_str.empty() ? NULL : &s->bucket_info.objv_tracker);
 
   new_policy.encode(bl);
   obj.init(s->bucket, s->object_str);
   map<string, bufferlist> attrs;
   attrs[RGW_ATTR_ACL] = bl;
   store->set_atomic(s->obj_ctx, obj);
-  if (s->object) {
+  if (!s->object_str.empty()) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, NULL, ptracker);
   } else {
     ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
@@ -2427,7 +2427,7 @@ void RGWPutCORS::execute()
   if (ret < 0)
     return;
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
+  RGWObjVersionTracker *ptracker = (!s->object_str.empty() ? NULL : &s->bucket_info.objv_tracker);
 
   store->get_bucket_instance_obj(s->bucket, obj);
   store->set_atomic(s->obj_ctx, obj);
@@ -2460,7 +2460,7 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
 
-  RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
+  RGWObjVersionTracker *ptracker = (!s->object_str.empty() ? NULL : &s->bucket_info.objv_tracker);
 
   /* check if obj exists, read orig attrs */
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
@@ -2556,7 +2556,7 @@ void RGWInitMultipart::execute()
   if (get_params() < 0)
     return;
   ret = -EINVAL;
-  if (!s->object)
+  if (s->object_str.empty())
     return;
 
   policy.encode(aclbl);
