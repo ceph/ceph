@@ -54,35 +54,81 @@ namespace librbd {
 
   /** read **/
 
+  void AioRead::guard_read()
+  {
+    RWLock::RLocker l(m_ictx->snap_lock);
+    RWLock::RLocker l2(m_ictx->parent_lock);
+
+    vector<pair<uint64_t,uint64_t> > image_extents;
+    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                            m_object_no, 0, m_ictx->layout.fl_object_size,
+                            image_extents);
+
+    uint64_t image_overlap = 0;
+    m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+    uint64_t object_overlap =
+      m_ictx->prune_parent_extents(image_extents, image_overlap);
+    if (object_overlap) {
+      ldout(m_ictx->cct, 20) << __func__ << " guarding read" << dendl;
+      m_state = LIBRBD_AIO_READ_GUARD;
+    }
+  }
+
   bool AioRead::should_complete(int r)
   {
-    ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
-			   << " r = " << r << dendl;
+    bool cor = (m_ictx->cct->_conf->rbd_clone_copy_on_read) && (!m_ictx->read_only);
+    ldout(m_ictx->cct, 20) << "AioRead::should_complete " << this
+                           << " " << m_oid << " " << m_object_off
+                           << "~" << m_object_len << " r = " << r
+                           << " cor = " << cor
+                           << " readonly = " << m_ictx->read_only
+                           << dendl;
 
-    if (!m_tried_parent && r == -ENOENT) {
-      RWLock::RLocker l(m_ictx->snap_lock);
-      RWLock::RLocker l2(m_ictx->parent_lock);
+    bool finished = true;
 
-      // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
+    switch (m_state) {
+    case LIBRBD_AIO_READ_GUARD:
+      ldout(m_ictx->cct, 20) << "should_complete " << this
+                             << " READ_CHECK_GUARD" << dendl;
 
-      uint64_t image_overlap = 0;
-      r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
-      if (r < 0) {
-	assert(0 == "FIXME");
+      if (!m_tried_parent && r == -ENOENT) {
+        RWLock::RLocker l(m_ictx->snap_lock);
+        RWLock::RLocker l2(m_ictx->parent_lock);
+
+        // calculate reverse mapping onto the image
+        vector<pair<uint64_t,uint64_t> > image_extents;
+        Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			        m_object_no, m_object_off, m_object_len,
+			        image_extents);
+
+        uint64_t image_overlap = 0;
+        r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+        if (r < 0) {
+          assert(0 == "FIXME");
+        }
+        uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
+        if (object_overlap) {
+          m_tried_parent = true;
+          read_from_parent(image_extents);
+          finished = false;
+        }
       }
-      uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
-      if (object_overlap) {
-	m_tried_parent = true;
-        read_from_parent(image_extents);
-       }
-	return false;
-      }
+      break;
+    case LIBRBD_AIO_READ_COPYUP:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_COPYUP" << dendl;
+      // This is the extra step for copy-on-read: extract target content from entire_object
+      // and asynchronously copyup. It is different from copy-on-write as asynchronous copyup 
+      // won't return immediately, so the state won't goback to LIBRBD_AIO_READ_GUARD.
+      break;
+    case LIBRBD_AIO_READ_FLAT:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_FLAT" << dendl;
+      // The read contect should be deposit in m_read_data
+      break;
+    default:
+      lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
+      assert(0);
     }
-    return true;
+    return finished;
   }
 
   int AioRead::send() {
