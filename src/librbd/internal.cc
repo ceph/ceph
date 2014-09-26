@@ -2152,8 +2152,8 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
     ictx->readahead.wait_for_pending();
-    if (ictx->cor_completions)
-      ictx->wait_last_completions();//copy-on-read: wait for unfinished AioCompletion requests
+    if (!ictx->copyup_queue.empty())
+      ictx->wait_last_completions();
 
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
@@ -3300,5 +3300,43 @@ reprotect_and_return_err:
     AioCompletion *c = aio_create_completion(cb_arg, cb_complete);
     c->rbd_comp = c;
     return c;
+  }
+
+  void rbd_copyup_cb(rados_completion_t c, void *arg)
+  {
+    librbd::ImageCtx *ictx = (librbd::ImageCtx *)arg;
+
+    ldout(ictx->cct, 20) << "rbd_copyup_cb::looking for aio_completion_impl " << c
+                         << ": is_complete " << rados_aio_is_complete(c)
+                         << " is_safe " << rados_aio_is_safe(c)
+                         << " is_complete_and_cb " << rados_aio_is_complete_and_cb(c)
+                         << " is_safe_and_cb " << rados_aio_is_safe_and_cb(c)
+                         << dendl;
+
+    ictx->copyup_queue_lock.Lock();
+    for (map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr = ictx->copyup_queue.begin();
+          itr != ictx->copyup_queue.end(); ++itr) {
+      if (((itr->second).second)->pc == c) {
+        librados::AioCompletion *comp = (itr->second).second;
+        rados_aio_release(comp->pc);
+        ldout(ictx->cct, 20) << "rbd_copyup_cb::found aio_completion_impl "<< c
+                             << " in copyup_queue " << comp->pc
+                             << " releasing ono= " << itr->first
+                             << ": is_complete " << rados_aio_is_complete(comp->pc)
+                             << " is_safe " << rados_aio_is_safe(comp->pc)
+                             << " is_complete_and_cb " << rados_aio_is_complete_and_cb(comp->pc)
+                             << " is_safe_and_cb " << rados_aio_is_safe_and_cb(comp->pc)
+                             << dendl;
+
+        // free bufferlist holding the entire object
+        delete (itr->second).first;
+        (itr->second).second = NULL;
+        ictx->copyup_queue.erase(itr);
+        break;
+      }
+    }
+    ldout(ictx->cct, 20) << "rbd_copyup_cb:: after cleanup: size = "
+                         << ictx->copyup_queue.size() << dendl;
+    ictx->copyup_queue_lock.Unlock();
   }
 }

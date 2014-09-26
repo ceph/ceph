@@ -71,6 +71,19 @@ namespace librbd {
 
   /** read **/
 
+  void AioRead::read_from_parent_cor(vector<pair<uint64_t,uint64_t> >& image_extents)
+  {
+    assert(!m_parent_completion);
+    m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+    ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
+                           << " parent completion " << m_parent_completion
+                           << " extents " << image_extents
+                           << dendl;
+    assert(m_entire_object);
+    aio_read(m_ictx->parent, image_extents, NULL, m_entire_object,
+	     m_parent_completion);
+  }
+
   void AioRead::guard_read()
   {
     RWLock::RLocker l(m_ictx->snap_lock);
@@ -108,7 +121,30 @@ namespace librbd {
       ldout(m_ictx->cct, 20) << "should_complete " << this
                              << " READ_CHECK_GUARD" << dendl;
 
+      // This is the step to read from parent
       if (!m_tried_parent && r == -ENOENT) {
+        // Check whether there is a valid writing-backing object in
+        // copyup_queue (valid means the bufferlist has been fulfilled and
+        // librados::AioCompletion field is assigned). If found, extracts
+        // requesting bits from that queued object.
+        if (cor) {
+          m_ictx->copyup_queue_lock.Lock();
+          map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
+            m_ictx->copyup_queue.find(m_object_no);
+          if (itr != m_ictx->copyup_queue.end() && (itr->second).second != NULL) {
+            ceph::bufferlist *entire_object = (itr->second).first;
+            assert(entire_object);
+            m_read_data.substr_of(*entire_object, m_object_off, m_object_len);
+            m_ictx->copyup_queue_lock.Unlock();
+            ldout(m_ictx->cct, 20) << "AioRead::should_complete "<< this
+                                   << " extracts " << m_oid << " " << m_object_off
+                                   << "~" << m_object_len << "from copyup_queue"
+                                   << dendl;
+            break;
+          }
+          m_ictx->copyup_queue_lock.Unlock();
+        }
+
         RWLock::RLocker l(m_ictx->snap_lock);
         RWLock::RLocker l2(m_ictx->parent_lock);
 
@@ -126,17 +162,52 @@ namespace librbd {
         uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
         if (object_overlap) {
           m_tried_parent = true;
-          read_from_parent(image_extents);
+          m_ictx->copyup_queue_lock.Lock();
+          map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
+            m_ictx->copyup_queue.find(m_object_no);
+          bool new_copyup  = (itr == m_ictx->copyup_queue.end());
+          m_ictx->copyup_queue_lock.Unlock();
+          if (cor && new_copyup) {
+            // depends on copy-on-read option, either read the whole object or partial
+            vector<pair<uint64_t,uint64_t> > extend_image_extents;
+            //extend range to entire object
+            Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
+                                    0, m_ictx->layout.fl_object_size,
+                                    extend_image_extents);
+            //read_from_parent(extend_image_extents);
+            m_entire_object = m_ictx->alloc_copyup_queue_slot(m_object_no);
+            assert(m_entire_object);
+            read_from_parent_cor(extend_image_extents);
+            m_state = LIBRBD_AIO_READ_COPYUP;
+          } else {
+            read_from_parent(image_extents);
+            m_state = LIBRBD_AIO_READ_GUARD;
+          }
           finished = false;
         }
       }
       break;
     case LIBRBD_AIO_READ_COPYUP:
       ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_COPYUP" << dendl;
-      // This is the extra step for copy-on-read: extract target content from entire_object
-      // and asynchronously copyup. It is different from copy-on-write as asynchronous copyup 
-      // won't return immediately, so the state won't goback to LIBRBD_AIO_READ_GUARD.
-      break;
+      // This is the extra step for copy-on-read: extract target content from
+      // entire_object and asynchronously copyup. It is different from
+      // copy-on-write as asynchronous copyup won't return immediately, so the
+      // state won't goback to LIBRBD_AIO_READ_GUARD.
+
+      // if read entire object from parent success
+      if (m_tried_parent && r > 0) {
+        // copy the read range to m_read_data
+        m_read_data.substr_of(*m_entire_object, m_object_off, m_object_len);
+        send_copyup();
+        finished = true;
+        break;
+      }
+
+      if (r < 0) {
+        ldout(m_ictx->cct, 20) << "error checking for object existence" << dendl;
+        finished = false;
+        break;
+      }
     case LIBRBD_AIO_READ_FLAT:
       ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_FLAT" << dendl;
       // The read contect should be deposit in m_read_data
@@ -167,6 +238,30 @@ namespace librbd {
 
     rados_completion->release();
     return r;
+  }
+
+  void AioRead::send_copyup()
+  {
+    ldout(m_ictx->cct, 20) << "send_copyup" << dendl;
+
+    m_ictx->snap_lock.get_read();
+    ::SnapContext snapc = m_ictx->snapc;
+    m_ictx->snap_lock.put_read();
+
+    std::vector<librados::snap_t> snaps;
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+         it != snapc.snaps.end(); ++it) {
+      snaps.push_back(it->val);
+    }
+
+    librados::ObjectWriteOperation copyup_cor;
+    copyup_cor.exec("rbd", "copyup", *m_entire_object);
+
+    librados::AioCompletion *copyup_completion =
+      librados::Rados::aio_create_completion(m_ictx, NULL, rbd_copyup_cb);
+    m_ictx->kickoff_copyup(m_object_no, copyup_completion);
+    m_ictx->md_ctx.aio_operate(m_oid, copyup_completion, &copyup_cor,
+                               snapc.seq.val, snaps);
   }
 
   /** write **/
@@ -249,7 +344,31 @@ namespace librbd {
 				 << m_object_image_extents << dendl;
 
 	  m_state = LIBRBD_AIO_WRITE_COPYUP;
-	  read_from_parent(m_object_image_extents);
+          // TODO: check whether the targeting object is in the copyup_queue.
+          // If it is resides in the queue, wait it for complete and retry the
+          // write.
+          m_ictx->copyup_queue_lock.Lock();
+          map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
+            m_ictx->copyup_queue.find(m_object_no);
+          // if librados::AioCompletion field is assigned, then the bufferlist
+          // holding the entire object is valid
+          if (itr != m_ictx->copyup_queue.end() && (itr->second).second != NULL) {
+            // The copyup is undergoing, finish it up
+            librados::AioCompletion *comp = (itr->second).second;
+            comp->wait_for_complete();
+            comp->release();
+            delete (itr->second).first;
+            m_ictx->copyup_queue.erase(itr);
+
+            m_ictx->copyup_queue_lock.Unlock();
+            ldout(m_ictx->cct, 20) << "AbstractWrite::should_complete "<< this
+                                   << " pushed " << m_oid << " from copyup_queue"
+                                   << dendl;
+            return should_complete(1);
+          }
+          m_ictx->copyup_queue_lock.Unlock();
+
+          read_from_parent(m_object_image_extents);
 	} else {
 	  ldout(m_ictx->cct, 20) << "should_complete(" << this
 				 << "): parent overlap now 0" << dendl;
