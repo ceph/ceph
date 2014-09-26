@@ -141,8 +141,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   object_acl = NULL;
   expect_cont = false;
 
-  object = NULL;
-
   header_ended = false;
   obj_size = 0;
   prot_flags = 0;
@@ -153,7 +151,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   time = ceph_clock_now(cct);
   perm_mask = 0;
   content_length = 0;
-  object = NULL;
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
@@ -168,7 +165,6 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
-  free((void *)object);
 }
 
 struct str_len {
