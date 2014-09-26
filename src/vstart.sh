@@ -538,11 +538,11 @@ EOF
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 
-        cmd="$CEPH_ADM osd pool create cephfs_data 128"
+        cmd="$CEPH_ADM osd pool create cephfs_data 8"
         echo $cmd
         $cmd
 
-        cmd="$CEPH_ADM osd pool create cephfs_metadata 128"
+        cmd="$CEPH_ADM osd pool create cephfs_metadata 8"
         echo $cmd
         $cmd
 
