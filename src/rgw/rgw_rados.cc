@@ -6399,6 +6399,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
     e.owner_display_name = dirent.meta.owner_display_name;
     e.content_type = dirent.meta.content_type;
     e.tag = dirent.tag;
+    e.flags = dirent.flags;
 
     /* oh, that shouldn't happen! */
     if (e.key.empty()) {

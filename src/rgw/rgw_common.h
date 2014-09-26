@@ -998,8 +998,9 @@ struct RGWObjEnt {
   string etag;
   string content_type;
   string tag;
+  uint32_t flags;
 
-  RGWObjEnt() : size(0) {}
+  RGWObjEnt() : size(0), flags(0) {}
 
   void dump(Formatter *f) const;
 };

@@ -570,6 +570,7 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("etag", etag, f);
   encode_json("content_type", content_type, f);
   encode_json("tag", tag, f);
+  encode_json("flags", flags, f);
 }
 
 void RGWBucketEnt::dump(Formatter *f) const

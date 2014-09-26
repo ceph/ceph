@@ -2079,6 +2079,7 @@ next:
             }
           }
         }
+        formatter->dump_int("flags", entry.flags);
 
         formatter->close_section();
         formatter->flush(cout);
