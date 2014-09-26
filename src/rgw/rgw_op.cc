@@ -1162,7 +1162,7 @@ void RGWListBucket::execute()
   rgw_obj_key *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
 
   ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, false, &is_truncated, NULL);
+                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, list_versions, &is_truncated, NULL);
 }
 
 int RGWGetBucketLogging::verify_permission()

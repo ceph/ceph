@@ -1003,6 +1003,16 @@ struct RGWObjEnt {
   RGWObjEnt() : size(0), flags(0) {}
 
   void dump(Formatter *f) const;
+
+  bool is_current() {
+    uint32_t test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
+    return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
+           (flags & test_flags) == test_flags;
+  }
+  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
+  bool is_visible() {
+    return is_current() && !is_delete_marker();
+  }
 };
 
 /** Store basic data on bucket */

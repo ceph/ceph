@@ -2258,8 +2258,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       string instance;
 
       bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns);
-
-      if (!list_versions && !entry.key.instance.empty()) {
+      if (!list_versions && !entry.is_visible()) {
         continue;
       }
 
