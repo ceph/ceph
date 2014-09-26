@@ -666,6 +666,12 @@ function test_mon_osd_pool()
   ceph osd pool mksnap data datasnap
   rados -p data lssnap | grep datasnap
   ceph osd pool rmsnap data datasnap
+
+  ceph osd pool ls
+  ceph osd pool ls data
+  ceph osd pool ls --format json-pretty
+  ceph osd pool ls data --format json-pretty
+
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pool create data2 10
