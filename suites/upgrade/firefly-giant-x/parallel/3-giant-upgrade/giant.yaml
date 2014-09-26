@@ -1,0 +1,18 @@
+tasks:
+   - install.upgrade:
+       mon.a:
+         branch: giant
+       mon.b:
+         branch: giant
+       client.0:
+         branch: giant
+   - print: "**** done install.upgrade"
+   - ceph.restart:
+   - print: "**** done restart"
+   - parallel:
+     - workload2
+     - upgrade-sequence
+   - print: "**** done parallel 2"
+   - install.upgrade:
+       client.0:
+   - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
