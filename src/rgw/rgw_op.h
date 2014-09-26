@@ -241,6 +241,7 @@ protected:
   rgw_obj_key next_marker; 
   string max_keys;
   string delimiter;
+  bool list_versions;
   int max;
   int ret;
   vector<RGWObjEnt> objs;
@@ -252,12 +253,8 @@ protected:
   int parse_max_keys();
 
 public:
-  RGWListBucket() {
-    max = 0;
-    ret = 0;
-    default_max = 0;
-    is_truncated = false;
-  }
+  RGWListBucket() : list_versions(false), max(0), ret(0),
+                    default_max(0), is_truncated(false) {}
   int verify_permission();
   void pre_exec();
   void execute();

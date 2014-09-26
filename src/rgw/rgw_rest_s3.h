@@ -47,6 +47,7 @@ public:
 
   int get_params();
   void send_response();
+  void send_versioned_response();
 };
 
 class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {

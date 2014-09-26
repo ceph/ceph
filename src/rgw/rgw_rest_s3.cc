@@ -237,7 +237,54 @@ int RGWListBucket_ObjStore_S3::get_params()
     return ret;
   }
   delimiter = s->info.args.get("delimiter");
+  list_versions = s->info.args.exists("versions");
   return 0;
+}
+
+void RGWListBucket_ObjStore_S3::send_versioned_response()
+{
+  s->formatter->open_object_section_in_ns("ListVersionsResult",
+					  "http://s3.amazonaws.com/doc/2006-03-01/");
+  s->formatter->dump_string("Name", s->bucket_name_str);
+  s->formatter->dump_string("Prefix", prefix);
+  s->formatter->dump_string("KeyMarker", marker.name);
+  if (is_truncated && !next_marker.empty())
+    s->formatter->dump_string("NextKeyMarker", next_marker.name);
+  s->formatter->dump_int("MaxKeys", max);
+  if (!delimiter.empty())
+    s->formatter->dump_string("Delimiter", delimiter);
+
+  s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true" : "false"));
+
+  if (ret >= 0) {
+    vector<RGWObjEnt>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      time_t mtime = iter->mtime.sec();
+      const char *section_name = (iter->is_delete_marker() ? "DeleteMarker" : "Version");
+      s->formatter->open_array_section(section_name);
+      s->formatter->dump_string("Key", iter->key.name);
+      s->formatter->dump_string("VersionId", iter->key.instance);
+      s->formatter->dump_bool("IsLatest", iter->is_current());
+      dump_time(s, "LastModified", &mtime);
+      if (!iter->is_delete_marker()) {
+        s->formatter->dump_format("ETag", "\"%s\"", iter->etag.c_str());
+        s->formatter->dump_int("Size", iter->size);
+        s->formatter->dump_string("StorageClass", "STANDARD");
+      }
+      dump_owner(s, iter->owner, iter->owner_display_name);
+      s->formatter->close_section();
+    }
+    if (common_prefixes.size() > 0) {
+      map<string, bool>::iterator pref_iter;
+      for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
+        s->formatter->open_array_section("CommonPrefixes");
+        s->formatter->dump_string("Prefix", pref_iter->first);
+        s->formatter->close_section();
+      }
+    }
+  }
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
 void RGWListBucket_ObjStore_S3::send_response()
@@ -250,6 +297,11 @@ void RGWListBucket_ObjStore_S3::send_response()
   dump_start(s);
   if (ret < 0)
     return;
+
+  if (list_versions) {
+    send_versioned_response();
+    return;
+  }
 
   s->formatter->open_object_section_in_ns("ListBucketResult",
 					  "http://s3.amazonaws.com/doc/2006-03-01/");
