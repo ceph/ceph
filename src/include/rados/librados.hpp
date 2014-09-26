@@ -63,7 +63,7 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
-  class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
+  class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
   public:
     static const ObjectIterator __EndObjectIterator;
     ObjectIterator() {}
