@@ -202,6 +202,14 @@ struct nest_info_t : public scatter_info_t {
     rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
   }
 
+  bool same_sums(const nest_info_t &o) const {
+    return rctime == o.rctime &&
+        rbytes == o.rbytes &&
+        rfiles == o.rfiles &&
+        rsubdirs == o.rsubdirs &&
+        rsnaprealms == o.rsnaprealms;
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
