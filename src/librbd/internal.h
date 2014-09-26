@@ -213,6 +213,7 @@ namespace librbd {
   void rados_ctx_cb(rados_completion_t cb, void *arg);
   void rbd_req_cb(completion_t cb, void *arg);
   void rbd_ctx_cb(completion_t cb, void *arg);
+  void rbd_copyup_cb(completion_t aio_completion_impl, void *arg);
 }
 
 #endif

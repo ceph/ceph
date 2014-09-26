@@ -70,6 +70,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    Mutex copyup_queue_lock; // protects copyup_queue
 
     unsigned extra_read_flags;
 
@@ -90,6 +91,7 @@ namespace librbd {
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
+    std::map<uint64_t, std::pair<ceph::bufferlist*, librados::AioCompletion*> > copyup_queue;
 
     Readahead readahead;
     uint64_t total_bytes_read;
@@ -156,6 +158,9 @@ namespace librbd {
 			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
+    void wait_last_completions();
+    ceph::bufferlist* alloc_copyup_queue_slot(uint64_t ono);
+    void kickoff_copyup(uint64_t ono, librados::AioCompletion *copyup_completion);
 
   };
 }
