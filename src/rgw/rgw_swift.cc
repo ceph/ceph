@@ -534,7 +534,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   if (s->bucket_name_str.empty())
     return -EPERM;
 
-  if (s->object_str.empty())
+  if (s->object.empty())
     return -EPERM;
 
   string temp_url_sig = s->info.args.get("temp_url_sig");

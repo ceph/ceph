@@ -557,7 +557,7 @@ protected:
   map<string, bufferlist> attrs;
   string src_bucket_name;
   rgw_bucket src_bucket;
-  string src_object;
+  rgw_obj_key src_object;
   string dest_bucket_name;
   rgw_bucket dest_bucket;
   string dest_object;
@@ -593,7 +593,7 @@ public:
     last_ofs = 0;
   }
 
-  static bool parse_copy_location(const char *src, string& bucket_name, string& object);
+  static bool parse_copy_location(const char *src, string& bucket_name, rgw_obj_key& object);
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);

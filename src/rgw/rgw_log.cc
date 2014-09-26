@@ -293,10 +293,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     return 0;
   }
 
-  if (!s->object_str.empty())
-    entry.obj = s->object_str.c_str();
-  else
-    entry.obj = "-";
+  if (!s->object.empty()) {
+    entry.obj = s->object;
+  } else {
+    entry.obj = rgw_obj_key("-");
+  }
 
   entry.obj_size = s->obj_size;
 

@@ -282,8 +282,8 @@ void dump_bucket_from_state(struct req_state *s)
 
 void dump_object_from_state(struct req_state *s)
 {
-  if (!s->object_str.empty())
-    s->cio->print("Key: \"%s\"\n", s->object_str.c_str());
+  if (!s->object.empty())
+    s->cio->print("Key: \"%s\"\n", s->object.name.c_str());
 }
 
 void dump_uri_from_state(struct req_state *s)
@@ -297,8 +297,8 @@ void dump_uri_from_state(struct req_state *s)
     if (!s->bucket_name_str.empty()) {
       location += s->bucket_name_str;
       location += "/";
-      if (!s->object_str.empty()) {
-        location += s->object_str;
+      if (!s->object.empty()) {
+        location += s->object.name;
         s->cio->print("Location: %s\n", location.c_str());
       }
     }

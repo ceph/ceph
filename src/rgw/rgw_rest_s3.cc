@@ -1034,19 +1034,22 @@ int RGWPostObj_ObjStore_S3::get_params()
     env.add_var(part.name, part_str);
   } while (!done);
 
-  if (!part_str("key", &s->object_str)) {
+  string object_str;
+  if (!part_str("key", &object_str)) {
     err_msg = "Key not specified";
     return -EINVAL;
   }
 
-  rebuild_key(s->object_str);
+  s->object = rgw_obj_key(object_str);
 
-  if (s->object_str.empty()) {
+  rebuild_key(s->object.name);
+
+  if (s->object.empty()) {
     err_msg = "Empty object name";
     return -EINVAL;
   }
 
-  env.add_var("key", s->object_str);
+  env.add_var("key", s->object.name);
 
   part_str("Content-Type", &content_type);
   env.add_var("Content-Type", content_type);
@@ -1258,7 +1261,7 @@ void RGWPostObj_ObjStore_S3::send_response()
     string etag_url;
 
     url_encode(s->bucket_name_str, bucket);
-    url_encode(s->object_str, key);
+    url_encode(s->object.name, key);
     url_encode(etag_str, etag_url);
 
     redirect.append("?bucket=");
@@ -1305,9 +1308,9 @@ done:
   if (ret == STATUS_CREATED) {
     s->formatter->open_object_section("PostResponse");
     if (g_conf->rgw_dns_name.length())
-      s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object_str.c_str());
+      s->formatter->dump_format("Location", "%s/%s", s->info.script_uri.c_str(), s->object.name.c_str());
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object_str);
+    s->formatter->dump_string("Key", s->object.name);
     s->formatter->close_section();
   }
   s->err.message = err_msg;
@@ -1361,7 +1364,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
   src_bucket_name = s->src_bucket_name;
   src_object = s->src_object;
   dest_bucket_name = s->bucket.name;
-  dest_object = s->object_str;
+  dest_object = s->object.name;
 
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
@@ -1392,7 +1395,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
 
   if (source_zone.empty() &&
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_object.compare(src_object) == 0) &&
+      (dest_object.compare(src_object.name) == 0) &&
+      src_object.instance.empty() &&
       !replace_attrs) {
     /* can only copy object into itself if replacing attrs */
     ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs" << dendl;
@@ -1457,7 +1461,7 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(RGWRados *store, struct req_st
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   // bucket-* canned acls do not apply to bucket
-  if (s->object_str.empty()) {
+  if (s->object.empty()) {
     if (s->canned_acl.find("bucket") != string::npos)
       s->canned_acl.clear();
   }
@@ -1624,7 +1628,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object_str);
+    s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1644,7 +1648,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), g_conf->rgw_dns_name.c_str());
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object_str);
+    s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("ETag", etag);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1683,7 +1687,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
       cur_max = test_iter->first;
     }
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object_str);
+    s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
     s->formatter->dump_int("PartNumberMarker", marker);
@@ -2025,10 +2029,10 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
 
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
-      s->object_str = encoded_obj_str;
+      s->object = rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"));
     }
   } else {
-    s->object_str = req_name;
+    s->object = rgw_obj_key(req_name, s->info.args.get("versionId"));
   }
   return 0;
 }
@@ -2093,13 +2097,13 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (!s->object_str.empty() ? s->object_str : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
   int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
   if (ret)
     return ret;
-  ret = validate_object_name(s->object_str);
+  ret = validate_object_name(s->object.name);
   if (ret)
     return ret;
 
@@ -2383,7 +2387,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_S3;
 
-  if (s->object_str.empty())
+  if (s->object.empty())
     return new RGWHandler_ObjStore_Bucket_S3;
 
   return new RGWHandler_ObjStore_Obj_S3;
