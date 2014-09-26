@@ -107,17 +107,6 @@ function TEST_erasure_crush_rule() {
     ! ./ceph osd pool create $poolname 12 12 erasure myprofile INVALIDRULESET || return 1
 }
 
-function TEST_erasure_crush_rule_pending() {
-    local dir=$1
-    run_mon $dir a --public-addr 127.0.0.1
-    # try again if the ruleset creation is pending
-    crush_ruleset=erasure_ruleset
-    CEPH_ARGS='' ./ceph --mon-host=127.0.0.1 tell 'mon.*' injectargs -- --mon-debug-idempotency || return 1
-    ./ceph osd pool create pool_erasure 12 12 erasure default $crush_ruleset || return 1
-    CEPH_ARGS='' ./ceph --admin-daemon $dir/a/ceph-mon.a.asok log flush || return 1
-    grep "$crush_ruleset try again" $dir/a/log || return 1
-}
-
 function TEST_erasure_code_profile_default() {
     local dir=$1
     run_mon $dir a --public-addr 127.0.0.1
