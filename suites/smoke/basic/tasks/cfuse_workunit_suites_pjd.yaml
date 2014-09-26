@@ -3,8 +3,12 @@ tasks:
 - ceph:
     fs: xfs
     conf:
-      debug mds: 20
-      debug client: 20
+      mds:
+        debug mds: 20
+        debug ms: 1
+      client:
+        debug client: 20
+        debug ms: 1
 - ceph-fuse:
 - workunit:
     clients:
