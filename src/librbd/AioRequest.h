@@ -70,7 +70,7 @@ namespace librbd {
 		   false),
 	m_buffer_extents(be),
 	m_tried_parent(false), m_sparse(sparse),
-	m_state(LIBRBD_AIO_READ_FLAT) {
+	m_entire_object(NULL), m_state(LIBRBD_AIO_READ_FLAT) {
       guard_read();
     }
     virtual ~AioRead() {}
@@ -86,9 +86,12 @@ namespace librbd {
     friend class C_AioRead;
 
   private:
+    void read_from_parent_cor(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void send_copyup();
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
+    ceph::bufferlist *m_entire_object;
 
     /**
      * Reads go through the following state machine to deal with
