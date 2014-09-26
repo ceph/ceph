@@ -11,7 +11,7 @@ configobj
 httplib2
 paramiko < 1.8
 pexpect
-requests >= 1.0
+requests >= 2.3.0
 raven
 web.py
 docopt
