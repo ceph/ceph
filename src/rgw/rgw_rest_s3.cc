@@ -1624,7 +1624,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
     s->formatter->open_object_section_in_ns("InitiateMultipartUploadResult",
 		  "http://s3.amazonaws.com/doc/2006-03-01/");
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object);
+    s->formatter->dump_string("Key", s->object_str);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1644,7 +1644,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     if (g_conf->rgw_dns_name.length())
       s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), g_conf->rgw_dns_name.c_str());
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object);
+    s->formatter->dump_string("Key", s->object_str);
     s->formatter->dump_string("ETag", etag);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1683,7 +1683,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
       cur_max = test_iter->first;
     }
     s->formatter->dump_string("Bucket", s->bucket_name_str);
-    s->formatter->dump_string("Key", s->object);
+    s->formatter->dump_string("Key", s->object_str);
     s->formatter->dump_string("UploadId", upload_id);
     s->formatter->dump_string("StorageClass", "STANDARD");
     s->formatter->dump_int("PartNumberMarker", marker);
@@ -2026,14 +2026,9 @@ int RGWHandler_ObjStore_S3::init_from_header(struct req_state *s, int default_fo
     if (pos >= 0) {
       string encoded_obj_str = req.substr(pos+1);
       s->object_str = encoded_obj_str;
-
-      if (s->object_str.size() > 0) {
-        s->object = strdup(s->object_str.c_str());
-      }
     }
   } else {
     s->object_str = req_name;
-    s->object = strdup(s->object_str.c_str());
   }
   return 0;
 }
@@ -2098,7 +2093,7 @@ int RGWHandler_ObjStore_S3::validate_bucket_name(const string& bucket, bool rela
 
 int RGWHandler_ObjStore_S3::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (!s->object_str.empty() ? s->object_str : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
   int ret = validate_bucket_name(s->bucket_name_str, relaxed_names);
@@ -2388,7 +2383,7 @@ RGWHandler *RGWRESTMgr_S3::get_handler(struct req_state *s)
   if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_S3;
 
-  if (!s->object)
+  if (s->object_str.empty())
     return new RGWHandler_ObjStore_Bucket_S3;
 
   return new RGWHandler_ObjStore_Obj_S3;
