@@ -5136,37 +5136,6 @@ void PG::queue_peering_event(CephPeeringEvtRef evt)
   osd->queue_for_peering(this);
 }
 
-void PG::queue_notify(epoch_t msg_epoch,
-		      epoch_t query_epoch,
-		      pg_shard_t from, pg_notify_t& i)
-{
-  dout(10) << "notify " << i << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MNotifyRec(from, i))));
-}
-
-void PG::queue_info(epoch_t msg_epoch,
-		     epoch_t query_epoch,
-		     pg_shard_t from, pg_info_t& i)
-{
-  dout(10) << "info " << i << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MInfoRec(from, i, msg_epoch))));
-}
-
-void PG::queue_log(epoch_t msg_epoch,
-		   epoch_t query_epoch,
-		   pg_shard_t from,
-		   MOSDPGLog *msg)
-{
-  dout(10) << "log " << *msg << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MLogRec(from, msg))));
-}
-
 void PG::queue_null(epoch_t msg_epoch,
 		    epoch_t query_epoch)
 {
