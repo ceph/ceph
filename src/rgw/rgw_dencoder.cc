@@ -200,7 +200,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->bucket = "bucket";
   e->remote_addr = "1.2.3.4";
   e->user = "user";
-  e->obj = "obj";
+  e->obj = rgw_obj_key("obj");
   e->uri = "http://uri/bucket/obj";
   e->http_status = "200";
   e->error_code = "error_code";

@@ -85,7 +85,9 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
   f->dump_string("user", user);
-  f->dump_string("obj", obj);
+  stringstream s;
+  s << obj;
+  f->dump_string("obj", s.str());
   f->dump_string("op", op);
   f->dump_string("uri", uri);
   f->dump_string("http_status", http_status);

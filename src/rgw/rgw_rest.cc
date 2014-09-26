@@ -291,8 +291,8 @@ void dump_uri_from_state(struct req_state *s)
     if (!s->bucket_name_str.empty()) {
       location += s->bucket_name_str;
       location += "/";
-      if (!s->object_str.empty()) {
-        location += s->object_str;
+      if (!s->object.empty()) {
+        location += s->object.name;
         s->cio->print("Location: %s\r\n", location.c_str());
       }
     }
