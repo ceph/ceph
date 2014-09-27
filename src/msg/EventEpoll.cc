@@ -84,8 +84,6 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 
 int EpollDriver::resize_events(int newsize)
 {
-  size = newsize;
-  events = (struct epoll_event*)realloc(events, sizeof(struct epoll_event)*newsize);
   return 0;
 }
 
