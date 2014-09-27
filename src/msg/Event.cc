@@ -60,6 +60,8 @@ int EventCenter::init(int n)
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
+  file_events = (FileEvent *)malloc(sizeof(FileEvent)*n);
+  memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
   create_file_event(notify_receive_fd, EVENT_READABLE, EventCallbackRef(new C_handle_notify()));
@@ -80,27 +82,30 @@ EventCenter::~EventCenter()
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
   int r;
-  if (file_events.size() > nevent) {
+  if (fd > nevent) {
     int new_size = nevent << 2;
+    while (fd > new_size)
+      new_size <<= 2;
     ldout(cct, 10) << __func__ << " event count exceed " << nevent << ", expand to " << new_size << dendl;
     r = driver->resize_events(new_size);
     if (r < 0) {
       lderr(cct) << __func__ << " event count is exceed." << dendl;
       return -ERANGE;
     }
+    FileEvent *new_events = (FileEvent *)realloc(file_events, sizeof(FileEvent)*new_size);
+    if (!new_events) {
+      lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
+      return -errno;
+    }
+    file_events = new_events;
     nevent = new_size;
   }
 
   EventCenter::FileEvent *event = _get_file_event(fd);
 
-  r = driver->add_event(fd, event ? event->mask: EVENT_NONE, mask);
+  r = driver->add_event(fd, event->mask, mask);
   if (r < 0)
     return r;
-
-  if (!event) {
-    file_events[fd] = EventCenter::FileEvent();
-    event = &file_events[fd];
-  }
 
   event->mask |= mask;
   if (mask & EVENT_READABLE) {
@@ -117,7 +122,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   EventCenter::FileEvent *event = _get_file_event(fd);
-  if (!event)
+  if (!event->mask)
     return ;
 
   driver->del_event(fd, event->mask, mask);
@@ -130,8 +135,6 @@ void EventCenter::delete_file_event(int fd, int mask)
   }
 
   event->mask = event->mask & (~mask);
-  if (event->mask == EVENT_NONE)
-    file_events.erase(fd);
   ldout(cct, 10) << __func__ << " delete fd=" << fd << " mask=" << mask
                  << " now mask is " << event->mask << dendl;
 }

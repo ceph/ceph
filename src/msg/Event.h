@@ -73,11 +73,11 @@ class EventCenter {
   };
 
   CephContext *cct;
-  uint64_t nevent;
+  int nevent;
   // Used only to external event
   Mutex lock;
   deque<EventCallbackRef> external_events;
-  unordered_map<int, FileEvent> file_events;
+  FileEvent *file_events;
   EventDriver *driver;
   map<utime_t, list<TimeEvent> > time_events;
   uint64_t time_event_next_id;
@@ -87,11 +87,10 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
-    unordered_map<int, FileEvent>::iterator it = file_events.find(fd);
-    if (it != file_events.end()) {
-      return &it->second;
-    }
-    return NULL;
+    FileEvent *p = &file_events[fd];
+    if (!p->mask)
+      new(p) FileEvent();
+    return p;
   }
 
  public:
