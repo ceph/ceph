@@ -1070,7 +1070,8 @@ int rados_ioctx_snap_get_stamp(rados_ioctx_t io, rados_snap_t id, time_t *t);
 uint64_t rados_get_last_version(rados_ioctx_t io);
 
 /**
- * Write data to an object
+ * Write *len* bytes from *buf* into the *oid* object, starting at
+ * offset *off*. The value of *len* must be <= UINT_MAX/2.
  *
  * @note This will never return a positive value not equal to len.
  * @param io the io context in which the write will occur
@@ -1083,7 +1084,8 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 
 /**
- * Write an entire object
+ * Write *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
  *
  * The object is filled with the provided data. If the object exists,
  * it is atomically truncated and then written.
@@ -1118,7 +1120,8 @@ int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
                       const char *src, uint64_t src_off, size_t len);
 
 /**
- * Append data to an object
+ * Append *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
  *
  * @param io the context to operate in
  * @param oid the name of the object
