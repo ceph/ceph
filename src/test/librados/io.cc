@@ -32,6 +32,11 @@ TEST_F(LibRadosIo, TooBig) {
   ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_write_full(ioctx, "A", buf, UINT_MAX));
+  IoCtx ioctx;
+  bufferlist bl;
+  ASSERT_EQ(-E2BIG, ioctx.write("foo", bl, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, ioctx.append("foo", bl, UINT_MAX));
+  // ioctx.write_full no way to overflow bl.length()
 }
 
 TEST_F(LibRadosIo, ReadTimeout) {
