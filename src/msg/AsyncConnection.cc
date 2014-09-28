@@ -1989,23 +1989,21 @@ void AsyncConnection::handle_write()
       keepalive = false;
     }
 
-    bool send = true;
     while (1) {
       Message *m = _get_next_outgoing();
       if (!m)
         break;
 
-      assert(m);
       ldout(async_msgr->cct, 10) << __func__ << " try send msg " << m << dendl;
       r = _send(m);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
         goto fail;
       } else if (r > 0) {
-        send = false;
         break;
       }
     }
+
     if (in_seq > in_seq_acked) {
       ceph_le64 s;
       s = in_seq;
@@ -2013,14 +2011,7 @@ void AsyncConnection::handle_write()
       bl.append((char*)&s, sizeof(s));
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack" << dendl;
       in_seq_acked = s;
-    }
-
-    r = _try_send(bl, send);
-    if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send msg ack failed" << dendl;
-      goto fail;
-    } else if (r > 0) {
-      return ;
+      _try_send(bl, false);
     }
   } else if (state != STATE_CONNECTING) {
     r = _try_send(bl);
