@@ -1787,6 +1787,7 @@ void AsyncConnection::was_session_reset()
 
   in_seq = 0;
   connect_seq = 0;
+  in_seq_acked = 0;
 }
 
 void AsyncConnection::mark_down()
@@ -1985,22 +1986,7 @@ void AsyncConnection::handle_write()
       keepalive = false;
     }
 
-    if (in_seq > in_seq_acked) {
-      ceph_le64 s;
-      s = in_seq;
-      bl.append(CEPH_MSGR_TAG_ACK);
-      bl.append((char*)&s, sizeof(s));
-      ldout(async_msgr->cct, 10) << __func__ << " try send msg ack" << dendl;
-    }
-
-    r = _try_send(bl);
-    if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send msg ack failed" << dendl;
-      goto fail;
-    } else if (r > 0) {
-      return ;
-    }
-
+    bool send = true;
     while (1) {
       Message *m = _get_next_outgoing();
       if (!m)
@@ -2013,8 +1999,25 @@ void AsyncConnection::handle_write()
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
         goto fail;
       } else if (r > 0) {
+        send = false;
         break;
       }
+    }
+    if (in_seq > in_seq_acked) {
+      ceph_le64 s;
+      s = in_seq;
+      bl.append(CEPH_MSGR_TAG_ACK);
+      bl.append((char*)&s, sizeof(s));
+      ldout(async_msgr->cct, 10) << __func__ << " try send msg ack" << dendl;
+      in_seq_acked = s;
+    }
+
+    r = _try_send(bl, send);
+    if (r < 0) {
+      ldout(async_msgr->cct, 1) << __func__ << " send msg ack failed" << dendl;
+      goto fail;
+    } else if (r > 0) {
+      return ;
     }
   } else if (state != STATE_CONNECTING) {
     r = _try_send(bl);
