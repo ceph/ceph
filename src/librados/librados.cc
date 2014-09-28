@@ -1035,6 +1035,11 @@ std::string librados::IoCtx::get_pool_name()
   return s;
 }
 
+uint64_t librados::IoCtx::get_instance_id() const
+{
+  return io_ctx_impl->client->get_instance_id();
+}
+
 int librados::IoCtx::create(const std::string& oid, bool exclusive)
 {
   object_t obj(oid);

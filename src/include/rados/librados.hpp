@@ -620,6 +620,8 @@ namespace librados
     // get pool auid
     int get_auid(uint64_t *auid_);
 
+    uint64_t get_instance_id() const;
+
     std::string get_pool_name();
 
     bool pool_requires_alignment();
