@@ -1118,7 +1118,7 @@ public:
   rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
   }
-  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) {
+  rgw_obj(rgw_bucket& b, const rgw_obj_key& k) : in_extra_data(false) {
     init(b, k.name);
     set_instance(k.instance);
   }
