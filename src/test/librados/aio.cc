@@ -177,6 +177,18 @@ TEST(LibRadosAio, TooBig) {
                                      my_completion, buf, UINT_MAX));
 }
 
+TEST(LibRadosAio, TooBigPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+  bufferlist bl;
+  AioCompletion *aio_completion = test_data.m_cluster.aio_create_completion(
+                                                                            (void*)&test_data, NULL, NULL);
+  ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_write("foo", aio_completion, bl, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_append("foo", aio_completion, bl, UINT_MAX));
+  // ioctx.aio_write_full no way to overflow bl.length()
+}
+
 TEST(LibRadosAio, SimpleWrite) {
   AioTestData test_data;
   rados_completion_t my_completion;
