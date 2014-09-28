@@ -3247,6 +3247,8 @@ extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
 				const char *buf, size_t len, uint64_t off)
 {
   tracepoint(librados, rados_aio_write_enter, io, o, completion, buf, len, off);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
@@ -3262,6 +3264,8 @@ extern "C" int rados_aio_append(rados_ioctx_t io, const char *o,
 				const char *buf, size_t len)
 {
   tracepoint(librados, rados_aio_append_enter, io, o, completion, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
@@ -3277,6 +3281,8 @@ extern "C" int rados_aio_write_full(rados_ioctx_t io, const char *o,
 				    const char *buf, size_t len)
 {
   tracepoint(librados, rados_aio_write_full_enter, io, o, completion, buf, len);
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   bufferlist bl;
