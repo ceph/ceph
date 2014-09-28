@@ -129,6 +129,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   write_handler.reset(new C_handle_write(this));
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
+  memset(msgvec, 0, sizeof(msgvec));
 }
 
 AsyncConnection::~AsyncConnection()
@@ -201,8 +202,12 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
 // else return < 0 means error
 int AsyncConnection::_try_send(bufferlist send_bl, bool send)
 {
-  if (send_bl.length())
-    outcoming_bl.claim_append(send_bl);
+  if (send_bl.length()) {
+    if (outcoming_bl.length())
+      outcoming_bl.claim_append(send_bl);
+    else
+      outcoming_bl.swap(send_bl);
+  }
 
   if (!send)
     return 0;
@@ -230,8 +235,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
   while (outcoming_bl.length() > sended) {
     struct msghdr msg;
-    int size = MIN(outcoming_bl.buffers().size(), IOV_MAX);
-    struct iovec *msgvec = new iovec[size];
+    int size = MIN(outcoming_bl.buffers().size(), IOV_LEN);
     memset(&msg, 0, sizeof(msg));
     msg.msg_iovlen = 0;
     msg.msg_iov = msgvec;
@@ -249,7 +253,6 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     if (r < 0)
       return r;
 
-    delete msgvec;
     // "r" is the remaining length
     sended += msglen - r;
     if (r > 0) {
