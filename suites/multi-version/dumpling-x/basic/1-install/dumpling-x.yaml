@@ -3,5 +3,4 @@ tasks:
    branch: dumpling
 - install.upgrade:
    client.0:
-    branch: firefly
 - ceph:
