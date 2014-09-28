@@ -20,7 +20,7 @@ using namespace std;
 class AsyncMessenger;
 
 class AsyncConnection : public Connection {
-  const static uint64_t send_threshold = 16 * 1024 * 1024;
+  const static uint64_t IOV_LEN = 1024;
 
   int read_bulk(int fd, char *buf, int len);
   int do_sendmsg(struct msghdr &msg, int len, bool more);
@@ -59,11 +59,6 @@ class AsyncConnection : public Connection {
 
     state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     return 0;
-  }
-  bool _can_prepare_send() {
-    if (outcoming_bl.length() > send_threshold)
-      return false;
-    return true;
   }
   bool is_queued() {
     return !out_q.empty() || outcoming_bl.length();
@@ -210,6 +205,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
   bool keepalive;
+  struct iovec msgvec[IOV_LEN];
 
   // Tis section are temp variables used by state transition
 
