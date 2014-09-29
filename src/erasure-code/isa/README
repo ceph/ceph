@@ -50,9 +50,10 @@ make ceph_erasure_code_benchmark
 
 Developer Notes
 ===============
-The plugin requires 16*k byte aligned buffers. The encoding tables are computed only
-once when the EC object is created. Decoding Tables have to be computed for
-each decoding since the available data/coding sources may change between calls.
+The plugin provides optimal performance for 32-byte aligned buffer start address and 
+k*32 byte aligned buffer length. The encoding tables are computed only once when the EC 
+object is created. Decoding Tables have to be computed for each decoding since the available 
+data/coding sources may change between calls.
 Decoding tables are cached in an LRU cache which is sufficiently large up to (12,4).
 
 For larger configurations the cache might expire the 'oldest' tables and decoding might

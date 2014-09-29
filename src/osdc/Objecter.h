@@ -1653,12 +1653,14 @@ public:
  public:
   bool ms_dispatch(Message *m);
   bool ms_can_fast_dispatch_any() const {
-    return true;
+    return false;
   }
   bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
-      return true;
+      /* sadly, we need to solve a deadlock before reenabling.
+       * See tracker issue #9462 */
+      return false;
     default:
       return false;
     }

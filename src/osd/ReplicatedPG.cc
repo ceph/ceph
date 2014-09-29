@@ -3492,6 +3492,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	}
 	result = _delete_oid(ctx, true);
+	if (result >= 0) {
+	  // mark that this is a cache eviction to avoid triggering normal
+	  // make_writeable() clone or snapdir object creation in finish_ctx()
+	  ctx->cache_evict = true;
+	}
 	osd->logger->inc(l_osd_tier_evict);
       }
       break;
@@ -5054,6 +5059,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
+      !ctx->cache_evict &&
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
     // clone
     hobject_t coid = soid;
@@ -5182,8 +5188,9 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
 void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
 {
   ConnectionRef conn(ctx->op->get_req()->get_connection());
-  boost::intrusive_ptr<OSD::Session> session(
-    (OSD::Session *)conn->get_priv());
+  boost::intrusive_ptr<OSD::Session> session((OSD::Session *)conn->get_priv());
+  if (!session.get())
+    return;
   session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
   entity_name_t entity = ctx->reqid.name;
 
@@ -5378,7 +5385,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  ctx->snapset_obc->obs.exists = false;
 	}
       }
-    } else if (ctx->new_snapset.clones.size()) {
+    } else if (ctx->new_snapset.clones.size() &&
+	       !ctx->cache_evict) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
@@ -12306,32 +12314,45 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 
   dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
 
-  // Get next
-  hobject_t old_pos = pos;
-  int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
-  if (r != 0 && r != -ENOENT) {
-    derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
-    assert(0);
-  } else if (r == -ENOENT) {
-    // Done!
-    dout(10) << "TrimmingObjects: got ENOENT" << dendl;
-    post_event(SnapTrim());
-    return transit< WaitingOnReplicas >();
+  for (set<RepGather *>::iterator i = repops.begin();
+       i != repops.end(); 
+       ) {
+    if ((*i)->all_applied && (*i)->all_committed) {
+      (*i)->put();
+      repops.erase(i++);
+    } else {
+      ++i;
+    }
   }
 
-  dout(10) << "TrimmingObjects react trimming " << pos << dendl;
-  RepGather *repop = pg->trim_object(pos);
-  if (!repop) {
-    dout(10) << __func__ << " could not get write lock on obj "
-	     << pos << dendl;
-    pos = old_pos;
-    return discard_event();
-  }
-  assert(repop);
-  repop->queue_snap_trimmer = true;
+  while (repops.size() < g_conf->osd_pg_max_concurrent_snap_trims) {
+    // Get next
+    hobject_t old_pos = pos;
+    int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
+    if (r != 0 && r != -ENOENT) {
+      derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
+      assert(0);
+    } else if (r == -ENOENT) {
+      // Done!
+      dout(10) << "TrimmingObjects: got ENOENT" << dendl;
+      post_event(SnapTrim());
+      return transit< WaitingOnReplicas >();
+    }
 
-  repops.insert(repop->get());
-  pg->simple_repop_submit(repop);
+    dout(10) << "TrimmingObjects react trimming " << pos << dendl;
+    RepGather *repop = pg->trim_object(pos);
+    if (!repop) {
+      dout(10) << __func__ << " could not get write lock on obj "
+	       << pos << dendl;
+      pos = old_pos;
+      return discard_event();
+    }
+    assert(repop);
+    repop->queue_snap_trimmer = true;
+
+    repops.insert(repop->get());
+    pg->simple_repop_submit(repop);
+  }
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
@@ -12365,7 +12386,7 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   for (set<RepGather *>::iterator i = repops.begin();
        i != repops.end();
        repops.erase(i++)) {
-    if (!(*i)->all_applied) {
+    if (!(*i)->all_applied || !(*i)->all_committed) {
       return discard_event();
     } else {
       (*i)->put();
