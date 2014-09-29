@@ -84,6 +84,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.create_destroy()
         self.mount_b.create_destroy()
 
+    def _session_num_caps(self, client_id):
+        ls_data = self.fs.mds_asok(['session', 'ls'])
+        return int(self._session_by_id(ls_data).get(client_id, {'num_caps': None})['num_caps'])
+
     def test_reconnect_timeout(self):
         # Reconnect timeout
         # =================
@@ -251,6 +255,34 @@ class TestClientRecovery(CephFSTestCase):
 
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
+
+    def test_trim_caps(self):
+        # Trim capability when reconnecting MDS
+        # ===================================
+
+        count = 500
+        # Create lots of files
+        for i in range(count):
+            self.mount_a.run_shell(["sudo", "touch", "f{0}".format(i)])
+
+        # Populate mount_b's cache
+        self.mount_b.run_shell(["sudo", "ls"])
+
+        client_id = self.mount_b.get_global_id()
+        num_caps = self._session_num_caps(client_id)
+        self.assertGreaterEqual(num_caps, count)
+
+        # Restart MDS. client should trim its cache when reconnecting to the MDS
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+        self.fs.mds_restart()
+        self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
+
+        num_caps = self._session_num_caps(client_id)
+        self.assertLess(num_caps, count,
+                        "should have less than {0} capabilities, have {1}".format(
+                            count, num_caps
+                        ))
 
     def test_network_death(self):
         """
