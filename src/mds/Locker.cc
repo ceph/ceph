@@ -2865,11 +2865,18 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 
 void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi)
 {
+
+  utime_t ctime = m->get_ctime();
+  if (dirty && ctime > pi->ctime) {
+    dout(7) << "  ctime " << pi->ctime << " -> " << ctime
+	    << " for " << *in << dendl;
+    pi->ctime = ctime;
+  }
+
   // file
   if (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR)) {
     utime_t atime = m->get_atime();
     utime_t mtime = m->get_mtime();
-    utime_t ctime = m->get_ctime();
     uint64_t size = m->get_size();
     version_t inline_version = m->inline_version;
     
@@ -2878,11 +2885,6 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
       pi->mtime = mtime;
-    }
-    if (ctime > pi->ctime) {
-      dout(7) << "  ctime " << pi->ctime << " -> " << ctime
-	      << " for " << *in << dendl;
-      pi->ctime = ctime;
     }
     if (in->inode.is_file() &&   // ONLY if regular file
 	size > pi->size) {
