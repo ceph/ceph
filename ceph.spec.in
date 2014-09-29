@@ -27,6 +27,7 @@ Requires:	python
 Requires:	python-argparse
 Requires:	python-ceph
 Requires:	python-requests
+Requires:	python-flask
 Requires:	xfsprogs
 Requires:	cryptsetup
 Requires:	parted
@@ -231,7 +232,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{version}-%{release}
 Requires:	librbd1 = %{version}-%{release}
-Requires:	python-flask
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -444,6 +444,7 @@ fi
 %{_bindir}/cephfs
 %{_bindir}/ceph-clsinfo
 %{_bindir}/ceph-rest-api
+%{python_sitelib}/ceph_rest_api.py*
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -706,7 +707,6 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{python_sitelib}/rbd.py*
 %{python_sitelib}/cephfs.py*
 %{python_sitelib}/ceph_argparse.py*
-%{python_sitelib}/ceph_rest_api.py*
 
 #################################################################################
 %files -n rest-bench
