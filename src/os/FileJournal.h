@@ -405,7 +405,7 @@ private:
   void commit_start(uint64_t seq);
   void committed_thru(uint64_t seq);
   bool should_commit_now() {
-    return full_state != FULL_NOTFULL;
+    return full_state != FULL_NOTFULL && !write_stop;
   }
 
   void set_wait_on_full(bool b) { wait_on_full = b; }
