@@ -22,6 +22,11 @@
 #include "common/strtol.h"
 #include "ErasureCode.h"
 
+int ErasureCode::chunk_index(unsigned int i) const
+{
+  return chunk_mapping.size() > i ? chunk_mapping[i] : i;
+}
+
 int ErasureCode::minimum_to_decode(const set<int> &want_to_read,
                                    const set<int> &available_chunks,
                                    set<int> *minimum)
@@ -85,8 +90,7 @@ int ErasureCode::encode(const set<int> &want_to_encode,
     return err;
   unsigned blocksize = get_chunk_size(in.length());
   for (unsigned int i = 0; i < k + m; i++) {
-    int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
-    bufferlist &chunk = (*encoded)[chunk_index];
+    bufferlist &chunk = (*encoded)[chunk_index(i)];
     chunk.substr_of(out, i * blocksize, blocksize);
   }
   encode_chunks(want_to_encode, encoded);
@@ -223,15 +227,13 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
   set<int> want_to_read;
 
   for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-    int chunk = chunk_mapping.size() > i ? chunk_mapping[i] : i;
-    want_to_read.insert(chunk);
+    want_to_read.insert(chunk_index(i));
   }
   map<int, bufferlist> decoded_map;
   int r = decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-      int chunk = chunk_mapping.size() > i ? chunk_mapping[i] : i;
-      decoded->claim_append(decoded_map[chunk]);
+      decoded->claim_append(decoded_map[chunk_index(i)]);
     }
   }
   return r;

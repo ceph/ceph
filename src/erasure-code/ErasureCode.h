@@ -85,6 +85,9 @@ namespace ceph {
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
+
+  private:
+    int chunk_index(unsigned int i) const;
   };
 }
 
