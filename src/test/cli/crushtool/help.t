@@ -29,6 +29,8 @@
                            reweight a given item (and adjust ancestor
                            weights as needed)
      -i mapfn --reweight   recalculate all bucket weights
+     -i mapfn --show-location id
+                           show location for given device id
      --show-utilization    show OSD usage
      --show utilization-all
                            include zero weight items
