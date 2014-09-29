@@ -14,8 +14,10 @@ class OS(object):
     _deb_distros = ('debian', 'ubuntu')
     _rpm_distros = ('fedora', 'rhel', 'centos', 'suse')
 
-    def __init__(self):
-        pass
+    def __init__(self, name=None, version=None):
+        self.name = name
+        self.version = version
+        self._set_package_type()
 
     @classmethod
     def from_lsb_release(cls, lsb_release_str):
@@ -43,10 +45,7 @@ class OS(object):
 
         obj.version = obj._get_value(str_, 'Release')
 
-        if obj.name in cls._deb_distros:
-            obj.package_type = "deb"
-        elif obj.name in cls._rpm_distros:
-            obj.package_type = "rpm"
+        obj._set_package_type()
 
         return obj
 
@@ -74,10 +73,7 @@ class OS(object):
         obj.name = cls._get_value(str_, 'ID').lower()
         obj.version = cls._get_value(str_, 'VERSION_ID')
 
-        if obj.name in cls._deb_distros:
-            obj.package_type = "deb"
-        elif obj.name in cls._rpm_distros:
-            obj.package_type = "rpm"
+        obj._set_package_type()
 
         return obj
 
@@ -89,5 +85,21 @@ class OS(object):
             return match.groups()[0].strip(' \t"\'')
         return ''
 
+    def _set_package_type(self):
+        if self.name in self._deb_distros:
+            self.package_type = "deb"
+        elif self.name in self._rpm_distros:
+            self.package_type = "rpm"
+
+    def to_dict(self):
+        return dict(
+            name=self.name,
+            version=self.version,
+        )
+
     def __str__(self):
         return " ".join([self.name, self.version]).strip()
+
+    def __repr__(self):
+        return "OS(name='{name}', version='{version}')".format(
+            name=self.name, version=self.version)

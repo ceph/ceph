@@ -132,3 +132,11 @@ class TestOS(object):
         assert os.name == 'rhel'
         assert os.version == '7.0'
         assert os.package_type == 'rpm'
+
+    def test_repr(self):
+        os = OS(name='NAME', version='0.1.2')
+        assert repr(os) == "OS(name='NAME', version='0.1.2')"
+
+    def test_to_dict(self):
+        os = OS(name='NAME', version='0.1.2')
+        assert os.to_dict() == dict(name='NAME', version='0.1.2')
