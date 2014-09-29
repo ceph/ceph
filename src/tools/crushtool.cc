@@ -114,6 +114,8 @@ void usage()
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
+  cout << "   -i mapfn --show-location id\n";
+  cout << "                         show location for given device id\n";
   cout << "   --show-utilization    show OSD usage\n";
   cout << "   --show utilization-all\n";
   cout << "                         include zero weight items\n";
@@ -168,6 +170,7 @@ int main(int argc, const char **argv)
   bool decompile = false;
   bool test = false;
   bool display = false;
+  int full_location = -1;
   bool write_to_file = false;
   int verbose = 0;
   bool unsafe_tunables = false;
@@ -244,6 +247,7 @@ int main(int argc, const char **argv)
       compile = true;
     } else if (ceph_argparse_flag(args, i, "-t", "--test", (char*)NULL)) {
       test = true;
+    } else if (ceph_argparse_withint(args, i, &full_location, &err, "--show-location", (char*)NULL)) {
     } else if (ceph_argparse_flag(args, i, "-s", "--simulate", (char*)NULL)) {
       tester.set_random_placement();
     } else if (ceph_argparse_flag(args, i, "--enable-unsafe-tunables", (char*)NULL)) {
@@ -431,7 +435,7 @@ int main(int argc, const char **argv)
     exit(EXIT_FAILURE);
   }
   if (!compile && !decompile && !build && !test && !reweight && !adjust &&
-      add_item < 0 &&
+      add_item < 0 && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     exit(EXIT_FAILURE);
@@ -477,6 +481,15 @@ int main(int argc, const char **argv)
     crush.decode(p);
   }
 
+  if (full_location >= 0) {
+    map<string, string> loc = crush.get_full_location(full_location);
+    for (map<string,string>::iterator p = loc.begin();
+	 p != loc.end();
+	 ++p) {
+      cout << p->first << "\t" << p->second << std::endl;
+    }
+    exit(0);
+  }
   if (decompile) {
     CrushCompiler cc(crush, cerr, verbose);
     if (!outfn.empty()) {
