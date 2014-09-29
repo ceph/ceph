@@ -1,0 +1,443 @@
+# begin crush map
+tunable choose_local_tries 0
+tunable choose_local_fallback_tries 0
+tunable choose_total_tries 50
+tunable chooseleaf_descend_once 1
+
+# devices
+device 0 device0
+device 1 device1
+device 2 device2
+device 3 device3
+device 4 device4
+device 5 device5
+device 6 device6
+device 7 device7
+device 8 device8
+device 9 device9
+device 10 device10
+device 11 device11
+device 12 device12
+device 13 device13
+device 14 device14
+device 15 device15
+device 16 device16
+device 17 device17
+device 18 device18
+device 19 device19
+device 20 device20
+device 21 device21
+device 22 device22
+device 23 device23
+device 24 device24
+device 25 device25
+device 26 device26
+device 27 device27
+device 28 device28
+device 29 device29
+device 30 device30
+device 31 device31
+device 32 device32
+device 33 device33
+device 34 device34
+device 35 device35
+device 36 device36
+device 37 device37
+device 38 device38
+device 39 device39
+device 40 device40
+device 41 device41
+device 42 device42
+device 43 device43
+device 44 device44
+device 45 device45
+device 46 device46
+device 47 device47
+device 48 device48
+device 49 device49
+device 50 device50
+device 51 device51
+device 52 device52
+device 53 device53
+device 54 device54
+device 55 device55
+device 56 device56
+device 57 device57
+device 58 device58
+device 59 device59
+device 60 device60
+device 61 device61
+device 62 device62
+device 63 device63
+device 64 device64
+device 65 device65
+device 66 device66
+device 67 device67
+device 68 device68
+device 69 device69
+device 70 device70
+device 71 device71
+device 72 device72
+device 73 device73
+device 74 device74
+device 75 device75
+device 76 device76
+device 77 device77
+device 78 device78
+device 79 device79
+device 80 device80
+device 81 device81
+device 82 device82
+device 83 device83
+device 84 device84
+device 85 device85
+device 86 device86
+device 87 device87
+device 88 device88
+device 89 device89
+device 90 device90
+device 91 device91
+device 92 device92
+device 93 device93
+device 94 device94
+device 95 device95
+device 96 device96
+device 97 device97
+device 98 device98
+device 99 device99
+
+# types
+type 0 device
+type 1 host
+type 2 rack
+type 3 default
+
+# buckets
+host host0 {
+	id -1		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device0 weight 1.000
+	item device1 weight 1.000
+	item device2 weight 1.000
+	item device3 weight 1.000
+}
+host host1 {
+	id -2		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device4 weight 1.000
+	item device5 weight 1.000
+	item device6 weight 1.000
+	item device7 weight 1.000
+}
+host host2 {
+	id -3		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device8 weight 1.000
+	item device9 weight 1.000
+	item device10 weight 1.000
+	item device11 weight 1.000
+}
+host host3 {
+	id -4		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device12 weight 1.000
+	item device13 weight 1.000
+	item device14 weight 1.000
+	item device15 weight 1.000
+}
+host host4 {
+	id -5		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device16 weight 1.000
+	item device17 weight 1.000
+	item device18 weight 1.000
+	item device19 weight 1.000
+}
+host host5 {
+	id -6		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device20 weight 1.000
+	item device21 weight 1.000
+	item device22 weight 1.000
+	item device23 weight 1.000
+}
+host host6 {
+	id -7		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device24 weight 1.000
+	item device25 weight 1.000
+	item device26 weight 1.000
+	item device27 weight 1.000
+}
+host host7 {
+	id -8		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device28 weight 1.000
+	item device29 weight 1.000
+	item device30 weight 1.000
+	item device31 weight 1.000
+}
+host host8 {
+	id -9		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device32 weight 1.000
+	item device33 weight 1.000
+	item device34 weight 1.000
+	item device35 weight 1.000
+}
+host host9 {
+	id -10		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device36 weight 1.000
+	item device37 weight 1.000
+	item device38 weight 1.000
+	item device39 weight 1.000
+}
+host host10 {
+	id -11		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device40 weight 1.000
+	item device41 weight 1.000
+	item device42 weight 1.000
+	item device43 weight 1.000
+}
+host host11 {
+	id -12		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device44 weight 1.000
+	item device45 weight 1.000
+	item device46 weight 1.000
+	item device47 weight 1.000
+}
+host host12 {
+	id -13		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device48 weight 1.000
+	item device49 weight 1.000
+	item device50 weight 1.000
+	item device51 weight 1.000
+}
+host host13 {
+	id -14		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device52 weight 1.000
+	item device53 weight 1.000
+	item device54 weight 1.000
+	item device55 weight 1.000
+}
+host host14 {
+	id -15		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device56 weight 1.000
+	item device57 weight 1.000
+	item device58 weight 1.000
+	item device59 weight 1.000
+}
+host host15 {
+	id -16		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device60 weight 1.000
+	item device61 weight 1.000
+	item device62 weight 1.000
+	item device63 weight 1.000
+}
+host host16 {
+	id -17		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device64 weight 1.000
+	item device65 weight 1.000
+	item device66 weight 1.000
+	item device67 weight 1.000
+}
+host host17 {
+	id -18		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device68 weight 1.000
+	item device69 weight 1.000
+	item device70 weight 1.000
+	item device71 weight 1.000
+}
+host host18 {
+	id -19		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device72 weight 1.000
+	item device73 weight 1.000
+	item device74 weight 1.000
+	item device75 weight 1.000
+}
+host host19 {
+	id -20		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device76 weight 1.000
+	item device77 weight 1.000
+	item device78 weight 1.000
+	item device79 weight 1.000
+}
+host host20 {
+	id -21		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device80 weight 1.000
+	item device81 weight 1.000
+	item device82 weight 1.000
+	item device83 weight 1.000
+}
+host host21 {
+	id -22		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device84 weight 1.000
+	item device85 weight 1.000
+	item device86 weight 1.000
+	item device87 weight 1.000
+}
+host host22 {
+	id -23		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device88 weight 1.000
+	item device89 weight 1.000
+	item device90 weight 1.000
+	item device91 weight 1.000
+}
+host host23 {
+	id -24		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device92 weight 1.000
+	item device93 weight 1.000
+	item device94 weight 1.000
+	item device95 weight 1.000
+}
+host host24 {
+	id -25		# do not change unnecessarily
+	# weight 4.000
+	alg straw
+	hash 0	# rjenkins1
+	item device96 weight 1.000
+	item device97 weight 1.000
+	item device98 weight 1.000
+	item device99 weight 1.000
+}
+rack rack0 {
+	id -26		# do not change unnecessarily
+	# weight 40.000
+	alg straw
+	hash 0	# rjenkins1
+	item host0 weight 4.000
+	item host1 weight 4.000
+	item host2 weight 4.000
+	item host3 weight 4.000
+	item host4 weight 4.000
+	item host5 weight 4.000
+	item host6 weight 4.000
+	item host7 weight 4.000
+	item host8 weight 4.000
+	item host9 weight 4.000
+}
+rack rack1 {
+	id -27		# do not change unnecessarily
+	# weight 40.000
+	alg straw
+	hash 0	# rjenkins1
+	item host10 weight 4.000
+	item host11 weight 4.000
+	item host12 weight 4.000
+	item host13 weight 4.000
+	item host14 weight 4.000
+	item host15 weight 4.000
+	item host16 weight 4.000
+	item host17 weight 4.000
+	item host18 weight 4.000
+	item host19 weight 4.000
+}
+rack rack2 {
+	id -28		# do not change unnecessarily
+	# weight 20.000
+	alg straw
+	hash 0	# rjenkins1
+	item host20 weight 4.000
+	item host21 weight 4.000
+	item host22 weight 4.000
+	item host23 weight 4.000
+	item host24 weight 4.000
+}
+
+default root {
+	id -31		# do not change unnecessarily
+	# weight 100.000
+	alg straw
+	hash 0	# rjenkins1
+	item rack1 weight 40.000
+	item rack1 weight 40.000
+	item rack2 weight 20.000
+}
+
+# rules
+rule myrule {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take root
+	step choose firstn 2 type rack
+	step chooseleaf indep 4 type host
+	step emit
+}
+
+rule myrule1 {
+	ruleset 1
+	type replicated
+	min_size 1
+	max_size 10
+	step take root
+	step choose firstn 2 type rack
+	step chooseleaf indep 1 type host
+	step emit
+}
+
+# end crush map
