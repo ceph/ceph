@@ -132,6 +132,7 @@ int ErasureCodeBench::encode()
 
   bufferlist in;
   in.append(string(in_size, 'X'));
+  in.rebuild_aligned(32);
   set<int> want_to_encode;
   for (int i = 0; i < k + m; i++) {
     want_to_encode.insert(i);
@@ -160,6 +161,7 @@ int ErasureCodeBench::decode()
 
   bufferlist in;
   in.append(string(in_size, 'X'));
+  in.rebuild_aligned(32);
 
   set<int> want_to_encode;
   for (int i = 0; i < k + m; i++) {
