@@ -253,7 +253,7 @@ void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
     list<rgw_bucket_dir_entry *>::iterator eiter;
     for (eiter = el.begin(); eiter != el.end(); ++eiter) {
       rgw_bucket_dir_entry *e = *eiter;
-      d->m[e->key] = *e;
+      d->m[e->key.name] = *e;
 
       delete e;
     }
@@ -271,11 +271,10 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->open_object_section("header");
   header.dump(f);
   f->close_section();
-  map<cls_rgw_obj_key, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  map<string, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
   f->open_array_section("map");
   for (; iter != m.end(); ++iter) {
-    f->dump_string("obj", iter->first.name);
-    f->dump_string("instance", iter->first.instance);
+    f->dump_string("key", iter->first);
     f->open_object_section("dir_entry");
     iter->second.dump(f);
     f->close_section();
