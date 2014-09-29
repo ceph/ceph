@@ -31,6 +31,10 @@
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
   Mutex &get_lock() { return lock; }
+  Cond &get_cond() { return cond; }
+  map<unsigned int, weak_ptr<int> > &get_weak_refs() {
+    return weak_refs;
+  }
 };
 
 class SharedLRU_all : public ::testing::Test {
@@ -81,8 +85,9 @@ public:
         usleep(delay);
       {
         Mutex::Locker l(cache.get_lock());
-        if (cache.waiting == waitting)
+        if (cache.waiting == waitting) {
           break;
+        }
       }
       if (delay > 0) {
         cout << "delay " << delay << "us, is not long enough, try again\n";
@@ -117,10 +122,83 @@ TEST_F(SharedLRU_all, lookup) {
   unsigned int key = 1;
   int value = 2;
   {
-    shared_ptr<int> ptr = cache.add(key, new int(value));
+    ASSERT_TRUE(cache.add(key, new int(value)));
     ASSERT_TRUE(cache.lookup(key));
     ASSERT_EQ(value, *cache.lookup(key));
   }
+  ASSERT_TRUE(cache.lookup(key));
+}
+
+TEST_F(SharedLRU_all, wait_lookup) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value = 2;
+
+  {
+    shared_ptr<int> ptr(new int);
+    cache.get_weak_refs()[key] = ptr;
+  }
+  EXPECT_FALSE(cache.get_weak_refs()[key].lock());
+
+  Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
+  t.create();
+  ASSERT_TRUE(wait_for(cache, 1));
+  EXPECT_EQ(value, *t.ptr);
+  // waiting on a key does not block lookups on other keys
+  EXPECT_FALSE(cache.lookup(key + 12345));
+  {
+    Mutex::Locker l(cache.get_lock());
+    cache.get_weak_refs().erase(key);
+    cache.get_cond().Signal();
+  }
+  ASSERT_TRUE(wait_for(cache, 0));
+  t.join();
+  EXPECT_FALSE(t.ptr);
+}
+
+TEST_F(SharedLRU_all, lower_bound) {
+  SharedLRUTest cache;
+
+  {
+    unsigned int key = 1;
+    ASSERT_FALSE(cache.lower_bound(key));
+    int value = 2;
+
+    ASSERT_TRUE(cache.add(key, new int(value)));
+    ASSERT_TRUE(cache.lower_bound(key));
+    EXPECT_EQ(value, *cache.lower_bound(key));
+  }
+}
+
+TEST_F(SharedLRU_all, wait_lower_bound) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value = 2;
+  unsigned int other_key = key + 1;
+  int other_value = value + 1;
+
+  ASSERT_TRUE(cache.add(other_key, new int(other_value)));
+
+  {
+    shared_ptr<int> ptr(new int);
+    cache.get_weak_refs()[key] = ptr;
+  }
+  EXPECT_FALSE(cache.get_weak_refs()[key].lock());
+
+  Thread_wait t(cache, key, value, Thread_wait::LOWER_BOUND);
+  t.create();
+  ASSERT_TRUE(wait_for(cache, 1));
+  EXPECT_FALSE(t.ptr);
+  // waiting on a key does not block getting lower_bound on other keys
+  EXPECT_TRUE(cache.lower_bound(other_key));
+  {
+    Mutex::Locker l(cache.get_lock());
+    cache.get_weak_refs().erase(key);
+    cache.get_cond().Signal();
+  }
+  ASSERT_TRUE(wait_for(cache, 0));
+  t.join();
+  EXPECT_TRUE(t.ptr);
 }
 
 TEST_F(SharedLRU_all, clear) {
