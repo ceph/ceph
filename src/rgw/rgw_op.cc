@@ -1047,7 +1047,8 @@ void RGWGetBucketVersioning::pre_exec()
 
 void RGWGetBucketVersioning::execute()
 {
-  versioning_enabled = s->bucket_info.versioning_enabled;
+  versioned = s->bucket_info.versioned();
+  versioning_enabled = s->bucket_info.versioning_enabled();
 
   send_response();
 }
@@ -1073,7 +1074,15 @@ void RGWSetBucketVersioning::execute()
   if (ret < 0)
     goto done;
 
-  s->bucket_info.versioning_enabled = true;
+  if (enable_versioning) {
+    s->bucket_info.flags |= BUCKET_VERSIONED;
+    s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+  } else if (s->bucket_info.versioned()) {
+    s->bucket_info.flags |= BUCKET_VERSIONS_SUSPENDED;
+  } else {
+    ret = -EINVAL;
+    goto done;
+  }
 
   ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
   if (ret < 0) {
@@ -1557,7 +1566,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
   const string& bucket_owner = s->bucket_owner.get_id();
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled);
+    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
   } else {
     processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
   }
@@ -1860,7 +1869,7 @@ RGWPutObjProcessor *RGWPostObj::select_processor()
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled);
+  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
 
   return processor;
 }
@@ -2806,6 +2815,8 @@ void RGWCompleteMultipart::execute()
 
   list<rgw_obj_key> remove_objs; /* objects to be removed from index listing */
 
+  bool versioned_object = s->bucket_info.versioning_enabled();
+
   iter = parts->parts.begin();
 
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
@@ -2891,6 +2902,9 @@ void RGWCompleteMultipart::execute()
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   target_obj.init(s->bucket, s->object.name);
+  if (versioned_object) {
+    store->gen_rand_obj_instance_name(&target_obj);
+  }
 
   store->set_atomic(s->obj_ctx, target_obj);
 
@@ -2907,6 +2921,13 @@ void RGWCompleteMultipart::execute()
 			    extra_params);
   if (ret < 0)
     return;
+
+  if (versioned_object) {
+    ret = store->set_olh(s->obj_ctx, s->bucket_owner.get_id(), target_obj, false);
+    if (ret < 0) {
+      return;
+    }
+  }
 
   // remove the upload obj
   store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);

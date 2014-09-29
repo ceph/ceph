@@ -1752,6 +1752,8 @@ public:
   int follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
 
+  void gen_rand_obj_instance_name(rgw_obj *target);
+
   virtual bool supports_omap() { return true; }
   int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
   virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);

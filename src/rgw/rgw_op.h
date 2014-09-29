@@ -280,9 +280,10 @@ public:
 
 class RGWGetBucketVersioning : public RGWOp {
 protected:
+  bool versioned;
   bool versioning_enabled;
 public:
-  RGWGetBucketVersioning() : versioning_enabled(false) {}
+  RGWGetBucketVersioning() : versioned(false), versioning_enabled(false) {}
 
   int verify_permission();
   void pre_exec();

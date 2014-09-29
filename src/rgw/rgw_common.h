@@ -725,6 +725,8 @@ struct RGWObjVersionTracker {
 
 enum RGWBucketFlags {
   BUCKET_SUSPENDED = 0x1,
+  BUCKET_VERSIONED = 0x2,
+  BUCKET_VERSIONS_SUSPENDED = 0x4,
 };
 
 struct RGWBucketInfo
@@ -739,10 +741,9 @@ struct RGWBucketInfo
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
-  bool versioning_enabled;
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(10, 4, bl);
+     ENCODE_START(9, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -752,11 +753,10 @@ struct RGWBucketInfo
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
      ::encode(quota, bl);
-     ::encode(versioning_enabled, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(6, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
      ::decode(bucket, bl);
      if (struct_v >= 2)
        ::decode(owner, bl);
@@ -775,8 +775,6 @@ struct RGWBucketInfo
        ::decode(has_instance_obj, bl);
      if (struct_v >= 9)
        ::decode(quota, bl);
-     if (struct_v >= 10)
-       ::decode(versioning_enabled, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -784,7 +782,10 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), versioning_enabled(false) {}
+  bool versioned() { return (flags & BUCKET_VERSIONED) != 0; }
+  bool versioning_enabled() { return (flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
+
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 

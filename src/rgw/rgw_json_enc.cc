@@ -545,7 +545,6 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
-  encode_json("versioning_enabled", versioning_enabled, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -557,7 +556,6 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("placement_rule", placement_rule, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
-  JSONDecoder::decode_json("versioning_enabled", versioning_enabled, obj);
 }
 
 void RGWObjEnt::dump(Formatter *f) const
