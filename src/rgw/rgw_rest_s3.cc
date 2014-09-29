@@ -229,15 +229,20 @@ void RGWListBuckets_ObjStore_S3::send_response_end()
 
 int RGWListBucket_ObjStore_S3::get_params()
 {
+  list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
-  marker = s->info.args.get("marker");
+  if (!list_versions) {
+    marker = s->info.args.get("marker");
+  } else {
+    marker.name = s->info.args.get("key-marker");
+    marker.instance = s->info.args.get("version-id-marker");
+  }
   max_keys = s->info.args.get("max-keys");
   ret = parse_max_keys();
   if (ret < 0) {
     return ret;
   }
   delimiter = s->info.args.get("delimiter");
-  list_versions = s->info.args.exists("versions");
   return 0;
 }
 
