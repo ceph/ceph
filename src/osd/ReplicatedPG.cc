@@ -2064,12 +2064,16 @@ void ReplicatedPG::do_scan(
       }
       peer_backfill_info[from] = bi;
 
-      assert(waiting_on_backfill.find(from) != waiting_on_backfill.end());
-      waiting_on_backfill.erase(from);
+      if (waiting_on_backfill.find(from) != waiting_on_backfill.end()) {
+	waiting_on_backfill.erase(from);
 
-      if (waiting_on_backfill.empty()) {
-        assert(peer_backfill_info.size() == backfill_targets.size());
-        finish_recovery_op(hobject_t::get_max());
+	if (waiting_on_backfill.empty()) {
+	  assert(peer_backfill_info.size() == backfill_targets.size());
+	  finish_recovery_op(hobject_t::get_max());
+	}
+      } else {
+	// we canceled backfill for a while due to a too full, and this
+	// is an extra response from a non-too-full peer
       }
     }
     break;
