@@ -46,7 +46,8 @@ namespace ceph {
                                             const map<int, int> &available,
                                             set<int> *minimum);
 
-    int encode_prepare(const bufferlist &raw, bufferlist *prepared) const;
+    int encode_prepare(const bufferlist &raw,
+                       map<int, bufferlist> &encoded) const;
 
     virtual int encode(const set<int> &want_to_encode,
                        const bufferlist &in,
