@@ -690,6 +690,7 @@ int crush_do_rule(const struct crush_map *map,
 	__u32 step;
 	int i, j;
 	int numrep;
+	int out_size;
 	/*
 	 * the original choose_total_tries value was off by one (it
 	 * counted "retries" and not "tries").  add one.
@@ -807,11 +808,13 @@ int crush_do_rule(const struct crush_map *map,
 						c+osize,
 						0);
 				} else {
+					out_size = ((numrep < (result_max-osize)) ?
+                                                    numrep : (result_max-osize));
 					crush_choose_indep(
 						map,
 						map->buckets[-1-w[i]],
 						weight, weight_max,
-						x, numrep, numrep,
+						x, out_size, numrep,
 						curstep->arg2,
 						o+osize, j,
 						choose_tries,
@@ -820,7 +823,7 @@ int crush_do_rule(const struct crush_map *map,
 						recurse_to_leaf,
 						c+osize,
 						0);
-					osize += numrep;
+					osize += out_size;
 				}
 			}
 
