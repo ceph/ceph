@@ -150,7 +150,7 @@ def parse_args():
     )
     parser.add_argument(
         '--os-type',
-        default='ubuntu',
+        default=None,
         help='OS type (distro)',
     )
     parser.add_argument(
