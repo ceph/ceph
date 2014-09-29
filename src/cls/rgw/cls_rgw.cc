@@ -423,7 +423,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (rc < 0)
     return rc;
 
-  std::map<cls_rgw_obj_key, struct rgw_bucket_dir_entry>& m = new_dir.m;
+  std::map<string, struct rgw_bucket_dir_entry>& m = new_dir.m;
   std::map<string, bufferlist>::iterator kiter = keys.begin();
   uint32_t i;
 
@@ -453,7 +453,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     if (!op.list_versions && !entry.is_visible()) {
       continue;
     }
-    m[key] = entry;
+    m[kiter->first] = entry;
 
     CLS_LOG(20, "got entry %s[%s] m.size()=%d\n", key.name.c_str(), key.instance.c_str(), (int)m.size());
   }
