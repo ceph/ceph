@@ -40,6 +40,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help,h", "produce help message")
+    ("verbose,v", "explain what happens")
     ("size,s", po::value<int>()->default_value(1024 * 1024),
      "size of the buffer to be encoded")
     ("iterations,i", po::value<int>()->default_value(1),
@@ -118,6 +119,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     cout << "parameter m is " << m << ". But m needs to be >= 0." << endl;
     return -EINVAL;
   } 
+
+  verbose = vm.count("verbose") > 0 ? true : false;
 
   return 0;
 }
