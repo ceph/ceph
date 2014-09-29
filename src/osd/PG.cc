@@ -1665,7 +1665,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
 
     // degraded?
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size()) {
+    if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
       state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
     }
@@ -1915,8 +1915,8 @@ unsigned PG::get_backfill_priority()
 
   // undersized: 200 + num missing replicas
   if (is_undersized()) {
-    assert(pool.info.size > acting.size());
-    return 200 + (pool.info.size - acting.size());
+    assert(pool.info.size > actingset.size());
+    return 200 + (pool.info.size - actingset.size());
   }
 
   // degraded: baseline degraded
@@ -6266,13 +6266,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     pg->dirty_big_info = true;
   }
 
-  for (vector<int>::iterator p = pg->want_acting.begin();
-       p != pg->want_acting.end(); ++p) {
-    if (!advmap.osdmap->is_up(*p)) {
-      assert((std::find(pg->acting.begin(), pg->acting.end(), *p) !=
-	      pg->acting.end()) ||
-	     (std::find(pg->up.begin(), pg->up.end(), *p) !=
-	      pg->up.end()));
+  for (size_t i = 0; i < pg->want_acting.size(); i++) {
+    int osd = pg->want_acting[i];
+    if (!advmap.osdmap->is_up(osd)) {
+      pg_shard_t osd_with_shard(osd, shard_id_t(i));
+      assert(pg->is_acting(osd_with_shard) || pg->is_up(osd_with_shard));
     }
   }
 
@@ -6280,7 +6278,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
-    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size()) {
+    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->actingset.size()) {
       pg->state_clear(PG_STATE_UNDERSIZED);
       if (pg->needs_recovery()) {
 	pg->state_set(PG_STATE_DEGRADED);
