@@ -438,6 +438,7 @@ public:
     bool modify;          // (force) modification (even if op_t is empty)
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
+    bool cache_evict;     ///< true if this is a cache eviction
 
     // side effects
     list<watch_info_t> watch_connects;
@@ -539,7 +540,7 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
-      modify(false), user_modify(false), undirty(false),
+      modify(false), user_modify(false), undirty(false), cache_evict(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
