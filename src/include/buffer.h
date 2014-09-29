@@ -56,6 +56,9 @@
 # include <assert.h>
 #endif
 
+#define CEPH_ALIGN 32
+#define CEPH_ALIGN_MASK (~(CEPH_ALIGN - 1LLU))
+
 namespace ceph {
 
 class buffer {
@@ -124,6 +127,7 @@ private:
    */
   class raw;
   class raw_malloc;
+  class raw_aligned;
   class raw_static;
   class raw_mmap_pages;
   class raw_posix_aligned;
@@ -144,6 +148,7 @@ public:
   static raw* create_malloc(unsigned len);
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
+  static raw* create_aligned(unsigned len);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
 
@@ -177,7 +182,9 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const;
 
+    bool is_aligned() const { return ((long)c_str() & ~CEPH_ALIGN_MASK) == 0; }
     bool is_page_aligned() const { return ((long)c_str() & ~CEPH_PAGE_MASK) == 0; }
+    bool is_n_align_sized() const { return (length() & ~CEPH_ALIGN_MASK) == 0; }
     bool is_n_page_sized() const { return (length() & ~CEPH_PAGE_MASK) == 0; }
 
     // accessors
@@ -344,7 +351,9 @@ public:
     bool contents_equal(buffer::list& other);
 
     bool can_zero_copy() const;
+    bool is_aligned() const;
     bool is_page_aligned() const;
+    bool is_n_align_sized() const;
     bool is_n_page_sized() const;
 
     bool is_zero() const;
@@ -382,6 +391,7 @@ public:
     bool is_contiguous();
     void rebuild();
     void rebuild(ptr& nb);
+    void rebuild_aligned();
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op

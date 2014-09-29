@@ -793,6 +793,15 @@ AC_MSG_RESULT([no])
 ])
 
 #
+# Check for functions to provide aligned memory
+#
+AC_CHECK_HEADERS([malloc.h])
+AC_CHECK_FUNCS([posix_memalign _aligned_malloc memalign aligned_malloc],
+               [found_memalign=yes; break])
+
+AS_IF([test "x$found_memalign" != "xyes"], [AC_MSG_WARN([No function for aligned memory allocation found])])
+
+#
 # Check for pthread spinlock (depends on ACX_PTHREAD)
 #
 saved_LIBS="$LIBS"

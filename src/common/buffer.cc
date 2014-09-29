@@ -30,6 +30,10 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#ifdef HAVE_MALLOC_H
+#include <malloc.h>
+#endif
+
 namespace ceph {
 
 #ifdef BUFFER_DEBUG
@@ -155,8 +159,14 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     virtual int zero_copy_to_fd(int fd, loff_t *offset) {
       return -ENOTSUP;
     }
+    virtual bool is_aligned() {
+      return ((long)data & ~CEPH_ALIGN_MASK) == 0;
+    }
     virtual bool is_page_aligned() {
       return ((long)data & ~CEPH_PAGE_MASK) == 0;
+    }
+    bool is_n_align_sized() {
+      return (len & ~CEPH_ALIGN_MASK) == 0;
     }
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
@@ -206,6 +216,41 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     raw* clone_empty() {
       return new raw_malloc(len);
+    }
+  };
+
+  class buffer::raw_aligned : public buffer::raw {
+  public:
+    raw_aligned(unsigned l) : raw(l) {
+      if (len) {
+#if HAVE_POSIX_MEMALIGN
+        if (posix_memalign((void **) &data, CEPH_ALIGN, len))
+          data = 0;
+#elif HAVE__ALIGNED_MALLOC
+        data = _aligned_malloc(len, CEPH_ALIGN);
+#elif HAVE_MEMALIGN
+        data = memalign(CEPH_ALIGN, len);
+#elif HAVE_ALIGNED_MALLOC
+        data = aligned_malloc((len + CEPH_ALIGN - 1) & ~CEPH_ALIGN_MASK,
+                              CEPH_ALIGN);
+#else
+        data = malloc(len);
+#endif
+        if (!data)
+          throw bad_alloc();
+      } else {
+        data = 0;
+      }
+      inc_total_alloc(len);
+      bdout << "raw_aligned " << this << " alloc " << (void *)data << " " << l << " " << buffer::get_total_alloc() << bendl;
+    }
+    ~raw_aligned() {
+      free(data);
+      dec_total_alloc(len);
+      bdout << "raw_aligned " << this << " free " << (void *)data << " " << buffer::get_total_alloc() << bendl;
+    }
+    raw* clone_empty() {
+      return new raw_aligned(len);
     }
   };
 
@@ -332,6 +377,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     bool can_zero_copy() const {
       return true;
+    }
+
+    bool is_aligned() {
+      return false;
     }
 
     bool is_page_aligned() {
@@ -519,6 +568,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
   buffer::raw* buffer::create_static(unsigned len, char *buf) {
     return new raw_static(buf, len);
+  }
+  buffer::raw* buffer::create_aligned(unsigned len) {
+    return new raw_aligned(len);
   }
   buffer::raw* buffer::create_page_aligned(unsigned len) {
 #ifndef __CYGWIN__
@@ -1013,6 +1065,16 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return true;
   }
 
+  bool buffer::list::is_aligned() const
+  {
+    for (std::list<ptr>::const_iterator it = _buffers.begin();
+         it != _buffers.end();
+         ++it)
+      if (!it->is_aligned())
+        return false;
+    return true;
+  }
+
   bool buffer::list::is_page_aligned() const
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
@@ -1100,6 +1162,44 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     _buffers.clear();
     _buffers.push_back(nb);
   }
+
+void buffer::list::rebuild_aligned()
+{
+  std::list<ptr>::iterator p = _buffers.begin();
+  while (p != _buffers.end()) {
+    // keep anything that's already page sized+aligned
+    if (p->is_aligned() && p->is_n_align_sized()) {
+      /*cout << " segment " << (void*)p->c_str()
+             << " offset " << ((unsigned long)p->c_str() & ~CEPH_ALIGN_MASK)
+             << " length " << p->length()
+             << " " << (p->length() & ~CEPH_ALIGN_MASK) << " ok" << std::endl;
+      */
+      ++p;
+      continue;
+    }
+
+    // consolidate unaligned items, until we get something that is sized+aligned
+    list unaligned;
+    unsigned offset = 0;
+    do {
+      /*cout << " segment " << (void*)p->c_str()
+             << " offset " << ((unsigned long)p->c_str() & ~CEPH_ALIGN_MASK)
+             << " length " << p->length() << " " << (p->length() & ~CEPH_ALIGN_MASK)
+             << " overall offset " << offset << " " << (offset & ~CEPH_ALIGN_MASK)
+             << " not ok" << std::endl;
+      */
+      offset += p->length();
+      unaligned.push_back(*p);
+      _buffers.erase(p++);
+    } while (p != _buffers.end() &&
+	     (!p->is_aligned() ||
+	      !p->is_n_align_sized() ||
+	      (offset & ~CEPH_ALIGN_MASK)));
+    ptr nb(buffer::create_aligned(unaligned._len));
+    unaligned.rebuild(nb);
+    _buffers.insert(p, unaligned._buffers.front());
+  }
+}
 
 void buffer::list::rebuild_page_aligned()
 {

@@ -54,22 +54,49 @@ int ErasureCode::minimum_to_decode_with_cost(const set<int> &want_to_read,
 }
 
 int ErasureCode::encode_prepare(const bufferlist &raw,
-                                bufferlist *prepared) const
+                                map<int, bufferlist> &encoded) const
 {
   unsigned int k = get_data_chunk_count();
   unsigned int m = get_chunk_count() - k;
   unsigned blocksize = get_chunk_size(raw.length());
-  unsigned padded_length = blocksize * k;
-  *prepared = raw;
-  if (padded_length - raw.length() > 0) {
-    bufferptr pad(padded_length - raw.length());
-    pad.zero();
-    prepared->push_back(pad);
+  unsigned pad_len = blocksize * k - raw.length();
+  unsigned padded_chunks = k - raw.length() / blocksize;
+  bufferlist prepared = raw;
+
+  if (!prepared.is_aligned()) {
+    // splice padded chunks off to make the rebuild faster
+    if (padded_chunks)
+      prepared.splice((k - padded_chunks) * blocksize,
+                      padded_chunks * blocksize - pad_len);
+    prepared.rebuild_aligned();
   }
-  unsigned coding_length = blocksize * m;
-  bufferptr coding(buffer::create_page_aligned(coding_length));
-  prepared->push_back(coding);
-  prepared->rebuild_page_aligned();
+
+  for (unsigned int i = 0; i < k - padded_chunks; i++) {
+    int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
+    bufferlist &chunk = encoded[chunk_index];
+    chunk.substr_of(prepared, i * blocksize, blocksize);
+  }
+  if (padded_chunks) {
+    unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;
+    bufferlist padded;
+    bufferptr buf(buffer::create_aligned(padded_chunks * blocksize));
+
+    raw.copy((k - padded_chunks) * blocksize, remainder, buf.c_str());
+    buf.zero(remainder, pad_len);
+    padded.push_back(buf);
+
+    for (unsigned int i = k - padded_chunks; i < k; i++) {
+      int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
+      bufferlist &chunk = encoded[chunk_index];
+      chunk.substr_of(padded, (i - (k - padded_chunks)) * blocksize, blocksize);
+    }
+  }
+  for (unsigned int i = k; i < k + m; i++) {
+    int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
+    bufferlist &chunk = encoded[chunk_index];
+    chunk.push_back(buffer::create_aligned(blocksize));
+  }
+
   return 0;
 }
 
@@ -80,15 +107,9 @@ int ErasureCode::encode(const set<int> &want_to_encode,
   unsigned int k = get_data_chunk_count();
   unsigned int m = get_chunk_count() - k;
   bufferlist out;
-  int err = encode_prepare(in, &out);
+  int err = encode_prepare(in, *encoded);
   if (err)
     return err;
-  unsigned blocksize = get_chunk_size(in.length());
-  for (unsigned int i = 0; i < k + m; i++) {
-    int chunk_index = chunk_mapping.size() > 0 ? chunk_mapping[i] : i;
-    bufferlist &chunk = (*encoded)[chunk_index];
-    chunk.substr_of(out, i * blocksize, blocksize);
-  }
   encode_chunks(want_to_encode, encoded);
   for (unsigned int i = 0; i < k + m; i++) {
     if (want_to_encode.count(i) == 0)
