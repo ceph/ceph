@@ -40,6 +40,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help,h", "produce help message")
+    ("verbose,v", "explain what happens")
     ("size,s", po::value<int>()->default_value(1024 * 1024),
      "size of the buffer to be encoded")
     ("iterations,i", po::value<int>()->default_value(1),
@@ -107,6 +108,8 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   plugin = vm["plugin"].as<string>();
   workload = vm["workload"].as<string>();
   erasures = vm["erasures"].as<int>();
+
+  verbose = vm.count("verbose") > 0 ? true : false;
 
   return 0;
 }

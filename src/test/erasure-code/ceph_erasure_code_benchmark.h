@@ -28,6 +28,8 @@ class ErasureCodeBench {
   int erasures;
   string workload;
   map<string,string> parameters;
+
+  bool verbose;
 public:
   int setup(int argc, char** argv);
   int run();
