@@ -60,6 +60,7 @@ Depends: binutils,
          sdparm | hdparm,
          uuid-runtime,
          xfsprogs,
+	 python-flask,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: btrfs-tools, ceph-mds, librados2, libradosstriper1, librbd1
@@ -455,7 +456,7 @@ Description: Ceph test and benchmarking tools
 Package: python-ceph
 Architecture: linux-any
 Section: python
-Depends: librados2, librbd1, libcephfs1, python-flask, ${misc:Depends}, ${python:Depends}
+Depends: librados2, librbd1, libcephfs1, ${misc:Depends}, ${python:Depends}
 X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph distributed filesystem
  Ceph is a massively scalable, open-source, distributed
