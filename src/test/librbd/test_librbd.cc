@@ -1773,6 +1773,58 @@ TEST(LibRBD, DiffIterateStress)
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
 }
 
+TEST(LibRBD, DiffIterateRegression6926)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  int seed = getpid();
+  cout << "seed " << seed << std::endl;
+  srand(seed);
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    vector<diff_extent> extents;
+    ceph::bufferlist bl;
+
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    char data[256];
+    memset(data, 1, sizeof(data));
+    bl.append(data, 256);
+    ASSERT_EQ(256, image.write(0, 256, bl));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    ASSERT_EQ(0, image.snap_set("snap1"));
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0, extents.size());
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
 TEST(LibRBD, ZeroLengthWrite)
 {
   rados_t cluster;
