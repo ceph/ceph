@@ -221,8 +221,7 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
 
   fiemap->fm_start = start;
   fiemap->fm_length = len;
-
-  fsync(fd); /* flush extents to disk if needed */
+  fiemap->fm_flags = FIEMAP_FLAG_SYNC; /* flush extents to disk if needed */
 
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
