@@ -259,7 +259,7 @@ def main(ctx):
                 machines_to_update.append(machine)
     elif ctx.num_to_lock:
         result = lock_many(ctx, ctx.num_to_lock, ctx.machine_type, user,
-                           ctx.desc)
+                           ctx.desc, ctx.os_type, ctx.os_version)
         if not result:
             ret = 1
         else:
@@ -300,7 +300,8 @@ def main(ctx):
     return ret
 
 
-def lock_many(ctx, num, machine_type, user=None, description=None):
+def lock_many(ctx, num, machine_type, user=None, description=None,
+              os_type=None, os_version=None):
     if user is None:
         user = misc.get_user()
 
@@ -331,6 +332,13 @@ def lock_many(ctx, num, machine_type, user=None, description=None):
             machine_type=machine_type,
             description=description,
         )
+        # Only query for os_type/os_version if non-vps, since in that case we
+        # just create them.
+        if machine_type != 'vps':
+            if os_type:
+                data['os_type'] = os_type
+            if os_version:
+                data['os_version'] = os_version
         log.debug("lock_many request: %s", repr(data))
         response = requests.post(
             uri,
