@@ -509,29 +509,18 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
   struct rgw_bucket_dir_header header;
-  std::map<cls_rgw_obj_key, struct rgw_bucket_dir_entry> m;
+  std::map<string, struct rgw_bucket_dir_entry> m;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(2, 2, bl);
     ::encode(header, bl);
     ::encode(m, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     ::decode(header, bl);
-    if (struct_v < 3) {
-      std::map<string, struct rgw_bucket_dir_entry> oldm;
-      std::map<string, struct rgw_bucket_dir_entry>::iterator iter;
-      ::decode(oldm, bl);
-      for (iter = oldm.begin(); iter != oldm.end(); ++iter) {
-        cls_rgw_obj_key k;
-        k.name = iter->first;
-        m[k] = iter->second;
-      }
-    } else {
-      ::decode(m, bl);
-    }
+    ::decode(m, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
