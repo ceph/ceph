@@ -991,7 +991,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret != -ENOENT) {
     /* previous instance is no longer the latest, need to update */
     string prev_key;
-    encode_obj_index_key(olh_data_entry.key, &prev_key);
+    encode_list_index_key(hctx, olh_data_entry.key, &prev_key);
 
     struct rgw_bucket_dir_entry prev_instance_entry;
     ret = read_index_entry(hctx, prev_key, &prev_instance_entry);
