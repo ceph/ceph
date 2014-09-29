@@ -5927,14 +5927,33 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->send_message_osd_cluster(
-    pg->primary.osd,
-    new MBackfillReserve(
-      MBackfillReserve::GRANT,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
-      pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_epoch());
-  return transit<RepRecovering>();
+
+  double ratio, max_ratio;
+  if (g_conf->osd_debug_reject_backfill_probability > 0 &&
+      (rand()%1000 < (g_conf->osd_debug_reject_backfill_probability*1000.0))) {
+    dout(10) << "backfill reservation rejected after reservation: "
+	     << "failure injection" << dendl;
+    pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+    post_event(RemoteReservationRejected());
+    return discard_event();
+  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+	     !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
+    dout(10) << "backfill reservation rejected after reservation: full ratio is "
+	     << ratio << ", which is greater than max allowed ratio "
+	     << max_ratio << dendl;
+    pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+    post_event(RemoteReservationRejected());
+    return discard_event();
+  } else {
+    pg->osd->send_message_osd_cluster(
+      pg->primary.osd,
+      new MBackfillReserve(
+	MBackfillReserve::GRANT,
+	spg_t(pg->info.pgid.pgid, pg->primary.shard),
+	pg->get_osdmap()->get_epoch()),
+      pg->get_osdmap()->get_epoch());
+    return transit<RepRecovering>();
+  }
 }
 
 boost::statechart::result
