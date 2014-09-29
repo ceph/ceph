@@ -1132,12 +1132,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *o
   head_obj.init(bucket, obj_str);
 
   if (versioned_object) {
-#define OBJ_INSTANCE_LEN 32
-    char buf[OBJ_INSTANCE_LEN + 1];
-
-    gen_rand_base64(store->ctx(), buf, OBJ_INSTANCE_LEN);
-
-    head_obj.set_instance(buf);
+    store->gen_rand_obj_instance_name(&head_obj);
   }
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
@@ -3305,7 +3300,7 @@ int RGWRados::copy_obj(void *ctx,
     append_rand_alpha(cct, tag, tag, 32);
 
     RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
-                                        cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled);
+                                        cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
     ret = processor.prepare(this, ctx, NULL);
     if (ret < 0)
       return ret;
@@ -3589,7 +3584,7 @@ int RGWRados::copy_obj_data(void *ctx,
   append_rand_alpha(cct, tag, tag, 32);
 
   RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled);
+                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   int ret = processor.prepare(this, ctx, NULL);
   if (ret < 0)
     return ret;
@@ -5595,6 +5590,16 @@ int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj
   }
 
   return 0;
+}
+
+void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
+{
+#define OBJ_INSTANCE_LEN 32
+  char buf[OBJ_INSTANCE_LEN + 1];
+
+  gen_rand_base64(cct, buf, OBJ_INSTANCE_LEN);
+
+  target_obj->set_instance(buf);
 }
 
 static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
