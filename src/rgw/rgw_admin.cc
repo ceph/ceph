@@ -2028,7 +2028,7 @@ next:
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<rgw_obj_key, RGWObjEnt> result;
+      map<string, RGWObjEnt> result;
       int r = store->cls_bucket_list(bucket, marker, prefix, 1000, true,
                                      result, &is_truncated, &marker,
                                      bucket_object_check_filter);
@@ -2040,9 +2040,9 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<rgw_obj_key, RGWObjEnt>::iterator iter;
+      map<string, RGWObjEnt>::iterator iter;
       for (iter = result.begin(); iter != result.end(); ++iter) {
-        rgw_obj_key key = iter->first;
+        rgw_obj_key key = iter->second.key;
         RGWObjEnt& entry = iter->second;
 
         formatter->open_object_section("object");

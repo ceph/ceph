@@ -1827,7 +1827,7 @@ public:
   int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
   int cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix, uint32_t num, bool list_versions,
-                      map<rgw_obj_key, RGWObjEnt>& m, bool *is_truncated,
+                      map<string, RGWObjEnt>& m, bool *is_truncated,
                       rgw_obj_key *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);

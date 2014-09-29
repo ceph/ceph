@@ -2244,15 +2244,15 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       cur_marker.set(skip_after_delim);
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
-    std::map<rgw_obj_key, RGWObjEnt> ent_map;
+    std::map<string, RGWObjEnt> ent_map;
     int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, list_versions, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
 
-    std::map<rgw_obj_key, RGWObjEnt>::iterator eiter;
+    std::map<string, RGWObjEnt>::iterator eiter;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      rgw_obj_key obj = eiter->first;
+      rgw_obj_key obj = eiter->second.key;
       RGWObjEnt& entry = eiter->second;
       rgw_obj_key key = obj;
       string instance;
@@ -3574,7 +3574,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
   if (r < 0)
     return r;
 
-  std::map<rgw_obj_key, RGWObjEnt> ent_map;
+  std::map<string, RGWObjEnt> ent_map;
   rgw_obj_key marker;
   string prefix;
   bool is_truncated;
@@ -3587,11 +3587,11 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
       return r;
 
     string ns;
-    std::map<rgw_obj_key, RGWObjEnt>::iterator eiter;
+    std::map<string, RGWObjEnt>::iterator eiter;
     rgw_obj_key obj;
     string instance;
     for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      obj = eiter->first;
+      obj = eiter->second.key;
 
       if (rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns))
         return -ENOTEMPTY;
@@ -6365,7 +6365,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
 }
 
 int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix,
-		              uint32_t num, bool list_versions, map<rgw_obj_key, RGWObjEnt>& m,
+		              uint32_t num, bool list_versions, map<string, RGWObjEnt>& m,
 			      bool *is_truncated, rgw_obj_key *last_entry,
 			      bool (*force_check_filter)(const string&  name))
 {
@@ -6383,7 +6383,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
   if (r < 0)
     return r;
 
-  map<cls_rgw_obj_key, struct rgw_bucket_dir_entry>::iterator miter;
+  map<string, struct rgw_bucket_dir_entry>::iterator miter;
   bufferlist updates;
   for (miter = dir.m.begin(); miter != dir.m.end(); ++miter) {
     RGWObjEnt e;
@@ -6421,7 +6421,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
           return r;
       }
     }
-    m[e.key] = e;
+    m[miter->first] = e;
     ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.key.name << "[" << e.key.instance << "]" << dendl;
   }
 
