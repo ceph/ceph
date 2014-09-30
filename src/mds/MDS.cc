@@ -2356,6 +2356,12 @@ void MDS::ms_handle_accept(Connection *con)
       dout(10) << " session connection " << s->connection << " -> " << con << dendl;
       s->connection = con;
 
+      // session might be removed from the sessionmap when old connection was reset
+      if (!sessionmap.have_session(s->info.inst.name)) {
+	assert(s->is_closed());
+	sessionmap.add_session(s);
+      }
+
       // send out any queued messages
       while (!s->preopen_out_queue.empty()) {
 	con->send_message(s->preopen_out_queue.front());
