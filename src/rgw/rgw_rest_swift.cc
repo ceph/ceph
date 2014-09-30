@@ -565,6 +565,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
+  s->cio->print("X-Timestamp: %lld\r\n", (long long)lastmod);
 
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
