@@ -1627,7 +1627,7 @@ public:
     messenger(m), monc(mc),
     osdmap(new OSDMap),
     cct(cct_),
-    initialized(false),
+    initialized(0),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),
