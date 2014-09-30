@@ -1,4 +1,0 @@
-tasks:
-- install.upgrade:
-     all:
-        branch: dumpling

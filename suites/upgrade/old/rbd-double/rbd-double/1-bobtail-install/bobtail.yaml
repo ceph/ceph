@@ -1,4 +1,0 @@
-tasks:
-- install:
-     branch: bobtail
-- ceph:
