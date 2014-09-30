@@ -1458,7 +1458,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 	  << " (" << oncommit << ")" << dendl;
   assert(e.length() > 0);
 
-  dout(30) << "XXX throttle take " << e.length() << dendl;
   throttle_ops.take(1);
   throttle_bytes.take(e.length());
   if (osd_op)
