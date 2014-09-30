@@ -1050,37 +1050,29 @@ public:
   }
 
 private:
-  Spinlock state_lock; // protects access to state
-  int state;
+  atomic_t state;
 
 public:
   int get_state() {
-    Spinlock::Locker l(state_lock);
-    return state;
+    return state.read();
   }
   void set_state(int s) {
-    Spinlock::Locker l(state_lock);
-    state = s;
+    state.set(s);
   }
   bool is_initializing() {
-    Spinlock::Locker l(state_lock);
-    return state == STATE_INITIALIZING;
+    return get_state() == STATE_INITIALIZING;
   }
   bool is_booting() {
-    Spinlock::Locker l(state_lock);
-    return state == STATE_BOOTING;
+    return get_state() == STATE_BOOTING;
   }
   bool is_active() {
-    Spinlock::Locker l(state_lock);
-    return state == STATE_ACTIVE;
+    return get_state() == STATE_ACTIVE;
   }
   bool is_stopping() {
-    Spinlock::Locker l(state_lock);
-    return state == STATE_STOPPING;
+    return get_state() == STATE_STOPPING;
   }
   bool is_waiting_for_healthy() {
-    Spinlock::Locker l(state_lock);
-    return state == STATE_WAITING_FOR_HEALTHY;
+    return get_state() == STATE_WAITING_FOR_HEALTHY;
   }
 
 private:
