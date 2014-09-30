@@ -13,7 +13,8 @@ for i in ${combinations}; do
 done
 
 # add special caps
-keymap["blank"]=`ceph auth get-or-create-key client.blank mon 'allow'` || exit 1
+# force blank cap with '--force'
+keymap["blank"]=`ceph auth get-or-create-key client.blank mon 'allow' --force` || exit 1
 keymap["all"]=`ceph auth get-or-create-key client.all mon 'allow *'` || exit 1
 
 tmp=`mktemp`
@@ -79,6 +80,7 @@ write_ops() {
   local caps=$1
   local has_read=1 has_write=1 has_exec=1
   local ret
+  local err
   local args
 
   ( echo $caps | grep 'r' ) || has_read=0
@@ -101,9 +103,16 @@ write_ops() {
   expect $ret ceph auth add client.foo $args
   expect $ret "ceph auth caps client.foo mon 'allow *' $args"
   expect $ret ceph auth get-or-create client.admin $args
-  expect $ret "ceph auth get-or-create client.bar mon 'allow' $args"
+  echo "wtf -- before: err=$err ret=$ret"
+  err=$ret
+  [[ $ret -eq 0 ]] && err=22 # EINVAL
+  expect $err "ceph auth get-or-create client.bar mon 'allow' $args"
+  echo "wtf -- after: err=$err ret=$ret"
+  expect $ret "ceph auth get-or-create client.bar mon 'allow' --force $args"
   expect $ret ceph auth get-or-create-key client.admin $args
   expect $ret ceph auth get-or-create-key client.baz $args
+  expect $ret ceph auth del client.bar $args
+  expect $ret ceph auth del client.baz $args
   expect $ret ceph auth del client.foo $args
   expect $ret ceph auth import -i $tmp $args
 }
