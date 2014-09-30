@@ -1806,6 +1806,7 @@ void AsyncConnection::was_session_reset()
 void AsyncConnection::mark_down()
 {
   Mutex::Locker l(lock);
+  state = STATE_CLOSED;
   center->dispatch_event_external(EventCallbackRef(new C_handle_stop(this)));
 }
 
