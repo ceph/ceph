@@ -721,9 +721,9 @@ void Objecter::_scan_requests(OSDSession *s,
 
 void Objecter::handle_osd_map(MOSDMap *m)
 {
-  assert(initialized.read());
-
   RWLock::WLocker wl(rwlock);
+  if (!initialized.read())
+    return;
 
   assert(osdmap); 
 
@@ -1548,6 +1548,8 @@ void Objecter::tick()
   RWLock::RLocker rl(rwlock);
 
   ldout(cct, 10) << "tick" << dendl;
+  if (!initialized.read())
+    return;
 
   // we are only called by C_Tick
   assert(tick_event);
@@ -2513,7 +2515,6 @@ void Objecter::unregister_op(Op *op)
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
-  assert(initialized.read());
   ldout(cct, 10) << "in handle_osd_op_reply" << dendl;
 
   // get pio
@@ -2522,6 +2523,11 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   int osd_num = (int)m->get_source().num();
 
   RWLock::RLocker l(rwlock);
+  if (!initialized.read()) {
+    m->put();
+    return;
+  }
+
   RWLock::Context lc(rwlock, RWLock::Context::TakenForRead);
 
   map<int, OSDSession *>::iterator siter = osd_sessions.find(osd_num);
@@ -3098,9 +3104,12 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
-  assert(initialized.read());
-
   rwlock.get_read();
+  if (!initialized.read()) {
+    rwlock.put_read();
+    m->put();
+    return;
+  }
 
   ldout(cct, 10) << "handle_pool_op_reply " << *m << dendl;
   ceph_tid_t tid = m->get_tid();
@@ -3229,11 +3238,15 @@ void Objecter::_poolstat_submit(PoolStatOp *op)
 
 void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
 {
-  assert(initialized.read());
   ldout(cct, 10) << "handle_get_pool_stats_reply " << *m << dendl;
   ceph_tid_t tid = m->get_tid();
 
   RWLock::WLocker wl(rwlock);
+  if (!initialized.read()) {
+    m->put();
+    return;
+  }
+
   map<ceph_tid_t, PoolStatOp *>::iterator iter = poolstat_ops.find(tid);
   if (iter != poolstat_ops.end()) {
     PoolStatOp *op = poolstat_ops[tid];
@@ -3334,9 +3347,11 @@ void Objecter::_fs_stats_submit(StatfsOp *op)
 
 void Objecter::handle_fs_stats_reply(MStatfsReply *m)
 {
-  assert(initialized.read());
-
   RWLock::WLocker wl(rwlock);
+  if (!initialized.read()) {
+    m->put();
+    return;
+  }
 
   ldout(cct, 10) << "handle_fs_stats_reply " << *m << dendl;
   ceph_tid_t tid = m->get_tid();
@@ -3445,6 +3460,10 @@ bool Objecter::ms_handle_reset(Connection *con)
     if (osd >= 0) {
       ldout(cct, 1) << "ms_handle_reset on osd." << osd << dendl;
       rwlock.get_write();
+      if (!initialized.read()) {
+	rwlock.put_write();
+	return false;
+      }
       map<int,OSDSession*>::iterator p = osd_sessions.find(osd);
       if (p != osd_sessions.end()) {
 	OSDSession *session = p->second;
@@ -3756,6 +3775,10 @@ void Objecter::handle_command_reply(MCommandReply *m)
   int osd_num = (int)m->get_source().num();
 
   RWLock::WLocker wl(rwlock);
+  if (!initialized.read()) {
+    m->put();
+    return;
+  }
 
   map<int, OSDSession *>::iterator siter = osd_sessions.find(osd_num);
   if (siter == osd_sessions.end()) {
