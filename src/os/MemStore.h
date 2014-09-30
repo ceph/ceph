@@ -242,6 +242,7 @@ public:
     return 1;
   }
 
+  bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *fsid);
 
   bool test_mount_in_use() {
