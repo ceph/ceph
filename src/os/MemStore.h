@@ -123,6 +123,17 @@ public:
       DECODE_FINISH(p);
     }
 
+    uint64_t used_bytes() const {
+      uint64_t result = 0;
+      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
+	   p != object_map.end();
+	   ++p) {
+        result += p->second->data.length();
+      }
+
+      return result;
+    }
+
     Collection() : lock("MemStore::Collection::lock") {}
   };
   typedef ceph::shared_ptr<Collection> CollectionRef;
@@ -182,6 +193,8 @@ private:
 
   Finisher finisher;
 
+  uint64_t used_bytes;
+
   void _do_transaction(Transaction& t);
 
   void _write_into_bl(const bufferlist& src, unsigned offset, bufferlist *dst);
@@ -232,7 +245,8 @@ public:
       coll_lock("MemStore::coll_lock"),
       apply_lock("MemStore::apply_lock"),
       finisher(cct),
-      sharded(false) { }
+      used_bytes(0),
+      sharded(false) {}
   ~MemStore() { }
 
   bool need_journal() { return false; };
