@@ -118,4 +118,9 @@ for i in ${!keymap[@]}; do
   fi
 done
 
+# cleanup
+for i in ${combinations} blank all; do
+  ceph auth del client.$i || exit 1
+done
+
 echo "OK"
