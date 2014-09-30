@@ -3258,6 +3258,11 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
+    // handle_command() does its own caps checking
+    case MSG_MON_COMMAND:
+      handle_command(static_cast<MMonCommand*>(m));
+      break;
+
     default:
       dealt_with = false;
       break;
@@ -3285,10 +3290,6 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 
     case CEPH_MSG_MON_GET_VERSION:
       handle_get_version(static_cast<MMonGetVersion*>(m));
-      break;
-
-    case MSG_MON_COMMAND:
-      handle_command(static_cast<MMonCommand*>(m));
       break;
 
     case CEPH_MSG_MON_SUBSCRIBE:
