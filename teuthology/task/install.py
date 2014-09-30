@@ -9,6 +9,7 @@ import subprocess
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.exceptions import VersionNotFoundError
 from teuthology.parallel import parallel
 from ..orchestra import run
 from ..orchestra.run import CommandFailedError
@@ -260,15 +261,6 @@ def _get_baseurl(ctx, remote, config):
         **baseparms
     )
     return base_url
-
-
-class VersionNotFoundError(Exception):
-
-    def __init__(self, url):
-        self.url = url
-
-    def __str__(self):
-        return "Failed to fetch package version from %s" % self.url
 
 
 def _block_looking_for_package_version(remote, base_url, wait=False):
@@ -1087,7 +1079,7 @@ def upgrade_common(ctx, config, deploy_style):
             # FIXME: again, make extra_pkgs distro-agnostic
         pkgs += extra_pkgs
         node['project'] = project
-        
+
         deploy_style(ctx, node, remote, pkgs, system_type)
 
 

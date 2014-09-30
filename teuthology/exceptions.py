@@ -77,3 +77,11 @@ class ScheduleFailError(RuntimeError):
             name=self.name,
             msg=self.message,
         ).replace('  ', ' ')
+
+
+class VersionNotFoundError(Exception):
+    def __init__(self, url):
+        self.url = url
+
+    def __str__(self):
+        return "Failed to fetch package version from %s" % self.url
