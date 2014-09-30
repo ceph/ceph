@@ -1640,13 +1640,23 @@ int AsyncConnection::send_message(Message *m)
     m->set_priority(async_msgr->get_default_send_priority());
 
   Mutex::Locker l(lock);
-  out_q[m->get_priority()].push_back(m);
-  if ((state == STATE_STANDBY || state == STATE_CLOSED) && !policy.server) {
-    ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
-                               << " policy.server is false" << dendl;
-    _connect();
-  } else if (sd > 0 && !open_write) {
-    center->dispatch_event_external(write_handler);
+  if (!is_queued() && state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE) {
+    ldout(async_msgr->cct, 10) << __func__ << " try send msg " << m << dendl;
+    int r = _send(m);
+    if (r < 0) {
+      ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+      // we want to handle fault within internal thread
+      center->dispatch_event_external(write_handler);
+    }
+  } else {
+    out_q[m->get_priority()].push_back(m);
+    if ((state == STATE_STANDBY || state == STATE_CLOSED) && !policy.server) {
+      ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
+                                 << " policy.server is false" << dendl;
+      _connect();
+    } else if (sd > 0 && !open_write) {
+      center->dispatch_event_external(write_handler);
+    }
   }
   return 0;
 }
