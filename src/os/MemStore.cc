@@ -174,6 +174,7 @@ int MemStore::_load()
     bufferlist::iterator p = cbl.begin();
     c->decode(p);
     coll_map[*q] = c;
+    used_bytes += c->used_bytes();
   }
 
   fn = path + "/sharded";
@@ -234,11 +235,14 @@ int MemStore::mkfs()
 int MemStore::statfs(struct statfs *st)
 {
   dout(10) << __func__ << dendl;
-  // make some shit up.  these are the only fields that matter.
   st->f_bsize = 1024;
-  st->f_blocks = 1000000;
-  st->f_bfree =  1000000;
-  st->f_bavail = 1000000;
+
+  // Device size is a configured constant
+  st->f_blocks = g_conf->memstore_device_bytes / st->f_bsize;
+
+  dout(10) << __func__ << ": used_bytes: " << used_bytes << "/" << g_conf->memstore_device_bytes << dendl;
+  st->f_bfree = st->f_bavail = MAX((st->f_blocks - used_bytes / st->f_bsize), 0);
+
   return 0;
 }
 
@@ -1072,7 +1076,10 @@ int MemStore::_write(coll_t cid, const ghobject_t& oid,
     c->object_hash[oid] = o;
   }
 
+  int old_size = o->data.length();
   _write_into_bl(bl, offset, &o->data);
+  used_bytes += (o->data.length() - old_size);
+
   return 0;
 }
 
@@ -1130,12 +1137,14 @@ int MemStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size)
   if (o->data.length() > size) {
     bufferlist bl;
     bl.substr_of(o->data, 0, size);
+    used_bytes -= o->data.length() - size;
     o->data.claim(bl);
   } else if (o->data.length() == size) {
     // do nothing
   } else {
     bufferptr bp(size - o->data.length());
     bp.zero();
+    used_bytes += bp.length();
     o->data.append(bp);
   }
   return 0;
@@ -1154,6 +1163,9 @@ int MemStore::_remove(coll_t cid, const ghobject_t& oid)
     return -ENOENT;
   c->object_map.erase(oid);
   c->object_hash.erase(oid);
+
+  used_bytes -= o->data.length();
+
   return 0;
 }
 
@@ -1225,6 +1237,7 @@ int MemStore::_clone(coll_t cid, const ghobject_t& oldoid,
     c->object_map[newoid] = no;
     c->object_hash[newoid] = no;
   }
+  used_bytes += oo->data.length() - no->data.length();
   no->data = oo->data;
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
@@ -1260,7 +1273,11 @@ int MemStore::_clone_range(coll_t cid, const ghobject_t& oldoid,
     len = oo->data.length() - srcoff;
   bufferlist bl;
   bl.substr_of(oo->data, srcoff, len);
+
+  int old_size = no->data.length();
   _write_into_bl(bl, dstoff, &no->data);
+  used_bytes += (no->data.length() - old_size);
+
   return len;
 }
 
@@ -1372,6 +1389,7 @@ int MemStore::_destroy_collection(coll_t cid)
     if (!cp->second->object_map.empty())
       return -ENOTEMPTY;
   }
+  used_bytes -= cp->second->used_bytes();
   coll_map.erase(cp);
   return 0;
 }
