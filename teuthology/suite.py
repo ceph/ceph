@@ -19,7 +19,7 @@ from tempfile import NamedTemporaryFile
 import teuthology
 from . import lock
 from .config import config, JobConfig
-from .exceptions import BranchNotFoundError
+from .exceptions import BranchNotFoundError, ScheduleFailError
 from .repo_utils import fetch_qa_suite, fetch_teuthology
 
 log = logging.getLogger(__name__)
@@ -309,18 +309,6 @@ def schedule_fail(message, name=''):
         smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
         smtp.quit()
     raise ScheduleFailError(message, name)
-
-
-class ScheduleFailError(RuntimeError):
-    def __init__(self, message, name=None):
-        self.message = message
-        self.name = name
-
-    def __str__(self):
-        return "Job scheduling {name} failed: {msg}".format(
-            name=self.name,
-            msg=self.message,
-        ).replace('  ', ' ')
 
 
 def get_worker(machine_type):
