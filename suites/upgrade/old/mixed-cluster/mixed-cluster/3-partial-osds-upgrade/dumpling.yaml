@@ -1,7 +1,0 @@
-tasks:
-- install.upgrade:
-     osd.0:
-        branch: dumpling
-     osd.2:
-        branch: dumpling
-

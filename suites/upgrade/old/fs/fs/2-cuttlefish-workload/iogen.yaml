@@ -1,6 +1,0 @@
-tasks:
-- workunit:
-     branch: cuttlefish
-     clients:
-        client.0:
-           - suites/iogen.sh

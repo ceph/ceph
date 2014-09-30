@@ -1,8 +1,0 @@
-workload:
-  sequential:
-    - rgw: [client.0]
-    - s3tests:
-        # use older tests when we are running a mix
-        client.0:
-          force-branch: dumpling
-          rgw_server: client.0
