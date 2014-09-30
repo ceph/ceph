@@ -233,6 +233,9 @@ void Server::handle_client_session(MClientSession *m)
       dout(20) << "  " << i->first << ": " << i->second << dendl;
     }
 
+    if (session->is_closed())
+      mds->sessionmap.add_session(session);
+
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
     pv = ++mds->sessionmap.projected;
@@ -383,6 +386,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       mds->send_message_client(new MClientSession(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
+      mds->sessionmap.remove_session(session);
     } else if (session->is_killing()) {
       // destroy session, close connection
       if (session->connection != NULL) {
