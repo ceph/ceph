@@ -63,6 +63,8 @@ def lock_machines(ctx, config):
     new machines.  This is not called if the one has teuthology-locked
     machines and placed those keys in the Targets section of a yaml file.
     """
+    os_type = ctx.config.get('os_type')
+    os_version = ctx.config.get('os_version')
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
     machine_type = config[1]
@@ -96,7 +98,7 @@ def lock_machines(ctx, config):
                 assert 0, 'not enough machines free'
 
         newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
-                                      ctx.archive)
+                                      ctx.archive, os_type, os_version)
         if not newly_locked and not isinstance(newly_locked, list):
             raise RuntimeError('Invalid parameters specified')
         if len(newly_locked) == how_many:
