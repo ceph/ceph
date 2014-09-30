@@ -24,7 +24,10 @@ trap "rm $tmp" INT ERR EXIT QUIT 0
 expect() {
 
   set +e
-  expected_ret=$1
+
+  local expected_ret=$1
+  local ret
+
   shift
   cmd=$@
 
@@ -42,10 +45,11 @@ expect() {
 }
 
 read_ops() {
+  local caps=$1
+  local has_read=1 has_exec=1
+  local ret
+  local args
 
-  caps=$1
-  has_read=1
-  has_exec=1
   ( echo $caps | grep 'r' ) || has_read=0
   ( echo $caps | grep 'x' ) || has_exec=0
   
@@ -72,10 +76,11 @@ read_ops() {
 
 write_ops() {
 
-  caps=$1
-  has_read=1
-  has_write=1
-  has_exec=1
+  local caps=$1
+  local has_read=1 has_write=1 has_exec=1
+  local ret
+  local args
+
   ( echo $caps | grep 'r' ) || has_read=0
   ( echo $caps | grep 'w' ) || has_write=0
   ( echo $caps | grep 'x' ) || has_exec=0
