@@ -375,7 +375,8 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   assert(did_bind);
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
     (*it)->stop();
-    (*it)->join();
+    if ((*it)->is_started())
+      (*it)->join();
   }
 
   processor.stop();
