@@ -466,25 +466,109 @@ function test_mon_misc()
 }
 
 
+function check_mds_active()
+{
+    ceph mds dump | grep active
+}
+
+function wait_mds_active()
+{
+  for i in $(seq 1 300) ; do
+      if ! check_mds_active ; then
+          echo "waiting for an active MDS daemon"
+          sleep 5
+      else
+          break
+      fi
+  done
+  check_mds_active
+}
+
+function get_mds_gids()
+{
+    ceph mds dump --format=json | python -c "import json; import sys; print ' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['info'].values()])"
+}
+
 function fail_all_mds()
 {
   ceph mds cluster_down
-  mds_gids=`ceph mds dump | grep up: | while read line ; do echo $line | awk '{print substr($1, 0, length($1)-1);}' ; done`
+  mds_gids=$(get_mds_gids)
   for mds_gid in $mds_gids ; do
       ceph mds fail $mds_gid
   done
+  if check_mds_active ; then
+      echo "An active MDS remains, something went wrong"
+      ceph mds dump
+      exit -1
+  fi
+
 }
 
-function test_mon_mds()
+function remove_all_fs()
 {
-  existing_fs=$(ceph fs ls | grep "name:" | awk '{print substr($2,0,length($2)-1);}')
-  num_mds=$(ceph mds stat | awk '{print $2;}' | cut -f1 -d'/')
+  existing_fs=$(ceph fs ls --format=json | python -c "import json; import sys; print ' '.join([fs['name'] for fs in json.load(sys.stdin)])")
   if [ -n "$existing_fs" ] ; then
       fail_all_mds
       echo "Removing existing filesystem '${existing_fs}'..."
       ceph fs rm $existing_fs --yes-i-really-mean-it
       echo "Removed '${existing_fs}'."
   fi
+}
+
+# So that tests requiring MDS can skip if one is not configured
+# in the cluster at all
+function mds_exists()
+{
+    ceph auth list | grep "^mds"
+}
+
+function test_mds_tell()
+{
+  if ! mds_exists ; then
+      echo "Skipping test, no MDS found"
+      return
+  fi
+
+  remove_all_fs
+  ceph osd pool create fs_data 10
+  ceph osd pool create fs_metadata 10
+  ceph fs new cephfs fs_metadata fs_data
+  wait_mds_active
+
+  # Test injectargs by GID
+  old_mds_gids=$(get_mds_gids)
+  echo Old GIDs: $old_mds_gids
+
+  for mds_gid in $old_mds_gids ; do
+      ceph tell mds.$mds_gid injectargs "--debug-mds 20"
+  done
+
+  # Test respawn by rank
+  ceph tell mds.0 respawn
+  new_mds_gids=$old_mds_gids
+  while [ $new_mds_gids -eq $old_mds_gids ] ; do
+      sleep 5
+      new_mds_gids=$(get_mds_gids)
+  done
+  echo New GIDs: $new_mds_gids
+
+  # Test respawn by ID
+  ceph tell mds.a respawn
+  new_mds_gids=$old_mds_gids
+  while [ $new_mds_gids -eq $old_mds_gids ] ; do
+      sleep 5
+      new_mds_gids=$(get_mds_gids)
+  done
+  echo New GIDs: $new_mds_gids
+
+  remove_all_fs
+  ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+  ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mon_mds()
+{
+  remove_all_fs
 
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
@@ -1182,6 +1266,7 @@ TESTS=(
   mon_osd_misc
   mon_heap_profiler
   osd_bench
+  mds_tell
 )
 
 #
