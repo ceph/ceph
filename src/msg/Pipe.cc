@@ -2192,7 +2192,6 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
   // set up msghdr and iovecs
   struct msghdr msg;
   memset(&msg, 0, sizeof(msg));
-  struct iovec *msgvec = new iovec[3 + blist.buffers().size()];  // conservative upper bound
   msg.msg_iov = msgvec;
   int msglen = 0;
   
@@ -2297,7 +2296,6 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
   ret = 0;
 
  out:
-  delete[] msgvec;
   return ret;
 
  fail:
