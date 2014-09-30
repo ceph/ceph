@@ -1350,7 +1350,7 @@ class RGWRados
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
 protected:
-  virtual int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker);
+  virtual int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning, RGWObjVersionTracker *objv_tracker);
 
   CephContext *cct;
   librados::Rados *rados;
@@ -1631,7 +1631,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, const string& bucket_owner, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
+  virtual int delete_obj(void *ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning, RGWObjVersionTracker *objv_tracker = NULL);
   virtual int delete_system_obj(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */

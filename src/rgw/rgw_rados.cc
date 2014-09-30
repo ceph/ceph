@@ -889,7 +889,7 @@ RGWPutObjProcessor::~RGWPutObjProcessor()
   list<rgw_obj>::iterator iter;
   for (iter = objs.begin(); iter != objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(obj_ctx, bucket_owner, obj);
+    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false);
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -3806,7 +3806,7 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, bool use_versioning, RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -3861,6 +3861,17 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
   if (r < 0)
     return r;
 
+  /* need to insert a delete marker? */
+  if (use_versioning && obj.get_instance().empty()) {
+    rgw_obj marker = obj;
+    gen_rand_obj_instance_name(&marker);
+
+    r = set_olh(ctx, bucket_owner, marker, true);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   if (ret_not_existed)
     return -ENOENT;
 
@@ -3872,11 +3883,11 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
   return 0;
 }
 
-int RGWRados::delete_obj(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
+int RGWRados::delete_obj(void *ctx, const string& bucket_owner, rgw_obj& obj, bool use_versioning, RGWObjVersionTracker *objv_tracker)
 {
   int r;
 
-  r = delete_obj_impl(ctx, bucket_owner, obj, objv_tracker);
+  r = delete_obj_impl(ctx, bucket_owner, obj, use_versioning, objv_tracker);
   if (r == -ECANCELED)
     r = 0;
 
@@ -3888,7 +3899,7 @@ int RGWRados::delete_system_obj(void *ctx, rgw_obj& obj, RGWObjVersionTracker *o
   int r;
 
   string no_owner;
-  r = delete_obj_impl(ctx, no_owner, obj, objv_tracker);
+  r = delete_obj_impl(ctx, no_owner, obj, false, objv_tracker);
   if (r == -ECANCELED)
     r = 0;
 
@@ -5373,7 +5384,7 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
     cls_rgw_obj_key& key = *liter;
     rgw_obj obj_instance(bucket, key.name);
     obj_instance.set_instance(key.instance);
-    int ret = delete_obj(ctx, bucket_owner, obj_instance);
+    int ret = delete_obj(ctx, bucket_owner, obj_instance, false);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
@@ -6413,7 +6424,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
 
     bool force_check = force_check_filter && force_check_filter(dirent.key.name);
 
-    if (!dirent.exists || !dirent.pending_map.empty() || force_check) {
+    if ((!dirent.exists && !dirent.is_delete_marker()) || !dirent.pending_map.empty() || force_check) {
       /* there are uncommitted ops. We need to check the current state,
        * and if the tags are old we need to do cleanup as well. */
       librados::IoCtx sub_ctx;
@@ -7014,7 +7025,7 @@ int RGWRados::process_intent_log(rgw_bucket& bucket, string& oid,
         complete = false;
         break;
       }
-      r = delete_obj(NULL, no_owner, entry.obj);
+      r = delete_obj(NULL, no_owner, entry.obj, false);
       if (r < 0 && r != -ENOENT) {
         cerr << "failed to remove obj: " << entry.obj << std::endl;
         complete = false;

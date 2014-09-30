@@ -2096,7 +2096,7 @@ void RGWDeleteObj::execute()
   rgw_obj obj(s->bucket, s->object);
   if (!s->object.empty()) {
     store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
+    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
   }
 }
 
@@ -2930,7 +2930,7 @@ void RGWCompleteMultipart::execute()
   }
 
   // remove the upload obj
-  store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj);
+  store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
 }
 
 int RGWAbortMultipart::verify_permission()
@@ -2985,7 +2985,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
-        ret = store->delete_obj(s->obj_ctx, owner, obj);
+        ret = store->delete_obj(s->obj_ctx, owner, obj, false);
         if (ret < 0 && ret != -ENOENT)
           return;
       } else {
@@ -2993,7 +2993,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
-          ret = store->delete_obj(s->obj_ctx, owner, loc);
+          ret = store->delete_obj(s->obj_ctx, owner, loc, false);
           if (ret < 0 && ret != -ENOENT)
             return;
         }
@@ -3004,7 +3004,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
-  ret = store->delete_obj(s->obj_ctx, owner, meta_obj);
+  ret = store->delete_obj(s->obj_ctx, owner, meta_obj, false);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -3155,7 +3155,7 @@ void RGWDeleteMultiObj::execute()
 
     rgw_obj obj(bucket,(*iter));
     store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj);
+    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
     if (ret == -ENOENT) {
       ret = 0;
     }

@@ -1943,7 +1943,7 @@ next:
       return -ret;
     }
     rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(store, bucket_info.owner, bucket, key);
+    ret = rgw_remove_object(store, bucket_info.owner, bucket, key, bucket_info.versioning_enabled());
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
