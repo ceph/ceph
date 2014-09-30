@@ -1,6 +1,5 @@
 tasks:
 - workunit:
-    branch: giant
     clients:
       client.0:
         - rbd/import_export.sh
