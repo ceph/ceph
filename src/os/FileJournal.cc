@@ -1883,19 +1883,19 @@ void FileJournal::corrupt(
   if (corrupt_at >= header.max_size)
     corrupt_at = corrupt_at + get_top() - header.max_size;
 
-    int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
-    assert(actual == corrupt_at);
+  int64_t actual = ::lseek64(fd, corrupt_at, SEEK_SET);
+  assert(actual == corrupt_at);
 
-    char buf[10];
-    int r = safe_read_exact(fd, buf, 1);
-    assert(r == 0);
+  char buf[10];
+  int r = safe_read_exact(fd, buf, 1);
+  assert(r == 0);
 
-    actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
-    assert(actual == corrupt_at);
+  actual = ::lseek64(wfd, corrupt_at, SEEK_SET);
+  assert(actual == corrupt_at);
 
-    buf[0]++;
-    r = safe_write(wfd, buf, 1);
-    assert(r == 0);
+  buf[0]++;
+  r = safe_write(wfd, buf, 1);
+  assert(r == 0);
 }
 
 void FileJournal::corrupt_payload(
