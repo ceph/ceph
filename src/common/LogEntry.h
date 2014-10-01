@@ -75,7 +75,7 @@ struct LogEntry {
   string msg;
   string channel;
 
-  LogEntry() : seq(0) {}
+  LogEntry() : seq(0), prio(CLOG_DEBUG) {}
 
   LogEntryKey key() const { return LogEntryKey(who, stamp, seq); }
 
@@ -122,12 +122,12 @@ inline ostream& operator<<(ostream& out, clog_type t)
     return out << "[DBG]";
   case CLOG_INFO:
     return out << "[INF]";
+  case CLOG_SEC:
+    return out << "[SEC]";
   case CLOG_WARN:
     return out << "[WRN]";
   case CLOG_ERROR:
     return out << "[ERR]";
-  case CLOG_SEC:
-    return out << "[SEC]";
   default:
     return out << "[???]";
   }
