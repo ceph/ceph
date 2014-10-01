@@ -52,7 +52,7 @@ def run_tasks(tasks, ctx):
             if hasattr(manager, '__enter__'):
                 manager.__enter__()
                 stack.append((taskname, manager))
-    except Exception as e:
+    except BaseException as e:
         ctx.summary['success'] = False
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
