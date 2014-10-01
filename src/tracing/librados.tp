@@ -980,6 +980,26 @@ TRACEPOINT_EVENT(librados, rados_pool_create_with_all_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_pool_get_base_tier_enter,
+    TP_ARGS(
+        rados_t, cluster,
+        int64_t, pool_id),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+        ctf_integer(int64_t, pool_id, pool_id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_pool_get_base_tier_exit,
+    TP_ARGS(
+        int, retval,
+        int64_t, base_tier),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(int64_t, base_tier, base_tier)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_pool_delete_enter,
     TP_ARGS(
         rados_t, cluster,
