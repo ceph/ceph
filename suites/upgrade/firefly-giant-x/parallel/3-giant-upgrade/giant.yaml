@@ -6,6 +6,7 @@ tasks:
          branch: giant
        client.0:
          branch: giant
+# client.1 will be upgraded as well as it's on the same host as client.0
    - print: "**** done install.upgrade"
    - ceph.restart:
    - print: "**** done restart"
@@ -15,4 +16,5 @@ tasks:
    - print: "**** done parallel 2"
    - install.upgrade:
        client.0:
-   - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
+# client.1 will be upgraded as well as it's on the same host as client.0
+   - print: "**** done install.upgrade client.0 and client.1 to the version from teuthology-suite arg"
