@@ -326,10 +326,9 @@ void MDCache::init_layouts()
   }
 }
 
-CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
+void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
+                                              int mode) const
 {
-  dout(0) << "creating system inode with ino:" << ino << dendl;
-  CInode *in = new CInode(this);
   in->inode.ino = ino;
   in->inode.version = 1;
   in->inode.mode = 0500 | mode;
@@ -356,9 +355,16 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     else
       in->inode_auth = pair<int,int>(in->ino() - MDS_INO_MDSDIR_OFFSET, CDIR_AUTH_UNKNOWN);
     in->open_snaprealm();  // empty snaprealm
+    assert(!in->snaprealm->parent); // created its own
     in->snaprealm->srnode.seq = 1;
   }
-  
+}
+
+CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
+{
+  dout(0) << "creating system inode with ino:" << ino << dendl;
+  CInode *in = new CInode(this);
+  create_unlinked_system_inode(in, ino, mode);
   add_inode(in);
   return in;
 }
