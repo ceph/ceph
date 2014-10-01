@@ -863,9 +863,9 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+  wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
-  wait_for_paxos_write();
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
