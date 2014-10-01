@@ -11,6 +11,7 @@
 Name:		ceph
 Version:	@VERSION@
 Release:	@RPM_RELEASE@%{?dist}
+Epoch:		1
 Summary:	User space components of the Ceph file system
 License:	GPL-2.0
 Group:		System Environment/Base
@@ -19,10 +20,10 @@ Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 %if 0%{?fedora} || 0%{?centos} || 0%{?rhel}
 Patch0:		init-ceph.in-fedora.patch
 %endif
-Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
-Requires:	ceph-common = %{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-argparse
 Requires:	python-ceph
@@ -104,9 +105,9 @@ block and file system storage.
 %package -n ceph-common
 Summary:	Ceph Common
 Group:		System Environment/Base
-Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	python-ceph = %{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	python-ceph = %{epoch}:%{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
 %description -n ceph-common
@@ -124,8 +125,8 @@ FUSE based client for Ceph distributed network file system
 Summary:	Ceph fuse-based client
 Group:		System Environment/Base
 Requires:	%{name}
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
 BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -134,12 +135,12 @@ FUSE based client to map Ceph rbd images to files
 Summary:	Ceph headers
 Group:		Development/Libraries
 License:	LGPL-2.0
-Requires:	%{name} = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	libradosstriper1 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
-Requires:	libcephfs_jni1 = %{version}-%{release}
+Requires:	%{name} = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	libradosstriper1 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
 %description devel
 This package contains libraries and headers needed to develop programs
 that use Ceph.
@@ -147,8 +148,8 @@ that use Ceph.
 %package radosgw
 Summary:	Rados REST gateway
 Group:		Development/Libraries
-Requires:	ceph-common = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
+Requires:	ceph-common = %{epoch}:%{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{defined suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
@@ -167,7 +168,7 @@ conjunction with any FastCGI capable web server.
 Summary:	OCF-compliant resource agents for Ceph daemons
 Group:		System Environment/Base
 License:	LGPL-2.0
-Requires:	%{name} = %{version}
+Requires:	%{name} = %{epoch}:%{version}
 Requires:	resource-agents
 %description resource-agents
 Resource agents for monitoring and managing Ceph daemons
@@ -180,7 +181,7 @@ Summary:	RADOS distributed object store client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
-Obsoletes:	ceph-libs < %{version}-%{release}
+Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 %endif
 %description -n librados2
 RADOS is a reliable, autonomic distributed object storage cluster
@@ -192,7 +193,7 @@ store using a simple file-like interface.
 Summary:	RADOS striping interface
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}
+Requires:	librados2 = %{epoch}:%{version}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
 to stripe bigger objects onto several standard rados objects using
@@ -202,9 +203,9 @@ an interface very similar to the rados one.
 Summary:	RADOS block device client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
-Obsoletes:	ceph-libs < %{version}-%{release}
+Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 %endif
 %description -n librbd1
 RBD is a block device striped across multiple distributed objects in
@@ -217,7 +218,7 @@ Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
-Obsoletes:	ceph-libs < %{version}-%{release}
+Obsoletes:	ceph-libs < %{epoch};%{version}-%{release}
 Obsoletes:	ceph-libcephfs
 %endif
 %description -n libcephfs1
@@ -230,8 +231,8 @@ POSIX-like interface.
 Summary:	Python libraries for the Ceph distributed filesystem
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -243,7 +244,7 @@ object storage.
 Summary:	RESTful benchmark
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	ceph-common = %{version}-%{release}
+Requires:	ceph-common = %{epoch}:%{version}-%{release}
 %description -n rest-bench
 RESTful bencher that can be used to benchmark radosgw performance.
 
@@ -251,9 +252,9 @@ RESTful bencher that can be used to benchmark radosgw performance.
 Summary:	Ceph benchmarks and test tools
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 %if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
 BuildRequires:	lttng-ust-devel
 BuildRequires:	libbabeltrace-devel
@@ -266,7 +267,7 @@ Summary:	Java Native Interface library for CephFS Java bindings.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
-Requires:	libcephfs1 = %{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 BuildRequires:	java-devel
 %description -n libcephfs_jni1
 This package contains the Java Native Interface library for CephFS Java
@@ -277,7 +278,7 @@ Summary:	Java libraries for the Ceph File System.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	java
-Requires:	libcephfs_jni1 = %{version}-%{release}
+Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
 BuildRequires:	java-devel
 Requires:	junit4
 BuildRequires:	junit4
@@ -289,9 +290,9 @@ Summary:	Meta package to include ceph libraries.
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Obsoletes:	ceph-libs
-Requires:	librados2 = %{version}-%{release}
-Requires:	librbd1 = %{version}-%{release}
-Requires:	libcephfs1 = %{version}-%{release}
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Provides:	ceph-libs
 
 %description libs-compat
