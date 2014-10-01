@@ -312,7 +312,7 @@ int main(int argc, const char **argv)
   }
 
   if (check_need_journal) {
-    if (store->check_need_journal())
+    if (store->need_journal())
       cout << "yes" << std::endl;
     else
       cout << "no" << std::endl;
