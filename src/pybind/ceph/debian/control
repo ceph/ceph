@@ -1,0 +1,19 @@
+Source: ceph
+Maintainer: Sage Weil <sage@newdream.net>
+Uploaders: Sage Weil <sage@newdream.net>
+Section: admin
+Priority: optional
+Build-Depends: debhelper (>= 7), python-setuptools
+X-Python-Version: >= 2.4
+Standards-Version: 3.9.2
+Homepage: http://ceph.com/
+Vcs-Git: git://github.com/ceph/ceph.git
+Vcs-Browser: https://github.com/ceph/ceph.git
+
+Package: python-ceph
+Architecture: all
+Depends: python,
+         python-setuptools,
+         ${misc:Depends},
+         ${python:Depends}
+Description:  Python bindings for Ceph
