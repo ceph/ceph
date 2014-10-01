@@ -3,33 +3,36 @@ upgrade-sequence:
    - install.upgrade:
        mon.a:
    - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** running mixed versions of osds and mons"
+   - exec:
+      mon.b:
+        - ceph osd crush tunables giant
    - install.upgrade:
        mon.b:
    - print: "**** done install.upgrade mon.b to the version from teuthology-suite arg"
    - ceph.restart:
-       daemons: [mon.a]
+       daemons: [mon.b, mon.c]
+       wait-for-healthy: true
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [mon.b]
+       daemons: [osd.2, osd.3]
+       wait-for-healthy: true
    - sleep:
        duration: 60
-   - ceph.restart: [mon.c]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.0]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.1]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.2]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.3]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mds.a]
-   - exec:
-      mon.a:
-        - ceph osd crush tunables firefly
+   - install.upgrade:
+       client.0:
+   - print: "*** client.0 upgraded"
