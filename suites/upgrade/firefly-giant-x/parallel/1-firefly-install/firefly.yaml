@@ -1,9 +1,0 @@
-tasks:
-- install:
-   branch: firefly
-- print: "**** done firefly install"
-- ceph:
-   fs: xfs
-- parallel:
-   - workload
-- print: "**** done parallel"
