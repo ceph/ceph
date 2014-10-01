@@ -1,0 +1,40 @@
+upgrade-sequence:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         branch: giant
+   - print: "**** done install.upgrade mon.a to giant"
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - print: "**** running mixed versions of osds and mons"
+   - exec:
+      mon.a:
+        - ceph osd crush tunables firefly
+   - install.upgrade:
+       mon.b:
+         branch: giant
+   - print: "**** done install.upgrade mon.b to giant"
+   - ceph.restart:
+       daemons: [mon.b, mon.c]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.2, osd.3]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - exec:
+      mon.a:
+        - ceph osd crush tunables firefly
