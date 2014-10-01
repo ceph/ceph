@@ -17,7 +17,7 @@ setup(
     license = "LGPL2",
     zip_safe = False,
     keywords = "ceph, rest, bindings, api, cli",
-    install_requires = ['flask==0.10', 'rados'],
+    install_requires = ['flask==0.10', 'python-rados'],
     long_description = long_description(),
     classifiers = [
         'Development Status :: 5 - Production/Stable',
