@@ -5,8 +5,9 @@
                                                 (-l includes snapshots/clones)
     info <image-name>                           show information about image size,
                                                 striping, etc.
-    create [--order <bits>] --size <MB> <name>  create an empty image
-    clone [--order <bits>] <parentsnap> <clonename>
+    create [--order <bits>] [--image-shared] --size <MB> <name>
+                                                create an empty image
+    clone [--order <bits>] [--image-shared] <parentsnap> <clonename>
                                                 clone a snapshot into a COW
                                                 child image
     children <snap-name>                        display children of snapshot
@@ -16,7 +17,7 @@
     rm <image-name>                             delete an image
     export <image-name> <path>                  export image to file
                                                 "-" for stdout
-    import <path> <image-name>                  import image from file
+    import [--image-shared] <path> <image-name> import image from file
                                                 (dest defaults
                                                  as the filename part of file)
                                                 "-" for stdin
@@ -68,6 +69,8 @@
     --image-format <format-number>     format to use when creating an image
                                        format 1 is the original format (default)
                                        format 2 supports cloning
+    --image-shared                     image will be used concurrently (disables
+                                       RBD exclusive lock and dependent features)
     --id <username>                    rados user (without 'client.'prefix) to
                                        authenticate as
     --keyfile <path>                   file containing secret key for use with cephx

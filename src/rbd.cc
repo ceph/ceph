@@ -83,8 +83,9 @@ void usage()
 "                                              (-l includes snapshots/clones)\n"
 "  info <image-name>                           show information about image size,\n"
 "                                              striping, etc.\n"
-"  create [--order <bits>] --size <MB> <name>  create an empty image\n"
-"  clone [--order <bits>] <parentsnap> <clonename>\n"
+"  create [--order <bits>] [--image-shared] --size <MB> <name>\n"
+"                                              create an empty image\n"
+"  clone [--order <bits>] [--image-shared] <parentsnap> <clonename>\n"
 "                                              clone a snapshot into a COW\n"
 "                                              child image\n"
 "  children <snap-name>                        display children of snapshot\n"
@@ -94,7 +95,7 @@ void usage()
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
 "                                              \"-\" for stdout\n"
-"  import <path> <image-name>                  import image from file\n"
+"  import [--image-shared] <path> <image-name> import image from file\n"
 "                                              (dest defaults\n"
 "                                               as the filename part of file)\n"
 "                                              \"-\" for stdin\n"
@@ -146,6 +147,8 @@ void usage()
 "  --image-format <format-number>     format to use when creating an image\n"
 "                                     format 1 is the original format (default)\n"
 "                                     format 2 supports cloning\n"
+"  --image-shared                     image will be used concurrently (disables\n"
+"                                     RBD exclusive lock and dependent features)\n"
 "  --id <username>                    rados user (without 'client.'prefix) to\n"
 "                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
@@ -2091,7 +2094,7 @@ int main(int argc, const char **argv)
   bool format_specified = false,
     output_format_specified = false;
   int format = 1;
-  uint64_t features = RBD_FEATURE_LAYERING;
+  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL,
     *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
@@ -2193,6 +2196,8 @@ int main(int argc, const char **argv)
       progress = false;
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
       resize_allow_shrink = true;
+    } else if (ceph_argparse_flag(args, i, "--image-shared", (char *)NULL)) {
+      features &= ~RBD_FEATURE_EXCLUSIVE_LOCK;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       long long ret = strict_strtoll(val.c_str(), 10, &parse_err);
       if (parse_err.empty()) {
