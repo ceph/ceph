@@ -301,7 +301,7 @@ def main(ctx):
 
 
 def lock_many(ctx, num, machine_type, user=None, description=None,
-              os_type=None, os_version=None):
+              os_type=None, os_version=None, arch=None):
     if user is None:
         user = misc.get_user()
 
@@ -339,6 +339,8 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                 data['os_type'] = os_type
             if os_version:
                 data['os_version'] = os_version
+        if arch:
+            data['arch'] = arch
         log.debug("lock_many request: %s", repr(data))
         response = requests.post(
             uri,
