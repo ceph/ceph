@@ -2130,7 +2130,8 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   }
 }
 
-void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+void Monitor::get_health(list<string>& status, bufferlist *detailbl,
+			 Formatter *f)
 {
   list<pair<health_status_t,string> > summary;
   list<pair<health_status_t,string> > detail;
@@ -2149,14 +2150,12 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   if (f)
     f->open_array_section("summary");
-  stringstream ss;
   health_status_t overall = HEALTH_OK;
   if (!summary.empty()) {
-    ss << ' ';
     while (!summary.empty()) {
       if (overall > summary.front().first)
 	overall = summary.front().first;
-      ss << summary.front().second;
+      status.push_back(summary.front().second);
       if (f) {
         f->open_object_section("item");
         f->dump_stream("severity") <<  summary.front().first;
@@ -2164,8 +2163,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
         f->close_section();
       }
       summary.pop_front();
-      if (!summary.empty())
-	ss << "; ";
     }
   }
   if (f)
@@ -2216,15 +2213,15 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       }
     }
     if (!warns.empty()) {
-      if (!ss.str().empty())
-        ss << ";";
-      ss << " clock skew detected on";
+      ostringstream ss;
+      ss << "clock skew detected on";
       while (!warns.empty()) {
         ss << " mon." << warns.front();
         warns.pop_front();
         if (!warns.empty())
           ss << ",";
       }
+      status.push_back(ss.str());
     }
     if (f)
       f->close_section();
@@ -2234,7 +2231,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   stringstream fss;
   fss << overall;
-  status = fss.str() + ss.str();
+  status.push_front(fss.str());
   if (f)
     f->dump_stream("overall_status") << overall;
 
@@ -2262,7 +2259,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->open_object_section("status");
 
   // reply with the status for all the components
-  string health;
+  list<string> health;
   get_health(health, NULL, f);
 
   if (f) {
@@ -2293,7 +2290,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->close_section();
   } else {
     ss << "    cluster " << monmap->get_fsid() << "\n";
-    ss << "     health " << health << "\n";
+    ss << "     health " << joinify(health.begin(), health.end(), 
+				    string("\n            ")) << "\n";
     ss << "     monmap " << *monmap << ", election epoch " << get_epoch()
        << ", quorum " << get_quorum() << " " << get_quorum_names() << "\n";
     if (mdsmon()->mdsmap.get_enabled())
@@ -2628,13 +2626,19 @@ void Monitor::handle_command(MMonCommand *m)
       }
       rdata.append(ds);
     } else if (prefix == "health") {
-      string health_str;
+      list<string> health_str;
       get_health(health_str, detail == "detail" ? &rdata : NULL, f.get());
       if (f) {
         f->flush(ds);
         ds << '\n';
       } else {
-        ds << health_str;
+	assert(!health_str.empty());
+	ds << health_str.front();
+	health_str.pop_front();
+	if (!health_str.empty()) {
+	  ds << ' ';
+	  ds << joinify(health_str.begin(), health_str.end(), string("; "));
+	}
       }
       bufferlist comb;
       comb.append(ds);
@@ -2682,7 +2686,7 @@ void Monitor::handle_command(MMonCommand *m)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    string hs;
+    list<string> hs;
     get_health(hs, NULL, f.get());
 
     monmon()->dump_info(f.get());
@@ -3382,7 +3386,7 @@ void Monitor::handle_ping(MPing *m)
   Formatter *f = new JSONFormatter(true);
   f->open_object_section("pong");
 
-  string health_str;
+  list<string> health_str;
   get_health(health_str, NULL, f);
   {
     stringstream ss;
