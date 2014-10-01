@@ -658,7 +658,7 @@ public:
    * @param status one-line status summary
    * @param detailbl optional bufferlist* to fill with a detailed report
    */
-  void get_health(string& status, bufferlist *detailbl, Formatter *f);
+  void get_health(list<string>& status, bufferlist *detailbl, Formatter *f);
   void get_cluster_status(stringstream &ss, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
