@@ -710,6 +710,19 @@ int rados_pool_create_with_all(rados_t cluster, const char *pool_name, uint64_t 
 			       uint8_t crush_rule_num);
 
 /**
+ * Returns the pool that is the base tier for this pool.
+ *
+ * The return value is the ID of the pool that should be used to read from/write to.
+ * If tiering is not set up for the pool, returns \c pool.
+ *
+ * @param cluster the cluster the pool is in
+ * @param pool ID of the pool to query
+ * @param[out] base_tier base tier, or \c pool if tiering is not configured
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_pool_get_base_tier(rados_t cluster, int64_t pool, int64_t* base_tier);
+
+/**
  * Delete a pool and all data inside it
  *
  * The pool is removed from the cluster immediately,

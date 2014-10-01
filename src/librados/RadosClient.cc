@@ -569,6 +569,31 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
   return r;
 }
 
+int librados::RadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier)
+{
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+
+  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
+  if (pool) {
+    if (pool->tier_of < 0) {
+      *base_tier = pool_id;
+    } else {
+      *base_tier = pool->tier_of;
+    }
+    r = 0;
+  } else {
+    r = -ENOENT;
+  }
+
+  objecter->put_osdmap_read();
+  return r;
+}
+
 int librados::RadosClient::pool_delete(const char *name)
 {
   int r = wait_for_osdmap();
