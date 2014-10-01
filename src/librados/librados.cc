@@ -1647,6 +1647,14 @@ int librados::Rados::pool_create_async(const char *name, uint64_t auid, __u8 cru
   return client->pool_create_async(str, c->pc, auid, crush_rule);
 }
 
+int librados::Rados::pool_get_base_tier(int64_t pool_id, int64_t* base_tier)
+{
+  tracepoint(librados, rados_pool_get_base_tier_enter, (rados_t)client, pool_id);
+  int retval = client->pool_get_base_tier(pool_id, base_tier);
+  tracepoint(librados, rados_pool_get_base_tier_exit, retval, *base_tier);
+  return retval;
+}
+
 int librados::Rados::pool_delete(const char *name)
 {
   return client->pool_delete(name);
@@ -2608,6 +2616,15 @@ extern "C" int rados_pool_create_with_all(rados_t cluster, const char *name,
   string sname(name);
   int retval = radosp->pool_create(sname, auid, crush_rule_num);
   tracepoint(librados, rados_pool_create_with_all_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_pool_get_base_tier(rados_t cluster, int64_t pool_id, int64_t* base_tier)
+{
+  tracepoint(librados, rados_pool_get_base_tier_enter, cluster, pool_id);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  int retval = client->pool_get_base_tier(pool_id, base_tier);
+  tracepoint(librados, rados_pool_get_base_tier_exit, retval, *base_tier);
   return retval;
 }
 
