@@ -2348,7 +2348,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
   Cond cond;
 
   int unack = 0;
-  int unsafe = 0;
 
   while (1) {
     if (time_to_stop()) break;
@@ -2390,9 +2389,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       }
       client->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(client->cct), 0,
 			       NULL, new C_Ref(lock, cond, &unack));
-      /*client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
-			      new C_Ref(lock, cond, &unack),
-			      new C_Ref(lock, cond, &unsafe));*/
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
@@ -2418,13 +2414,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
   }
 
-
-  lock.Lock();
-  while (unsafe > 0) {
-    dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
-    cond.Wait(lock);
-  }
-  lock.Unlock();
   return 0;
 }
 
