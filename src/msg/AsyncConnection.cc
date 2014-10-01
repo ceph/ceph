@@ -1092,10 +1092,9 @@ int AsyncConnection::_process_connection()
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // message may in queue between last _try_send and connection ready
-        if (!open_write && is_queued()) {
-          center->create_file_event(sd, EVENT_WRITABLE, write_handler);
-          open_write = true;
-        }
+        // write event may already notify and we need to force scheduler again
+        if (is_queued())
+          center->create_time_event(1, write_handler);
 
         break;
       }
