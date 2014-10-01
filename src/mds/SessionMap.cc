@@ -320,8 +320,14 @@ void SessionMap::add_session(Session *s)
 
 void SessionMap::remove_session(Session *s)
 {
-  dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
+  // already removed from the session map?
+  if (!s->item_session_list.is_on_list()) {
+    assert(session_map.count(s->info.inst.name) == 0 ||
+	   session_map[s->info.inst.name] != s);
+    return;
+  }
 
+  dout(10) << __func__ << " s=" << s << " name=" << s->info.inst.name << dendl;
   s->trim_completed_requests(0);
   s->item_session_list.remove_myself();
   session_map.erase(s->info.inst.name);
