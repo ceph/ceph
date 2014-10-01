@@ -390,6 +390,70 @@ void inode_t::generate_test_instances(list<inode_t*>& ls)
   // i am lazy.
 }
 
+int inode_t::compare(const inode_t &other, bool *divergent) const
+{
+  assert(ino == other.ino);
+  if (version == other.version) {
+    if (rdev != other.rdev ||
+        ctime != other.ctime ||
+        mode != other.mode ||
+        uid != other.uid ||
+        gid != other.gid ||
+        nlink != other.nlink ||
+        memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
+        memcmp(&layout, &other.layout, sizeof(layout)) ||
+        old_pools != other.old_pools ||
+        size != other.size ||
+        max_size_ever != other.max_size_ever ||
+        truncate_seq != other.truncate_seq ||
+        truncate_size != other.truncate_size ||
+        truncate_from != other.truncate_from ||
+        truncate_pending != other.truncate_pending ||
+        mtime != other.mtime ||
+        atime != other.atime ||
+        time_warp_seq != other.time_warp_seq ||
+        !(*const_cast<bufferlist*>(&inline_data) ==
+            *const_cast<bufferlist*>(&other.inline_data)) ||
+        inline_version != other.inline_version ||
+        client_ranges != other.client_ranges ||
+        !(dirstat == other.dirstat) ||
+        !(rstat == other.rstat) ||
+        !(accounted_rstat == other.accounted_rstat) ||
+        file_data_version != other.file_data_version ||
+        xattr_version != other.xattr_version ||
+        backtrace_version != other.backtrace_version) {
+      *divergent = true;
+    }
+    return 0;
+  } else if (version > other.version) {
+    *divergent = !older_is_consistent(other);
+    return 1;
+  } else {
+    assert(version < other.version);
+    *divergent = !other.older_is_consistent(*this);
+    return -1;
+  }
+  assert(0 == "can't have reached this point");
+  *divergent = true;
+  return 0;
+}
+
+bool inode_t::older_is_consistent(const inode_t &other) const
+{
+  if (max_size_ever < other.max_size_ever ||
+      truncate_seq < other.truncate_seq ||
+      time_warp_seq < other.time_warp_seq ||
+      inline_version < other.inline_version ||
+      dirstat.version < other.dirstat.version ||
+      rstat.version < other.rstat.version ||
+      accounted_rstat.version < other.accounted_rstat.version ||
+      file_data_version < other.file_data_version ||
+      xattr_version < other.xattr_version ||
+      backtrace_version < other.backtrace_version) {
+    return false;
+  }
+  return true;
+}
 
 /*
  * old_inode_t
