@@ -218,7 +218,7 @@ Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 %if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
-Obsoletes:	ceph-libs < %{epoch};%{version}-%{release}
+Obsoletes:	ceph-libs < %{epoch}:%{version}-%{release}
 Obsoletes:	ceph-libcephfs
 %endif
 %description -n libcephfs1
