@@ -107,6 +107,7 @@ int main(int argc, const char **argv)
   bool get_journal_fsid = false;
   bool get_osd_fsid = false;
   bool get_cluster_fsid = false;
+  bool check_need_journal = false;
   std::string dump_pg_log;
 
   std::string val;
@@ -136,6 +137,8 @@ int main(int argc, const char **argv)
       get_osd_fsid = true;
     } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
+    } else if (ceph_argparse_flag(args, i, "--check-needs-journal", (char*)NULL)) {
+      check_need_journal = true;
     } else {
       ++i;
     }
@@ -306,6 +309,14 @@ int main(int argc, const char **argv)
     if (r == 0)
       cout << fsid << std::endl;
     exit(r);
+  }
+
+  if (check_need_journal) {
+    if (store->check_need_journal())
+      cout << "yes" << std::endl;
+    else
+      cout << "no" << std::endl;
+    exit(0);
   }
 
   string magic;
