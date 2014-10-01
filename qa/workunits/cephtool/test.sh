@@ -203,6 +203,11 @@ function test_tiering()
   ceph osd tier add slow cache2 --force-nonempty
   ceph osd tier remove slow cache2
 
+  ceph osd pool ls | grep cache2
+  ceph osd pool ls -f json-pretty | grep cache2
+  ceph osd pool ls detail | grep cache2
+  ceph osd pool ls detail -f json-pretty | grep cache2
+
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
@@ -211,7 +216,9 @@ function test_tiering()
   ceph osd tier add-cache slow cache3 1024000
   ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
   ceph osd tier remove slow cache3
+  ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
+  expect_false ceph osd pool ls | grep cache3
 
   ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it

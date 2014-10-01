@@ -2248,18 +2248,8 @@ struct qi {
   qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
 };
 
-void OSDMap::print(ostream& out) const
+void OSDMap::print_pools(ostream& out) const
 {
-  out << "epoch " << get_epoch() << "\n"
-      << "fsid " << get_fsid() << "\n"
-      << "created " << get_created() << "\n"
-      << "modified " << get_modified() << "\n";
-
-  out << "flags " << get_flag_string() << "\n";
-  if (get_cluster_snapshot().length())
-    out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
-  out << "\n";
-
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     std::string name("<unknown>");
     map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
@@ -2276,6 +2266,21 @@ void OSDMap::print(ostream& out) const
       out << "\tremoved_snaps " << p->second.removed_snaps << "\n";
   }
   out << std::endl;
+}
+
+void OSDMap::print(ostream& out) const
+{
+  out << "epoch " << get_epoch() << "\n"
+      << "fsid " << get_fsid() << "\n"
+      << "created " << get_created() << "\n"
+      << "modified " << get_modified() << "\n";
+
+  out << "flags " << get_flag_string() << "\n";
+  if (get_cluster_snapshot().length())
+    out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
+  out << "\n";
+
+  print_pools(out);
 
   out << "max_osd " << get_max_osd() << "\n";
   for (int i=0; i<get_max_osd(); i++) {
