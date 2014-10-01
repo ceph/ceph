@@ -1805,6 +1805,7 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
@@ -1814,6 +1815,7 @@ void Monitor::join_election()
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
