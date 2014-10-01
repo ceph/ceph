@@ -173,6 +173,8 @@ class DispatchQueue;
 
   private:
     int sd;
+    struct iovec msgvec[IOV_MAX];
+
   public:
     int port;
     int peer_type;
