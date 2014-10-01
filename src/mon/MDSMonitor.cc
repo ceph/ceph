@@ -791,6 +791,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
                 f->dump_int("data_pool_id", *dpi);
               }
             }
+            f->close_section();
 
             f->open_array_section("data_pools");
             {
