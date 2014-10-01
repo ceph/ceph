@@ -8,7 +8,7 @@ def long_description():
 
 
 setup(
-    name = 'ceph',
+    name = 'python-ceph',
     description = 'bindings to Ceph, the distributed file system',
     packages=find_packages(),
     author = 'Inktank',
