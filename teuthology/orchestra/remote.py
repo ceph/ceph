@@ -264,7 +264,7 @@ class Remote(object):
     @property
     def arch(self):
         if not hasattr(self, '_arch'):
-            proc = self.run(args=['uname', '-p'], stdout=StringIO())
+            proc = self.run(args=['uname', '-m'], stdout=StringIO())
             proc.wait()
             self._arch = proc.stdout.getvalue().strip()
         return self._arch

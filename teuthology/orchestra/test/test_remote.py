@@ -102,7 +102,7 @@ class TestRemote(object):
         run = fudge.Fake('run')
         args = [
             'uname',
-            '-p',
+            '-m',
             ]
         stdout = StringIO('test_arch')
         stdout.seek(0)
