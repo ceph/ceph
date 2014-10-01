@@ -1249,6 +1249,14 @@ public:
   virtual uint32_t get_target_version() = 0;
 
   /**
+   * check whether need journal device
+   *
+   * It's not constant for backend store. FileStore could have journaless mode
+   * and KeyValueStore could have journal device for special backend.
+   */
+  virtual bool need_journal() = 0;
+
+  /**
    * check the journal uuid/fsid, without opening
    */
   virtual int peek_journal_fsid(uuid_d *fsid) = 0;

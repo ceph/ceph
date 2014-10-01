@@ -484,6 +484,7 @@ class KeyValueStore : public ObjectStore,
   uint32_t get_target_version() {
     return target_version;
   }
+  bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *id) {
     *id = fsid;
     return 0;
