@@ -1819,7 +1819,7 @@ TEST(LibRBD, DiffIterateRegression6926)
     extents.clear();
     ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
 				    vector_iterate_cb, (void *) &extents));
-    ASSERT_EQ(0, extents.size());
+    ASSERT_EQ(static_cast<size_t>(0), extents.size());
   }
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
