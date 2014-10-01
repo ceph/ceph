@@ -696,6 +696,8 @@ private:
 
 public:
   void init_layouts();
+  void create_unlinked_system_inode(CInode *in, inodeno_t ino,
+                                    int mode) const;
   CInode *create_system_inode(inodeno_t ino, int mode);
   CInode *create_root_inode();
 
