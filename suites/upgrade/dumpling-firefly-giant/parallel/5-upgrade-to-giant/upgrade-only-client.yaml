@@ -1,8 +1,0 @@
-upgrade-sequence:
-   sequential:
-   - install.upgrade:
-       client.0:
-         branch: giant
-   - print: "**** done install.upgrade client.0 to giant"
-   - sleep:
-       duration: 60
