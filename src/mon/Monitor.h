@@ -557,6 +557,7 @@ public:
 
 private:
   void _reset();   ///< called from bootstrap, start_, or join_election
+  void wait_for_paxos_write();
 public:
   void bootstrap();
   void join_election();
