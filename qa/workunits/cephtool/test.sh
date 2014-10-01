@@ -218,7 +218,7 @@ function test_tiering()
   ceph osd tier remove slow cache3
   ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
-  expect_false ceph osd pool ls | grep cache3
+  ! ceph osd pool ls | grep cache3 || exit 1
 
   ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
