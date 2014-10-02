@@ -431,10 +431,9 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       goto out;
     }
     if (count == 0) {
-      if (!offset) {
-	ret = io_ctx.create(oid, true);
+      if (!offset) { // in case we have to create an empty object
+	ret = io_ctx.write_full(oid, indata); // indata is empty
 	if (ret < 0) {
-	  cerr << "WARNING: could not create object: " << oid << std::endl;
 	  goto out;
 	}
       }
