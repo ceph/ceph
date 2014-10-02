@@ -996,7 +996,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     for (map<string,map<string,string> >::const_iterator p = erasure_code_profiles.begin();
 	 p != erasure_code_profiles.end();
-	 p++) {
+	 ++p) {
       const map<string,string> &profile = p->second;
       map<string,string>::const_iterator plugin = profile.find("plugin");
       if (plugin != profile.end() && (plugin->second == "isa" ||
