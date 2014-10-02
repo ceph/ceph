@@ -92,7 +92,7 @@ Notable Changes
 * rgw: align object stripes with erasure pool alignment (#8442 Yehuda Sadeh)
 * rgw: don't send error body on HEAD for civetweb (#8539 Yehuda Sadeh)
 * rgw: fix crash in CORS preflight request (Yehuda Sadeh)
-* rgw: fix decoding of + in URL (#8702 Yehuda Sadeh)
+* rgw: fix decoding of + in URL (#8702 Brian Rak)
 * rgw: fix object removal on object create (#8972 Patrycja Szabowska, Yehuda Sadeh)
 * systemd: use systemd-run when starting radosgw (JuanJose Galvez)
 * sysvinit: support non-default cluster name (Alfredo Deza)
