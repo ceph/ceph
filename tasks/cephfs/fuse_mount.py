@@ -87,6 +87,7 @@ class FuseMount(CephFSMount):
             )
         except CommandFailedError:
             # This happens if the mount directory doesn't exist
+            log.info('mount point does not exist: %s', self.mountpoint)
             return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')

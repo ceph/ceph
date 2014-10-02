@@ -103,9 +103,28 @@ class CephFSMount(object):
             'sudo', 'adjust-ulimits', 'daemon-helper', 'kill', 'python', '-c', pyscript
         ], wait=False, stdin=run.PIPE)
 
+    def run_python(self, pyscript):
+        p = self._run_python(pyscript)
+        p.wait()
+
     def run_shell(self, args):
         args = ["cd", self.mountpoint, run.Raw('&&')] + args
         return self.client_remote.run(args=args, stdout=StringIO())
+
+    def open_no_data(self, basename):
+        """
+        A pure metadata operation
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.mountpoint, basename)
+
+        p = self._run_python(dedent(
+            """
+            f = open("{path}", 'w')
+            """.format(path=path)
+        ))
+        p.wait()
 
     def open_background(self, basename="background_file"):
         """
@@ -240,6 +259,18 @@ class CephFSMount(object):
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
         return rproc
+
+    def write_n_mb(self, filename, n_mb, seek=0):
+        """
+        Write the requested number of megabytes to a file
+        """
+        assert(self.is_mounted())
+
+        self.run_shell(["dd", "if=/dev/urandom", "of={0}".format(filename),
+                        "bs=1M",
+                        "count={0}".format(n_mb),
+                        "seek={0}".format(seek)
+        ])
 
     def open_n_background(self, fs_path, count):
         """
