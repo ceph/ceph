@@ -327,6 +327,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       assert(internal_op != -1);
       f->dump_string("op_type", "internal_op");
       f->dump_int("internal_op", internal_op);
+      f->dump_string("op_name", ceph_mds_op_name(internal_op));
     }
   }
   {
