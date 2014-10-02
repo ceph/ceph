@@ -77,6 +77,19 @@ top_level = os.path.dirname(
     )
 )
 
-pybind = os.path.join(top_level, 'src/pybind')
-if pybind not in sys.path:
-    sys.path.insert(0, pybind)
+# Add all Pybind modules
+pybind_modules = [
+    'src/pybind/ceph',
+    'src/pybind/rbd',
+    'src/pybind/rados',
+    'src/pybind/cephfs',
+]
+
+pybind_paths = [
+    os.path.join(top_level, module)
+    for module in pybind_modules
+]
+
+for pybind_path in pybind_paths:
+    if pybind_path not in sys.path:
+        sys.path.insert(0, pybind_path)
