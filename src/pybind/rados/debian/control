@@ -7,8 +7,8 @@ Build-Depends: debhelper (>= 7), python-setuptools
 X-Python-Version: >= 2.4
 Standards-Version: 3.9.2
 Homepage: http://ceph.com/
-Vcs-Git: git://github.com/ceph/ceph-deploy.git
-Vcs-Browser: https://github.com/ceph/ceph-deploy
+Vcs-Git: git://github.com/ceph/ceph.git
+Vcs-Browser: https://github.com/ceph/ceph
 
 Package: python-rados
 Architecture: all
