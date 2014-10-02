@@ -53,7 +53,7 @@ using namespace std;
 
 #include "mon/MonClient.h"
 
-#include "mds/MDSMap.h"
+#include "mds/flock.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
 
@@ -2034,6 +2034,9 @@ void Client::send_reconnect(MetaSession *session)
       in->make_long_path(path);
       ldout(cct, 10) << "    path " << path << dendl;
 
+      bufferlist flockbl;
+      _encode_filelocks(in, flockbl);
+
       in->caps[mds]->seq = 0;  // reset seq.
       in->caps[mds]->issue_seq = 0;  // reset seq.
       in->caps[mds]->mseq = 0;  // reset seq.
@@ -2042,7 +2045,8 @@ void Client::send_reconnect(MetaSession *session)
 		 path.get_ino(), path.get_path(),   // ino
 		 in->caps_wanted(), // wanted
 		 in->caps[mds]->issued,     // issued
-		 in->snaprealm->ino);
+		 in->snaprealm->ino,
+		 flockbl);
 
       if (did_snaprealm.count(in->snaprealm->ino) == 0) {
 	ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
@@ -2182,6 +2186,8 @@ void Client::put_inode(Inode *in, int n)
     in->snaprealm_item.remove_myself();
     if (in == root)
       root = 0;
+    delete in->fcntl_locks;
+    delete in->flock_locks;
     delete in;
   }
 }
@@ -5870,6 +5876,8 @@ int Client::_release_fh(Fh *f)
     in->snap_cap_refs--;
   }
 
+  _release_filelocks(f);
+
   put_inode(in);
   delete f;
 
@@ -6856,6 +6864,266 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_namemax = NAME_MAX;
 
   return rval;
+}
+
+int Client::_do_filelock(Inode *in, int lock_type, int op, int sleep,
+			 struct flock *fl, uint64_t owner)
+{
+  ldout(cct, 10) << "_do_filelock ino " << in->ino
+		 << (lock_type == CEPH_LOCK_FCNTL ? " fcntl" : " flock")
+		 << " type " << fl->l_type << " owner " << owner
+		 << " " << fl->l_start << "~" << fl->l_len << dendl;
+
+  int lock_cmd;
+  if (F_RDLCK == fl->l_type)
+    lock_cmd = CEPH_LOCK_SHARED;
+  else if (F_WRLCK == fl->l_type)
+    lock_cmd = CEPH_LOCK_EXCL;
+  else if (F_UNLCK == fl->l_type)
+    lock_cmd = CEPH_LOCK_UNLOCK;
+  else
+    return -EIO;
+
+  /*
+   * Set the most significant bit, so that MDS knows the 'owner'
+   * is sufficient to identify the owner of lock. (old code uses
+   * both 'owner' and 'pid')
+   */
+  owner |= (1ULL << 63);
+
+  MetaRequest *req = new MetaRequest(op);
+  filepath path;
+  in->make_nosnap_relative_path(path);
+  req->set_filepath(path);
+  req->set_inode(in);
+
+  req->head.args.filelock_change.rule = lock_type;
+  req->head.args.filelock_change.type = lock_cmd;
+  req->head.args.filelock_change.owner = owner;
+  req->head.args.filelock_change.pid = fl->l_pid;
+  req->head.args.filelock_change.start = fl->l_start;
+  req->head.args.filelock_change.length = fl->l_len;
+  req->head.args.filelock_change.wait = sleep;
+
+  bufferlist bl;
+  int ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+
+  if (ret == 0) {
+    if (op == CEPH_MDS_OP_GETFILELOCK) {
+      ceph_filelock filelock;
+      bufferlist::iterator p = bl.begin();
+      ::decode(filelock, p);
+
+      if (CEPH_LOCK_SHARED == filelock.type)
+	fl->l_type = F_RDLCK;
+      else if (CEPH_LOCK_EXCL == filelock.type)
+	fl->l_type = F_WRLCK;
+      else
+	fl->l_type = F_UNLCK;
+
+      fl->l_whence = SEEK_SET;
+      fl->l_start = filelock.start;
+      fl->l_len = filelock.length;
+      fl->l_pid = filelock.pid;
+    } else if (op == CEPH_MDS_OP_SETFILELOCK) {
+      ceph_lock_state_t *lock_state;
+      if (lock_type == CEPH_LOCK_FCNTL) {
+	if (!in->fcntl_locks)
+	  in->fcntl_locks = new ceph_lock_state_t(cct);
+	lock_state = in->fcntl_locks;
+      } else if (lock_type == CEPH_LOCK_FLOCK) {
+	if (!in->flock_locks)
+	  in->flock_locks = new ceph_lock_state_t(cct);
+	lock_state = in->flock_locks;
+      } else
+	assert(0);
+
+      ceph_filelock filelock;
+      _convert_flock(fl, owner, &filelock);
+      if (filelock.type == CEPH_LOCK_UNLOCK) {
+	list<ceph_filelock> activated_locks;
+	lock_state->remove_lock(filelock, activated_locks);
+      } else {
+	bool r = lock_state->add_lock(filelock, false, false);
+	assert(r);
+      }
+    } else
+      assert(0);
+  }
+  return ret;
+}
+
+void Client::_encode_filelocks(Inode *in, bufferlist& bl)
+{
+  if (!in->fcntl_locks && !in->flock_locks)
+    return;
+
+  unsigned nr_fcntl_locks = in->fcntl_locks ? in->fcntl_locks->held_locks.size() : 0;
+  ::encode(nr_fcntl_locks, bl);
+  if (nr_fcntl_locks) {
+    ceph_lock_state_t* lock_state = in->fcntl_locks;
+    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+	p != lock_state->held_locks.end();
+	++p)
+      ::encode(p->second, bl);
+  }
+
+  unsigned nr_flock_locks = in->flock_locks ? in->flock_locks->held_locks.size() : 0;
+  ::encode(nr_flock_locks, bl);
+  if (nr_flock_locks) {
+    ceph_lock_state_t* lock_state = in->flock_locks;
+    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+	p != lock_state->held_locks.end();
+	++p)
+      ::encode(p->second, bl);
+  }
+
+  ldout(cct, 10) << "_encode_filelocks ino " << in->ino << ", " << nr_fcntl_locks
+		 << " fcntl locks, " << nr_flock_locks << " flock locks" <<  dendl;
+}
+
+void Client::_release_filelocks(Fh *fh)
+{
+  if (!fh->fcntl_locks && !fh->flock_locks)
+    return;
+
+  Inode *in = fh->inode;
+  ldout(cct, 10) << "_release_filelocks " << fh << " ino " << in->ino << dendl;
+
+  list<pair<int, ceph_filelock> > to_release;
+
+  if (fh->fcntl_locks) {
+    ceph_lock_state_t* lock_state = fh->fcntl_locks;
+    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+	p != lock_state->held_locks.end();
+	++p)
+      to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FCNTL, p->second));
+    delete fh->fcntl_locks;
+  }
+  if (fh->flock_locks) {
+    ceph_lock_state_t* lock_state = fh->flock_locks;
+    for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
+	p != lock_state->held_locks.end();
+	++p)
+      to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FLOCK, p->second));
+    delete fh->flock_locks;
+  }
+
+  if (to_release.empty())
+    return;
+
+  struct flock fl;
+  memset(&fl, 0, sizeof(fl));
+  fl.l_whence = SEEK_SET;
+  fl.l_type = F_UNLCK;
+
+  for (list<pair<int, ceph_filelock> >::iterator p = to_release.begin();
+       p != to_release.end();
+       ++p) {
+    fl.l_start = p->second.start;
+    fl.l_len = p->second.length;
+    fl.l_pid = p->second.pid;
+    _do_filelock(in, p->first, CEPH_MDS_OP_SETFILELOCK, 0, &fl, p->second.owner);
+  }
+}
+
+void Client::_convert_flock(struct flock *fl, uint64_t owner, struct ceph_filelock *filelock)
+{
+  int lock_cmd;
+  if (F_RDLCK == fl->l_type)
+    lock_cmd = CEPH_LOCK_SHARED;
+  else if (F_WRLCK == fl->l_type)
+    lock_cmd = CEPH_LOCK_EXCL;
+  else
+    lock_cmd = CEPH_LOCK_UNLOCK;;
+
+  filelock->start = fl->l_start;
+  filelock->length = fl->l_len;
+  filelock->client = 0;
+  // see comment in _do_filelock()
+  filelock->owner = owner | (1ULL << 63);
+  filelock->pid = fl->l_pid;
+  filelock->type = lock_cmd;
+}
+
+int Client::_getlk(Fh *fh, struct flock *fl, uint64_t owner)
+{
+  Inode *in = fh->inode;
+  ldout(cct, 10) << "_getlk " << fh << " ino " << in->ino << dendl;
+  int ret = _do_filelock(in, CEPH_LOCK_FCNTL, CEPH_MDS_OP_GETFILELOCK, 0, fl, owner);
+  return ret;
+}
+
+int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
+{
+  Inode *in = fh->inode;
+  ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << dendl;
+  int ret =  _do_filelock(in, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner);
+  if (ret == 0) {
+    if (!fh->fcntl_locks)
+      fh->fcntl_locks = new ceph_lock_state_t(cct);
+
+    ceph_filelock filelock;
+    _convert_flock(fl, owner, &filelock);
+
+    if (filelock.type == CEPH_LOCK_UNLOCK) {
+      list<ceph_filelock> activated_locks;
+      fh->fcntl_locks->remove_lock(filelock, activated_locks);
+    } else {
+      bool r = fh->fcntl_locks->add_lock(filelock, false, false);
+      assert(r);
+    }
+  }
+  ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << " result=" << ret << dendl;
+  return ret;
+}
+
+int Client::_flock(Fh *fh, int cmd, uint64_t owner)
+{
+  Inode *in = fh->inode;
+  ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << dendl;
+
+  int sleep = !(cmd & LOCK_NB);
+  cmd &= ~LOCK_NB;
+
+  int type;
+  switch (cmd) {
+    case LOCK_SH:
+      type = F_RDLCK;
+      break;
+    case LOCK_EX:
+      type = F_WRLCK;
+      break;
+    case LOCK_UN:
+      type = F_UNLCK;
+      break;
+    default:
+      return -EINVAL;
+  }
+
+  struct flock fl;
+  memset(&fl, 0, sizeof(fl));
+  fl.l_type = type;
+  fl.l_whence = SEEK_SET;
+
+  int ret =  _do_filelock(in, CEPH_LOCK_FLOCK, CEPH_MDS_OP_SETFILELOCK, sleep, &fl, owner);
+  if (ret == 0) {
+    if (!fh->flock_locks)
+      fh->flock_locks = new ceph_lock_state_t(cct);
+
+    ceph_filelock filelock;
+    _convert_flock(&fl, owner, &filelock);
+
+    if (filelock.type == CEPH_LOCK_UNLOCK) {
+      list<ceph_filelock> activated_locks;
+      fh->flock_locks->remove_lock(filelock, activated_locks);
+    } else {
+      bool r = fh->flock_locks->add_lock(filelock, false, false);
+      assert(r);
+    }
+  }
+  ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << " result=" << ret << dendl;
+  return ret;
 }
 
 int Client::ll_statfs(Inode *in, struct statvfs *stbuf)
@@ -8740,7 +9008,35 @@ int Client::ll_release(Fh *fh)
   return 0;
 }
 
+int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
+{
+  Mutex::Locker lock(client_lock);
 
+  ldout(cct, 3) << "ll_getlk (fh)" << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << "ll_getk (fh)" << (unsigned long)fh << std::endl;
+
+  return _getlk(fh, fl, owner);
+}
+
+int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
+{
+  Mutex::Locker lock(client_lock);
+
+  ldout(cct, 3) << "ll_setlk  (fh) " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << "ll_setk (fh)" << (unsigned long)fh << std::endl;
+
+  return _setlk(fh, fl, owner, sleep);
+}
+
+int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
+{
+  Mutex::Locker lock(client_lock);
+
+  ldout(cct, 3) << "ll_flock  (fh) " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << "ll_flock (fh)" << (unsigned long)fh << std::endl;
+
+  return _flock(fh, cmd, owner);
+}
 // =========================================
 // layout
 

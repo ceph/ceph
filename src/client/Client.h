@@ -119,6 +119,7 @@ struct CapSnap;
 
 struct MetaSession;
 struct MetaRequest;
+class ceph_lock_state_t;
 
 
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
@@ -604,6 +605,9 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
+  int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int _flock(Fh *fh, int cmd, uint64_t owner);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
@@ -612,6 +616,12 @@ private:
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
+
+  int _do_filelock(Inode *in, int lock_type, int op, int sleep,
+		   struct flock *fl, uint64_t owner);
+  void _encode_filelocks(Inode *in, bufferlist& bl);
+  void _release_filelocks(Fh *fh);
+  void _convert_flock(struct flock *fl, uint64_t owner, ceph_filelock *filelock);
 
 public:
   int mount(const std::string &mount_root);
@@ -818,6 +828,9 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
+  int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
+  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+  int ll_flock(Fh *fh, int cmd, uint64_t owner);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);

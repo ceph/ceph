@@ -40,9 +40,9 @@ public:
   }
 
   void add_cap(inodeno_t ino, uint64_t cap_id, inodeno_t pathbase, const string& path,
-	       int wanted, int issued,
-	       inodeno_t sr) {
-    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr);
+	       int wanted, int issued, inodeno_t sr, bufferlist& lb)
+  {
+    caps[ino] = cap_reconnect_t(cap_id, pathbase, path, wanted, issued, sr, lb);
   }
   void add_snaprealm(inodeno_t ino, snapid_t seq, inodeno_t parent) {
     ceph_mds_snaprealm_reconnect r;
