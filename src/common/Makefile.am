@@ -83,7 +83,8 @@ libcommon_la_SOURCES += \
 	osd/HitSet.cc \
 	mds/MDSMap.cc \
 	mds/inode_backtrace.cc \
-	mds/mdstypes.cc 
+	mds/mdstypes.cc \
+	mds/flock.cc
 
 # inject crc in common
 libcommon_crc_la_SOURCES = \
