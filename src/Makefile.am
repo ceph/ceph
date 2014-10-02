@@ -802,3 +802,10 @@ project.tgz: clean
 coverity-submit:
 	scp project.tgz ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
 	curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
+
+# Install Python bindings into a virtualenv
+install-pybind:
+	@cd pybind && ./bootstrap
+
+uninstall-pybind:
+	rm -rf pybind/virtualenv
