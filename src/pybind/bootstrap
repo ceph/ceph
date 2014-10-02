@@ -1,0 +1,59 @@
+#!/bin/sh
+set -e
+
+if command -v lsb_release >/dev/null 2>&1; then
+    case "$(lsb_release --id --short)" in
+	Ubuntu|Debian)
+	    for package in python-virtualenv; do
+		if [ "$(dpkg --status -- $package 2>/dev/null|sed -n 's/^Status: //p')" != "install ok installed" ]; then
+                    # add a space after old values
+		    missing="${missing:+$missing }$package"
+		fi
+	    done
+	    if [ -n "$missing" ]; then
+			echo "$0: missing required packages, please install them:" 1>&2
+			echo "  sudo apt-get install $missing"
+			exit 1
+	    fi
+	    ;;
+    esac
+
+    case "$(lsb_release --id --short | awk '{print $1}')" in
+	openSUSE|SUSE)
+	for package in python-virtualenv; do
+		if [ "$(rpm -qa $package 2>/dev/null)" == "" ]; then
+			missing="${missing:+$missing }$package"
+		fi
+	done
+	if [ -n "$missing" ]; then
+		echo "$0: missing required packages, please install them:" 1>&2
+		echo "  sudo zypper install $missing"
+		exit 1
+	fi
+	;;
+    esac
+
+else
+	if [ -f /etc/redhat-release ]; then
+		case "$(cat /etc/redhat-release | awk '{print $1}')" in
+			CentOS)
+				for package in python-virtualenv; do
+				if [ "$(rpm -qa $package 2>/dev/null)" == "" ]; then
+		    			missing="${missing:+$missing }$package"
+				fi
+				done
+				if [ -n "$missing" ]; then
+					echo "$0: missing required packages, please install them:" 1>&2
+					echo "  sudo yum install $missing"
+				exit 1
+				fi
+				;;
+		esac
+	fi
+fi
+
+test -d virtualenv || virtualenv virtualenv
+cd cephfs && ../virtualenv/bin/python setup.py develop && cd -
+cd rados && ../virtualenv/bin/python setup.py develop && cd -
+cd rbd && ../virtualenv/bin/python setup.py develop && cd -
+cd ceph && ../virtualenv/bin/python setup.py develop && cd -
