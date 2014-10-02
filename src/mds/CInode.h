@@ -893,6 +893,8 @@ public:
 
     validated_data() : performed_validation(false),
         passed_validation(false) {}
+
+    void dump(Formatter *f) const;
   };
 
   /**
@@ -909,6 +911,8 @@ public:
    */
   void validate_disk_state(validated_data *results,
                            Context *fin);
+  static void dump_validation_results(const validated_data& results,
+                                      Formatter *f);
 private:
   bool _validate_disk_state(class ValidationContinuation *c,
                             int rval, int stage);

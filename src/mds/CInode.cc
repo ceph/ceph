@@ -3657,3 +3657,33 @@ void CInode::validate_disk_state(CInode::validated_data *results,
                                                           fin);
   vc->begin();
 }
+
+void CInode::validated_data::dump(Formatter *f) const
+{
+  f->open_object_section("results");
+  {
+    f->dump_bool("performed_validation", performed_validation);
+    f->dump_bool("passed_validation", passed_validation);
+    f->open_object_section("backtrace");
+    {
+      f->dump_bool("checked", backtrace.checked);
+      f->dump_bool("passed", backtrace.passed);
+      f->dump_int("read_ret_val", backtrace.ondisk_read_retval);
+      f->dump_stream("ondisk_value") << backtrace.ondisk_value;
+      f->dump_stream("memoryvalue") << backtrace.memory_value;
+      f->dump_stream("error_str") << backtrace.error_str;
+    }
+    f->close_section(); // backtrace
+    f->open_object_section("raw_rstats");
+    {
+      f->dump_bool("checked", raw_rstats.checked);
+      f->dump_bool("passed", raw_rstats.passed);
+      f->dump_int("read_ret_val", raw_rstats.ondisk_read_retval);
+      f->dump_stream("ondisk_value") << raw_rstats.ondisk_value;
+      f->dump_stream("memory_value") << raw_rstats.memory_value;
+      f->dump_stream("error_str") << raw_rstats.error_str;
+    }
+    f->close_section(); // raw_rstats
+  }
+  f->close_section(); // results
+}
