@@ -1349,6 +1349,7 @@ class RGWRados
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
+  void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
 protected:
   virtual int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning, RGWObjVersionTracker *objv_tracker);
 

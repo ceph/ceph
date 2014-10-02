@@ -31,6 +31,7 @@ cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_bucket_link_olh;
 cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
+cls_method_handle_t h_rgw_obj_remove;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
@@ -1277,6 +1278,63 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_remove_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  if (op.keep_attr_prefixes.empty()) {
+    return cls_cxx_remove(hctx);
+  }
+
+  map<string, bufferlist> attrset;
+  int ret = cls_cxx_getxattrs(hctx, &attrset);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+    return ret;
+  }
+
+  CLS_LOG(20, "%s(): removing object", __func__);
+  ret = cls_cxx_remove(hctx);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_remove returned %d", __func__, ret);
+    return ret;
+  }
+
+  map<string, bufferlist> new_attrs;
+  for (list<string>::iterator iter = op.keep_attr_prefixes.begin();
+       iter != op.keep_attr_prefixes.end(); ++iter) {
+    string& check_prefix = *iter;
+
+    for (map<string, bufferlist>::iterator aiter = attrset.lower_bound(check_prefix);
+         aiter != attrset.end(); ++aiter) {
+      const string& attr = aiter->first;
+
+      if (attr.substr(0, check_prefix.size()) > check_prefix) {
+        break;
+      }
+
+      ret = cls_cxx_setxattr(hctx, attr.c_str(), &aiter->second);
+      CLS_LOG(20, "%s(): setting attr: %s", __func__, attr.c_str());
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, attr.c_str(), ret);
+        return ret;
+      }
+    }
+  }
+
+
+
+  return 0;
+}
+
 int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
 {
   bufferlist::iterator iter = bl.begin();
@@ -2095,6 +2153,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
   cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
   cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
+
+  cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
 
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);

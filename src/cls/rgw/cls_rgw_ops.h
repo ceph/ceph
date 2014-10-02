@@ -330,6 +330,23 @@ struct rgw_cls_check_index_ret
 };
 WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 
+struct rgw_cls_obj_remove_op {
+  list<string> keep_attr_prefixes;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(keep_attr_prefixes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(keep_attr_prefixes, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_remove_op)
+
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
 

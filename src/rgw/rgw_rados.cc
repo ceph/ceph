@@ -3799,6 +3799,13 @@ int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
   return gc->defer_chain(tag, false);
 }
 
+void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
+{
+  list<string> prefixes;
+  prefixes.push_back(RGW_ATTR_OLH_PREFIX);
+  cls_rgw_remove_obj(op, prefixes);
+}
+
 
 /**
  * Delete an object.
@@ -3834,7 +3841,7 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
     objv_tracker->prepare_op_for_write(&op);
   }
 
-  cls_refcount_put(op, tag, true);
+  remove_rgw_head_obj(op);
   r = ref.ioctx.operate(ref.oid, &op);
   bool removed = (r >= 0);
 
@@ -4147,7 +4154,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
 
     if (reset_obj) {
       op.create(false);
-      op.remove(); // we're not dropping reference here, actually removing object
+      remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
     }
 
     return 0;
@@ -4162,7 +4169,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   if (reset_obj) {
     if (state->exists) {
       op.create(false);
-      op.remove();
+      remove_rgw_head_obj(op);
     } else {
       op.create(true);
     }

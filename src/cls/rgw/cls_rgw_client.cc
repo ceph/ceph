@@ -92,6 +92,15 @@ int cls_rgw_list_op(IoCtx& io_ctx, const string& oid,
  return r;
 }
 
+void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
+{
+  bufferlist in;
+  struct rgw_cls_obj_remove_op call;
+  call.keep_attr_prefixes = keep_attr_prefixes;
+  ::encode(call, in);
+  o.exec("rgw", "obj_remove", in);
+}
+
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
                             bool delete_marker, const string& op_tag)
 {
