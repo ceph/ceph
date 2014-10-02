@@ -705,7 +705,8 @@ struct cap_reconnect_t {
   cap_reconnect_t() {
     memset(&capinfo, 0, sizeof(capinfo));
   }
-  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i, inodeno_t sr) : 
+  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i,
+		  inodeno_t sr, bufferlist& lb) :
     path(p) {
     capinfo.cap_id = cap_id;
     capinfo.wanted = w;
@@ -713,6 +714,7 @@ struct cap_reconnect_t {
     capinfo.snaprealm = sr;
     capinfo.pathbase = pino;
     capinfo.flock_len = 0;
+    flockbl.claim(lb);
   }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
