@@ -42,8 +42,8 @@ def task(ctx, config):
     manager.create_erasure_code_profile(profile_name, profile)
     pool = manager.create_pool_with_unique_name(erasure_code_profile_name=profile_name)
 
-    # something that is always there
-    dummyfile = '/etc/fstab'
+    # something that is always there, readable and never empty
+    dummyfile = '/etc/group'
 
     # kludge to make sure they get a map
     rados(ctx, mon, ['-p', pool, 'put', 'dummy', dummyfile])
