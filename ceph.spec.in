@@ -27,6 +27,10 @@ Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	python-ceph = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-argparse
+Requires:	python-ceph
+Requires:	python-rbd
+Requires:	python-cephfs
+Requires:	python-rados
 Requires:	python-requests
 Requires:	python-flask
 Requires:	xfsprogs
