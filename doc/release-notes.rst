@@ -2,6 +2,257 @@
  Release Notes
 ===============
 
+v0.80.6 Firefly
+===============
+
+This is a major bugfix release for firefly, fixing a range of issues
+in the OSD and monitor, particularly with cache tiering.  There are
+also important fixes in librados, with the watch/notify mechanism used
+by librbd, and in radosgw.
+
+A few pieces of new functionality of been backported, including improved
+'ceph df' output (view amount of writeable space per pool), support for
+non-default cluster names when using sysvinit or systemd, and improved
+(and fixed) support for dmcrypt.
+
+We recommend that all v0.80.x Firefly users upgrade to this release.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.6.txt>`.
+
+Notable Changes
+---------------
+
+* build: fix atomic64_t on i386 (#8969 Sage Weil)
+* build: fix build on alpha (Michael Cree, Dmitry Smirnov)
+* build: fix build on hppa (Dmitry Smirnov)
+* build: fix yasm detection on x32 arch (Sage Weil)
+* ceph-disk: fix 'list' function with dmcrypt (Sage Weil)
+* ceph-disk: fix dmcrypt support (Alfredo Deza)
+* ceph: allow non-default cluster to be specified (#8944)
+* common: fix dup log messages to mon (#9080 Sage Weil)
+* global: write pid file when -f is used (systemd, upstart) (Alexandre Oliva)
+* librados: fix crash when read timeout is enabled (#9362 Matthias Kiefer, Sage Weil)
+* librados: fix lock leaks in error paths (#9022 Pavan Rallabhandi)
+* librados: fix watch resend on PG acting set change (#9220 Samuel Just)
+* librados: python: fix aio_read handling with \0 (Mohammad Salehe)
+* librbd: add interface to invalidate cached data (Josh Durgin)
+* librbd: fix crash when using clone of flattened image (#8845 Josh Durgin)
+* librbd: fix error path cleanup on open (#8912 Josh Durgin)
+* librbd: fix null pointer check (Danny Al-Gaaf)
+* librbd: limit dirty object count (Haomai Wang)
+* mds: fix rstats for root and mdsdir (Yan, Zheng)
+* mon: add 'get' command for new cache tier pool properties (Joao Eduardo Luis)
+* mon: add 'osd pool get-quota' (#8523 Joao Eduardo Luis)
+* mon: add cluster fingerprint (Sage Weil)
+* mon: disallow nonsensical cache-mode transitions (#8155 Joao Eduardo Luis)
+* mon: fix cache tier rounding error on i386 (Sage Weil)
+* mon: fix occasional memory leak (#9176 Sage Weil)
+* mon: fix reported latency for 'osd perf' (#9269 Samuel Just)
+* mon: include 'max avail' in 'ceph df' output (Sage Weil, Xioaxi Chen)
+* mon: persistently mark pools where scrub may find incomplete clones (#8882 Sage Weil)
+* mon: preload erasure plugins (Loic Dachary)
+* mon: prevent cache-specific settings on non-tier pools (#8696 Joao Eduardo Luis)
+* mon: reduce log spam (Aanchal Agrawal, Sage Weil)
+* mon: warn when cache pools have no hit_sets enabled (Sage Weil)
+* msgr: fix trivial memory leak (Sage Weil)
+* osd: automatically scrub PGs with invalid stats (#8147 Sage Weil)
+* osd: avoid sharing PG metadata that is not durable (Samuel Just)
+* osd: cap hit_set size (#9339 Samuel Just)
+* osd: create default erasure profile if needed (#8601 Loic Dachary)
+* osd: dump tid as JSON int (not string)  where appropriate (Joao Eduardo Luis)
+* osd: encode blacklist in deterministic order (#9211 Sage Weil)
+* osd: fix behavior when cache tier has no hit_sets enabled (#8982 Sage Weil)
+* osd: fix cache tier flushing of snapshots (#9054 Samuel Just)
+* osd: fix cache tier op ordering when going from full to non-full (#8931 Sage Weil)
+* osd: fix crash on dup recovery reservation (#8863 Sage Weil)
+* osd: fix division by zero when pg_num adjusted with no OSDs (#9052 Sage Weil)
+* osd: fix hint crash in experimental keyvaluestore_dev backend (Hoamai Wang)
+* osd: fix leak in copyfrom cancellation (#8894 Samuel Just)
+* osd: fix locking for copyfrom finish (#8889 Sage Weil)
+* osd: fix long filename handling in backend (#8701 Sage Weil)
+* osd: fix min_size check with backfill (#9497 Samuel Just)
+* osd: fix mount/remount sync race (#9144 Sage Weil)
+* osd: fix object listing + erasure code bug (Guang Yang)
+* osd: fix race on reconnect to failed OSD (#8944 Greg Farnum)
+* osd: fix recovery reservation deadlock (Samuel Just)
+* osd: fix tiering agent arithmetic for negative values (#9082 Karan Singh)
+* osd: improve shutdown order (#9218 Sage Weil)
+* osd: improve subop discard logic (#9259 Samuel Just)
+* osd: introduce optional sleep, io priority for scrub and snap trim (Sage Weil)
+* osd: make scrub check for and remove stale erasure-coded objects (Samuel Just)
+* osd: misc fixes (#9481 #9482 #9179 Sameul Just)
+* osd: mix keyvaluestore_dev improvements (Haomai Wang)
+* osd: only require CRUSH features for rules that are used (#8963 Sage Weil)
+* osd: preload erasure plugins on startup (Loic Dachary)
+* osd: prevent PGs from falling behind when consuming OSDMaps (#7576 Sage Weil)
+* osd: prevent old clients from using tiered pools (#8714 Sage Weil)
+* osd: set min_size on erasure pools to data chunk count (Sage Weil)
+* osd: trim old erasure-coded objects more aggressively (Samuel Just)
+* rados: enforce erasure code alignment (Lluis Pamies-Juarez)
+* rgw: align object stripes with erasure pool alignment (#8442 Yehuda Sadeh)
+* rgw: don't send error body on HEAD for civetweb (#8539 Yehuda Sadeh)
+* rgw: fix crash in CORS preflight request (Yehuda Sadeh)
+* rgw: fix decoding of + in URL (#8702 Yehuda Sadeh)
+* rgw: fix object removal on object create (#8972 Patrycja Szabowska, Yehuda Sadeh)
+* systemd: use systemd-run when starting radosgw (JuanJose Galvez)
+* sysvinit: support non-default cluster name (Alfredo Deza)
+
+
+v0.80.5 Firefly
+===============
+
+This release fixes a few important bugs in the radosgw and fixes
+several packaging and environment issues, including OSD log rotation,
+systemd environments, and daemon restarts on upgrade.
+
+We recommend that all v0.80.x Firefly users upgrade, particularly if they
+are using upstart, systemd, or radosgw.
+
+Notable Changes
+---------------
+
+* ceph-dencoder: do not needlessly link to librgw, librados, etc. (Sage Weil)
+* do not needlessly link binaries to leveldb (Sage Weil)
+* mon: fix mon crash when no auth keys are present (#8851, Joao Eduardo Luis)
+* osd: fix cleanup (and avoid occasional crash) during shutdown (#7981, Sage Weil)
+* osd: fix log rotation under upstart (Sage Weil)
+* rgw: fix multipart upload when object has irregular size (#8846, Yehuda Sadeh, Sylvain Munaut)
+* rgw: improve bucket listing S3 compatibility (#8858, Yehuda Sadeh)
+* rgw: improve delimited bucket listing (Yehuda Sadeh)
+* rpm: do not restart daemons on upgrade (#8849, Alfredo Deza)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.5.txt>`.
+
+v0.80.4 Firefly
+===============
+
+This Firefly point release fixes an potential data corruption problem
+when ceph-osd daemons run on top of XFS and service Firefly librbd
+clients.  A recently added allocation hint that RBD utilizes triggers
+an XFS bug on some kernels (Linux 3.2, and likely others) that leads
+to data corruption and deep-scrub errors (and inconsistent PGs).  This
+release avoids the situation by disabling the allocation hint until we
+can validate which kernels are affected and/or are known to be safe to
+use the hint on.
+
+We recommend that all v0.80.x Firefly users urgently upgrade,
+especially if they are using RBD.
+
+Notable Changes
+---------------
+
+* osd: disable XFS extsize hint by default (#8830, Samuel Just)
+* rgw: fix extra data pool default name (Yehuda Sadeh)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.4.txt>`.
+
+
+v0.80.3 Firefly
+===============
+
+This is the third Firefly point release.  It includes a single fix
+for a radosgw regression that was discovered in v0.80.2 right after it
+was released.
+
+We recommand that all v0.80.x Firefly users upgrade.
+
+Notable Changes
+---------------
+
+* radosgw: fix regression in manifest decoding (#8804, Sage Weil)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.3.txt>`.
+
+
+v0.80.2 Firefly
+===============
+
+This is the second Firefly point release.  It contains a range of
+important fixes, including several bugs in the OSD cache tiering, some
+compatibility checks that affect upgrade situations, several radosgw
+bugs, and an irritating and unnecessary feature bit check that
+prevents older clients from communicating with a cluster with any
+erasure coded pools.
+
+One someone large change in this point release is that the ceph RPM
+package is separated into a ceph and ceph-common package, similar to
+Debian.  The ceph-common package contains just the client libraries
+without any of the server-side daemons.
+
+We recommend that all v0.80.x Firefly users skip this release and use
+v0.80.3.
+
+Notable Changes
+---------------
+
+* ceph-disk: better debug logging (Alfredo Deza)
+* ceph-disk: fix preparation of OSDs with dmcrypt (#6700, Stephen F Taylor)
+* ceph-disk: partprobe on prepare to fix dm-crypt (#6966, Eric Eastman)
+* do not require ERASURE_CODE feature from clients (#8556, Sage Weil)
+* libcephfs-java: build with older JNI headers (Greg Farnum)
+* libcephfs-java: fix build with gcj-jdk (Dmitry Smirnov)
+* librados: fix osd op tid for redirected ops (#7588, Samuel Just)
+* librados: fix rados_pool_list buffer bounds checks (#8447, Sage Weil)
+* librados: resend ops when pool overlay changes (#8305, Sage Weil)
+* librbd, ceph-fuse: reduce CPU overhead for clean object check in cache (Haomai Wang)
+* mon: allow deletion of cephfs pools (John Spray)
+* mon: fix default pool ruleset choice (#8373, John Spray)
+* mon: fix health summary for mon low disk warning (Sage Weil)
+* mon: fix 'osd pool set <pool> cache_target_full_ratio' (Geoffrey Hartz)
+* mon: fix quorum feature check (Greg Farnum)
+* mon: fix request forwarding in mixed firefly+dumpling clusters 9#8727, Joao Eduardo Luis)
+* mon: fix rule vs ruleset check in 'osd pool set ... crush_ruleset' command (John Spray)
+* mon: make osd 'down' count accurate (Sage Weil)
+* mon: set 'next commit' in primary-affinity reply (Ilya Dryomov)
+* mon: verify CRUSH features are supported by all mons (#8738, Greg Farnum)
+* msgr: fix sequence negotiation during connection reset (Guang Yang)
+* osd: block scrub on blocked objects (#8011, Samuel Just)
+* osd: call XFS hint ioctl less often (#8241, Ilya Dryomov)
+* osd: copy xattr spill out marker on clone (Haomai Wang)
+* osd: fix flush of snapped objects (#8334, Samuel Just)
+* osd: fix hashindex restart of merge operation (#8332, Samuel Just)
+* osd: fix osdmap subscription bug causing startup hang (Greg Farnum)
+* osd: fix potential null deref (#8328, Sage Weil)
+* osd: fix shutdown race (#8319, Sage Weil)
+* osd: handle 'none' in CRUSH results properly during peering (#8507, Samuel Just)
+* osd: set no spill out marker on new objects (Greg Farnum)
+* osd: skip op ordering debug checks on tiered pools (#8380, Sage Weil)
+* rados: enforce 'put' alignment (Lluis Pamies-Juarez)
+* rest-api: fix for 'rx' commands (Ailing Zhang)
+* rgw: calc user manifest etag and fix check (#8169, #8436, Yehuda Sadeh)
+* rgw: fetch attrs on multipart completion (#8452, Yehuda Sadeh, Sylvain Munaut)
+* rgw: fix buffer overflow for long instance ids (#8608, Yehuda Sadeh)
+* rgw: fix entity permission check on metadata put (#8428, Yehuda Sadeh)
+* rgw: fix multipart retry race (#8269, Yehuda Sadeh)
+* rpm: split ceph into ceph and ceph-common RPMs (Sandon Van Ness, Dan Mick)
+* sysvinit: continue startin daemons after failure doing mount (#8554, Sage Weil)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.2.txt>`.
+
+v0.80.1 Firefly
+===============
+
+This first Firefly point release fixes a few bugs, the most visible
+being a problem that prevents scrub from completing in some cases.
+
+Notable Changes
+---------------
+
+* osd: revert incomplete scrub fix (Samuel Just)
+* rgw: fix stripe calculation for manifest objects (Yehuda Sadeh)
+* rgw: improve handling, memory usage for abort reads (Yehuda Sadeh)
+* rgw: send Swift user manifest HTTP header (Yehuda Sadeh)
+* libcephfs, ceph-fuse: expose MDS session state via admin socket (Yan, Zheng)
+* osd: add simple throttle for snap trimming (Sage Weil)
+* monclient: fix possible hang from ill-timed monitor connection failure (Sage Weil)
+* osd: fix trimming of past HitSets (Sage Weil)
+* osd: fix whiteouts for non-writeback cache modes (Sage Weil)
+* osd: prevent divide by zero in tiering agent (David Zafman)
+* osd: prevent busy loop when tiering agent can do no work (David Zafman)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.1.txt>`.
+
+
 v0.80 Firefly
 =============
 
