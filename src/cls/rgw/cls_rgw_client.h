@@ -31,6 +31,8 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
                     const string& filter_prefix, uint32_t num_entries, bool list_versions,
                     rgw_bucket_dir *dir, bool *is_truncated);
 
+void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes);
+
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
                             bool delete_marker, const string& op_tag);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
