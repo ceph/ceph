@@ -956,11 +956,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  if (op.key.instance.empty()) {
-    CLS_LOG(1, "bad key passed in (instance empty)");
-    return -EINVAL;
-  }
-
   cls_rgw_obj_key olh_key;
   olh_key.name = op.key.name;
 
@@ -1009,15 +1004,17 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
-  /* need to remove the plain object listing key anyway */
-  string plain_key;
-  struct rgw_bucket_dir_entry plain_entry;
-  encode_obj_index_key(olh_key, &plain_key);
-  ret = read_index_entry(hctx, plain_key, &plain_entry);
-  if (ret >= 0) {
+  /* might need to remove the plain object listing key */
+    if (!op.key.instance.empty()) {
+    string plain_key;
+    struct rgw_bucket_dir_entry plain_entry;
+    encode_obj_index_key(olh_key, &plain_key);
+    ret = read_index_entry(hctx, plain_key, &plain_entry);
+    if (ret >= 0) {
 #warning handle overwrite of non-olh object
-    ret = cls_cxx_map_remove_key(hctx, plain_key);
-  }
+      ret = cls_cxx_map_remove_key(hctx, plain_key);
+    }
+    }
 
   olh_data_entry.epoch++;
   olh_data_entry.delete_marker = op.delete_marker;
@@ -1047,12 +1044,14 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-   /* write a new list entry for the object instance */
-  get_list_index_key(instance_entry, &instance_list_key);
-  ret = write_entry(hctx, instance_entry, instance_list_key);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_entry() instance_list_key=%s ret=%d", instance_list_key.c_str(), ret);
-    return ret;
+  if (instance_key != instance_list_key) {
+    /* write a new list entry for the object instance */
+   get_list_index_key(instance_entry, &instance_list_key);
+   ret = write_entry(hctx, instance_entry, instance_list_key);
+   if (ret < 0) {
+     CLS_LOG(0, "ERROR: write_entry() instance_list_key=%s ret=%d", instance_list_key.c_str(), ret);
+     return ret;
+   }
   }
 
   /* update the olh log */
