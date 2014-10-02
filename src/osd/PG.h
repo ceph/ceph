@@ -766,6 +766,16 @@ public:
       return std::find(acting.begin(), acting.end(), osd.osd) != acting.end();
     }
   }
+  bool is_acting(int osd) {
+    for (set<pg_shard_t>::const_iterator it = actingset.begin();
+        it != actingset.end();
+        ++it) {
+      if (it->osd == osd) {
+        return true;
+      }
+    }
+    return false;
+  }
   bool is_up(pg_shard_t osd) const {
     if (pool.info.ec_pool()) {
       return up.size() > osd.shard && up[osd.shard] == osd.osd;
