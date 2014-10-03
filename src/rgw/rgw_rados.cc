@@ -2858,7 +2858,161 @@ int RGWRados::get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bu
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
+int RGWRados::Object::Write::write_meta(uint64_t size,
+                  map<string, bufferlist>& attrs)
+{
+  rgw_bucket bucket;
+  rgw_rados_ref ref;
+  rgw_obj& obj = target->get_obj();
+  RGWRados *store = target->get_store();
+  int r = store->get_obj_ref(obj, &ref, &bucket);
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation op;
+
+  RGWObjState *state = NULL;
+
+  bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
+  r = target->prepare_atomic_modification(op, reset_obj, meta.ptag, meta.if_match, meta.if_nomatch);
+  if (r < 0)
+    return r;
+
+  utime_t ut;
+  if (meta.set_mtime) {
+    ut = utime_t(meta.set_mtime, 0);
+  } else {
+    ut = ceph_clock_now(0);
+    meta.set_mtime = ut.sec();
+  }
+
+  op.mtime(&meta.set_mtime);
+
+  if (meta.data) {
+    /* if we want to overwrite the data, we also want to overwrite the
+       xattrs, so just remove the object */
+    op.write_full(*meta.data);
+  }
+
+  string etag;
+  string content_type;
+  bufferlist acl_bl;
+
+  map<string, bufferlist>::iterator iter;
+  if (meta.rmattrs) {
+    for (iter = meta.rmattrs->begin(); iter != meta.rmattrs->end(); ++iter) {
+      const string& name = iter->first;
+      op.rmxattr(name.c_str());
+    }
+  }
+
+  if (meta.manifest) {
+    /* remove existing manifest attr */
+    iter = attrs.find(RGW_ATTR_MANIFEST);
+    if (iter != attrs.end())
+      attrs.erase(iter);
+
+    bufferlist bl;
+    ::encode(*meta.manifest, bl);
+    op.setxattr(RGW_ATTR_MANIFEST, bl);
+  }
+
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    const string& name = iter->first;
+    bufferlist& bl = iter->second;
+
+    if (!bl.length())
+      continue;
+
+    op.setxattr(name.c_str(), bl);
+
+    if (name.compare(RGW_ATTR_ETAG) == 0) {
+      etag = bl.c_str();
+    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
+      content_type = bl.c_str();
+    } else if (name.compare(RGW_ATTR_ACL) == 0) {
+      acl_bl = bl;
+    }
+  }
+
+  if (!op.size())
+    return 0;
+
+  string index_tag;
+  uint64_t epoch;
+  int64_t poolid;
+
+  index_tag = state->write_tag;
+
+  RGWRados::Bucket bop(store, bucket);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, *state);
+
+  r = index_op.prepare(CLS_RGW_OP_ADD);
+  if (r < 0)
+    return r;
+
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
+                or -ENOENT if was removed, or -EEXIST if it did not exist
+                before and now it does */
+    goto done_cancel;
+  }
+
+  epoch = ref.ioctx.get_last_version();
+  poolid = ref.ioctx.get_id();
+
+  r = target->complete_atomic_modification();
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
+  }
+
+  r = index_op.complete(poolid, epoch, size,
+                        ut, etag, content_type, &acl_bl,
+                        meta.category, meta.remove_objs);
+  if (r < 0)
+    goto done_cancel;
+
+  if (meta.mtime) {
+    *meta.mtime = meta.set_mtime;
+  }
+
+  /* update quota cache */
+  store->quota_handler->update_stats(meta.owner, bucket, (state->exists ? 0 : 1), size, state->size);
+
+  return 0;
+
+done_cancel:
+  int ret = index_op.cancel();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
+  }
+  /* we lost in a race. There are a few options:
+   * - existing object was rewritten (ECANCELED)
+   * - non existing object was created (EEXIST)
+   * - object was removed (ENOENT)
+   * should treat it as a success
+   */
+  if ((r == -ECANCELED || r == -ENOENT) ||
+      (!(meta.flags & PUT_OBJ_EXCL) && r == -EEXIST)) {
+    r = 0;
+  }
+
+  return r;
+}
+
+/**
+ * Write/overwrite an object to the bucket storage.
+ * bucket: the bucket to store the object in
+ * obj: the object name/key
+ * data: the object contents/value
+ * size: the amount of data to write (data must be this long)
+ * mtime: if non-NULL, writes the given mtime to the bucket storage
+ * attrs: all the given attrs are written to bucket storage for the given object
+ * exclusive: create object exclusively
+ * Returns: 0 on success, -ERR# otherwise.
+ */
 int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
+#warning remove me when done
                   time_t *mtime, map<string, bufferlist>& attrs,
                   RGWObjCategory category, int flags,
                   map<string, bufferlist>* rmattrs,
@@ -3763,7 +3917,32 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
   return 0;
 }
 
+int RGWRados::Object::complete_atomic_modification()
+{
+  if (!state->has_manifest || state->keep_tail)
+    return 0;
+
+  cls_rgw_obj_chain chain;
+  RGWObjManifest::obj_iterator iter;
+  for (iter = state->manifest.obj_begin(); iter != state->manifest.obj_end(); ++iter) {
+    const rgw_obj& mobj = iter.get_location();
+    if (mobj == obj)
+      continue;
+    string oid, loc;
+    rgw_bucket bucket;
+    get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
+    cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
+    chain.push_obj(bucket.data_pool, key, loc);
+  }
+
+  string tag = state->obj_tag.c_str();
+  int ret = store->gc->send_chain(chain, tag, false);  // do it async
+
+  return ret;
+}
+
 int RGWRados::complete_atomic_overwrite(ObjectCtx *rctx, RGWObjState *state, rgw_obj& obj)
+#warning remove me when done
 {
   if (!state || !state->has_manifest || state->keep_tail)
     return 0;
@@ -4073,6 +4252,7 @@ int RGWRados::get_olh_target_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState *o
 }
 
 int RGWRados::get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
+#warning FIXME: get rid objv_tracker for non system objects
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -4083,6 +4263,8 @@ int RGWRados::get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **st
     }
     return 0;
   }
+
+  s->obj = obj;
 
   int r = raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv_tracker);
   if (r == -ENOENT) {
@@ -4228,10 +4410,102 @@ int RGWRados::append_atomic_test(ObjectCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
+int RGWRados::Object::get_state(RGWObjState **pstate)
+{
+#warning FIXME follow_olh
+  bool follow_olh = false;
+  return store->get_obj_state(&ctx, obj, pstate, NULL, follow_olh);
+}
+
+int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
+                                                  const char *if_match, const char *if_nomatch)
+{
+  int r = get_state(&state);
+  if (r < 0)
+    return r;
+
+  bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0) ||
+                     if_match != NULL || if_nomatch != NULL) &&
+                     (!state->fake_tag);
+
+  if (!state->is_atomic) {
+    ldout(store->ctx(), 20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
+
+    if (reset_obj) {
+      op.create(false);
+      store->remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
+    }
+
+    return 0;
+  }
+
+  if (need_guard) {
+    /* first verify that the object wasn't replaced under */
+    if (if_nomatch == NULL || strcmp(if_nomatch, "*") != 0) {
+      op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag); 
+      // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
+    }
+
+    if (if_match) {
+      if (strcmp(if_match, "*") == 0) {
+        // test the object is existing
+        if (!state->exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        bufferlist bl;
+        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
+            strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+
+    if (if_nomatch) {
+      if (strcmp(if_nomatch, "*") == 0) {
+        // test the object is NOT existing
+        if (state->exists) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        bufferlist bl;
+        if (!state->get_attr(RGW_ATTR_ETAG, bl) ||
+            strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      }
+    }
+  }
+
+  if (reset_obj) {
+    if (state->exists) {
+      op.create(false);
+      store->remove_rgw_head_obj(op);
+    } else {
+      op.create(true);
+    }
+  }
+
+  if (ptag) {
+    state->write_tag = *ptag;
+  } else {
+    append_rand_alpha(store->ctx(), state->write_tag, state->write_tag, 32);
+  }
+  bufferlist bl;
+  bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
+
+  ldout(store->ctx(), 10) << "setting object write_tag=" << state->write_tag << dendl;
+
+  op.setxattr(RGW_ATTR_ID_TAG, bl);
+
+  return 0;
+}
+
 int RGWRados::prepare_atomic_for_write_impl(ObjectCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
 			    bool reset_obj, const string *ptag,
                             const char *if_match, const char *if_nomatch)
+#warning remove me when done
 {
   int r = get_obj_state(rctx, obj, pstate, NULL, false);
   if (r < 0)
@@ -4614,8 +4888,32 @@ done_err:
   return r;
 }
 
+int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
+{
+  rgw_bucket& bucket = target->get_bucket();
+  RGWRados *store = target->get_store();
+
+  int ret = store->data_log->add_entry(bucket);
+  if (ret < 0) {
+    lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
+    return ret;
+  }
+
+  if (obj_state.write_tag.length()) {
+    optag = string(obj_state.write_tag.c_str(), obj_state.write_tag.length());
+  } else {
+    if (optag.empty()) {
+      append_rand_alpha(store->ctx(), optag, optag, 32);
+    }
+  }
+  ret = store->cls_obj_prepare_op(bucket, op, optag, obj_state.obj);
+
+  return ret;
+}
+
 int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                                    RGWModifyOp op, rgw_obj& obj, string& tag)
+#warning remove me when done
 {
   if (bucket_is_system(bucket))
     return 0;
@@ -4642,9 +4940,44 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
   return ret;
 }
 
+int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint64_t size,
+                                    utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
+                                    list<rgw_obj_key> *remove_objs)
+{
+  RGWRados *store = target->get_store();
+  rgw_bucket& bucket = target->get_bucket();
+
+  RGWObjEnt ent;
+  obj_state.obj.get_index_key(&ent.key);
+  ent.size = size;
+  ent.mtime = ut;
+  ent.etag = etag;
+  ACLOwner owner;
+  if (acl_bl && acl_bl->length()) {
+    int ret = store->decode_policy(*acl_bl, &owner);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "WARNING: could not decode policy ret=" << ret << dendl;
+    }
+  }
+  ent.owner = owner.get_id();
+  ent.owner_display_name = owner.get_display_name();
+  ent.content_type = content_type;
+
+  int ret = store->cls_obj_complete_add(bucket, optag, poolid, epoch, ent, category, remove_objs);
+
+  return ret;
+}
+
+int RGWRados::Bucket::UpdateIndex::cancel()
+{
+  RGWRados *store = target->get_store();
+  return store->cls_obj_complete_cancel(target->get_bucket(), optag, obj_state.obj);
+}
+
 int RGWRados::complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
                                     list<rgw_obj_key> *remove_objs)
+#warning remove me when done
 {
   if (bucket_is_system(bucket))
     return 0;
