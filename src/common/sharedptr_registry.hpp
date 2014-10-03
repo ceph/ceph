@@ -29,10 +29,11 @@ class SharedPtrRegistry {
 public:
   typedef std::tr1::shared_ptr<V> VPtr;
   typedef std::tr1::weak_ptr<V> WeakVPtr;
+  int waiting;
 private:
   Mutex lock;
   Cond cond;
-  map<K, WeakVPtr> contents;
+  map<K, pair<WeakVPtr, V*> > contents;
 
   class OnRemoval {
     SharedPtrRegistry<K,V> *parent;
@@ -43,8 +44,13 @@ private:
     void operator()(V *to_remove) {
       {
 	Mutex::Locker l(parent->lock);
-	parent->contents.erase(key);
-	parent->cond.Signal();
+	typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	  parent->contents.find(key);
+	if (i != parent->contents.end() &&
+	    i->second.second == to_remove) {
+	  parent->contents.erase(i);
+	  parent->cond.Signal();
+	}
       }
       delete to_remove;
     }
@@ -52,14 +58,44 @@ private:
   friend class OnRemoval;
 
 public:
-  SharedPtrRegistry() : lock("SharedPtrRegistry::lock") {}
+  SharedPtrRegistry() :
+    waiting(0),
+    lock("SharedPtrRegistry::lock")
+  {}
 
+  bool empty() {
+    Mutex::Locker l(lock);
+    return contents.empty();
+  }
+
+  bool get_next(const K &key, pair<K, VPtr> *next) {
+    pair<K, VPtr> r;
+    {
+      Mutex::Locker l(lock);
+      VPtr next_val;
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.upper_bound(key);
+      while (i != contents.end() &&
+	     !(next_val = i->second.first.lock()))
+	++i;
+      if (i == contents.end())
+	return false;
+      if (next)
+	r = make_pair(i->first, next_val);
+    }
+    if (next)
+      *next = r;
+    return true;
+  }
+
+  
   bool get_next(const K &key, pair<K, V> *next) {
     VPtr next_val;
     Mutex::Locker l(lock);
-    typename map<K, WeakVPtr>::iterator i = contents.upper_bound(key);
+    typename map<K, pair<WeakVPtr, V*> >::iterator i =
+      contents.upper_bound(key);
     while (i != contents.end() &&
-	   !(next_val = i->second.lock()))
+	   !(next_val = i->second.first.lock()))
       ++i;
     if (i == contents.end())
       return false;
@@ -70,33 +106,46 @@ public:
 
   VPtr lookup(const K &key) {
     Mutex::Locker l(lock);
+    waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
-	if (retval)
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
+	if (retval) {
+	  waiting--;
 	  return retval;
+	}
       } else {
 	break;
       }
       cond.Wait(lock);
     }
+    waiting--;
     return VPtr();
   }
 
   VPtr lookup_or_create(const K &key) {
     Mutex::Locker l(lock);
+    waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
-	if (retval)
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
+	if (retval) {
+	  waiting--;
 	  return retval;
+	}
       } else {
 	break;
       }
       cond.Wait(lock);
     }
-    VPtr retval(new V(), OnRemoval(this, key));
-    contents[key] = retval;
+    V *ptr = new V();
+    VPtr retval(ptr, OnRemoval(this, key));
+    contents.insert(make_pair(key, make_pair(retval, ptr)));
+    waiting--;
     return retval;
   }
 
@@ -109,20 +158,29 @@ public:
   template<class A>
   VPtr lookup_or_create(const K &key, const A &arg) {
     Mutex::Locker l(lock);
+    waiting++;
     while (1) {
-      if (contents.count(key)) {
-	VPtr retval = contents[key].lock();
-	if (retval)
+      typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	contents.find(key);
+      if (i != contents.end()) {
+	VPtr retval = i->second.first.lock();
+	if (retval) {
+	  waiting--;
 	  return retval;
+	}
       } else {
 	break;
       }
       cond.Wait(lock);
     }
-    VPtr retval(new V(arg), OnRemoval(this, key));
-    contents[key] = retval;
+    V *ptr = new V(arg);
+    VPtr retval(ptr, OnRemoval(this, key));
+    contents.insert(make_pair(key, make_pair(retval, ptr)));
+    waiting--;
     return retval;
   }
+
+  friend class SharedPtrRegistryTest;
 };
 
 #endif
