@@ -571,125 +571,6 @@ struct RGWUploadPartInfo {
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
-class RGWPutObjProcessor
-{
-protected:
-  RGWRados *store;
-  void *obj_ctx;
-  bool is_complete;
-  string bucket_owner;
-
-  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
-
-  list<rgw_obj> objs;
-
-  void add_obj(const rgw_obj& obj) {
-    objs.push_back(obj);
-  }
-public:
-  RGWPutObjProcessor(const string& _bo) : store(NULL), obj_ctx(NULL), is_complete(false), bucket_owner(_bo) {}
-  virtual ~RGWPutObjProcessor();
-  virtual int prepare(RGWRados *_store, void *_o, string *oid_rand) {
-    store = _store;
-    obj_ctx = _o;
-    return 0;
-  }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
-  virtual int throttle_data(void *handle, bool need_to_wait) = 0;
-  virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
-
-  CephContext *ctx();
-};
-
-struct put_obj_aio_info {
-  void *handle;
-};
-
-class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
-{
-  list<struct put_obj_aio_info> pending;
-  size_t max_chunks;
-
-  struct put_obj_aio_info pop_pending();
-  int wait_pending_front();
-  bool pending_has_completed();
-
-protected:
-  uint64_t obj_len;
-
-  int drain_pending();
-  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
-
-public:
-  int throttle_data(void *handle, bool need_to_wait);
-
-  RGWPutObjProcessor_Aio(const string& bucket_owner) : RGWPutObjProcessor(bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
-  virtual ~RGWPutObjProcessor_Aio() {
-    drain_pending();
-  }
-};
-
-class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
-{
-  bufferlist first_chunk;
-  uint64_t part_size;
-  off_t cur_part_ofs;
-  off_t next_part_ofs;
-  int cur_part_id;
-  off_t data_ofs;
-
-  uint64_t extra_data_len;
-  bufferlist extra_data_bl;
-  bufferlist pending_data_bl;
-  uint64_t max_chunk_size;
-
-  bool versioned_object;
-
-protected:
-  rgw_bucket bucket;
-  string obj_str;
-
-  string unique_tag;
-
-  rgw_obj head_obj;
-  rgw_obj cur_obj;
-  RGWObjManifest manifest;
-  RGWObjManifest::generator manifest_gen;
-
-  int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
-  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
-
-  int prepare_next_part(off_t ofs);
-  int complete_parts();
-  int complete_writing_data();
-
-  int prepare_init(RGWRados *store, void *obj_ctx, string *oid_rand);
-
-public:
-  ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(const string& bucket_owner, rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
-                                RGWPutObjProcessor_Aio(bucket_owner),
-                                part_size(_p),
-                                cur_part_ofs(0),
-                                next_part_ofs(_p),
-                                cur_part_id(0),
-                                data_ofs(0),
-                                extra_data_len(0),
-                                max_chunk_size(0),
-                                versioned_object(versioned),
-                                bucket(_b),
-                                obj_str(_o),
-                                unique_tag(_t) {}
-  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  virtual bool immutable_head() { return false; }
-  void set_extra_data_len(uint64_t len) {
-    extra_data_len = len;
-  }
-  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
-  bufferlist& get_extra_data() { return extra_data_bl; }
-};
-
-
 struct RGWObjState {
   rgw_obj obj;
   bool is_atomic;
@@ -1308,7 +1189,7 @@ private:
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
-  int get_olh_target_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+  int get_olh_target_state(ObjectCtx& rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
   int append_atomic_test(ObjectCtx *rctx, rgw_obj& obj,
@@ -1639,7 +1520,7 @@ public:
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int copy_obj(void *ctx,
+  virtual int copy_obj(ObjectCtx& obj_ctx,
                const string& user_id,
                const string& client_id,
                const string& op_id,
@@ -1662,7 +1543,7 @@ public:
                void (*progress_cb)(off_t, void *),
                void *progress_data);
 
-  int copy_obj_data(void *ctx,
+  int copy_obj_data(ObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
@@ -1803,13 +1684,13 @@ public:
   int bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
   int bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver);
-  int apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
+  int apply_olh_log(ObjectCtx& ctx, const string& bucket_owner, rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                     uint64_t *plast_ver);
-  int update_olh(void *ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
-  int set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker);
+  int update_olh(ObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
+  int set_olh(ObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker);
 
-  int follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
+  int follow_olh(ObjectCtx& ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
 
   void gen_rand_obj_instance_name(rgw_obj *target);
@@ -2094,5 +1975,122 @@ public:
   }
 };
 
+class RGWPutObjProcessor
+{
+protected:
+  RGWRados *store;
+  RGWRados::ObjectCtx& obj_ctx;
+  bool is_complete;
+  string bucket_owner;
+
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
+
+  list<rgw_obj> objs;
+
+  void add_obj(const rgw_obj& obj) {
+    objs.push_back(obj);
+  }
+public:
+  RGWPutObjProcessor(RGWRados::ObjectCtx& _obj_ctx, const string& _bo) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_owner(_bo) {}
+  virtual ~RGWPutObjProcessor();
+  virtual int prepare(RGWRados *_store, string *oid_rand) {
+    store = _store;
+    return 0;
+  }
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again) = 0;
+  virtual int throttle_data(void *handle, bool need_to_wait) = 0;
+  virtual int complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+
+  CephContext *ctx();
+};
+
+struct put_obj_aio_info {
+  void *handle;
+};
+
+class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
+{
+  list<struct put_obj_aio_info> pending;
+  size_t max_chunks;
+
+  struct put_obj_aio_info pop_pending();
+  int wait_pending_front();
+  bool pending_has_completed();
+
+protected:
+  uint64_t obj_len;
+
+  int drain_pending();
+  int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
+
+public:
+  int throttle_data(void *handle, bool need_to_wait);
+
+  RGWPutObjProcessor_Aio(RGWRados::ObjectCtx& obj_ctx, const string& bucket_owner) : RGWPutObjProcessor(obj_ctx, bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  virtual ~RGWPutObjProcessor_Aio() {
+    drain_pending();
+  }
+};
+
+class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
+{
+  bufferlist first_chunk;
+  uint64_t part_size;
+  off_t cur_part_ofs;
+  off_t next_part_ofs;
+  int cur_part_id;
+  off_t data_ofs;
+
+  uint64_t extra_data_len;
+  bufferlist extra_data_bl;
+  bufferlist pending_data_bl;
+  uint64_t max_chunk_size;
+
+  bool versioned_object;
+
+protected:
+  rgw_bucket bucket;
+  string obj_str;
+
+  string unique_tag;
+
+  rgw_obj head_obj;
+  rgw_obj cur_obj;
+  RGWObjManifest manifest;
+  RGWObjManifest::generator manifest_gen;
+
+  int write_data(bufferlist& bl, off_t ofs, void **phandle, bool exclusive);
+  virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+
+  int prepare_next_part(off_t ofs);
+  int complete_parts();
+  int complete_writing_data();
+
+  int prepare_init(RGWRados *store, string *oid_rand);
+
+public:
+  ~RGWPutObjProcessor_Atomic() {}
+  RGWPutObjProcessor_Atomic(RGWRados::ObjectCtx& obj_ctx, const string& bucket_owner,
+                            rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
+                                RGWPutObjProcessor_Aio(obj_ctx, bucket_owner),
+                                part_size(_p),
+                                cur_part_ofs(0),
+                                next_part_ofs(_p),
+                                cur_part_id(0),
+                                data_ofs(0),
+                                extra_data_len(0),
+                                max_chunk_size(0),
+                                versioned_object(versioned),
+                                bucket(_b),
+                                obj_str(_o),
+                                unique_tag(_t) {}
+  int prepare(RGWRados *store, string *oid_rand);
+  virtual bool immutable_head() { return false; }
+  void set_extra_data_len(uint64_t len) {
+    extra_data_len = len;
+  }
+  virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
+  bufferlist& get_extra_data() { return extra_data_bl; }
+};
 
 #endif

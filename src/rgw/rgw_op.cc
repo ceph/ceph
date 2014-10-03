@@ -1433,18 +1433,18 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand);
   int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
 
 public:
   bool immutable_head() { return true; }
-  RGWPutObjProcessor_Multipart(const string& bucket_owner, uint64_t _p, req_state *_s) :
-                   RGWPutObjProcessor_Atomic(bucket_owner, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  RGWPutObjProcessor_Multipart(RGWRados::ObjectCtx& obj_ctx, const string& bucket_owner, uint64_t _p, req_state *_s) :
+                   RGWPutObjProcessor_Atomic(obj_ctx, bucket_owner, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
 };
 
-int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
+int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 {
-  int r = prepare_init(store, obj_ctx, NULL);
+  int r = prepare_init(store, NULL);
   if (r < 0) {
     return r;
   }
@@ -1514,7 +1514,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
   params.mtime = mtime;
   params.owner = s->owner.get_id();
 
-  int r = store->put_obj_meta(obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
+  int r = store->put_obj_meta(&obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
   if (r < 0)
     return r;
 
@@ -1555,7 +1555,7 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 }
 
 
-RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
+RGWPutObjProcessor *RGWPutObj::select_processor(RGWRados::ObjectCtx& obj_ctx, bool *is_multipart)
 {
   RGWPutObjProcessor *processor;
 
@@ -1566,9 +1566,9 @@ RGWPutObjProcessor *RGWPutObj::select_processor(bool *is_multipart)
   const string& bucket_owner = s->bucket_owner.get_id();
 
   if (!multipart) {
-    processor = new RGWPutObjProcessor_Atomic(bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+    processor = new RGWPutObjProcessor_Atomic(obj_ctx, bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
   } else {
-    processor = new RGWPutObjProcessor_Multipart(bucket_owner, part_size, s);
+    processor = new RGWPutObjProcessor_Multipart(obj_ctx, bucket_owner, part_size, s);
   }
 
   if (is_multipart) {
@@ -1714,9 +1714,9 @@ void RGWPutObj::execute()
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  processor = select_processor(&multipart);
+  processor = select_processor(*(RGWRados::ObjectCtx *)s->obj_ctx, &multipart);
 
-  ret = processor->prepare(store, s->obj_ctx, NULL);
+  ret = processor->prepare(store, NULL);
   if (ret < 0)
     goto done;
 
@@ -1747,14 +1747,14 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
-      processor = select_processor(&multipart);
+      processor = select_processor(*(RGWRados::ObjectCtx *)s->obj_ctx, &multipart);
 
       string oid_rand;
       char buf[33];
       gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
       oid_rand.append(buf);
 
-      ret = processor->prepare(store, s->obj_ctx, &oid_rand);
+      ret = processor->prepare(store, &oid_rand);
       if (ret < 0) {
         ldout(s->cct, 0) << "ERROR: processor->prepare() returned " << ret << dendl;
         goto done;
@@ -1863,13 +1863,13 @@ int RGWPostObj::verify_permission()
   return 0;
 }
 
-RGWPutObjProcessor *RGWPostObj::select_processor()
+RGWPutObjProcessor *RGWPostObj::select_processor(RGWRados::ObjectCtx& obj_ctx)
 {
   RGWPutObjProcessor *processor;
 
   uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
 
-  processor = new RGWPutObjProcessor_Atomic(s->bucket_owner.get_id(), s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+  processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_owner.get_id(), s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
 
   return processor;
 }
@@ -1907,9 +1907,9 @@ void RGWPostObj::execute()
     goto done;
   }
 
-  processor = select_processor();
+  processor = select_processor(*(RGWRados::ObjectCtx *)s->obj_ctx);
 
-  ret = processor->prepare(store, s->obj_ctx, NULL);
+  ret = processor->prepare(store, NULL);
   if (ret < 0)
     goto done;
 
@@ -2257,11 +2257,12 @@ void RGWCopyObj::execute()
 
   rgw_obj src_obj(src_bucket, src_object);
   rgw_obj dst_obj(dest_bucket, dest_object);
-  store->set_atomic(s->obj_ctx, src_obj);
 
-  store->set_atomic(s->obj_ctx, dst_obj);
+  RGWRados::ObjectCtx& obj_ctx = *(RGWRados::ObjectCtx *)s->obj_ctx;
+  obj_ctx.set_atomic(src_obj);
+  obj_ctx.set_atomic(dst_obj);
 
-  ret = store->copy_obj(s->obj_ctx,
+  ret = store->copy_obj(obj_ctx,
                         s->user.user_id,
                         client_id,
                         op_id,
@@ -2906,7 +2907,9 @@ void RGWCompleteMultipart::execute()
     store->gen_rand_obj_instance_name(&target_obj);
   }
 
-  store->set_atomic(s->obj_ctx, target_obj);
+  RGWRados::ObjectCtx& obj_ctx = *(RGWRados::ObjectCtx *)s->obj_ctx;
+
+  obj_ctx.set_atomic(target_obj);
 
   RGWRados::PutObjMetaExtraParams extra_params;
 
@@ -2916,21 +2919,21 @@ void RGWCompleteMultipart::execute()
   extra_params.ptag = &s->req_id; /* use req_id as operation tag */
   extra_params.owner = s->owner.get_id();
 
-  ret = store->put_obj_meta(s->obj_ctx, target_obj, ofs, attrs,
+  ret = store->put_obj_meta(&obj_ctx, target_obj, ofs, attrs,
                             RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
 			    extra_params);
   if (ret < 0)
     return;
 
   if (versioned_object) {
-    ret = store->set_olh(s->obj_ctx, s->bucket_owner.get_id(), target_obj, false);
+    ret = store->set_olh(obj_ctx, s->bucket_owner.get_id(), target_obj, false);
     if (ret < 0) {
       return;
     }
   }
 
   // remove the upload obj
-  store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
+  store->delete_obj(&obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
 }
 
 int RGWAbortMultipart::verify_permission()
