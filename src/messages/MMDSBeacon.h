@@ -121,6 +121,7 @@ WRITE_CLASS_ENCODER(MDSHealth)
 class MMDSBeacon : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 2;
 
   uuid_d fsid;
   uint64_t global_id;
@@ -136,9 +137,9 @@ class MMDSBeacon : public PaxosServiceMessage {
   MDSHealth health;
 
  public:
-  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION) { }
+  MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION) { }
   MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se) : 
-    PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION), 
+    PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
     standby_for_rank(-1) {
   }
