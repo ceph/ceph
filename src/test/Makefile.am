@@ -302,7 +302,8 @@ UNITTEST_LDADD = \
 	$(top_builddir)/src/gmock/lib/libgmock_main.la \
 	$(top_builddir)/src/gmock/lib/libgmock.la \
 	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
-	$(PTHREAD_LIBS)
+	$(PTHREAD_LIBS) \
+	-luuid
 
 unittest_encoding_SOURCES = test/encoding.cc
 unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) $(CEPH_GLOBAL) -lm $(UNITTEST_LDADD)

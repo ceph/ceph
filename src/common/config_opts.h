@@ -43,6 +43,10 @@ OPTION(log_to_syslog, OPT_BOOL, false)
 OPTION(err_to_syslog, OPT_BOOL, false)
 OPTION(log_flush_on_exit, OPT_BOOL, true) // default changed by common_preinit()
 OPTION(log_stop_at_utilization, OPT_FLOAT, .97)  // stop logging at (near) full
+OPTION(log_to_graylog, OPT_BOOL, false)
+OPTION(err_to_graylog, OPT_BOOL, false)
+OPTION(log_graylog_host, OPT_STR, "127.0.0.1")
+OPTION(log_graylog_port, OPT_INT, 12201)
 
 // options will take k/v pairs, or single-item that will be assumed as general
 // default for all, regardless of channel.

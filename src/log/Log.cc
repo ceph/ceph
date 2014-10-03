@@ -8,13 +8,21 @@
 
 #include <iostream>
 #include <sstream>
+#include <memory>
+
+#include <boost/lexical_cast.hpp>
+#include <boost/asio.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
+#include <boost/iostreams/filter/zlib.hpp>
 
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/Clock.h"
+#include "common/Formatter.h"
 #include "include/assert.h"
 #include "include/compat.h"
 #include "include/on_exit.h"
+#include "include/uuid.h"
 
 #define DEFAULT_MAX_NEW    100
 #define DEFAULT_MAX_RECENT 10000
@@ -43,6 +51,10 @@ Log::Log(SubsystemMap *s)
     m_fd(-1),
     m_syslog_log(-2), m_syslog_crash(-2),
     m_stderr_log(1), m_stderr_crash(-1),
+    m_graylog_log(-3), m_graylog_crash(-3),
+    m_host(""), m_fsid(),
+    m_graylog_endpoint(),
+    m_graylog_io_service(),
     m_stop(false),
     m_max_new(DEFAULT_MAX_NEW),
     m_max_recent(DEFAULT_MAX_RECENT),
@@ -141,6 +153,32 @@ void Log::set_stderr_level(int log, int crash)
   pthread_mutex_unlock(&m_flush_mutex);
 }
 
+void Log::set_graylog_level(int log, int crash)
+{
+  pthread_mutex_lock(&m_flush_mutex);
+  m_graylog_log = log;
+  m_graylog_crash = crash;
+  pthread_mutex_unlock(&m_flush_mutex);
+}
+
+void Log::set_host(string host)
+{
+  m_host = host;
+}
+
+void Log::set_fsid(uuid_d fsid)
+{
+  m_fsid = fsid;
+}
+
+void Log::set_graylog_destination(string host, int port)
+{
+  boost::asio::ip::udp::resolver resolver(m_graylog_io_service);
+  boost::asio::ip::udp::resolver::query query(host,
+					      boost::lexical_cast<string>(port));
+  m_graylog_endpoint = *resolver.resolve(query);
+}
+
 void Log::submit_entry(Entry *e)
 {
   pthread_mutex_lock(&m_queue_mutex);
@@ -209,6 +247,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
     bool do_fd = m_fd >= 0 && should_log;
     bool do_syslog = m_syslog_crash >= e->m_prio && should_log;
     bool do_stderr = m_stderr_crash >= e->m_prio && should_log;
+    bool do_graylog2 = m_graylog_crash >= e->m_prio && should_log;
 
     if (do_fd || do_syslog || do_stderr) {
       int buflen = 0;
@@ -239,8 +278,52 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       if (do_stderr) {
 	cerr << buf << s << std::endl;
       }
-    }
 
+      if (do_graylog2) {
+	std::auto_ptr<Formatter> f(Formatter::create("json"));
+
+	char fsid_str[40];
+	m_fsid.print(fsid_str);
+
+	// GELF format
+	// http://www.graylog2.org/resources/gelf/specification
+	f->open_object_section("");
+	f->dump_string("version", "1.1");
+	f->dump_string("host", m_host);
+	f->dump_string("short_message", s);
+	f->dump_string("_app", "ceph");
+	f->dump_float("timestamp", e->m_stamp.sec() + (e->m_stamp.usec() / 1000000.0));
+	f->dump_int("_thread", e->m_thread);
+	f->dump_int("_prio", e->m_prio);
+	f->dump_string("_subsys_name", m_subs->get_name(sub));
+	f->dump_int("_subsys_id", sub);
+	f->dump_int("_crash", crash);
+	f->dump_string("_fsid", fsid_str);
+	if (crash) f->dump_int("_crash_entry_queue_len", -t->m_len);
+	f->close_section();
+
+	std::stringstream zos(std::stringstream::in |
+			      std::stringstream::out |
+			      std::stringstream::binary);
+
+	{
+	  boost::iostreams::filtering_ostream os;
+	  os.push(boost::iostreams::zlib_compressor());
+	  os.push(zos);
+
+	  f->flush(os);
+	  os << std::endl;
+	}
+
+	try {
+	  boost::asio::ip::udp::socket socket(m_graylog_io_service);
+	  socket.open(m_graylog_endpoint.protocol());
+	  socket.send_to(boost::asio::buffer(zos.str()), m_graylog_endpoint);
+	} catch (boost::system::system_error const& e) {
+	  /* The above code fails until the configuration is set */
+	}
+      }
+    }
     requeue->enqueue(e);
   }
 }
