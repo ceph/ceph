@@ -3,10 +3,10 @@
 ==================================================
 
 The Ceph project needs automated tests. Because Ceph is a highly
-distributed system, and has active kernel development, its testing
-requirements are quite different from e.g. typical LAMP web
-applications. Nothing out there seemed to handle our requirements,
-so we wrote our own framework, called `Teuthology`.
+distributed system and has active kernel development, its testing
+requirements are quite different from typical LAMP web applications.
+Nothing out there seemed to handle our requirements, so we wrote our
+own framework called `Teuthology`.
 
 
 Overview
@@ -15,8 +15,8 @@ Overview
 Teuthology runs a given set of Python functions (`tasks`), with an SSH
 connection to every host participating in the test. The SSH connection
 uses `Paramiko <http://www.lag.net/paramiko/>`__, a native Python
-client for the SSH2 protocol, and this allows us to e.g. run multiple
-commands inside a single SSH connection, to speed up test
+client for the SSH2 protocol.  This allows us to run multiple
+commands inside a single SSH connection and speeds up test
 execution. Tests can use `gevent <http://www.gevent.org/>`__ to
 perform actions concurrently or in the background.
 
@@ -24,10 +24,11 @@ perform actions concurrently or in the background.
 Build
 =====
 Teuthology is not meant to be distributed as a library, therefore we depend
-on the pinned dependencies listed in ``requirements.txt``, the ``setup.py``
-will not list any and will only be there to install the package entry points
-(a.k.a teuthology's scripts).
+on the pinned dependencies listed in ``requirements.txt``.  The ``setup.py``
+script will not list any dependencies, and only exists to provide the package
+entry points (a.k.a teuthology's scripts).
 
+To get a copy of the source in one's local directory, execute the following:
     git clone https://github.com/ceph/teuthology.git
     cd teuthology
 
@@ -108,6 +109,15 @@ With a dedicated ``virtualenv`` activated, install the teuthology package and
     pip install -r requirements.txt
 
 
+Infrastructure
+==============
+
+This examples in this document are based on the lab machine configuration
+used by the Red Hat Ceph development and quality assurance teams.  Other
+instances of ceph being used in a development or testing environment may
+differ from these examples. 
+
+
 Test configuration
 ==================
 
@@ -116,6 +126,10 @@ An integration test run takes three items of configuration:
 - ``targets``: what hosts to run on; this is a dictionary mapping
   hosts to ssh host keys, like:
   "username@hostname.example.com: ssh-rsa long_hostkey_here"
+  It is possible to configure your installation so that if the targets line
+  and host keys are omitted and teuthology is run with the --lock option,
+  then teuthology will grab available machines from a pool of available
+  test machines.
 - ``roles``: how to use the hosts; this is a list of lists, where each
   entry lists all the roles to be run on a single host; for example, a
   single entry might say ``[mon.1, osd.1]``
@@ -154,10 +168,10 @@ The listed targets need resolvable hostnames. If you do not have a DNS server
 running, you can add entries to ``/etc/hosts``. You also need to be able to SSH
 in to the listed targets without passphrases, and the remote user needs to have
 passwordless `sudo` access. Note that the ssh keys at the end of the
-``targets`` entries are the public ssh keys for the hosts.  On Ubuntu, these
-are located at /etc/ssh/ssh_host_rsa_key.pub
+``targets`` entries are the public ssh keys for the hosts.  These are
+located in /etc/ssh/ssh_host_rsa_key.pub
 
-If you'd save the above file as ``example.yaml``, you could run
+If you had save the above file as ``example.yaml``, you could run
 teuthology on it by saying::
 
     ./virtualenv/bin/teuthology example.yaml
@@ -171,7 +185,7 @@ Multiple config files
 
 You can pass multiple files as arguments to teuthology. Each one
 will be read as a config file, and their contents will be merged. This
-allows you to e.g. share definitions of what a "simple 3 node cluster"
+allows you to share definitions of what a "simple 3 node cluster"
 is. The source tree comes with ``roles/3-simple.yaml``, so we could
 skip the ``roles`` section in the above ``example.yaml`` and then
 run::
@@ -182,22 +196,20 @@ run::
 Reserving target machines
 -------------------------
 
-Before locking machines will work, you must create a .teuthology.yaml
-file in your home directory that sets a lock_server, i.e.::
-
-    lock_server: http://host.example.com:8080/lock
-
 Teuthology automatically locks nodes for you if you specify the
 ``--lock`` option. Without this option, you must specify machines to
 run on in a ``targets.yaml`` file, and lock them using
 teuthology-lock.
 
-Note that the default owner of a machine is ``USER@HOST``.
+Note that the default owner of a machine is of the form: USER@HOST where USER
+is the user who issued the lock command and host is the machine on which the
+lock command was run.
+
 You can override this with the ``--owner`` option when running
 teuthology or teuthology-lock.
 
 With teuthology-lock, you can also add a description, so you can
-remember which tests you were running on them. This can be done when
+remember which tests you were running. This can be done when
 locking or unlocking machines, or as a separate action with the
 ``--update`` option. To lock 3 machines and set a description, run::
 
@@ -222,7 +234,7 @@ callable named ``task``. It gets the following arguments:
 - ``ctx``: a context that is available through the lifetime of the
   test run, and has useful attributes such as ``cluster``, letting the
   task access the remote hosts. Tasks can also store their internal
-  state here. (TODO beware namespace collisions.)
+  state here. (TODO beware of namespace collisions.)
 - ``config``: the data structure after the colon in the config file,
   e.g. for the above ``ceph-fuse`` example, it would be a list like
   ``["client.0"]``.
@@ -263,10 +275,14 @@ Some of the more important / commonly used tasks include:
 - ``project``: specify a project (ceph, samba...)
 - ``sha1``: install the build with this sha1 value.
 - ``tag``: specify a tag/identifying text for this build (v47.2, v48.1...)
+
 * ``ceph``: Bring up Ceph
 
 * ``overrides``: override behavior. Typically, this includes sub-tasks being
-  overridden. Sub-tasks can nest further information.  For example, overrides
+  overridden. Overrides technically is not a task (there is no 'def task' in
+  an overrides.py file), but from a user's standpoint can be described as
+  behaving like one.
+  Sub-tasks can nest further information.  For example, overrides
   of install tasks are project specific, so the following section of a yaml
   file would cause all ceph installation to default into using the cuttlefish
   branch::
@@ -286,8 +302,14 @@ Sequential and parallel tasks can be nested.  Tasks run sequentially if not
 specified.
 
 The above list is a very incomplete description of the tasks available on
-teuthology. The teuthology/task subdirectory contains all the python files
-that implement tasks.
+teuthology. The teuthology/task subdirectory contains the teuthology
+specific python files that implement tasks.
+
+Extra tasks used by teuthology can be found in ceph-qa-suite/tasks.  These
+tasks are not needed for teuthology to run but do test specific independent
+features.  A user who wants to define a test for a new feature can implement
+new tasks in this directory.
+
 Many of these tasks are used to run shell scripts that are defined in the
 ceph/ceph-qa-suite.
 
@@ -295,7 +317,7 @@ If machines were locked as part of the run (with the --lock switch),
 teuthology normally leaves them locked when there is any task failure
 for investigation of the machine state.  When developing new teuthology
 tasks, sometimes this behavior is not useful.  The ``unlock_on_failure``
-global option can be set to True to make the unlocking happen unconditionally.
+global option can be set to true to make the unlocking happen unconditionally.
 
 Troubleshooting
 ===============
@@ -320,6 +342,7 @@ this issue.
 
 Interactive task facilities
 ===========================
+
 The ``interactive`` task presents a prompt for you to interact with the
 teuthology configuration.  The ``ctx`` variable is available to explore,
 and a ``pprint.PrettyPrinter().pprint`` object is added for convenience as
@@ -345,11 +368,12 @@ physical machines but differ in the following ways:
 
 VPSHOST:
 --------
+The following description is based on the Red Hat lab used by the Ceph
+development and quality assurance teams.
 
-A new entry, vpshost, has been added to the teuthology database of
-available machines.  For physical machines, this value is null. For
-virtual machines, this entry is the name of the physical machine that
-that virtual machine resides on.
+The teuthology database of available machines contains a vpshost field.
+For physical machines, this value is null. For virtual machines, this entry
+is the name of the physical machine that that virtual machine resides on.
 
 There are fixed "slots" for virtual machines that appear in the teuthology
 database.  These slots have a machine type of vps and can be locked like
@@ -357,9 +381,9 @@ any other machine.  The existence of a vpshost field is how teuthology
 knows whether or not a database entry represents a physical or a virtual
 machine.
 
-The following needs to be set in ~/.config/libvirt/libvirt.conf or for some
-older versions of libvirt (like ubuntu precise) is ~/libvirt/libvirt.conf
-in order to get the right virtual machine associations for the Inktank lab::
+In order to get the right virtual machine associations, the following needs
+to be set in ~/.config/libvirt/libvirt.conf or for some older versions
+of libvirt (like ubuntu precise) in ~/libvirt/libvirt.conf::
 
     uri_aliases = [
         'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty=1',
@@ -408,7 +432,7 @@ When a virtual machine is locked, downburst is run on that machine to install a
 new image.  This allows the user to set different virtual OSes to be installed
 on the newly created virtual machine.  Currently the default virtual machine is
 ubuntu (precise).  A different vm installation can be set using the
-``--os-type`` option in ``teuthology.lock``.
+``--os-type`` and ``--os-version`` options in ``teuthology.lock``.
 
 When a virtual machine is unlocked, downburst destroys the image on the
 machine.
@@ -444,13 +468,6 @@ locking, once a connection is established to the new machine,
 display the new keys.  When vps machines are locked using the ``--lock-many``
 option, a message is displayed indicating that ``--list-targets`` should be run
 later.
-
-CEPH-QA-CHEF:
--------------
-
-Once teuthology starts after a new vm is installed, teuthology
-checks for the existence of ``/ceph-qa-ready``.  If this file is not
-present, ``ceph-qa-chef`` is run when teuthology first comes up.
 
 ASSUMPTIONS:
 ------------
