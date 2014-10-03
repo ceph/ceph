@@ -3953,6 +3953,12 @@ bool OSDMonitor::prepare_command(MMonCommand *m)
     return true;
   }
 
+  if (g_conf->mon_debug_idempotency) {
+    MMonCommand *fake = static_cast<MMonCommand *>((new MMonCommand())->get());
+    dout(10) << __func__ << ": running twice to check idempotency" << dendl;
+    prepare_command_impl(fake, cmdmap);
+    fake->put();
+  }
   return prepare_command_impl(m, cmdmap);
 }
 
