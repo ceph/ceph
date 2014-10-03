@@ -900,47 +900,6 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   }
 }
 
-int RGWPutObjProcessor_Plain::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
-{
-  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
-
-  obj.init(bucket, obj_str);
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Plain::handle_data(bufferlist& bl, off_t _ofs, MD5 *hash, void **phandle, bool *again)
-{
-  assert(!hash);
-
-  *again = false;
-
-  if (ofs != _ofs)
-    return -EINVAL;
-
-  data.append(bl);
-  ofs += bl.length();
-
-  return 0;
-}
-
-int RGWPutObjProcessor_Plain::do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                                          map<string, bufferlist>& attrs,
-                                          const char *if_match, const char *if_nomatch)
-{
-  RGWRados::PutObjMetaExtraParams params;
-  params.set_mtime = set_mtime;
-  params.mtime = mtime;
-  params.data = &data;
-  params.owner = bucket_owner;
-
-  int r = store->put_obj_meta(obj_ctx, obj, data.length(), attrs,
-                              RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                              params);
-  return r;
-}
-
-
 int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive)
 {
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
