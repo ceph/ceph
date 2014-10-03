@@ -1252,14 +1252,14 @@ class RGWRados
   friend class RGWReplicaLogger;
 
 public:
-  struct RGWRadosCtx {
+  struct ObjectCtx {
     RGWRados *store;
     map<rgw_obj, RGWObjState> objs_state;
     int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
     void *user_ctx;
 
-    RGWRadosCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
-    RGWRadosCtx(RGWRados *_store, void *_user_ctx) : store(_store), intent_cb(NULL), user_ctx(_user_ctx) { }
+    ObjectCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
+    ObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), intent_cb(NULL), user_ctx(_user_ctx) { }
 
     RGWObjState *get_state(rgw_obj& obj);
     void set_atomic(rgw_obj& obj);
@@ -1326,15 +1326,15 @@ private:
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
-  int get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+  int get_olh_target_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state, RGWObjVersionTracker *objv_tracker);
-  int get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
-  int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
+  int get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+  int append_atomic_test(ObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
-  int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
+  int prepare_atomic_for_write_impl(ObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
 			 bool reset_obj, const string *ptag);
-  int prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
+  int prepare_atomic_for_write(ObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectWriteOperation& op, RGWObjState **pstate,
 			 bool reset_obj, const string *ptag);
 
@@ -1344,7 +1344,7 @@ private:
     }
   }
 
-  int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
+  int complete_atomic_overwrite(ObjectCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
@@ -1664,8 +1664,8 @@ public:
                         map<string, bufferlist>* rmattrs,
                         RGWObjVersionTracker *objv_tracker);
 
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
+  int get_obj_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+  int get_obj_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
     return get_obj_state(rctx, obj, state, objv_tracker, true);
   }
 /**
@@ -1776,25 +1776,25 @@ public:
   void pick_control_oid(const string& key, string& notify_oid);
 
   void *create_context(void *user_ctx) {
-    RGWRadosCtx *rctx = new RGWRadosCtx(this);
+    ObjectCtx *rctx = new ObjectCtx(this);
     rctx->user_ctx = user_ctx;
     return rctx;
   }
   void destroy_context(void *ctx) {
-    delete static_cast<RGWRadosCtx *>(ctx);
+    delete static_cast<ObjectCtx *>(ctx);
   }
   void set_atomic(void *ctx, rgw_obj& obj) {
-    RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+    ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
     rctx->set_atomic(obj);
   }
   void set_prefetch_data(void *ctx, rgw_obj& obj) {
-    RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+    ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
   }
   // to notify upper layer that we need to do some operation on an object, and it's up to
   // the upper layer to schedule this operation.. e.g., log intent in intent log
   void set_intent_cb(void *ctx, int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
-    RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+    ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
     rctx->set_intent_cb(cb);
   }
 

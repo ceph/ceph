@@ -519,7 +519,7 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   struct req_state *s = &rstate;
 
-  RGWRados::RGWRadosCtx rados_ctx(store, s);
+  RGWRados::ObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
   store->set_intent_cb(s->obj_ctx, call_log_intent);
 
