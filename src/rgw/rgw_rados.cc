@@ -1191,6 +1191,18 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(obj_ctx);
+
+  bool is_olh = false;
+  if (head_obj.get_instance().empty()) {
+    RGWObjState *astate = NULL;
+    r = store->get_obj_state(rctx, head_obj, &astate, NULL, false); /* don't follow olh */
+    if (r < 0) {
+      return r;
+    }
+    is_olh = astate->is_olh;
+  }
+
   r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
                           RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                           extra_params);
@@ -1198,7 +1210,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
     return r;
   }
 
-  if (versioned_object) {
+  if (versioned_object || is_olh) {
     r = store->set_olh(obj_ctx, bucket_owner, head_obj, false);
     if (r < 0) {
       return r;
@@ -1224,6 +1236,11 @@ RGWObjState *RGWRadosCtx::get_state(rgw_obj& obj) {
     rgw_obj new_obj(store->zone.domain_root, obj.bucket.name);
     return &objs_state[new_obj];
   }
+}
+
+void RGWRadosCtx::invalidate(rgw_obj& obj)
+{
+  objs_state.erase(obj);
 }
 
 void RGWRadosCtx::set_atomic(rgw_obj& obj) {
@@ -4141,7 +4158,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
 			    bool reset_obj, const string *ptag)
 {
-  int r = get_obj_state(rctx, obj, pstate, NULL);
+  int r = get_obj_state(rctx, obj, pstate, NULL, false);
   if (r < 0)
     return r;
 
@@ -5230,9 +5247,9 @@ int RGWRados::olh_init_modification(RGWObjState *state, rgw_obj& obj, string *ob
 
   do {
     ret = olh_init_modification_impl(state, obj, obj_tag, op_tag);
-  } while (ret == -ECANCELED || ret == -EEXIST);
+  } while (ret == -EEXIST);
 
-  return 0;
+  return ret;
 }
 
 int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag)
@@ -5446,15 +5463,24 @@ int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj
 
   RGWObjState *state = NULL;
   RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-  int r = get_obj_state(rctx, olh_obj, &state, NULL, false); /* don't follow olh */
-  if (r < 0)
-    return r;
 
-  int ret = olh_init_modification(state, olh_obj, &obj_tag, &op_tag);
-  if (ret < 0) {
-    ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
-    return ret;
-  }
+  int ret;
+
+  do {
+    ret = get_obj_state(rctx, olh_obj, &state, NULL, false); /* don't follow olh */
+    if (ret < 0)
+      return ret;
+
+    ret = olh_init_modification(state, olh_obj, &obj_tag, &op_tag);
+    if (ret == -ECANCELED) {
+      rctx->invalidate(olh_obj);
+      continue;
+    }
+    if (ret < 0) {
+      ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      return ret;
+    }
+  } while (ret == -ECANCELED);
 
   ret = bucket_index_link_olh(target_obj, delete_marker, op_tag);
   if (ret < 0) {

@@ -810,6 +810,8 @@ struct RGWRadosCtx {
     }
     return 0;
   }
+
+  void invalidate(rgw_obj& obj);
 };
 
 struct RGWPoolIterCtx {
@@ -1325,10 +1327,6 @@ class RGWRados
   int get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
                            RGWObjState **target_state, RGWObjVersionTracker *objv_tracker);
   int get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
-    return get_obj_state(rctx, obj, state, objv_tracker, true);
-  }
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
@@ -1664,6 +1662,10 @@ public:
                         map<string, bufferlist>* rmattrs,
                         RGWObjVersionTracker *objv_tracker);
 
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
+    return get_obj_state(rctx, obj, state, objv_tracker, true);
+  }
 /**
  * Get data about an object out of RADOS and into memory.
  * bucket: name of the bucket the object is in.
