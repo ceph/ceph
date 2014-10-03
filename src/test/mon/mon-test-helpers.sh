@@ -47,7 +47,6 @@ function run_mon() {
         --debug-mon 20 \
         --debug-ms 20 \
         --debug-paxos 20 \
-        --mon-advanced-debug-mode \
         --chdir= \
         --mon-data=$dir \
         --log-file=$dir/log \
