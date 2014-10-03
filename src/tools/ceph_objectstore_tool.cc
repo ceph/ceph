@@ -2041,7 +2041,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  ObjectStore *fs = ObjectStore::create(NULL, type, dpath, jpath, flags);
+  ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
     exit(1);
