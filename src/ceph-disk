@@ -1919,7 +1919,8 @@ def activate(
         raise Error('No OSD uuid assigned.')
     LOG.debug('OSD uuid is %s', fsid)
 
-    keyring = activate_key_template.format(cluster=cluster)
+    keyring = activate_key_template.format(cluster=cluster,
+                                           statedir=STATEDIR)
 
     osd_id = get_osd_id(path)
     if osd_id is None:
@@ -2658,7 +2659,7 @@ def parse_args():
         help='path to block device or directory',
         )
     activate_parser.set_defaults(
-        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
+        activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate,
         )
 
@@ -2682,7 +2683,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_journal_parser.set_defaults(
-        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
+        activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate_journal,
         )
 
@@ -2701,7 +2702,7 @@ def parse_args():
         choices=INIT_SYSTEMS,
         )
     activate_all_parser.set_defaults(
-        activate_key_template=STATEDIR + '/bootstrap-osd/{cluster}.keyring',
+        activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
         func=main_activate_all,
         )
 
