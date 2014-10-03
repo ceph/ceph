@@ -232,7 +232,8 @@ public:
     : ObjectStore(path),
       coll_lock("MemStore::coll_lock"),
       apply_lock("MemStore::apply_lock"),
-      finisher(cct) { }
+      finisher(cct),
+      sharded(false) { }
   ~MemStore() { }
 
   int update_version_stamp() {
@@ -264,10 +265,12 @@ public:
     return 0;
   }
 
+  bool sharded;
   void set_allow_sharded_objects() {
+    sharded = true;
   }
   bool get_allow_sharded_objects() {
-    return true;
+    return sharded;
   }
 
   int statfs(struct statfs *buf);
