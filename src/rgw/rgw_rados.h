@@ -711,6 +711,7 @@ public:
 
 
 struct RGWObjState {
+  rgw_obj obj;
   bool is_atomic;
   bool has_attrs;
   bool exists;
@@ -738,6 +739,7 @@ struct RGWObjState {
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
                   has_data(false), prefetch_data(false), keep_tail(false), is_olh(false) {}
   RGWObjState(const RGWObjState& rhs) {
+    obj = rhs.obj;
     is_atomic = rhs.is_atomic;
     has_attrs = rhs.has_attrs;
     exists = rhs.exists;
@@ -1506,6 +1508,79 @@ public:
   virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
+
+  class Object {
+    RGWRados *store;
+    RGWRados::ObjectCtx& ctx;
+    rgw_obj obj;
+
+    RGWObjState *state;
+
+  protected:
+    int get_state(RGWObjState **pstate);
+
+    int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag);
+    int complete_atomic_modification();
+
+  public:
+    Object(RGWRados *_store, RGWRados::ObjectCtx& _ctx, rgw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
+
+    RGWRados *get_store() { return store; }
+    rgw_obj& get_obj() { return obj; }
+
+    struct Write {
+      RGWRados::Object *target;
+      
+      struct MetaParams {
+        time_t *mtime;
+        map<std::string, bufferlist>* rmattrs;
+        const bufferlist *data;
+        RGWObjManifest *manifest;
+        const string *ptag;
+        list<rgw_obj_key> *remove_objs;
+        time_t set_mtime;
+        string owner;
+        RGWObjCategory category;
+        int flags;
+
+        MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
+                 remove_objs(NULL), set_mtime(0), category(RGW_OBJ_CATEGORY_MAIN), flags(0) {}
+      } meta;
+
+      Write(RGWRados::Object *_target) : target(_target) {}
+
+      int write_meta(uint64_t size,  map<std::string, bufferlist>& attrs);
+      int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+    };
+  };
+
+  class Bucket {
+    RGWRados *store;
+    rgw_bucket& bucket;
+
+  public:
+    Bucket(RGWRados *_store, rgw_bucket& _bucket) : store(_store), bucket(_bucket) {}
+
+    RGWRados *get_store() { return store; }
+    rgw_bucket& get_bucket() { return bucket; }
+
+    class UpdateIndex {
+      RGWRados::Bucket *target;
+      string optag;
+      RGWObjState& obj_state;
+    public:
+
+      UpdateIndex(RGWRados::Bucket *_target, RGWObjState& _state) : target(_target), obj_state(_state) {}
+
+      int prepare(RGWModifyOp);
+      int complete(int64_t poolid, uint64_t epoch, uint64_t size,
+                   utime_t& ut, string& etag, string& content_type,
+                   bufferlist *acl_bl, RGWObjCategory category,
+		   list<rgw_obj_key> *remove_objs);
+      int cancel();
+    };
+  };
+
   struct PutObjMetaExtraParams {
     time_t *mtime;
     map<std::string, bufferlist>* rmattrs;
@@ -1850,6 +1925,7 @@ public:
     return cls_obj_complete_del(bucket, tag, pool, epoch, obj);
   }
   int complete_update_index_cancel(rgw_bucket& bucket, rgw_obj& obj, string& tag) {
+#warning remove me when done
     if (bucket_is_system(bucket))
       return 0;
 
