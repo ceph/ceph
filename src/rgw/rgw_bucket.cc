@@ -339,7 +339,7 @@ static bool bucket_object_check_filter(const string& name)
 
 int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, rgw_obj_key& key, bool use_versioning)
 {
-  RGWRados::RGWRadosCtx rctx(store);
+  RGWRados::ObjectCtx rctx(store);
 
   rgw_obj obj(bucket, key);
 
