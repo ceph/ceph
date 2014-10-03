@@ -218,6 +218,12 @@ function test_find_cluster_by_uuid() {
     teardown
 }
 
+# http://tracker.ceph.com/issues/9653
+function test_keyring_path() {
+    test_activate_dir 2>&1 | tee $DIR/test_keyring
+    grep --quiet "keyring $DIR/bootstrap-osd/ceph.keyring" $DIR/test_keyring || return 1
+}
+
 function run() {
     local default_actions
     default_actions+="test_path "
@@ -226,6 +232,7 @@ function run() {
     default_actions+="test_prepend_to_path "
     default_actions+="test_activate_dir_magic "
     default_actions+="test_activate_dir "
+    default_actions+="test_keyring_path "
     local actions=${@:-$default_actions}
     for action in $actions  ; do
         setup
