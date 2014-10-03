@@ -2,23 +2,26 @@
  `Teuthology` -- The Ceph integration test runner
 ==================================================
 
-The Ceph project needs automated tests. Because Ceph is a highly
-distributed system and has active kernel development, its testing
-requirements are quite different from typical LAMP web applications.
-Nothing out there seemed to handle our requirements, so we wrote our
-own framework called `Teuthology`.
+``teuthology`` is an automation framework for `Ceph
+<https://github.com/ceph/ceph>`__, written in `Python
+<https://www.python.org/>`__. It is used to run the vast majority of its tests
+and was developed because the unique requirements of testing such a highly
+distributed system with active kernel development meant that no other framework
+existed that could do its job.
+
+The name '`teuthology <http://en.wikipedia.org/wiki/Teuthology>`__' refers to the
+study of cephalopods.
 
 
 Overview
 ========
 
-Teuthology runs a given set of Python functions (`tasks`), with an SSH
-connection to every host participating in the test. The SSH connection
-uses `Paramiko <http://www.lag.net/paramiko/>`__, a native Python
-client for the SSH2 protocol.  This allows us to run multiple
-commands inside a single SSH connection and speeds up test
-execution. Tests can use `gevent <http://www.gevent.org/>`__ to
-perform actions concurrently or in the background.
+The general mode of operation of ``teuthology`` is to remotely orchestrate
+operations on remote hosts over SSH, as implemented by `Paramiko
+<http://www.lag.net/paramiko/>`__. A typical `job` consists of multiple nested
+`tasks`, each of which perform operations on a remote host over the network.
+
+When testing, it is common to group many `jobs` together to form a `test run`.
 
 
 Build
