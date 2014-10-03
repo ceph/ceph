@@ -893,7 +893,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   list<rgw_obj>::iterator iter;
   for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false);
+    int r = store->delete_obj(&obj_ctx, bucket_owner, obj, false);
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -1070,9 +1070,9 @@ void RGWPutObjProcessor_Atomic::complete_hash(MD5 *hash)
 }
 
 
-int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, void *obj_ctx, string *oid_rand)
+int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
-  RGWPutObjProcessor::prepare(store, obj_ctx, oid_rand);
+  RGWPutObjProcessor::prepare(store, oid_rand);
 
   int r = store->get_max_chunk_size(bucket, &max_chunk_size);
   if (r < 0) {
@@ -1082,9 +1082,9 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, void *obj_ctx, stri
   return 0;
 }
 
-int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, void *obj_ctx, string *oid_rand)
+int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
 {
-  int r = prepare_init(store, obj_ctx, oid_rand);
+  int r = prepare_init(store, oid_rand);
   if (r < 0) {
     return r;
   }
@@ -1165,7 +1165,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   if (r < 0)
     return r;
 
-  store->set_atomic(obj_ctx, head_obj);
+  obj_ctx.set_atomic(head_obj);
 
   RGWRados::PutObjMetaExtraParams extra_params;
 
@@ -1178,19 +1178,17 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
-  RGWRados::ObjectCtx *rctx = static_cast<RGWRados::ObjectCtx *>(obj_ctx);
-
   bool is_olh = false;
   if (head_obj.get_instance().empty()) {
     RGWObjState *astate = NULL;
-    r = store->get_obj_state(rctx, head_obj, &astate, NULL, false); /* don't follow olh */
+    r = store->get_obj_state(&obj_ctx, head_obj, &astate, NULL, false); /* don't follow olh */
     if (r < 0) {
       return r;
     }
     is_olh = astate->is_olh;
   }
 
-  r = store->put_obj_meta(obj_ctx, head_obj, obj_len, attrs,
+  r = store->put_obj_meta(&obj_ctx, head_obj, obj_len, attrs,
                           RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
                           extra_params);
   if (r < 0) {
@@ -3352,7 +3350,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
     return ret;
   }
 
-  return copy_obj_data((void *)&rctx, dest_bucket_info, &handle, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL, NULL);
+  return copy_obj_data(rctx, dest_bucket_info, &handle, end, obj, obj, max_chunk_size, NULL, mtime, attrset, RGW_OBJ_CATEGORY_MAIN, NULL, NULL, NULL);
 }
 
 /**
@@ -3363,7 +3361,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::copy_obj(void *ctx,
+int RGWRados::copy_obj(ObjectCtx& obj_ctx,
                const string& user_id,
                const string& client_id,
                const string& op_id,
@@ -3416,7 +3414,7 @@ int RGWRados::copy_obj(void *ctx,
   off_t ofs = 0;
   off_t end = -1;
   if (!remote_src && source_zone.empty()) {
-    ret = prepare_get_obj(ctx, src_obj, &ofs, &end, &src_attrs,
+    ret = prepare_get_obj(&obj_ctx, src_obj, &ofs, &end, &src_attrs,
                   mod_ptr, unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &obj_size, NULL, &handle, err);
     if (ret < 0)
       return ret;
@@ -3429,9 +3427,10 @@ int RGWRados::copy_obj(void *ctx,
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
 
-    RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
+    RGWPutObjProcessor_Atomic processor(obj_ctx,
+                                        dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
                                         cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-    ret = processor.prepare(this, ctx, NULL);
+    ret = processor.prepare(this, NULL);
     if (ret < 0)
       return ret;
 
@@ -3522,8 +3521,7 @@ set_err_state:
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
-  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
-  ret = get_obj_state(rctx, src_obj, &astate, NULL);
+  ret = get_obj_state(&obj_ctx, src_obj, &astate, NULL);
   if (ret < 0)
     return ret;
 
@@ -3540,7 +3538,7 @@ set_err_state:
     if (ret < 0)
       return ret;
 
-    ret = get_obj_iterate(ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
+    ret = get_obj_iterate(&obj_ctx, &handle, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
     if (ret < 0)
       return ret;
 
@@ -3581,7 +3579,7 @@ set_err_state:
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, dest_bucket_info, &handle, end, dest_obj, src_obj,
+    return copy_obj_data(obj_ctx, dest_bucket_info, &handle, end, dest_obj, src_obj,
                          max_chunk_size, mtime, 0, src_attrs, category, ptag, petag, err);
   }
 
@@ -3643,7 +3641,7 @@ set_err_state:
   }
 
   if (copy_first) {
-    ret = get_obj(ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size, NULL);
+    ret = get_obj(&obj_ctx, NULL, &handle, src_obj, first_chunk, 0, max_chunk_size, NULL);
     if (ret < 0)
       goto done_ret;
 
@@ -3657,7 +3655,7 @@ set_err_state:
   ep.owner = dest_bucket_info.owner;
   ep.mtime = mtime;
 
-  ret = put_obj_meta(ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
+  ret = put_obj_meta(&obj_ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
 
   if (petag) {
     map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
@@ -3693,7 +3691,7 @@ done_ret:
 }
 
 
-int RGWRados::copy_obj_data(void *ctx,
+int RGWRados::copy_obj_data(ObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
 	       void **handle, off_t end,
                rgw_obj& dest_obj,
@@ -3713,9 +3711,10 @@ int RGWRados::copy_obj_data(void *ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  RGWPutObjProcessor_Atomic processor(dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
+  RGWPutObjProcessor_Atomic processor(obj_ctx,
+                                      dest_bucket_info.owner, dest_obj.bucket, dest_obj.get_object(),
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
-  int ret = processor.prepare(this, ctx, NULL);
+  int ret = processor.prepare(this, NULL);
   if (ret < 0)
     return ret;
 
@@ -3723,7 +3722,7 @@ int RGWRados::copy_obj_data(void *ctx,
 
   do {
     bufferlist bl;
-    ret = get_obj(ctx, NULL, handle, src_obj, bl, ofs, end, NULL);
+    ret = get_obj(&obj_ctx, NULL, handle, src_obj, bl, ofs, end, NULL);
     if (ret < 0)
       return ret;
 
@@ -4102,7 +4101,7 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
     rgw_obj marker = obj;
     gen_rand_obj_instance_name(&marker);
 
-    r = set_olh(ctx, bucket_owner, marker, true);
+    r = set_olh(*rctx, bucket_owner, marker, true);
     if (r < 0) {
       return r;
     }
@@ -4192,17 +4191,17 @@ static bool is_olh(map<string, bufferlist>& attrs)
   return (iter != attrs.end());
 }
 
-int RGWRados::get_olh_target_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+int RGWRados::get_olh_target_state(ObjectCtx& obj_ctx, rgw_obj& obj, RGWObjState *olh_state,
                                    RGWObjState **target_state, RGWObjVersionTracker *objv_tracker)
 {
   assert(olh_state->is_olh);
 
   rgw_obj target;
-  int r = RGWRados::follow_olh((void *)rctx, olh_state, obj, &target); /* might return -EAGAIN */
+  int r = RGWRados::follow_olh(obj_ctx, olh_state, obj, &target); /* might return -EAGAIN */
   if (r < 0) {
     return r;
   }
-  r = get_obj_state(rctx, target, target_state, objv_tracker, false);
+  r = get_obj_state(&obj_ctx, target, target_state, objv_tracker, false);
   if (r < 0) {
     return r;
   }
@@ -4218,7 +4217,7 @@ int RGWRados::get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **st
   *state = s;
   if (s->has_attrs) {
     if (s->is_olh && follow_olh) {
-      return get_olh_target_state(rctx, obj, s, state, objv_tracker);
+      return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
     }
     return 0;
   }
@@ -4284,7 +4283,7 @@ int RGWRados::get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **st
     s->is_olh = true;
 
     if (follow_olh) {
-      return get_olh_target_state(rctx, obj, s, state, objv_tracker);
+      return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
     }
   }
 
@@ -4648,10 +4647,10 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
       uint64_t epoch = ref.ioctx.get_last_version();
       int64_t poolid = ref.ioctx.get_id();
       utime_t mtime = ceph_clock_now(cct);
-      r = complete_update_index(bucket, obj.object, tag, poolid, epoch, state->size,
+      r = complete_update_index(bucket, obj, tag, poolid, epoch, state->size,
                                 mtime, etag, content_type, &acl_bl, RGW_OBJ_CATEGORY_MAIN, NULL);
     } else {
-      int ret = complete_update_index_cancel(bucket, obj.object, tag);
+      int ret = complete_update_index_cancel(bucket, obj, tag);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
       }
@@ -5772,7 +5771,7 @@ static void op_setxattr(librados::ObjectWriteOperation& op, const char *name, co
   op.setxattr(name, bl);
 }
 
-int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
+int RGWRados::apply_olh_log(ObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj,
                             bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                             uint64_t *plast_ver)
 {
@@ -5839,7 +5838,7 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
     cls_rgw_obj_key& key = *liter;
     rgw_obj obj_instance(bucket, key.name);
     obj_instance.set_instance(key.instance);
-    int ret = delete_obj(ctx, bucket_owner, obj_instance, false);
+    int ret = delete_obj(&obj_ctx, bucket_owner, obj_instance, false);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
@@ -5864,7 +5863,7 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
 /*
  * read olh log and apply it
  */
-int RGWRados::update_olh(void *ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj)
+int RGWRados::update_olh(ObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj)
 {
   map<uint64_t, rgw_bucket_olh_log_entry> log;
   bool is_truncated;
@@ -5875,7 +5874,7 @@ int RGWRados::update_olh(void *ctx, RGWObjState *state, const string& bucket_own
     if (ret < 0) {
       return ret;
     }
-    ret = apply_olh_log(ctx, bucket_owner, obj, state->obj_tag, log, &ver_marker);
+    ret = apply_olh_log(obj_ctx, bucket_owner, obj, state->obj_tag, log, &ver_marker);
     if (ret < 0) {
       return ret;
     }
@@ -5884,7 +5883,7 @@ int RGWRados::update_olh(void *ctx, RGWObjState *state, const string& bucket_own
   return 0;
 }
 
-int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker)
+int RGWRados::set_olh(ObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker)
 {
   string op_tag;
   string obj_tag;
@@ -5893,18 +5892,17 @@ int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj
   olh_obj.clear_instance();
 
   RGWObjState *state = NULL;
-  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   int ret;
 
   do {
-    ret = get_obj_state(rctx, olh_obj, &state, NULL, false); /* don't follow olh */
+    ret = get_obj_state(&obj_ctx, olh_obj, &state, NULL, false); /* don't follow olh */
     if (ret < 0)
       return ret;
 
     ret = olh_init_modification(state, olh_obj, &obj_tag, &op_tag);
     if (ret == -ECANCELED) {
-      rctx->invalidate(olh_obj);
+      obj_ctx.invalidate(olh_obj);
       continue;
     }
     if (ret < 0) {
@@ -5919,7 +5917,7 @@ int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj
     return ret;
   }
 
-  ret = update_olh(ctx, state, bucket_owner, olh_obj);
+  ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
   if (ret < 0) {
     ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
     return ret;
@@ -5984,7 +5982,7 @@ int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
   return 0;
 }
 
-int RGWRados::follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target)
+int RGWRados::follow_olh(ObjectCtx& obj_ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
   filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
@@ -5992,7 +5990,7 @@ int RGWRados::follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_ob
   if (!pending_entries.empty()) {
 #warning FIXME: bucket_owner
     string bucket_owner;
-    int ret = update_olh(ctx, state, bucket_owner, olh_obj);
+    int ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
     if (ret < 0) {
       return ret;
     }
