@@ -787,33 +787,6 @@ struct RGWObjState {
   }
 };
 
-struct RGWRadosCtx {
-  RGWRados *store;
-  map<rgw_obj, RGWObjState> objs_state;
-  int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
-  void *user_ctx;
-
-  RGWRadosCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
-  RGWRadosCtx(RGWRados *_store, void *_user_ctx) : store(_store), intent_cb(NULL), user_ctx(_user_ctx) { }
-
-  RGWObjState *get_state(rgw_obj& obj);
-  void set_atomic(rgw_obj& obj);
-  void set_prefetch_data(rgw_obj& obj);
-
-  void set_intent_cb(int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
-    intent_cb = cb;
-  }
-
-  int notify_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent) {
-    if (intent_cb) {
-      return intent_cb(store, user_ctx, obj, intent);
-    }
-    return 0;
-  }
-
-  void invalidate(rgw_obj& obj);
-};
-
 struct RGWPoolIterCtx {
   librados::IoCtx io_ctx;
   librados::ObjectIterator iter;
@@ -1278,6 +1251,35 @@ class RGWRados
   friend class RGWStateLog;
   friend class RGWReplicaLogger;
 
+public:
+  struct RGWRadosCtx {
+    RGWRados *store;
+    map<rgw_obj, RGWObjState> objs_state;
+    int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
+    void *user_ctx;
+
+    RGWRadosCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
+    RGWRadosCtx(RGWRados *_store, void *_user_ctx) : store(_store), intent_cb(NULL), user_ctx(_user_ctx) { }
+
+    RGWObjState *get_state(rgw_obj& obj);
+    void set_atomic(rgw_obj& obj);
+    void set_prefetch_data(rgw_obj& obj);
+
+    void set_intent_cb(int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
+      intent_cb = cb;
+    }
+
+    int notify_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent) {
+      if (intent_cb) {
+        return intent_cb(store, user_ctx, obj, intent);
+      }
+      return 0;
+    }
+
+    void invalidate(rgw_obj& obj);
+  };
+
+private:
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
   int open_gc_pool_ctx();

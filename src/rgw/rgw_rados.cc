@@ -1191,7 +1191,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(obj_ctx);
+  RGWRados::RGWRadosCtx *rctx = static_cast<RGWRados::RGWRadosCtx *>(obj_ctx);
 
   bool is_olh = false;
   if (head_obj.get_instance().empty()) {
@@ -1229,7 +1229,7 @@ public:
   }
 };
 
-RGWObjState *RGWRadosCtx::get_state(rgw_obj& obj) {
+RGWObjState *RGWRados::RGWRadosCtx::get_state(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     return &objs_state[obj];
   } else {
@@ -1238,12 +1238,12 @@ RGWObjState *RGWRadosCtx::get_state(rgw_obj& obj) {
   }
 }
 
-void RGWRadosCtx::invalidate(rgw_obj& obj)
+void RGWRados::RGWRadosCtx::invalidate(rgw_obj& obj)
 {
   objs_state.erase(obj);
 }
 
-void RGWRadosCtx::set_atomic(rgw_obj& obj) {
+void RGWRados::RGWRadosCtx::set_atomic(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     objs_state[obj].is_atomic = true;
   } else {
@@ -1252,7 +1252,7 @@ void RGWRadosCtx::set_atomic(rgw_obj& obj) {
   }
 }
 
-void RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
+void RGWRados::RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     objs_state[obj].prefetch_data = true;
   } else {
