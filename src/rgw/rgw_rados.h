@@ -603,28 +603,6 @@ public:
   CephContext *ctx();
 };
 
-class RGWPutObjProcessor_Plain : public RGWPutObjProcessor
-{
-  rgw_bucket bucket;
-  string obj_str;
-
-  bufferlist data;
-  rgw_obj obj;
-  off_t ofs;
-
-protected:
-  int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  int handle_data(bufferlist& bl, off_t ofs, MD5 *hash /* NULL expected */, void **phandle, bool *again);
-  int do_complete(string& etag, time_t *mtime, time_t set_mtime,
-                  map<string, bufferlist>& attrs,
-                  const char *if_match = NULL, const char *if_nomatch = NULL);
-
-public:
-  int throttle_data(void *handle, bool need_to_wait) { return 0; }
-  RGWPutObjProcessor_Plain(const string& bucket_owner, rgw_bucket& b, const string& o) : RGWPutObjProcessor(bucket_owner),
-                                                                                         bucket(b), obj_str(o), ofs(0) {}
-};
-
 struct put_obj_aio_info {
   void *handle;
 };
