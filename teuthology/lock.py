@@ -315,7 +315,9 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
     # all in one shot. If we are passed 'plana,mira,burnupi,vps', do one query
     # for 'plana,mira,burnupi' and one for 'vps'
     machine_types_list = misc.get_multi_machine_types(machine_type)
-    if 'vps' in machine_types_list:
+    if machine_types_list == ['vps']:
+        machine_types = machine_types_list
+    elif 'vps' in machine_types_list:
         machine_types_non_vps = list(machine_types_list)
         machine_types_non_vps.remove('vps')
         machine_types_non_vps = '|'.join(machine_types_non_vps)
