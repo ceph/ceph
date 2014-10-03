@@ -1219,7 +1219,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   extra_params.set_mtime = set_mtime;
   extra_params.owner = bucket_owner;
 
-  RGWRados::RGWRadosCtx *rctx = static_cast<RGWRados::RGWRadosCtx *>(obj_ctx);
+  RGWRados::ObjectCtx *rctx = static_cast<RGWRados::ObjectCtx *>(obj_ctx);
 
   bool is_olh = false;
   if (head_obj.get_instance().empty()) {
@@ -1257,7 +1257,7 @@ public:
   }
 };
 
-RGWObjState *RGWRados::RGWRadosCtx::get_state(rgw_obj& obj) {
+RGWObjState *RGWRados::ObjectCtx::get_state(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     return &objs_state[obj];
   } else {
@@ -1266,12 +1266,12 @@ RGWObjState *RGWRados::RGWRadosCtx::get_state(rgw_obj& obj) {
   }
 }
 
-void RGWRados::RGWRadosCtx::invalidate(rgw_obj& obj)
+void RGWRados::ObjectCtx::invalidate(rgw_obj& obj)
 {
   objs_state.erase(obj);
 }
 
-void RGWRados::RGWRadosCtx::set_atomic(rgw_obj& obj) {
+void RGWRados::ObjectCtx::set_atomic(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     objs_state[obj].is_atomic = true;
   } else {
@@ -1280,7 +1280,7 @@ void RGWRados::RGWRadosCtx::set_atomic(rgw_obj& obj) {
   }
 }
 
-void RGWRados::RGWRadosCtx::set_prefetch_data(rgw_obj& obj) {
+void RGWRados::ObjectCtx::set_prefetch_data(rgw_obj& obj) {
   if (!obj.get_object().empty()) {
     objs_state[obj].prefetch_data = true;
   } else {
@@ -2878,7 +2878,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   if (r < 0)
     return r;
 
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   ObjectWriteOperation op;
 
@@ -3222,7 +3222,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
   time_t mtime;
   uint64_t total_len;
   uint64_t obj_size;
-  RGWRadosCtx rctx(this);
+  ObjectCtx rctx(this);
   int ret = prepare_get_obj((void *)&rctx, obj, &ofs, &end, &attrset,
                             NULL, NULL, &mtime, NULL, NULL, &total_len,
                             &obj_size, NULL, &handle, NULL);
@@ -3409,7 +3409,7 @@ set_err_state:
 
   RGWObjManifest manifest;
   RGWObjState *astate = NULL;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
   ret = get_obj_state(rctx, src_obj, &astate, NULL);
   if (ret < 0)
     return ret;
@@ -3763,7 +3763,7 @@ int RGWRados::bucket_suspended(rgw_bucket& bucket, bool *suspended)
   return 0;
 }
 
-int RGWRados::complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj)
+int RGWRados::complete_atomic_overwrite(ObjectCtx *rctx, RGWObjState *state, rgw_obj& obj)
 {
   if (!state || !state->has_manifest || state->keep_tail)
     return 0;
@@ -3860,7 +3860,7 @@ int RGWRados::bucket_rebuild_index(rgw_bucket& bucket)
 
 int RGWRados::defer_gc(void *ctx, rgw_obj& obj)
 {
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
   rgw_bucket bucket;
   std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
@@ -3912,7 +3912,7 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
   if (r < 0) {
     return r;
   }
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   ObjectWriteOperation op;
 
@@ -4054,7 +4054,7 @@ static bool is_olh(map<string, bufferlist>& attrs)
   return (iter != attrs.end());
 }
 
-int RGWRados::get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
+int RGWRados::get_olh_target_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState *olh_state,
                                    RGWObjState **target_state, RGWObjVersionTracker *objv_tracker)
 {
   assert(olh_state->is_olh);
@@ -4072,7 +4072,7 @@ int RGWRados::get_olh_target_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState 
   return 0;
 }
 
-int RGWRados::get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
+int RGWRados::get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -4150,7 +4150,7 @@ int RGWRados::get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **
   return 0;
 }
 
-int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
+int RGWRados::get_obj_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
 {
   int ret;
 
@@ -4177,7 +4177,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   if (r < 0) {
     return r;
   }
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   if (rctx) {
     RGWObjState *state;
@@ -4203,7 +4203,7 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   return 0;
 }
 
-int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
+int RGWRados::append_atomic_test(ObjectCtx *rctx, rgw_obj& obj,
                             ObjectOperation& op, RGWObjState **pstate)
 {
   if (!rctx)
@@ -4228,7 +4228,7 @@ int RGWRados::append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
+int RGWRados::prepare_atomic_for_write_impl(ObjectCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
 			    bool reset_obj, const string *ptag,
                             const char *if_match, const char *if_nomatch)
@@ -4320,7 +4320,7 @@ int RGWRados::prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::prepare_atomic_for_write(RGWRadosCtx *rctx, rgw_obj& obj,
+int RGWRados::prepare_atomic_for_write(ObjectCtx *rctx, rgw_obj& obj,
                             ObjectWriteOperation& op, RGWObjState **pstate,
 			    bool reset_obj, const string *ptag,
                             const char *if_match, const char *if_nomatch)
@@ -4363,7 +4363,7 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   if (r < 0) {
     return r;
   }
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   ObjectWriteOperation op;
   RGWObjState *state = NULL;
@@ -4480,8 +4480,8 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 {
   bufferlist etag;
   time_t ctime;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-  RGWRadosCtx *new_ctx = NULL;
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
+  ObjectCtx *new_ctx = NULL;
   RGWObjState *astate = NULL;
   off_t ofs = 0;
   off_t end = -1;
@@ -4503,7 +4503,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
   }
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx(this);
+    new_ctx = new ObjectCtx(this);
     rctx = new_ctx;
   }
 
@@ -4678,8 +4678,8 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len, read_len;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-  RGWRadosCtx *new_ctx = NULL;
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
+  ObjectCtx *new_ctx = NULL;
   bool reading_from_head = true;
   ObjectReadOperation op;
 
@@ -4695,7 +4695,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx(this);
+    new_ctx = new ObjectCtx(this);
     rctx = new_ctx;
   }
 
@@ -5064,7 +5064,7 @@ int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
                          off_t read_ofs, off_t len,
                          bool is_head_obj, void *arg)
 {
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
   ObjectReadOperation op;
   struct get_obj_data *d = (struct get_obj_data *)arg;
   string oid, key;
@@ -5198,13 +5198,13 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
-  RGWRadosCtx *new_ctx = NULL;
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
+  ObjectCtx *new_ctx = NULL;
   bool reading_from_head = true;
   RGWObjState *astate = NULL;
 
   if (!rctx) {
-    new_ctx = new RGWRadosCtx(this);
+    new_ctx = new ObjectCtx(this);
     rctx = new_ctx;
   }
 
@@ -5274,7 +5274,7 @@ int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& 
   if (r < 0) {
     return r;
   }
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
   RGWObjState *astate = NULL;
 
   ObjectReadOperation op;
@@ -5601,7 +5601,7 @@ int RGWRados::set_olh(void *ctx, const string& bucket_owner, rgw_obj& target_obj
   olh_obj.clear_instance();
 
   RGWObjState *state = NULL;
-  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
   int ret;
 
@@ -6740,7 +6740,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   io_ctx.locator_set_key(loc);
 
   RGWObjState *astate = NULL;
-  RGWRadosCtx rctx(this);
+  ObjectCtx rctx(this);
   int r = get_obj_state(&rctx, obj, &astate, NULL);
   if (r < 0)
     return r;
