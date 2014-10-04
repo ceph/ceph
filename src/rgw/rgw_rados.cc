@@ -2946,19 +2946,12 @@ done_cancel:
  * exclusive: create object exclusively
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
-#warning remove me when done
-                  time_t *mtime, map<string, bufferlist>& attrs,
-                  RGWObjCategory category, int flags,
-                  map<string, bufferlist>* rmattrs,
-                  const bufferlist *data,
-                  RGWObjManifest *manifest,
-		  const string *ptag,
-                  list<rgw_obj_key> *remove_objs,
-                  bool modify_version,
-                  RGWObjVersionTracker *objv_tracker,
-                  time_t set_mtime,
-                  const string& bucket_owner)
+  /** Write/overwrite a system object. */
+int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+              map<std::string, bufferlist>& attrs, int flags,
+              bufferlist& data,
+              RGWObjVersionTracker *objv_tracker,
+              time_t set_mtime /* 0 for don't set */)
 {
   rgw_bucket bucket;
   rgw_rados_ref ref;
@@ -2966,21 +2959,12 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   if (r < 0)
     return r;
 
-  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
-
   ObjectWriteOperation op;
-
-  RGWObjState *state = NULL;
 
   if (flags & PUT_OBJ_EXCL) {
     if (!(flags & PUT_OBJ_CREATE))
 	return -EINVAL;
     op.create(true); // exclusive create
-  } else {
-    bool reset_obj = (flags & PUT_OBJ_CREATE) != 0;
-    r = prepare_atomic_for_write(rctx, obj, op, &state, reset_obj, ptag);
-    if (r < 0)
-      return r;
   }
 
   if (objv_tracker) {
@@ -2996,37 +2980,13 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   }
 
   op.mtime(&set_mtime);
-
-  if (data) {
-    /* if we want to overwrite the data, we also want to overwrite the
-       xattrs, so just remove the object */
-    op.write_full(*data);
-  }
+  op.write_full(data);
 
   string etag;
   string content_type;
   bufferlist acl_bl;
 
-  map<string, bufferlist>::iterator iter;
-  if (rmattrs) {
-    for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
-      const string& name = iter->first;
-      op.rmxattr(name.c_str());
-    }
-  }
-
-  if (manifest) {
-    /* remove existing manifest attr */
-    iter = attrs.find(RGW_ATTR_MANIFEST);
-    if (iter != attrs.end())
-      attrs.erase(iter);
-
-    bufferlist bl;
-    ::encode(*manifest, bl);
-    op.setxattr(RGW_ATTR_MANIFEST, bl);
-  }
-
-  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+  for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter) {
     const string& name = iter->first;
     bufferlist& bl = iter->second;
 
@@ -3034,82 +2994,22 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
       continue;
 
     op.setxattr(name.c_str(), bl);
-
-    if (name.compare(RGW_ATTR_ETAG) == 0) {
-      etag = bl.c_str();
-    } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
-      content_type = bl.c_str();
-    } else if (name.compare(RGW_ATTR_ACL) == 0) {
-      acl_bl = bl;
-    }
   }
-
-  if (!op.size())
-    return 0;
-
-  string index_tag;
-  uint64_t epoch;
-  int64_t poolid;
-
-  if (state) {
-    index_tag = state->write_tag;
-  }
-
-  r = prepare_update_index(NULL, bucket, CLS_RGW_OP_ADD, obj, index_tag);
-  if (r < 0)
-    return r;
 
   r = ref.ioctx.operate(ref.oid, &op);
-  if (r < 0) /* we can expect to get -ECANCELED if object was replaced under,
-                or -ENOENT if was removed, or -EEXIST if it did not exist
-                before and now it does */
-    goto done_cancel;
+  if (r < 0) {
+    return r;
+  }
 
   if (objv_tracker) {
     objv_tracker->apply_write();
   }
 
-  epoch = ref.ioctx.get_last_version();
-  poolid = ref.ioctx.get_id();
-
-  r = complete_atomic_overwrite(rctx, state, obj);
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
-  }
-
-  r = complete_update_index(bucket, obj, index_tag, poolid, epoch, size,
-                            ut, etag, content_type, &acl_bl, category, remove_objs);
-  if (r < 0)
-    goto done_cancel;
-
   if (mtime) {
     *mtime = set_mtime;
   }
 
-  if (state) {
-    /* update quota cache */
-    quota_handler->update_stats(bucket_owner, bucket, (state->exists ? 0 : 1), size, state->size);
-  }
-
   return 0;
-
-done_cancel:
-  int ret = complete_update_index_cancel(bucket, obj, index_tag);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
-  }
-  /* we lost in a race. There are a few options:
-   * - existing object was rewritten (ECANCELED)
-   * - non existing object was created (EEXIST)
-   * - object was removed (ENOENT)
-   * should treat it as a success
-   */
-  if ((r == -ECANCELED || r == -ENOENT) ||
-      (!(flags & PUT_OBJ_EXCL) && r == -EEXIST)) {
-    r = 0;
-  }
-
-  return r;
 }
 
 /**
