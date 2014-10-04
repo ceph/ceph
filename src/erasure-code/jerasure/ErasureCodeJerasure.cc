@@ -454,6 +454,10 @@ void ErasureCodeJerasureLiberation::prepare()
 //
 bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 {
+  // back in Firefly, w = 7 was the default and produced useable 
+  // chunks. Tolerate this value for backward compatibility.
+  if (w == 7)
+    return true;
   if (w <= 2 || !is_prime(w+1)) {
     *ss <<  "w=" << w << " must be greater than two and "
 	<< "w+1 must be prime" << std::endl;

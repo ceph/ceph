@@ -11,6 +11,7 @@ usr/bin/ceph-mon
 usr/bin/ceph-osd
 usr/bin/ceph-run
 usr/bin/ceph-rest-api
+usr/lib/python*/dist-packages/ceph_rest_api.py
 usr/bin/ceph_mon_store_converter
 usr/bin/crushtool
 usr/bin/monmaptool

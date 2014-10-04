@@ -520,9 +520,6 @@ OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping 
 OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 
-// max number of parallel snap trims/pg
-OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
-
 // minimum number of peers tha tmust be reachable to mark ourselves
 // back up after being wrongly marked down.
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
@@ -911,7 +908,7 @@ OPTION(rgw_bucket_quota_cache_size, OPT_INT, 10000) // number of entries in buck
 
 OPTION(rgw_expose_bucket, OPT_BOOL, false) // Return the bucket name in the 'Bucket' response header
 
-OPTION(rgw_frontends, OPT_STR, "") // alternative front ends
+OPTION(rgw_frontends, OPT_STR, "fastcgi, civetweb port=7480") // rgw front ends
 
 OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT, 180) // time period for accumulating modified buckets before syncing stats
 OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accumulating modified buckets before syncing entire user stats
