@@ -1147,12 +1147,16 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
 
   RGWRados::PutObjMetaExtraParams extra_params;
 
-  extra_params.data = &first_chunk;
-  extra_params.manifest = &manifest;
-  extra_params.ptag = &unique_tag; /* use req_id as operation tag */
-  extra_params.mtime = mtime;
-  extra_params.set_mtime = set_mtime;
-  extra_params.owner = bucket_owner;
+  RGWRados::Object op_target(store, obj_ctx, head_obj);
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.data = &first_chunk;
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = bucket_owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
 
   bool is_olh = false;
   if (head_obj.get_instance().empty()) {
@@ -1164,9 +1168,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
     is_olh = astate->is_olh;
   }
 
-  r = store->put_obj_meta(&obj_ctx, head_obj, obj_len, attrs,
-                          RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-                          extra_params);
+  r = obj_op.write_meta(obj_len, attrs);
   if (r < 0) {
     return r;
   }
@@ -3535,7 +3537,6 @@ set_err_state:
   if (ret < 0) {
     return ret;
   }
-  PutObjMetaExtraParams ep;
 
   bufferlist first_chunk;
 
@@ -3543,6 +3544,8 @@ set_err_state:
   RGWObjManifest *pmanifest; 
   ldout(cct, 0) << "dest_obj=" << dest_obj << " src_obj=" << src_obj << " copy_itself=" << (int)copy_itself << dendl;
 
+  RGWRados::Object op_target(this, obj_ctx, dest_obj);
+  RGWRados::Object::Write obj_op(&op_target);
 
   string tag;
 
@@ -3590,13 +3593,17 @@ set_err_state:
     pmanifest->set_head_size(first_chunk.length());
   }
 
-  ep.data = &first_chunk;
-  ep.manifest = pmanifest;
-  ep.ptag = &tag;
-  ep.owner = dest_bucket_info.owner;
-  ep.mtime = mtime;
+  obj_op.meta.data = &first_chunk;
+  obj_op.meta.manifest = pmanifest;
+  obj_op.meta.ptag = &tag;
+  obj_op.meta.owner = dest_bucket_info.owner;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.category = category;
 
-  ret = put_obj_meta(&obj_ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
+  ret = obj_op.write_meta(end + 1, attrs);
+  if (ret < 0)
+    goto done_ret;
 
   return 0;
 
