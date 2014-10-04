@@ -1534,12 +1534,14 @@ int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_
 {
   complete_writing_data();
 
-  RGWRados::PutObjMetaExtraParams params;
-  params.set_mtime = set_mtime;
-  params.mtime = mtime;
-  params.owner = s->owner.get_id();
+  RGWRados::Object op_target(store, obj_ctx, head_obj);
+  RGWRados::Object::Write head_obj_op(&op_target);
 
-  int r = store->put_obj_meta(&obj_ctx, head_obj, s->obj_size, attrs, RGW_OBJ_CATEGORY_MAIN, 0, params);
+  head_obj_op.meta.set_mtime = set_mtime;
+  head_obj_op.meta.mtime = mtime;
+  head_obj_op.meta.owner = s->owner.get_id();
+
+  int r = head_obj_op.write_meta(s->obj_size, attrs);
   if (r < 0)
     return r;
 
@@ -2594,7 +2596,15 @@ void RGWInitMultipart::execute()
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
     obj.set_in_extra_data(true);
-    ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, s->owner.get_id());
+
+    RGWRados::Object op_target(store, *(RGWRados::ObjectCtx *)s->obj_ctx, obj);
+    RGWRados::Object::Write obj_op(&op_target);
+
+    obj_op.meta.owner = s->owner.get_id();
+    obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
+    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+
+    ret = obj_op.write_meta(0, attrs);
   } while (ret == -EEXIST);
 }
 
@@ -2893,17 +2903,17 @@ void RGWCompleteMultipart::execute()
 
   obj_ctx.set_atomic(target_obj);
 
-  RGWRados::PutObjMetaExtraParams extra_params;
+  RGWRados::Object op_target(store, *(RGWRados::ObjectCtx *)s->obj_ctx, target_obj);
+  RGWRados::Object::Write obj_op(&op_target);
 
-  extra_params.manifest = &manifest;
-  extra_params.remove_objs = &remove_objs;
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.remove_objs = &remove_objs;
 
-  extra_params.ptag = &s->req_id; /* use req_id as operation tag */
-  extra_params.owner = s->owner.get_id();
+  obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
+  obj_op.meta.owner = s->owner.get_id();
+  obj_op.meta.flags = PUT_OBJ_CREATE;
 
-  ret = store->put_obj_meta(&obj_ctx, target_obj, ofs, attrs,
-                            RGW_OBJ_CATEGORY_MAIN, PUT_OBJ_CREATE,
-			    extra_params);
+  ret = obj_op.write_meta(ofs, attrs);
   if (ret < 0)
     return;
 
