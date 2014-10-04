@@ -236,7 +236,6 @@ public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
   {
-    DEFAULT_W = 6;
   }
 
   virtual bool check_w(ostream *ss) const;
