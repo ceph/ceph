@@ -1472,36 +1472,17 @@ public:
   };
 
   /** Write/overwrite an object to the bucket storage. */
-  virtual int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
-              map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-              RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
-              bool modify_version, RGWObjVersionTracker *objv_tracker,
-              time_t set_mtime /* 0 for don't set */,
-              const string& owner,
-              const char *if_match = NULL, const char *if_nomatch = NULL);
-
-  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
-              const string& owner, const bufferlist *data = NULL) {
-    return put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags,
-                        NULL, data, NULL, NULL, NULL,
-                        false, NULL, 0, owner);
-  }
-
-  virtual int put_obj_meta(void *ctx, rgw_obj& obj, uint64_t size,  map<std::string, bufferlist>& attrs,
-                           RGWObjCategory category, int flags, PutObjMetaExtraParams& params) {
-    return put_obj_meta_impl(ctx, obj, size, params.mtime, attrs, category, flags,
-                        params.rmattrs, params.data, params.manifest, params.ptag, params.remove_objs,
-                        params.modify_version, params.objv_tracker, params.set_mtime, params.owner,
-                        params.if_match, params.if_nomatch);
-  }
+  virtual int put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+              map<std::string, bufferlist>& attrs, int flags,
+              bufferlist& data,
+              RGWObjVersionTracker *objv_tracker,
+              time_t set_mtime /* 0 for don't set */);
 
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
                                off_t ofs, bool exclusive, void **handle);
-  /* note that put_obj doesn't set category on an object, only use it for none user objects */
+
   int put_system_obj(void *ctx, rgw_obj& obj, const char *data, size_t len, bool exclusive,
               time_t *mtime, map<std::string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
               time_t set_mtime) {
@@ -1511,15 +1492,7 @@ public:
     if (exclusive)
       flags |= PUT_OBJ_EXCL;
 
-    PutObjMetaExtraParams ep;
-    ep.mtime = mtime;
-    ep.data = &bl;
-    ep.modify_version = true;
-    ep.objv_tracker = objv_tracker;
-    ep.set_mtime = set_mtime;
-
-    int ret = put_obj_meta(ctx, obj, len, attrs, RGW_OBJ_CATEGORY_NONE, flags, ep);
-    return ret;
+    return put_system_obj_impl(obj, len, mtime, attrs, flags, bl, objv_tracker, set_mtime);
   }
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
