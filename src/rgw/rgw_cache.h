@@ -210,13 +210,11 @@ public:
                 map<string, bufferlist>& attrs,
                 map<string, bufferlist>* rmattrs,
                 RGWObjVersionTracker *objv_tracker);
-  int put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-                   map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
-                   map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                   RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
-                   bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime,
-                   const string& owner,
-                   const char *if_match = NULL, const char *if_nomatch = NULL);
+  int put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+              map<std::string, bufferlist>& attrs, int flags,
+              bufferlist& data,
+              RGWObjVersionTracker *objv_tracker,
+              time_t set_mtime);
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
@@ -398,13 +396,11 @@ int RGWCache<T>::set_attrs(void *ctx, rgw_obj& obj,
 }
 
 template <class T>
-int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_t *mtime,
-                              map<std::string, bufferlist>& attrs, RGWObjCategory category, int flags,
-                              map<std::string, bufferlist>* rmattrs, const bufferlist *data,
-                              RGWObjManifest *manifest, const string *ptag, list<rgw_obj_key> *remove_objs,
-                              bool modify_version, RGWObjVersionTracker *objv_tracker, time_t set_mtime,
-                              const string& owner,
-                              const char *if_match, const char *if_nomatch)
+int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
+              map<std::string, bufferlist>& attrs, int flags,
+              bufferlist& data,
+              RGWObjVersionTracker *objv_tracker,
+              time_t set_mtime)
 {
   rgw_bucket bucket;
   string oid;
@@ -416,18 +412,15 @@ int RGWCache<T>::put_obj_meta_impl(void *ctx, rgw_obj& obj, uint64_t size, time_
     info.xattrs = attrs;
     info.status = 0;
     info.flags = CACHE_FLAG_XATTRS;
-    if (data) {
-      info.data = *data;
-      info.flags |= CACHE_FLAG_DATA;
-    }
+    info.data = data;
+    info.flags |= CACHE_FLAG_DATA;
     if (objv_tracker) {
       info.version = objv_tracker->write_version;
       info.flags |= CACHE_FLAG_OBJV;
     }
   }
-  int ret = T::put_obj_meta_impl(ctx, obj, size, mtime, attrs, category, flags, rmattrs, data, manifest, ptag, remove_objs,
-                                 modify_version, objv_tracker, set_mtime, owner,
-                                 if_match, if_nomatch);
+  int ret = T::put_system_obj_impl(obj, size, mtime, attrs, flags, data,
+                                   objv_tracker, set_mtime);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {
