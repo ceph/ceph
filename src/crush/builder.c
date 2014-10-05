@@ -517,6 +517,53 @@ err:
         return NULL;
 }
 
+/* linear bucket */
+
+struct crush_bucket_linear *
+crush_make_linear_bucket(int hash, int type, int size,
+			  int *items,
+			  int item_weight)
+{
+	int i;
+	struct crush_bucket_linear *bucket;
+
+	if (crush_multiplication_is_unsafe(size, item_weight)) {
+		//need more info
+		//printf("");
+                return NULL;
+	}
+
+	bucket = malloc(sizeof(*bucket));
+        if (!bucket)
+                return NULL;
+	memset(bucket, 0, sizeof(*bucket));
+	bucket->h.alg = CRUSH_BUCKET_LINEAR;
+	bucket->h.hash = hash;
+	bucket->h.type = type;
+	bucket->h.size = size;
+
+	bucket->h.weight = size * item_weight;
+	bucket->item_weight = item_weight;
+	bucket->h.items = malloc(sizeof(__s32) * size);
+
+        if (!bucket->h.items)
+                goto err;
+
+        bucket->h.perm = malloc(sizeof(__u32) * size);
+
+        if (!bucket->h.perm)
+                goto err;
+	for (i=0; i<size; i++)
+		bucket->h.items[i] = items[i];
+
+	return bucket;
+err:
+        free(bucket->h.perm);
+        free(bucket->h.items);
+        free(bucket);
+        return NULL;
+}
+
 
 
 struct crush_bucket*
@@ -542,6 +589,13 @@ crush_make_bucket(int alg, int hash, int type, int size,
 
 	case CRUSH_BUCKET_STRAW:
 		return (struct crush_bucket *)crush_make_straw_bucket(hash, type, size, items, weights);
+
+	case CRUSH_BUCKET_LINEAR:
+		if (size && weights)
+			item_weight = weights[0];
+		else
+			item_weight = 0;
+		return (struct crush_bucket *)crush_make_linear_bucket(hash, type, size, items, item_weight);
 	}
 	return 0;
 }
@@ -709,6 +763,33 @@ int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int
 	return crush_calc_straw(bucket);
 }
 
+int crush_add_linear_bucket_item(struct crush_bucket_linear *bucket, int item, int weight)
+{
+	int newsize = bucket->h.size + 1;
+	void *_realloc = NULL;
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+
+	bucket->h.items[newsize-1] = item;
+
+        if (crush_addition_is_unsafe(bucket->h.weight, weight))
+                return -ERANGE;
+
+        bucket->h.weight += weight;
+        bucket->h.size++;
+
+        return 0;
+}
+
 int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 {
 	/* invalidate perm cache */
@@ -723,6 +804,8 @@ int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 		return crush_add_tree_bucket_item((struct crush_bucket_tree *)b, item, weight);
 	case CRUSH_BUCKET_STRAW:
 		return crush_add_straw_bucket_item((struct crush_bucket_straw *)b, item, weight);
+	case CRUSH_BUCKET_LINEAR:
+		return crush_add_linear_bucket_item((struct crush_bucket_linear *)b, item, weight);
 	default:
 		return -1;
 	}
@@ -921,6 +1004,36 @@ int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
 	return crush_calc_straw(bucket);
 }
 
+int crush_remove_linear_bucket_item(struct crush_bucket_linear *bucket, int item)
+{
+	unsigned i, j;
+	int newsize;
+	void *_realloc = NULL;
+
+	for (i = 0; i < bucket->h.size; i++)
+		if (bucket->h.items[i] == item)
+			break;
+	if (i == bucket->h.size)
+		return -ENOENT;
+
+	for (j = i; j < bucket->h.size; j++)
+		bucket->h.items[j] = bucket->h.items[j+1];
+	newsize = --bucket->h.size;
+	bucket->h.weight -= bucket->item_weight;
+
+	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.items = _realloc;
+	}
+	if ((_realloc = realloc(bucket->h.perm, sizeof(__u32)*newsize)) == NULL) {
+		return -ENOMEM;
+	} else {
+		bucket->h.perm = _realloc;
+	}
+	return 0;
+}
+
 int crush_bucket_remove_item(struct crush_bucket *b, int item)
 {
 	/* invalidate perm cache */
@@ -935,6 +1048,8 @@ int crush_bucket_remove_item(struct crush_bucket *b, int item)
 		return crush_remove_tree_bucket_item((struct crush_bucket_tree *)b, item);
 	case CRUSH_BUCKET_STRAW:
 		return crush_remove_straw_bucket_item((struct crush_bucket_straw *)b, item);
+	case CRUSH_BUCKET_LINEAR:
+		return crush_remove_linear_bucket_item((struct crush_bucket_linear *)b, item);
 	default:
 		return -1;
 	}
@@ -1025,6 +1140,16 @@ int crush_adjust_straw_bucket_item_weight(struct crush_bucket_straw *bucket, int
 	return diff;
 }
 
+int crush_adjust_linear_bucket_item_weight(struct crush_bucket_linear *bucket, int item, int weight)
+{
+	int diff = (weight - bucket->item_weight) * bucket->h.size;
+
+	bucket->item_weight = weight;
+	bucket->h.weight = bucket->item_weight * bucket->h.size;
+
+	return diff;
+}
+
 int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight)
 {
 	switch (b->alg) {
@@ -1039,6 +1164,9 @@ int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight
 							    item, weight);
 	case CRUSH_BUCKET_STRAW:
 		return crush_adjust_straw_bucket_item_weight((struct crush_bucket_straw *)b,
+							     item, weight);
+	case CRUSH_BUCKET_LINEAR:
+		return crush_adjust_linear_bucket_item_weight((struct crush_bucket_linear *)b,
 							     item, weight);
 	default:
 		return -1;
@@ -1144,6 +1272,34 @@ static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_buc
 	return 0;
 }
 
+static int crush_reweight_linear_bucket(struct crush_map *crush, struct crush_bucket_linear *bucket)
+{
+	unsigned i;
+	unsigned sum = 0, n = 0, leaves = 0;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		int id = bucket->h.items[i];
+		if (id < 0) {
+			struct crush_bucket *c = crush->buckets[-1-id];
+			crush_reweight_bucket(crush, c);
+
+			if (crush_addition_is_unsafe(sum, c->weight))
+                                return -ERANGE;
+
+			sum += c->weight;
+			n++;
+		} else {
+			leaves++;
+		}
+	}
+
+	if (n > leaves)
+		bucket->item_weight = sum / n;  // more bucket children than leaves, average!
+	bucket->h.weight = bucket->item_weight * bucket->h.size;
+
+	return 0;
+}
+
 int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 {
 	switch (b->alg) {
@@ -1155,6 +1311,8 @@ int crush_reweight_bucket(struct crush_map *crush, struct crush_bucket *b)
 		return crush_reweight_tree_bucket(crush, (struct crush_bucket_tree *)b);
 	case CRUSH_BUCKET_STRAW:
 		return crush_reweight_straw_bucket(crush, (struct crush_bucket_straw *)b);
+	case CRUSH_BUCKET_LINEAR:
+		return crush_reweight_linear_bucket(crush, (struct crush_bucket_linear *)b);
 	default:
 		return -1;
 	}

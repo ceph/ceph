@@ -925,6 +925,20 @@ public:
       out[i] = rawout[i];
   }
 
+  void do_rule(int rule, int x, vector<int>& out, int maxout,
+	       const vector<__u32>& weight, float balance_param) const {
+    Mutex::Locker l(mapper_lock);
+    int rawout[maxout];
+    int scratch[maxout * 3];
+    int numrep = crush_do_rule_wrapper(crush, rule, x, rawout, maxout,
+					&weight[0], weight.size(), scratch, balance_param);
+    if (numrep < 0)
+      numrep = 0;
+    out.resize(numrep);
+    for (int i=0; i<numrep; i++)
+      out[i] = rawout[i];
+  }
+
   int read_from_file(const char *fn) {
     bufferlist bl;
     std::string error;
