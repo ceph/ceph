@@ -52,6 +52,57 @@ trap "rm -fr $TMPDIR" 0
 
 TMPFILE=$TMPDIR/test_invalid.$$
 
+#
+# retry_eagain max cmd args ...
+#
+# retry cmd args ... if it exits on error and its output contains the
+# string EAGAIN, at most $max times
+#
+function retry_eagain()
+{
+    local max=$1
+    shift
+    local status
+    local tmpfile=$TMPDIR/retry_eagain.$$
+    local count
+    for count in $(seq 1 $max) ; do
+        status=0
+        "$@" > $tmpfile 2>&1 || status=$?
+        if test $status = 0 || 
+            ! grep --quiet EAGAIN $tmpfile ; then
+            break
+        fi
+        sleep 1
+    done
+    if test $count = $max ; then
+        echo retried with non zero exit status, $max times: "$@" >&2
+    fi
+    cat $tmpfile
+    rm $tmpfile
+    return $status
+}
+
+#
+# map_enxio_to_eagain cmd arg ...
+#
+# add EAGAIN to the output of cmd arg ... if the output contains
+# ENXIO.
+#
+function map_enxio_to_eagain()
+{
+    local status=0
+    local tmpfile=$TMPDIR/map_enxio_to_eagain.$$
+
+    "$@" > $tmpfile 2>&1 || status=$?
+    if test $status != 0 &&
+        grep --quiet ENXIO $tmpfile ; then
+        echo "EAGAIN added by $0::map_enxio_to_eagain" >> $tmpfile
+    fi
+    cat $tmpfile
+    rm $tmpfile
+    return $status
+}
+
 function check_response()
 {
 	expected_stderr_string=$1
@@ -633,7 +684,7 @@ function test_mon_osd()
   ceph osd getmaxosd | grep "max_osd = $save"
 
   for id in `ceph osd ls` ; do
-    ceph tell osd.$id version
+    retry_eagain 5 map_enxio_to_eagain ceph tell osd.$id version
   done
 
   ceph osd rm 0 2>&1 | grep 'EBUSY'
