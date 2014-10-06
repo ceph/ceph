@@ -30,7 +30,8 @@ def _get_downburst_exec():
     import pwd
     little_old_me = pwd.getpwuid(os.getuid()).pw_name
     for user in [little_old_me, 'ubuntu', 'teuthology']:
-        pth = "/home/%s/src/downburst/virtualenv/bin/downburst" % user
+        pth = os.path.expanduser("~%s/src/downburst/virtualenv/bin/downburst"
+                                 % user)
         if os.access(pth, os.X_OK):
             return pth
     return ''
