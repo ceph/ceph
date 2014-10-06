@@ -59,7 +59,8 @@ Depends: binutils,
          ${misc:Depends},
          ${shlibs:Depends}
 Recommends: btrfs-tools, ceph-mds, librados2, librbd1
-Replaces: ceph-common (<< 0.78-500)
+Replaces: ceph-common (<< 0.78-500), python-ceph (<< 0.80.6)
+Breaks: python-ceph (<< 0.80.6)
 X-Python-Version: >= 2.6
 Description: distributed storage and file system
  Ceph is a massively scalable, open-source, distributed
@@ -419,6 +420,7 @@ Package: python-ceph
 Architecture: linux-any
 Section: python
 Depends: librados2, librbd1, ${misc:Depends}, ${python:Depends}
+Replaced: ceph (<< 0.80.6)
 X-Python-Version: >= 2.6
 Description: Python libraries for the Ceph distributed filesystem
  Ceph is a massively scalable, open-source, distributed
