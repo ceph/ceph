@@ -490,6 +490,12 @@ function test_mon_mds()
   ceph osd pool create fs_metadata 10
   ceph fs new cephfs fs_metadata fs_data
 
+  ceph mds cluster_down
+  ceph mds cluster_up
+
+  ceph mds compat rm_incompat 4
+  ceph mds compat rm_incompat 4
+
   # We don't want any MDSs to be up, their activity can interfere with
   # the "current_epoch + 1" checking below if they're generating updates
   fail_all_mds
@@ -497,12 +503,6 @@ function test_mon_mds()
   # Check for default crash_replay_interval set automatically in 'fs new'
   ceph osd dump | grep fs_data > $TMPFILE
   check_response "crash_replay_interval 45 "
-
-  ceph mds cluster_down
-  ceph mds cluster_up
-
-  ceph mds compat rm_incompat 4
-  ceph mds compat rm_incompat 4
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
@@ -598,6 +598,7 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
+  fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
@@ -630,6 +631,7 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
+  fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
 
