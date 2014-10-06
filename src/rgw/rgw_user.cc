@@ -318,7 +318,7 @@ extern int rgw_get_user_info_by_access_key(RGWRados *store, string& access_key, 
 int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 {
   rgw_obj obj(store->zone.user_keys_pool, access_key.id);
-  int ret = store->delete_system_obj(NULL, obj);
+  int ret = store->delete_system_obj(obj);
   return ret;
 }
 
@@ -340,14 +340,14 @@ int rgw_remove_uid_index(RGWRados *store, string& uid)
 int rgw_remove_email_index(RGWRados *store, string& email)
 {
   rgw_obj obj(store->zone.user_email_pool, email);
-  int ret = store->delete_system_obj(NULL, obj);
+  int ret = store->delete_system_obj(obj);
   return ret;
 }
 
 int rgw_remove_swift_name_index(RGWRados *store, string& swift_name)
 {
   rgw_obj obj(store->zone.user_swift_pool, swift_name);
-  int ret = store->delete_system_obj(NULL, obj);
+  int ret = store->delete_system_obj(obj);
   return ret;
 }
 
@@ -409,7 +409,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
 
   rgw_obj email_obj(store->zone.user_email_pool, info.user_email);
   ldout(store->ctx(), 10) << "removing email index: " << info.user_email << dendl;
-  ret = store->delete_system_obj(NULL, email_obj);
+  ret = store->delete_system_obj(email_obj);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << email_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -419,7 +419,7 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
   rgw_get_buckets_obj(info.user_id, buckets_obj_id);
   rgw_obj uid_bucks(store->zone.user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
-  ret = store->delete_system_obj(NULL, uid_bucks);
+  ret = store->delete_system_obj(uid_bucks);
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
