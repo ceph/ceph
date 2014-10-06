@@ -15,7 +15,8 @@
 #ifndef CEPH_MSG_PIPECONNECTION_H
 #define CEPH_MSG_PIPECONNECTION_H
 
-#include "Connection.h"
+#include "msg/Connection.h"
+
 class Pipe;
 
 struct PipeConnection : public Connection {

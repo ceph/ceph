@@ -16,10 +16,10 @@
 #define CEPH_MSGR_PIPE_H
 
 #include "include/memory.h"
-
-#include "msg_types.h"
-#include "Messenger.h"
 #include "auth/AuthSessionHandler.h"
+
+#include "msg/msg_types.h"
+#include "msg/Messenger.h"
 #include "PipeConnection.h"
 
 

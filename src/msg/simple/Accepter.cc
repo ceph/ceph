@@ -18,11 +18,11 @@
 #include <limits.h>
 #include <poll.h>
 
-#include "Accepter.h"
-#include "SimpleMessenger.h"
+#include "msg/Message.h"
 
-#include "Message.h"
+#include "Accepter.h"
 #include "Pipe.h"
+#include "SimpleMessenger.h"
 
 #include "common/debug.h"
 #include "common/errno.h"
