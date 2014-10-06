@@ -2,7 +2,7 @@
 #include "include/types.h"
 #include "Messenger.h"
 
-#include "SimpleMessenger.h"
+#include "msg/simple/SimpleMessenger.h"
 
 Messenger *Messenger::create(CephContext *cct,
 			     entity_name_t name,
