@@ -1619,6 +1619,12 @@ def auth_key(
         else:
             raise
 
+def get_mount_point(cluster, osd_id):
+    parent = STATEDIR + '/osd'
+    return os.path.join(
+        parent,
+        '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
+    )
 
 def move_mount(
     dev,
@@ -1629,11 +1635,7 @@ def move_mount(
     mount_options,
     ):
     LOG.debug('Moving mount to final location...')
-    parent = STATEDIR + '/osd'
-    osd_data = os.path.join(
-        parent,
-        '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
-        )
+    osd_data = get_mount_point(cluster, osd_id)
     maybe_mkdir(osd_data)
 
     # pick best-of-breed mount options based on fs type
@@ -1811,10 +1813,8 @@ def mount_activate(
                 parent_dev = os.stat(STATEDIR + '/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-                elif os.listdir((STATEDIR + '/osd/{cluster}-{osd_id}').format(
-                        cluster=cluster,
-                        osd_id=osd_id,
-                        )):
+                elif os.listdir(get_mount_point(cluster, osd_id)):
+                    LOG.info(get_mount_point(cluster, osd_id) + " is not empty, won't override")
                     other = True
 
         except OSError:
@@ -2022,6 +2022,7 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+            osd_data = get_mount_point(cluster, osd_id)
 
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
@@ -2029,20 +2030,21 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
-
-            if args.mark_init == 'none':
-                command_check_call(
-                    [
-                        'ceph-osd',
-                        '--cluster={cluster}'.format(cluster=cluster),
-                        '--id={osd_id}'.format(osd_id=osd_id),
-                        '--osd-data={path}'.format(path=args.path),
-                        '--osd-journal={path}/journal'.format(path=args.path),
-                    ],
-                )
+            osd_data = args.path
 
         else:
             raise Error('%s is not a directory or block device' % args.path)
+
+        if args.mark_init == 'none':
+            command_check_call(
+                [
+                    'ceph-osd',
+                    '--cluster={cluster}'.format(cluster=cluster),
+                    '--id={osd_id}'.format(osd_id=osd_id),
+                    '--osd-data={path}'.format(path=osd_data),
+                    '--osd-journal={path}/journal'.format(path=osd_data),
+                ],
+            )
 
         if args.mark_init not in (None, 'none' ):
 
