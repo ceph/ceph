@@ -2097,8 +2097,11 @@ void RGWDeleteObj::execute()
   ret = -EINVAL;
   rgw_obj obj(s->bucket, s->object);
   if (!s->object.empty()) {
-    store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
+    RGWRados::ObjectCtx *obj_ctx = (RGWRados::ObjectCtx *)s->obj_ctx;
+
+    obj_ctx->set_atomic(obj);
+
+    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
   }
 }
 
@@ -2943,7 +2946,10 @@ void RGWCompleteMultipart::execute()
   }
 
   // remove the upload obj
-  store->delete_obj(&obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
+  int r = store->delete_obj(*(RGWRados::ObjectCtx *)s->obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
+  }
 }
 
 int RGWAbortMultipart::verify_permission()
@@ -2986,6 +2992,8 @@ void RGWAbortMultipart::execute()
   int marker = 0;
   int max_parts = 1000;
 
+  RGWRados::ObjectCtx *obj_ctx = (RGWRados::ObjectCtx *)s->obj_ctx;
+
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
     if (ret < 0)
@@ -2998,7 +3006,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
-        ret = store->delete_obj(s->obj_ctx, owner, obj, false);
+        ret = store->delete_obj(*obj_ctx, owner, obj, false);
         if (ret < 0 && ret != -ENOENT)
           return;
       } else {
@@ -3006,7 +3014,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
-          ret = store->delete_obj(s->obj_ctx, owner, loc, false);
+          ret = store->delete_obj(*obj_ctx, owner, loc, false);
           if (ret < 0 && ret != -ENOENT)
             return;
         }
@@ -3017,7 +3025,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
-  ret = store->delete_obj(s->obj_ctx, owner, meta_obj, false);
+  ret = store->delete_obj(*obj_ctx, owner, meta_obj, false);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -3127,6 +3135,7 @@ void RGWDeleteMultiObj::execute()
   RGWMultiDelXMLParser parser;
   pair<string,int> result;
   int num_processed = 0;
+  RGWRados::ObjectCtx *obj_ctx = (RGWRados::ObjectCtx *)s->obj_ctx;
 
   ret = get_params();
   if (ret < 0) {
@@ -3167,8 +3176,9 @@ void RGWDeleteMultiObj::execute()
         ++iter, num_processed++) {
 
     rgw_obj obj(bucket,(*iter));
-    store->set_atomic(s->obj_ctx, obj);
-    ret = store->delete_obj(s->obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
+
+    obj_ctx->set_atomic(obj);
+    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
     if (ret == -ENOENT) {
       ret = 0;
     }

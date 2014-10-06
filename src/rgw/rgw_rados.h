@@ -1214,8 +1214,6 @@ private:
 
   void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
 protected:
-  virtual int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning, RGWObjVersionTracker *objv_tracker);
-
   CephContext *cct;
   librados::Rados *rados;
   librados::IoCtx gc_pool_ctx;        // .rgw.gc
@@ -1388,6 +1386,7 @@ public:
 
     RGWRados *get_store() { return store; }
     rgw_obj& get_obj() { return obj; }
+    RGWRados::ObjectCtx& get_ctx() { return ctx; }
 
     struct Write {
       RGWRados::Object *target;
@@ -1412,6 +1411,21 @@ public:
 
       int write_meta(uint64_t size,  map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+    };
+
+    struct Delete {
+      RGWRados::Object *target;
+
+      struct DeleteParams {
+        string bucket_owner;
+        bool use_versioning;
+
+        DeleteParams() : use_versioning(false) {}
+      } params;
+      
+      Delete(RGWRados::Object *_target) : target(_target) {}
+
+      int delete_obj();
     };
   };
 
@@ -1527,8 +1541,10 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(void *ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning, RGWObjVersionTracker *objv_tracker = NULL);
-  virtual int delete_system_obj(void *ctx, rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
+  virtual int delete_obj(RGWRados::ObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning);
+
+  /* Delete a system object */
+  virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
 
   /** Remove an object from the bucket index */
   int delete_obj_index(rgw_obj& obj);

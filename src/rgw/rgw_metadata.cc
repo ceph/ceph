@@ -601,7 +601,7 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 
   rgw_obj obj(bucket, oid);
 
-  ret = store->delete_system_obj(NULL, obj, objv_tracker);
+  ret = store->delete_system_obj(obj, objv_tracker);
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
