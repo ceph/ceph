@@ -2069,11 +2069,23 @@ main(int argc, char **argv)
 			randomoplen = 0;
 			break;
 		case 'P':
-			strncpy(dirpath, optarg, sizeof(dirpath));
-			strncpy(goodfile, dirpath, sizeof(goodfile));
-			strcat(goodfile, "/");
+			strncpy(dirpath, optarg, sizeof(dirpath)-1);
+			dirpath[sizeof(dirpath)-1] = '\0';
+			strncpy(goodfile, dirpath, sizeof(goodfile)-1);
+			goodfile[sizeof(goodfile)-1] = '\0';
+			if (strlen(goodfile) < sizeof(goodfile)-2) {
+				strcat(goodfile, "/");
+			} else {
+				prt("file name to long\n");
+				exit(1);
+			}
 			strncpy(logfile, dirpath, sizeof(logfile));
-			strcat(logfile, "/");
+			if (strlen(logfile) < sizeof(logfile)-2) {
+				strcat(logfile, "/");
+			} else {
+				prt("file path to long\n");
+				exit(1);
+			}
 			break;
                 case 'R':
                         mapped_reads = 0;
