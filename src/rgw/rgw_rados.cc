@@ -1167,8 +1167,6 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
 
   obj_ctx.set_atomic(head_obj);
 
-  RGWRados::PutObjMetaExtraParams extra_params;
-
   RGWRados::Object op_target(store, obj_ctx, head_obj);
   RGWRados::Object::Write obj_op(&op_target);
 
@@ -2904,7 +2902,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   index_tag = state->write_tag;
 
   RGWRados::Bucket bop(store, bucket);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, *state);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj(), state);
 
   r = index_op.prepare(CLS_RGW_OP_ADD);
   if (r < 0)
@@ -2943,7 +2941,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 done_cancel:
   int ret = index_op.cancel();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: index_op.cancel()() returned ret=" << ret << dendl;
   }
 
   /* we lost in a race. There are a few options:
@@ -3955,8 +3953,11 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
 
   bool ret_not_existed = (state && !state->exists);
 
+  RGWRados::Bucket bop(this, bucket);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
+
   string tag;
-  r = prepare_update_index(state, bucket, CLS_RGW_OP_DEL, obj, tag);
+  r = index_op.prepare(CLS_RGW_OP_DEL);
   if (r < 0)
     return r;
 
@@ -3970,12 +3971,11 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0 || r == -ENOENT) {
-    uint64_t epoch = ref.ioctx.get_last_version();
-    r = complete_update_index_del(bucket, obj, tag, poolid, epoch);
+    r = index_op.complete_del(poolid, ref.ioctx.get_last_version());
   } else {
-    int ret = complete_update_index_cancel(bucket, obj, tag);
+    int ret = index_op.cancel();
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: complete_update_index_cancel returned ret=" << ret << dendl;
+      ldout(cct, 0) << "ERROR: index_op.cancel() returned ret=" << ret << dendl;
     }
   }
   if (removed) {
@@ -4043,7 +4043,10 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   string tag;
-  int r = complete_update_index_del(bucket, obj, tag, -1 /* pool */, 0);
+  RGWRados::Bucket bop(this, bucket);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
+
+  int r = index_op.complete_del(-1 /* pool */, 0);
 
   return r;
 }
@@ -4752,43 +4755,14 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
     return ret;
   }
 
-  if (obj_state.write_tag.length()) {
-    optag = string(obj_state.write_tag.c_str(), obj_state.write_tag.length());
+  if (obj_state && obj_state->write_tag.length()) {
+    optag = string(obj_state->write_tag.c_str(), obj_state->write_tag.length());
   } else {
     if (optag.empty()) {
       append_rand_alpha(store->ctx(), optag, optag, 32);
     }
   }
-  ret = store->cls_obj_prepare_op(bucket, op, optag, obj_state.obj);
-
-  return ret;
-}
-
-int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
-                                   RGWModifyOp op, rgw_obj& obj, string& tag)
-#warning remove me when done
-{
-  if (bucket_is_system(bucket))
-    return 0;
-
-  int ret = data_log->add_entry(obj.bucket);
-  if (ret < 0) {
-    lderr(cct) << "ERROR: failed writing data log" << dendl;
-    return ret;
-  }
-
-  if (state && state->obj_tag.length()) {
-    int len = state->obj_tag.length();
-    char buf[len + 1];
-    memcpy(buf, state->obj_tag.c_str(), len);
-    buf[len] = '\0';
-    tag = buf;
-  } else {
-    if (tag.empty()) {
-      append_rand_alpha(cct, tag, tag, 32);
-    }
-  }
-  ret = cls_obj_prepare_op(bucket, op, tag, obj);
+  ret = store->cls_obj_prepare_op(bucket, op, optag, obj);
 
   return ret;
 }
@@ -4801,7 +4775,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   rgw_bucket& bucket = target->get_bucket();
 
   RGWObjEnt ent;
-  obj_state.obj.get_index_key(&ent.key);
+  obj.get_index_key(&ent.key);
   ent.size = size;
   ent.mtime = ut;
   ent.etag = etag;
@@ -4821,39 +4795,17 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   return ret;
 }
 
+int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch)
+{
+  RGWRados *store = target->get_store();
+  return store->cls_obj_complete_del(target->get_bucket(), optag, poolid, epoch, obj);
+}
+
+
 int RGWRados::Bucket::UpdateIndex::cancel()
 {
   RGWRados *store = target->get_store();
-  return store->cls_obj_complete_cancel(target->get_bucket(), optag, obj_state.obj);
-}
-
-int RGWRados::complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
-                                    utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-                                    list<rgw_obj_key> *remove_objs)
-#warning remove me when done
-{
-  if (bucket_is_system(bucket))
-    return 0;
-
-  RGWObjEnt ent;
-  obj.get_index_key(&ent.key);
-  ent.size = size;
-  ent.mtime = ut;
-  ent.etag = etag;
-  ACLOwner owner;
-  if (acl_bl && acl_bl->length()) {
-    int ret = decode_policy(*acl_bl, &owner);
-    if (ret < 0) {
-      ldout(cct, 0) << "WARNING: could not decode policy ret=" << ret << dendl;
-    }
-  }
-  ent.owner = owner.get_id();
-  ent.owner_display_name = owner.get_display_name();
-  ent.content_type = content_type;
-
-  int ret = cls_obj_complete_add(bucket, tag, poolid, epoch, ent, category, remove_objs);
-
-  return ret;
+  return store->cls_obj_complete_cancel(target->get_bucket(), optag, obj);
 }
 
 int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
