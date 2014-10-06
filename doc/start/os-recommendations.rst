@@ -11,15 +11,27 @@ We also recommend deploying on releases with long-term support.
 Linux Kernel
 ------------
 
-- **Ceph Kernel Client:**  We currently recommend:
+- **Ceph Kernel Client**
 
-  - NOT v3.15 (there is a deadlock regression)
-  - v3.14 or later (but not v3.15)
+  We currently recommend:
+
+  - v3.16.3 or later (rbd deadlock regression in v3.16.[0-2])
+  - *NOT* v3.15.* (rbd deadlock regression)
+  - v3.14.*
+  - v3.10.*
+
+  These are considered pretty old, but if you must:
+
   - v3.6.6 or later in the v3.6 stable series
   - v3.4.20 or later in the v3.4 stable series
 
-- **btrfs**: If you use the ``btrfs`` file system with Ceph, we recommend using 
-  a recent Linux kernel (v3.14 or later).
+  firefly (CRUSH_TUNABLES3) tunables are supported starting with v3.15.
+  See `CRUSH Tunables`_ for more details.
+
+- **btrfs**
+
+  If you use the ``btrfs`` file system with Ceph, we recommend using a
+  recent Linux kernel (v3.14 or later).
 
 glibc
 -----
@@ -237,3 +249,5 @@ Testing
 - **C**: We run a comprehensive functional, regression, and stress test suite
   on this platform on a continuous basis. This includes development branches,
   pre-release, and released code.
+
+.. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
