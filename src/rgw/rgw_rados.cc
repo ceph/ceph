@@ -2828,7 +2828,10 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   ObjectWriteOperation op;
 
-  RGWObjState *state = NULL;
+  RGWObjState *state;
+  r = target->get_state(&state);
+  if (r < 0)
+    return r;
 
   bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
   r = target->prepare_atomic_modification(op, reset_obj, meta.ptag, meta.if_match, meta.if_nomatch);
