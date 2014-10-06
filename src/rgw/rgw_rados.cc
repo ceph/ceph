@@ -2920,7 +2920,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 
   r = target->complete_atomic_modification();
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
+    ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
   r = index_op.complete(poolid, epoch, size,
@@ -3792,31 +3792,6 @@ int RGWRados::Object::complete_atomic_modification()
   return ret;
 }
 
-int RGWRados::complete_atomic_overwrite(ObjectCtx *rctx, RGWObjState *state, rgw_obj& obj)
-#warning remove me when done
-{
-  if (!state || !state->has_manifest || state->keep_tail)
-    return 0;
-
-  cls_rgw_obj_chain chain;
-  RGWObjManifest::obj_iterator iter;
-  for (iter = state->manifest.obj_begin(); iter != state->manifest.obj_end(); ++iter) {
-    const rgw_obj& mobj = iter.get_location();
-    if (mobj == obj)
-      continue;
-    string oid, loc;
-    rgw_bucket bucket;
-    get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
-    cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
-    chain.push_obj(bucket.data_pool, key, loc);
-  }
-
-  string tag = state->obj_tag.c_str();
-  int ret = gc->send_chain(chain, tag, false);  // do it async
-
-  return ret;
-}
-
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx, string& bucket_oid)
 {
   if (bucket_is_system(bucket))
@@ -3979,7 +3954,7 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
     }
   }
   if (removed) {
-    int ret = complete_atomic_overwrite(rctx, state, obj);
+    int ret = index_op.complete_atomic_modification();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: complete_atomic_removal returned ret=" << ret << dendl;
     }
