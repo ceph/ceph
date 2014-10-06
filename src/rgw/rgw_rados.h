@@ -1428,36 +1428,20 @@ public:
     class UpdateIndex {
       RGWRados::Bucket *target;
       string optag;
-      RGWObjState& obj_state;
+      rgw_obj obj;
+      RGWObjState *obj_state;
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, RGWObjState& _state) : target(_target), obj_state(_state) {}
+      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state) {}
 
       int prepare(RGWModifyOp);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
                    utime_t& ut, string& etag, string& content_type,
                    bufferlist *acl_bl, RGWObjCategory category,
 		   list<rgw_obj_key> *remove_objs);
+      int complete_del(int64_t poolid, uint64_t epoch);
       int cancel();
     };
-  };
-
-  struct PutObjMetaExtraParams {
-    time_t *mtime;
-    map<std::string, bufferlist>* rmattrs;
-    const bufferlist *data;
-    RGWObjManifest *manifest;
-    const string *ptag;
-    list<rgw_obj_key> *remove_objs;
-    bool modify_version;
-    RGWObjVersionTracker *objv_tracker;
-    time_t set_mtime;
-    string owner;
-
-    PutObjMetaExtraParams() : mtime(NULL), rmattrs(NULL),
-                     data(NULL), manifest(NULL), ptag(NULL),
-                     remove_objs(NULL), modify_version(false),
-                     objv_tracker(NULL), set_mtime(0) {}
   };
 
   /** Write/overwrite an object to the bucket storage. */
@@ -1749,24 +1733,6 @@ public:
                       rgw_obj_key *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
   int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
-  int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
-                           RGWModifyOp op, rgw_obj& oid, string& tag);
-  int complete_update_index(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
-                            utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
-			    list<rgw_obj_key> *remove_objs);
-  int complete_update_index_del(rgw_bucket& bucket, rgw_obj& obj, string& tag, int64_t pool, uint64_t epoch) {
-    if (bucket_is_system(bucket))
-      return 0;
-
-    return cls_obj_complete_del(bucket, tag, pool, epoch, obj);
-  }
-  int complete_update_index_cancel(rgw_bucket& bucket, rgw_obj& obj, string& tag) {
-#warning remove me when done
-    if (bucket_is_system(bucket))
-      return 0;
-
-    return cls_obj_complete_cancel(bucket, tag, obj);
-  }
   int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
 
