@@ -12,7 +12,7 @@
  * 
  */
 
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
@@ -114,11 +114,11 @@ int MonClient::get_monmap_privately()
   Mutex::Locker l(monc_lock);
 
   bool temp_msgr = false;
-  SimpleMessenger* smessenger = NULL;
+  Messenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = new SimpleMessenger(cct,
-                                                 entity_name_t::CLIENT(-1),
-                                                 "temp_mon_client", getpid());
+    messenger = smessenger = Messenger::create(cct,
+					       entity_name_t::CLIENT(-1),
+					       "temp_mon_client", getpid());
     messenger->add_dispatcher_head(this);
     smessenger->start();
     temp_msgr = true;
@@ -213,9 +213,9 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 
   MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
 
-  Messenger *smsgr = new SimpleMessenger(cct,
-                                         entity_name_t::CLIENT(-1),
-                                         "temp_ping_client", getpid());
+  Messenger *smsgr = Messenger::create(cct,
+				       entity_name_t::CLIENT(-1),
+				       "temp_ping_client", getpid());
   smsgr->add_dispatcher_head(pinger);
   smsgr->start();
 
