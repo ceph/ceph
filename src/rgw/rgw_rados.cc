@@ -3891,6 +3891,7 @@ int RGWRados::Object::Delete::delete_obj()
   r = ref.ioctx.operate(ref.oid, &op);
   if (r == -ECANCELED) {
     /* raced with another operation, we can regard it as removed */
+    state->clear();
     r = 0;
   }
   bool removed = (r >= 0);
@@ -3911,8 +3912,6 @@ int RGWRados::Object::Delete::delete_obj()
     }
     /* other than that, no need to propagate error */
   }
-
-  store->atomic_write_finish(state, r);
 
   if (r < 0)
     return r;
@@ -4219,7 +4218,7 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
   bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0)) && (!state->fake_tag);
 
   if (!state->is_atomic) {
-    ldout(store->ctx(), 20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
+    ldout(store->ctx(), 20) << "prepare_atomic_modification: state is not atomic. state=" << (void *)state << dendl;
 
     if (reset_obj) {
       op.create(false);
@@ -4257,75 +4256,6 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
   op.setxattr(RGW_ATTR_ID_TAG, bl);
 
   return 0;
-}
-
-int RGWRados::prepare_atomic_for_write_impl(ObjectCtx *rctx, rgw_obj& obj,
-                            ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj, const string *ptag)
-#warning remove me when done
-{
-  int r = get_obj_state(rctx, obj, pstate, NULL, false);
-  if (r < 0)
-    return r;
-
-  RGWObjState *state = *pstate;
-
-  bool need_guard = (state->has_manifest || (state->obj_tag.length() != 0)) && (!state->fake_tag);
-
-  if (!state->is_atomic) {
-    ldout(cct, 20) << "prepare_atomic_for_write_impl: state is not atomic. state=" << (void *)state << dendl;
-
-    if (reset_obj) {
-      op.create(false);
-      remove_rgw_head_obj(op); // we're not dropping reference here, actually removing object
-    }
-
-    return 0;
-  }
-
-  if (need_guard) {
-    /* first verify that the object wasn't replaced under */
-    op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state->obj_tag);
-    // FIXME: need to add FAIL_NOTEXIST_OK for racing deletion
-  }
-
-  if (reset_obj) {
-    if (state->exists) {
-      op.create(false);
-      remove_rgw_head_obj(op);
-    } else {
-      op.create(true);
-    }
-  }
-
-  if (ptag) {
-    state->write_tag = *ptag;
-  } else {
-    append_rand_alpha(cct, state->write_tag, state->write_tag, 32);
-  }
-  bufferlist bl;
-  bl.append(state->write_tag.c_str(), state->write_tag.size() + 1);
-
-  ldout(cct, 10) << "setting object write_tag=" << state->write_tag << dendl;
-
-  op.setxattr(RGW_ATTR_ID_TAG, bl);
-
-  return 0;
-}
-
-int RGWRados::prepare_atomic_for_write(ObjectCtx *rctx, rgw_obj& obj,
-                            ObjectWriteOperation& op, RGWObjState **pstate,
-			    bool reset_obj, const string *ptag)
-{
-  if (!rctx) {
-    *pstate = NULL;
-    return 0;
-  }
-
-  int r;
-  r = prepare_atomic_for_write_impl(rctx, obj, op, pstate, reset_obj, ptag);
-
-  return r;
 }
 
 /**

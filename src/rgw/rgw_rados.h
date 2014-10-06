@@ -1194,20 +1194,6 @@ private:
   int get_obj_state_impl(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
   int append_atomic_test(ObjectCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
-  int prepare_atomic_for_write_impl(ObjectCtx *rctx, rgw_obj& obj,
-                         librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag);
-  int prepare_atomic_for_write(ObjectCtx *rctx, rgw_obj& obj,
-                         librados::ObjectWriteOperation& op, RGWObjState **pstate,
-			 bool reset_obj, const string *ptag);
-
-  void atomic_write_finish(RGWObjState *state, int r) {
-    if (state && r == -ECANCELED) {
-      state->clear();
-    }
-  }
-
-  int complete_atomic_overwrite(ObjectCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
   int store_bucket_info(RGWBucketInfo& info, map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
