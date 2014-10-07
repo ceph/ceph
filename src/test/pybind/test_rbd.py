@@ -1,16 +1,19 @@
+# vim: expandtab smarttab shiftwidth=4 softtabstop=4
 import functools
 import random
 import socket
 import struct
 import os
 
+from contextlib import nested
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises
 from rados import Rados
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
-                 RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2)
+                 RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
+                 RBD_FEATURE_EXCLUSIVE_LOCK)
 
 
 rados = None
@@ -121,7 +124,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
 
                     expected_features = features
                     if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 3
+                        expected_features = 0 if format == 1 else 7
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -888,3 +891,27 @@ class TestClone(object):
         self.rbd.remove(ioctx, clone_name3)
         self.clone.unprotect_snap('snap2')
         self.clone.remove_snap('snap2')
+
+class TestExclusiveLock(object):
+
+    @require_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    def setUp(self):
+        global rados2
+        rados2 = Rados(conffile='')
+        rados2.connect()
+        global ioctx2
+        ioctx2 = rados2.open_ioctx(pool_name)
+        create_image()
+
+    def tearDown(self):
+        remove_image()
+        global ioctx2
+        ioctx2.__del__()
+        global rados2
+        rados2.shutdown()
+
+    def test_ownership(self):
+        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
+                image1, image2):
+            eq(image1.is_exclusive_lock_owner(), False)
+            eq(image2.is_exclusive_lock_owner(), False)

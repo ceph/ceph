@@ -155,6 +155,10 @@ CEPH_RBD_API int rbd_get_parent_info(rbd_image_t image,
 			             char *parent_name, size_t pnamelen,
 			             char *parent_snapname,
                                      size_t psnapnamelen);
+
+/* exclusive lock feature */
+CEPH_RBD_API int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner);
+
 CEPH_RBD_API int rbd_copy(rbd_image_t image, rados_ioctx_t dest_io_ctx,
                           const char *destname);
 CEPH_RBD_API int rbd_copy2(rbd_image_t src, rbd_image_t dest);

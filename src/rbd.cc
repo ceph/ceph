@@ -165,6 +165,8 @@ static string feature_str(uint64_t feature)
     return "layering";
   case RBD_FEATURE_STRIPINGV2:
     return "striping";
+  case RBD_FEATURE_EXCLUSIVE_LOCK:
+    return "exclusive";
   default:
     return "";
   }
@@ -174,7 +176,7 @@ static string features_str(uint64_t features)
 {
   string s = "";
 
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_EXCLUSIVE_LOCK;
        feature <<= 1) {
     if (feature & features) {
       if (s.size())
@@ -188,7 +190,7 @@ static string features_str(uint64_t features)
 static void format_features(Formatter *f, uint64_t features)
 {
   f->open_array_section("features");
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_STRIPINGV2;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_EXCLUSIVE_LOCK;
        feature <<= 1) {
     f->dump_string("feature", feature_str(feature));
   }
@@ -428,7 +430,7 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     r = rbd.create(io_ctx, imgname, size, order);
   } else {
     if (features == 0) {
-      features = RBD_FEATURE_LAYERING;
+      features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
     }
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
