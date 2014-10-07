@@ -610,6 +610,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   if (command == "query") {
     f->open_object_section("pg");
     f->dump_string("state", pg_state_string(get_state()));
+    f->dump_stream("snap_trimq") << snap_trimq;
     f->dump_unsigned("epoch", get_osdmap()->get_epoch());
     f->open_array_section("up");
     for (vector<int>::iterator p = up.begin(); p != up.end(); ++p)
@@ -2658,10 +2659,6 @@ void ReplicatedPG::snap_trimmer()
 	     last_complete_ondisk.epoch > info.history.last_epoch_started) {
     // replica collection trimming
     snap_trimmer_machine.process_event(SnapTrim());
-  }
-  if (snap_trimmer_machine.requeue) {
-    dout(10) << "snap_trimmer requeue" << dendl;
-    queue_snap_trim();
   }
   unlock();
   return;
@@ -12249,13 +12246,11 @@ ReplicatedPG::NotTrimming::NotTrimming(my_context ctx)
   : my_base(ctx), 
     NamedState(context< SnapTrimmer >().pg->cct, "NotTrimming")
 {
-  context< SnapTrimmer >().requeue = false;
   context< SnapTrimmer >().log_enter(state_name);
 }
 
 void ReplicatedPG::NotTrimming::exit()
 {
-  context< SnapTrimmer >().requeue = true;
   context< SnapTrimmer >().log_exit(state_name, enter_time);
 }
 
@@ -12315,32 +12310,45 @@ boost::statechart::result ReplicatedPG::TrimmingObjects::react(const SnapTrim&)
 
   dout(10) << "TrimmingObjects: trimming snap " << snap_to_trim << dendl;
 
-  // Get next
-  hobject_t old_pos = pos;
-  int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
-  if (r != 0 && r != -ENOENT) {
-    derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
-    assert(0);
-  } else if (r == -ENOENT) {
-    // Done!
-    dout(10) << "TrimmingObjects: got ENOENT" << dendl;
-    post_event(SnapTrim());
-    return transit< WaitingOnReplicas >();
+  for (set<RepGather *>::iterator i = repops.begin();
+       i != repops.end(); 
+       ) {
+    if ((*i)->all_applied && (*i)->all_committed) {
+      (*i)->put();
+      repops.erase(i++);
+    } else {
+      ++i;
+    }
   }
 
-  dout(10) << "TrimmingObjects react trimming " << pos << dendl;
-  RepGather *repop = pg->trim_object(pos);
-  if (!repop) {
-    dout(10) << __func__ << " could not get write lock on obj "
-	     << pos << dendl;
-    pos = old_pos;
-    return discard_event();
-  }
-  assert(repop);
-  repop->queue_snap_trimmer = true;
+  while (repops.size() < g_conf->osd_pg_max_concurrent_snap_trims) {
+    // Get next
+    hobject_t old_pos = pos;
+    int r = pg->snap_mapper.get_next_object_to_trim(snap_to_trim, &pos);
+    if (r != 0 && r != -ENOENT) {
+      derr << __func__ << ": get_next returned " << cpp_strerror(r) << dendl;
+      assert(0);
+    } else if (r == -ENOENT) {
+      // Done!
+      dout(10) << "TrimmingObjects: got ENOENT" << dendl;
+      post_event(SnapTrim());
+      return transit< WaitingOnReplicas >();
+    }
 
-  repops.insert(repop->get());
-  pg->simple_repop_submit(repop);
+    dout(10) << "TrimmingObjects react trimming " << pos << dendl;
+    RepGather *repop = pg->trim_object(pos);
+    if (!repop) {
+      dout(10) << __func__ << " could not get write lock on obj "
+	       << pos << dendl;
+      pos = old_pos;
+      return discard_event();
+    }
+    assert(repop);
+    repop->queue_snap_trimmer = true;
+
+    repops.insert(repop->get());
+    pg->simple_repop_submit(repop);
+  }
   return discard_event();
 }
 /* WaitingOnReplicasObjects */
@@ -12349,7 +12357,6 @@ ReplicatedPG::WaitingOnReplicas::WaitingOnReplicas(my_context ctx)
     NamedState(context< SnapTrimmer >().pg->cct, "Trimming/WaitingOnReplicas")
 {
   context< SnapTrimmer >().log_enter(state_name);
-  context< SnapTrimmer >().requeue = false;
 }
 
 void ReplicatedPG::WaitingOnReplicas::exit()
@@ -12374,7 +12381,7 @@ boost::statechart::result ReplicatedPG::WaitingOnReplicas::react(const SnapTrim&
   for (set<RepGather *>::iterator i = repops.begin();
        i != repops.end();
        repops.erase(i++)) {
-    if (!(*i)->all_applied) {
+    if (!(*i)->all_applied || !(*i)->all_committed) {
       return discard_event();
     } else {
       (*i)->put();
