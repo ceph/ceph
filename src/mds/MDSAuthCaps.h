@@ -68,6 +68,7 @@ class MDSAuthCaps
     std::vector<MDSCapGrant> grants;
 
     public:
+    void set_allow_all();
     bool parse(const std::string &str, std::ostream *err);
     MDSAuthCaps() {}
     MDSAuthCaps(const std::vector<MDSCapGrant> &grants_) : grants(grants_) {}
