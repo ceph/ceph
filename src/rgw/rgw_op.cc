@@ -203,14 +203,14 @@ static int get_bucket_policy_from_attr(CephContext *cct, RGWRados *store, void *
   return 0;
 }
 
-static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
+static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWRados::ObjectCtx& obj_ctx,
                                     RGWBucketInfo& bucket_info, map<string, bufferlist>& bucket_attrs,
                                     RGWAccessControlPolicy *policy, rgw_obj& obj)
 {
   bufferlist bl;
   int ret = 0;
 
-  ret = store->get_attr(ctx, obj, RGW_ATTR_ACL, bl);
+  ret = store->get_attr(obj_ctx, obj, RGW_ATTR_ACL, bl);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -250,7 +250,7 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
     return get_bucket_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
                                        policy, instance_obj);
   }
-  return get_obj_policy_from_attr(cct, store, ctx, bucket_info, bucket_attrs,
+  return get_obj_policy_from_attr(cct, store, *(RGWRados::ObjectCtx *)ctx, bucket_info, bucket_attrs,
                                   policy, obj);
 }
 
@@ -628,8 +628,8 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
 
-  uint64_t cur_ofs = start_ofs;
-  uint64_t cur_end = end_ofs;
+  int64_t cur_ofs = start_ofs;
+  int64_t cur_end = end_ofs;
   utime_t start_time = s->time;
 
   rgw_obj part(bucket, ent.key);
@@ -865,7 +865,7 @@ void RGWGetObj::execute()
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
-  uint64_t new_ofs, new_end;
+  int64_t new_ofs, new_end;
 
   RGWRados::Object op_target(store, *(RGWRados::ObjectCtx *)s->obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -914,7 +914,7 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  ret = store->get_obj_iterate(s->obj_ctx, &handle, obj, ofs, end, &cb);
+  ret = store->get_obj_iterate(s->obj_ctx, read_op, obj, ofs, end, &cb);
 
   perfcounter->tinc(l_rgw_get_lat,
                    (ceph_clock_now(s->cct) - start_time));
