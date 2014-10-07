@@ -377,6 +377,9 @@ unittest_pglog_SOURCES = test/osd/TestPGLog.cc
 unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_pglog
+if LINUX
+unittest_pglog_LDADD += -ldl
+endif # LINUX
 
 unittest_ecbackend_SOURCES = test/osd/TestECBackend.cc
 unittest_ecbackend_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -393,9 +396,10 @@ unittest_lru_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_lru_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_lru
 
-if LINUX
-unittest_pglog_LDADD += -ldl
-endif # LINUX
+unittest_io_priority_SOURCES = test/common/test_io_priority.cc
+unittest_io_priority_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_io_priority_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_io_priority
 
 unittest_gather_SOURCES = test/gather.cc
 unittest_gather_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
