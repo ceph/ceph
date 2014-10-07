@@ -254,7 +254,18 @@ static int get_policy_from_attr(CephContext *cct, RGWRados *store, void *ctx,
                                   policy, obj);
 }
 
-static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
+static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+{
+  RGWRados::Object op_target(store, *(RGWRados::ObjectCtx *)s->obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.perr = &s->err;
+
+  return read_op.prepare(NULL, NULL);
+}
+
+static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
                          uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
 {
   void *handle;
@@ -617,9 +628,8 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
 
-  void *handle = NULL;
-  off_t cur_ofs = start_ofs;
-  off_t cur_end = end_ofs;
+  uint64_t cur_ofs = start_ofs;
+  uint64_t cur_end = end_ofs;
   utime_t start_time = s->time;
 
   rgw_obj part(bucket, ent.key);
@@ -627,40 +637,45 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
   map<string, bufferlist> attrs;
 
   uint64_t obj_size;
-  void *obj_ctx = store->create_context(s);
+  RGWRados::ObjectCtx obj_ctx(store);
   RGWAccessControlPolicy obj_policy(s->cct);
 
   ldout(s->cct, 20) << "reading obj=" << part << " ofs=" << cur_ofs << " end=" << cur_end << dendl;
 
-  store->set_atomic(obj_ctx, part);
-  store->set_prefetch_data(obj_ctx, part);
-  ret = store->prepare_get_obj(obj_ctx, part, &cur_ofs, &cur_end, &attrs, NULL,
-                                  NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, &s->err);
+  obj_ctx.set_atomic(part);
+  store->set_prefetch_data(&obj_ctx, part);
+
+  RGWRados::Object op_target(store, obj_ctx, part);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.obj_size = &obj_size;
+  read_op.params.perr = &s->err;
+
+  ret = read_op.prepare(&cur_ofs, &cur_end);
   if (ret < 0)
-    goto done_err;
+    return ret;
 
   if (obj_size != ent.size) {
     // hmm.. something wrong, object not as expected, abort!
     ldout(s->cct, 0) << "ERROR: expected obj_size=" << obj_size << ", actual read size=" << ent.size << dendl;
-    ret = -EIO;
-    goto done_err;
+    return -EIO;
   }
 
   ret = rgw_policy_from_attrset(s->cct, attrs, &obj_policy);
   if (ret < 0)
-    goto done_err;
+    return ret;
 
   if (!verify_object_permission(s, bucket_policy, &obj_policy, RGW_PERM_READ)) {
-    ret = -EPERM;
-    goto done_err;
+    return -EPERM;
   }
 
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   while (cur_ofs <= cur_end) {
     bufferlist bl;
-    ret = store->get_obj(obj_ctx, NULL, &handle, part, bl, cur_ofs, cur_end, NULL);
+    ret = read_op.read(cur_ofs, cur_end, bl);
     if (ret < 0)
-      goto done_err;
+      return ret;
 
     off_t len = bl.length();
     cur_ofs += len;
@@ -673,17 +688,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket, RGWObjEnt& ent, RGWAc
     start_time = ceph_clock_now(s->cct);
   }
 
-  store->destroy_context(obj_ctx);
-  obj_ctx = NULL;
-
-  store->finish_get_obj(&handle);
-
   return 0;
-
-done_err:
-  if (obj_ctx)
-    store->destroy_context(obj_ctx);
-  return ret;
 }
 
 static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t ofs, off_t end,
@@ -860,7 +865,10 @@ void RGWGetObj::execute()
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
-  off_t new_ofs, new_end;
+  uint64_t new_ofs, new_end;
+
+  RGWRados::Object op_target(store, *(RGWRados::ObjectCtx *)s->obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
 
   ret = get_params();
   if (ret < 0)
@@ -873,8 +881,17 @@ void RGWGetObj::execute()
   new_ofs = ofs;
   new_end = end;
 
-  ret = store->prepare_get_obj(s->obj_ctx, obj, &new_ofs, &new_end, &attrs, mod_ptr,
-                               unmod_ptr, &lastmod, if_match, if_nomatch, &total_len, &s->obj_size, NULL, &handle, &s->err);
+  read_op.conds.mod_ptr = mod_ptr;
+  read_op.conds.unmod_ptr = unmod_ptr;
+  read_op.conds.if_match = if_match;
+  read_op.conds.if_nomatch = if_nomatch;
+  read_op.params.attrs = &attrs;
+  read_op.params.lastmod = &lastmod;
+  read_op.params.read_size = &total_len;
+  read_op.params.obj_size = &s->obj_size;
+  read_op.params.perr = &s->err;
+
+  ret = read_op.prepare(&new_ofs, &new_end);
   if (ret < 0)
     goto done_err;
 
@@ -1603,7 +1620,7 @@ int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWA
 
   map<string, bufferlist> attrs;
 
-  int ret = get_obj_attrs(store, s, part, attrs, NULL, NULL);
+  int ret = get_obj_attrs(store, s, part, attrs);
   if (ret < 0) {
     return ret;
   }
@@ -2003,13 +2020,25 @@ void RGWPutMetadata::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  /* no need to track object versioning, need it for bucket's data only */
-  RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
+  bool is_object_op = (!s->object.empty());
+  RGWObjVersionTracker *ptracker = NULL;
 
-  /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
-  if (ret < 0)
-    return;
+  if (is_object_op) {
+    /* no need to track object versioning, need it for bucket's data only */
+    ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
+
+    /* check if obj exists, read orig attrs */
+    ret = get_obj_attrs(store, s, obj, orig_attrs);
+    if (ret < 0)
+      return;
+  } else {
+    RGWObjVersionTracker *ptracker = &s->bucket_info.objv_tracker;
+
+    /* check if obj exists, read orig attrs */
+    ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
+    if (ret < 0)
+      return;
+  }
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
@@ -2036,7 +2065,7 @@ void RGWPutMetadata::execute()
     cors_config.encode(cors_bl);
     attrs[RGW_ATTR_CORS] = cors_bl;
   }
-  if (!s->object.empty()) {
+  if (is_object_op) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
   } else {
     ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
@@ -2493,12 +2522,21 @@ void RGWDeleteCORS::execute()
   map<string, bufferlist> orig_attrs, attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
 
-  RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
+  bool is_object_op = (!s->object.empty());
+  RGWObjVersionTracker *ptracker = NULL;
 
-  /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
-  if (ret < 0)
-    return;
+
+  if (is_object_op) {
+    /* check if obj exists, read orig attrs */
+    ret = get_obj_attrs(store, s, obj, orig_attrs);
+    if (ret < 0)
+      return;
+  } else {
+    ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
+    ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
+    if (ret < 0)
+      return;
+  }
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
@@ -2510,7 +2548,11 @@ void RGWDeleteCORS::execute()
       attrs[name] = iter->second;
     }
   }
-  ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
+  if (is_object_op) {
+    ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
+  } else {
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
+  }
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -2639,7 +2681,7 @@ static int get_multipart_info(RGWRados *store, struct req_state *s, string& meta
   obj.init_ns(s->bucket, meta_oid, mp_ns);
   obj.set_in_extra_data(true);
 
-  int ret = get_obj_attrs(store, s, obj, attrs, NULL, NULL);
+  int ret = get_obj_attrs(store, s, obj, attrs);
   if (ret < 0)
     return ret;
 
@@ -2836,7 +2878,7 @@ void RGWCompleteMultipart::execute()
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
 
-  ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
+  ret = get_obj_attrs(store, s, meta_obj, attrs);
   if (ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj << " ret=" << ret << dendl;
     return;
