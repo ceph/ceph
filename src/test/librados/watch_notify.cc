@@ -45,11 +45,13 @@ const char *notify_oid = 0;
 static void watch_notify2_test_cb(void *arg,
 				  uint64_t notify_id,
 				  uint64_t handle,
+				  uint64_t notifier_gid,
 				  void *data,
 				  size_t data_len)
 {
-  std::cout << __func__ << " notify_id " << notify_id
+  std::cout << __func__ << " from " << notifier_gid << " notify_id " << notify_id
 	    << " handle " << handle << std::endl;
+  assert(notifier_gid > 0);
   notify_bl.clear();
   notify_bl.append((char*)data, data_len);
   if (notify_sleep)
@@ -61,7 +63,8 @@ IoCtx *notify_ioctx;
 class WatchNotifyTestCtx2 : public WatchCtx2
 {
 public:
-  void handle_notify(uint64_t notify_id, uint64_t cookie, bufferlist& bl)
+  void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
+		     bufferlist& bl)
   {
     std::cout << __func__ << std::endl;
     notify_bl = bl;

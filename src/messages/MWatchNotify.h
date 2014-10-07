@@ -20,7 +20,7 @@
 
 
 class MWatchNotify : public Message {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -30,6 +30,7 @@ class MWatchNotify : public Message {
   uint8_t opcode;      ///< always WATCH_NOTIFY
   bufferlist bl;       ///< notify payload (osd->client)
   int32_t return_code; ///< notify result (osd->client)
+  uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
     : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
@@ -40,7 +41,8 @@ class MWatchNotify : public Message {
       notify_id(i),
       opcode(o),
       bl(b),
-      return_code(0) { }
+      return_code(0),
+      notifier_gid(0) { }
 private:
   ~MWatchNotify() {}
 
@@ -59,6 +61,10 @@ public:
       ::decode(return_code, p);
     else
       return_code = 0;
+    if (header.version >= 3)
+      ::decode(notifier_gid, p);
+    else
+      notifier_gid = 0;
   }
   void encode_payload(uint64_t features) {
     uint8_t msg_ver = 1;
@@ -69,6 +75,7 @@ public:
     ::encode(notify_id, payload);
     ::encode(bl, payload);
     ::encode(return_code, payload);
+    ::encode(notifier_gid, payload);
   }
 
   const char *get_type_name() const { return "watch-notify"; }

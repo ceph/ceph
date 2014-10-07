@@ -739,7 +739,8 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
 	bufferlist empty;
 	wc->io_ctx_impl->notify_ack(wc->oid, m->notify_id, m->cookie, empty);
       } else if (wc->watch_ctx2) {
-	wc->watch_ctx2->handle_notify(m->notify_id, m->cookie, m->bl);
+	wc->watch_ctx2->handle_notify(m->notify_id, m->cookie,
+				      m->notifier_gid, m->bl);
 	// user needs to explicitly ack (and may have already!)
       }
       lock.Lock();

@@ -158,10 +158,12 @@ namespace librados
     /**
      * @param notify_id unique id for this notify event
      * @param cookie the watcher we are notifying
+     * @param notifier_id the unique client id of the notifier
      * @param bl opaque notify payload (from the notifier)
      */
     virtual void handle_notify(uint64_t notify_id,
 			       uint64_t cookie,
+			       uint64_t notifier_id,
 			       bufferlist& bl) = 0;
   };
 
