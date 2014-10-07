@@ -30,7 +30,7 @@
 
 #include "messages/MWatchNotify.h"
 #include "messages/MLog.h"
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 // needed for static_cast
 #include "messages/PaxosServiceMessage.h"
@@ -222,7 +222,8 @@ int librados::RadosClient::connect()
 
   err = -ENOMEM;
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), "radosclient", nonce);
+  messenger = Messenger::create(cct, entity_name_t::CLIENT(-1),
+				"radosclient", nonce);
   if (!messenger)
     goto out;
 
