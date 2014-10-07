@@ -310,6 +310,12 @@ AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
 
+AC_ARG_ENABLE([docker],
+            [AS_HELP_STRING([--enable-docker], [enable docker based functional tests])],
+            [],
+            [enable_docker=no])
+AM_CONDITIONAL(ENABLE_DOCKER, test "x$enable_docker" != xno)
+
 # code coverage?
 AC_ARG_ENABLE([coverage],
             [AS_HELP_STRING([--enable-coverage], [enable code coverage tracking])],
