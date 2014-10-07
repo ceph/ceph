@@ -855,16 +855,9 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+  wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
-
-  if (paxos->is_writing() || paxos->is_writing_previous()) {
-    dout(10) << __func__ << " flushing" << dendl;
-    lock.Unlock();
-    store->flush();
-    lock.Lock();
-    dout(10) << __func__ << " flushed" << dendl;
-  }
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
@@ -911,15 +904,21 @@ void Monitor::shutdown()
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
-void Monitor::bootstrap()
+void Monitor::wait_for_paxos_write()
 {
   if (paxos->is_writing() || paxos->is_writing_previous()) {
-    dout(10) << "bootstrap flushing pending write" << dendl;
+    dout(10) << __func__ << " flushing pending write" << dendl;
     lock.Unlock();
     store->flush();
     lock.Lock();
+    dout(10) << __func__ << " flushed pending write" << dendl;
   }
+}
+
+void Monitor::bootstrap()
+{
   dout(10) << "bootstrap" << dendl;
+  wait_for_paxos_write();
 
   sync_reset_requester();
   unregister_cluster_logger();
@@ -1791,6 +1790,7 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
@@ -1800,6 +1800,7 @@ void Monitor::join_election()
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
@@ -2466,6 +2467,13 @@ void Monitor::handle_command(MMonCommand *m)
     forward_request_leader(m);
     return;
   }
+  
+  /* what we perceive as being the service the command falls under */
+  string service(mon_cmd->module);
+
+  dout(25) << __func__ << " prefix='" << prefix
+           << "' module='" << module
+           << "' service='" << service << "'" << dendl;
 
   bool cmd_is_rw =
     (mon_cmd->requires_perm('w') || mon_cmd->requires_perm('x'));
@@ -2473,7 +2481,7 @@ void Monitor::handle_command(MMonCommand *m)
   // validate user's permissions for requested command
   map<string,string> param_str_map;
   _generate_command_map(cmdmap, param_str_map);
-  if (!_allowed_command(session, module, prefix, cmdmap,
+  if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
@@ -2538,11 +2546,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
-    while (paxos->is_writing() || paxos->is_writing_previous()) {
-      lock.Unlock();
-      store->flush();
-      lock.Lock();
-    }
+    wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub();
       reply_command(m, r, "", rdata, 0);
@@ -3178,41 +3182,30 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
 {
   assert(m != NULL);
 
+  /* deal with all messages that do not necessarily need caps */
+  bool dealt_with = true;
   switch (m->get_type()) {
-
-    case MSG_ROUTE:
-      handle_route(static_cast<MRoute*>(m));
+    // auth
+    case MSG_MON_GLOBAL_ID:
+    case CEPH_MSG_AUTH:
+      /* no need to check caps here */
+      paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
       break;
 
-    // misc
-    case CEPH_MSG_MON_GET_MAP:
-      handle_mon_get_map(static_cast<MMonGetMap*>(m));
+    case CEPH_MSG_PING:
+      handle_ping(static_cast<MPing*>(m));
       break;
 
-    case CEPH_MSG_MON_GET_VERSION:
-      handle_get_version(static_cast<MMonGetVersion*>(m));
+    default:
+      dealt_with = false;
       break;
+  }
+  if (dealt_with)
+    return;
 
-    case MSG_MON_COMMAND:
-      handle_command(static_cast<MMonCommand*>(m));
-      break;
-
-    case CEPH_MSG_MON_SUBSCRIBE:
-      /* FIXME: check what's being subscribed, filter accordingly */
-      handle_subscribe(static_cast<MMonSubscribe*>(m));
-      break;
-
-    case MSG_MON_PROBE:
-      handle_probe(static_cast<MMonProbe*>(m));
-      break;
-
-    // Sync (i.e., the new slurp, but on steroids)
-    case MSG_MON_SYNC:
-      handle_sync(static_cast<MMonSync*>(m));
-      break;
-    case MSG_MON_SCRUB:
-      handle_scrub(static_cast<MMonScrub*>(m));
-      break;
+  /* deal with all messages which caps should be checked somewhere else */
+  dealt_with = true;
+  switch (m->get_type()) {
 
     // OSDs
     case MSG_OSD_MARK_ME_DOWN:
@@ -3220,9 +3213,6 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
     case MSG_OSD_BOOT:
     case MSG_OSD_ALIVE:
     case MSG_OSD_PGTEMP:
-      paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
-      break;
-
     case MSG_REMOVE_SNAPS:
       paxos_service[PAXOS_OSDMAP]->dispatch((PaxosServiceMessage*)m);
       break;
@@ -3233,12 +3223,6 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       paxos_service[PAXOS_MDSMAP]->dispatch((PaxosServiceMessage*)m);
       break;
 
-    // auth
-    case MSG_MON_GLOBAL_ID:
-    case CEPH_MSG_AUTH:
-      /* no need to check caps here */
-      paxos_service[PAXOS_AUTH]->dispatch((PaxosServiceMessage*)m);
-      break;
 
     // pg
     case CEPH_MSG_STATFS:
@@ -3256,6 +3240,81 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       paxos_service[PAXOS_LOG]->dispatch((PaxosServiceMessage*)m);
       break;
 
+    // handle_command() does its own caps checking
+    case MSG_MON_COMMAND:
+      handle_command(static_cast<MMonCommand*>(m));
+      break;
+
+    default:
+      dealt_with = false;
+      break;
+  }
+  if (dealt_with)
+    return;
+
+  /* messages we, the Monitor class, need to deal with
+   * but may be sent by clients. */
+
+  if (!s->is_capable("mon", MON_CAP_R)) {
+    dout(5) << __func__ << " " << m->get_source_inst()
+            << " not enough caps for " << *m << " -- dropping"
+            << dendl;
+    goto drop;
+  }
+
+  dealt_with = true;
+  switch (m->get_type()) {
+
+    // misc
+    case CEPH_MSG_MON_GET_MAP:
+      handle_mon_get_map(static_cast<MMonGetMap*>(m));
+      break;
+
+    case CEPH_MSG_MON_GET_VERSION:
+      handle_get_version(static_cast<MMonGetVersion*>(m));
+      break;
+
+    case CEPH_MSG_MON_SUBSCRIBE:
+      /* FIXME: check what's being subscribed, filter accordingly */
+      handle_subscribe(static_cast<MMonSubscribe*>(m));
+      break;
+
+    default:
+      dealt_with = false;
+      break;
+  }
+  if (dealt_with)
+    return;
+
+  if (!src_is_mon) {
+    dout(1) << __func__ << " unexpected monitor message from"
+            << " non-monitor entity " << m->get_source_inst()
+            << " " << *m << " -- dropping" << dendl;
+    goto drop;
+  }
+
+  /* messages that should only be sent by another monitor */
+  dealt_with = true;
+  switch (m->get_type()) {
+
+    case MSG_ROUTE:
+      handle_route(static_cast<MRoute*>(m));
+      break;
+
+    case MSG_MON_PROBE:
+      handle_probe(static_cast<MMonProbe*>(m));
+      break;
+
+    // Sync (i.e., the new slurp, but on steroids)
+    case MSG_MON_SYNC:
+      handle_sync(static_cast<MMonSync*>(m));
+      break;
+    case MSG_MON_SCRUB:
+      handle_scrub(static_cast<MMonScrub*>(m));
+      break;
+
+    /* log acks are sent from a monitor we sent the MLog to, and are
+       never sent by clients to us. */
     case MSG_LOGACK:
       log_client.handle_log_ack((MLogAck*)m);
       m->put();
@@ -3330,15 +3389,18 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
       health_monitor->dispatch(static_cast<MMonHealth *>(m));
       break;
 
-    case CEPH_MSG_PING:
-      handle_ping(static_cast<MPing*>(m));
-      break;
-
     default:
-      dout(1) << "dropping unexpected " << *m << dendl;
-      m->put();
+      dealt_with = false;
       break;
   }
+  if (!dealt_with) {
+    dout(1) << "dropping unexpected " << *m << dendl;
+    goto drop;
+  }
+  return;
+
+drop:
+  m->put();
 }
 
 void Monitor::handle_ping(MPing *m)
