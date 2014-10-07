@@ -855,16 +855,9 @@ void Monitor::shutdown()
   dout(1) << "shutdown" << dendl;
 
   lock.Lock();
+  wait_for_paxos_write();
 
   state = STATE_SHUTDOWN;
-
-  if (paxos->is_writing() || paxos->is_writing_previous()) {
-    dout(10) << __func__ << " flushing" << dendl;
-    lock.Unlock();
-    store->flush();
-    lock.Lock();
-    dout(10) << __func__ << " flushed" << dendl;
-  }
 
   if (admin_hook) {
     AdminSocket* admin_socket = cct->get_admin_socket();
@@ -911,15 +904,21 @@ void Monitor::shutdown()
   messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
 }
 
-void Monitor::bootstrap()
+void Monitor::wait_for_paxos_write()
 {
   if (paxos->is_writing() || paxos->is_writing_previous()) {
-    dout(10) << "bootstrap flushing pending write" << dendl;
+    dout(10) << __func__ << " flushing pending write" << dendl;
     lock.Unlock();
     store->flush();
     lock.Lock();
+    dout(10) << __func__ << " flushed pending write" << dendl;
   }
+}
+
+void Monitor::bootstrap()
+{
   dout(10) << "bootstrap" << dendl;
+  wait_for_paxos_write();
 
   sync_reset_requester();
   unregister_cluster_logger();
@@ -1774,6 +1773,7 @@ void Monitor::handle_probe_reply(MMonProbe *m)
 void Monitor::join_election()
 {
   dout(10) << __func__ << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
@@ -1783,6 +1783,7 @@ void Monitor::join_election()
 void Monitor::start_election()
 {
   dout(10) << "start_election" << dendl;
+  wait_for_paxos_write();
   _reset();
   state = STATE_ELECTING;
 
@@ -2528,11 +2529,7 @@ void Monitor::handle_command(MMonCommand *m)
   }
 
   if (prefix == "scrub") {
-    while (paxos->is_writing() || paxos->is_writing_previous()) {
-      lock.Unlock();
-      store->flush();
-      lock.Lock();
-    }
+    wait_for_paxos_write();
     if (is_leader()) {
       int r = scrub();
       reply_command(m, r, "", rdata, 0);
