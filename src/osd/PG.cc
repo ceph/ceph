@@ -5674,7 +5674,28 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
+        pg->osd->send_message_osd_cluster(
+          new MBackfillReserve(
+	    MBackfillReserve::REJECT,
+	    spg_t(pg->info.pgid.pgid, it->shard),
+	    pg->get_osdmap()->get_epoch()),
+	  con.get());
+      }
+    }
+  }
+
   pg->osd->recovery_wq.dequeue(pg);
+
+  pg->waiting_on_backfill.clear();
+  pg->finish_recovery_op(hobject_t::get_max());
 
   pg->schedule_backfill_full_retry();
   return transit<NotBackfilling>();
@@ -5980,7 +6001,7 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->reject_reservation();
-  return transit<RepNotRecovering>();
+  return discard_event();
 }
 
 void PG::RecoveryState::RepRecovering::exit()
