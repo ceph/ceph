@@ -1035,7 +1035,8 @@ private:
   version_t last_seen_pgmap_version;
 
   RWLock rwlock;
-  RWTimer timer;
+  Mutex timer_lock;
+  SafeTimer timer;
 
   PerfCounters *logger;
   
@@ -1627,7 +1628,8 @@ public:
     last_seen_osdmap_version(0),
     last_seen_pgmap_version(0),
     rwlock("Objecter::rwlock"),
-    timer(cct, rwlock),
+    timer_lock("Objecter::timer_lock"),
+    timer(cct, timer_lock, false),
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
     num_homeless_ops(0),

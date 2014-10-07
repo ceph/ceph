@@ -124,6 +124,20 @@ private:
     pending_auth.push_back(inc);
   }
 
+  /* validate mon caps ; don't care about caps for other services as
+   * we don't know how to validate them */
+  bool valid_caps(const vector<string>& caps, ostream *out) {
+    for (vector<string>::const_iterator p = caps.begin();
+         p != caps.end(); p += 2) {
+      if (!p->empty() && *p != "mon")
+        continue;
+      MonCap tmp;
+      if (!tmp.parse(*(p+1), out))
+        return false;
+    }
+    return true;
+  }
+
   void on_active();
   bool should_propose(double& delay);
   void create_initial();

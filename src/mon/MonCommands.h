@@ -167,7 +167,8 @@ COMMAND("auth import", "auth import: read keyring file from -i <file>", \
 COMMAND("auth add " \
 	"name=entity,type=CephString " \
 	"name=caps,type=CephString,n=N,req=false", \
-	"add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command",
+	"add auth info for <entity> from input file, or random key if no " \
+        "input is given, and/or any caps specified in the command",
 	"auth", "rwx", "cli,rest")
 COMMAND("auth get-or-create-key " \
 	"name=entity,type=CephString " \
