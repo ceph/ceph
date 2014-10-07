@@ -11,6 +11,6 @@ Messenger *Messenger::create(CephContext *cct,
 {
   if (cct->_conf->ms_type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce);
-  derr << "unrecognized ms_type '" << cct->_conf->ms_type << "'" << dendl;
+  lderr(cct) << "unrecognized ms_type '" << cct->_conf->ms_type << "'" << dendl;
   return NULL;
 }
