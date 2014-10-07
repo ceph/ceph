@@ -33,7 +33,7 @@ ifeq ($(DEB_HOST_ARCH), armel)
   extraopts += --without-libatomic-ops
 endif
 
-ifeq ($(shell lsb_release -sc | egrep -q '(precise|quantal|raring|saucy|wheezy)' && echo yes),yes)
+ifeq ($(shell lsb_release -sc | egrep -q '(precise|quantal|raring|saucy|wheezy|squeeze)' && echo yes),yes)
   extraopts += --without-lttng --without-babeltrace
 else
   extraopts += --with-lttng --with-babeltrace
