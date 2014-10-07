@@ -4196,7 +4196,7 @@ int RGWRados::get_obj_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, 
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& dest)
+int RGWRados::get_attr(ObjectCtx& obj_ctx, rgw_obj& obj, const char *name, bufferlist& dest)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -4204,19 +4204,16 @@ int RGWRados::get_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& de
   if (r < 0) {
     return r;
   }
-  ObjectCtx *rctx = static_cast<ObjectCtx *>(ctx);
 
-  if (rctx) {
-    RGWObjState *state;
-    r = get_obj_state(rctx, obj, &state, NULL);
-    if (r < 0)
-      return r;
-    if (!state->exists)
-      return -ENOENT;
-    if (state->get_attr(name, dest))
-      return 0;
-    return -ENODATA;
-  }
+  RGWObjState *state;
+  r = get_obj_state(&obj_ctx, obj, &state, NULL);
+  if (r < 0)
+    return r;
+  if (!state->exists)
+    return -ENOENT;
+  if (state->get_attr(name, dest))
+    return 0;
+  return -ENODATA;
 
   ObjectReadOperation op;
 
@@ -4531,7 +4528,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     }
   }
   if (conds.if_match || conds.if_nomatch) {
-    r = get_attr(source->get_ctx(), obj, RGW_ATTR_ETAG, etag);
+    r = store->get_attr(source->get_ctx(), obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       return r;
 
@@ -4694,7 +4691,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
     }
   }
   if (if_match || if_nomatch) {
-    r = get_attr(rctx, obj, RGW_ATTR_ETAG, etag);
+    r = get_attr(*rctx, obj, RGW_ATTR_ETAG, etag);
     if (r < 0)
       goto done_err;
 
