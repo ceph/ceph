@@ -110,6 +110,5 @@ noinst_HEADERS += \
 	tools/cephfs/Resetter.h \
 	tools/cephfs/Dumper.h \
 	tools/cephfs/MDSUtility.h \
-	tools/rados/rados_sync.h \
-	tools/common.h
+	tools/rados/rados_sync.h
 
