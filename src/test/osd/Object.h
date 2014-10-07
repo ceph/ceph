@@ -210,7 +210,9 @@ public:
     const ContDesc &cont, map<uint64_t, uint64_t> &out);
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
-    return (rand() % max_length);
+    if (max_length == 0)
+      return 0;
+    return (rand() % (max_length/2)) + ((max_length - 1)/2) + 1;
   }
 };
 
