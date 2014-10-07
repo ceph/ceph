@@ -41,7 +41,6 @@ Darwin)
     exit 1
     ;;
 esac
-exit
 
 if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
     # site packages needed because libvirt python bindings are not nicely
