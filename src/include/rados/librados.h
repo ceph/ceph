@@ -1779,12 +1779,14 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * - arg opaque user-defined value provided to rados_watch2()
  * - notify_id an id for this notify event
  * - handle the watcher handle we are notifying
+ * - notifier_id the unique client id for the notifier
  * - data payload from the notifier
  * - datalen length of payload buffer
  */
 typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
 				 uint64_t handle,
+				 uint64_t notifier_id,
 				 void *data,
 				 size_t data_len);
 

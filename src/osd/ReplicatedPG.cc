@@ -5250,6 +5250,7 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
     NotifyRef notif(
       Notify::makeNotifyRef(
 	conn,
+	ctx->reqid.name.num(),
 	ctx->obc->watchers.size(),
 	p->bl,
 	p->timeout,

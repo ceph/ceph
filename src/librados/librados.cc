@@ -3415,8 +3415,9 @@ struct C_WatchCB2 : public librados::WatchCtx2 {
   C_WatchCB2(rados_watchcb2_t _wcb, void *_arg) : wcb(_wcb), arg(_arg) {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
+		     uint64_t notifier_gid,
 		     bufferlist& bl) {
-    wcb(arg, notify_id, cookie, bl.c_str(), bl.length());
+    wcb(arg, notify_id, cookie, notifier_gid, bl.c_str(), bl.length());
   }
 };
 

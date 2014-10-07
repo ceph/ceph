@@ -55,6 +55,7 @@ class Notify {
   friend class Watch;
   WNotifyRef self;
   ConnectionRef client;
+  uint64_t client_gid;
   unsigned in_progress_watchers;
   bool complete;
   bool discarded;
@@ -87,6 +88,7 @@ class Notify {
 
   Notify(
     ConnectionRef client,
+    uint64_t client_gid,
     unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,
@@ -114,6 +116,7 @@ public:
   }
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
+    uint64_t client_gid,
     unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,

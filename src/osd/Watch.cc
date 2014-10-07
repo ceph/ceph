@@ -28,6 +28,7 @@ static ostream& _prefix(
 
 Notify::Notify(
   ConnectionRef client,
+  uint64_t client_gid,
   unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
@@ -35,7 +36,7 @@ Notify::Notify(
   uint64_t notify_id,
   uint64_t version,
   OSDService *osd)
-  : client(client),
+  : client(client), client_gid(client_gid),
     in_progress_watchers(num_watchers),
     complete(false),
     discarded(false),
@@ -51,6 +52,7 @@ Notify::Notify(
 
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
+  uint64_t client_gid,
   unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
@@ -60,7 +62,7 @@ NotifyRef Notify::makeNotifyRef(
   OSDService *osd) {
   NotifyRef ret(
     new Notify(
-      client, num_watchers,
+      client, client_gid, num_watchers,
       payload, timeout,
       cookie, notify_id,
       version, osd));
@@ -188,6 +190,7 @@ void Notify::maybe_complete_notify()
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
 					 WATCH_NOTIFY, empty));
+    reply->notifier_gid = client_gid;
     reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
@@ -428,6 +431,7 @@ void Watch::send_notify(NotifyRef notif)
   MWatchNotify *notify_msg = new MWatchNotify(
     cookie, notif->version, notif->notify_id,
     WATCH_NOTIFY, notif->payload);
+  notify_msg->notifier_gid = notif->client_gid;
   osd->send_message_osd_client(notify_msg, conn.get());
 }
 
