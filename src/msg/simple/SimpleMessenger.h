@@ -26,18 +26,18 @@ using namespace std;
 
 #include "common/Mutex.h"
 #include "include/atomic.h"
+#include "include/Spinlock.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
-#include "SimplePolicyMessenger.h"
-#include "Message.h"
+#include "msg/SimplePolicyMessenger.h"
+#include "msg/Message.h"
 #include "include/assert.h"
-#include "DispatchQueue.h"
 
+#include "DispatchQueue.h"
 #include "Pipe.h"
 #include "Accepter.h"
-#include "include/Spinlock.h"
 
 /*
  * This class handles transmission and reception of messages. Generally

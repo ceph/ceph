@@ -32,7 +32,7 @@ struct md_config_t;
 class Message;
 class MWatchNotify;
 class MLog;
-class SimpleMessenger;
+class Messenger;
 
 class librados::RadosClient : public Dispatcher
 {
@@ -47,7 +47,7 @@ private:
   } state;
 
   MonClient monclient;
-  SimpleMessenger *messenger;
+  Messenger *messenger;
 
   uint64_t instance_id;
 
