@@ -1153,13 +1153,6 @@ private:
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
 
-  struct GetObjState {
-    librados::IoCtx io_ctx;
-    bool sent_data;
-
-    GetObjState() : sent_data(false) {}
-  };
-
   Mutex lock;
   SafeTimer *timer;
 
@@ -1353,7 +1346,14 @@ public:
   virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
+  struct GetObjState {
+#warning remove me
+    librados::IoCtx io_ctx;
+    bool sent_data;
 
+    GetObjState() : sent_data(false) {}
+  } state;
+      
   class Object {
     RGWRados *store;
     RGWRados::ObjectCtx& ctx;
@@ -1374,6 +1374,42 @@ public:
     RGWRados *get_store() { return store; }
     rgw_obj& get_obj() { return obj; }
     RGWRados::ObjectCtx& get_ctx() { return ctx; }
+
+    struct Read {
+      RGWRados::Object *source;
+
+      struct GetObjState {
+        librados::IoCtx io_ctx;
+        bool sent_data;
+
+        GetObjState() : sent_data(false) {}
+      } state;
+      
+      struct ConditionParams {
+        const time_t *mod_ptr;
+        const time_t *unmod_ptr;
+        const char *if_match;
+        const char *if_nomatch;
+        
+        ConditionParams() : 
+                 mod_ptr(NULL), unmod_ptr(NULL), if_match(NULL), if_nomatch(NULL) {}
+      } conds;
+
+      struct Params {
+        time_t *lastmod;
+        uint64_t *read_size;
+        uint64_t *obj_size;
+        map<string, bufferlist> *attrs;
+        struct rgw_err *perr;
+
+        Params() : lastmod(NULL), read_size(NULL), obj_size(NULL), attrs(NULL) {}
+      } params;
+
+      Read(RGWRados::Object *_source) : source(_source) {}
+
+      int prepare(int64_t *pofs, int64_t *pend);
+      int read(int64_t ofs, int64_t end, bufferlist& bl);
+    };
 
     struct Write {
       RGWRados::Object *target;
@@ -1509,7 +1545,7 @@ public:
 
   int copy_obj_data(ObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-	       void **handle, off_t end,
+	       RGWRados::Object::Read& read_op, off_t end,
                rgw_obj& dest_obj,
                rgw_obj& src_obj,
                uint64_t max_chunk_size,
@@ -1620,7 +1656,7 @@ public:
                   int (*iterate_obj_cb)(rgw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
                   void *arg);
 
-  int get_obj_iterate(void *ctx, void **handle, rgw_obj& obj,
+  int get_obj_iterate(void *ctx, RGWRados::Object::Read& read_op, rgw_obj& obj,
                       off_t ofs, off_t end,
 	              RGWGetDataCB *cb);
 
