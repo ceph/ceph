@@ -23,6 +23,7 @@ PS4='${FUNCNAME[0]}: $LINENO: '
 
 export PATH=:$PATH # make sure program from sources are prefered
 DIR=test-ceph-disk
+OSD_DATA=$DIR/osd
 MON_ID=a
 MONA=127.0.0.1:7451
 TEST_POOL=rbd
@@ -37,6 +38,7 @@ CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
 CEPH_ARGS+=" --osd-pool-default-erasure-code-directory=.libs"
 CEPH_ARGS+=" --auth-supported=none"
+CEPH_ARGS+=" --osd-journal-size=100"
 CEPH_DISK_ARGS=
 CEPH_DISK_ARGS+=" --statedir=$DIR"
 CEPH_DISK_ARGS+=" --sysconfdir=$DIR"
@@ -47,11 +49,15 @@ TIMEOUT=360
 cat=$(which cat)
 timeout=$(which timeout)
 diff=$(which diff)
+mkdir=$(which mkdir)
+rm=$(which rm)
 
 function setup() {
     teardown
     mkdir $DIR
-    touch $DIR/ceph.conf
+    mkdir $OSD_DATA
+#    mkdir $OSD_DATA/ceph-0
+    touch $DIR/ceph.conf # so ceph-disk think ceph is the cluster
 }
 
 function teardown() {
@@ -162,7 +168,7 @@ function test_no_path() {
 }
 
 # ceph-disk prepare returns immediately on success if the magic file
-# exists on the --osd-data directory.
+# exists in the --osd-data directory.
 function test_activate_dir_magic() {
     local uuid=$(uuidgen)
     local osd_data=$DIR/osd
@@ -192,28 +198,59 @@ function test_activate_dir_magic() {
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
 }
 
-function test_activate_dir() {
-    run_mon
+function test_activate() {
+    local to_prepare=$1
+    local to_activate=$2
 
-    local osd_data=$DIR/osd
+    $mkdir -p $OSD_DATA
 
-    /bin/mkdir -p $osd_data
     ./ceph-disk $CEPH_DISK_ARGS \
-        prepare $osd_data || return 1
+        prepare $to_prepare || return 1
 
-    CEPH_ARGS="$CEPH_ARGS --osd-journal-size=100 --osd-data=$osd_data" \
-        $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
-                      activate \
-                     --mark-init=none \
-                    $osd_data || return 1
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        $to_activate || return 1
     $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
-    local id=$($cat $osd_data/whoami)
+
+    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
     local weight=1
     ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
     $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
     $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
     $diff $DIR/BAR $DIR/BAR.copy || return 1
+}
+
+function test_activate_dir() {
+    run_mon
+
+    local osd_data=$DIR/dir
+    $mkdir -p $osd_data
+    test_activate $osd_data $osd_data || return 1
+    $rm -fr $osd_data
+}
+
+function test_activate_dev() {
+    run_mon
+
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    dd if=/dev/zero of=vde.disk bs=1024k count=200
+    losetup --find vde.disk
+    local disk=$(losetup --associated vde.disk | cut -f1 -d:)
+    ./ceph-disk zap $disk
+    test_activate ${disk} ${disk}p1
+    kill_daemons
+    umount ${disk}p1
+    ./ceph-disk zap $disk
+    status=$?
+    losetup --detach $disk
+    rm vde.disk
+    return $status
 }
 
 function test_find_cluster_by_uuid() {
