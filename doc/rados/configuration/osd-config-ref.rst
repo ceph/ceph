@@ -320,10 +320,10 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``1`` 
 
-``disk thread ioprio class``
+``osd disk thread ioprio class``
 
-:Description: Warning: it will only be used if both ``disk thread
-	      ioprio class`` and ``disk thread ioprio priority`` are
+:Description: Warning: it will only be used if both ``osd disk thread
+	      ioprio class`` and ``osd disk thread ioprio priority`` are
 	      set to a non default value.  Sets the ioprio_set(2) I/O
 	      scheduling ``class`` for the disk thread. Acceptable
 	      values are ``idle``, ``be`` or ``rt``. The ``idle``
@@ -340,10 +340,10 @@ recovery operations to ensure optimal performance during recovery.
 :Type: String
 :Default: the empty string
 
-``disk thread ioprio priority``
+``osd disk thread ioprio priority``
 
-:Description: Warning: it will only be used if both ``disk thread
-	      ioprio class`` and ``disk thread ioprio priority`` are
+:Description: Warning: it will only be used if both ``osd disk thread
+	      ioprio class`` and ``osd disk thread ioprio priority`` are
 	      set to a non default value. It sets the ioprio_set(2)
 	      I/O scheduling ``priority`` of the disk thread ranging
 	      from 0 (highest) to 7 (lowest). If all OSDs on a given
