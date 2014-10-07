@@ -33,6 +33,7 @@ upgrade-sequence:
        wait-for-healthy: true
    - sleep:
        duration: 60
-   - install.upgrade:
-       client.0:
-   - print: "*** client.0 upgraded"
+### removed to fix #9642
+#   - install.upgrade:
+#       client.0:
+#   - print: "*** client.0 upgraded"
