@@ -109,6 +109,12 @@ bool MDSAuthCaps::is_capable(const std::string &path, int uid, bool may_read, bo
   return false;
 }
 
+void MDSAuthCaps::set_allow_all()
+{
+    grants.clear();
+    grants.push_back(MDSCapGrant(MDSCapSpec(true, true, true), MDSCapMatch()));
+}
+
 bool MDSAuthCaps::parse(const std::string& str, ostream *err)
 {
   // Special case for legacy caps

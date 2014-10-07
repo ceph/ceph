@@ -817,7 +817,6 @@ void MDS::handle_command(MCommand *m)
 
 
   if (!session->auth_caps.allow_all()) {
-    // TODO: enforce allow_all check only for 'w' commands
     dout(1) << __func__
       << ": received command from client without `tell` capability: "
       << m->get_connection()->peer_addr << dendl;
@@ -2561,6 +2560,11 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       // messenger.)
     }
 
+    if (caps_info.allow_all) {
+        // Flag for auth providers that don't provide cap strings
+        s->auth_caps.set_allow_all();
+    }
+
     bufferlist::iterator p = caps_info.caps.begin();
     string auth_cap_str;
     try {
@@ -2579,16 +2583,6 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       //  * permit no `tell` ops
       dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
     }
-
-    /*
-    s->caps.set_allow_all(caps_info.allow_all);
- 
-    if (caps_info.caps.length() > 0) {
-      bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
-      dout(10) << " session " << s << " has caps " << s->caps << dendl;
-    }
-    */
   }
 
   return true;  // we made a decision (see is_valid)
