@@ -19,6 +19,7 @@
 
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "common/ceph_argparse.h"
 
 #include "global/global_init.h"
 
@@ -1978,10 +1979,11 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
+  env_to_vec(ceph_options);
   vector<string> ceph_option_strings = po::collect_unrecognized(
     parsed.options, po::include_positional);
-  ceph_options.reserve(ceph_option_strings.size());
+  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
        ++i) {
@@ -1995,7 +1997,7 @@ int main(int argc, char **argv)
     flags |= SKIP_MOUNT_OMAP;
 
   global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
     //CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
