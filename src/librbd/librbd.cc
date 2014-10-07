@@ -358,6 +358,17 @@ namespace librbd {
     return r;
   }
 
+  int Image::is_exclusive_lock_owner(bool *is_owner)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, is_exclusive_lock_owner_enter, ictx);
+    // TODO: implement
+    int r = 0;
+    *is_owner = false;
+    tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
+    return r;
+  }
+
   int Image::copy(IoCtx& dest_io_ctx, const char *destname)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -1161,6 +1172,17 @@ extern "C" int rbd_get_parent_info(rbd_image_t image,
 
   tracepoint(librbd, get_parent_info_exit, 0, parent_pool_name, parent_name, parent_snap_name);
   return 0;
+}
+
+extern "C" int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, is_exclusive_lock_owner_enter, ictx);
+  // TODO implement
+  int r = 0;
+  *is_owner = 0;
+  tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
+  return r;
 }
 
 /* snapshots */
