@@ -1881,7 +1881,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
   map<ceph_tid_t, Op*>::iterator p = s->ops.find(tid);
   if (p == s->ops.end()) {
-    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne in session " << s->osd << dendl;
     return -ENOENT;
   }
 
@@ -1891,7 +1891,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     s->con->revoke_rx_buffer(tid);
   }
 
-  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd << dendl;
   Op *op = p->second;
   if (op->onack) {
     op->onack->complete(r);
@@ -1913,6 +1913,17 @@ int Objecter::op_cancel(ceph_tid_t tid, int r)
   int ret = 0;
 
   rwlock.get_write();
+  ret = _op_cancel(tid, r);
+  rwlock.unlock();
+
+  return ret;
+}
+
+int Objecter::_op_cancel(ceph_tid_t tid, int r)
+{
+  int ret = 0;
+
+  ldout(cct, 5) << __func__ << ": cancelling tid " << tid << " r=" << r << dendl;
 
 start:
 
@@ -1926,11 +1937,12 @@ start:
         /* oh no! raced, maybe tid moved to another session, restarting */
         goto start;
       }
-      rwlock.unlock();
       return ret;
     }
     s->lock.unlock();
   }
+
+  ldout(cct, 5) << __func__ << ": tid " << tid << " not found in live sessions" << dendl;
 
   // Handle case where the op is in homeless session
   homeless_session->lock.get_read();
@@ -1941,16 +1953,52 @@ start:
       /* oh no! raced, maybe tid moved to another session, restarting */
       goto start;
     } else {
-      rwlock.unlock();
       return ret;
     }
   } else {
     homeless_session->lock.unlock();
   }
 
-  rwlock.unlock();
+  ldout(cct, 5) << __func__ << ": tid " << tid << " not found in homeless session" << dendl;
 
   return ret;
+}
+
+/**
+ * Any write op which is in progress at the start of this call shall no longer
+ * be in progress when this call ends.  Operations started after the start
+ * of this call may still be in progress when this call ends.
+ *
+ * @return the latest possible epoch in which a cancelled op could have existed
+ */
+epoch_t Objecter::op_cancel_writes(int r)
+{
+  rwlock.get_write();
+
+  std::vector<ceph_tid_t> to_cancel;
+
+  for (map<int, OSDSession *>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+    OSDSession *s = siter->second;
+    s->lock.get_read();
+    for (map<ceph_tid_t, Op*>::iterator op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
+      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+        to_cancel.push_back(op_i->first);
+      }
+    }
+    s->lock.unlock();
+  }
+
+  for (std::vector<ceph_tid_t>::iterator titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
+    int cancel_result = _op_cancel(*titer, r);
+    // We hold rwlock across search and cancellation, so cancels should always succeed
+    assert(cancel_result == 0);
+  }
+
+  const epoch_t epoch = osdmap->get_epoch();
+
+  rwlock.unlock();
+
+  return epoch;
 }
 
 bool Objecter::is_pg_changed(
