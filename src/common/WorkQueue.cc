@@ -271,6 +271,10 @@ void ThreadPool::set_ioprio(int cls, int priority)
   for (set<WorkThread*>::iterator p = _threads.begin();
        p != _threads.end();
        ++p) {
+    ldout(cct,10) << __func__ 
+		  << " class " << cls << " priority " << priority
+		  << " pid " << (*p)->get_pid()
+		  << dendl;
     int r = (*p)->set_ioprio(cls, priority);
     if (r < 0)
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
