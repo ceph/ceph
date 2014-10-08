@@ -652,6 +652,10 @@ unittest_msgr_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_msgr
 
+unittest_tableformatter_SOURCES = test/common/test_tableformatter.cc
+unittest_tableformatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_tableformatter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_tableformatter
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
