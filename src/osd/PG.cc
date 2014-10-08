@@ -202,7 +202,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(this),
-  pg_id(p)
+  pg_id(p),
+  peer_features((uint64_t)-1)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -401,7 +402,7 @@ bool PG::search_for_missing(
 {
   unsigned num_unfound_before = missing_loc.num_unfound();
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing);
+    from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
   if (found_missing &&
@@ -441,7 +442,8 @@ bool PG::MissingLoc::readable_with_acting(
 bool PG::MissingLoc::add_source_info(
   pg_shard_t fromosd,
   const pg_info_t &oinfo,
-  const pg_missing_t &omissing)
+  const pg_missing_t &omissing,
+  ThreadPool::TPHandle* handle)
 {
   bool found_missing = false;
   // found items?
@@ -450,6 +452,9 @@ bool PG::MissingLoc::add_source_info(
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
+    if (handle) {
+      handle->reset_tp_timeout();
+    }
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
 	       << " also missing on osd." << fromosd
@@ -1632,7 +1637,7 @@ void PG::activate(ObjectStore::Transaction& t,
     // past intervals.
     might_have_unfound.clear();
     if (needs_recovery()) {
-      missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing());
+      missing_loc.add_source_info(pg_whoami, info, pg_log.get_missing(), ctx->handle);
       for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	   i != actingbackfill.end();
 	   ++i) {
@@ -1643,7 +1648,8 @@ void PG::activate(ObjectStore::Transaction& t,
 	missing_loc.add_source_info(
 	  *i,
 	  peer_info[*i],
-	  peer_missing[*i]);
+	  peer_missing[*i],
+          ctx->handle);
       }
       for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
 	   i != peer_missing.end();
@@ -1668,7 +1674,7 @@ void PG::activate(ObjectStore::Transaction& t,
     }
 
     // degraded?
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) > acting.size()) {
+    if (get_osdmap()->get_pg_size(info.pgid.pgid) > actingset.size()) {
       state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
     }
@@ -1918,8 +1924,8 @@ unsigned PG::get_backfill_priority()
 
   // undersized: 200 + num missing replicas
   if (is_undersized()) {
-    assert(pool.info.size > acting.size());
-    return 200 + (pool.info.size - acting.size());
+    assert(pool.info.size > actingset.size());
+    return 200 + (pool.info.size - actingset.size());
   }
 
   // degraded: baseline degraded
@@ -5643,7 +5649,28 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
+        pg->osd->send_message_osd_cluster(
+          new MBackfillReserve(
+	    MBackfillReserve::REJECT,
+	    spg_t(pg->info.pgid.pgid, it->shard),
+	    pg->get_osdmap()->get_epoch()),
+	  con.get());
+      }
+    }
+  }
+
   pg->osd->recovery_wq.dequeue(pg);
+
+  pg->waiting_on_backfill.clear();
+  pg->finish_recovery_op(hobject_t::get_max());
 
   pg->schedule_backfill_full_retry();
   return transit<NotBackfilling>();
@@ -5949,7 +5976,7 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->reject_reservation();
-  return transit<RepNotRecovering>();
+  return discard_event();
 }
 
 void PG::RecoveryState::RepRecovering::exit()
@@ -6238,13 +6265,11 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     pg->dirty_big_info = true;
   }
 
-  for (vector<int>::iterator p = pg->want_acting.begin();
-       p != pg->want_acting.end(); ++p) {
-    if (!advmap.osdmap->is_up(*p)) {
-      assert((std::find(pg->acting.begin(), pg->acting.end(), *p) !=
-	      pg->acting.end()) ||
-	     (std::find(pg->up.begin(), pg->up.end(), *p) !=
-	      pg->up.end()));
+  for (size_t i = 0; i < pg->want_acting.size(); i++) {
+    int osd = pg->want_acting[i];
+    if (!advmap.osdmap->is_up(osd)) {
+      pg_shard_t osd_with_shard(osd, shard_id_t(i));
+      assert(pg->is_acting(osd_with_shard) || pg->is_up(osd_with_shard));
     }
   }
 
@@ -6252,7 +6277,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
       pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid)) {
-    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->acting.size()) {
+    if (pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid) <= pg->actingset.size()) {
       pg->state_clear(PG_STATE_UNDERSIZED);
       if (pg->needs_recovery()) {
 	pg->state_set(PG_STATE_DEGRADED);
@@ -6696,6 +6721,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
   if (!prior_set.get())
     pg->build_prior(prior_set);
 
+  pg->reset_peer_features();
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
@@ -6771,6 +6797,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       }
       get_infos();
     }
+    dout(20) << "Adding osd: " << infoevt.from.osd << " features: "
+      << hex << infoevt.features << dec << dendl;
+    pg->apply_peer_features(infoevt.features);
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -6829,6 +6858,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  break;
 	}
       }
+      dout(20) << "Common features: " << hex << pg->get_min_peer_features() << dec << dendl;
       post_event(GotInfo());
     }
   }
