@@ -111,7 +111,7 @@ ostream& operator<<(ostream& out, CInode& in)
     if (in.is_replicated()) 
       out << in.get_replicas();
   } else {
-    pair<int,int> a = in.authority();
+    mds_authority_t a = in.authority();
     out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
@@ -2259,7 +2259,7 @@ void CInode::adjust_nested_auth_pins(int a, void *by)
 
 // authority
 
-pair<int,int> CInode::authority() 
+mds_authority_t CInode::authority() 
 {
   if (inode_auth.first >= 0) 
     return inode_auth;
