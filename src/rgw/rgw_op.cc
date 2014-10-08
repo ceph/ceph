@@ -268,10 +268,13 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map
 static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs,
                          uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
 {
-  void *handle;
-  int ret = store->prepare_get_obj(s->obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                      NULL, NULL, NULL, NULL, NULL, obj_size, objv_tracker, &handle, &s->err);
-  store->finish_get_obj(&handle);
+  RGWRados::SystemObject src(store, *(RGWRados::ObjectCtx *)s->obj_ctx, obj);
+  RGWRados::SystemObject::Read rop(&src);
+
+  rop.stat_params.attrs = &attrs;
+  rop.stat_params.obj_size = obj_size;
+
+  int ret = rop.stat(objv_tracker);
   return ret;
 }
 
@@ -332,6 +335,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   int ret = 0;
   rgw_obj_key obj;
   RGWUserInfo bucket_owner_info;
+  RGWRados::ObjectCtx& obj_ctx = *(RGWRados::ObjectCtx *)s->obj_ctx;
 
   s->bucket_instance_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
 
@@ -349,7 +353,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     RGWBucketInfo source_info;
 
-    ret = store->get_bucket_info(s->obj_ctx, copy_source_str, source_info, NULL);
+    ret = store->get_bucket_info(obj_ctx, copy_source_str, source_info, NULL);
     if (ret == 0) {
       string& region = source_info.region;
       s->local_source = store->region.equals(region);
@@ -359,9 +363,9 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   if (!s->bucket_name_str.empty()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
-      ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+      ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
     } else {
-      ret = store->get_bucket_instance_info(s->obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);
+      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);
     }
     if (ret < 0) {
       if (ret != -ENOENT) {
@@ -792,7 +796,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> bucket_attrs;
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &bucket_attrs);
+    RGWRados::ObjectCtx obj_ctx(store);
+    int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &bucket_attrs);
     if (r < 0) {
       ldout(s->cct, 0) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return r;
@@ -858,7 +863,6 @@ void RGWGetObj::pre_exec()
 
 void RGWGetObj::execute()
 {
-  void *handle = NULL;
   utime_t start_time = s->time;
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now(s->cct);
@@ -926,11 +930,8 @@ void RGWGetObj::execute()
     goto done_err;
   }
 
-  store->finish_get_obj(&handle);
-
 done_err:
   send_response_data(bl, 0, 0);
-  store->finish_get_obj(&handle);
 }
 
 int RGWGetObj::init_common()
@@ -1281,7 +1282,8 @@ void RGWCreateBucket::execute()
   }
 
   /* we need to make sure we read bucket info, it's not read before for this specific request */
-  ret = store->get_bucket_info(s->obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
+  RGWRados::ObjectCtx& obj_ctx = *(RGWRados::ObjectCtx *)s->obj_ctx;
+  ret = store->get_bucket_info(obj_ctx, s->bucket_name_str, s->bucket_info, NULL, &s->bucket_attrs);
   if (ret < 0 && ret != -ENOENT)
     return;
   s->bucket_exists = (ret != -ENOENT);
@@ -2140,7 +2142,9 @@ int RGWCopyObj::verify_permission()
 
   map<string, bufferlist> src_attrs;
 
-  ret = store->get_bucket_info(s->obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
+  RGWRados::ObjectCtx& obj_ctx = *(RGWRados::ObjectCtx *)s->obj_ctx;
+
+  ret = store->get_bucket_info(obj_ctx, src_bucket_name, src_bucket_info, NULL, &src_attrs);
   if (ret < 0)
     return ret;
 
@@ -2168,7 +2172,7 @@ int RGWCopyObj::verify_permission()
   if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source */
     dest_bucket_info = src_bucket_info;
   } else {
-    ret = store->get_bucket_info(s->obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
+    ret = store->get_bucket_info(obj_ctx, dest_bucket_name, dest_bucket_info, NULL, &dest_attrs);
     if (ret < 0)
       return ret;
   }
