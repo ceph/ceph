@@ -6,4 +6,5 @@ tasks:
    fs: xfs
 - parallel:
    - workload
+   - upgrade-sequence
 - print: "**** done parallel"
