@@ -1,6 +1,6 @@
 tasks:
 - install:
-    tag: v0.76.11
+    tag: v0.67.11
 - ceph:
     log-whitelist:
       - scrub mismatch
