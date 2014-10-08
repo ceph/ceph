@@ -362,9 +362,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, is_exclusive_lock_owner_enter, ictx);
-    // TODO: implement
-    int r = 0;
-    *is_owner = false;
+    int r = librbd::is_exclusive_lock_owner(ictx, is_owner);
     tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
     return r;
   }
@@ -1178,9 +1176,9 @@ extern "C" int rbd_is_exclusive_lock_owner(rbd_image_t image, int *is_owner)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, is_exclusive_lock_owner_enter, ictx);
-  // TODO implement
-  int r = 0;
-  *is_owner = 0;
+  bool owner;
+  int r = librbd::is_exclusive_lock_owner(ictx, &owner);
+  *is_owner = owner ? 1 : 0;
   tracepoint(librbd, is_exclusive_lock_owner_exit, ictx, r, *is_owner);
   return r;
 }
