@@ -4799,7 +4799,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
-				       cap_exports[p->first][q->first].cap_id, 0);
+				       cap_exports[p->first][q->first].cap_id, 0,
+                                       mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
       mds->send_message_client_counted(m, session);
 
@@ -5277,7 +5278,7 @@ void MDCache::export_remaining_imported_caps()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
 	// mark client caps stale.
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0, mds->get_osd_epoch_barrier());
 	stale->set_cap_peer(0, 0, 0, -1, 0);
 	mds->send_message_client_counted(stale, q->first);
       }
@@ -5336,7 +5337,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					realm->inode->ino(),
 					cap->get_cap_id(), cap->get_last_seq(),
 					cap->pending(), cap->wanted(), 0,
-					cap->get_mseq());
+					cap->get_mseq(), mds->get_osd_epoch_barrier());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
