@@ -1254,7 +1254,6 @@ TESTS=(
   auth
   auth_profiles
   mon_misc
-  mon_mds
   mon_mon
   mon_osd
   mon_osd_pool
@@ -1267,6 +1266,7 @@ TESTS=(
   mon_heap_profiler
   osd_bench
   mds_tell
+  mon_mds
 )
 
 #
