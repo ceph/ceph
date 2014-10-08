@@ -64,14 +64,11 @@ public:
     }
   }
 
-  int mount(const std::string &mount_root)
+  int init()
   {
-    int ret;
-    
-    if (mounted)
-      return -EISCONN;
-
     common_init_finish(cct);
+
+    int ret;
 
     //monmap
     monclient = new MonClient(cct);
@@ -97,17 +94,33 @@ public:
       goto fail;
 
     inited = true;
-
-    ret = client->mount(mount_root);
-    if (ret)
-      goto fail;
-
-    mounted = true;
     return 0;
 
-  fail:
+    fail:
     shutdown();
     return ret;
+  }
+
+  int mount(const std::string &mount_root)
+  {
+    int ret;
+    
+    if (mounted)
+      return -EISCONN;
+
+    ret = init();
+    if (ret != 0) {
+      return ret;
+    }
+
+    ret = client->mount(mount_root);
+    if (ret) {
+      shutdown();
+      return ret;
+    } else {
+      mounted = true;
+      return 0;
+    }
   }
 
   int unmount()
@@ -142,6 +155,11 @@ public:
       delete client;
       client = NULL;
     }
+  }
+
+  bool is_initialized() const
+  {
+    return inited;
   }
 
   bool is_mounted()
@@ -224,6 +242,34 @@ private:
   CephContext *cct;
   std::string cwd;
 };
+
+static void do_out_buffer(bufferlist& outbl, char **outbuf, size_t *outbuflen)
+{
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen)
+    *outbuflen = outbl.length();
+}
+
+static void do_out_buffer(string& outbl, char **outbuf, size_t *outbuflen)
+{
+  if (outbuf) {
+    if (outbl.length() > 0) {
+      *outbuf = (char *)malloc(outbl.length());
+      memcpy(*outbuf, outbl.c_str(), outbl.length());
+    } else {
+      *outbuf = NULL;
+    }
+  }
+  if (outbuflen)
+    *outbuflen = outbl.length();
+}
 
 extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
 {
@@ -314,6 +360,57 @@ extern "C" int ceph_conf_get(struct ceph_mount_info *cmount, const char *option,
     return -EINVAL;
   }
   return cmount->conf_get(option, buf, len);
+}
+
+extern "C" int ceph_mds_command(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    char **outbuf, size_t *outbuflen,
+    char **outsbuf, size_t *outsbuflen)
+{
+  bufferlist inbl;
+  bufferlist outbl;
+  std::vector<string> cmdv;
+  std::string outs;
+
+  if (!cmount->is_initialized()) {
+    return -ENOTCONN;
+  }
+
+  // Construct inputs
+  for (size_t i = 0; i < cmdlen; ++i) {
+    cmdv.push_back(cmd[i]);
+  }
+  inbl.append(inbuf, inbuflen);
+
+  // Issue remote command
+  C_SaferCond cond;
+  int r = cmount->get_client()->mds_command(
+      mds_spec,
+      cmdv, inbl,
+      &outbl, &outs,
+      &cond);
+
+  if (r != 0) {
+    goto out;
+  }
+
+  // Wait for completion
+  r = cond.wait();
+
+  // Construct outputs
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outs, outsbuf, outsbuflen);
+
+out:
+  return r;
+}
+
+extern "C" int ceph_init(struct ceph_mount_info *cmount)
+{
+  return cmount->init();
 }
 
 extern "C" int ceph_mount(struct ceph_mount_info *cmount, const char *root)
@@ -1516,4 +1613,11 @@ extern "C" uint64_t ceph_ll_get_internal_offset(class ceph_mount_info *cmount,
 						uint64_t blockno)
 {
   return (cmount->get_client()->ll_get_internal_offset(in, blockno));
+}
+
+extern "C" void ceph_buffer_free(char *buf)
+{
+  if (buf) {
+    free(buf);
+  }
 }

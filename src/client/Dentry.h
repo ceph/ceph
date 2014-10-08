@@ -4,6 +4,8 @@
 #include "include/lru.h"
 #include "include/xlist.h"
 
+#include "mds/mdstypes.h"
+
 class Dir;
 struct Inode;
 
@@ -15,7 +17,7 @@ class Dentry : public LRUObject {
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
   uint64_t offset;
-  int lease_mds;
+  mds_rank_t lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
   ceph_seq_t lease_seq;

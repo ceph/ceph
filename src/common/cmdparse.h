@@ -40,11 +40,11 @@ std::string cmd_vartype_stringify(const cmd_vartype& v);
 
 template <typename T>
 bool
-cmd_getval(CephContext *cct, cmdmap_t& cmdmap, std::string k, T& val)
+cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, std::string k, T& val)
 {
   if (cmdmap.count(k)) {
     try {
-      val = boost::get<T>(cmdmap[k]);
+      val = boost::get<T>(cmdmap.find(k)->second);
       return true;
     } catch (boost::bad_get) {
       handle_bad_get(cct, k, typeid(T).name());

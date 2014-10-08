@@ -142,6 +142,12 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  if (g_conf->name.get_id().empty() || (g_conf->name.get_id()[0] >= '0' && g_conf->name.get_id()[0] <= '9')) {
+    derr << "deprecation warning: MDS id '" << g_conf->name
+      << "' is invalid and will be forbidden in a future version.  "
+      "MDS names may not start with a numeric digit." << dendl;
+  }
+
   Messenger *messenger = Messenger::create(g_ceph_context,
 					   entity_name_t::MDS(-1), "mds",
 					   getpid());
