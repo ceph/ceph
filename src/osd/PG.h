@@ -393,7 +393,8 @@ public:
     bool add_source_info(
       pg_shard_t source,           ///< [in] source
       const pg_info_t &oinfo,      ///< [in] info
-      const pg_missing_t &omissing ///< [in] (optional) missing
+      const pg_missing_t &omissing, ///< [in] (optional) missing
+      ThreadPool::TPHandle* handle  ///< [in] ThreadPool handle
       ); ///< @return whether a new object location was discovered
 
     /// Uses osdmap to update structures for now down sources
@@ -519,6 +520,7 @@ public:
     C_Contexts *on_applied;
     C_Contexts *on_safe;
     ObjectStore::Transaction *transaction;
+    ThreadPool::TPHandle* handle;
     RecoveryCtx(map<int, map<spg_t, pg_query_t> > *query_map,
 		map<int,
 		    vector<pair<pg_notify_t, pg_interval_map_t> > > *info_map,
@@ -531,7 +533,8 @@ public:
 	notify_list(notify_list),
 	on_applied(on_applied),
 	on_safe(on_safe),
-	transaction(transaction) {}
+	transaction(transaction),
+        handle(NULL) {}
 
     RecoveryCtx(BufferedRecoveryMessages &buf, RecoveryCtx &rctx)
       : query_map(&(buf.query_map)),
@@ -539,7 +542,8 @@ public:
 	notify_list(&(buf.notify_list)),
 	on_applied(rctx.on_applied),
 	on_safe(rctx.on_safe),
-	transaction(rctx.transaction) {}
+	transaction(rctx.transaction),
+        handle(NULL) {}
 
     void accept_buffered_messages(BufferedRecoveryMessages &m) {
       assert(query_map);
@@ -1302,10 +1306,12 @@ public:
   struct MNotifyRec : boost::statechart::event< MNotifyRec > {
     pg_shard_t from;
     pg_notify_t notify;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify) :
-      from(from), notify(notify) {}
+    uint64_t features;
+    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+      from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
-      *out << "MNotifyRec from " << from << " notify: " << notify;
+      *out << "MNotifyRec from " << from << " notify: " << notify
+        << " features: 0x" << hex << features << dec;
     }
   };
 
@@ -1988,10 +1994,15 @@ public:
   PG(const PG& rhs);
   PG& operator=(const PG& rhs);
   const spg_t pg_id;
+  uint64_t peer_features;
 
  public:
   const spg_t&      get_pgid() const { return pg_id; }
   int        get_nrep() const { return acting.size(); }
+
+  void reset_peer_features() { peer_features = (uint64_t)-1; }
+  uint64_t get_min_peer_features() { return peer_features; }
+  void apply_peer_features(uint64_t f) { peer_features &= f; }
 
   void init_primary_up_acting(
     const vector<int> &newup,
