@@ -2240,7 +2240,6 @@ bool MDS::ms_handle_reset(Connection *con)
       dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
       con->set_priv(NULL);
-      sessionmap.remove_session(session);
     }
     session->put();
   } else {
@@ -2266,7 +2265,6 @@ void MDS::ms_handle_remote_reset(Connection *con)
       dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
       con->set_priv(NULL);
-      sessionmap.remove_session(session);
     }
     session->put();
   }
@@ -2312,7 +2310,6 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
       con->set_priv(s);
       s->connection = con;
-      sessionmap.add_session(s);
     } else {
       dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;
