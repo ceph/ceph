@@ -105,4 +105,11 @@ def run_tests(ctx, config, test_klass, params):
 
     if not result.wasSuccessful():
         result.printErrors()  # duplicate output at end for convenience
-        raise RuntimeError("Test failure.")
+
+        bad_tests = []
+        for test, error in result.errors:
+            bad_tests.append(str(test))
+        for test, failure in result.failures:
+            bad_tests.append(str(test))
+
+        raise RuntimeError("Test failure: {0}".format(", ".join(bad_tests)))
