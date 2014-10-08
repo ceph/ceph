@@ -976,11 +976,17 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
       }
     }
   }
-  
-  pending_inc.pg_stat_updates[pgid].state = PG_STATE_CREATING;
-  pending_inc.pg_stat_updates[pgid].created = epoch;
-  pending_inc.pg_stat_updates[pgid].parent = parent;
-  pending_inc.pg_stat_updates[pgid].parent_split_bits = split_bits;
+ 
+  pg_stat_t &stats = pending_inc.pg_stat_updates[pgid];
+  stats.state = PG_STATE_CREATING;
+  stats.created = epoch;
+  stats.parent = parent;
+  stats.parent_split_bits = split_bits;
+
+  utime_t now = ceph_clock_now(g_ceph_context);
+  stats.last_scrub_stamp = now;
+  stats.last_deep_scrub_stamp = now;
+  stats.last_clean_scrub_stamp = now;
 
   if (split_bits == 0) {
     dout(10) << "register_new_pgs  will create " << pgid << dendl;
