@@ -142,7 +142,6 @@ OPTION(ms_dump_corrupt_message_level, OPT_INT, 1)  // debug level to hexdump und
 OPTION(ms_event_op_threads, OPT_INT, 2)
 OPTION(ms_event_thread_timeout, OPT_INT, 15)
 OPTION(ms_event_thread_suicide_timeout, OPT_INT, 180)
-OPTION(ms_use_event, OPT_BOOL, false)
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 
