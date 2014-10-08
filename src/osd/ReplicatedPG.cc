@@ -802,10 +802,8 @@ void ReplicatedPG::do_op(OpRequestRef op)
   // don't apply on the backfill_target and it doesn't matter.)
   // The last_backfill_started is used as the backfill line since
   // that determines the boundary for writes.
-  pg_info_t *backfill_target_info = NULL;
   bool before_backfill = false;
   if (backfill_target >= 0) {
-    backfill_target_info = &peer_info[backfill_target];
     before_backfill = obc->obs.oi.soid <= last_backfill_started;
   }
 
