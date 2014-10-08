@@ -108,6 +108,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker, 
                      m->cct->_conf->osd_num_op_tracker_shard),
   finisher(cct),
+  osd_epoch_barrier(0),
   sessionmap(this),
   progress_thread(this),
   asok_hook(NULL)
@@ -2892,4 +2893,17 @@ void MDS::ProgressThread::shutdown()
   mds->mds_lock.Unlock();
   join();
   mds->mds_lock.Lock();
+}
+
+/**
+ * This is used whenever a RADOS operation has been cancelled
+ * or a RADOS client has been blacklisted, to cause the MDS and
+ * any clients to wait for this OSD epoch before using any new caps.
+ *
+ * See doc/cephfs/eviction
+ */
+void MDS::set_osd_epoch_barrier(epoch_t e)
+{
+  dout(4) << __func__ << ": epoch=" << e << dendl;
+  osd_epoch_barrier = e;
 }
