@@ -61,6 +61,11 @@ struct FiredFileEvent {
   int mask;
 };
 
+/*
+ * EventDriver is a wrap of event mechanisms depends on different OS.
+ * For example, Linux will use epoll(2), BSD will use kqueue(2) and select will
+ * be used for worst condition.
+ */
 class EventDriver {
  public:
   virtual ~EventDriver() {}       // we want a virtual destructor!!!
@@ -71,6 +76,13 @@ class EventDriver {
   virtual int resize_events(int newsize) = 0;
 };
 
+
+/*
+ * EventCenter maintain a set of file descriptor and handle registered events.
+ *
+ * EventCenter is aimed to used by one thread, other threads access EventCenter
+ * only can use dispatch_event_external method which is protected by lock.
+ */
 class EventCenter {
   struct FileEvent {
     int mask;
