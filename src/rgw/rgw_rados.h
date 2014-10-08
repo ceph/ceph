@@ -1346,14 +1346,56 @@ public:
   virtual int list_placement_set(set<string>& names);
   virtual int create_pools(vector<string>& names, vector<int>& retcodes);
 
-  struct GetObjState {
-#warning remove me
-    librados::IoCtx io_ctx;
-    bool sent_data;
+  class SystemObject {
+    RGWRados *store;
+    RGWRados::ObjectCtx& ctx;
+    rgw_obj obj;
 
-    GetObjState() : sent_data(false) {}
-  } state;
+    RGWObjState *state;
+
+  protected:
+    int get_state(RGWObjState **pstate, RGWObjVersionTracker *objv_tracker);
+
+  public:
+    SystemObject(RGWRados *_store, RGWRados::ObjectCtx& _ctx, rgw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
+
+    RGWRados *get_store() { return store; }
+    rgw_obj& get_obj() { return obj; }
+    RGWRados::ObjectCtx& get_ctx() { return ctx; }
+
+    struct Read {
+      RGWRados::SystemObject *source;
+
+      struct GetObjState {
+        librados::IoCtx io_ctx;
+        bool has_ioctx;
+        uint64_t last_ver;
+
+        GetObjState() : has_ioctx(false), last_ver(0) {}
+
+        int get_ioctx(RGWRados *store, rgw_obj& obj, librados::IoCtx **ioctx);
+      } state;
       
+      struct StatParams {
+        time_t *lastmod;
+        uint64_t *obj_size;
+        map<string, bufferlist> *attrs;
+        struct rgw_err *perr;
+
+        StatParams() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
+      } stat_params;
+
+      struct ReadParams {
+        rgw_cache_entry_info *cache_info;
+      } read_params;
+
+      Read(RGWRados::SystemObject *_source) : source(_source) {}
+
+      int stat(RGWObjVersionTracker *objv_tracker);
+      int read(int64_t ofs, int64_t end, bufferlist& bl, RGWObjVersionTracker *objv_tracker);
+    };
+  };
+
   class Object {
     RGWRados *store;
     RGWRados::ObjectCtx& ctx;
@@ -1607,46 +1649,19 @@ public:
   int get_obj_state(ObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
     return get_obj_state(rctx, obj, state, objv_tracker, true);
   }
-/**
- * Get data about an object out of RADOS and into memory.
- * bucket: name of the bucket the object is in.
- * obj: name/key of the object to read
- * data: if get_data==true, this pointer will be set
- *    to an address containing the object's data/value
- * ofs: the offset of the object to read from
- * end: the point in the object to stop reading
- * attrs: if non-NULL, the pointed-to map will contain
- *    all the attrs of the object when this function returns
- * mod_ptr: if non-NULL, compares the object's mtime to *mod_ptr,
- *    and if mtime is smaller it fails.
- * unmod_ptr: if non-NULL, compares the object's mtime to *unmod_ptr,
- *    and if mtime is >= it fails.
- * if_match/nomatch: if non-NULL, compares the object's etag attr
- *    to the string and, if it doesn't/does match, fails out.
- * err: Many errors will result in this structure being filled
- *    with extra informatin on the error.
- * Returns: -ERR# on failure, otherwise
- *          (if get_data==true) length of read data,
- *          (if get_data==false) length of the object
- */
-  virtual int prepare_get_obj(void *ctx, rgw_obj& obj,
-            off_t *ofs, off_t *end,
-            map<string, bufferlist> *attrs,
-            const time_t *mod_ptr,
-            const time_t *unmod_ptr,
-            time_t *lastmod,
-            const char *if_match,
-            const char *if_nomatch,
-            uint64_t *total_size,
-            uint64_t *obj_size,
-            RGWObjVersionTracker *objv_tracker,
-            void **handle,
-            struct rgw_err *err);
 
-  virtual int get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj,
-                      bufferlist& bl, off_t ofs, off_t end, rgw_cache_entry_info *cache_info);
+  virtual int stat_system_obj(RGWRados::ObjectCtx& obj_ctx,
+                              RGWRados::SystemObject::Read::GetObjState& state,
+                              rgw_obj& obj,
+                              map<string, bufferlist> *attrs,
+                              time_t *lastmod,
+                              uint64_t *obj_size,
+                              RGWObjVersionTracker *objv_tracker);
 
-  virtual void finish_get_obj(void **handle);
+  virtual int get_system_obj(ObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
+                             RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
+                             bufferlist& bl, off_t ofs, off_t end,
+                             rgw_cache_entry_info *cache_info);
 
   virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
@@ -1750,15 +1765,15 @@ public:
   int put_bucket_entrypoint_info(const string& bucket_name, RGWBucketEntryPoint& entry_point, bool exclusive, RGWObjVersionTracker& objv_tracker, time_t mtime,
                                  map<string, bufferlist> *pattrs);
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, time_t mtime, map<string, bufferlist> *pattrs);
-  int get_bucket_entrypoint_info(void *ctx, const string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime,
+  int get_bucket_entrypoint_info(ObjectCtx& obj_ctx, const string& bucket_name, RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker, time_t *pmtime,
                                  map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
-  int get_bucket_instance_info(void *ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
-  int get_bucket_instance_from_oid(void *ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs,
+  int get_bucket_instance_info(ObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_info(ObjectCtx& obj_ctx, rgw_bucket& bucket, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs);
+  int get_bucket_instance_from_oid(ObjectCtx& obj_ctx, string& oid, RGWBucketInfo& info, time_t *pmtime, map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info = NULL);
 
-  int convert_old_bucket_info(void *ctx, string& bucket_name);
-  virtual int get_bucket_info(void *ctx, const string& bucket_name, RGWBucketInfo& info,
+  int convert_old_bucket_info(ObjectCtx& obj_ctx, string& bucket_name);
+  virtual int get_bucket_info(ObjectCtx& obj_ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, time_t mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
