@@ -152,7 +152,7 @@ namespace librbd {
   int read_header_bl(librados::IoCtx& io_ctx, const std::string& md_oid,
 		     ceph::bufferlist& header, uint64_t *ver);
   int notify_change(librados::IoCtx& io_ctx, const std::string& oid,
-		    uint64_t *pver, ImageCtx *ictx);
+		    ImageCtx *ictx);
   int read_header(librados::IoCtx& io_ctx, const std::string& md_oid,
 		  struct rbd_obj_header_ondisk *header, uint64_t *ver);
   int write_header(librados::IoCtx& io_ctx, const std::string& md_oid,
