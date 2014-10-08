@@ -522,7 +522,8 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   time_t mtime;
-  int r = store->get_bucket_info(NULL, bucket.name, bucket_info, &mtime);
+  RGWRados::ObjectCtx obj_ctx(store);
+  int r = store->get_bucket_info(obj_ctx, bucket.name, bucket_info, &mtime);
   if (r < 0)
     return r;
 
@@ -564,7 +565,8 @@ public:
 static int init_bucket(string& bucket_name, RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    RGWRados::ObjectCtx obj_ctx(store);
+    int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -710,7 +712,8 @@ int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t 
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL, &attrs);
+  RGWRados::ObjectCtx obj_ctx(store);
+  int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -774,13 +777,15 @@ int check_min_obj_stripe_size(RGWRados *store, rgw_obj& obj, uint64_t min_stripe
 {
   map<string, bufferlist> attrs;
   uint64_t obj_size;
-  void *handle;
 
-  void *obj_ctx = store->create_context(NULL);
-  int ret = store->prepare_get_obj(obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                   NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, NULL);
-  store->finish_get_obj(&handle);
-  store->destroy_context(obj_ctx);
+  RGWRados::ObjectCtx obj_ctx(store);
+  RGWRados::Object op_target(store, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.obj_size = &obj_size;
+
+  int ret = read_op.prepare(NULL, NULL);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -2117,14 +2122,16 @@ next:
     rgw_obj obj(bucket, object);
     obj.set_instance(object_version);
 
-    void *handle;
     uint64_t obj_size;
     map<string, bufferlist> attrs;
-    void *obj_ctx = store->create_context(NULL);
-    ret = store->prepare_get_obj(obj_ctx, obj, NULL, NULL, &attrs, NULL,
-                                 NULL, NULL, NULL, NULL, NULL, &obj_size, NULL, &handle, NULL);
-    store->finish_get_obj(&handle);
-    store->destroy_context(obj_ctx);
+    RGWRados::ObjectCtx obj_ctx(store);
+    RGWRados::Object op_target(store, obj_ctx, obj);
+    RGWRados::Object::Read read_op(&op_target);
+
+    read_op.params.attrs = &attrs;
+    read_op.params.obj_size = &obj_size;
+
+    ret = read_op.prepare(NULL, NULL);
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
