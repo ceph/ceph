@@ -73,7 +73,7 @@ class Notify {
   Mutex lock;
 
   /// gid -> reply_bl for everyone who acked the notify
-  map<uint64_t,bufferlist> notify_replies;
+  multimap<uint64_t,bufferlist> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
