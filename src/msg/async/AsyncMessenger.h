@@ -76,33 +76,10 @@ class Worker : public Thread {
 
 
 /*
- * This class handles transmission and reception of messages. Generally
- * speaking, there are several major components:
+ * AsyncMessenger is represented for maintaining a set of asynchronous connections,
+ * it may own a bind address and the accepted connections will be managed by
+ * AsyncMessenger.
  *
- * - Connection
- *    Each logical session is associated with a Connection.
- * - AsyncConnection
- *    Each network connection is handled through a AsyncConnection, which handles
- *    the input and output of each message.  There is normally a 1:1
- *    relationship between AsyncConnection and Connection, but logical sessions may
- *    get handed off between AsyncConnection when sockets reconnect or during
- *    connection races.
- * - IncomingQueue
- *    Incoming messages are associated with an IncomingQueue, and there
- *    is one such queue associated with each AsyncConnection.
- * - DispatchQueue
- *    IncomingQueues get queued in the DispatchQueue, which is responsible
- *    for doing a round-robin sweep and processing them via a worker thread.
- * - AsyncMessenger
- *    It's the exterior class passed to the external message handler and
- *    most of the API details.
- *
- * Lock ordering:
- *
- *   AsyncMessenger::lock
- *       Pipe::pipe_lock
- *           DispatchQueue::lock
- *               IncomingQueue::lock
  */
 
 class AsyncMessenger : public SimplePolicyMessenger {
@@ -405,4 +382,4 @@ public:
    */
 } ;
 
-#endif /* CEPH_SIMPLEMESSENGER_H */
+#endif /* CEPH_ASYNCMESSENGER_H */

@@ -33,6 +33,13 @@ using namespace std;
 
 class AsyncMessenger;
 
+/*
+ * AsyncConnection maintains a logic session between two endpoints. In other
+ * word, a pair of addresses can find the only AsyncConnection. AsyncConnection
+ * will handle with network fault or read/write transactions. If one file
+ * descriptor broken, AsyncConnection will maintain the message queue and
+ * sequence, try to reconnect peer endpoint.
+ */
 class AsyncConnection : public Connection {
   const static uint64_t IOV_LEN = 1024;
 
