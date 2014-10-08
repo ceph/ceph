@@ -163,7 +163,7 @@ void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
   assert(in_progress_watchers > 0);
   watchers.erase(watch);
   --in_progress_watchers;
-  notify_replies[watch->get_watcher_gid()].claim(reply_bl);
+  notify_replies.insert(make_pair(watch->get_watcher_gid(), reply_bl));
   maybe_complete_notify();
 }
 

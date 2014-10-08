@@ -1893,8 +1893,11 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
  *      u8 * buflen  payload
  *    } * num_acks
  *
- * Note that this buffer must be released with rados_buffer_free()
- * when the user is done with it.
+ * Note: There may be multiple instances of the same gid if there are
+ * multiple watchers registered via the same client.
+ *
+ * Note: The buffer must be released with rados_buffer_free() when the
+ * user is done with it.
  *
  * @param io the pool the object is in
  * @param o the name of the object

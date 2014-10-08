@@ -107,13 +107,42 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
 			     &reply_buf, &reply_buf_len));
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
-  std::map<uint64_t, bufferlist> reply_map;
+  std::multimap<uint64_t, bufferlist> reply_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
   ASSERT_EQ(1, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   rados_unwatch(ioctx, notify_oid, handle);
+}
+
+TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
+  notify_io = ioctx;
+  notify_oid = "foo";
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
+  uint64_t handle1, handle2;
+  ASSERT_EQ(0,
+      rados_watch2(ioctx, notify_oid, &handle1, watch_notify2_test_cb, NULL));
+  ASSERT_EQ(0,
+      rados_watch2(ioctx, notify_oid, &handle2, watch_notify2_test_cb, NULL));
+  ASSERT_NE(handle1, handle2);
+  char *reply_buf;
+  size_t reply_buf_len;
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 0,
+			     &reply_buf, &reply_buf_len));
+  bufferlist reply;
+  reply.append(reply_buf, reply_buf_len);
+  std::multimap<uint64_t, bufferlist> reply_map;
+  bufferlist::iterator reply_p = reply.begin();
+  ::decode(reply_map, reply_p);
+  ASSERT_EQ(2, reply_map.size());
+  ASSERT_EQ(5, reply_map.begin()->second.length());
+  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  rados_unwatch(ioctx, notify_oid, handle1);
+  rados_unwatch(ioctx, notify_oid, handle2);
 }
 
 TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
@@ -172,7 +201,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
   bufferlist bl2, bl_reply;
   ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 0, &bl_reply));
   bufferlist::iterator p = bl_reply.begin();
-  std::map<uint64_t,bufferlist> reply_map;
+  std::multimap<uint64_t,bufferlist> reply_map;
   ::decode(reply_map, p);
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
