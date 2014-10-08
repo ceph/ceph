@@ -103,7 +103,10 @@ class AsyncConnection : public Connection {
   int send_message(Message *m);
 
   void send_keepalive();
-  void mark_down();
+  void mark_down() {
+    Mutex::Locker l(lock);
+    _stop();
+  }
   void mark_disposable() {
     Mutex::Locker l(lock);
     policy.lossy = true;
@@ -239,10 +242,6 @@ class AsyncConnection : public Connection {
   // used by eventcallback
   void handle_write();
   void process();
-  void stop() {
-    Mutex::Locker l(lock);
-    _stop();
-  }
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
