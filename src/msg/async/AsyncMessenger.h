@@ -18,9 +18,8 @@ using namespace std;
 #include "common/Thread.h"
 #include "common/Throttle.h"
 
-#include "SimplePolicyMessenger.h"
+#include "msg/SimplePolicyMessenger.h"
 #include "include/assert.h"
-#include "DispatchQueue.h"
 #include "AsyncConnection.h"
 #include "Event.h"
 

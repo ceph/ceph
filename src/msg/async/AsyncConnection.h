@@ -12,10 +12,10 @@ using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "include/buffer.h"
-#include "Connection.h"
+#include "msg/Connection.h"
 #include "net_handler.h"
 #include "Event.h"
-#include "Messenger.h"
+#include "msg/Messenger.h"
 
 class AsyncMessenger;
 

@@ -3,7 +3,7 @@
 #include "Messenger.h"
 
 #include "msg/simple/SimpleMessenger.h"
-#include "AsyncMessenger.h"
+#include "msg/async/AsyncMessenger.h"
 
 Messenger *Messenger::create(CephContext *cct,
 			     entity_name_t name,
