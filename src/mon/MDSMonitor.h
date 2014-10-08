@@ -97,7 +97,7 @@ class MDSMonitor : public PaxosService {
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
   int fail_mds(std::ostream &ss, const std::string &arg);
-  void fail_mds_gid(uint64_t gid);
+  void fail_mds_gid(mds_gid_t gid);
 
   bool preprocess_command(MMonCommand *m);
   bool prepare_command(MMonCommand *m);
@@ -118,7 +118,7 @@ class MDSMonitor : public PaxosService {
     utime_t stamp;
     uint64_t seq;
   };
-  map<uint64_t, beacon_info_t> last_beacon;
+  map<mds_gid_t, beacon_info_t> last_beacon;
 
   bool try_standby_replay(MDSMap::mds_info_t& finfo, MDSMap::mds_info_t& ainfo);
 

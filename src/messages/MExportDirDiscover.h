@@ -19,12 +19,12 @@
 #include "include/types.h"
 
 class MExportDirDiscover : public Message {
-  int32_t from;
+  mds_rank_t from;
   dirfrag_t dirfrag;
   filepath path;
 
  public:
-  int get_source_mds() { return from; }
+  mds_rank_t get_source_mds() { return from; }
   inodeno_t get_ino() { return dirfrag.ino; }
   dirfrag_t get_dirfrag() { return dirfrag; }
   filepath& get_path() { return path; }
@@ -34,7 +34,7 @@ class MExportDirDiscover : public Message {
   MExportDirDiscover() :     
     Message(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
-  MExportDirDiscover(dirfrag_t df, filepath& p, int f, uint64_t tid) :
+  MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
     Message(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);

@@ -50,7 +50,8 @@ Beacon::~Beacon()
 }
 
 
-void Beacon::init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, int standby_rank_, std::string const & standby_name_)
+void Beacon::init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_,
+    mds_rank_t standby_rank_, std::string const & standby_name_)
 {
   Mutex::Locker l(lock);
   assert(mdsmap != NULL);
@@ -164,7 +165,7 @@ void Beacon::_send()
   seq_stamp[last_seq] = ceph_clock_now(g_ceph_context);
   
   MMDSBeacon *beacon = new MMDSBeacon(
-      monc->get_fsid(), monc->get_global_id(),
+      monc->get_fsid(), mds_gid_t(monc->get_global_id()),
       name,
       epoch,
       want_state,

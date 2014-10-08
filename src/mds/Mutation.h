@@ -46,7 +46,7 @@ private:
 
 public:
   // flag mutation as slave
-  int slave_to_mds;                // this is a slave request if >= 0.
+  mds_rank_t slave_to_mds;                // this is a slave request if >= 0.
 
   // -- my pins and locks --
   // cache pins (so things don't expire)
@@ -54,20 +54,20 @@ public:
   set<CInode*> stickydirs;
 
   // auth pins
-  map<MDSCacheObject*,int> remote_auth_pins;
+  map<MDSCacheObject*, mds_rank_t> remote_auth_pins;
   set< MDSCacheObject* > auth_pins;
   
   // held locks
   set< SimpleLock* > rdlocks;  // always local.
   set< SimpleLock* > wrlocks;  // always local.
-  map< SimpleLock*, int > remote_wrlocks;
+  map< SimpleLock*, mds_rank_t > remote_wrlocks;
   set< SimpleLock* > xlocks;   // local or remote.
   set< SimpleLock*, SimpleLock::ptr_lt > locks;  // full ordering
 
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
   SimpleLock *locking;
-  int locking_target_mds;
+  mds_rank_t locking_target_mds;
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
@@ -88,11 +88,11 @@ public:
   MutationImpl()
     : attempt(0),
       ls(0),
-      slave_to_mds(-1),
+      slave_to_mds(MDS_RANK_NONE),
       locking(NULL),
       locking_target_mds(-1),
       done_locking(false), committing(false), aborted(false), killed(false) { }
-  MutationImpl(metareqid_t ri, __u32 att=0, int slave_to=-1)
+  MutationImpl(metareqid_t ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
     : reqid(ri), attempt(att),
       ls(0),
       slave_to_mds(slave_to), 
@@ -109,8 +109,8 @@ public:
     assert(remote_wrlocks.empty());
   }
 
-  bool is_master() { return slave_to_mds < 0; }
-  bool is_slave() { return slave_to_mds >= 0; }
+  bool is_master() { return slave_to_mds == MDS_RANK_NONE; }
+  bool is_slave() { return slave_to_mds != MDS_RANK_NONE; }
 
   client_t get_client() {
     if (reqid.name.is_client())
@@ -221,19 +221,19 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
-    set<int> slaves;           // mds nodes that have slave requests to me (implies client_request)
-    set<int> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
+    set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
+    set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
     // for rename/link/unlink
-    set<int> witnessed;       // nodes who have journaled a RenamePrepare
+    set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
     map<MDSCacheObject*,version_t> pvmap;
 
     bool has_journaled_slaves;
     bool slave_update_journaled;
     
     // for rename
-    set<int> extra_witnesses; // replica list from srcdn auth (rename)
-    int srcdn_auth_mds;
+    set<mds_rank_t> extra_witnesses; // replica list from srcdn auth (rename)
+    mds_rank_t srcdn_auth_mds;
     bufferlist inode_import;
     version_t inode_import_v;
     CInode* rename_inode;
@@ -278,13 +278,13 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     __u32 attempt;
     MClientRequest *client_req;
     class Message *triggering_slave_req;
-    int slave_to;
+    mds_rank_t slave_to;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op;
     // keep these default values synced to MutationImpl's
     Params() : attempt(0), client_req(NULL),
-        triggering_slave_req(NULL), slave_to(-1), internal_op(-1) {}
+        triggering_slave_req(NULL), slave_to(MDS_RANK_NONE), internal_op(-1) {}
   };
   MDRequestImpl(const Params& params, OpTracker *tracker) :
     MutationImpl(params.reqid, params.attempt, params.slave_to),

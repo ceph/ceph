@@ -388,7 +388,7 @@ public:
 
   std::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
-  pair<int,int> inode_auth;
+  mds_authority_t inode_auth;
 
   // -- distributed state --
 protected:
@@ -557,7 +557,7 @@ public:
   void encode_store(bufferlist& bl);
   void decode_store(bufferlist::iterator& bl);
 
-  void encode_replica(int rep, bufferlist& bl) {
+  void encode_replica(mds_rank_t rep, bufferlist& bl) {
     assert(is_auth());
     
     // relax locks?
@@ -773,7 +773,7 @@ public:
 
 
   // -- authority --
-  pair<int,int> authority();
+  mds_authority_t authority();
 
 
   // -- auth pins --

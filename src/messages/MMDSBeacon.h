@@ -124,12 +124,12 @@ class MMDSBeacon : public PaxosServiceMessage {
   static const int COMPAT_VERSION = 2;
 
   uuid_d fsid;
-  uint64_t global_id;
+  mds_gid_t global_id;
   string name;
 
   MDSMap::DaemonState state;
   version_t seq;
-  __s32 standby_for_rank;
+  mds_rank_t standby_for_rank;
   string standby_for_name;
 
   CompatSet compat;
@@ -138,23 +138,23 @@ class MMDSBeacon : public PaxosServiceMessage {
 
  public:
   MMDSBeacon() : PaxosServiceMessage(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION) { }
-  MMDSBeacon(const uuid_d &f, uint64_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se) : 
+  MMDSBeacon(const uuid_d &f, mds_gid_t g, string& n, epoch_t les, MDSMap::DaemonState st, version_t se) : 
     PaxosServiceMessage(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
-    standby_for_rank(-1) {
+    standby_for_rank(MDS_RANK_NONE) {
   }
 private:
   ~MMDSBeacon() {}
 
 public:
   uuid_d& get_fsid() { return fsid; }
-  uint64_t get_global_id() { return global_id; }
+  mds_gid_t get_global_id() { return global_id; }
   string& get_name() { return name; }
   epoch_t get_last_epoch_seen() { return version; }
   MDSMap::DaemonState get_state() { return state; }
   version_t get_seq() { return seq; }
   const char *get_type_name() const { return "mdsbeacon"; }
-  int get_standby_for_rank() { return standby_for_rank; }
+  mds_rank_t get_standby_for_rank() { return standby_for_rank; }
   const string& get_standby_for_name() { return standby_for_name; }
 
   CompatSet const& get_compat() const { return compat; }
@@ -163,7 +163,7 @@ public:
   MDSHealth const& get_health() const { return health; }
   void set_health(const MDSHealth &h) { health = h; }
 
-  void set_standby_for_rank(int r) { standby_for_rank = r; }
+  void set_standby_for_rank(mds_rank_t r) { standby_for_rank = r; }
   void set_standby_for_name(string& n) { standby_for_name = n; }
   void set_standby_for_name(const char* c) { standby_for_name.assign(c); }
 

@@ -134,7 +134,7 @@ public:
   // -- discover --
   struct discover_info_t {
     ceph_tid_t tid;
-    int mds;
+    mds_rank_t mds;
     inodeno_t ino;
     frag_t frag;
     snapid_t snap;
@@ -149,7 +149,7 @@ public:
   ceph_tid_t discover_last_tid;
 
   void _send_discover(discover_info_t& dis);
-  discover_info_t& _create_discover(int mds) {
+  discover_info_t& _create_discover(mds_rank_t mds) {
     ceph_tid_t t = ++discover_last_tid;
     discover_info_t& d = discovers[t];
     d.tid = t;
@@ -160,14 +160,14 @@ public:
   // waiters
   map<int, map<inodeno_t, list<MDSInternalContextBase*> > > waiting_for_base_ino;
 
-  void discover_base_ino(inodeno_t want_ino, MDSInternalContextBase *onfinish, int from=-1);
+  void discover_base_ino(inodeno_t want_ino, MDSInternalContextBase *onfinish, mds_rank_t from=MDS_RANK_NONE);
   void discover_dir_frag(CInode *base, frag_t approx_fg, MDSInternalContextBase *onfinish,
-			 int from=-1);
+			 mds_rank_t from=MDS_RANK_NONE);
   void discover_path(CInode *base, snapid_t snap, filepath want_path, MDSInternalContextBase *onfinish,
-		     bool want_xlocked=false, int from=-1);
+		     bool want_xlocked=false, mds_rank_t from=MDS_RANK_NONE);
   void discover_path(CDir *base, snapid_t snap, filepath want_path, MDSInternalContextBase *onfinish,
 		     bool want_xlocked=false);
-  void kick_discovers(int who);  // after a failure.
+  void kick_discovers(mds_rank_t who);  // after a failure.
 
 
 public:
@@ -187,17 +187,17 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, pair<int,int> auth, bool do_eval=true);
-  void adjust_subtree_auth(CDir *root, int a, int b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
-    adjust_subtree_auth(root, pair<int,int>(a,b), do_eval); 
+  void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool do_eval=true);
+  void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN, bool do_eval=true) {
+    adjust_subtree_auth(root, mds_authority_t(a,b), do_eval); 
   }
-  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, pair<int,int> auth);
-  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, int a) {
-    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_authority_t auth);
+  void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_rank_t a) {
+    adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(a, CDIR_AUTH_UNKNOWN));
   }
-  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, pair<int,int> auth);
-  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, int a) {
-    adjust_bounded_subtree_auth(dir, bounds, pair<int,int>(a, CDIR_AUTH_UNKNOWN));
+  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, mds_authority_t auth);
+  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, mds_rank_t a) {
+    adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(a, CDIR_AUTH_UNKNOWN));
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
@@ -233,7 +233,7 @@ public:
   
 protected:
   // delayed cache expire
-  map<CDir*, map<int, MCacheExpire*> > delayed_expire; // subtree root -> expire msg
+  map<CDir*, map<mds_rank_t, MCacheExpire*> > delayed_expire; // subtree root -> expire msg
 
 
   // -- requests --
@@ -252,7 +252,7 @@ public:
   MDRequestRef request_get(metareqid_t rid);
   void request_pin_ref(MDRequestRef& r, CInode *ref, vector<CDentry*>& trace);
   void request_finish(MDRequestRef& mdr);
-  void request_forward(MDRequestRef& mdr, int mds, int port=0);
+  void request_forward(MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(MDRequestRef& mdr);
   void request_drop_foreign_locks(MDRequestRef& mdr);
   void request_drop_non_rdlocks(MDRequestRef& r);
@@ -283,7 +283,7 @@ public:
 				snapid_t follows=CEPH_NOSNAP);
 
   // slaves
-  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<int> &slaves, bool safe=false) {
+  void add_uncommitted_master(metareqid_t reqid, LogSegment *ls, set<mds_rank_t> &slaves, bool safe=false) {
     uncommitted_masters[reqid].ls = ls;
     uncommitted_masters[reqid].slaves = slaves;
     uncommitted_masters[reqid].safe = safe;
@@ -294,34 +294,34 @@ public:
   void log_master_commit(metareqid_t reqid);
   void logged_master_update(metareqid_t reqid);
   void _logged_master_commit(metareqid_t reqid);
-  void committed_master_slave(metareqid_t r, int from);
+  void committed_master_slave(metareqid_t r, mds_rank_t from);
   void finish_committed_masters();
 
-  void _logged_slave_commit(int from, metareqid_t reqid);
+  void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
 
   // -- recovery --
 protected:
-  set<int> recovery_set;
+  set<mds_rank_t> recovery_set;
 
 public:
-  void set_recovery_set(set<int>& s);
-  void handle_mds_failure(int who);
-  void handle_mds_recovery(int who);
+  void set_recovery_set(set<mds_rank_t>& s);
+  void handle_mds_failure(mds_rank_t who);
+  void handle_mds_recovery(mds_rank_t who);
 
 protected:
   // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
   map<dirfrag_t, vector<dirfrag_t> >            my_ambiguous_imports;  
   // from MMDSResolves
-  map<int, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
+  map<mds_rank_t, map<dirfrag_t, vector<dirfrag_t> > > other_ambiguous_imports;  
 
-  map<int, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
+  map<mds_rank_t, map<metareqid_t, MDSlaveUpdate*> > uncommitted_slave_updates;  // slave: for replay.
   map<CInode*, int> uncommitted_slave_rename_olddir;  // slave: preserve the non-auth dir until seeing commit.
   map<CInode*, int> uncommitted_slave_unlink;  // slave: preserve the unlinked inode until seeing commit.
 
   // track master requests whose slaves haven't acknowledged commit
   struct umaster {
-    set<int> slaves;
+    set<mds_rank_t> slaves;
     LogSegment *ls;
     list<MDSInternalContextBase*> waiters;
     bool safe;
@@ -338,40 +338,40 @@ protected:
   friend class ECommitted;
 
   bool resolves_pending;
-  set<int> resolve_gather;	// nodes i need resolves from
-  set<int> resolve_ack_gather;	// nodes i need a resolve_ack from
-  map<metareqid_t, int> need_resolve_rollback;  // rollbacks i'm writing to the journal
-  map<int, MMDSResolve*> delayed_resolve;
+  set<mds_rank_t> resolve_gather;	// nodes i need resolves from
+  set<mds_rank_t> resolve_ack_gather;	// nodes i need a resolve_ack from
+  map<metareqid_t, mds_rank_t> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<mds_rank_t, MMDSResolve*> delayed_resolve;
   
   void handle_resolve(MMDSResolve *m);
   void handle_resolve_ack(MMDSResolveAck *m);
   void process_delayed_resolve();
-  void discard_delayed_resolve(int who);
+  void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
   void disambiguate_imports();
   void trim_unlinked_inodes();
-  void add_uncommitted_slave_update(metareqid_t reqid, int master, MDSlaveUpdate*);
-  void finish_uncommitted_slave_update(metareqid_t reqid, int master);
-  MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, int master);
+  void add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate*);
+  void finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
+  MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
 public:
   void recalc_auth_bits(bool replay);
   void remove_inode_recursive(CInode *in);
 
-  bool is_ambiguous_slave_update(metareqid_t reqid, int master) {
+  bool is_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     return ambiguous_slave_updates.count(master) &&
 	   ambiguous_slave_updates[master].count(reqid);
   }
-  void add_ambiguous_slave_update(metareqid_t reqid, int master) {
+  void add_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     ambiguous_slave_updates[master].insert(reqid);
   }
-  void remove_ambiguous_slave_update(metareqid_t reqid, int master) {
+  void remove_ambiguous_slave_update(metareqid_t reqid, mds_rank_t master) {
     assert(ambiguous_slave_updates[master].count(reqid));
     ambiguous_slave_updates[master].erase(reqid);
     if (ambiguous_slave_updates[master].empty())
       ambiguous_slave_updates.erase(master);
   }
 
-  void add_rollback(metareqid_t reqid, int master) {
+  void add_rollback(metareqid_t reqid, mds_rank_t master) {
     need_resolve_rollback[reqid] = master;
   }
   void finish_rollback(metareqid_t reqid);
@@ -407,17 +407,17 @@ public:
 protected:
   // [rejoin]
   bool rejoins_pending;
-  set<int> rejoin_gather;      // nodes from whom i need a rejoin
-  set<int> rejoin_sent;        // nodes i sent a rejoin to
-  set<int> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
-  map<int,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
-  map<inodeno_t,pair<int,map<client_t,Capability::Export> > > rejoin_slave_exports;
+  set<mds_rank_t> rejoin_gather;      // nodes from whom i need a rejoin
+  set<mds_rank_t> rejoin_sent;        // nodes i sent a rejoin to
+  set<mds_rank_t> rejoin_ack_gather;  // nodes from whom i need a rejoin ack
+  map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
+  map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
   map<client_t,entity_inst_t> rejoin_client_map;
 
   map<inodeno_t,map<client_t,ceph_mds_cap_reconnect> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,int> cap_export_targets; // ino -> auth mds
+  map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
 
-  map<inodeno_t,map<client_t,map<int,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
+  map<inodeno_t,map<client_t,map<mds_rank_t,ceph_mds_cap_reconnect> > > cap_imports;  // ino -> client -> frommds -> capex
   map<inodeno_t,filepath> cap_import_paths;
   set<inodeno_t> cap_imports_missing;
   int cap_imports_num_opening;
@@ -425,7 +425,7 @@ protected:
   set<CInode*> rejoin_undef_inodes;
   set<CInode*> rejoin_potential_updated_scatterlocks;
   set<CDir*>   rejoin_undef_dirfrags;
-  map<int, set<CInode*> > rejoin_unlinked_inodes;
+  map<mds_rank_t, set<CInode*> > rejoin_unlinked_inodes;
 
   vector<CInode*> rejoin_recover_q, rejoin_check_q;
   list<SimpleLock*> rejoin_eval_locks;
@@ -437,7 +437,7 @@ protected:
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
   void handle_cache_rejoin_strong(MMDSCacheRejoin *m);
-  void rejoin_scour_survivor_replicas(int from, MMDSCacheRejoin *ack,
+  void rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *ack,
 				      set<vinodeno_t>& acked_inodes,
 				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
@@ -457,15 +457,15 @@ public:
     cap_export_targets[ino] = target;
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, cap_reconnect_t& icr, 
-			     int frommds=-1) {
+			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr.capinfo;
     cap_import_paths[ino] = filepath(icr.path, (uint64_t)icr.capinfo.pathbase);
   }
   ceph_mds_cap_reconnect *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&
-	cap_imports[ino][client].count(-1)) {
-      return &cap_imports[ino][client][-1];
+	cap_imports[ino][client].count(MDS_RANK_NONE)) {
+      return &cap_imports[ino][client][MDS_RANK_NONE];
     }
     return NULL;
   }
@@ -497,7 +497,7 @@ public:
 			   map<client_t,MClientSnap*>& splits);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend=false);
   void send_snaps(map<client_t,MClientSnap*>& splits);
-  Capability* rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, int frommds);
+  Capability* rejoin_import_cap(CInode *in, client_t client, ceph_mds_cap_reconnect& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq);
   void try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
@@ -558,12 +558,12 @@ public:
 
   // trimming
   bool trim(int max=-1, int count=-1);   // trim cache
-  bool trim_dentry(CDentry *dn, map<int, MCacheExpire*>& expiremap);
+  bool trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
-		    map<int, MCacheExpire*>& expiremap);
+		    map<mds_rank_t, MCacheExpire*>& expiremap);
   bool trim_inode(CDentry *dn, CInode *in, CDir *con,
-		  map<int,class MCacheExpire*>& expiremap);
-  void send_expire_messages(map<int, MCacheExpire*>& expiremap);
+		  map<mds_rank_t,class MCacheExpire*>& expiremap);
+  void send_expire_messages(map<mds_rank_t, MCacheExpire*>& expiremap);
   void trim_non_auth();      // trim out trimmable non-auth items
   bool trim_non_auth_subtree(CDir *directory);
   void standby_trim_segment(LogSegment *ls);
@@ -665,9 +665,9 @@ public:
   }
 protected:
 
-  void inode_remove_replica(CInode *in, int rep, bool rejoin,
+  void inode_remove_replica(CInode *in, mds_rank_t rep, bool rejoin,
 			    set<SimpleLock *>& gather_locks);
-  void dentry_remove_replica(CDentry *dn, int rep, set<SimpleLock *>& gather_locks);
+  void dentry_remove_replica(CDentry *dn, mds_rank_t rep, set<SimpleLock *>& gather_locks);
 
   void rename_file(CDentry *srcdn, CDentry *destdn);
 
@@ -783,9 +783,9 @@ public:
 protected:
   struct open_ino_info_t {
     vector<inode_backpointer_t> ancestors;
-    set<int> checked;
-    int checking;
-    int auth_hint;
+    set<mds_rank_t> checked;
+    mds_rank_t checking;
+    mds_rank_t auth_hint;
     bool check_peers;
     bool fetch_backtrace;
     bool discover;
@@ -794,7 +794,7 @@ protected:
     version_t tid;
     int64_t pool;
     list<MDSInternalContextBase*> waiters;
-    open_ino_info_t() : checking(-1), auth_hint(-1),
+    open_ino_info_t() : checking(MDS_RANK_NONE), auth_hint(MDS_RANK_NONE),
       check_peers(true), fetch_backtrace(true), discover(false) {}
   };
   ceph_tid_t open_ino_last_tid;
@@ -807,7 +807,7 @@ protected:
   MDSInternalContextBase* _open_ino_get_waiter(inodeno_t ino, MMDSOpenIno *m);
   int open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
 			    vector<inode_backpointer_t>& ancestors,
-			    bool discover, bool want_xlocked, int *hint);
+			    bool discover, bool want_xlocked, mds_rank_t *hint);
   void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
@@ -818,7 +818,7 @@ protected:
   friend struct C_MDC_OpenInoParentOpened;
 
 public:
-  void kick_open_ino_peers(int who);
+  void kick_open_ino_peers(mds_rank_t who);
   void open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase *fin,
 		bool want_replica=true, bool want_xlocked=false);
   
@@ -827,21 +827,21 @@ public:
     inodeno_t ino;
     ceph_tid_t tid;
     MDSInternalContextBase *fin;
-    int hint;
-    int checking;
-    set<int> checked;
+    mds_rank_t hint;
+    mds_rank_t checking;
+    set<mds_rank_t> checked;
 
-    find_ino_peer_info_t() : tid(0), fin(NULL), hint(-1), checking(-1) {}
+    find_ino_peer_info_t() : tid(0), fin(NULL), hint(MDS_RANK_NONE), checking(MDS_RANK_NONE) {}
   };
 
   map<ceph_tid_t, find_ino_peer_info_t> find_ino_peer;
   ceph_tid_t find_ino_peer_last_tid;
 
-  void find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, int hint=-1);
+  void find_ino_peers(inodeno_t ino, MDSInternalContextBase *c, mds_rank_t hint=MDS_RANK_NONE);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
   void handle_find_ino(MMDSFindIno *m);
   void handle_find_ino_reply(MMDSFindInoReply *m);
-  void kick_find_ino_peers(int who);
+  void kick_find_ino_peers(mds_rank_t who);
 
   // -- snaprealms --
 public:
@@ -877,7 +877,7 @@ protected:
   friend class C_MDC_PurgeStrayLoggedTruncate;
   friend class C_IO_MDC_PurgeStrayPurged;
   void reintegrate_stray(CDentry *dn, CDentry *rlink);
-  void migrate_stray(CDentry *dn, int dest);
+  void migrate_stray(CDentry *dn, mds_rank_t dest);
 
 
   // == messages ==
@@ -891,29 +891,29 @@ protected:
   friend class C_MDC_Join;
 
 public:
-  void replicate_dir(CDir *dir, int to, bufferlist& bl) {
+  void replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl) {
     dirfrag_t df = dir->dirfrag();
     ::encode(df, bl);
     dir->encode_replica(to, bl);
   }
-  void replicate_dentry(CDentry *dn, int to, bufferlist& bl) {
+  void replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl) {
     ::encode(dn->name, bl);
     ::encode(dn->last, bl);
     dn->encode_replica(to, bl);
   }
-  void replicate_inode(CInode *in, int to, bufferlist& bl) {
+  void replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl) {
     ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
     ::encode(in->last, bl);
     in->encode_replica(to, bl);
   }
   
-  CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, int from, list<MDSInternalContextBase*>& finished);
-  CDir* forge_replica_dir(CInode *diri, frag_t fg, int from);
+  CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
+  CDir* forge_replica_dir(CInode *diri, frag_t fg, mds_rank_t from);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);
   CInode *add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished);
 
-  void replicate_stray(CDentry *straydn, int who, bufferlist& bl);
-  CDentry *add_replica_stray(bufferlist &bl, int from);
+  void replicate_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl);
+  CDentry *add_replica_stray(bufferlist &bl, mds_rank_t from);
 
   // -- namespace --
 public:
