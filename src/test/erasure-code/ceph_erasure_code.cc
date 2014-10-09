@@ -146,10 +146,15 @@ int ErasureCodeCommand::run() {
 
 int main(int argc, char** argv) {
   ErasureCodeCommand eccommand;
-  int err = eccommand.setup(argc, argv);
-  if (err)
-    return err;
-  return eccommand.run();
+  try {
+    int err = eccommand.setup(argc, argv);
+    if (err)
+      return err;
+    return eccommand.run();
+  } catch(po::error &e) {
+    cerr << e.what() << endl; 
+    return 1;
+  }
 }
 
 /*
