@@ -160,11 +160,12 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
-    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-			     uint64_t off, Context *onfinish);
+    void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+			     size_t len, uint64_t off, Context *onfinish);
     void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
 			Context *onfinish);
-    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
+    int read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+			size_t len, uint64_t off);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
@@ -180,6 +181,8 @@ namespace librbd {
     void wait_for_pending_aio();
     void wait_for_pending_copyup();
 
+    /* object map */
+    bool object_may_exist(uint64_t object_no) const;
     int refresh_object_map();
     int resize_object_map(uint8_t default_object_state);
     int update_object_map(uint64_t object_no, uint8_t object_state);

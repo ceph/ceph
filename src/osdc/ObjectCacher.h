@@ -170,6 +170,7 @@ class ObjectCacher {
     friend struct ObjectSet;
 
   public:
+    uint64_t object_no;
     ObjectSet *oset;
     xlist<Object*>::item set_item;
     object_locator_t oloc;
@@ -193,11 +194,11 @@ class ObjectCacher {
     Object(const Object& other);
     const Object& operator=(const Object& other);
 
-    Object(ObjectCacher *_oc, sobject_t o, ObjectSet *os, object_locator_t& l,
-	   uint64_t ts, uint64_t tq) :
+    Object(ObjectCacher *_oc, sobject_t o, uint64_t ono, ObjectSet *os,
+	   object_locator_t& l, uint64_t ts, uint64_t tq) :
       ref(0),
       oc(_oc),
-      oid(o), oset(os), set_item(this), oloc(l),
+      oid(o), object_no(ono), oset(os), set_item(this), oloc(l),
       truncate_size(ts), truncate_seq(tq),
       complete(false), exists(true),
       last_write_tid(0), last_commit_tid(0),
@@ -218,6 +219,7 @@ class ObjectCacher {
     snapid_t get_snap() { return oid.snap; }
     ObjectSet *get_object_set() { return oset; }
     string get_namespace() { return oloc.nspace; }
+    uint64_t get_object_number() const { return object_no; }
     
     object_locator_t& get_oloc() { return oloc; }
     void set_object_locator(object_locator_t& l) { oloc = l; }
@@ -373,8 +375,9 @@ class ObjectCacher {
     return NULL;
   }
 
-  Object *get_object(sobject_t oid, ObjectSet *oset, object_locator_t &l,
-		     uint64_t truncate_size, uint64_t truncate_seq);
+  Object *get_object(sobject_t oid, uint64_t object_no, ObjectSet *oset,
+		     object_locator_t &l, uint64_t truncate_size,
+		     uint64_t truncate_seq);
   void close_object(Object *ob);
 
   // bh stats

@@ -486,12 +486,13 @@ namespace librbd {
     return -ENOENT;
   }
 
-  void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
+  void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
+				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
+    ObjectExtent extent(o, object_no, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
@@ -520,14 +521,14 @@ namespace librbd {
     }
   }
 
-  int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len,
-				uint64_t off) {
+  int ImageCtx::read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+				size_t len, uint64_t off) {
     int r;
     Mutex mylock("librbd::ImageCtx::read_from_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, bl, len, off, onfinish);
+    aio_read_from_cache(o, object_no, bl, len, off, onfinish);
     mylock.Lock();
     while (!done)
       cond.Wait(mylock);
@@ -684,12 +685,26 @@ namespace librbd {
     }
   }
 
+  bool ImageCtx::object_may_exist(uint64_t object_no) const
+  {
+    // Fall back to default logic if object map is disabled
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0 /* || invalid map */) {
+      return true;
+    }
+
+    RWLock::RLocker l(object_map_lock);
+    assert(object_no < object_map.size());
+    return (object_map[object_no] == OBJECT_EXISTS ||
+	    object_map[object_no] == OBJECT_PENDING);
+  }
+
   int ImageCtx::refresh_object_map()
   {
     if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
       return 0;
     }
 
+    RWLock::WLocker l(object_map_lock);
     int r = cls_client::object_map_load(&data_ctx, object_map_name(id),
 					&object_map);
     if (r < 0) {
@@ -720,6 +735,7 @@ namespace librbd {
       return 0;
     }
 
+    RWLock::WLocker l(object_map_lock);
     uint64_t num_objs = Striper::get_num_objects(layout, get_current_size());
     ldout(cct, 20) << "resizing object map: " << num_objs << dendl;
     librados::ObjectWriteOperation op;
@@ -755,6 +771,7 @@ namespace librbd {
       return 0;
     }
 
+    RWLock::WLocker l(object_map_lock);
     assert(start_object_no <= end_object_no);
     assert(/* flagged as invalid || */ end_object_no <= object_map.size());
     if (end_object_no > object_map.size()) {
@@ -786,7 +803,7 @@ namespace librbd {
     int r = data_ctx.operate(object_map_name(id), &op);
     if (r < 0) {
       lderr(cct) << "object map update failed: " << cpp_strerror(r) << dendl;
-      // TODO: disable object map
+      // TODO: remove RBD_FEATURE_EXCLUSIVE_LOCK feature on image
     } else {
       for (uint64_t object_no = start_object_no; object_no < end_object_no;
            ++object_no) {

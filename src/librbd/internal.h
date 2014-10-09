@@ -54,6 +54,7 @@ enum {
 };
 
 class Context;
+class SimpleThrottle;
 
 namespace librbd {
 
@@ -166,6 +167,8 @@ namespace librbd {
 		   ceph::bufferlist& header);
   int tmap_set(librados::IoCtx& io_ctx, const std::string& imgname);
   int tmap_rm(librados::IoCtx& io_ctx, const std::string& imgname);
+  void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
+                       SimpleThrottle& throttle);
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx);
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
