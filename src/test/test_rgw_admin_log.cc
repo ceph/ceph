@@ -744,7 +744,6 @@ TEST(TestRGWAdmin, datalog_list) {
   char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
-  free(bucket_obj);
   sleep(1); 
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
   rest_req = ss.str();
@@ -777,6 +776,7 @@ TEST(TestRGWAdmin, datalog_list) {
 
   sleep(1);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  free(bucket_obj);
   sleep(20);
   ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
