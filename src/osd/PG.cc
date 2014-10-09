@@ -1286,21 +1286,28 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
       ss);
   dout(10) << ss.str() << dendl;
 
-  unsigned num_want_acting = 0;
-  for (vector<int>::iterator i = want.begin();
-       i != want.end();
-       ++i) {
-    if (*i != CRUSH_ITEM_NONE)
-      ++num_want_acting;
-  }
-  assert(want_acting_backfill.size() - want_backfill.size() == num_want_acting);
+  if (compat_mode) {
+    if (want_acting_backfill.size() < pool.info.min_size) {
+      want_acting.clear();
+      return false;
+    }
+  } else {
+    unsigned num_want_acting = 0;
+    for (vector<int>::iterator i = want.begin();
+	 i != want.end();
+	 ++i) {
+      if (*i != CRUSH_ITEM_NONE)
+	++num_want_acting;
+    }
+    assert(want_acting_backfill.size() - want_backfill.size() == num_want_acting);
 
-  // This is a bit of a problem, if we allow the pg to go active with
-  // want.size() < min_size, we won't consider the pg to have been
-  // maybe_went_rw in build_prior.
-  if (num_want_acting < pool.info.min_size) {
-    want_acting.clear();
-    return false;
+    // This is a bit of a problem, if we allow the pg to go active with
+    // want.size() < min_size, we won't consider the pg to have been
+    // maybe_went_rw in build_prior.
+    if (num_want_acting < pool.info.min_size) {
+      want_acting.clear();
+      return false;
+    }
   }
 
   /* Check whether we have enough acting shards to later perform recovery */
