@@ -108,7 +108,6 @@ int GenericFileStoreBackend::detect_features()
       return r;
     }
   }
-  ::fsync(fd);
 
   // fiemap an extent inside that
   struct fiemap *fiemap;
