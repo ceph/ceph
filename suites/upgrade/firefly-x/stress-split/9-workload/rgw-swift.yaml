@@ -1,6 +1,6 @@
 tasks:
 - rgw: 
-    [client.0]
+    client.0
     default_idle_timeout: 300
 - swift:
     client.0:
