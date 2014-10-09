@@ -1,0 +1,13 @@
+tasks:
+- install:
+    tag: v0.86
+- print: "**** done giant RC install"
+- ceph:
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel"
+~                                
