@@ -49,6 +49,9 @@ using ::librbd::cls_client::get_stripe_unit_count;
 using ::librbd::cls_client::set_stripe_unit_count;
 using ::librbd::cls_client::old_snapshot_add;
 using ::librbd::cls_client::get_mutable_metadata;
+using ::librbd::cls_client::object_map_load;
+using ::librbd::cls_client::object_map_resize;
+using ::librbd::cls_client::object_map_update;
 
 static char *random_buf(size_t len)
 {
@@ -920,6 +923,101 @@ TEST_F(TestClsRbd, get_mutable_metadata_features)
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK), features);
   ASSERT_EQ(static_cast<uint64_t>(RBD_FEATURE_EXCLUSIVE_LOCK),
 	    incompatible_features);
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, object_map_resize)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> ref_bit_vector;
+  ref_bit_vector.resize(32);
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    ref_bit_vector[i] = 1;
+  }
+
+  librados::ObjectWriteOperation op1;
+  object_map_resize(&op1, ref_bit_vector.size(), 1);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  BitVector<2> osd_bit_vector;
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ref_bit_vector.resize(64);
+  for (uint64_t i = 32; i < ref_bit_vector.size(); ++i) {
+    ref_bit_vector[i] = 2;
+  }
+
+  librados::ObjectWriteOperation op2;
+  object_map_resize(&op2, ref_bit_vector.size(), 2);
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ref_bit_vector.resize(16);
+
+  librados::ObjectWriteOperation op3;
+  object_map_resize(&op3, ref_bit_vector.size(), 1);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, object_map_update)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> ref_bit_vector;
+  ref_bit_vector.resize(16);
+  for (uint64_t i = 0; i < ref_bit_vector.size(); ++i) {
+    ref_bit_vector[i] = 2;
+  }
+
+  BitVector<2> osd_bit_vector;
+
+  librados::ObjectWriteOperation op1;
+  object_map_resize(&op1, ref_bit_vector.size(), 2);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ref_bit_vector[7] = 1;
+  ref_bit_vector[8] = 1;
+
+  librados::ObjectWriteOperation op2;
+  object_map_update(&op2, 7, 9, 1, boost::optional<uint8_t>());
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ref_bit_vector[7] = 3;
+  ref_bit_vector[8] = 3;
+
+  librados::ObjectWriteOperation op3;
+  object_map_update(&op3, 6, 10, 3, 1);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+  ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
+  ASSERT_EQ(ref_bit_vector, osd_bit_vector);
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, object_map_load_enoent)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  BitVector<2> osd_bit_vector;
+  ASSERT_EQ(-ENOENT, object_map_load(&ioctx, oid, &osd_bit_vector));
 
   ioctx.close();
 }

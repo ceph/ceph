@@ -37,6 +37,7 @@
 #include <sstream>
 #include <vector>
 
+#include "common/bit_vector.hpp"
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "include/rbd_types.h"
@@ -90,6 +91,9 @@ cls_method_handle_t h_dir_list;
 cls_method_handle_t h_dir_add_image;
 cls_method_handle_t h_dir_remove_image;
 cls_method_handle_t h_dir_rename_image;
+cls_method_handle_t h_object_map_load;
+cls_method_handle_t h_object_map_resize;
+cls_method_handle_t h_object_map_update;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -1795,6 +1799,186 @@ int dir_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return dir_remove_image_helper(hctx, name, id);
 }
 
+int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
+{
+  uint64_t size;
+  int r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  r = cls_cxx_read(hctx, 0, size, &bl);
+  if (r < 0) {
+   return r;
+  }
+
+  try {
+    bufferlist::iterator iter = bl.begin();
+    ::decode(object_map, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+/**
+ * Load an rbd image's object map
+ *
+ * Input:
+ * none
+ *
+ * Output:
+ * @param object map bit vector
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_load(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  BitVector<2> object_map;
+  int r = object_map_read(hctx, object_map);
+  if (r < 0) {
+    return r;
+  }
+
+  ::encode(object_map, *out);
+  return 0;
+}
+
+/**
+ * Resize an rbd image's object map
+ *
+ * Input:
+ * @param object_count the max number of objects in the image
+ * @param default_state the default state of newly created objects
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t object_count;
+  uint8_t default_state;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(object_count, iter);
+    ::decode(default_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  BitVector<2> object_map;
+  int r = object_map_read(hctx, object_map);
+  if ((r < 0) && (r != -ENOENT)) {
+    return r;
+  }
+
+  size_t orig_object_map_size = object_map.size();
+  if (orig_object_map_size != object_count) {
+    object_map.resize(object_count);
+    for (uint64_t i = orig_object_map_size; i < object_count; ++i) {
+      object_map[i] = default_state;
+    }
+  }
+
+  bufferlist map;
+  ::encode(object_map, map);
+  CLS_LOG(20, "object_map_resize: object size=%llu, byte size=%llu",
+	  static_cast<unsigned long long>(object_count),
+	  static_cast<unsigned long long>(map.length()));
+  return cls_cxx_write_full(hctx, &map);
+}
+
+/**
+ * Update an rbd image's object map
+ *
+ * Input:
+ * @param start_object_no the start object iterator
+ * @param end_object_no the end object iterator
+ * @param new_object_state the new object state
+ * @param current_object_state optional current object state filter
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t start_object_no;
+  uint64_t end_object_no;
+  uint8_t new_object_state;
+  boost::optional<uint8_t> current_object_state;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_object_no, iter);
+    ::decode(end_object_no, iter);
+    ::decode(new_object_state, iter);
+    ::decode(current_object_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  BitVector<2> object_map;
+  bufferlist header_bl;
+  int r = cls_cxx_read(hctx, 0, object_map.get_header_length(), &header_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  try {
+    bufferlist::iterator it = header_bl.begin();
+    object_map.decode_header(it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (start_object_no >= end_object_no || end_object_no > object_map.size()) {
+    return -ERANGE;
+  }
+
+  uint64_t byte_offset;
+  uint64_t byte_length;
+  object_map.get_data_extents(start_object_no,
+			      end_object_no - start_object_no,
+			      &byte_offset, &byte_length);
+
+  bufferlist data_bl;
+  r = cls_cxx_read(hctx, object_map.get_header_length() + byte_offset,
+		   byte_length, &data_bl); 
+  if (r < 0) {
+    return r;
+  }
+
+  try {
+    bufferlist::iterator it = data_bl.begin();
+    object_map.decode_data(it, byte_offset);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  } 
+
+  bool updated = false;
+  for (uint64_t object_no = start_object_no; object_no < end_object_no;
+       ++object_no) {
+    if ((!current_object_state || object_map[object_no] == *current_object_state) &&
+	object_map[object_no] != new_object_state) {
+      object_map[object_no] = new_object_state;
+      updated = true;
+    }
+  }
+
+  if (updated) {
+    CLS_LOG(20, "object_map_update: %llu~%llu -> %llu",
+	    static_cast<unsigned long long>(byte_offset),
+	    static_cast<unsigned long long>(byte_length),
+	    static_cast<unsigned long long>(object_map.get_header_length() +
+					    byte_offset));
+
+    bufferlist update;
+    object_map.encode_data(update, byte_offset, byte_length); 
+    r = cls_cxx_write(hctx, object_map.get_header_length() + byte_offset,
+		      update.length(), &update);
+  }
+  return r;
+}
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -2089,6 +2273,17 @@ void __cls_init()
   cls_register_cxx_method(h_class, "dir_rename_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
+
+  /* methods for the rbd_object_map.$image_id object */
+  cls_register_cxx_method(h_class, "object_map_load",
+                          CLS_METHOD_RD,
+			  object_map_load, &h_object_map_load);
+  cls_register_cxx_method(h_class, "object_map_resize",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_resize, &h_object_map_resize);
+  cls_register_cxx_method(h_class, "object_map_update",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  object_map_update, &h_object_map_update);
 
   /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
