@@ -945,9 +945,18 @@ class TestExclusiveLock(object):
             RBD().clone(ioctx, image_name, 'snap', ioctx, 'clone', features)
             with nested(Image(ioctx, 'clone'), Image(ioctx2, 'clone')) as (
                     image1, image2):
-                image1.write('0'*256, 0)
-                assert_raises(ReadOnlyImage, image2.flatten)
-                image1.flatten()
+                data = rand_data(256)
+                image1.write(data, 0)
+                image2.flatten()
+                assert_raises(ImageNotFound, image1.parent_info)
+                parent = True
+                for x in xrange(30):
+                    try:
+                        image2.parent_info()
+                    except ImageNotFound:
+                        parent = False
+                        break
+                eq(False, parent)
         finally:
             RBD().remove(ioctx, 'clone')
             with Image(ioctx, image_name) as image:
@@ -959,8 +968,19 @@ class TestExclusiveLock(object):
                 image1, image2):
             image1.write('0'*256, 0)
             for new_size in [IMG_SIZE * 2, IMG_SIZE / 2]:
-                assert_raises(ReadOnlyImage, image2.resize, new_size)
-                image1.resize(new_size);
+                image2.resize(new_size);
+                eq(new_size, image1.size())
+                for x in xrange(30):
+                    if new_size == image2.size():
+                        break
+                    time.sleep(1)
+                eq(new_size, image2.size())
+
+    def test_follower_snap_create(self):
+        with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
+                image1, image2):
+            image2.create_snap('snap1')
+            image1.remove_snap('snap1')
 
     def test_follower_snap_rollback(self):
         with nested(Image(ioctx, image_name), Image(ioctx2, image_name)) as (
