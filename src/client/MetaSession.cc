@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
+#include "messages/MClientCapRelease.h"
 
 #include "MetaSession.h"
 
@@ -37,4 +38,23 @@ MetaSession::~MetaSession()
 {
   if (release)
     release->put();
+}
+
+void MetaSession::enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
+    ceph_seq_t mseq, epoch_t osd_barrier)
+{
+  if (!release) {
+    release = new MClientCapRelease;
+  }
+
+  if (osd_barrier > release->osd_epoch_barrier) {
+    release->osd_epoch_barrier = osd_barrier;
+  }
+
+  ceph_mds_cap_item i;
+  i.ino = ino;
+  i.cap_id = cap_id;
+  i.seq = iseq;
+  i.migrate_seq = mseq;
+  release->caps.push_back(i);
 }
