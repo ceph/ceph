@@ -950,6 +950,9 @@ def zap(dev):
                 dev,
             ],
         )
+
+        update_partition('-d', dev, 'zapped')
+
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
