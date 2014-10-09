@@ -465,6 +465,7 @@ namespace librbd {
 
   int snap_create(ImageCtx *ictx, const char *snap_name)
   {
+    assert(ictx->owner_lock.is_locked());
     ldout(ictx->cct, 20) << "snap_create " << ictx << " " << snap_name << dendl;
 
     if (ictx->read_only)
@@ -474,7 +475,6 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    RWLock::RLocker l(ictx->owner_lock);
     r = prepare_image_update(ictx);
     if (r < 0) {
       return -EROFS;

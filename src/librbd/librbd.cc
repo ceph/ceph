@@ -498,6 +498,7 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
+    RWLock::RLocker owner_locker(ictx->owner_lock);
     int r = librbd::snap_create(ictx, snap_name);
     tracepoint(librbd, snap_create_exit, r);
     return r;
@@ -1188,6 +1189,7 @@ extern "C" int rbd_snap_create(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_create_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
+  RWLock::RLocker owner_locker(ictx->owner_lock);
   int r = librbd::snap_create(ictx, snap_name);
   tracepoint(librbd, snap_create_exit, r);
   return r;
