@@ -1029,5 +1029,5 @@ class TestExclusiveLock(object):
             eq(image1.is_exclusive_lock_owner(), False)
             eq(image2.is_exclusive_lock_owner(), True)
             for offset in [0, IMG_SIZE / 2]:
-                read = image2.read(0, 256)
+                read = image2.read(offset, 256)
                 eq(data, read)

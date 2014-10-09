@@ -11,6 +11,7 @@
 #include "osd/osd_types.h"
 #include "osdc/WritebackHandler.h"
 
+class Finisher;
 class Mutex;
 
 namespace librbd {
@@ -20,13 +21,13 @@ namespace librbd {
   class LibrbdWriteback : public WritebackHandler {
   public:
     LibrbdWriteback(ImageCtx *ictx, Mutex& lock);
-    virtual ~LibrbdWriteback() {}
+    virtual ~LibrbdWriteback();
 
     // Note that oloc, trunc_size, and trunc_seq are ignored
-    virtual void read(const object_t& oid, const object_locator_t& oloc,
-		      uint64_t off, uint64_t len, snapid_t snapid,
-		      bufferlist *pbl, uint64_t trunc_size,  __u32 trunc_seq,
-		      Context *onfinish);
+    virtual void read(const object_t& oid, uint64_t object_no,
+		      const object_locator_t& oloc, uint64_t off, uint64_t len,
+		      snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
+		      __u32 trunc_seq, Context *onfinish);
 
     // Determine whether a read to this extent could be affected by a write-triggered copy-on-write
     virtual bool may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid);
@@ -52,6 +53,7 @@ namespace librbd {
   private:
     void complete_writes(const std::string& oid);
 
+    Finisher *m_finisher;
     ceph_tid_t m_tid;
     Mutex& m_lock;
     librbd::ImageCtx *m_ictx;
