@@ -1438,15 +1438,15 @@ int Client::make_request(MetaRequest *request,
 
 void Client::put_request(MetaRequest *request)
 {
-  if (request->get_num_ref() == 1) {
+  if (request->_put()) {
     if (request->inode())
       put_inode(request->take_inode());
     if (request->old_inode())
       put_inode(request->take_old_inode());
     if (request->other_inode())
       put_inode(request->take_other_inode());
+    delete request;
   }
-  request->_put();
 }
 
 int Client::encode_inode_release(Inode *in, MetaRequest *req,

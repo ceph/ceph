@@ -9,6 +9,7 @@
 #include "msg/msg_types.h"
 #include "include/xlist.h"
 #include "include/filepath.h"
+#include "include/atomic.h"
 #include "mds/mdstypes.h"
 
 #include "common/Mutex.h"
@@ -47,7 +48,7 @@ public:
   __u32    sent_on_mseq;       // mseq at last submission of this request
   int      num_fwd;            // # of times i've been forwarded
   int      retry_attempt;
-  int      ref;
+  atomic_t ref;
   
   MClientReply *reply;         // the reply
   bool kick;
@@ -126,17 +127,14 @@ public:
   Dentry *old_dentry();
 
   MetaRequest* get() {
-    ++ref;
+    ref.inc();
     return this;
   }
 
   /// psuedo-private put method; use Client::put_request()
-  void _put() {
-    if (--ref == 0)
-      delete this;
-  }
-  int get_num_ref() {
-    return ref;
+  bool _put() {
+    int v = ref.dec();
+    return v == 0;
   }
 
   // normal fields
