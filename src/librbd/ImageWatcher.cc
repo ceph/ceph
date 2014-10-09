@@ -403,6 +403,11 @@ void ImageWatcher::release_lock()
   unlock();
 }
 
+void ImageWatcher::finalize_header_update() {
+  librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
+			&m_image_ctx);
+}
+
 int ImageWatcher::notify_async_progress(const RemoteAsyncRequest &request,
 					uint64_t offset, uint64_t total) {
   ldout(m_image_ctx.cct, 20) << "remote async request progress: "
@@ -857,10 +862,17 @@ void ImageWatcher::handle_snap_create(bufferlist::iterator iter, bufferlist *out
 
     ldout(m_image_ctx.cct, 20) << "remote snap_create request: " << snap_name << dendl;
 
-    int r = librbd::snap_create(&m_image_ctx, snap_name.c_str());
+    int r = librbd::snap_create(&m_image_ctx, snap_name.c_str(), false);
     ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, *out);
     ::encode(r, *out);
     ENCODE_FINISH(*out);
+
+    if (r == 0) {
+      // cannot notify within a notificiation
+      FunctionContext *ctx = new FunctionContext(
+	boost::bind(&ImageWatcher::finalize_header_update, this));
+      m_finisher->queue(ctx);
+    }
   }
 }
 
