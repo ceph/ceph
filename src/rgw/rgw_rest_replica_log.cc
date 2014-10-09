@@ -147,7 +147,8 @@ static int bucket_instance_to_bucket(RGWRados *store, string& bucket_instance, r
   RGWBucketInfo bucket_info;
   time_t mtime;
   
-  int r = store->get_bucket_instance_info(NULL, bucket_instance, bucket_info, &mtime, NULL);
+  RGWObjectCtx obj_ctx(store);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, &mtime, NULL);
   if (r < 0) {
     dout(5) << "could not get bucket instance info for bucket=" << bucket_instance << ": " << cpp_strerror(r) << dendl;
     if (r == -ENOENT)
