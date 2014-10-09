@@ -129,6 +129,7 @@ namespace librbd {
     void release_lock();
     bool try_request_lock();
     void finalize_request_lock();
+    void finalize_header_update();
 
     void schedule_retry_aio_requests();
     void cancel_retry_aio_requests();
