@@ -655,5 +655,47 @@ namespace librbd {
       ::encode(id, in);
       return ioctx->exec(oid, "rbd", "dir_rename_image", in, out);
     }
+
+    int object_map_load(librados::IoCtx *ioctx, const std::string &oid,
+			ceph::BitVector<2> *object_map)
+    {
+      bufferlist in;
+      bufferlist out;
+      int r = ioctx->exec(oid, "rbd", "object_map_load", in, out);
+      if (r < 0) {
+	return r;
+      }
+
+      try {
+        bufferlist::iterator iter = out.begin();
+        ::decode(*object_map, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    void object_map_resize(librados::ObjectWriteOperation *rados_op,
+                           uint64_t object_count, uint8_t default_state)
+    {
+      bufferlist in;
+      ::encode(object_count, in);
+      ::encode(default_state, in);
+      rados_op->exec("rbd", "object_map_resize", in);
+    }
+
+    void object_map_update(librados::ObjectWriteOperation *rados_op,
+			   uint64_t start_object_no, uint64_t end_object_no,
+                           uint8_t new_object_state,
+			   const boost::optional<uint8_t> &current_object_state)
+    {
+      bufferlist in;
+      ::encode(start_object_no, in);
+      ::encode(end_object_no, in);
+      ::encode(new_object_state, in);
+      ::encode(current_object_state, in);
+      rados_op->exec("rbd", "object_map_update", in);
+    }
+
   } // namespace cls_client
 } // namespace librbd

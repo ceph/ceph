@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "common/bit_vector.hpp"
+TYPE(BitVector<2>)
+
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)

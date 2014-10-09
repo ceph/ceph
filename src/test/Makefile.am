@@ -669,6 +669,11 @@ unittest_tableformatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_tableformatter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_tableformatter
 
+unittest_bit_vector_SOURCES = test/common/test_bit_vector.cc
+unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_bit_vector
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW
