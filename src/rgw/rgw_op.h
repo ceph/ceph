@@ -432,7 +432,7 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  RGWPutObjProcessor *select_processor(RGWRados::ObjectCtx& obj_ctx, bool *is_multipart);
+  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   int verify_permission();
@@ -480,7 +480,7 @@ public:
   void pre_exec();
   void execute();
 
-  RGWPutObjProcessor *select_processor(RGWRados::ObjectCtx& obj_ctx);
+  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   virtual int get_params() = 0;
