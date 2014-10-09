@@ -666,6 +666,20 @@ static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
   fuse_reply_err(req, -r);
 }
 
+static void fuse_ll_interrupt(fuse_req_t req, void* data)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  cfuse->client->ll_interrupt(data);
+}
+
+static void switch_interrupt_cb(void *req, void* data)
+{
+  if (data)
+    fuse_req_interrupt_func((fuse_req_t)req, fuse_ll_interrupt, data);
+  else
+    fuse_req_interrupt_func((fuse_req_t)req, NULL, NULL);
+}
+
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
 static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
 		          struct fuse_file_info *fi, int cmd)
@@ -909,6 +923,8 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   }
 
   fuse_session_add_chan(se, ch);
+
+  client->ll_register_switch_interrupt_cb(switch_interrupt_cb);
 
   /*
    * this is broken:

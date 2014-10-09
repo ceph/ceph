@@ -149,6 +149,7 @@ Client::Client(Messenger *m, MonClient *mc)
     logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
+    switch_interrupt_cb(NULL),
     ino_invalidate_cb(NULL),
     ino_invalidate_cb_handle(NULL),
     dentry_invalidate_cb(NULL),
@@ -7140,6 +7141,15 @@ void Client::ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void 
   async_dentry_invalidator.start();
 }
 
+void Client::ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb)
+{
+  Mutex::Locker l(client_lock);
+  ldout(cct, 10) << "ll_register_switch_interrupt_cb cb " << (void*)cb << dendl;
+  if (cb == NULL)
+    return;
+  switch_interrupt_cb = cb;
+}
+
 void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)
 {
   Mutex::Locker l(client_lock);
@@ -9021,6 +9031,11 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 
   return _flock(fh, cmd, owner);
 }
+
+void Client::ll_interrupt(void *d)
+{
+}
+
 // =========================================
 // layout
 

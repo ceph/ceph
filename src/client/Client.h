@@ -128,6 +128,7 @@ typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
+typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
 
 // ========================================================
 // client interface
@@ -214,6 +215,8 @@ class Client : public Dispatcher {
   OSDMap *osdmap;
 
   SafeTimer timer;
+
+  client_switch_interrupt_callback_t switch_interrupt_cb;
 
   client_ino_callback_t ino_invalidate_cb;
   void *ino_invalidate_cb_handle;
@@ -830,6 +833,7 @@ public:
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int ll_flock(Fh *fh, int cmd, uint64_t owner);
+  void ll_interrupt(void *d);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
@@ -837,11 +841,11 @@ public:
   int ll_num_osds(void);
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
+
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
-
   void ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle);
-
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
+  void ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb);
 };
 
 #endif
