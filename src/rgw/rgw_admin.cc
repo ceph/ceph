@@ -522,7 +522,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   time_t mtime;
-  RGWRados::ObjectCtx obj_ctx(store);
+  RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_info(obj_ctx, bucket.name, bucket_info, &mtime);
   if (r < 0)
     return r;
@@ -565,7 +565,7 @@ public:
 static int init_bucket(string& bucket_name, RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
-    RGWRados::ObjectCtx obj_ctx(store);
+    RGWObjectCtx obj_ctx(store);
     int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL);
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -712,7 +712,7 @@ int set_bucket_quota(RGWRados *store, int opt_cmd, string& bucket_name, int64_t 
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
-  RGWRados::ObjectCtx obj_ctx(store);
+  RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_info(obj_ctx, bucket_name, bucket_info, NULL, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
@@ -778,7 +778,7 @@ int check_min_obj_stripe_size(RGWRados *store, rgw_obj& obj, uint64_t min_stripe
   map<string, bufferlist> attrs;
   uint64_t obj_size;
 
-  RGWRados::ObjectCtx obj_ctx(store);
+  RGWObjectCtx obj_ctx(store);
   RGWRados::Object op_target(store, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
@@ -2124,7 +2124,7 @@ next:
 
     uint64_t obj_size;
     map<string, bufferlist> attrs;
-    RGWRados::ObjectCtx obj_ctx(store);
+    RGWObjectCtx obj_ctx(store);
     RGWRados::Object op_target(store, obj_ctx, obj);
     RGWRados::Object::Read read_op(&op_target);
 

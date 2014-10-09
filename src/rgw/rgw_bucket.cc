@@ -339,7 +339,7 @@ static bool bucket_object_check_filter(const string& name)
 
 int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, rgw_obj_key& key, bool use_versioning)
 {
-  RGWRados::ObjectCtx rctx(store);
+  RGWObjectCtx rctx(store);
 
   rgw_obj obj(bucket, key);
 
@@ -802,7 +802,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
   if (!object_name.empty()) {
     bufferlist bl;
     rgw_obj obj(bucket, object_name);
-    RGWRados::ObjectCtx obj_ctx(store);
+    RGWObjectCtx obj_ctx(store);
     int ret = store->get_attr(obj_ctx, obj, RGW_ATTR_ACL, bl);
     if (ret < 0)
       return ret;

@@ -416,7 +416,7 @@ public:
     policy.set_ctx(s->cct);
   }
 
-  RGWPutObjProcessor *select_processor(RGWRados::ObjectCtx& obj_ctx, bool *is_multipart);
+  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   int user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
@@ -466,7 +466,7 @@ public:
   void pre_exec();
   void execute();
 
-  RGWPutObjProcessor *select_processor(RGWRados::ObjectCtx& obj_ctx);
+  RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx);
   void dispose_processor(RGWPutObjProcessor *processor);
 
   virtual int get_params() = 0;
