@@ -255,6 +255,9 @@ public:
   Messenger *messenger;  
   client_t whoami;
 
+  void set_cap_epoch_barrier(epoch_t e);
+  epoch_t cap_epoch_barrier;
+
   // mds sessions
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
@@ -475,6 +478,7 @@ protected:
 
   // messaging
   void handle_mds_map(class MMDSMap *m);
+  void handle_osd_map(class MOSDMap *m);
 
   void handle_lease(MClientLease *m);
 
