@@ -505,6 +505,8 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
 
     validate.append_header("X-Auth-Token", admin_token);
 
+    validate.set_send_length(0);
+
     int ret = validate.process(url.c_str());
     if (ret < 0)
       return ret;
