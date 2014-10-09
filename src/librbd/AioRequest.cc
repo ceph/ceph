@@ -195,6 +195,12 @@ namespace librbd {
   int AioRead::send() {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
 
+    // send read request to parent if the object doesn't exist locally
+    if (!m_ictx->object_may_exist(m_object_no)) {
+      complete(-ENOENT);
+      return 0;
+    }
+
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_req_cb, NULL);
     int r;

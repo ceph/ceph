@@ -320,6 +320,12 @@ int ImageWatcher::lock() {
   ldout(m_image_ctx.cct, 20) << "acquired exclusive lock" << dendl;
   m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
 
+  r = m_image_ctx.refresh_object_map();
+  if (r < 0) {
+    unlock();
+    return r;
+  }
+
   bufferlist bl;
   ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
   ::encode(NOTIFY_OP_ACQUIRED_LOCK, bl);

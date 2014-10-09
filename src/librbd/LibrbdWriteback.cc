@@ -5,6 +5,7 @@
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
+#include "common/Finisher.h"
 #include "common/Mutex.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
@@ -85,11 +86,17 @@ namespace librbd {
   };
 
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
-    : m_tid(0), m_lock(lock), m_ictx(ictx)
+    : m_finisher(new Finisher(ictx->cct)), m_tid(0), m_lock(lock), m_ictx(ictx)
   {
+    m_finisher->start();
   }
 
-  void LibrbdWriteback::read(const object_t& oid,
+  LibrbdWriteback::~LibrbdWriteback() {
+    m_finisher->stop();
+    delete m_finisher;
+  }
+
+  void LibrbdWriteback::read(const object_t& oid, uint64_t object_no,
 			     const object_locator_t& oloc,
 			     uint64_t off, uint64_t len, snapid_t snapid,
 			     bufferlist *pbl, uint64_t trunc_size,
@@ -97,6 +104,11 @@ namespace librbd {
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
+    if (!m_ictx->object_may_exist(object_no)) {
+      m_finisher->queue(req, -ENOENT);
+      return;
+    }
+
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(req, context_cb, NULL);
     librados::ObjectReadOperation op;
