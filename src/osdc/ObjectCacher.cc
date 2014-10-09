@@ -1723,11 +1723,19 @@ void ObjectCacher::purge_set(ObjectSet *oset)
   }
 
   ldout(cct, 10) << "purge_set " << oset << dendl;
+  const bool were_dirty = oset->dirty_or_tx > 0;
 
   for (xlist<Object*>::iterator i = oset->objects.begin();
        !i.end(); ++i) {
     Object *ob = *i;
 	purge(ob);
+  }
+
+  // Although we have purged rather than flushed, caller should still
+  // drop any resources associate with dirty data.
+  assert(oset->dirty_or_tx == 0);
+  if (flush_set_callback && were_dirty) {
+    flush_set_callback(flush_set_callback_arg, oset);
   }
 }
 
