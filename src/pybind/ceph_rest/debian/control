@@ -1,0 +1,19 @@
+Source: ceph_rest
+Maintainer: Sage Weil <sage@newdream.net>
+Uploaders: Sage Weil <sage@newdream.net>
+Section: admin
+Priority: optional
+Build-Depends: debhelper (>= 7), python-setuptools
+X-Python-Version: >= 2.4
+Standards-Version: 3.9.2
+Homepage: http://ceph.com/
+Vcs-Git: git://github.com/ceph/ceph.git
+Vcs-Browser: https://github.com/ceph/ceph.git
+
+Package: python-ceph-rest
+Architecture: all
+Depends: python,
+         python-setuptools,
+         ${misc:Depends},
+         ${python:Depends}
+Description:  Python bindings for the Ceph rest API
