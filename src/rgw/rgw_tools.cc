@@ -37,7 +37,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, RGWRados::ObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
