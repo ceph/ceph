@@ -217,7 +217,6 @@ enum {
   OPT_LOG_RM,
   OPT_USAGE_SHOW,
   OPT_USAGE_TRIM,
-  OPT_TEMP_REMOVE,
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
@@ -358,9 +357,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_USAGE_SHOW;
     if (strcmp(cmd, "trim") == 0)
       return OPT_USAGE_TRIM;
-  } else if (strcmp(prev_cmd, "temp") == 0) {
-    if (strcmp(cmd, "remove") == 0)
-      return OPT_TEMP_REMOVE;
   } else if (strcmp(prev_cmd, "caps") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_CAPS_ADD;
@@ -1594,13 +1590,18 @@ int main(int argc, char **argv)
       map<string, bool> common_prefixes;
       string ns;
 
-      rgw_obj_key marker_key(marker);
+      RGWRados::Bucket target(store, bucket);
+      RGWRados::Bucket::List list_op(&target);
+
+      list_op.params.prefix = prefix;
+      list_op.params.delim = delim;
+      list_op.params.marker = rgw_obj_key(marker);
+      list_op.params.ns = ns;
+      list_op.params.enforce_ns = false;
+      list_op.params.list_versions = true;
       
       do {
-        list<rgw_bi_log_entry> entries;
-        ret = store->list_objects(bucket, max_entries - count, prefix, delim,
-                                  marker_key, NULL, result, common_prefixes, true,
-                                  ns, false, true, &truncated, NULL);
+        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -1611,8 +1612,6 @@ int main(int argc, char **argv)
         for (vector<RGWObjEnt>::iterator iter = result.begin(); iter != result.end(); ++iter) {
           RGWObjEnt& entry = *iter;
           encode_json("entry", entry, formatter);
-
-          marker_key = entry.key;
         }
         formatter->flush(cout);
       } while (truncated && count < max_entries);
@@ -1643,24 +1642,6 @@ int main(int argc, char **argv)
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
       return -r;
-    }
-  }
-
-  if (opt_cmd == OPT_TEMP_REMOVE) {
-    if (date.empty()) {
-      cerr << "date wasn't specified" << std::endl;
-      return usage();
-    }
-    string parsed_date, parsed_time;
-    int r = utime_t::parse_date(date, NULL, NULL, &parsed_date, &parsed_time);
-    if (r < 0) {
-      cerr << "failure parsing date: " << cpp_strerror(r) << std::endl;
-      return 1;
-    }
-    r = store->remove_temp_objects(parsed_date, parsed_time);
-    if (r < 0) {
-      cerr << "failure removing temp objects: " << cpp_strerror(r) << std::endl;
-      return 1;
     }
   }
 

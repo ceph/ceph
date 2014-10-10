@@ -2187,37 +2187,38 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
  * common_prefixes: if delim is filled in, any matching prefixes are placed
  *     here.
  */
-int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& delim,
-			   const rgw_obj_key& marker, rgw_obj_key *next_marker, vector<RGWObjEnt>& result,
-                           map<string, bool>& common_prefixes,
-			   bool get_content_type, string& ns, bool enforce_ns,
-                           bool list_versions,
-                           bool *is_truncated, RGWAccessListFilter *filter)
+int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
+                                         map<string, bool> *common_prefixes,
+                                         bool *is_truncated)
 {
+  RGWRados *store = target->get_store();
+  CephContext *cct = store->ctx();
+  rgw_bucket& bucket = target->get_bucket();
+
   int count = 0;
   bool truncated = true;
 
-  if (bucket_is_system(bucket)) {
+  if (store->bucket_is_system(bucket)) {
     return -EINVAL;
   }
-  result.clear();
+  result->clear();
 
   rgw_obj marker_obj, prefix_obj;
-  marker_obj.set_instance(marker.instance);
-  marker_obj.set_ns(ns);
-  marker_obj.set_obj(marker.name);
+  marker_obj.set_instance(params.marker.instance);
+  marker_obj.set_ns(params.ns);
+  marker_obj.set_obj(params.marker.name);
   rgw_obj_key cur_marker;
   marker_obj.get_index_key(&cur_marker);
 
-  prefix_obj.set_ns(ns);
-  prefix_obj.set_obj(prefix);
+  prefix_obj.set_ns(params.ns);
+  prefix_obj.set_obj(params.prefix);
   string cur_prefix = prefix_obj.get_index_key_name();
 
   string bigger_than_delim;
 
-  if (!delim.empty()) {
-    unsigned long val = decode_utf8((unsigned char *)delim.c_str(), delim.size());
-    char buf[delim.size() + 16];
+  if (!params.delim.empty()) {
+    unsigned long val = decode_utf8((unsigned char *)params.delim.c_str(), params.delim.size());
+    char buf[params.delim.size() + 16];
     int r = encode_utf8(val + 1, (unsigned char *)buf);
     if (r < 0) {
       ldout(cct,0) << "ERROR: encode_utf8() failed" << dendl;
@@ -2231,8 +2232,8 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
   string skip_after_delim;
 
   /* if marker points at a common prefix, fast forward it into its upperbound string */
-  if (!delim.empty()) {
-    int delim_pos = cur_marker.name.find(delim, prefix.size());
+  if (!params.delim.empty()) {
+    int delim_pos = cur_marker.name.find(params.delim, params.prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
       s.append(bigger_than_delim);
@@ -2246,7 +2247,7 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
     std::map<string, RGWObjEnt> ent_map;
-    int r = cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, list_versions, ent_map,
+    int r = store->cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, params.list_versions, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -2258,13 +2259,13 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
       rgw_obj_key key = obj;
       string instance;
 
-      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, ns);
-      if (!list_versions && !entry.is_visible()) {
+      bool check_ns = rgw_obj::translate_raw_obj_to_obj_in_ns(obj.name, instance, params.ns);
+      if (!params.list_versions && !entry.is_visible()) {
         continue;
       }
 
-      if (enforce_ns && !check_ns) {
-        if (!ns.empty()) {
+      if (params.enforce_ns && !check_ns) {
+        if (!params.ns.empty()) {
           /* we've iterated past the namespace we're searching -- done now */
           truncated = false;
           goto done;
@@ -2274,31 +2275,31 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
         continue;
       }
 
-      if (next_marker && count < max) {
-        *next_marker = obj;
+      if (count < max) {
+        params.marker = obj;
+        next_marker = obj;
       }
 
-      if (filter && !filter->filter(obj.name, key.name))
+      if (params.filter && !params.filter->filter(obj.name, key.name))
         continue;
 
-      if (prefix.size() &&  (obj.name.compare(0, prefix.size(), prefix) != 0))
+      if (params.prefix.size() &&  (obj.name.compare(0, params.prefix.size(), params.prefix) != 0))
         continue;
 
-      if (!delim.empty()) {
-        int delim_pos = obj.name.find(delim, prefix.size());
+      if (!params.delim.empty()) {
+        int delim_pos = obj.name.find(params.delim, params.prefix.size());
 
         if (delim_pos >= 0) {
           string prefix_key = obj.name.substr(0, delim_pos + 1);
 
-          if (common_prefixes.find(prefix_key) == common_prefixes.end()) {
+          if (common_prefixes &&
+              common_prefixes->find(prefix_key) == common_prefixes->end()) {
             if (count >= max) {
               truncated = true;
               goto done;
             }
-            if (next_marker) {
-              *next_marker = prefix_key;
-            }
-            common_prefixes[prefix_key] = true;
+            next_marker = prefix_key;
+            (*common_prefixes)[prefix_key] = true;
 
             skip_after_delim = obj.name.substr(0, delim_pos);
             skip_after_delim.append(bigger_than_delim);
@@ -2319,8 +2320,8 @@ int RGWRados::list_objects(rgw_bucket& bucket, int max, string& prefix, string& 
 
       RGWObjEnt ent = eiter->second;
       ent.key = obj;
-      ent.ns = ns;
-      result.push_back(ent);
+      ent.ns = params.ns;
+      result->push_back(ent);
       count++;
     }
   }
@@ -5346,29 +5347,6 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
 done_err:
   delete new_ctx;
   return r;
-}
-
-/* a simple object read */
-int RGWRados::read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl)
-{
-  rgw_rados_ref ref;
-  rgw_bucket bucket;
-  int r = get_obj_ref(obj, &ref, &bucket);
-  if (r < 0) {
-    return r;
-  }
-  RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-  RGWObjState *astate = NULL;
-
-  ObjectReadOperation op;
-
-  r = append_atomic_test(rctx, obj, op, &astate);
-  if (r < 0)
-    return r;
-
-  op.read(ofs, size, &bl, NULL);
-
-  return ref.ioctx.operate(ref.oid, &op, NULL);
 }
 
 int RGWRados::obj_operate(rgw_obj& obj, ObjectWriteOperation *op)

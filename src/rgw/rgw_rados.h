@@ -1284,25 +1284,6 @@ public:
                  bool *is_truncated, RGWUsageIter& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage);
   int trim_usage(string& user, uint64_t start_epoch, uint64_t end_epoch);
 
-  /**
-   * get listing of the objects in a bucket.
-   * bucket: bucket to list contents of
-   * max: maximum number of results to return
-   * prefix: only return results that match this prefix
-   * delim: do not include results that match this string.
-   *     Any skipped results will have the matching portion of their name
-   *     inserted in common_prefixes with a "true" mark.
-   * marker: if filled in, begin the listing with this object.
-   * result: the objects are put in here.
-   * common_prefixes: if delim is filled in, any matching prefixes are placed
-   *     here.
-   */
-  virtual int list_objects(rgw_bucket& bucket, int max, std::string& prefix, std::string& delim,
-                   const rgw_obj_key& marker, rgw_obj_key *next_marker, std::vector<RGWObjEnt>& result,
-                   map<string, bool>& common_prefixes, bool get_content_type, string& ns, bool enforce_ns,
-                   bool list_versions,
-                   bool *is_truncated, RGWAccessListFilter *filter);
-
   virtual int create_pool(rgw_bucket& bucket);
 
   /**
@@ -1407,9 +1388,6 @@ public:
 
       struct GetObjState {
         librados::IoCtx io_ctx;
-        bool sent_data;
-
-        GetObjState() : sent_data(false) {}
       } state;
       
       struct ConditionParams {
@@ -1508,6 +1486,31 @@ public:
 		   list<rgw_obj_key> *remove_objs);
       int complete_del(int64_t poolid, uint64_t epoch);
       int cancel();
+    };
+
+    struct List {
+      RGWRados::Bucket *target;
+      rgw_obj_key next_marker;
+
+      struct Params {
+        string prefix;
+        string delim;
+        rgw_obj_key marker;
+        string ns;
+        bool enforce_ns;
+        RGWAccessListFilter *filter;
+        bool list_versions;
+
+        Params() : enforce_ns(true), filter(NULL), list_versions(false) {}
+      } params;
+
+    public:
+      List(RGWRados::Bucket *_target) : target(_target) {}
+
+      int list_objects(int max, vector<RGWObjEnt> *result, map<string, bool> *common_prefixes, bool *is_truncated);
+      rgw_obj_key& get_next_marker() {
+        return next_marker;
+      }
     };
   };
 
@@ -1672,7 +1675,6 @@ public:
   /**
    * a simple object read without keeping state
    */
-  virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
   virtual int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
                        map<string, bufferlist> *attrs, bufferlist *first_chunk,
@@ -1698,7 +1700,6 @@ public:
 
   void gen_rand_obj_instance_name(rgw_obj *target);
 
-  virtual bool supports_omap() { return true; }
   int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
   virtual int omap_get_all(rgw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
   virtual int omap_set(rgw_obj& obj, std::string& key, bufferlist& bl);
@@ -1714,14 +1715,6 @@ public:
   virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
   void pick_control_oid(const string& key, string& notify_oid);
 
-  void *create_context(void *user_ctx) {
-    RGWObjectCtx *rctx = new RGWObjectCtx(this);
-    rctx->user_ctx = user_ctx;
-    return rctx;
-  }
-  void destroy_context(void *ctx) {
-    delete static_cast<RGWObjectCtx *>(ctx);
-  }
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_atomic(obj);
@@ -1792,9 +1785,6 @@ public:
                     const string& from_marker, const string& to_marker);
   int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
   int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
-
-  /// clean up/process any temporary objects older than given date[/time]
-  int remove_temp_objects(string date, string time);
 
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op);
