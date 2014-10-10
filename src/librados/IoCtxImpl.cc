@@ -1052,7 +1052,7 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   wc->watch_ctx2 = ctx2;
   client->register_watch_notify_callback(wc, cookie);
   prepare_assert_ops(&wr);
-  wr.watch(*cookie, 0, 1);
+  wr.watch(*cookie, CEPH_OSD_WATCH_OP_WATCH);
   bufferlist bl;
   wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
 					  snapc, ceph_clock_now(NULL), bl,
@@ -1107,7 +1107,7 @@ int librados::IoCtxImpl::unwatch(const object_t& oid, uint64_t cookie)
 
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
-  wr.watch(cookie, 0, 0);
+  wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(oid, oloc, wr, snapc, ceph_clock_now(client->cct), 0, NULL, oncommit, &ver);
   lock->Unlock();
 
@@ -1158,7 +1158,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   // Construct RADOS op
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.notify(cookie, 0, inbl);
+  rd.notify(cookie, inbl);
 
   // Issue RADOS op
   C_SaferCond onack;
