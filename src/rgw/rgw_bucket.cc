@@ -358,8 +358,6 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
   std::vector<RGWObjEnt> objs;
-  std::string prefix, delim, ns;
-  rgw_obj_key marker;
   map<string, bool> common_prefixes;
   rgw_obj obj;
   RGWBucketInfo info;
@@ -378,12 +376,15 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
   if (ret < 0)
     return ret;
 
+
+  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.list_versions = true;
+
   if (delete_children) {
     int max = 1000;
-    ret = store->list_objects(bucket, max, prefix, delim, marker, NULL,
-            objs, common_prefixes,
-            false, ns, true, true, NULL, NULL);
-
+    ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
     if (ret < 0)
       return ret;
 
@@ -396,8 +397,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
       }
       objs.clear();
 
-      ret = store->list_objects(bucket, max, prefix, delim, marker, NULL, objs, common_prefixes,
-                                false, ns, true, true, NULL, NULL);
+      ret = list_op.list_objects(max, &objs, &common_prefixes, NULL);
       if (ret < 0)
         return ret;
     }
@@ -640,9 +640,6 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   rgw_bucket bucket = op_state.get_bucket();
 
   int max = 1000;
-  string prefix;
-  string delim;
-  rgw_obj_key marker;
 
   map<string, bool> common_prefixes;
   string ns = "multipart";
@@ -651,13 +648,14 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   map<string, bool> meta_objs;
   map<rgw_obj_key, string> all_objs;
 
+  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.list_versions = true;
+
   do {
     vector<RGWObjEnt> result;
-    int r = store->list_objects(bucket, max, prefix, delim, marker, NULL,
-                                result, common_prefixes, false,
-                                ns, true, true,
-                                &is_truncated, NULL);
-
+    int r = list_op.list_objects(max, &result, &common_prefixes, &is_truncated);
     if (r < 0) {
       set_err_msg(err_msg, "failed to list objects in bucket=" + bucket.name +
               " err=" +  cpp_strerror(-r));
@@ -674,8 +672,6 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 
       rgw_obj_key key;
       obj.get_index_key(&key);
-
-      marker = key;
 
       string oid = key.name;
 
