@@ -1,0 +1,10 @@
+
+overrides:
+    ceph:
+        conf:
+            osd:
+              osd objectstore: memstore
+              memstore device bytes: 100000000
+
+tasks:
+    - mds_full:
