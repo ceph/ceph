@@ -130,7 +130,6 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
   bool remove_to_end = (0 == removal_lock.length);
   uint64_t removal_start = removal_lock.start;
   uint64_t removal_end = removal_start + removal_lock.length - 1;
-  uint64_t old_lock_end;
   __s64 old_lock_client = 0;
   ceph_filelock *old_lock;
 
@@ -143,7 +142,7 @@ void ceph_lock_state_t::remove_lock(ceph_filelock removal_lock,
     dout(15) << "self overlapping lock " << (*iter)->second << dendl;
     old_lock = &(*iter)->second;
     bool old_lock_to_end = (0 == old_lock->length);
-    old_lock_end = old_lock->start + old_lock->length - 1;
+    uint64_t old_lock_end = old_lock->start + old_lock->length - 1;
     old_lock_client = old_lock->client;
     if (remove_to_end) {
       if (old_lock->start < removal_start) {
@@ -209,8 +208,6 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
 {
   dout(15) << "adjust_locks" << dendl;
   bool new_lock_to_end = (0 == new_lock.length);
-  uint64_t new_lock_start, new_lock_end;
-  uint64_t old_lock_start, old_lock_end;
   __s64 old_lock_client = 0;
   ceph_filelock *old_lock;
   for (list<multimap<uint64_t, ceph_filelock>::iterator>::iterator
@@ -220,10 +217,10 @@ void ceph_lock_state_t::adjust_locks(list<multimap<uint64_t, ceph_filelock>::ite
     old_lock = &(*iter)->second;
     dout(15) << "adjusting lock: " << *old_lock << dendl;
     bool old_lock_to_end = (0 == old_lock->length);
-    old_lock_start = old_lock->start;
-    old_lock_end = old_lock->start + old_lock->length - 1;
-    new_lock_start = new_lock.start;
-    new_lock_end = new_lock.start + new_lock.length - 1;
+    uint64_t old_lock_start = old_lock->start;
+    uint64_t old_lock_end = old_lock->start + old_lock->length - 1;
+    uint64_t new_lock_start = new_lock.start;
+    uint64_t new_lock_end = new_lock.start + new_lock.length - 1;
     old_lock_client = old_lock->client;
     if (new_lock_to_end || old_lock_to_end) {
       //special code path to deal with a length set at 0

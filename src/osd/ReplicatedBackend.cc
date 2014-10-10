@@ -357,7 +357,7 @@ public:
     const hobject_t &hoid,
     map<string, bufferlist> &keys
     ) {
-    for (map<string, bufferlist>::iterator p = keys.begin(); p != keys.end(); p++)
+    for (map<string, bufferlist>::iterator p = keys.begin(); p != keys.end(); ++p)
       written += p->first.length() + p->second.length();
     return t->omap_setkeys(get_coll(hoid), hoid, keys);
   }

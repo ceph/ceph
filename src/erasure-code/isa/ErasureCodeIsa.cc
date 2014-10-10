@@ -173,7 +173,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
                                   int blocksize)
 {
   int nerrs = 0;
-  int i, j, r, s;
+  int i, r, s;
 
   // count the errors
   for (int l = 0; erasures[l] != -1; l++) {
@@ -233,8 +233,6 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     return 0;
   }
 
-  unsigned char b[k * (m + k)];
-  unsigned char c[k * (m + k)];
   unsigned char d[k * (m + k)];
   unsigned char decode_tbls[k * (m + k)*32];
   unsigned char *p_tbls = decode_tbls;
@@ -271,6 +269,10 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
   // Try to get an already computed matrix
   // ---------------------------------------------
   if (!tcache.getDecodingTableFromCache(erasure_signature, p_tbls, matrixtype, k, m)) {
+    int j;
+    unsigned char b[k * (m + k)];
+    unsigned char c[k * (m + k)];
+
     for (i = 0; i < k; i++) {
       r = decode_index[i];
       for (j = 0; j < k; j++)

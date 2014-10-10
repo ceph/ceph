@@ -34,6 +34,7 @@ TEST(LibRadosCWriteOps, assertExists) {
   ASSERT_EQ(0, rados_aio_write_op_operate(op2, ioctx, completion, "test", NULL, 0));
   rados_aio_wait_for_complete(completion);
   ASSERT_EQ(-2, rados_aio_get_return_value(completion));
+  rados_aio_release(completion);
 
   rados_ioctx_destroy(ioctx);
   rados_release_write_op(op2);
