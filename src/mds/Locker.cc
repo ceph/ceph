@@ -2871,7 +2871,6 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi)
 {
 
-  utime_t ctime = m->get_ctime();
   if (dirty && m->get_ctime() > pi->ctime) {
     dout(7) << "  ctime " << pi->ctime << " -> " << m->get_ctime()
 	    << " for " << *in << dendl;
