@@ -4554,8 +4554,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " " << snapid_t(op.op.snap.snapid);
       break;
     case CEPH_OSD_OP_WATCH:
-      out << (op.op.watch.flag ? " add":" remove")
-	  << " cookie " << op.op.watch.cookie << " ver " << op.op.watch.ver;
+      out << " " << ceph_osd_watch_op_name(op.op.watch.op)
+	  << " cookie " << op.op.watch.cookie;
       break;
     case CEPH_OSD_OP_COPY_GET:
     case CEPH_OSD_OP_COPY_GET_CLASSIC:

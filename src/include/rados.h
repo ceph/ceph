@@ -446,6 +446,13 @@ enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
+enum {
+	CEPH_OSD_WATCH_OP_UNWATCH = 0,
+	CEPH_OSD_WATCH_OP_WATCH = 1,
+};
+
+const char *ceph_osd_watch_op_name(int o);
+
 /*
  * an individual object operation.  each may be accompanied by some data
  * payload
