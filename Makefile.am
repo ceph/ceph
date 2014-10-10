@@ -31,7 +31,7 @@ if WITH_DEBUG
 	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.a lib/libgtest_main.a
 endif
 
-check-local:
+check-local: all
 #	We build gtest this way, instead of using SUBDIRS, because with that,
 #	gtest's own tests would be run and that would slow us down.
 	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.a lib/libgtest_main.a
