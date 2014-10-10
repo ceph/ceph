@@ -99,7 +99,8 @@ void PGLog::IndexedLog::trim(
 
     unindex(e);         // remove from index,
 
-    if (e.version == rollback_info_trimmed_to_riter->version) {
+    if (rollback_info_trimmed_to_riter == log.rend() ||
+	e.version == rollback_info_trimmed_to_riter->version) {
       log.pop_front();
       rollback_info_trimmed_to_riter = log.rend();
     } else {
