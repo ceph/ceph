@@ -5065,21 +5065,21 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
-      dout(10) << "changing mode to " << attr->st_mode;
+      ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
     }
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
-      dout(10) << "changing uid to " << attr->st_uid;
+      ldout(cct,10) << "changing uid to " << attr->st_uid << dendl;
     }
     if (mask & CEPH_SETATTR_GID) {
       in->ctime = ceph_clock_now(cct);
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
-      dout(10) << "changing gid to " << attr->st_gid;
+      ldout(cct,10) << "changing gid to " << attr->st_gid << dendl;
     }
   }
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
@@ -5107,17 +5107,17 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = attr->st_mode;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    dout(10) << "changing mode to " << attr->st_mode;
+    ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
   }
   if (mask & CEPH_SETATTR_UID) {
     req->head.args.setattr.uid = attr->st_uid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    dout(10) << "changing uid to " << attr->st_uid;
+    ldout(cct,10) << "changing uid to " << attr->st_uid << dendl;
   }
   if (mask & CEPH_SETATTR_GID) {
     req->head.args.setattr.gid = attr->st_gid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
-    dout(10) << "changing gid to " << attr->st_gid;
+    ldout(cct,10) << "changing gid to " << attr->st_gid << dendl;
   }
   if (mask & CEPH_SETATTR_MTIME) {
     utime_t mtime = utime_t(stat_get_mtime_sec(attr), stat_get_mtime_nsec(attr));
