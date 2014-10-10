@@ -330,6 +330,20 @@ class TestClientRecovery(CephFSTestCase):
         self.assertLess(recovery_time, self.ms_max_backoff * 2)
         self.assert_session_state(client_id, "open")
 
+    def test_filelock(self):
+        # Check that file lock doesn't get lost after an MDS restart
+        # =====================================
+        lock_holder = self.mount_a.lock_background()
+
+        self.mount_b.wait_for_visible();
+        self.mount_b.check_filelock();
+
+        self.fs.mds_stop()
+        self.fs.mds_fail()
+        self.fs.mds_restart()
+        self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
+
+        self.mount_b.check_filelock();
 
 class LogStream(object):
     def __init__(self):
