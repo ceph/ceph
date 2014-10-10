@@ -1563,6 +1563,7 @@ void Objecter::tick()
     laggy_ops = 0;
     for (map<int,OSDSession*>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
       OSDSession *s = siter->second;
+      RWLock::RLocker l(s->lock);
       for (map<ceph_tid_t,Op*>::iterator p = s->ops.begin();
            p != s->ops.end();
            ++p) {
