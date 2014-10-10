@@ -194,24 +194,11 @@ static void usage_exit()
 
 
 template <typename I, typename T>
-static int rados_strtol(I &i, T *val) {
-  char* endptr = NULL;
-  *val = strtol(i->second.c_str(), &endptr, 10);
-  if (*endptr) {
-    cerr << "Invalid value for " << i->first << ": '" << i->second << "'" << std::endl;
-    return -EINVAL;
-  } else {
-    return 0;
-  }
-}
-
-
-template <typename I, typename T>
-static int rados_strtoll(I &i, T *val) {
-  char* endptr = NULL;
-  *val = strtoll(i->second.c_str(), &endptr, 10);
-  if (*endptr) {
-    cerr << "Invalid value for " << i->first << ": '" << i->second << "'" << std::endl;
+static int rados_sistrtoll(I &i, T *val) {
+  std::string err;
+  *val = strict_sistrtoll(i->second.c_str(), &err);
+  if (err != "") {
+    cerr << "Invalid value for " << i->first << ": " << err << std::endl;
     return -EINVAL;
   } else {
     return 0;
@@ -978,7 +965,7 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   }
   i = opts.find("lock-duration");
   if (i != opts.end()) {
-    if (rados_strtol(i, &lock_duration)) {
+    if (rados_sistrtoll(i, &lock_duration)) {
       return -EINVAL;
     }
   }
@@ -1259,7 +1246,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
-    if (rados_strtol(i, &concurrent_ios)) {
+    if (rados_sistrtoll(i, &concurrent_ios)) {
       return -EINVAL;
     }
   }
@@ -1273,7 +1260,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("block-size");
   if (i != opts.end()) {
-    if (rados_strtol(i, &op_size)) {
+    if (rados_sistrtoll(i, &op_size)) {
       return -EINVAL;
     }
   }
@@ -1283,67 +1270,67 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("snapid");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &snapid)) {
+    if (rados_sistrtoll(i, &snapid)) {
       return -EINVAL;
     }
   }
   i = opts.find("min-object-size");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &min_obj_len)) {
+    if (rados_sistrtoll(i, &min_obj_len)) {
       return -EINVAL;
     }
   }
   i = opts.find("max-object-size");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &max_obj_len)) {
+    if (rados_sistrtoll(i, &max_obj_len)) {
       return -EINVAL;
     }
   }
   i = opts.find("min-op-len");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &min_op_len)) {
+    if (rados_sistrtoll(i, &min_op_len)) {
       return -EINVAL;
     }
   }
   i = opts.find("max-op-len");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &max_op_len)) {
+    if (rados_sistrtoll(i, &max_op_len)) {
       return -EINVAL;
     }
   }
   i = opts.find("max-ops");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &max_ops)) {
+    if (rados_sistrtoll(i, &max_ops)) {
       return -EINVAL;
     }
   }
   i = opts.find("max-backlog");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &max_backlog)) {
+    if (rados_sistrtoll(i, &max_backlog)) {
       return -EINVAL;
     }
   }
   i = opts.find("target-throughput");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &target_throughput)) {
+    if (rados_sistrtoll(i, &target_throughput)) {
       return -EINVAL;
     }
   }
   i = opts.find("read-percent");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &read_percent)) {
+    if (rados_sistrtoll(i, &read_percent)) {
       return -EINVAL;
     }
   }
   i = opts.find("num-objects");
   if (i != opts.end()) {
-    if (rados_strtoll(i, &num_objs)) {
+    if (rados_sistrtoll(i, &num_objs)) {
       return -EINVAL;
     }
   }
   i = opts.find("run-length");
   if (i != opts.end()) {
-    if (rados_strtol(i, &run_length)) {
+    if (rados_sistrtoll(i, &run_length)) {
       return -EINVAL;
     }
   }
