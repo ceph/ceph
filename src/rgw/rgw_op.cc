@@ -708,21 +708,20 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false;
   string delim;
-  rgw_obj_key marker;
   bool is_truncated;
-  string no_ns;
-  map<string, bool> common_prefixes;
   vector<RGWObjEnt> objs;
 
   utime_t start_time = ceph_clock_now(cct);
 
+  RGWRados::Bucket target(store, bucket);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.prefix = obj_prefix;
+  list_op.params.delim = delim;
+
   do {
 #define MAX_LIST_OBJS 100
-    int r = store->list_objects(bucket, MAX_LIST_OBJS, obj_prefix, delim, marker, NULL,
-                                objs, common_prefixes,
-                                true, no_ns, true,
-                                false,
-                                &is_truncated, NULL);
+    int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated);
     if (r < 0)
       return r;
 
@@ -757,7 +756,6 @@ static int iterate_user_manifest_parts(CephContext *cct, RGWRados *store, off_t 
             return r;
         }
       }
-      marker = ent.key;
 
       start_time = ceph_clock_now(cct);
     }
@@ -1189,10 +1187,18 @@ void RGWListBucket::execute()
   if (ret < 0)
     return;
 
-  rgw_obj_key *pnext_marker = (delimiter.empty() ? NULL : &next_marker);
+  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket::List list_op(&target);
 
-  ret = store->list_objects(s->bucket, max, prefix, delimiter, marker, pnext_marker, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_SWIFT), no_ns, true, list_versions, &is_truncated, NULL);
+  list_op.params.prefix = prefix;
+  list_op.params.delim = delimiter;
+  list_op.params.marker = marker;
+  list_op.params.list_versions = list_versions;
+
+  ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated);
+  if (ret >= 0 && !delimiter.empty()) {
+    next_marker = list_op.get_next_marker();
+  }
 }
 
 int RGWGetBucketLogging::verify_permission()
@@ -3116,8 +3122,17 @@ void RGWListBucketMultiparts::execute()
     }
   }
   marker_meta = marker.get_meta();
-  ret = store->list_objects(s->bucket, max_uploads, prefix, delimiter, marker_meta, NULL, objs, common_prefixes,
-                               !!(s->prot_flags & RGW_REST_SWIFT), mp_ns, true, false, &is_truncated, &mp_filter);
+
+  RGWRados::Bucket target(store, s->bucket);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.prefix = prefix;
+  list_op.params.delim = delimiter;
+  list_op.params.marker = marker_meta;
+  list_op.params.ns = mp_ns;
+  list_op.params.filter = &mp_filter;
+
+  ret = list_op.list_objects(max_uploads, &objs, &common_prefixes, &is_truncated);
   if (!objs.empty()) {
     vector<RGWObjEnt>::iterator iter;
     RGWMultipartUploadEntry entry;
