@@ -466,12 +466,12 @@ TRACEPOINT_EVENT(osd, do_osd_op_pre_watch,
         const char*, oid,
         uint64_t, snap,
         uint64_t, cookie,
-        uint8_t, flag),
+        uint8_t, op),
     TP_FIELDS(
         ctf_string(oid, oid)
         ctf_integer(uint64_t, snap, snap)
         ctf_integer(uint64_t, cookie, cookie)
-        ctf_integer(uint8_t, flag, flag)
+        ctf_integer(uint8_t, op, op)
     )
 )
 
