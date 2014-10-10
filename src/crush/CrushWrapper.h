@@ -545,10 +545,18 @@ public:
   float get_item_weightf(int id) {
     return (float)get_item_weight(id) / (float)0x10000;
   }
+  int get_item_weight_in_loc(int id, const map<string,string> &loc);
+  float get_item_weightf_in_loc(int id, const map<string,string> &loc) {
+    return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
+  }
 
   int adjust_item_weight(CephContext *cct, int id, int weight);
   int adjust_item_weightf(CephContext *cct, int id, float weight) {
     return adjust_item_weight(cct, id, (int)(weight * (float)0x10000));
+  }
+  int adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc);
+  int adjust_item_weightf_in_loc(CephContext *cct, int id, float weight, const map<string,string>& loc) {
+    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
 
@@ -749,9 +757,6 @@ private:
     crush_bucket *b = get_bucket(item);
     unsigned bucket_weight = b->weight;
 
-    // zero out the bucket weight
-    adjust_item_weight(cct, item, 0);
-
     // get where the bucket is located
     pair<string, string> bucket_location = get_immediate_parent(item);
 
@@ -760,6 +765,10 @@ private:
 
     // get the parent bucket
     crush_bucket *parent_bucket = get_bucket(parent_id);
+
+    // zero out the bucket weight
+    crush_bucket_adjust_item_weight(parent_bucket, item, 0);
+    adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
 
     if (!IS_ERR(parent_bucket)) {
       // remove the bucket from the parent
