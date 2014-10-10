@@ -500,13 +500,6 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-static int call_log_intent(RGWRados *store, void *ctx, rgw_obj& obj, RGWIntentEvent intent)
-{
-  struct req_state *s = (struct req_state *)ctx;
-  return rgw_log_intent(store, s, obj, intent);
-}
-
-
 static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWClientIO *client_io, OpsLogSocket *olog)
 {
   int ret = 0;
@@ -526,7 +519,6 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
 
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
-  store->set_intent_cb(s->obj_ctx, call_log_intent);
 
   s->req_id = store->unique_id(req->id);
 

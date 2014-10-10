@@ -1111,27 +1111,14 @@ public:
 struct RGWObjectCtx {
   RGWRados *store;
   map<rgw_obj, RGWObjState> objs_state;
-  int (*intent_cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent);
   void *user_ctx;
 
-  RGWObjectCtx(RGWRados *_store) : store(_store), intent_cb(NULL), user_ctx(NULL) { }
-  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), intent_cb(NULL), user_ctx(_user_ctx) { }
+  RGWObjectCtx(RGWRados *_store) : store(_store), user_ctx(NULL) { }
+  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), user_ctx(_user_ctx) { }
 
   RGWObjState *get_state(rgw_obj& obj);
   void set_atomic(rgw_obj& obj);
   void set_prefetch_data(rgw_obj& obj);
-
-  void set_intent_cb(int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
-    intent_cb = cb;
-  }
-
-  int notify_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent) {
-    if (intent_cb) {
-      return intent_cb(store, user_ctx, obj, intent);
-    }
-    return 0;
-  }
-
   void invalidate(rgw_obj& obj);
 };
 
@@ -1743,12 +1730,6 @@ public:
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
     rctx->set_prefetch_data(obj);
   }
-  // to notify upper layer that we need to do some operation on an object, and it's up to
-  // the upper layer to schedule this operation.. e.g., log intent in intent log
-  void set_intent_cb(void *ctx, int (*cb)(RGWRados *store, void *user_ctx, rgw_obj& obj, RGWIntentEvent intent)) {
-    RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-    rctx->set_intent_cb(cb);
-  }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
   int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
@@ -1868,8 +1849,6 @@ public:
   }
 
  private:
-  int process_intent_log(rgw_bucket& bucket, string& oid,
-			 time_t epoch, int flags, bool purge);
   /**
    * Check the actual on-disk state of the object specified
    * by list_state, and fill in the time and size of object.
