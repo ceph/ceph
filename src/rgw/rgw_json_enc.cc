@@ -101,16 +101,6 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("bucket_id", bucket_id);
 }
 
-void rgw_intent_log_entry::dump(Formatter *f) const
-{
-  f->open_object_section("obj");
-  obj.dump(f);
-  f->close_section();
-  f->dump_stream("op_time") << op_time;
-  f->dump_unsigned("intent", intent);
-}
-
-
 void ACLPermission::dump(Formatter *f) const
 {
   f->dump_int("flags", flags);
