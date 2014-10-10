@@ -214,16 +214,6 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   o.push_back(new rgw_log_entry);
 }
 
-void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
-{
-  rgw_intent_log_entry *e = new rgw_intent_log_entry;
-  rgw_bucket b("bucket", "pool", ".index_pool", "marker", "10", "region");
-  e->obj = rgw_obj(b, "object");
-  e->intent = DEL_OBJ;
-  o.push_back(e);
-  o.push_back(new rgw_intent_log_entry);
-}
-
 void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
 {
   ACLPermission *p = new ACLPermission;

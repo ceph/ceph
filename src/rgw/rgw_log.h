@@ -101,30 +101,6 @@ struct rgw_log_entry {
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
 
-struct rgw_intent_log_entry {
-  rgw_obj obj;
-  utime_t op_time;
-  uint32_t intent;
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(obj, bl);
-    ::encode(op_time, bl);
-    ::encode(intent, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-    ::decode(obj, p);
-    ::decode(op_time, p);
-    ::decode(intent, p);
-    DECODE_FINISH(p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<rgw_intent_log_entry*>& o);
-};
-WRITE_CLASS_ENCODER(rgw_intent_log_entry)
-
 class OpsLogSocket : public OutputDataSocket {
   Formatter *formatter;
   Mutex lock;
@@ -142,8 +118,6 @@ public:
 };
 
 int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog);
-int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc);
-int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter);
