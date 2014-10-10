@@ -34,12 +34,12 @@ class MWatchNotify : public Message {
 
   MWatchNotify()
     : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
-  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, bufferlist b)
+  MWatchNotify(uint64_t c, uint64_t v, uint64_t i, bufferlist b)
     : Message(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       cookie(c),
       ver(v),
       notify_id(i),
-      opcode(o),
+      opcode(WATCH_NOTIFY),
       bl(b),
       return_code(0),
       notifier_gid(0) { }
@@ -80,7 +80,10 @@ public:
 
   const char *get_type_name() const { return "watch-notify"; }
   void print(ostream& out) const {
-    out << "watch-notify(c=" << cookie << " v=" << ver << " i=" << notify_id << " opcode=" << (int)opcode << " r = " << return_code << ")";
+    out << "watch-notify(c=" << cookie
+	<< " v=" << ver
+	<< " i=" << notify_id
+	<< " r = " << return_code << ")";
   }
 };
 

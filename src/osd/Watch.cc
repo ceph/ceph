@@ -188,8 +188,7 @@ void Notify::maybe_complete_notify()
     bufferlist bl;
     ::encode(notify_replies, bl);
     bufferlist empty;
-    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
-					 WATCH_NOTIFY, empty));
+    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id, empty));
     reply->notifier_gid = client_gid;
     reply->set_data(bl);
     if (timed_out)
@@ -429,8 +428,7 @@ void Watch::send_notify(NotifyRef notif)
 {
   dout(10) << "send_notify" << dendl;
   MWatchNotify *notify_msg = new MWatchNotify(
-    cookie, notif->version, notif->notify_id,
-    WATCH_NOTIFY, notif->payload);
+    cookie, notif->version, notif->notify_id, notif->payload);
   notify_msg->notifier_gid = notif->client_gid;
   osd->send_message_osd_client(notify_msg, conn.get());
 }
