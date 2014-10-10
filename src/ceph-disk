@@ -1282,12 +1282,7 @@ def prepare_dev(
                     data,
                 ],
             )
-            command(
-                [
-                    'partprobe',
-                    data,
-                    ],
-                )
+            update_partition('-a', data, 'created')
             command(
                 [
                     # wait for udev event queue to clear
@@ -1504,33 +1499,7 @@ def main_prepare(args):
         prepare_lock.release()  # noqa
 
         if stat.S_ISBLK(dmode):
-            # try to make sure the kernel refreshes the table.  note
-            # that if this gets ebusy, we are probably racing with
-            # udev because it already updated it.. ignore failure here.
-
-            # On RHEL and CentOS distros, calling partprobe forces a reboot of
-            # the server. Since we are not resizing partitons so we rely on
-            # calling partx
-            if platform_distro().startswith(('centos', 'red', 'scientific')):
-                LOG.info('calling partx on prepared device %s', args.data)
-                LOG.info('re-reading known partitions will display errors')
-
-                command(
-                    [
-                        'partx',
-                        '-a',
-                        args.data,
-                        ],
-                    )
-
-            else:
-                LOG.debug('Calling partprobe on prepared device %s', args.data)
-                command(
-                    [
-                        'partprobe',
-                        args.data,
-                        ],
-                    )
+            update_partition('-a', args.data, 'prepared')
 
     except Error as e:
         if journal_dm_keypath:
