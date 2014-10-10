@@ -342,32 +342,35 @@ void Objecter::shutdown()
   while(!homeless_session->linger_ops.empty()) {
     std::map<uint64_t, LingerOp*>::iterator i = homeless_session->linger_ops.begin();
     ldout(cct, 10) << " linger_op " << i->first << dendl;
+    LingerOp *lop = i->second;
     {
       RWLock::WLocker wl(homeless_session->lock);
-      _session_linger_op_remove(homeless_session, i->second);
+      _session_linger_op_remove(homeless_session, lop);
     }
-    linger_ops.erase(i->second->linger_id);
-    i->second->put();
+    linger_ops.erase(lop->linger_id);
+    lop->put();
   }
 
   while(!homeless_session->ops.empty()) {
     std::map<ceph_tid_t, Op*>::iterator i = homeless_session->ops.begin();
     ldout(cct, 10) << " op " << i->first << dendl;
+    Op *op = i->second;
     {
       RWLock::WLocker wl(homeless_session->lock);
-      _session_op_remove(homeless_session, i->second);
+      _session_op_remove(homeless_session, op);
     }
-    i->second->put();
+    op->put();
   }
 
   while(!homeless_session->command_ops.empty()) {
     std::map<ceph_tid_t, CommandOp*>::iterator i = homeless_session->command_ops.begin();
     ldout(cct, 10) << " command_op " << i->first << dendl;
+    CommandOp *cop = i->second;
     {
       RWLock::WLocker wl(homeless_session->lock);
-      _session_command_op_remove(homeless_session, i->second);
+      _session_command_op_remove(homeless_session, cop);
     }
-    i->second->put();
+    cop->put();
   }
 
   if (tick_event) {
@@ -1303,22 +1306,22 @@ void Objecter::close_session(OSDSession *s)
   while(!s->linger_ops.empty()) {
     std::map<uint64_t, LingerOp*>::iterator i = s->linger_ops.begin();
     ldout(cct, 10) << " linger_op " << i->first << dendl;
-    _session_linger_op_remove(s, i->second);
     homeless_lingers.push_back(i->second);
+    _session_linger_op_remove(s, i->second);
   }
 
   while(!s->ops.empty()) {
     std::map<ceph_tid_t, Op*>::iterator i = s->ops.begin();
     ldout(cct, 10) << " op " << i->first << dendl;
-    _session_op_remove(s, i->second);
     homeless_ops.push_back(i->second);
+    _session_op_remove(s, i->second);
   }
 
   while(!s->command_ops.empty()) {
     std::map<ceph_tid_t, CommandOp*>::iterator i = s->command_ops.begin();
     ldout(cct, 10) << " command_op " << i->first << dendl;
-    _session_command_op_remove(s, i->second);
     homeless_commands.push_back(i->second);
+    _session_command_op_remove(s, i->second);
   }
 
   osd_sessions.erase(s->osd);
