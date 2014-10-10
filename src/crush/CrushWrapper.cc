@@ -150,10 +150,10 @@ int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
     for (unsigned i=0; i<b->size; ++i) {
       int id = b->items[i];
       if (id == item) {
-	adjust_item_weight(cct, item, 0);
 	ldout(cct, 5) << "remove_item removing item " << item
 		      << " from bucket " << b->id << dendl;
 	crush_bucket_remove_item(b, item);
+	adjust_item_weight(cct, b->id, b->weight);
 	ret = 0;
       }
     }
@@ -197,9 +197,9 @@ int CrushWrapper::_remove_item_under(CephContext *cct, int item, int ancestor, b
   for (unsigned i=0; i<b->size; ++i) {
     int id = b->items[i];
     if (id == item) {
-      adjust_item_weight(cct, item, 0);
       ldout(cct, 5) << "_remove_item_under removing item " << item << " from bucket " << b->id << dendl;
       crush_bucket_remove_item(b, item);
+      adjust_item_weight(cct, b->id, b->weight);
       ret = 0;
     } else if (id < 0) {
       int r = remove_item_under(cct, item, id, unlink_only);
@@ -459,6 +459,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 
   int cur = item;
 
+  // create locations if locations don't exist and add child in location with 0 weight
+  // the more detail in the insert_item method declaration in CrushWrapper.h
   for (map<int,string>::iterator p = type_map.begin(); p != type_map.end(); ++p) {
     // ignore device type
     if (p->first == 0)
@@ -520,15 +522,15 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
 		  << " to bucket " << id << dendl;
     int r = crush_bucket_add_item(b, cur, 0);
     assert (!r);
+    break;
+  }
 
-    // now that we've added the (0-weighted) item and any parent buckets, adjust the weight.
-    adjust_item_weightf(cct, item, weight);
-
+  // adjust the item's weight in location
+  if(adjust_item_weightf_in_loc(cct, item, weight, loc) > 0) {
     if (item >= crush->max_devices) {
       crush->max_devices = item + 1;
       ldout(cct, 5) << "insert_item max_devices now " << crush->max_devices << dendl;
     }
-
     return 0;
   }
 
@@ -620,7 +622,7 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
     if (old_iweight != iweight) {
       ldout(cct, 5) << "update_item " << item << " adjusting weight "
 		    << ((float)old_iweight/(float)0x10000) << " -> " << weight << dendl;
-      adjust_item_weight(cct, item, iweight);
+      adjust_item_weight_in_loc(cct, item, iweight, loc);
       ret = 1;
     }
     if (get_item_name(item) != name) {
@@ -654,6 +656,24 @@ int CrushWrapper::get_item_weight(int id)
   return -ENOENT;
 }
 
+int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
+{
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+    int bid = get_item_id(l->second);
+    if (!bucket_exists(bid))
+      continue;
+    crush_bucket *b = get_bucket(bid);
+    if ( b == NULL)
+      continue;
+    for (unsigned int i = 0; i < b->size; i++) {
+      if (b->items[i] == id) {
+	return crush_get_bucket_item_weight(b, i);
+      }
+    }
+  }
+  return -ENOENT;
+}
+
 int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 {
   ldout(cct, 5) << "adjust_item_weight " << id << " weight " << weight << dendl;
@@ -667,6 +687,32 @@ int CrushWrapper::adjust_item_weight(CephContext *cct, int id, int weight)
 	int diff = crush_bucket_adjust_item_weight(b, id, weight);
 	ldout(cct, 5) << "adjust_item_weight " << id << " diff " << diff << " in bucket " << bidx << dendl;
 	adjust_item_weight(cct, -1 - bidx, b->weight);
+	changed++;
+      }
+    }
+  }
+  if (!changed)
+    return -ENOENT;
+  return changed;
+}
+
+int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight, const map<string,string>& loc)
+{
+  ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight << " in " << loc << dendl;
+  int changed = 0;
+
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+    int bid = get_item_id(l->second);
+    if (!bucket_exists(bid))
+      continue;
+    crush_bucket *b = get_bucket(bid);
+    if ( b == NULL)
+      continue;
+    for (unsigned int i = 0; i < b->size; i++) {
+      if (b->items[i] == id) {
+	int diff = crush_bucket_adjust_item_weight(b, id, weight);
+	ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " diff " << diff << " in bucket " << bid << dendl;
+	adjust_item_weight(cct, bid, b->weight);
 	changed++;
       }
     }
