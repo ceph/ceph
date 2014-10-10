@@ -968,6 +968,35 @@ def get_free_partition_index(dev):
     return num
 
 
+def update_partition(action, dev, description):
+     # try to make sure the kernel refreshes the table.  note
+     # that if this gets ebusy, we are probably racing with
+     # udev because it already updated it.. ignore failure here.
+
+     # On RHEL and CentOS distros, calling partprobe forces a reboot of the
+     # server. Since we are not resizing partitons so we rely on calling
+     # partx
+     if platform_distro().startswith(('centos', 'red', 'scientific')):
+         LOG.info('calling partx on %s device %s', description, dev)
+         LOG.info('re-reading known partitions will display errors')
+         command(
+             [
+                 'partx',
+                 action,
+                 dev,
+             ],
+         )
+
+     else:
+         LOG.debug('Calling partprobe on %s device %s', description, dev)
+         command(
+             [
+                 'partprobe',
+                 dev,
+             ],
+         )
+
+
 def zap(dev):
     """
     Destroy the partition table and content of a given disk.
@@ -1068,32 +1097,7 @@ def prepare_journal_dev(
             ],
         )
 
-        # try to make sure the kernel refreshes the table.  note
-        # that if this gets ebusy, we are probably racing with
-        # udev because it already updated it.. ignore failure here.
-
-        # On RHEL and CentOS distros, calling partprobe forces a reboot of the
-        # server. Since we are not resizing partitons so we rely on calling
-        # partx
-        if platform_distro().startswith(('centos', 'red', 'scientific')):
-            LOG.info('calling partx on prepared device %s', journal)
-            LOG.info('re-reading known partitions will display errors')
-            command(
-                [
-                    'partx',
-                    '-a',
-                    journal,
-                    ],
-                )
-
-        else:
-            LOG.debug('Calling partprobe on prepared device %s', journal)
-            command(
-                [
-                    'partprobe',
-                    journal,
-                    ],
-                )
+        update_partition('-a', journal, 'prepared')
 
         # wait for udev event queue to clear
         command(
@@ -1117,7 +1121,6 @@ def prepare_journal_dev(
 
     except subprocess.CalledProcessError as e:
         raise Error(e)
-
 
 def prepare_journal_file(
     journal):
