@@ -72,7 +72,7 @@ public:
 
     //monmap
     monclient = new MonClient(cct);
-    ret = -1000;
+    ret = -ERROR_MON_MAP_BUILD; //defined in libcephfs.h
     if (monclient->build_initial_monmap() < 0)
       goto fail;
 
@@ -80,12 +80,12 @@ public:
     messenger = Messenger::create(cct, entity_name_t::CLIENT(), "client", msgr_nonce);
 
     //at last the client
-    ret = -1002;
+    ret = -ERROR_NEW_CLIENT; //defined in libcephfs.h
     client = new Client(messenger, monclient);
     if (!client)
       goto fail;
 
-    ret = -1003;
+    ret = -ERROR_MESSENGER_START; //defined in libcephfs.h
     if (messenger->start() != 0)
       goto fail;
 
