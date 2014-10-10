@@ -169,14 +169,6 @@ struct ObjectOperation {
     osd_op.indata.append(method, osd_op.op.cls.method_len);
     osd_op.indata.append(indata);
   }
-  void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag, bufferlist& inbl) {
-    OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
-    osd_op.op.watch.cookie = cookie;
-    osd_op.op.watch.ver = ver;
-    osd_op.op.watch.flag = flag;
-    osd_op.indata.append(inbl);
-  }
   void add_pgls(int op, uint64_t count, collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.op = op;
@@ -853,22 +845,26 @@ struct ObjectOperation {
   }
 
   // watch/notify
-  void watch(uint64_t cookie, uint64_t ver, bool set) {
-    bufferlist inbl;
-    add_watch(CEPH_OSD_OP_WATCH, cookie, ver, (set ? 1 : 0), inbl);
+  void watch(uint64_t cookie, __u8 op) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_WATCH);
+    osd_op.op.watch.cookie = cookie;
+    osd_op.op.watch.op = op;
   }
 
-  void notify(uint64_t cookie, uint64_t ver, bufferlist& inbl) {
-    add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1, inbl); 
+  void notify(uint64_t cookie, bufferlist& inbl) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY);
+    osd_op.op.notify.cookie = cookie;
+    osd_op.indata.append(inbl);
   }
 
   void notify_ack(uint64_t notify_id, uint64_t cookie,
 		  bufferlist& reply_bl) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY_ACK);
     bufferlist bl;
     ::encode(notify_id, bl);
     ::encode(cookie, bl);
     ::encode(reply_bl, bl);
-    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, 0, 0, bl);
+    osd_op.indata.append(bl);
   }
 
   void list_watchers(list<obj_watch_t> *out,
