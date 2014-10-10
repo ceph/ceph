@@ -457,6 +457,8 @@ protected:
   void put_qtree(Inode *in);
   void invalidate_quota_tree(Inode *in);
   Inode* get_quota_root(Inode *in);
+  bool is_quota_files_exceeded(Inode *in);
+  bool is_quota_bytes_exceeded(Inode *in, uint64_t new_bytes);
 
  public:
   void set_filer_flags(int flags);
