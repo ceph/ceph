@@ -51,7 +51,14 @@ $vdir/bin/pip install --quiet -r ../admin/doc-requirements.txt
 install -d -m0755 \
     output/html \
     output/man
-PYTHONPATH=`pwd`/../src/pybind $vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees ../doc output/html
+
+# Install pybind packages so that they are available for Sphinx in the docs venv
+cd `pwd`/../src/pybind/cephfs && $vdir/bin/python setup.py develop && cd -
+cd `pwd`/../src/pybind/rados && $vdir/bin/python setup.py develop && cd -
+cd `pwd`/../src/pybind/rbd && $vdir/bin/python setup.py develop && cd -
+cd `pwd`/../src/pybind/ceph && $vdir/bin/python setup.py develop && cd -
+
+$vdir/bin/sphinx-build -a -n -b dirhtml -d doctrees ../doc output/html
 $vdir/bin/sphinx-build -a -b man -d doctrees ../doc output/man
 
 #
