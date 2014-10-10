@@ -928,6 +928,25 @@ bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
+ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
+	-Werror \
+	-Wstrict-prototypes \
+	-Wredundant-decls \
+	-Wall \
+	-Wundef \
+	-Wwrite-strings \
+	-Wmissing-prototypes \
+	-Wendif-labels \
+	-Wmissing-include-dirs \
+	-Wempty-body \
+	-Wnested-externs \
+	-Wformat-security \
+	-Wformat-y2k \
+	-Winit-self \
+	-Wignored-qualifiers \
+	-Wold-style-declaration \
+	-Wold-style-definition \
+	-Wtype-limits
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
 ceph_test_get_blkdev_size_SOURCES = test/test_get_blkdev_size.cc
