@@ -421,7 +421,7 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     // weird striping not allowed with format 1!
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
-      cerr << "non-default striping not allowed with format 1; use --format 2"
+      cerr << "non-default striping not allowed with format 1; use --image-format 2"
 	   << std::endl;
       return -EINVAL;
     }
