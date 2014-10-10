@@ -620,6 +620,7 @@ public:
 
     Context *on_applied;
     bool log_op_stat;
+    bool not_client_op;
     
     RepGather(OpContext *c, ObjectContextRef pi, ceph_tid_t rt,
 	      eversion_t lc) :
@@ -634,7 +635,8 @@ public:
       pg_local_last_complete(lc),
       queue_snap_trimmer(false),
       on_applied(NULL),
-      log_op_stat(false) { }
+      log_op_stat(false),
+      not_client_op(false) { }
 
     RepGather *get() {
       nref++;

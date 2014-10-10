@@ -6103,6 +6103,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     dout(10) << __func__ << " abort; will clean up partial work" << dendl;
     ObjectContextRef tempobc = get_object_context(results->temp_oid, true);
     RepGather *repop = simple_repop_create(tempobc);
+    repop->not_client_op = true;
     repop->ctx->op_t->remove(results->temp_oid);
     simple_repop_submit(repop);
     results->started_temp_obj = false;
@@ -6117,6 +6118,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     ObjectContextRef obc = get_object_context(head, false);
     assert(obc);
     RepGather *repop = simple_repop_create(obc);
+    repop->not_client_op = true;
     OpContext *tctx = repop->ctx;
     tctx->at_version = get_next_version();
     filter_snapc(tctx->new_snapset.snaps);
@@ -6169,6 +6171,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   }
 
   RepGather *repop = simple_repop_create(obc);
+  repop->not_client_op = true;
   OpContext *tctx = repop->ctx;
   tctx->at_version = get_next_version();
 
@@ -6822,9 +6825,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // ondisk?
     if (repop->all_committed) {
 
-      if (!repop->log_op_stat) {
-        log_op_stats(repop->ctx);
-        repop->log_op_stat = true;
+      if (!repop->not_client_op) {
+        if (!repop->log_op_stat) {
+          log_op_stats(repop->ctx);
+          repop->log_op_stat = true;
+        }
       }
       publish_stats_to_osd();
 
