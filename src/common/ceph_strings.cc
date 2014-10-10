@@ -42,6 +42,18 @@ const char *ceph_osd_state_name(int s)
 	}	
 }
 
+const char *ceph_osd_watch_op_name(int o)
+{
+	switch (o) {
+	case CEPH_OSD_WATCH_OP_UNWATCH:
+		return "unwatch";
+	case CEPH_OSD_WATCH_OP_WATCH:
+		return "watch";
+	default:
+		return "???";
+	}
+}
+
 const char *ceph_mds_state_name(int s)
 {
 	switch (s) {
