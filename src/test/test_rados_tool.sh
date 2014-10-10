@@ -91,11 +91,11 @@ attr -q -s "rados.toothbrush" -V "green" "$TDIR/dirc/foo2"
 attr -q -s "rados_full_name" -V "foo2" "$TDIR/dirc/foo2"
 
 # make sure that --create works
-run "$RADOS_TOOL" rmpool "$POOL"
+run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
 
 # make sure that lack of --create fails
-run_expect_succ "$RADOS_TOOL" rmpool "$POOL"
+run_expect_succ "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_fail "$RADOS_TOOL" import "$TDIR/dira" "$POOL"
 
 run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
@@ -169,8 +169,8 @@ run_expect_succ grep temporary "$TDIR/out7"
 
 
 # test copy pool
-run "$RADOS_TOOL" rmpool "$POOL"
-run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET"
+run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL_CP_TARGET"
 
