@@ -51,6 +51,7 @@ class MDirUpdate : public Message {
     this->dir_rep = dir_rep;
     this->dir_rep_by = dir_rep_by;
     if (discover) this->discover = 5;
+    else this->discover = 0;
     this->path = path;
   }
 private:

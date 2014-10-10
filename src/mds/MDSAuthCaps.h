@@ -26,7 +26,7 @@ struct MDSCapSpec {
   bool write;
   bool any;
 
-  MDSCapSpec() : write(false), any(false) {}
+  MDSCapSpec() : read(false), write(false), any(false) {}
   MDSCapSpec(bool r_, bool w_, bool a_) : read(r_), write(w_), any(a_) {}
 
   bool allow_all() const {return any;}
