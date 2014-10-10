@@ -1817,7 +1817,8 @@ librados::ObjectOperation::ObjectOperation()
 librados::ObjectOperation::~ObjectOperation()
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  delete o;
+  if (o)
+    delete o;
 }
 
 ///////////////////////////// C API //////////////////////////////
