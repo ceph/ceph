@@ -118,6 +118,7 @@ e 12v
 #include "include/Context.h"
 
 #include "common/Timer.h"
+#include "common/perf_counters.h"
 #include <errno.h>
 
 #include "MonitorDBStore.h"
@@ -125,6 +126,43 @@ e 12v
 class Monitor;
 class MMonPaxos;
 class Paxos;
+
+enum {
+  l_paxos_first = 45800,
+  l_paxos_start_leader,
+  l_paxos_start_peon,
+  l_paxos_restart,
+  l_paxos_refresh,
+  l_paxos_refresh_latency,
+  l_paxos_begin,
+  l_paxos_begin_keys,
+  l_paxos_begin_bytes,
+  l_paxos_begin_latency,
+  l_paxos_commit,
+  l_paxos_commit_keys,
+  l_paxos_commit_bytes,
+  l_paxos_commit_latency,
+  l_paxos_collect,
+  l_paxos_collect_keys,
+  l_paxos_collect_bytes,
+  l_paxos_collect_latency,
+  l_paxos_collect_uncommitted,
+  l_paxos_collect_timeout,
+  l_paxos_accept_timeout,
+  l_paxos_lease_ack_timeout,
+  l_paxos_lease_timeout,
+  l_paxos_store_state,
+  l_paxos_store_state_keys,
+  l_paxos_store_state_bytes,
+  l_paxos_store_state_latency,
+  l_paxos_share_state,
+  l_paxos_share_state_keys,
+  l_paxos_share_state_bytes,
+  l_paxos_new_pn,
+  l_paxos_new_pn_latency,
+  l_paxos_last,
+};
+
 
 // i am one state machine.
 /**
@@ -146,6 +184,11 @@ class Paxos {
    * The Monitor to which this Paxos class is associated with.
    */
   Monitor *mon;
+
+  /// perf counter for internal instrumentations
+  PerfCounters *logger;
+
+  void init_logger();
 
   // my state machine info
   const string paxos_name;
@@ -1004,6 +1047,7 @@ public:
    */
   Paxos(Monitor *m, const string &name) 
 		 : mon(m),
+		   logger(NULL),
 		   paxos_name(name),
 		   state(STATE_RECOVERING),
 		   first_committed(0),

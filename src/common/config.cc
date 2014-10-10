@@ -389,12 +389,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
-      set_val_or_die("pid_file", "");
     }
     else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("log_file", "");
-      set_val_or_die("pid_file", "");
       set_val_or_die("log_to_stderr", "true");
       set_val_or_die("err_to_stderr", "true");
       set_val_or_die("log_to_syslog", "false");
@@ -949,7 +947,7 @@ int md_config_t::set_val_raw(const char *val, const config_option *opt)
 }
 
 static const char *CONF_METAVARIABLES[] =
-  { "cluster", "type", "name", "host", "num", "id", "pid" };
+  { "cluster", "type", "name", "host", "num", "id", "pid", "cctid" };
 static const int NUM_CONF_METAVARIABLES =
       (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
 
@@ -1061,6 +1059,8 @@ bool md_config_t::expand_meta(std::string &origval,
 	  out += name.get_id().c_str();
 	else if (var == "pid")
 	  out += stringify(getpid());
+	else if (var == "cctid")
+	  out += stringify((unsigned long long)this);
 	else
 	  assert(0); // unreachable
 	expanded = true;

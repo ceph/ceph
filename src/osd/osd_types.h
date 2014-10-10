@@ -2535,6 +2535,29 @@ struct SnapSet {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapSet*>& o);  
+
+  SnapContext get_ssc_as_of(snapid_t as_of) const {
+    SnapContext out;
+    out.seq = as_of;
+    for (vector<snapid_t>::const_iterator i = snaps.begin();
+	 i != snaps.end();
+	 ++i) {
+      if (*i <= as_of)
+	out.snaps.push_back(*i);
+    }
+    return out;
+  }
+
+  // return min element of snaps > after, return max if no such element
+  snapid_t get_first_snap_after(snapid_t after, snapid_t max) const {
+    for (vector<snapid_t>::const_reverse_iterator i = snaps.rbegin();
+	 i != snaps.rend();
+	 ++i) {
+      if (*i > after)
+	return *i;
+    }
+    return max;
+  }
 };
 WRITE_CLASS_ENCODER(SnapSet)
 

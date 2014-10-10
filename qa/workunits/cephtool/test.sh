@@ -457,21 +457,7 @@ function test_mon_osd()
     fi
   done
 
-  ceph osd thrash 10
-  ceph osd down `seq 0 31`  # force everything down so that we can trust up
-  # make sure everything gets back up+in.
-  for ((i=0; i < 100; i++)); do
-    if ceph osd dump | grep ' down '; then
-      echo "waiting for osd(s) to come back up"
-      sleep 10
-    else
-      break
-    fi
-  done
-  # if you have more osds than this you are on your own
-  for f in `seq 0 31`; do
-    ceph osd in $f || true
-  done
+  ceph osd thrash 0
 
   ceph osd dump | grep 'osd.0 up'
   ceph osd find 1

@@ -15,6 +15,7 @@ PATH=/sbin:/bin:/usr/bin
 
 daemon_is_running() {
     daemon=$1
+    sleep 1
     if pidof $daemon >/dev/null; then
         echo "$daemon is running."
         exit 0
@@ -43,6 +44,10 @@ if [ ! -x "$RADOSGW" ]; then
     [ $VERBOSE -eq 1 ] && echo "$RADOSGW could not start, it is not executable."
     exit 1
 fi
+
+# detect systemd
+SYSTEMD=0
+grep -qs systemd /proc/1/comm && SYSTEMD=1
 
 case "$1" in
     start)
@@ -79,8 +84,12 @@ case "$1" in
                 chown $user $log_file
             fi
 
-            #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
-            daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
+            if [ $SYSTEMD -eq 1 ]; then
+                systemd-run -r bash -c "ulimit -n 32768; $RADOSGW -n $name"
+            else
+                #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
+                daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
+            fi
             echo "Starting $name..."
         done
         daemon_is_running $RADOSGW
