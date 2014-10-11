@@ -1879,7 +1879,7 @@ int rados_set_alloc_hint(rados_ioctx_t io, const char *o,
  *
  * @returns non-NULL on success, NULL on memory allocation error.
  */
-rados_write_op_t rados_create_write_op();
+rados_write_op_t rados_create_write_op(void);
 
 /**
  * Free a rados_write_op_t, must be called when you're done with it.
@@ -2120,7 +2120,7 @@ int rados_aio_write_op_operate(rados_write_op_t write_op,
  *
  * @returns non-NULL on success, NULL on memory allocation error.
  */
-rados_read_op_t rados_create_read_op();
+rados_read_op_t rados_create_read_op(void);
 
 /**
  * Free a rados_read_op_t, must be called when you're done with it.
