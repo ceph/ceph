@@ -91,11 +91,11 @@ attr -q -s "rados.toothbrush" -V "green" "$TDIR/dirc/foo2"
 attr -q -s "rados_full_name" -V "foo2" "$TDIR/dirc/foo2"
 
 # make sure that --create works
-run "$RADOS_TOOL" rmpool "$POOL"
+run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
 
 # make sure that lack of --create fails
-run_expect_succ "$RADOS_TOOL" rmpool "$POOL"
+run_expect_succ "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
 run_expect_fail "$RADOS_TOOL" import "$TDIR/dira" "$POOL"
 
 run_expect_succ "$RADOS_TOOL" --create import "$TDIR/dira" "$POOL"
@@ -169,8 +169,8 @@ run_expect_succ grep temporary "$TDIR/out7"
 
 
 # test copy pool
-run "$RADOS_TOOL" rmpool "$POOL"
-run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET"
+run "$RADOS_TOOL" rmpool "$POOL" "$POOL" --yes-i-really-really-mean-it
+run "$RADOS_TOOL" rmpool "$POOL_CP_TARGET" "$POOL_CP_TARGET" --yes-i-really-really-mean-it
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL"
 run_expect_succ "$RADOS_TOOL" mkpool "$POOL_CP_TARGET"
 
@@ -219,6 +219,49 @@ done
 
 diff -q -r "$TDIR/dir_cp_src" "$TDIR/dir_cp_dst" \
     || die "copy pool validation failed!"
+
+for opt in \
+    block-size \
+    concurrent-ios \
+    min-object-size \
+    max-object-size \
+    min-op-len \
+    max-op-len \
+    max-ops \
+    max-backlog \
+    target-throughput \
+    read-percent \
+    num-objects \
+    run-length \
+    ; do
+    run_expect_succ "$RADOS_TOOL" --$opt 4 df
+    run_expect_fail "$RADOS_TOOL" --$opt 4k df
+done
+
+run_expect_succ "$RADOS_TOOL" lock list f.1 --lock-duration 4 --pool "$POOL"
+echo # previous command doesn't output an end of line: issue #9735
+run_expect_fail "$RADOS_TOOL" lock list f.1 --lock-duration 4k --pool "$POOL"
+
+run_expect_succ "$RADOS_TOOL" mksnap snap1 --pool "$POOL"
+snapid=$("$RADOS_TOOL" lssnap --pool "$POOL" | grep snap1 | cut -f1)
+[ $? -ne 0 ] && die "expected success, but got failure! cmd: \"$RADOS_TOOL\" lssnap --pool \"$POOL\" | grep snap1 | cut -f1"
+run_expect_succ "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"
+run_expect_fail "$RADOS_TOOL" ls --pool "$POOL" --snapid="$snapid"k
+
+run_expect_succ "$RADOS_TOOL" chown 1 --pool "$POOL"
+run_expect_fail "$RADOS_TOOL" chown 1k --pool "$POOL"
+
+run_expect_succ "$RADOS_TOOL" truncate f.1 0 --pool "$POOL"
+run_expect_fail "$RADOS_TOOL" truncate f.1 0k --pool "$POOL"
+
+run "$RADOS_TOOL" rmpool delete_me_mkpool_test delete_me_mkpool_test --yes-i-really-really-mean-it
+run_expect_succ "$RADOS_TOOL" mkpool delete_me_mkpool_test 0 0
+run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test2 0k 0
+run_expect_fail "$RADOS_TOOL" mkpool delete_me_mkpool_test3 0 0k
+
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1k write
+
 
 echo "SUCCESS!"
 exit 0
