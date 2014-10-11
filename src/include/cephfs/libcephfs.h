@@ -107,6 +107,11 @@ struct CephContext;
 # define CEPH_SETATTR_CTIME 64
 #endif
 
+/* define error codes for the mount function*/
+# define CEPHFS_ERROR_MON_MAP_BUILD 1000
+# define CEPHFS_ERROR_NEW_CLIENT 1002
+# define CEPHFS_ERROR_MESSENGER_START 1003
+
 /**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
