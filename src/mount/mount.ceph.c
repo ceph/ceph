@@ -175,11 +175,13 @@ static char *parse_options(const char *data, int *filesys_flags)
 			}
 
 			/* secret is only added to kernel options as
-			   backwards compatilbity, if add_key doesn't
+			   backwards compatibility, if add_key doesn't
 			   recognize our keytype; hence, it is skipped
 			   here and appended to options on add_key
 			   failure */
-			strncpy(secret, value, sizeof(secret));
+			size_t len = sizeof(secret);
+			strncpy(secret, value, len-1);
+			secret[len-1] = '\0';
 			saw_secret = secret;
 			skip = 1;
 		} else if (strncmp(data, "name", 4) == 0) {

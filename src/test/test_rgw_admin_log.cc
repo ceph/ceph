@@ -741,10 +741,9 @@ TEST(TestRGWAdmin, datalog_list) {
   sleep(1);
   ASSERT_EQ(0, create_bucket());
   
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
-  free(bucket_obj);
   sleep(1); 
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
   rest_req = ss.str();
@@ -777,6 +776,7 @@ TEST(TestRGWAdmin, datalog_list) {
 
   sleep(1);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
+  free(bucket_obj);
   sleep(20);
   ss.str("");
   ss << "/admin/log?type=data&id=" << shard_id << "&start-time=" << start_time;
@@ -980,7 +980,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   
   ASSERT_EQ(0, create_bucket());
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   ASSERT_EQ(0, delete_obj(TEST_BUCKET_OBJECT));
@@ -1398,7 +1398,7 @@ TEST(TestRGWAdmin, bilog_list) {
 
   ASSERT_EQ(0, create_bucket());
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
@@ -1428,7 +1428,7 @@ TEST(TestRGWAdmin, bilog_list) {
   get_bilog_list(entries);
   EXPECT_EQ(2U, entries.size());
 
-  bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT_1, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
@@ -1539,7 +1539,7 @@ TEST(TestRGWAdmin, bilog_trim) {
   g_test->send_request(string("DELETE"), rest_req);
   EXPECT_EQ(400U, g_test->get_resp_code()); /*Bad request*/
 
-  char *bucket_obj = (char *)malloc(TEST_BUCKET_OBJECT_SIZE);
+  char *bucket_obj = (char *)calloc(1, TEST_BUCKET_OBJECT_SIZE);
   ASSERT_TRUE(bucket_obj != NULL);
   EXPECT_EQ(put_bucket_obj(TEST_BUCKET_OBJECT, bucket_obj, TEST_BUCKET_OBJECT_SIZE), 0);
   free(bucket_obj);
