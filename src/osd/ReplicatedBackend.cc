@@ -158,6 +158,7 @@ bool ReplicatedBackend::handle_message(
       }
     } else {
       sub_op_modify(op);
+      return true;
     }
     break;
   }
@@ -174,6 +175,7 @@ bool ReplicatedBackend::handle_message(
       }
     } else {
       sub_op_modify_reply(op);
+      return true;
     }
     break;
   }
