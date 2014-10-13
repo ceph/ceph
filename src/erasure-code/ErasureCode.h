@@ -30,6 +30,8 @@ namespace ceph {
 
   class ErasureCode : public ErasureCodeInterface {
   public:
+    static const unsigned SIMD_ALIGN;
+
     vector<int> chunk_mapping;
 
     virtual ~ErasureCode() {}
