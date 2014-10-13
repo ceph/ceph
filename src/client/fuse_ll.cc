@@ -662,7 +662,7 @@ static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
     return;
   }
 
-  int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep);
+  int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep, req);
   fuse_reply_err(req, -r);
 }
 
@@ -694,7 +694,7 @@ static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
     return;
   }
 
-  int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner);
+  int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner, req);
   fuse_reply_err(req, -r);
 }
 #endif

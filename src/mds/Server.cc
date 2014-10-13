@@ -3085,13 +3085,20 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
   dout(0) << "handle_client_file_setlock: " << set_lock << dendl;
 
   ceph_lock_state_t *lock_state = NULL;
+  bool interrupt = false;
 
   // get the appropriate lock state
   switch (req->head.args.filelock_change.rule) {
+  case CEPH_LOCK_FLOCK_INTR:
+    interrupt = true;
+    // fall-thru
   case CEPH_LOCK_FLOCK:
     lock_state = &cur->flock_locks;
     break;
 
+  case CEPH_LOCK_FCNTL_INTR:
+    interrupt = true;
+    // fall-thru
   case CEPH_LOCK_FCNTL:
     lock_state = &cur->fcntl_locks;
     break;
@@ -3110,16 +3117,15 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
       lock_state->remove_waiting(set_lock);
-    } else {
+      cur->take_waiting(CInode::WAIT_FLOCK, waiters);
+    } else if (!interrupt) {
       dout(10) << " unlock attempt on " << set_lock << dendl;
       lock_state->remove_lock(set_lock, activated_locks);
       cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     }
-    reply_request(mdr, 0);
-    /* For now we're ignoring the activated locks because their responses
-     * will be sent when the lock comes up again in rotation by the MDS.
-     * It's a cheap hack, but it's easy to code. */
     mds->queue_waiters(waiters);
+
+    reply_request(mdr, 0);
   } else {
     dout(10) << " lock attempt on " << set_lock << dendl;
     if (mdr->more()->flock_was_waiting &&

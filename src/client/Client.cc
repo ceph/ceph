@@ -6868,7 +6868,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf)
 }
 
 int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-			 struct flock *fl, uint64_t owner)
+			 struct flock *fl, uint64_t owner, void *fuse_req)
 {
   ldout(cct, 10) << "_do_filelock ino " << in->ino
 		 << (lock_type == CEPH_LOCK_FCNTL ? " fcntl" : " flock")
@@ -6884,6 +6884,9 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
     lock_cmd = CEPH_LOCK_UNLOCK;
   else
     return -EIO;
+
+  if (op != CEPH_MDS_OP_SETFILELOCK || lock_cmd == CEPH_LOCK_UNLOCK)
+    sleep = 0;
 
   /*
    * Set the most significant bit, so that MDS knows the 'owner'
@@ -6906,8 +6909,21 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   req->head.args.filelock_change.length = fl->l_len;
   req->head.args.filelock_change.wait = sleep;
 
+  int ret;
   bufferlist bl;
-  int ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+
+  if (sleep && switch_interrupt_cb && fuse_req) {
+    // enable interrupt
+    switch_interrupt_cb(fuse_req, req->get());
+
+    ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+
+    // disable interrupt
+    switch_interrupt_cb(fuse_req, NULL);
+    put_request(req);
+  } else {
+    ret = make_request(req, -1, -1, NULL, NULL, -1, &bl);
+  }
 
   if (ret == 0) {
     if (op == CEPH_MDS_OP_GETFILELOCK) {
@@ -6956,6 +6972,30 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
       assert(0);
   }
   return ret;
+}
+
+int Client::_interrupt_filelock(MetaRequest *req)
+{
+  Inode *in = req->inode();
+
+  int lock_type;
+  if (req->head.args.filelock_change.rule == CEPH_LOCK_FLOCK)
+    lock_type = CEPH_LOCK_FLOCK_INTR;
+  else if (req->head.args.filelock_change.rule == CEPH_LOCK_FCNTL)
+    lock_type = CEPH_LOCK_FCNTL_INTR;
+  else
+    assert(0);
+
+  MetaRequest *intr_req = new MetaRequest(CEPH_MDS_OP_SETFILELOCK);
+  filepath path;
+  in->make_nosnap_relative_path(path);
+  intr_req->set_filepath(path);
+  intr_req->set_inode(in);
+  intr_req->head.args.filelock_change = req->head.args.filelock_change;
+  intr_req->head.args.filelock_change.rule = lock_type;
+  intr_req->head.args.filelock_change.type = CEPH_LOCK_UNLOCK;
+
+  return make_request(intr_req, -1, -1, NULL, NULL, -1);
 }
 
 void Client::_encode_filelocks(Inode *in, bufferlist& bl)
@@ -7069,16 +7109,16 @@ int Client::_getlk(Fh *fh, struct flock *fl, uint64_t owner)
   return ret;
 }
 
-int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
+int Client::_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req)
 {
   Inode *in = fh->inode;
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << dendl;
-  int ret =  _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner);
+  int ret =  _do_filelock(in, fh, CEPH_LOCK_FCNTL, CEPH_MDS_OP_SETFILELOCK, sleep, fl, owner, fuse_req);
   ldout(cct, 10) << "_setlk " << fh << " ino " << in->ino << " result=" << ret << dendl;
   return ret;
 }
 
-int Client::_flock(Fh *fh, int cmd, uint64_t owner)
+int Client::_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
 {
   Inode *in = fh->inode;
   ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << dendl;
@@ -7106,7 +7146,7 @@ int Client::_flock(Fh *fh, int cmd, uint64_t owner)
   fl.l_type = type;
   fl.l_whence = SEEK_SET;
 
-  int ret =  _do_filelock(in, fh, CEPH_LOCK_FLOCK, CEPH_MDS_OP_SETFILELOCK, sleep, &fl, owner);
+  int ret =  _do_filelock(in, fh, CEPH_LOCK_FLOCK, CEPH_MDS_OP_SETFILELOCK, sleep, &fl, owner, fuse_req);
   ldout(cct, 10) << "_flock " << fh << " ino " << in->ino << " result=" << ret << dendl;
   return ret;
 }
@@ -9012,28 +9052,36 @@ int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
   return _getlk(fh, fl, owner);
 }
 
-int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
+int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req)
 {
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "ll_setlk  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_setk (fh)" << (unsigned long)fh << std::endl;
 
-  return _setlk(fh, fl, owner, sleep);
+  return _setlk(fh, fl, owner, sleep, fuse_req);
 }
 
-int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
+int Client::ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req)
 {
   Mutex::Locker lock(client_lock);
 
   ldout(cct, 3) << "ll_flock  (fh) " << fh << " " << fh->inode->ino << dendl;
   tout(cct) << "ll_flock (fh)" << (unsigned long)fh << std::endl;
 
-  return _flock(fh, cmd, owner);
+  return _flock(fh, cmd, owner, fuse_req);
 }
 
 void Client::ll_interrupt(void *d)
 {
+  Mutex::Locker lock(client_lock);
+
+  MetaRequest *req = static_cast<MetaRequest*>(d);
+  ldout(cct, 3) << "ll_interrupt tid " << req->get_tid() << dendl;
+  tout(cct) << "ll_interrupt tid " << req->get_tid() << std::endl;
+
+  assert(req->head.op == CEPH_MDS_OP_SETFILELOCK);
+  _interrupt_filelock(req);
 }
 
 // =========================================

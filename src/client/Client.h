@@ -609,8 +609,8 @@ private:
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
-  int _flock(Fh *fh, int cmd, uint64_t owner);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req=NULL);
+  int _flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req=NULL);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
@@ -621,7 +621,8 @@ private:
   inodeno_t _get_inodeno(Inode *in);
 
   int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
-		   struct flock *fl, uint64_t owner);
+		   struct flock *fl, uint64_t owner, void *fuse_req=NULL);
+  int _interrupt_filelock(MetaRequest *req);
   void _encode_filelocks(Inode *in, bufferlist& bl);
   void _release_filelocks(Fh *fh);
   void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
@@ -831,8 +832,8 @@ public:
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
-  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
-  int ll_flock(Fh *fh, int cmd, uint64_t owner);
+  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req);
+  int ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req);
   void ll_interrupt(void *d);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
