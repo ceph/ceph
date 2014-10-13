@@ -1514,22 +1514,19 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
     if (r < 0) {
       bool ok = false;
 
-      if (r == -ENOENT && !(op == Transaction::OP_CLONERANGE ||
-                            op == Transaction::OP_CLONE ||
-                            op == Transaction::OP_CLONERANGE2))
-        // -ENOENT is normally okay
-        // ...including on a replayed OP_RMCOLL with checkpoint mode
-        ok = true;
       if (r == -ENODATA)
         ok = true;
 
       if (!ok) {
         const char *msg = "unexpected error code";
 
-        if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
-                            op == Transaction::OP_CLONE ||
-                            op == Transaction::OP_CLONERANGE2))
-          msg = "ENOENT on clone suggests osd bug";
+        if (op == Transaction::OP_CLONERANGE ||
+            op == Transaction::OP_CLONE ||
+            op == Transaction::OP_CLONERANGE2) {
+          dout(0) << "BUG: clone failed will lead to paritial transaction applied" << dendl;
+          if (r == -ENOENT)
+            msg = "ENOENT on clone suggests osd bug";
+        }
 
         if (r == -ENOSPC)
           // For now, if we hit _any_ ENOSPC, crash, before we do any damage
