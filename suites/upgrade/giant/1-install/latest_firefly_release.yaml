@@ -1,0 +1,11 @@
+tasks:
+# change tag to the latest firefly released version
+- install:
+    tag: v0.80.6
+- print: "**** done latest firefly install"
+- ceph:
+   fs: xfs
+- parallel:
+   - workload
+   - upgrade-sequence
+- print: "**** done parallel"
