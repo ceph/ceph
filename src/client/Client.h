@@ -238,6 +238,7 @@ class Client : public Dispatcher {
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
+  Finisher interrupt_finisher;
   Finisher objecter_finisher;
 
   Context *tick_event;
@@ -403,6 +404,7 @@ protected:
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_C_Tick; // Asserts on client_lock
   friend class C_Client_SyncCommit; // Asserts on client_lock
+  friend class C_Client_RequestInterrupt;
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
