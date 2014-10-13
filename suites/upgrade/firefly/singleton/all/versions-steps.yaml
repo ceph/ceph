@@ -19,10 +19,6 @@ roles:
 tasks:
 - install:
     tag: v0.80.4
-- ceph:
-    log-whitelist:
-      - scrub mismatch
-      - ScrubResult
 - print: "**** done v0.80.4 install"
 - ceph:
    fs: xfs
