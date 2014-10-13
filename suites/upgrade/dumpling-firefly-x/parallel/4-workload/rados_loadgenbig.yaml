@@ -1,8 +1,0 @@
-workload2:
-  sequential:
-  - workunit:
-      branch: firefly
-      clients:
-        client.0:
-        - rados/load-gen-big.sh
-  - print: "**** done rados/load-gen-big.sh 2"
