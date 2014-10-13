@@ -22,7 +22,7 @@
 #include "common/strtol.h"
 #include "ErasureCode.h"
 
-static const unsigned SIMD_ALIGN = 32;
+const unsigned ErasureCode::SIMD_ALIGN = 32;
 
 int ErasureCode::chunk_index(unsigned int i) const
 {
