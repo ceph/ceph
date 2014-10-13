@@ -108,7 +108,6 @@ int GenericFileStoreBackend::detect_features()
       return r;
     }
   }
-  ::fsync(fd);
 
   // fiemap an extent inside that
   struct fiemap *fiemap;
@@ -218,11 +217,16 @@ int GenericFileStoreBackend::do_fiemap(int fd, off_t start, size_t len, struct f
   fiemap = (struct fiemap*)calloc(sizeof(struct fiemap), 1);
   if (!fiemap)
     return -ENOMEM;
-
-  fiemap->fm_start = start;
-  fiemap->fm_length = len;
-
-  fsync(fd); /* flush extents to disk if needed */
+  /*
+   * There is a bug on xfs about fiemap. Suppose(offset=3990, len=4096),
+   * the result is (logical=4096, len=4096). It leak the [3990, 4096).
+   * Commit:"xfs: fix rounding error of fiemap length parameter
+   * (eedf32bfcace7d8e20cc66757d74fc68f3439ff7)" fix this bug.
+   * Here, we make offset aligned with CEPH_PAGE_SIZE to avoid this bug.
+   */
+  fiemap->fm_start = start - start % CEPH_PAGE_SIZE;
+  fiemap->fm_length = len + start % CEPH_PAGE_SIZE;
+  fiemap->fm_flags = FIEMAP_FLAG_SYNC; /* flush extents to disk if needed */
 
   if (ioctl(fd, FS_IOC_FIEMAP, fiemap) < 0) {
     ret = -errno;
