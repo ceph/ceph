@@ -3645,6 +3645,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_SETALLOCHINT:
       ++ctx->num_write;
       {
+        if (!(get_min_peer_features() & CEPH_FEATURE_OSD_SET_ALLOC_HINT)) { 
+          result = -EOPNOTSUPP;
+          break;
+        }
         if (!obs.exists) {
           ctx->mod_desc.create();
           t->touch(soid);

@@ -194,7 +194,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   finish_sync_event(NULL),
   scrub_after_recovery(false),
   active_pushes(0),
-  recovery_state(this)
+  recovery_state(this),
+  peer_features((uint64_t)-1)
 {
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
@@ -5278,37 +5279,6 @@ void PG::queue_peering_event(CephPeeringEvtRef evt)
   osd->queue_for_peering(this);
 }
 
-void PG::queue_notify(epoch_t msg_epoch,
-		      epoch_t query_epoch,
-		      pg_shard_t from, pg_notify_t& i)
-{
-  dout(10) << "notify " << i << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MNotifyRec(from, i))));
-}
-
-void PG::queue_info(epoch_t msg_epoch,
-		     epoch_t query_epoch,
-		     pg_shard_t from, pg_info_t& i)
-{
-  dout(10) << "info " << i << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MInfoRec(from, i, msg_epoch))));
-}
-
-void PG::queue_log(epoch_t msg_epoch,
-		   epoch_t query_epoch,
-		   pg_shard_t from,
-		   MOSDPGLog *msg)
-{
-  dout(10) << "log " << *msg << " from replica " << from << dendl;
-  queue_peering_event(
-    CephPeeringEvtRef(new CephPeeringEvt(msg_epoch, query_epoch,
-					 MLogRec(from, msg))));
-}
-
 void PG::queue_null(epoch_t msg_epoch,
 		    epoch_t query_epoch)
 {
@@ -6840,6 +6810,7 @@ PG::RecoveryState::GetInfo::GetInfo(my_context ctx)
 
   pg->publish_stats_to_osd();
 
+  pg->reset_peer_features();
   get_infos();
   if (peer_info_requested.empty() && !prior_set->pg_down) {
     post_event(GotInfo());
@@ -6907,6 +6878,9 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
       }
       get_infos();
     }
+    dout(20) << "Adding osd: " << infoevt.from.osd << " features: "
+      << hex << infoevt.features << dec << dendl;
+    pg->apply_peer_features(infoevt.features);
 
     // are we done getting everything?
     if (peer_info_requested.empty() && !prior_set->pg_down) {
@@ -6965,6 +6939,7 @@ boost::statechart::result PG::RecoveryState::GetInfo::react(const MNotifyRec& in
 	  break;
 	}
       }
+      dout(20) << "Common features: " << hex << pg->get_min_peer_features() << dec << dendl;
       post_event(GotInfo());
     }
   }

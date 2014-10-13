@@ -1308,10 +1308,12 @@ public:
   struct MNotifyRec : boost::statechart::event< MNotifyRec > {
     pg_shard_t from;
     pg_notify_t notify;
-    MNotifyRec(pg_shard_t from, pg_notify_t &notify) :
-      from(from), notify(notify) {}
+    uint64_t features;
+    MNotifyRec(pg_shard_t from, pg_notify_t &notify, uint64_t f) :
+      from(from), notify(notify), features(f) {}
     void print(std::ostream *out) const {
-      *out << "MNotifyRec from " << from << " notify: " << notify;
+      *out << "MNotifyRec from " << from << " notify: " << notify
+        << " features: 0x" << hex << features << dec;
     }
   };
 
@@ -1993,10 +1995,15 @@ public:
   // Prevent copying
   PG(const PG& rhs);
   PG& operator=(const PG& rhs);
+  uint64_t peer_features;
 
  public:
   spg_t      get_pgid() const { return info.pgid; }
   int        get_nrep() const { return acting.size(); }
+
+  void reset_peer_features() { peer_features = (uint64_t)-1; }
+  uint64_t get_min_peer_features() { return peer_features; }
+  void apply_peer_features(uint64_t f) { peer_features &= f; }
 
   void init_primary_up_acting(
     const vector<int> &newup,
@@ -2189,12 +2196,6 @@ public:
   void take_waiters();
   void queue_peering_event(CephPeeringEvtRef evt);
   void handle_peering_event(CephPeeringEvtRef evt, RecoveryCtx *rctx);
-  void queue_notify(epoch_t msg_epoch, epoch_t query_epoch,
-		    pg_shard_t from, pg_notify_t& i);
-  void queue_info(epoch_t msg_epoch, epoch_t query_epoch,
-		  pg_shard_t from, pg_info_t& i);
-  void queue_log(epoch_t msg_epoch, epoch_t query_epoch, pg_shard_t from,
-		 MOSDPGLog *msg);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
