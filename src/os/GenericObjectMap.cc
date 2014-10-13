@@ -673,6 +673,13 @@ void GenericObjectMap::clone(const Header parent, const coll_t &cid,
     *old_header = source;
   if (new_header)
     *new_header = destination;
+
+  // Clone will set parent header and rm_keys wll lookup_parent which will try
+  // to find parent header. So it will let lookup_parent fail when "clone" and
+  // "rm_keys" in one transaction. Here have to sync transaction to make
+  // visiable for lookup_parent
+  int r = submit_transaction_sync(t);
+  assert(r == 0);
 }
 
 void GenericObjectMap::rename(const Header old_header, const coll_t &cid,
