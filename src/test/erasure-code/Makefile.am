@@ -89,6 +89,13 @@ unittest_erasure_code_plugin_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin
 
+unittest_erasure_code_SOURCES = \
+	erasure-code/ErasureCode.cc \
+	test/erasure-code/TestErasureCode.cc
+unittest_erasure_code_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_erasure_code
+
 unittest_erasure_code_jerasure_SOURCES = \
 	test/erasure-code/TestErasureCodeJerasure.cc \
 	${jerasure_sources}
