@@ -636,6 +636,7 @@ class CephManager:
     def osd_admin_socket(self, osdnum, command, check_status=True):
         """
         Remotely start up ceph specifying the admin socket
+        :param command a list of words to use as the command to the admin socket
         """
         testdir = teuthology.get_testdir(self.ctx)
         remote = None
