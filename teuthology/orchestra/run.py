@@ -157,6 +157,9 @@ def quote(args):
     """
     Internal quote wrapper.
     """
+    if isinstance(args, basestring):
+        return args
+
     def _quote(args):
         """
         Handle quoted string, testing for raw charaters.
