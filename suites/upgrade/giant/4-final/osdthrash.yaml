@@ -11,8 +11,6 @@ tasks:
       chance_pgnum_grow: 1
       chance_pgpnum_fix: 1
   - print: "**** done thrashosds"
-  - ceph-fuse: [client.0]
-  - print: "**** done ceph-fuse"
   - workunit:
       clients:
         client.0:
