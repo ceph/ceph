@@ -1,0 +1,142 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - scrub
+    fs: xfs
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+  - client.1
+tasks:
+- install:
+    tag: v0.80.4
+- ceph:
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
+- print: "**** done v0.80.4 install"
+- ceph:
+   fs: xfs
+- print: "**** done ceph xfs"
+- workload:
+- print: "**** done workload"
+
+- install.upgrade:
+    tag: v0.80.5
+- print: "**** done v0.80.5 install.upgrade"
+- parallel:
+   - workload1
+   - upgrade-sequence1
+- print: "**** done parallel 1"
+- install.upgrade:
+    tag: v0.80.6
+- print: "**** done v0.80.6 install.upgrade"
+- parallel:
+   - workload2
+   - upgrade-sequence2
+- print: "**** done parallel 2"
+#####################
+workload:
+   workunit:
+      clients:
+         client.0:
+           - suites/blogbench.sh
+workload1:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - rbd/import_export.sh
+       env:
+         RBD_CREATE_ARGS: --new-format
+   - workunit:
+       clients:
+         client.0:
+           - cls/test_cls_rbd.sh
+upgrade-sequence1:
+   sequential:
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 30
+   - print: "**** done ceph.restart all 1"
+workload2:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - rbd/import_export.sh
+       env:
+         RBD_CREATE_ARGS: --new-format
+   - workunit:
+       clients:
+         client.0:
+           - cls/test_cls_rbd.sh
+upgrade-sequence2:
+   sequential:
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all 2"
