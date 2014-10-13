@@ -3,6 +3,7 @@ upgrade-sequence:
    - install.upgrade:
       all:
          branch: giant
+   - print: "**** done install.upgrade giant"
    - ceph.restart: [mon.a]
    - sleep:
        duration: 60
@@ -31,3 +32,6 @@ upgrade-sequence:
    - sleep:
        duration: 30
    - ceph.restart: [osd.5]
+   - sleep:
+       duration: 30
+   - print: "**** done ceph.restart all"
