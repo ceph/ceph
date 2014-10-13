@@ -334,10 +334,6 @@ static uint32_t simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZE
       return true;
     }
 
-    bool is_page_aligned() {
-      return false;
-    }
-
     int set_source(int fd, loff_t *off) {
       int flags = SPLICE_F_NONBLOCK;
       ssize_t r = safe_splice(fd, off, pipefds[1], NULL, len, flags);
