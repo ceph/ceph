@@ -54,6 +54,7 @@
 #include "rgw_resolve.h"
 #include "rgw_loadgen.h"
 #include "rgw_civetweb.h"
+#include "rgw_civetweb_log.h"
 
 #include "civetweb/civetweb.h"
 
@@ -92,6 +93,8 @@ struct RGWRequest
 
   RGWRequest() : id(0), s(NULL), op(NULL) {
   }
+
+  virtual ~RGWRequest() {}
 
   void init_state(req_state *_s) {
     s = _s;
@@ -922,11 +925,13 @@ public:
     snprintf(thread_pool_buf, sizeof(thread_pool_buf), "%d", (int)g_conf->rgw_thread_pool_size);
     string port_str;
     conf->get_val("port", "80", &port_str);
-    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf, NULL};
+    const char *options[] = {"listening_ports", port_str.c_str(), "enable_keep_alive", "yes", "num_threads", thread_pool_buf,
+                             "decode_url", "no", NULL};
 
     struct mg_callbacks cb;
     memset((void *)&cb, 0, sizeof(cb));
     cb.begin_request = civetweb_callback;
+    cb.log_message = rgw_civetweb_log_callback;
     ctx = mg_start(&cb, &env, (const char **)&options);
 
     if (!ctx) {
@@ -965,7 +970,7 @@ int main(int argc, const char **argv)
   vector<const char *> def_args;
   def_args.push_back("--debug-rgw=1/5");
   def_args.push_back("--keyring=$rgw_data/keyring");
-  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name");
+  def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);

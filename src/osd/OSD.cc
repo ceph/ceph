@@ -6732,7 +6732,8 @@ void OSD::handle_pg_notify(OpRequestRef op)
       PG::CephPeeringEvtRef(
 	new PG::CephPeeringEvt(
 	  it->first.epoch_sent, it->first.query_epoch,
-	  PG::MNotifyRec(pg_shard_t(from, it->first.from), it->first)))
+	  PG::MNotifyRec(pg_shard_t(from, it->first.from), it->first,
+          op->get_req()->get_connection()->get_features())))
       );
   }
 }
@@ -7931,7 +7932,12 @@ void OSD::set_disk_tp_priority()
 	   << dendl;
   int cls =
     ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
-  disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
+  if (cls < 0)
+    derr << __func__ << cpp_strerror(cls) << ": "
+	 << "osd_disk_thread_ioprio_class is " << cct->_conf->osd_disk_thread_ioprio_class
+	 << " but only the following values are allowed: idle, be or rt" << dendl;
+  else
+    disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
 }
 
 // --------------------------------
