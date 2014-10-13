@@ -23,9 +23,9 @@ tasks:
 - ceph:
    fs: xfs
 - print: "**** done ceph xfs"
-- workload:
+- parallel:
+   - workload
 - print: "**** done workload"
-
 - install.upgrade:
     tag: v0.80.5
 - print: "**** done v0.80.5 install.upgrade"
@@ -40,7 +40,7 @@ tasks:
    - workload2
    - upgrade-sequence2
 - print: "**** done parallel 2"
-#####################
+######################
 workload:
    workunit:
       clients:
