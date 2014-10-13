@@ -5343,9 +5343,11 @@ struct C_Copyfrom : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  C_Copyfrom(ReplicatedPG *p, hobject_t o, epoch_t lpr)
+  ReplicatedPG::CopyOpRef cop;
+  C_Copyfrom(ReplicatedPG *p, hobject_t o, epoch_t lpr,
+	     const ReplicatedPG::CopyOpRef& c)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0)
+      tid(0), cop(c)
   {}
   void finish(int r) {
     if (r == -ECANCELED)
@@ -5592,7 +5594,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
-				   get_last_peering_reset());
+				   get_last_peering_reset(), cop);
   gather.set_finisher(new C_OnFinisher(fin,
 				       &osd->objecter_finisher));
 
@@ -6023,8 +6025,10 @@ void ReplicatedPG::cancel_copy(CopyOpRef cop, bool requeue)
   if (cop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(cop->objecter_tid, -ECANCELED);
+    cop->objecter_tid = 0;
     if (cop->objecter_tid2) {
       osd->objecter->op_cancel(cop->objecter_tid2, -ECANCELED);
+      cop->objecter_tid2 = 0;
     }
   }
 
@@ -6440,6 +6444,7 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
   if (fop->objecter_tid) {
     Mutex::Locker l(osd->objecter_lock);
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
+    fop->objecter_tid = 0;
   }
   if (requeue) {
     if (fop->op)
