@@ -3390,7 +3390,7 @@ set_err_state:
     if (ret < 0)
       return ret;
 
-    ret = get_obj_iterate(&obj_ctx, read_op, src_obj, 0, astate->size - 1, out_stream_req->get_out_cb());
+    ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
     if (ret < 0)
       return ret;
 
@@ -4782,7 +4782,7 @@ static void _get_obj_aio_completion_cb(completion_t cb, void *arg);
 struct get_obj_data : public RefCountedObject {
   CephContext *cct;
   RGWRados *rados;
-  void *ctx;
+  RGWObjectCtx *ctx;
   IoCtx io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
@@ -5031,7 +5031,7 @@ int RGWRados::flush_read_list(struct get_obj_data *d)
   return r;
 }
 
-int RGWRados::get_obj_iterate_cb(void *ctx, RGWObjState *astate,
+int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
 		         rgw_obj& obj,
 			 off_t obj_ofs,
                          off_t read_ofs, off_t len,
@@ -5112,19 +5112,22 @@ done_err:
   return r;
 }
 
-int RGWRados::get_obj_iterate(void *ctx, RGWRados::Object::Read& read_op, rgw_obj& obj,
-                              off_t ofs, off_t end,
-			      RGWGetDataCB *cb)
+int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 {
+  RGWRados *store = source->get_store();
+  rgw_obj& obj = source->get_obj();
+  CephContext *cct = store->ctx();
+
   struct get_obj_data *data = new get_obj_data(cct);
   bool done = false;
 
-  data->rados = this;
-  data->ctx = ctx;
-  data->io_ctx.dup(read_op.state.io_ctx);
+  RGWObjectCtx& obj_ctx = source->get_ctx();
+
+  data->rados = store;
+  data->io_ctx.dup(state.io_ctx);
   data->client_cb = cb;
 
-  int r = iterate_obj(ctx, obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
+  int r = store->iterate_obj(obj_ctx, obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
   if (r < 0) {
     data->cancel_all_io();
     goto done;
@@ -5137,7 +5140,7 @@ int RGWRados::get_obj_iterate(void *ctx, RGWRados::Object::Read& read_op, rgw_ob
       data->cancel_all_io();
       break;
     }
-    r = flush_read_list(data);
+    r = store->flush_read_list(data);
     if (r < 0) {
       dout(10) << "get_obj_iterate() r=" << r << ", canceling all io" << dendl;
       data->cancel_all_io();
@@ -5150,7 +5153,7 @@ done:
   return r;
 }
 
-int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
+int RGWRados::iterate_obj(RGWObjectCtx& obj_ctx, rgw_obj& obj,
                           off_t ofs, off_t end,
 			  uint64_t max_chunk_size,
 			  int (*iterate_obj_cb)(rgw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
@@ -5160,19 +5163,13 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
   rgw_obj read_obj = obj;
   uint64_t read_ofs = ofs;
   uint64_t len;
-  RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
-  RGWObjectCtx *new_ctx = NULL;
   bool reading_from_head = true;
   RGWObjState *astate = NULL;
 
-  if (!rctx) {
-    new_ctx = new RGWObjectCtx(this);
-    rctx = new_ctx;
+  int r = get_obj_state(&obj_ctx, obj, &astate, NULL);
+  if (r < 0) {
+    return r;
   }
-
-  int r = get_obj_state(rctx, obj, &astate, NULL);
-  if (r < 0)
-    goto done_err;
 
   if (end < 0)
     len = 0;
@@ -5200,8 +5197,9 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
 
         reading_from_head = (read_obj == obj);
         r = iterate_obj_cb(read_obj, ofs, read_ofs, read_len, reading_from_head, astate, arg);
-	if (r < 0)
-	  goto done_err;
+	if (r < 0) {
+	  return r;
+        }
 
 	len -= read_len;
         ofs += read_len;
@@ -5212,8 +5210,9 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
       uint64_t read_len = min(len, max_chunk_size);
 
       r = iterate_obj_cb(obj, ofs, ofs, read_len, reading_from_head, astate, arg);
-      if (r < 0)
-	goto done_err;
+      if (r < 0) {
+	return r;
+      }
 
       len -= read_len;
       ofs += read_len;
@@ -5221,10 +5220,6 @@ int RGWRados::iterate_obj(void *ctx, rgw_obj& obj,
   }
 
   return 0;
-
-done_err:
-  delete new_ctx;
-  return r;
 }
 
 int RGWRados::obj_operate(rgw_obj& obj, ObjectWriteOperation *op)
