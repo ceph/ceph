@@ -39,7 +39,7 @@ CloudStack integrates with Ceph's block devices to provide CloudStack with a
 back end for CloudStack's Primary Storage. The instructions below detail the
 setup for CloudStack Primary Storage.
 
-.. note:: We recommend installing with Ubuntu 13.04 or later so that 
+.. note:: We recommend installing with Ubuntu 14.04 or later so that 
    you can use package installation instead of having to compile 
    libvirt from source.
 
@@ -58,15 +58,11 @@ QEMU and configure it for use with Ceph; then, install ``libvirt`` version
 0.9.13 or higher (you may need to compile from source) and ensure it is running
 with Ceph.
 
-#. `Install and Configure QEMU`_.
-#. `Install and Configure libvirt`_ version 0.9.13 or higher.
-#. Also see `KVM Hypervisor Host Installation`_.
-
 
 .. note:: Raring Ringtail (13.04) will have ``libvirt`` version 0.9.13 or higher
    with RBD storage pool support enabled by default.
 
-..index:: pools; CloudStack
+.. index:: pools; CloudStack
 
 Create a Pool
 =============
@@ -89,7 +85,7 @@ credentials to access the ``cloudstack`` pool we just created. Although we could
 use ``client.admin`` for this, it's recommended to create a user with only
 access to the ``cloudstack`` pool. ::
 
-  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow rwx pool=cloudstack'
+  ceph auth get-or-create client.cloudstack mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=cloudstack'
 
 Use the information returned by the command in the next step when adding the 
 Primary Storage.

@@ -91,7 +91,7 @@ ostream& operator<<(ostream& out, CDir& dir)
     out << " cv=" << dir.get_committing_version();
     out << "/" << dir.get_committed_version();
   } else {
-    pair<int,int> a = dir.authority();
+    mds_authority_t a = dir.authority();
     out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
@@ -981,7 +981,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       steal_dentry(dir->items.begin()->second);
     
     // merge replica map
-    for (map<int,unsigned>::iterator p = dir->replicas_begin();
+    for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
 	 p != dir->replica_map.end();
 	 ++p) {
       unsigned cur = replica_map[p->first];
@@ -2168,7 +2168,7 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
  * if dir_auth.first == parent, auth is same as inode.
  * unless .second != unknown, in which case that sticks.
  */
-pair<int,int> CDir::authority() 
+mds_authority_t CDir::authority() 
 {
   if (is_subtree_root()) 
     return dir_auth;
@@ -2219,7 +2219,7 @@ bool CDir::contains(CDir *x)
 
 /** set_dir_auth
  */
-void CDir::set_dir_auth(pair<int,int> a)
+void CDir::set_dir_auth(mds_authority_t a)
 { 
   dout(10) << "setting dir_auth=" << a
 	   << " from " << dir_auth

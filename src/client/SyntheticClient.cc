@@ -2174,13 +2174,11 @@ int SyntheticClient::read_file(const std::string& fn, int size,
     // verify fingerprint
     int bad = 0;
     uint64_t *p = (uint64_t*)buf;
-    uint64_t readoff;
-    int64_t readclient;
     while ((char*)p + 32 < buf + rdsize) {
-      readoff = *p;
+      uint64_t readoff = *p;
       uint64_t wantoff = (uint64_t)i*(uint64_t)rdsize + (uint64_t)((char*)p - buf);
       p++;
-      readclient = *p;
+      int64_t readclient = *p;
       p++;
       if (readoff != wantoff ||
 	  readclient != client->get_nodeid()) {
@@ -2325,8 +2323,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
   bufferlist bl;
   bl.push_back(bp);
 
-  bool do_sync = false;
-
   // start with odd number > nobj
   rjhash<uint32_t> h;
   unsigned prime = nobj + 1;             // this is the minimum!
@@ -2348,7 +2344,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
   Cond cond;
 
   int unack = 0;
-  int unsafe = 0;
 
   while (1) {
     if (time_to_stop()) break;
@@ -2383,16 +2378,8 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
       op.op.extent.length = osize;
       op.indata = bl;
       m.ops.push_back(op);
-      if (do_sync) {
-        OSDOp op;
-        op.op.op = CEPH_OSD_OP_STARTSYNC;
-	m.ops.push_back(op);
-      }
       client->objecter->mutate(oid, oloc, m, snapc, ceph_clock_now(client->cct), 0,
 			       NULL, new C_Ref(lock, cond, &unack));
-      /*client->objecter->write(oid, layout, 0, osize, snapc, bl, 0,
-			      new C_Ref(lock, cond, &unack),
-			      new C_Ref(lock, cond, &unsafe));*/
     } else {
       dout(10) << "read from " << oid << dendl;
       bufferlist inbl;
@@ -2418,13 +2405,6 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     }
   }
 
-
-  lock.Lock();
-  while (unsafe > 0) {
-    dout(10) << "waiting for " << unsafe << " unsafe" << dendl;
-    cond.Wait(lock);
-  }
-  lock.Unlock();
   return 0;
 }
 

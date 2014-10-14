@@ -1543,7 +1543,7 @@ int buffer::list::read_fd_zero_copy(int fd, size_t len)
     append(bp);
   } catch (buffer::error_code &e) {
     return e.code;
-  } catch (buffer::malformed_input) {
+  } catch (buffer::malformed_input &e) {
     return -EIO;
   }
   return 0;

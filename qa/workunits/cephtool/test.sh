@@ -5,6 +5,24 @@ set -o functrace
 PS4=' ${FUNCNAME[0]}: $LINENO: '
 SUDO=${SUDO:-sudo}
 
+function check_no_osd_down()
+{
+    ! ceph osd dump | grep ' down '
+}
+
+function wait_no_osd_down()
+{
+  for i in $(seq 1 300) ; do
+    if ! check_no_osd_down ; then
+      echo "waiting for osd(s) to come back up"
+      sleep 1
+    else
+      break
+    fi
+  done
+  check_no_osd_down
+}
+
 function get_pg()
 {
 	local pool obj map_output pg
@@ -33,6 +51,57 @@ mkdir $TMPDIR
 trap "rm -fr $TMPDIR" 0
 
 TMPFILE=$TMPDIR/test_invalid.$$
+
+#
+# retry_eagain max cmd args ...
+#
+# retry cmd args ... if it exits on error and its output contains the
+# string EAGAIN, at most $max times
+#
+function retry_eagain()
+{
+    local max=$1
+    shift
+    local status
+    local tmpfile=$TMPDIR/retry_eagain.$$
+    local count
+    for count in $(seq 1 $max) ; do
+        status=0
+        "$@" > $tmpfile 2>&1 || status=$?
+        if test $status = 0 || 
+            ! grep --quiet EAGAIN $tmpfile ; then
+            break
+        fi
+        sleep 1
+    done
+    if test $count = $max ; then
+        echo retried with non zero exit status, $max times: "$@" >&2
+    fi
+    cat $tmpfile
+    rm $tmpfile
+    return $status
+}
+
+#
+# map_enxio_to_eagain cmd arg ...
+#
+# add EAGAIN to the output of cmd arg ... if the output contains
+# ENXIO.
+#
+function map_enxio_to_eagain()
+{
+    local status=0
+    local tmpfile=$TMPDIR/map_enxio_to_eagain.$$
+
+    "$@" > $tmpfile 2>&1 || status=$?
+    if test $status != 0 &&
+        grep --quiet ENXIO $tmpfile ; then
+        echo "EAGAIN added by $0::map_enxio_to_eagain" >> $tmpfile
+    fi
+    cat $tmpfile
+    rm $tmpfile
+    return $status
+}
 
 function check_response()
 {
@@ -185,6 +254,11 @@ function test_tiering()
   ceph osd tier add slow cache2 --force-nonempty
   ceph osd tier remove slow cache2
 
+  ceph osd pool ls | grep cache2
+  ceph osd pool ls -f json-pretty | grep cache2
+  ceph osd pool ls detail | grep cache2
+  ceph osd pool ls detail -f json-pretty | grep cache2
+
   ceph osd pool delete cache cache --yes-i-really-really-mean-it
   ceph osd pool delete cache2 cache2 --yes-i-really-really-mean-it
 
@@ -193,7 +267,9 @@ function test_tiering()
   ceph osd tier add-cache slow cache3 1024000
   ceph osd dump | grep cache3 | grep bloom | grep 'false_positive_probability: 0.05' | grep 'target_bytes 1024000' | grep '1200s x4'
   ceph osd tier remove slow cache3
+  ceph osd pool ls | grep cache3
   ceph osd pool delete cache3 cache3 --yes-i-really-really-mean-it
+  ! ceph osd pool ls | grep cache3 || exit 1
 
   ceph osd pool delete slow2 slow2 --yes-i-really-really-mean-it
   ceph osd pool delete slow slow --yes-i-really-really-mean-it
@@ -249,12 +325,12 @@ function test_tiering()
   ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of[ \t]\+$poolB_id"
 
   ceph osd tier remove basepoolA cache5 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache5'" 2>&1 | grep "tier_of" || exit 1
   ceph osd tier remove basepoolB cache6 2>&1 | grep 'not a tier of'
-  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of"
+  ! ceph osd dump | grep "pool.*'cache6'" 2>&1 | grep "tier_of" || exit 1
 
-  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers"
-  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers"
+  ! ceph osd dump | grep "pool.*'basepoolA'" 2>&1 | grep "tiers" || exit 1
+  ! ceph osd dump | grep "pool.*'basepoolB'" 2>&1 | grep "tiers" || exit 1
 
   ceph osd pool delete cache6 cache6 --yes-i-really-really-mean-it
   ceph osd pool delete cache5 cache5 --yes-i-really-really-mean-it
@@ -390,29 +466,119 @@ function test_mon_misc()
 }
 
 
+function check_mds_active()
+{
+    ceph mds dump | grep active
+}
+
+function wait_mds_active()
+{
+  for i in $(seq 1 300) ; do
+      if ! check_mds_active ; then
+          echo "waiting for an active MDS daemon"
+          sleep 5
+      else
+          break
+      fi
+  done
+  check_mds_active
+}
+
+function get_mds_gids()
+{
+    ceph mds dump --format=json | python -c "import json; import sys; print ' '.join([m['gid'].__str__() for m in json.load(sys.stdin)['info'].values()])"
+}
+
 function fail_all_mds()
 {
   ceph mds cluster_down
-  mds_gids=`ceph mds dump | grep up: | while read line ; do echo $line | awk '{print substr($1, 0, length($1)-1);}' ; done`
+  mds_gids=$(get_mds_gids)
   for mds_gid in $mds_gids ; do
       ceph mds fail $mds_gid
   done
+  if check_mds_active ; then
+      echo "An active MDS remains, something went wrong"
+      ceph mds dump
+      exit -1
+  fi
+
 }
 
-function test_mon_mds()
+function remove_all_fs()
 {
-  existing_fs=$(ceph fs ls | grep "name:" | awk '{print substr($2,0,length($2)-1);}')
-  num_mds=$(ceph mds stat | awk '{print $2;}' | cut -f1 -d'/')
+  existing_fs=$(ceph fs ls --format=json | python -c "import json; import sys; print ' '.join([fs['name'] for fs in json.load(sys.stdin)])")
   if [ -n "$existing_fs" ] ; then
       fail_all_mds
       echo "Removing existing filesystem '${existing_fs}'..."
       ceph fs rm $existing_fs --yes-i-really-mean-it
       echo "Removed '${existing_fs}'."
   fi
+}
+
+# So that tests requiring MDS can skip if one is not configured
+# in the cluster at all
+function mds_exists()
+{
+    ceph auth list | grep "^mds"
+}
+
+function test_mds_tell()
+{
+  if ! mds_exists ; then
+      echo "Skipping test, no MDS found"
+      return
+  fi
+
+  remove_all_fs
+  ceph osd pool create fs_data 10
+  ceph osd pool create fs_metadata 10
+  ceph fs new cephfs fs_metadata fs_data
+  wait_mds_active
+
+  # Test injectargs by GID
+  old_mds_gids=$(get_mds_gids)
+  echo Old GIDs: $old_mds_gids
+
+  for mds_gid in $old_mds_gids ; do
+      ceph tell mds.$mds_gid injectargs "--debug-mds 20"
+  done
+
+  # Test respawn by rank
+  ceph tell mds.0 respawn
+  new_mds_gids=$old_mds_gids
+  while [ $new_mds_gids -eq $old_mds_gids ] ; do
+      sleep 5
+      new_mds_gids=$(get_mds_gids)
+  done
+  echo New GIDs: $new_mds_gids
+
+  # Test respawn by ID
+  ceph tell mds.a respawn
+  new_mds_gids=$old_mds_gids
+  while [ $new_mds_gids -eq $old_mds_gids ] ; do
+      sleep 5
+      new_mds_gids=$(get_mds_gids)
+  done
+  echo New GIDs: $new_mds_gids
+
+  remove_all_fs
+  ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
+  ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
+}
+
+function test_mon_mds()
+{
+  remove_all_fs
 
   ceph osd pool create fs_data 10
   ceph osd pool create fs_metadata 10
   ceph fs new cephfs fs_metadata fs_data
+
+  ceph mds cluster_down
+  ceph mds cluster_up
+
+  ceph mds compat rm_incompat 4
+  ceph mds compat rm_incompat 4
 
   # We don't want any MDSs to be up, their activity can interfere with
   # the "current_epoch + 1" checking below if they're generating updates
@@ -421,12 +587,6 @@ function test_mon_mds()
   # Check for default crash_replay_interval set automatically in 'fs new'
   ceph osd dump | grep fs_data > $TMPFILE
   check_response "crash_replay_interval 45 "
-
-  ceph mds cluster_down
-  ceph mds cluster_up
-
-  ceph mds compat rm_incompat 4
-  ceph mds compat rm_incompat 4
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
@@ -522,6 +682,7 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
+  fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
   # ... but we should be forbidden from using the cache pool in the FS directly.
@@ -554,6 +715,7 @@ function test_mon_mds()
   check_response 'in use by CephFS' $? 16
   set -e
 
+  fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
 
@@ -668,7 +830,7 @@ function test_mon_osd()
   ceph osd getmaxosd | grep "max_osd = $save"
 
   for id in `ceph osd ls` ; do
-    ceph tell osd.$id version
+    retry_eagain 5 map_enxio_to_eagain ceph tell osd.$id version
   done
 
   ceph osd rm 0 2>&1 | grep 'EBUSY'
@@ -1092,7 +1254,6 @@ TESTS=(
   auth
   auth_profiles
   mon_misc
-  mon_mds
   mon_mon
   mon_osd
   mon_osd_pool
@@ -1104,6 +1265,8 @@ TESTS=(
   mon_osd_misc
   mon_heap_profiler
   osd_bench
+  mds_tell
+  mon_mds
 )
 
 #
@@ -1125,6 +1288,8 @@ function usage()
 
 tests_to_run=()
 
+sanity_check=true
+
 while [[ $# -gt 0 ]]; do
   opt=$1
 
@@ -1134,6 +1299,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--asok-does-not-need-root" )
       SUDO=""
+      ;;
+    "--no-sanity-check" )
+      sanity_check=false
       ;;
     "-t" )
       shift
@@ -1161,11 +1329,20 @@ if [[ ${#tests_to_run[@]} -eq 0 ]]; then
   tests_to_run=("${TESTS[@]}")
 fi
 
+if $sanity_check ; then
+    wait_no_osd_down
+fi
 for i in ${tests_to_run[@]}; do
+  if $sanity_check ; then
+      check_no_osd_down
+  fi
   set -x
-  test_${i} ;
+  test_${i}
   set +x
 done
+if $sanity_check ; then
+    check_no_osd_down
+fi
 
 set -x
 

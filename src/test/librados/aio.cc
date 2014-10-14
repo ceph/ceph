@@ -161,6 +161,34 @@ void set_completion_safePP(rados_completion_t cb, void *arg)
   sem_post(&test->m_sem);
 }
 
+TEST(LibRadosAio, TooBig) {
+  AioTestData test_data;
+  rados_completion_t my_completion;
+  ASSERT_EQ("", test_data.init());
+  ASSERT_EQ(0, rados_aio_create_completion((void*)&test_data,
+	      set_completion_complete, set_completion_safe, &my_completion));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(-E2BIG, rados_aio_write(test_data.m_ioctx, "foo",
+                                    my_completion, buf, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, rados_aio_write_full(test_data.m_ioctx, "foo",
+                                         my_completion, buf, UINT_MAX));
+  ASSERT_EQ(-E2BIG, rados_aio_append(test_data.m_ioctx, "foo",
+                                     my_completion, buf, UINT_MAX));
+}
+
+TEST(LibRadosAio, TooBigPP) {
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+  bufferlist bl;
+  AioCompletion *aio_completion = test_data.m_cluster.aio_create_completion(
+                                                                            (void*)&test_data, NULL, NULL);
+  ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_write("foo", aio_completion, bl, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_append("foo", aio_completion, bl, UINT_MAX));
+  // ioctx.aio_write_full no way to overflow bl.length()
+}
+
 TEST(LibRadosAio, SimpleWrite) {
   AioTestData test_data;
   rados_completion_t my_completion;
@@ -1935,6 +1963,7 @@ TEST(LibRadosAioEC, RoundTripAppend) {
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
   rados_aio_release(my_completion3);
+  rados_aio_release(my_completion4);
   delete[] buf;
   delete[] buf2;
   delete[] buf3;

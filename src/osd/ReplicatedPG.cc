@@ -5271,7 +5271,10 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   for (list<OpContext::NotifyAck>::iterator p = ctx->notify_acks.begin();
        p != ctx->notify_acks.end();
        ++p) {
-    dout(10) << "notify_ack " << make_pair(p->watch_cookie, p->notify_id) << dendl;
+    if (p->watch_cookie)
+      dout(10) << "notify_ack " << make_pair(p->watch_cookie.get(), p->notify_id) << dendl;
+    else
+      dout(10) << "notify_ack " << make_pair("NULL", p->notify_id) << dendl;
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
 	   ctx->obc->watchers.begin();
 	 i != ctx->obc->watchers.end();

@@ -1,0 +1,215 @@
+commit bc8b67bef6309a32361be76cd11fb56b057ea9d2 (tag: refs/tags/v0.67.11, refs/remotes/gh/dumpling)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Wed Sep 24 06:25:55 2014 -0700
+
+    0.67.11
+
+commit 0e90b04d9452999d7d91305c80585782d492c91b (refs/remotes/gh/dumpling-jni)
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed May 21 21:41:23 2014 -0700
+
+    cephfs-java: build against older jni headers
+    
+    Older versions of the JNI interface expected non-const parameters
+    to their memory move functions. It's unpleasant, but won't actually
+    change the memory in question, to do a cast_const in order to satisfy
+    those older headers. (And even if it *did* modify the memory, that
+    would be okay given our single user.)
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 4d4b77e5b6b923507ec4a0ad9d5c7018e4542a3c)
+
+commit 3f020443c8d92e61d8593049147a79a6696c9c93
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Jul 24 15:29:40 2014 -0700
+
+    librbd: fix crash using clone of flattened image
+    
+    The crash occurs due to ImageCtx->parent->parent being uninitialized,
+    since the inital open_parent() -> open_image(parent) ->
+    ictx_refresh(parent) occurs before ImageCtx->parent->snap_id is set,
+    so refresh_parent() is not called to open an ImageCtx for the parent
+    of the parent. This leaves the ImageCtx->parent->parent NULL, but the
+    rest of ImageCtx->parent updated to point at the correct parent snapshot.
+    
+    Setting the parent->snap_id earlier has some unintended side effects
+    currently, so for now just call refresh_parent() during
+    open_parent(). This is the easily backportable version of the
+    fix. Further patches can clean up this whole initialization process.
+    
+    Fixes: #8845
+    Backport: firefly, dumpling
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 2545e80d274b23b6715f4d8b1f4c6b96182996fb)
+
+commit d3e880af5f3ae71d13159514c33c6b41fc648d54
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Sep 10 08:00:50 2014 -0700
+
+    test/cli-integration/rbd: fix trailing space
+    
+    Newer versions of json.tool remove the trailing ' ' after the comma.  Add
+    it back in with sed so that the .t works on both old and new versions, and
+    so that we don't have to remove the trailing spaces from all of the test
+    cases.
+    
+    Fixes: #8920
+    
+    Backports commit 605064dc685aa25cc7d58ec18b6449a3ce476d01
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 5336398618f49d10e497392ab942d43062ed772d
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Aug 16 12:42:33 2014 -0700
+
+    os/FileStore: fix mount/remount force_sync race
+    
+    Consider:
+    
+     - mount
+     - sync_entry is doing some work
+     - umount
+       - set force_sync = true
+       - set done = true
+     - sync_entry exits (due to done)
+       - ..but does not set force_sync = false
+     - mount
+     - journal replay starts
+     - sync_entry sees force_sync and does a commit while op_seq == 0
+     ...crash...
+    
+    Fixes: #9144
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit dd11042f969b94f7a461d02e1475794031c79f61)
+    
+    Conflicts:
+    	src/os/FileStore.cc
+
+commit f7498c47ed90db71e50a3d4ff9ce13626e863719
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Sep 8 13:44:57 2014 -0700
+
+    osdc/Objecter: revoke rx_buffer on op_cancel
+    
+    If we cancel a read, revoke the rx buffers to avoid a use-after-free and/or
+    other undefined badness by using user buffers that may no longer be
+    present.
+    
+    Fixes: #9362
+    Backport: firefly, dumpling
+    Reported-by: Matthias Kiefer <matthias.kiefer@1und1.de>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2305b2897acba38384358c33ca3bbfcae6f1c74e)
+    
+    (adjusted for op->con instead of s->con)
+
+commit 4dbb5010bd73ea8c7f9ed85e90e645ba1e85ea0a
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Sep 8 06:58:45 2014 -0700
+
+    mon/Paxos: don't spam log with is_readable at dout level 1
+    
+    Backport: firefly, dumpling
+    Reported-by: Aanchal Agrawal <Aanchal.Agrawal@sandisk.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 62ca27d0b119b597ebad40dde64c4d86599e466d)
+
+commit 5315cf0a47e0a21e514df0d85be170dbca7ffc92
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Thu Sep 4 13:58:14 2014 -0400
+
+    doc: add note on soft JS dependency for navigating docs
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 657be818375bea2d8b5998ea1e5505eedc2f294d)
+
+commit 707076e3a9294169c3042afeb11b71b84727094b
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Wed Sep 3 21:21:45 2014 -0400
+
+    doc: fix missing bracket
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 69638dfaeb0dcd96dac4b5f5c00ed08042432487)
+
+commit 2ebdcfd5490462d77e32ffe3ef162f70183d53ab
+Author: Alfredo Deza <alfredo.deza@inktank.com>
+Date:   Wed Sep 3 20:47:54 2014 -0400
+
+    doc: attempt to get the ayni JS into all head tags
+    
+    Signed-off-by: Alfredo Deza <alfredo.deza@inktank.com>
+    (cherry picked from commit 35663fa55ac1579a3b0c8b67028a3a8dfea87b48)
+
+commit c7948afa8232117c8a6e13b17774045a5e1bea6d
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Aug 17 20:54:28 2014 -0700
+
+    qa/workunits/rbd/qemu-iotests: touch common.env
+    
+    This seems to be necessary on trusty.
+    
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 055be68cf8e1b84287ab3631a02e89a9f3ae6cca)
+
+commit aaeebceb2189336f5f957f2a797d0448c2754b15
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 13 13:32:29 2014 -0700
+
+    mon: fix divide by zero when pg_num adjusted and no osds
+    
+    Fixes: #9052
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    
+    Manual backport of 239401db7b51541a57c59a261b89e0f05347c32d
+
+commit e7c5fb58d85ed0d1be359e616137666c5e207c38
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 12 07:05:34 2014 -0700
+
+    common/LogClient: fix sending dup log items
+    
+    We need to skip even the most recently sent item in order to get to the
+    ones we haven't sent yet.
+    
+    Fixes: #9080
+    Backport: firefly, dumpling
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 057c6808be5bc61c3f1ac2b956c1522f18411245)
+
+commit cbc9218edc122337fd6d9dbbdca18670e20c6169
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Aug 11 16:41:26 2014 -0700
+
+    librbd: fix error path cleanup for opening an image
+    
+    If the image doesn't exist and caching is enabled, the ObjectCacher
+    was not being shutdown, and the ImageCtx was leaked. The IoCtx could
+    later be closed while the ObjectCacher was still running, resulting in
+    a segfault. Simply use the usual cleanup path in open_image(), which
+    works fine here.
+    
+    Fixes: #8912
+    Backport: dumpling, firefly
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 3dfa72d5b9a1f54934dc8289592556d30430959d)
+
+commit b5dafe1c0f7ecf7c3a25d0be5dfddcbe3d07e69e
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 18 11:02:58 2014 -0700
+
+    osd: allow io priority to be set for the disk_tp
+    
+    The disk_tp covers scrubbing, pg deletion, and snap trimming
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 84b3003119eeb8acfb3faacf357e6c6a452950e3)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+    
+    (cherry picked from commit 987ad133415aa988061c95259f9412b05ce8ac7e)

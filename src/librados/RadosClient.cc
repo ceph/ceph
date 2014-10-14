@@ -30,7 +30,7 @@
 
 #include "messages/MWatchNotify.h"
 #include "messages/MLog.h"
-#include "msg/SimpleMessenger.h"
+#include "msg/Messenger.h"
 
 // needed for static_cast
 #include "messages/PaxosServiceMessage.h"
@@ -209,7 +209,8 @@ int librados::RadosClient::connect()
 
   err = -ENOMEM;
   nonce = getpid() + (1000000 * (uint64_t)rados_instance.inc());
-  messenger = new SimpleMessenger(cct, entity_name_t::CLIENT(-1), "radosclient", nonce);
+  messenger = Messenger::create(cct, entity_name_t::CLIENT(-1),
+				"radosclient", nonce);
   if (!messenger)
     goto out;
 
@@ -566,6 +567,31 @@ int librados::RadosClient::pool_create_async(string& name, PoolAsyncCompletionIm
   if (r < 0) {
     delete onfinish;
   }
+  return r;
+}
+
+int librados::RadosClient::pool_get_base_tier(int64_t pool_id, int64_t* base_tier)
+{
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+
+  const pg_pool_t* pool = osdmap->get_pg_pool(pool_id);
+  if (pool) {
+    if (pool->tier_of < 0) {
+      *base_tier = pool_id;
+    } else {
+      *base_tier = pool->tier_of;
+    }
+    r = 0;
+  } else {
+    r = -ENOENT;
+  }
+
+  objecter->put_osdmap_read();
   return r;
 }
 

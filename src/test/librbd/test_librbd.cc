@@ -846,7 +846,7 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
   int r = comp->get_return_value();
   printf("return value is: %d\n", r);
   assert(r == TEST_IO_SIZE);
-  assert(strncmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
+  assert(memcmp(expected, bl.c_str(), TEST_IO_SIZE) == 0);
   printf("finished read\n");
   comp->release();
 }
@@ -860,7 +860,7 @@ void read_test_data(librbd::Image& image, const char *expected, off_t off, size_
   assert(read >= 0);
   printf("read: %u\n", (unsigned int) read);
   printf("read: %s\nexpected: %s\n", bl.c_str(), expected);
-  assert(strncmp(bl.c_str(), expected, expected_len) == 0);
+  assert(memcmp(bl.c_str(), expected, expected_len) == 0);
 }
 
 TEST(LibRBD, TestIOPP) 
@@ -1330,6 +1330,124 @@ TEST(LibRBD, ListChildren)
   ASSERT_EQ(0, destroy_one_pool(pool_name2, &cluster));
 }
 
+TEST(LibRBD, ListChildrenTiered)
+{
+  rados_t cluster;
+  string pool_name1 = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name1, &cluster));
+  string pool_name2 = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name2, &cluster));
+  string pool_name3 = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name3, &cluster));
+
+  std::string cmdstr = "{\"prefix\": \"osd tier add\", \"pool\": \"" +
+     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\", \"force_nonempty\":\"\"}";
+  char *cmd[1];
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+
+  cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
+     pool_name3 + "\", \"mode\":\"writeback\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+
+  cmdstr = "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" +
+     pool_name1 + "\", \"overlaypool\":\"" + pool_name3 + "\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+
+  EXPECT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+
+  rados_ioctx_t ioctx1, ioctx2;
+  rados_ioctx_create(cluster, pool_name1.c_str(), &ioctx1);
+  rados_ioctx_create(cluster, pool_name2.c_str(), &ioctx2);
+
+  int features = RBD_FEATURE_LAYERING;
+  rbd_image_t parent;
+  int order = 0;
+
+  // make a parent to clone from
+  ASSERT_EQ(0, create_image_full(ioctx1, "parent", 4<<20, &order,
+				 false, features));
+  ASSERT_EQ(0, rbd_open(ioctx1, "parent", &parent, NULL));
+  // create a snapshot, reopen as the parent we're interested in
+  ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_set(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
+
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_open(ioctx1, "parent", &parent, "parent_snap"));
+
+  ASSERT_EQ(0, rbd_clone(ioctx1, "parent", "parent_snap", ioctx2, "child1",
+	    features, &order));
+  test_list_children(parent, 1, pool_name2.c_str(), "child1");
+
+  ASSERT_EQ(0, rbd_clone(ioctx1, "parent", "parent_snap", ioctx1, "child2",
+	    features, &order));
+  test_list_children(parent, 2, pool_name2.c_str(), "child1",
+		     pool_name1.c_str(), "child2");
+
+  // read from the cache to populate it
+  rbd_image_t tier_image;
+  ASSERT_EQ(0, rbd_open(ioctx1, "child2", &tier_image, NULL));
+  size_t len = 4 * 1024 * 1024;
+  char* buf = (char*)malloc(len);
+  ssize_t size = rbd_read(tier_image, 0, len, buf);
+  ASSERT_GT(size, 0);
+  free(buf);
+  ASSERT_EQ(0, rbd_close(tier_image));
+
+  ASSERT_EQ(0, rbd_clone(ioctx1, "parent", "parent_snap", ioctx2, "child3",
+	    features, &order));
+  test_list_children(parent, 3, pool_name2.c_str(), "child1",
+		     pool_name1.c_str(), "child2",
+		     pool_name2.c_str(), "child3");
+
+  ASSERT_EQ(0, rbd_clone(ioctx1, "parent", "parent_snap", ioctx2, "child4",
+	    features, &order));
+  test_list_children(parent, 4, pool_name2.c_str(), "child1",
+		     pool_name1.c_str(), "child2",
+		     pool_name2.c_str(), "child3",
+		     pool_name2.c_str(), "child4");
+
+  ASSERT_EQ(0, rbd_remove(ioctx2, "child1"));
+  test_list_children(parent, 3,
+		     pool_name1.c_str(), "child2",
+		     pool_name2.c_str(), "child3",
+		     pool_name2.c_str(), "child4");
+
+  ASSERT_EQ(0, rbd_remove(ioctx2, "child3"));
+  test_list_children(parent, 2,
+		     pool_name1.c_str(), "child2",
+		     pool_name2.c_str(), "child4");
+
+  ASSERT_EQ(0, rbd_remove(ioctx2, "child4"));
+  test_list_children(parent, 1,
+		     pool_name1.c_str(), "child2");
+
+  ASSERT_EQ(0, rbd_remove(ioctx1, "child2"));
+  test_list_children(parent, 0);
+
+  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_close(parent));
+  ASSERT_EQ(0, rbd_remove(ioctx1, "parent"));
+  rados_ioctx_destroy(ioctx1);
+  rados_ioctx_destroy(ioctx2);
+  // destroy_one_pool also closes the cluster; do this one step at a time
+  cmdstr = "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" +
+     pool_name1 + "\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+  cmdstr = "{\"prefix\": \"osd tier remove\", \"pool\": \"" +
+     pool_name1 + "\", \"tierpool\":\"" + pool_name3 + "\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name3.c_str()));
+  ASSERT_EQ(0, rados_pool_delete(cluster, pool_name1.c_str()));
+  ASSERT_EQ(0, destroy_one_pool(pool_name2, &cluster));
+}
+
 TEST(LibRBD, LockingPP)
 {
   librados::Rados rados;
@@ -1768,6 +1886,58 @@ TEST(LibRBD, DiffIterateStress)
       }
     }
 
+  }
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+TEST(LibRBD, DiffIterateRegression6926)
+{
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  int seed = getpid();
+  cout << "seed " << seed << std::endl;
+  srand(seed);
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    const char *name = "testimg";
+    uint64_t size = 20 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name, size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name, NULL));
+
+    vector<diff_extent> extents;
+    ceph::bufferlist bl;
+
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(0u, extents.size());
+
+    ASSERT_EQ(0, image.snap_create("snap1"));
+    char data[256];
+    memset(data, 1, sizeof(data));
+    bl.append(data, 256);
+    ASSERT_EQ(256, image.write(0, 256, bl));
+
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 256, true), extents[0]);
+
+    ASSERT_EQ(0, image.snap_set("snap1"));
+    extents.clear();
+    ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
+				    vector_iterate_cb, (void *) &extents));
+    ASSERT_EQ(static_cast<size_t>(0), extents.size());
   }
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));

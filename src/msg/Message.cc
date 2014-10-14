@@ -14,7 +14,7 @@ using namespace std;
 #include "global/global_context.h"
 
 #include "Message.h"
-#include "Pipe.h"
+
 #include "messages/MPGStats.h"
 
 #include "messages/MGenericMessage.h"

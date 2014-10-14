@@ -25,13 +25,16 @@ namespace rbd_replay {
 
 class Replayer;
 
+/**
+   Performs Actions within a single thread.
+ */
 class Worker : public ActionCtx {
 public:
   explicit Worker(Replayer &replayer);
 
   void start();
 
-  // Should only be called by StopThreadAction
+  /// Should only be called by StopThreadAction
   void stop();
 
   void join();
@@ -113,13 +116,17 @@ public:
     m_image_name_map = map;
   }
 
+  void set_dump_perf_counters(bool dump_perf_counters) {
+    m_dump_perf_counters = dump_perf_counters;
+  }
+
   const ImageNameMap &image_name_map() const {
     return m_image_name_map;
   }
 
 private:
   struct action_tracker_d {
-    // Maps an action ID to the time the action completed
+    /// Maps an action ID to the time the action completed
     std::map<action_id_t, boost::system_time> actions;
     boost::shared_mutex mutex;
     boost::condition condition;
@@ -129,8 +136,9 @@ private:
 
   action_tracker_d &tracker_for(action_id_t id);
 
-  // Disallow assignment and copying
+  /// Disallow copying
   Replayer(const Replayer& rhs);
+  /// Disallow assignment
   const Replayer& operator=(const Replayer& rhs);
 
   librbd::RBD* m_rbd;
@@ -139,13 +147,14 @@ private:
   float m_latency_multiplier;
   bool m_readonly;
   ImageNameMap m_image_name_map;
+  bool m_dump_perf_counters;
 
   std::map<imagectx_id_t, librbd::Image*> m_images;
   boost::shared_mutex m_images_mutex;
 
-  // Actions are hashed across the trackers by ID.
-  // Number of trackers should probably be larger than the number of cores and prime.
-  // Should definitely be odd.
+  /// Actions are hashed across the trackers by ID.
+  /// Number of trackers should probably be larger than the number of cores and prime.
+  /// Should definitely be odd.
   const int m_num_action_trackers;
   action_tracker_d* m_action_trackers;
 };

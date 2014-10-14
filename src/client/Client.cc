@@ -47,6 +47,7 @@ using namespace std;
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
+#include "messages/MCommandReply.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -54,7 +55,6 @@ using namespace std;
 
 #include "mon/MonClient.h"
 
-#include "mds/MDSMap.h"
 #include "osd/OSDMap.h"
 #include "mon/MonMap.h"
 
@@ -166,7 +166,8 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
-    initialized(false), mounted(false), unmounting(false),
+    initialized(false), authenticated(false),
+    mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
     client_lock("Client::client_lock")
@@ -506,14 +507,44 @@ void Client::trim_cache()
   }
 }
 
+void Client::trim_cache_for_reconnect(MetaSession *s)
+{
+  mds_rank_t mds = s->mds_num;
+  ldout(cct, 20) << "trim_cache_for_reconnect mds." << mds << dendl;
+
+  int trimmed = 0;
+  list<Dentry*> skipped;
+  while (lru.lru_get_size() > 0) {
+    Dentry *dn = static_cast<Dentry*>(lru.lru_expire());
+    if (!dn)
+      break;
+
+    if ((dn->inode && dn->inode->caps.count(mds)) ||
+	dn->dir->parent_inode->caps.count(mds)) {
+      trim_dentry(dn);
+      trimmed++;
+    } else
+      skipped.push_back(dn);
+  }
+
+  for(list<Dentry*>::iterator p = skipped.begin(); p != skipped.end(); ++p)
+    lru.lru_insert_mid(*p);
+
+  ldout(cct, 20) << "trim_cache_for_reconnect mds." << mds
+		 << " trimmed " << trimmed << " dentries" << dendl;
+
+  if (s->caps.size() > 0)
+    _invalidate_kernel_dcache();
+}
+
 void Client::trim_dentry(Dentry *dn)
 {
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir " << hex << dn->dir->parent_inode->ino 
 		 << dendl;
   if (dn->dir->parent_inode->flags & I_COMPLETE) {
-    ldout(cct, 10) << " clearing I_COMPLETE on " << *dn->dir->parent_inode << dendl;
-    dn->dir->parent_inode->flags &= ~I_COMPLETE;
+    ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *dn->dir->parent_inode << dendl;
+    dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
     dn->dir->release_count++;
   }
   unlink(dn, false, false);  // drop dir, drop dentry
@@ -688,7 +719,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->nlink = st->nlink;
     }
 
-    if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
+    if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
 	st->xattrbl.length() &&
 	st->xattr_version > in->xattr_version) {
       bufferlist::iterator p = st->xattrbl.begin();
@@ -735,17 +766,17 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       (issued & CEPH_CAP_FILE_EXCL) == 0 &&
       in->dirstat.nfiles == 0 &&
       in->dirstat.nsubdirs == 0) {
-    ldout(cct, 10) << " marking I_COMPLETE on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE;
+    ldout(cct, 10) << " marking (I_COMPLETE|I_COMPLETE_ORDERED) on empty dir " << *in << dendl;
+    in->flags |= I_COMPLETE | I_COMPLETE_ORDERED;
     if (in->dir) {
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
-		     << in->dir->dentry_map.size() << " entries, marking all dentries null" << dendl;
-      for (map<string, Dentry*>::iterator p = in->dir->dentry_map.begin();
-	   p != in->dir->dentry_map.end();
+		     << in->dir->dentry_list.size() << " entries, marking all dentries null" << dendl;
+      for (xlist<Dentry*>::iterator p = in->dir->dentry_list.begin();
+	   !p.end();
 	   ++p) {
-	unlink(p->second, true, true);  // keep dir, keep dentry
+	unlink(*p, true, true);  // keep dir, keep dentry
       }
-      if (in->dir->dentry_map.empty())
+      if (in->dir->dentry_list.empty())
 	close_dir(in->dir);
     }
   }
@@ -758,7 +789,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
  * insert_dentry_inode - insert + link a single dentry + inode into the metadata cache.
  */
 Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-				    Inode *in, utime_t from, MetaSession *session, bool set_offset,
+				    Inode *in, utime_t from, MetaSession *session,
 				    Dentry *old_dentry)
 {
   Dentry *dn = NULL;
@@ -785,14 +816,20 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   
   if (!dn || dn->inode == 0) {
     in->get();
-    if (old_dentry)
+    if (old_dentry) {
+      if (old_dentry->dir->parent_inode->flags & I_COMPLETE_ORDERED) {
+	ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on "
+		       << *old_dentry->dir->parent_inode << dendl;
+	old_dentry->dir->parent_inode->flags &= ~I_COMPLETE_ORDERED;
+      }
       unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
+    }
+    if (dir->parent_inode->flags & I_COMPLETE_ORDERED) {
+	ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on " << *dir->parent_inode << dendl;
+	dir->parent_inode->flags &= ~I_COMPLETE_ORDERED;
+    }
     dn = link(dir, dname, in, dn);
     put_inode(in);
-    if (set_offset) {
-      ldout(cct, 15) << " setting dn offset to " << dir->max_offset << dendl;
-      dn->offset = dir->max_offset++;
-    }
   }
 
   update_dentry_lease(dn, dlease, from, session);
@@ -908,8 +945,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     request->readdir_end = end;
     request->readdir_num = numdn;
 
-    map<string,Dentry*>::iterator pd = dir->dentry_map.upper_bound(readdir_start);
-
     string dname;
     LeaseStat dlease;
     for (unsigned i=0; i<numdn; i++) {
@@ -919,36 +954,12 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
 
-      // remove any skipped names
-      while (pd != dir->dentry_map.end() && pd->first < dname) {
-	if (pd->first < dname &&
-	    fg.contains(diri->hash_dentry_name(pd->first))) {  // do not remove items in earlier frags
-	  Dentry *dn = pd->second;
-	  if (dn->inode) {
-	    ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
-	    ++pd;
-	    unlink(dn, true, true);  // keep dir, dentry
-	  } else {
-	    ++pd;
-	  }
-	} else {
-	  ++pd;
-	}
-      }
-
-      if (pd == dir->dentry_map.end())
-	ldout(cct, 15) << " pd is at end" << dendl;
-      else
-	ldout(cct, 15) << " pd is '" << pd->first << "' dn " << pd->second << dendl;
-
       Inode *in = add_update_inode(&ist, request->sent_stamp, session);
       Dentry *dn;
-      if (pd != dir->dentry_map.end() &&
-	  pd->first == dname) {
-	Dentry *olddn = pd->second;
-	if (pd->second->inode != in) {
+      if (diri->dir->dentries.count(dname)) {
+	Dentry *olddn = diri->dir->dentries[dname];
+	if (olddn->inode != in) {
 	  // replace incorrect dentry
-	  ++pd;  // we are about to unlink this guy, move past it.
 	  unlink(olddn, true, true);  // keep dir, dentry
 	  dn = link(dir, dname, in, olddn);
 	  assert(dn == olddn);
@@ -956,7 +967,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	  // keep existing dn
 	  dn = olddn;
 	  touch_dn(dn);
-	  ++pd;  // move past the dentry we just touched.
+	  dn->item_dentry_list.move_to_back();
 	}
       } else {
 	// new dn
@@ -972,19 +983,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       ldout(cct, 15) << __func__ << "  " << hex << dn->offset << dec << ": '" << dname << "' -> " << in->ino << dendl;
     }
     request->readdir_last_name = dname;
-
-    // remove trailing names
-    if (end) {
-      while (pd != dir->dentry_map.end()) {
-	if (fg.contains(diri->hash_dentry_name(pd->first))) {
-	  ldout(cct, 15) << __func__ << "  unlink '" << pd->first << "'" << dendl;
-	  Dentry *dn = pd->second;
-	  ++pd;
-	  unlink(dn, true, true); // keep dir, dentry
-	} else
-	  ++pd;
-      }
-    }
 
     if (dir->is_empty())
       close_dir(dir);
@@ -1017,8 +1015,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     Dentry *d = request->dentry();
     if (d && d->dir &&
 	(d->dir->parent_inode->flags & I_COMPLETE)) {
-      ldout(cct, 10) << " clearing I_COMPLETE on " << *d->dir->parent_inode << dendl;
-      d->dir->parent_inode->flags &= ~I_COMPLETE;
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *d->dir->parent_inode << dendl;
+      d->dir->parent_inode->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
       d->dir->release_count++;
     }
 
@@ -1078,14 +1076,19 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session, true,
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session,
                           ((request->head.op == CEPH_MDS_OP_RENAME) ?
                                         request->old_dentry() : NULL));
     } else {
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
-	if (dn->inode)
+	if (dn->inode) {
+	  if (diri->flags & I_COMPLETE_ORDERED) {
+	    ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on " << *diri << dendl;
+	    diri->flags &= ~I_COMPLETE_ORDERED;
+	  }
 	  unlink(dn, true, true);  // keep dir, dentry
+	}
       }
     }
   } else if (reply->head.op == CEPH_MDS_OP_LOOKUPSNAP ||
@@ -1104,7 +1107,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     if (in) {
       Dir *dir = diri->open_dir();
-      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session, true);
+      insert_dentry_inode(dir, dname, &dlease, in, request->sent_stamp, session);
     } else {
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
@@ -1125,9 +1128,9 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
 // -------
 
-int Client::choose_target_mds(MetaRequest *req) 
+mds_rank_t Client::choose_target_mds(MetaRequest *req) 
 {
-  int mds = -1;
+  mds_rank_t mds = MDS_RANK_NONE;
   __u32 hash = 0;
   bool is_hash = false;
 
@@ -1224,12 +1227,12 @@ out:
 }
 
 
-void Client::connect_mds_targets(int mds)
+void Client::connect_mds_targets(mds_rank_t mds)
 {
   ldout(cct, 10) << "connect_mds_targets for mds." << mds << dendl;
   assert(mds_sessions.count(mds));
   const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
-  for (set<int>::const_iterator q = info.export_targets.begin();
+  for (set<mds_rank_t>::const_iterator q = info.export_targets.begin();
        q != info.export_targets.end();
        ++q) {
     if (mds_sessions.count(*q) == 0 &&
@@ -1245,7 +1248,7 @@ void Client::dump_mds_sessions(Formatter *f)
 {
   f->dump_int("id", get_nodeid().v);
   f->open_array_section("sessions");
-  for (map<int,MetaSession*>::const_iterator p = mds_sessions.begin(); p != mds_sessions.end(); ++p) {
+  for (map<mds_rank_t,MetaSession*>::const_iterator p = mds_sessions.begin(); p != mds_sessions.end(); ++p) {
     f->open_object_section("session");
     p->second->dump(f);
     f->close_section();
@@ -1397,8 +1400,8 @@ int Client::make_request(MetaRequest *request,
     request->caller_cond = &caller_cond;
 
     // choose mds
-    int mds = choose_target_mds(request);
-    if (mds < 0 || !mdsmap->is_active_or_stopping(mds)) {
+    mds_rank_t mds = choose_target_mds(request);
+    if (mds < MDS_RANK_NONE || !mdsmap->is_active_or_stopping(mds)) {
       ldout(cct, 10) << " target mds." << mds << " not active, waiting for new mdsmap" << dendl;
       wait_on_list(waiting_for_mdsmap);
       continue;
@@ -1494,7 +1497,7 @@ void Client::put_request(MetaRequest *request)
 }
 
 int Client::encode_inode_release(Inode *in, MetaRequest *req,
-			 int mds, int drop,
+			 mds_rank_t mds, int drop,
 			 int unless, int force)
 {
   ldout(cct, 20) << "encode_inode_release enter(in:" << *in << ", req:" << req
@@ -1533,7 +1536,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 }
 
 void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
-			   int mds, int drop, int unless)
+			   mds_rank_t mds, int drop, int unless)
 {
   ldout(cct, 20) << "encode_dentry_release enter(dn:"
 	   << dn << ")" << dendl;
@@ -1559,7 +1562,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
  * Additionally, if you set any *drop member, you'd better have
  * set the corresponding dentry!
  */
-void Client::encode_cap_releases(MetaRequest *req, int mds)
+void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
 {
   ldout(cct, 20) << "encode_cap_releases enter (req: "
 		 << req << ", mds: " << mds << ")" << dendl;
@@ -1590,7 +1593,7 @@ void Client::encode_cap_releases(MetaRequest *req, int mds)
 	   << req << ", mds " << mds <<dendl;
 }
 
-bool Client::have_open_session(int mds)
+bool Client::have_open_session(mds_rank_t mds)
 {
   return
     mds_sessions.count(mds) &&
@@ -1598,7 +1601,7 @@ bool Client::have_open_session(int mds)
      mds_sessions[mds]->state == MetaSession::STATE_STALE);
 }
 
-MetaSession *Client::_get_mds_session(int mds, Connection *con)
+MetaSession *Client::_get_mds_session(mds_rank_t mds, Connection *con)
 {
   if (mds_sessions.count(mds) == 0)
     return NULL;
@@ -1608,7 +1611,7 @@ MetaSession *Client::_get_mds_session(int mds, Connection *con)
   return s;
 }
 
-MetaSession *Client::_get_or_open_mds_session(int mds)
+MetaSession *Client::_get_or_open_mds_session(mds_rank_t mds)
 {
   if (mds_sessions.count(mds))
     return mds_sessions[mds];
@@ -1651,7 +1654,7 @@ void Client::update_metadata(std::string const &k, std::string const &v)
   metadata[k] = v;
 }
 
-MetaSession *Client::_open_mds_session(int mds)
+MetaSession *Client::_open_mds_session(mds_rank_t mds)
 {
   ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
   assert(mds_sessions.count(mds) == 0);
@@ -1689,7 +1692,7 @@ void Client::_closed_mds_session(MetaSession *s)
 
 void Client::handle_client_session(MClientSession *m) 
 {
-  int from = m->get_source().num();
+  mds_rank_t from = mds_rank_t(m->get_source().num());
   ldout(cct, 10) << "handle_client_session " << *m << " from mds." << from << dendl;
 
   MetaSession *session = _get_mds_session(from, m->get_connection().get());
@@ -1745,7 +1748,7 @@ void Client::_kick_stale_sessions()
 {
   ldout(cct, 1) << "kick_stale_sessions" << dendl;
 
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end(); ) {
     MetaSession *s = p->second;
     ++p;
@@ -1757,7 +1760,7 @@ void Client::_kick_stale_sessions()
 void Client::send_request(MetaRequest *request, MetaSession *session)
 {
   // make the request
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << "send_request rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
   MClientRequest *r = build_client_request(request);
@@ -1827,7 +1830,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
 
 void Client::handle_client_request_forward(MClientRequestForward *fwd)
 {
-  int mds = fwd->get_source().num();
+  mds_rank_t mds = mds_rank_t(fwd->get_source().num());
   MetaSession *session = _get_mds_session(mds, fwd->get_connection().get());
   if (!session) {
     fwd->put();
@@ -1865,7 +1868,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 
 void Client::handle_client_reply(MClientReply *reply)
 {
-  int mds_num = reply->get_source().num();
+  mds_rank_t mds_num = mds_rank_t(reply->get_source().num());
   MetaSession *session = _get_mds_session(mds_num, reply->get_connection().get());
   if (!session) {
     reply->put();
@@ -2004,7 +2007,13 @@ bool Client::ms_dispatch(Message *m)
   case CEPH_MSG_CLIENT_LEASE:
     handle_lease(static_cast<MClientLease*>(m));
     break;
-
+  case MSG_COMMAND_REPLY:
+    if (m->get_source().type() == CEPH_ENTITY_TYPE_MDS) {
+      handle_command_reply(static_cast<MCommandReply*>(m));
+    } else {
+      return false;
+    }
+    break;
   default:
     return false;
   }
@@ -2043,8 +2052,33 @@ void Client::handle_mds_map(MMDSMap* m)
   mdsmap = new MDSMap;
   mdsmap->decode(m->get_encoded());
 
+  // Cancel any commands for missing or laggy GIDs
+  std::list<ceph_tid_t> cancel_ops;
+  for (std::map<ceph_tid_t, CommandOp>::iterator i = commands.begin();
+       i != commands.end(); ++i) {
+    const mds_gid_t op_mds_gid = i->second.mds_gid;
+    if (mdsmap->is_dne_gid(op_mds_gid) || mdsmap->is_laggy_gid(op_mds_gid)) {
+      ldout(cct, 1) << __func__ << ": cancelling command op " << i->first << dendl;
+      cancel_ops.push_back(i->first);
+      if (i->second.outs) {
+        std::ostringstream ss;
+        ss << "MDS " << op_mds_gid << " went away";
+        *(i->second.outs) = ss.str();
+      }
+      i->second.con->mark_down();
+      if (i->second.on_finish) {
+        i->second.on_finish->complete(-ETIMEDOUT);
+      }
+    }
+  }
+
+  for (std::list<ceph_tid_t>::iterator i = cancel_ops.begin();
+       i != cancel_ops.end(); ++i) {
+    commands.erase(*i);
+  }
+
   // reset session
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
     int oldstate = oldmap->get_state(p->first);
@@ -2052,8 +2086,13 @@ void Client::handle_mds_map(MMDSMap* m)
     if (!mdsmap->is_up(p->first) ||
 	mdsmap->get_inst(p->first) != p->second->inst) {
       p->second->con->mark_down();
-      if (mdsmap->is_up(p->first))
+      if (mdsmap->is_up(p->first)) {
 	p->second->inst = mdsmap->get_inst(p->first);
+	// When new MDS starts to take over, notify kernel to trim unused entries
+	// in its dcache/icache. Hopefully, the kernel will release some unused
+	// inodes before the new MDS enters reconnect state.
+	trim_cache_for_reconnect(p->second);
+      }
     } else if (oldstate == newstate)
       continue;  // no change
     
@@ -2088,8 +2127,16 @@ void Client::handle_mds_map(MMDSMap* m)
 
 void Client::send_reconnect(MetaSession *session)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << "send_reconnect to mds." << mds << dendl;
+
+  // trim unused caps to reduce MDS's cache rejoin time
+  trim_cache_for_reconnect(session);
+
+  if (session->release) {
+    session->release->put();
+    session->release = NULL;
+  }
 
   MClientReconnect *m = new MClientReconnect;
 
@@ -2207,7 +2254,7 @@ void Client::handle_lease(MClientLease *m)
 
   assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
 
-  int mds = m->get_source().num();
+  mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
@@ -2296,7 +2343,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     // link to dir
     dn->dir = dir;
     dir->dentries[dn->name] = dn;
-    dir->dentry_map[dn->name] = dn;
+    dir->dentry_list.push_back(&dn->item_dentry_list);
     lru.lru_insert_mid(dn);    // mid or top?
 
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
@@ -2304,6 +2351,7 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   } else {
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
+    dn->item_dentry_list.move_to_back();
   }
 
   if (in) {    // link to inode
@@ -2361,7 +2409,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
-    dn->dir->dentry_map.erase(dn->name);
+    dn->item_dentry_list.remove_myself();
     if (dn->dir->is_empty() && !keepdir)
       close_dir(dn->dir);
     dn->dir = 0;
@@ -2623,9 +2671,9 @@ void Client::check_caps(Inode *in, bool is_delayed)
 
   utime_t now = ceph_clock_now(cct);
 
-  map<int,Cap*>::iterator it = in->caps.begin();
+  map<mds_rank_t, Cap*>::iterator it = in->caps.begin();
   while (it != in->caps.end()) {
-    int mds = it->first;
+    mds_rank_t mds = it->first;
     Cap *cap = it->second;
     ++it;
 
@@ -3029,8 +3077,8 @@ void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
     in->shared_gen++;
 
     if (in->is_dir() && (in->flags & I_COMPLETE)) {
-      ldout(cct, 10) << " clearing I_COMPLETE on " << *in << dendl;
-      in->flags &= ~I_COMPLETE;
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *in << dendl;
+      in->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
     }
   }
 }
@@ -3040,7 +3088,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 			    int flags)
 {
   Cap *cap = 0;
-  int mds = mds_session->mds_num;
+  mds_rank_t mds = mds_session->mds_num;
   if (in->caps.count(mds)) {
     cap = in->caps[mds];
 
@@ -3105,7 +3153,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if ((issued & ~old_caps) && in->auth_cap == cap) {
     // non-auth MDS is revoking the newly grant caps ?
-    for (map<int,Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
+    for (map<mds_rank_t,Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
       if (it->second == cap)
 	continue;
       if (it->second->implemented & ~it->second->issued & issued) {
@@ -3123,7 +3171,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
 {
   Inode *in = cap->inode;
   MetaSession *session = cap->session;
-  int mds = cap->session->mds_num;
+  mds_rank_t mds = cap->session->mds_num;
 
   ldout(cct, 10) << "remove_cap mds." << mds << " on " << *in << dendl;
   
@@ -3196,9 +3244,23 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
+void Client::_invalidate_kernel_dcache()
+{
+  // notify kernel to invalidate top level directory entries. As a side effect,
+  // unused inodes underneath these entries get pruned.
+  if (dentry_invalidate_cb && root->dir) {
+    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+	 p != root->dir->dentries.end();
+	 ++p) {
+      if (p->second->inode)
+	_schedule_invalidate_dentry_callback(p->second, false);
+    }
+  }
+}
+
 void Client::trim_caps(MetaSession *s, int max)
 {
-  int mds = s->mds_num;
+  mds_rank_t mds = s->mds_num;
   ldout(cct, 10) << "trim_caps mds." << mds << " max " << max << dendl;
 
   int trimmed = 0;
@@ -3254,23 +3316,8 @@ void Client::trim_caps(MetaSession *s, int max)
   }
   s->s_cap_iterator = NULL;
 
-
-  // notify kernel to invalidate top level directory entries. As a side effect,
-  // unused inodes underneath these entries get pruned.
-  if (dentry_invalidate_cb && s->caps.size() > max) {
-    assert(root);
-    if (root->dir) {
-      for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-           p != root->dir->dentries.end();
-           ++p) {
-        if (p->second->inode)
-          _schedule_invalidate_dentry_callback(p->second, false);
-      }
-    } else {
-      // This seems unnatural, as long as we are holding caps they must be on
-      // some descendent of the root, so why don't we have the root open?
-    }
-  }
+  if (s->caps.size() > max)
+    _invalidate_kernel_dcache();
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -3341,7 +3388,7 @@ void Client::wait_sync_caps(uint64_t want)
  retry:
   ldout(cct, 10) << "wait_sync_caps want " << want << " (last is " << last_flush_seq << ", "
 	   << num_flushing_caps << " total flushing)" << dendl;
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
     if (p->second->flushing_caps.empty())
@@ -3358,7 +3405,7 @@ void Client::wait_sync_caps(uint64_t want)
 
 void Client::kick_flushing_caps(MetaSession *session)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << "kick_flushing_caps mds." << mds << dendl;
 
   for (xlist<CapSnap*>::iterator p = session->flushing_capsnaps.begin(); !p.end(); ++p) {
@@ -3560,7 +3607,7 @@ inodeno_t Client::update_snap_trace(bufferlist& bl, bool flush)
 void Client::handle_snap(MClientSnap *m)
 {
   ldout(cct, 10) << "handle_snap " << *m << dendl;
-  int mds = m->get_source().num();
+  mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
@@ -3636,7 +3683,7 @@ void Client::handle_snap(MClientSnap *m)
 
 void Client::handle_caps(MClientCaps *m)
 {
-  int mds = m->get_source().num();
+  mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     m->put();
@@ -3701,7 +3748,7 @@ void Client::handle_caps(MClientCaps *m)
 
 void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
 
   ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " IMPORT from mds." << mds << dendl;
@@ -3712,8 +3759,10 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 		 m->get_caps(), m->get_seq(), m->get_mseq(), m->get_realm(),
 		 CEPH_CAP_FLAG_AUTH);
 
-  if (m->peer.cap_id && in->caps.count(m->peer.mds)) {
-    Cap *cap = in->caps[m->peer.mds];
+  const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
+
+  if (m->peer.cap_id && in->caps.count(peer_mds)) {
+    Cap *cap = in->caps[peer_mds];
     if (cap && cap->cap_id == m->peer.cap_id)
       remove_cap(cap, (m->peer.flags & CEPH_CAP_FLAG_RELEASE));
   }
@@ -3729,7 +3778,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 
 void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
 
   ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " EXPORT from mds." << mds << dendl;
@@ -3738,11 +3787,13 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
   if (in->caps.count(mds))
     cap = in->caps[mds];
 
+  const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
+
   if (cap && cap->cap_id == m->get_cap_id()) {
     if (m->peer.cap_id) {
-      MetaSession *tsession = _get_or_open_mds_session(m->peer.mds);
-      if (in->caps.count(m->peer.mds)) {
-	Cap *tcap = in->caps[m->peer.mds];
+      MetaSession *tsession = _get_or_open_mds_session(peer_mds);
+      if (in->caps.count(peer_mds)) {
+	Cap *tcap = in->caps[peer_mds];
 	if (tcap->cap_id != m->peer.cap_id ||
 	    ceph_seq_cmp(tcap->seq, m->peer.seq) < 0) {
 	  tcap->cap_id = m->peer.cap_id;
@@ -3771,7 +3822,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 
 void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   assert(in->caps[mds]);
 
   ldout(cct, 10) << "handle_cap_trunc on ino " << *in
@@ -3791,7 +3842,7 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
 
 void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   int dirty = m->get_dirty();
   int cleaned = 0;
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
@@ -3829,7 +3880,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 
 void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   assert(in->caps[mds]);
   snapid_t follows = m->get_snap_follows();
 
@@ -3903,7 +3954,7 @@ void Client::_invalidate_inode_parents(Inode *in)
 
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
-  int mds = session->mds_num;
+  mds_rank_t mds = session->mds_num;
   int used = get_caps_used(in);
   int wanted = in->caps_wanted();
 
@@ -3988,7 +4039,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
     if (cap == in->auth_cap) {
       // non-auth MDS is revoking the newly grant caps ?
-      for (map<int,Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
+      for (map<mds_rank_t, Cap*>::iterator it = in->caps.begin(); it != in->caps.end(); ++it) {
 	if (it->second == cap)
 	  continue;
 	if (it->second->implemented & ~it->second->issued & new_caps) {
@@ -4044,6 +4095,218 @@ inodeno_t Client::_get_inodeno(Inode *in)
 }
 
 
+/**
+ * Resolve an MDS spec to a list of MDS daemon GIDs.
+ *
+ * The spec is a string representing a GID, rank or name/id.  It may
+ * be * in which case it matches all GIDs.
+ *
+ * If no error is returned, the `targets` vector will be populated with at least
+ * one MDS.
+ */
+int Client::resolve_mds(
+    const std::string &mds_spec,
+    std::vector<mds_gid_t> *targets)
+{
+  std::string strtol_err;
+  long long rank_or_gid = strict_strtoll(mds_spec.c_str(), 10, &strtol_err);
+  if (strtol_err.empty()) {
+    // If it parses as an integer, it's GID or a rank
+    if (rank_or_gid >= 0 && rank_or_gid < MAX_MDS) {
+      const mds_rank_t mds_rank = mds_rank_t(rank_or_gid);
+
+      if (mdsmap->is_dne(mds_rank)) {
+        lderr(cct) << __func__ << ": MDS rank " << mds_rank << " does not exist" << dendl;
+        return -ENOENT;
+      }
+
+      if (!mdsmap->is_up(mds_rank)) {
+        lderr(cct) << __func__ << ": MDS rank " << mds_rank << " is not up" << dendl;
+        return -EAGAIN;
+      }
+
+      const mds_gid_t mds_gid = mdsmap->get_info(mds_rank).global_id;
+      ldout(cct, 10) << __func__ << ": resolved rank " << mds_rank << " to GID " << mds_gid << dendl;
+      targets->push_back(mds_gid);
+    } else {
+      const mds_gid_t mds_gid = mds_gid_t(rank_or_gid);
+      if (mdsmap->is_dne_gid(mds_gid)) {
+        lderr(cct) << __func__ << ": GID " << mds_gid << " not in MDS map" << dendl;
+        return -ENOENT;
+      } else {
+        ldout(cct, 10) << __func__ << ": validated GID " << mds_gid << dendl;
+        targets->push_back(mds_gid);
+      }
+    }
+  } else if (mds_spec == "*") {
+    // It is a wildcard: use all MDSs
+    const std::map<mds_gid_t, MDSMap::mds_info_t> &mds_info = mdsmap->get_mds_info();
+
+    if (mds_info.size() == 0) {
+      lderr(cct) << __func__ << ": * passed but no MDS daemons found" << dendl;
+      return -ENOENT;
+    }
+
+    for (std::map<mds_gid_t, MDSMap::mds_info_t>::const_iterator i = mds_info.begin();
+        i != mds_info.end(); ++i) {
+      targets->push_back(i->first);
+    }
+  } else {
+    // It did not parse as an integer, it is not a wildcard, it must be a name
+    const mds_gid_t mds_gid = mdsmap->find_mds_gid_by_name(mds_spec);
+    if (mds_gid == 0) {
+      lderr(cct) << "MDS ID '" << mds_spec << "' not found" << dendl;
+      return -ENOENT;
+    } else {
+      ldout(cct, 10) << __func__ << ": resolved ID '" << mds_spec << "' to GID " << mds_gid << dendl;
+      targets->push_back(mds_gid);
+    }
+  }
+
+  return 0;
+}
+
+
+/**
+ * Authenticate with mon and establish global ID
+ */
+int Client::authenticate()
+{
+  assert(client_lock.is_locked_by_me());
+
+  if (authenticated) {
+    return 0;
+  }
+
+  client_lock.Unlock();
+  int r = monclient->authenticate(cct->_conf->client_mount_timeout);
+  client_lock.Lock();
+  if (r < 0) {
+    return r;
+  }
+
+  whoami = monclient->get_global_id();
+  messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+  authenticated = true;
+
+  return 0;
+}
+
+
+/**
+ *
+ * @mds_spec one of ID, rank, GID, "*"
+ *
+ */
+int Client::mds_command(
+    const std::string &mds_spec,
+    const vector<string>& cmd,
+    const bufferlist& inbl,
+    bufferlist *outbl,
+    string *outs,
+    Context *onfinish)
+{
+  Mutex::Locker lock(client_lock);
+
+  assert(initialized);
+
+  int r;
+  r = authenticate();
+  if (r < 0) {
+    return r;
+  }
+
+  // Block until we have an MDSMap to resolve IDs
+  if (mdsmap->get_epoch() == 0) {
+    wait_on_list(waiting_for_mdsmap);
+  }
+
+  // Look up MDS target(s) of the command
+  std::vector<mds_gid_t> targets;
+  r = resolve_mds(mds_spec, &targets);
+  if (r < 0) {
+    return r;
+  }
+
+  // If daemons are laggy, we won't send them commands.  If all
+  // are laggy then we fail.
+  std::vector<mds_gid_t> non_laggy;
+  for (std::vector<mds_gid_t>::iterator target = targets.begin();
+      target != targets.end(); ++target) {
+    if (!mdsmap->is_laggy_gid(*target)) {
+      non_laggy.push_back(*target);
+    }
+  }
+  if (non_laggy.size() == 0) {
+    *outs = "All targeted MDS daemons are laggy";
+    return -ENOENT;
+  }
+
+  // Send commands to targets
+  C_GatherBuilder gather(cct, onfinish);
+  for (std::vector<mds_gid_t>::iterator target = non_laggy.begin();
+      target != non_laggy.end(); ++target) {
+    ceph_tid_t tid = ++last_tid;
+
+    // Open a connection to the target MDS
+    entity_inst_t inst = mdsmap->get_info_gid(*target).get_inst();
+    ConnectionRef conn = messenger->get_connection(inst);
+
+    // Generate CommandOp state
+    CommandOp op;
+    op.tid = tid;
+    op.on_finish = gather.new_sub();
+    op.outbl = outbl;
+    op.outs = outs;
+    op.mds_gid = *target;
+    op.con = conn;
+    commands[op.tid] = op;
+
+    ldout(cct, 4) << __func__ << ": new command op to " << *target
+      << " tid=" << op.tid << cmd << dendl;
+
+    // Construct and send MCommand
+    MCommand *m = new MCommand(monclient->get_fsid());
+    m->cmd = cmd;
+    m->set_data(inbl);
+    m->set_tid(tid);
+    conn->send_message(m);
+  }
+  gather.activate();
+
+  return 0;
+}
+
+void Client::handle_command_reply(MCommandReply *m)
+{
+  ceph_tid_t const tid = m->get_tid();
+
+  ldout(cct, 10) << __func__ << ": tid=" << m->get_tid() << dendl;
+
+  map<ceph_tid_t, CommandOp>::iterator opiter = commands.find(tid);
+  if (opiter == commands.end()) {
+    ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
+    m->put();
+    return;
+  }
+
+  CommandOp const &op = opiter->second;
+  if (op.outbl) {
+    op.outbl->claim(m->get_data());
+  }
+  if (op.outs) {
+    *op.outs = m->rs;
+  }
+
+  op.con->mark_down();
+
+  if (op.on_finish) {
+    op.on_finish->complete(m->r);
+  }
+
+  m->put();
+}
+
 // -------------------
 // MOUNT
 
@@ -4056,14 +4319,10 @@ int Client::mount(const std::string &mount_root)
     return 0;
   }
 
-  client_lock.Unlock();
-  int r = monclient->authenticate(cct->_conf->client_mount_timeout);
-  client_lock.Lock();
-  if (r < 0)
+  int r = authenticate();
+  if (r < 0) {
     return r;
-  
-  whoami = monclient->get_global_id();
-  messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+  }
 
   mounted = true;
 
@@ -4202,7 +4461,7 @@ void Client::unmount()
   
   while (!mds_sessions.empty()) {
     // send session closes!
-    for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+    for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
 	p != mds_sessions.end();
 	++p) {
       if (p->second->state != MetaSession::STATE_CLOSING) {
@@ -4236,7 +4495,7 @@ public:
 void Client::flush_cap_releases()
 {
   // send any cap releases
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
     if (p->second->release && mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
@@ -4293,7 +4552,7 @@ void Client::renew_caps()
   ldout(cct, 10) << "renew_caps()" << dendl;
   last_cap_renew = ceph_clock_now(cct);
   
-  for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+  for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
        p != mds_sessions.end();
        ++p) {
     ldout(cct, 15) << "renew_caps requesting from mds." << p->first << dendl;
@@ -4806,18 +5065,21 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
       in->mode = (in->mode & ~07777) | (attr->st_mode & 07777);
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_MODE;
+      ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
     }
     if (mask & CEPH_SETATTR_UID) {
       in->ctime = ceph_clock_now(cct);
       in->uid = attr->st_uid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_UID;
+      ldout(cct,10) << "changing uid to " << attr->st_uid << dendl;
     }
     if (mask & CEPH_SETATTR_GID) {
       in->ctime = ceph_clock_now(cct);
       in->gid = attr->st_gid;
       mark_caps_dirty(in, CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_GID;
+      ldout(cct,10) << "changing gid to " << attr->st_gid << dendl;
     }
   }
   if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
@@ -4845,14 +5107,17 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
   if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = attr->st_mode;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    ldout(cct,10) << "changing mode to " << attr->st_mode << dendl;
   }
   if (mask & CEPH_SETATTR_UID) {
     req->head.args.setattr.uid = attr->st_uid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    ldout(cct,10) << "changing uid to " << attr->st_uid << dendl;
   }
   if (mask & CEPH_SETATTR_GID) {
     req->head.args.setattr.gid = attr->st_gid;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+    ldout(cct,10) << "changing gid to " << attr->st_gid << dendl;
   }
   if (mask & CEPH_SETATTR_MTIME) {
     utime_t mtime = utime_t(stat_get_mtime_sec(attr), stat_get_mtime_nsec(attr));
@@ -5406,21 +5671,26 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     return 0;
   }
 
-  map<string,Dentry*>::iterator pd;
+  xlist<Dentry*>::iterator pd = dir->dentry_list.begin();
   if (dirp->at_cache_name.length()) {
-    pd = dir->dentry_map.find(dirp->at_cache_name);
-    if (pd == dir->dentry_map.end())
-      return -EAGAIN;  // weird, i give up
+    ceph::unordered_map<string,Dentry*>::iterator it = dir->dentries.find(dirp->at_cache_name);
+    if (it == dir->dentries.end())
+      return -EAGAIN;
+    Dentry *dn = it->second;
+    pd = xlist<Dentry*>::iterator(&dn->item_dentry_list);
     ++pd;
-  } else {
-    pd = dir->dentry_map.begin();
   }
 
   string prev_name;
-  while (pd != dir->dentry_map.end()) {
-    Dentry *dn = pd->second;
+  while (!pd.end()) {
+    Dentry *dn = *pd;
     if (dn->inode == NULL) {
-      ldout(cct, 15) << " skipping null '" << pd->first << "'" << dendl;
+      ldout(cct, 15) << " skipping null '" << dn->name << "'" << dendl;
+      ++pd;
+      continue;
+    }
+    if (dn->cap_shared_gen != dir->parent_inode->shared_gen) {
+      ldout(cct, 15) << " skipping mismatch shared gen '" << dn->name << "'" << dendl;
       ++pd;
       continue;
     }
@@ -5428,11 +5698,11 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p)
     struct stat st;
     struct dirent de;
     int stmask = fill_stat(dn->inode, &st);  
-    fill_dirent(&de, pd->first.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
+    fill_dirent(&de, dn->name.c_str(), st.st_mode, st.st_ino, dirp->offset + 1);
       
     uint64_t next_off = dn->offset + 1;
     ++pd;
-    if (pd == dir->dentry_map.end())
+    if (pd.end())
       next_off = dir_result_t::END;
 
     client_lock.Unlock();
@@ -5529,12 +5799,13 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
   // can we read from our cache?
   ldout(cct, 10) << "offset " << hex << dirp->offset << dec << " at_cache_name " << dirp->at_cache_name
-	   << " snapid " << dirp->inode->snapid << " complete " << (bool)(dirp->inode->flags & I_COMPLETE)
+	   << " snapid " << dirp->inode->snapid << " I_COMPLETE_ORDERED "
+	   << (bool)(dirp->inode->flags & I_COMPLETE_ORDERED)
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
   if ((dirp->offset == 2 || dirp->at_cache_name.length()) &&
       dirp->inode->snapid != CEPH_SNAPDIR &&
-      (dirp->inode->flags & I_COMPLETE) &&
+      (dirp->inode->flags & I_COMPLETE_ORDERED) &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
     int err = _readdir_cache_cb(dirp, cb, p);
     if (err != -EAGAIN)
@@ -5603,10 +5874,8 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     if (diri->dir &&
 	diri->dir->release_count == dirp->release_count &&
 	diri->shared_gen == dirp->start_shared_gen) {
-      ldout(cct, 10) << " marking I_COMPLETE on " << *diri << dendl;
-      diri->flags |= I_COMPLETE;
-      if (diri->dir)
-	diri->dir->max_offset = dirp->offset;
+      ldout(cct, 10) << " marking (I_COMPLETE|I_COMPLETE_ORDERED) on " << *diri << dendl;
+      diri->flags |= I_COMPLETE | I_COMPLETE_ORDERED;
     }
 
     dirp->set_end();
@@ -6852,7 +7121,7 @@ int Client::_fsync(Fh *f, bool syncdataonly)
   }
   
   if (!syncdataonly && (in->dirty_caps & ~CEPH_CAP_ANY_FILE_WR)) {
-    for (map<int, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
+    for (map<mds_rank_t, Cap*>::iterator iter = in->caps.begin(); iter != in->caps.end(); ++iter) {
       if (iter->second->implemented & ~CEPH_CAP_ANY_FILE_WR) {
 	MetaSession *session = mds_sessions[iter->first];
 	assert(session);
@@ -7509,7 +7778,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     goto out;
   }
 
-  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     string n(name);
     r = -ENODATA;
@@ -7545,7 +7814,7 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 
 int Client::_listxattr(Inode *in, char *name, size_t size, int uid, int gid)
 {
-  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid);
+  int r = _getattr(in, CEPH_STAT_CAP_XATTR, uid, gid, in->xattr_version == 0);
   if (r == 0) {
     for (map<string,bufferptr>::iterator p = in->xattrs.begin();
 	 p != in->xattrs.end();
@@ -9295,9 +9564,9 @@ void Client::ms_handle_remote_reset(Connection *con)
   case CEPH_ENTITY_TYPE_MDS:
     {
       // kludge to figure out which mds this is; fixme with a Connection* state
-      int mds = -1;
+      mds_rank_t mds = MDS_RANK_NONE;
       MetaSession *s = NULL;
-      for (map<int,MetaSession*>::iterator p = mds_sessions.begin();
+      for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
 	   p != mds_sessions.end();
 	   ++p) {
 	if (mdsmap->get_addr(p->first) == con->get_peer_addr()) {

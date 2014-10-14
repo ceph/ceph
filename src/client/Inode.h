@@ -70,6 +70,7 @@ struct CapSnap {
 
 // inode flags
 #define I_COMPLETE 1
+#define I_COMPLETE_ORDERED 2
 
 struct Inode {
   CephContext *cct;
@@ -139,7 +140,7 @@ struct Inode {
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<int,Cap*> caps;            // mds -> Cap
+  map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
   unsigned dirty_caps, flushing_caps;
   uint64_t flushing_cap_seq;
@@ -255,7 +256,7 @@ struct Inode {
   bool cap_is_valid(Cap* cap);
   int caps_issued(int *implemented = 0);
   void touch_cap(Cap *cap);
-  void try_touch_cap(int mds);
+  void try_touch_cap(mds_rank_t mds);
   bool caps_issued_mask(unsigned mask);
   int caps_used();
   int caps_file_wanted();

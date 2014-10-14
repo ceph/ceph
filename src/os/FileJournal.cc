@@ -1367,7 +1367,7 @@ void FileJournal::write_finish_thread_entry()
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
 	  derr << "aio to " << ai->off << "~" << ai->len
-	       << " got " << cpp_strerror(event[i].res) << dendl;
+	       << " wrote " << event[i].res << dendl;
 	  assert(0 == "unexpected aio error");
 	}
 	dout(10) << "write_finish_thread_entry aio " << ai->off

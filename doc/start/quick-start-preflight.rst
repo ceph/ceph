@@ -4,17 +4,18 @@
 
 .. versionadded:: 0.60
 
-Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin :term:`node`
-and a 3-node :term:`Ceph Storage Cluster` to explore the basics of Ceph. This
-**Preflight Checklist** will help you prepare a ``ceph-deploy`` admin node and
-three Ceph Nodes (or virtual machines) that will host your Ceph Storage Cluster.
-Before proceeding any further, see `OS Recommendations`_ to verify that you have
-a supported distribution and version of Linux.
+Thank you for trying Ceph! We recommend setting up a ``ceph-deploy`` admin
+:term:`node` and a 3-node :term:`Ceph Storage Cluster` to explore the basics of
+Ceph. This **Preflight Checklist** will help you prepare a ``ceph-deploy`` 
+admin node and three Ceph Nodes (or virtual machines) that will host your Ceph 
+Storage Cluster. Before proceeding any further, see `OS Recommendations`_ to 
+verify that you have a supported distribution and version of Linux. When 
+you use a single Linux distribution and version across the cluster, it will 
+make it easier for you to troubleshoot issues that arise in production. 
 
 In the descriptions below, :term:`Node` refers to a single machine.
 
 .. include:: quick-common.rst
-
 
 
 Ceph Deploy Setup
@@ -50,7 +51,7 @@ For Debian and Ubuntu distributions, perform the following steps:
 Red Hat Package Manager (RPM)
 -----------------------------
 
-For Red Hat(rhel6), CentOS (el6), and Fedora 17-19 (f17-f19) perform the
+For Red Hat(rhel6, rhel7), CentOS (el6, el7), and Fedora 19-20 (f19-f20) perform the
 following steps:
 
 #. Add the package to your repository. Open a text editor and create a
@@ -61,9 +62,9 @@ following steps:
 
    Paste the following example code. Replace ``{ceph-release}`` with
    the recent major release of Ceph (e.g., ``firefly``). Replace ``{distro}``
-   with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6`` for
-   Red Hat 6, ``fc18`` or ``fc19`` for Fedora 18 or Fedora 19, and ``sles11``
-   for SLES 11). Finally, save the contents to the
+   with your Linux distribution (e.g., ``el6`` for CentOS 6, ``rhel6.5`` for
+   Red Hat 6.5, ``rhel7`` for Red Hat 7, and ``fc19`` or ``fc20`` for Fedora 19
+   or Fedora 20. Finally, save the contents to the 
    ``/etc/yum.repos.d/ceph.repo`` file. ::
 
 	[ceph-noarch]
@@ -80,55 +81,40 @@ following steps:
 	sudo yum update && sudo yum install ceph-deploy
 
 
-.. note:: Some distributions (e.g., RHEL) require you to comment out
-   ``Defaults requiretty`` in the ``/etc/sudoers`` file for ``ceph-deploy`` to
-   work properly. If editing, ``/etc/sudoers``, ensure that you use
-   ``sudo visudo`` rather than a text editor.
-
 .. note:: You can also use the EU mirror eu.ceph.com for downloading your packages.
    Simply replace ``http://ceph.com/`` by ``http://eu.ceph.com/``
 
 
 Ceph Node Setup
 ===============
-.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root``
-   if you are logged in as a different user, because it will not issue ``sudo``
-   commands needed on the remote host.
 
-If you are using ``ceph-deploy`` version 1.1.3 and beyond, ``ceph-deploy``
-will attempt to create the SSH key and copy it to the initial monitor nodes
-automatically when you create the new cluster.
+The admin node must be have password-less SSH access to Ceph nodes. 
+When ceph-deploy logs in to a Ceph node as a user, that particular
+user must have passwordless ``sudo`` privileges.
 
-Start from your ``ceph-deploy`` admin node. The admin node needs to
-have password-less SSH access to each Ceph Node listed below.
 
-For example, for three monitor nodes (with hostnames ``node1``, ``node2``, and
-``node3``) it would look like::
+Install NTP
+-----------
 
-	ceph-deploy new node1 node2 node3
+We recommend installing NTP on Ceph nodes (especially on Ceph Monitor nodes) to
+prevent issues arising from clock drift. See `Clock`_ for details.
 
-This command will create the following files in the current directory
-of the admin node:
+On CentOS / RHEL, execute:: 
 
-- ``ceph.conf``
-- ``ceph.log``
-- ``ceph.mon.keyring``
+	sudo yum install ntp ntpdate ntp-doc
 
-For other Ceph Nodes in this example
-(and for initial monitors prior to ``ceph-deploy`` v1.1.3)
-perform the following steps:
+On Debian / Ubuntu, execute::
 
-#. Create a user on each Ceph Node. ::
+	sudo apt-get install ntp
 
-	ssh user@ceph-server
-	sudo useradd -d /home/ceph -m ceph
-	sudo passwd ceph
+Ensure that you enable the NTP service. Ensure that each Ceph Node uses the 
+same NTP time server. See `NTP`_ for details.
 
-#. Add ``sudo`` privileges for the user on each Ceph Node. ::
 
-	echo "ceph ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph
-	sudo chmod 0440 /etc/sudoers.d/ceph
+Install SSH Server
+------------------
 
+For **ALL** Ceph Nodes perform the following steps:
 
 #. Install an SSH server (if necessary) on each Ceph Node::
 
@@ -139,48 +125,173 @@ perform the following steps:
 	sudo yum install openssh-server
 
 
-#. Configure your ``ceph-deploy`` admin node with password-less SSH access to
-   each Ceph Node. When configuring SSH access, do not use ``sudo`` or the
+#. Ensure the SSH server is running on **ALL** Ceph Nodes.
+
+
+Create a Ceph User
+------------------
+
+The ``ceph-deploy`` utility must login to a Ceph node as a user
+that has passwordless ``sudo`` privileges, because it needs to install
+software and configuration files without prompting for passwords. 
+
+Recent versions of ``ceph-deploy`` support a ``--username`` option so you can
+specify any user that has password-less ``sudo`` (including ``root``, although
+this is **NOT** recommended). To use ``ceph-deploy --username {username}``, the
+user you specify must have password-less SSH access to the Ceph node, as
+``ceph-deploy`` will not prompt you for a password.
+
+We recommend creating a Ceph user on **ALL** Ceph nodes in the cluster. A
+uniform user name across the cluster may improve ease of use  (not required),
+but you should avoid obvious user names, because hackers typically use them with
+brute force hacks (e.g., ``root``,  ``admin``, ``{productname}``). The following
+procedure, substituting  ``{username}`` for the user name you define, describes
+how to create a user  with passwordless ``sudo``.
+
+#. Create a user on each Ceph Node. ::
+
+	ssh user@ceph-server
+	sudo useradd -d /home/{username} -m {username}
+	sudo passwd {username}
+
+#. For the user you added to each Ceph node, ensure that the user has
+   ``sudo`` privileges. ::
+
+	echo "{username} ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/{username}
+	sudo chmod 0440 /etc/sudoers.d/{username}
+
+
+Enable Password-less SSH
+------------------------
+
+Since ``ceph-deploy`` will not prompt for a password, you must generate
+SSH keys on the admin node and distribute the public key to each Ceph node.
+
+.. note:: ``ceph-deploy`` v1.1.3 and later releases will attempt to generate
+   the SSH keys for initial monitors. 
+
+#. Generate the SSH keys, but do not use ``sudo`` or the
    ``root`` user. Leave the passphrase empty::
 
 	ssh-keygen
+	
 	Generating public/private key pair.
-	Enter file in which to save the key (/ceph-client/.ssh/id_rsa):
+	Enter file in which to save the key (/ceph-admin/.ssh/id_rsa):
 	Enter passphrase (empty for no passphrase):
 	Enter same passphrase again:
-	Your identification has been saved in /ceph-client/.ssh/id_rsa.
-	Your public key has been saved in /ceph-client/.ssh/id_rsa.pub.
+	Your identification has been saved in /ceph-admin/.ssh/id_rsa.
+	Your public key has been saved in /ceph-admin/.ssh/id_rsa.pub.
 
-#. Copy the key to each Ceph Node. ::
+#. Copy the key to each Ceph Node, replacing ``{username}`` with the user name
+   you created with `Create a Ceph User`_. ::
 
-	ssh-copy-id ceph@node1
-	ssh-copy-id ceph@node2
-	ssh-copy-id ceph@node3
+	ssh-copy-id {username}@node1
+	ssh-copy-id {username}@node2
+	ssh-copy-id {username}@node3
 
-
-#. Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` admin node so that
-   it logs in to Ceph Nodes as the user you created (e.g., ``ceph``). ::
+#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` 
+   admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you 
+   created without requiring you to specify ``--username {username}`` each 
+   time you execute ``ceph-deploy``. This has the added benefit of streamlining
+   ``ssh`` and ``scp`` usage. Replace ``{username}`` with the user name you
+   created::
 
 	Host node1
 	   Hostname node1
-	   User ceph
+	   User {username}
 	Host node2
 	   Hostname node2
-	   User ceph
+	   User {username}
 	Host node3
 	   Hostname node3
-	   User ceph
+	   User {username}
 
 
-#. Ensure connectivity using ``ping`` with short hostnames (``hostname -s``).
-   Address hostname resolution issues and firewall issues as necessary.
-   **Note:** Hostnames should resolve to a network IP address, not to the
+Enable Networking On Bootup
+---------------------------
+
+Ceph OSDs peer with each other and report to Ceph Monitors over the network.
+If networking is ``off`` by default, the Ceph cluster cannot come online
+during bootup until you enable networking.
+
+The default configuration on some distributions (e.g., CentOS) has the
+networking interface(s) off by default. Ensure that, during boot up, your
+network interface(s) turn(s) on so that your Ceph daemons can communicate over
+the network. For example, on Red Hat and CentOS, navigate to
+``/etc/sysconfig/network-scripts`` and ensure that the  ``ifcfg-{iface}`` file
+has ``ONBOOT`` set to ``yes``.
+
+
+Ensure Connectivity
+-------------------
+
+Ensure connectivity using ``ping`` with short hostnames (``hostname -s``).
+Address hostname resolution issues as necessary.
+   
+.. note:: Hostnames should resolve to a network IP address, not to the
    loopback IP address (e.g., hostnames should resolve to an IP address other
-   than ``127.0.0.1``).
+   than ``127.0.0.1``). If you use your admin node as a Ceph node, you 
+   should also ensure that it resolves to its hostname and IP address
+   (i.e., not its loopback IP address).
 
-.. note:: If you use your admin node as one of the Ceph Nodes, you must perform
-   these steps on the admin node too.
 
+Open Required Ports
+-------------------
+
+Ceph Monitors communicate using port ``6789`` by default. Ceph OSDs communicate
+in a port range of ``6800:7810`` by default. See the `Network Configuration
+Reference`_ for details. Ceph OSDs can use multiple network connections to
+communicate with clients, monitors, other OSDs for replication, and other OSDs
+for heartbeats.
+
+On some distributions (e.g., RHEL), the default firewall configuration is fairly
+strict. You may need to adjust your firewall settings allow inbound requests so
+that clients in your network can communicate with daemons on your Ceph nodes.
+
+For ``firewalld`` on RHEL 7, add port ``6789`` for Ceph Monitor nodes and ports
+``6800:7100`` for Ceph OSDs to the public zone and ensure that you make the
+setting permanent so that it is enabled on reboot. For example::
+
+	sudo firewall-cmd --zone=public --add-port=6789/tcp --permanent
+
+For ``iptables``, add port ``6789`` for Ceph Monitors and ports ``6800:7100`` 
+for Ceph OSDs. For example::
+
+	sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 6789 -j ACCEPT
+
+Once you have finished configuring ``iptables``, ensure that you make the
+changes persistent on each node so that they will be in effect when your nodes
+reboot. For example::
+
+	/sbin/service iptables save
+
+TTY
+---
+
+On CentOS and RHEL, you may receive an error while trying to execute
+``ceph-deploy`` commands. If ``requiretty`` is set by default on your Ceph
+nodes, disable it by executing ``sudo visudo`` and locate the ``Defaults
+requiretty`` setting. Change it to ``Defaults:ceph !requiretty`` or comment it
+out to ensure that ``ceph-deploy`` can connect using the user you created with
+`Create a Ceph User`_.
+
+.. note:: If editing, ``/etc/sudoers``, ensure that you use
+   ``sudo visudo`` rather than a text editor.
+
+
+SELinux
+-------
+
+On CentOS and RHEL, SELinux is set to ``Enforcing`` by default. To streamline your
+installation, we recommend setting SELinux to ``Permissive`` or disabling it
+entirely and ensuring that your installation and cluster are working properly
+before hardening your configuration. To set SELinux to ``Permissive``, execute the
+following::
+
+	sudo setenforce 0
+
+To configure SELinux persistently (recommended if SELinux is an issue), modify
+the configuration file at  ``/etc/selinux/config``.
 
 
 Summary
@@ -191,3 +302,6 @@ Quick Start`_.
 
 .. _Storage Cluster Quick Start: ../quick-ceph-deploy
 .. _OS Recommendations: ../os-recommendations
+.. _Network Configuration Reference: ../../rados/configuration/network-config-ref
+.. _Clock: ../../rados/configuration/mon-config-ref#clock
+.. _NTP: http://www.ntp.org/

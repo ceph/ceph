@@ -38,6 +38,7 @@ using std::fstream;
 //#include "barrier.h"
 
 #include "mds/mdstypes.h"
+#include "mds/MDSMap.h"
 
 #include "msg/Message.h"
 #include "msg/Dispatcher.h"
@@ -85,6 +86,16 @@ enum {
   l_c_last,
 };
 
+
+struct CommandOp
+{
+  ConnectionRef con;
+  mds_gid_t     mds_gid;
+  ceph_tid_t    tid;
+  Context      *on_finish;
+  bufferlist   *outbl;
+  std::string  *outs;
+};
 
 
 // ============================================
@@ -239,15 +250,22 @@ public:
   client_t whoami;
 
   // mds sessions
-  map<int, MetaSession*> mds_sessions;  // mds -> push seq
+  map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
 
+  // MDS command state
+  std::map<ceph_tid_t, CommandOp> commands;
+  void handle_command_reply(MCommandReply *m);
+  int resolve_mds(
+      const std::string &mds_spec,
+      std::vector<mds_gid_t> *targets);
+
   void get_session_metadata(std::map<std::string, std::string> *meta) const;
-  bool have_open_session(int mds);
+  bool have_open_session(mds_rank_t mds);
   void got_mds_push(MetaSession *s);
-  MetaSession *_get_mds_session(int mds, Connection *con);  ///< return session for mds *and* con; null otherwise
-  MetaSession *_get_or_open_mds_session(int mds);
-  MetaSession *_open_mds_session(int mds);
+  MetaSession *_get_mds_session(mds_rank_t mds, Connection *con);  ///< return session for mds *and* con; null otherwise
+  MetaSession *_get_or_open_mds_session(mds_rank_t mds);
+  MetaSession *_open_mds_session(mds_rank_t mds);
   void _close_mds_session(MetaSession *s);
   void _closed_mds_session(MetaSession *s);
   void _kick_stale_sessions();
@@ -258,7 +276,6 @@ public:
   // mds requests
   ceph_tid_t last_tid, last_flush_seq;
   map<ceph_tid_t, MetaRequest*> mds_requests;
-  set<int>                 failed_mds;
 
   void dump_mds_requests(Formatter *f);
   void dump_mds_sessions(Formatter *f);
@@ -271,14 +288,14 @@ public:
 
   int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
 			 Inode **ptarget, bool *pcreated, int uid, int gid);
-  void encode_cap_releases(MetaRequest *request, int mds);
+  void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
   int encode_inode_release(Inode *in, MetaRequest *req,
-			   int mds, int drop,
+			   mds_rank_t mds, int drop,
 			   int unless,int force=0);
   void encode_dentry_release(Dentry *dn, MetaRequest *req,
-			     int mds, int drop, int unless);
-  int choose_target_mds(MetaRequest *req);
-  void connect_mds_targets(int mds);
+			     mds_rank_t mds, int drop, int unless);
+  mds_rank_t choose_target_mds(MetaRequest *req);
+  void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session);
   MClientRequest *build_client_request(MetaRequest *request);
   void kick_requests(MetaSession *session);
@@ -287,6 +304,7 @@ public:
   void handle_client_reply(MClientReply *reply);
 
   bool   initialized;
+  bool   authenticated;
   bool   mounted;
   bool   unmounting;
 
@@ -401,8 +419,10 @@ protected:
 
   // trim cache.
   void trim_cache();
+  void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
+  void _invalidate_kernel_dcache();
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
@@ -423,6 +443,7 @@ protected:
   void ms_handle_remote_reset(Connection *con);
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
 
+  int authenticate();
 
  public:
   void set_filer_flags(int flags);
@@ -534,7 +555,7 @@ protected:
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, MetaSession *session, bool set_offset,
+			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
@@ -668,6 +689,12 @@ private:
 public:
   int mount(const std::string &mount_root);
   void unmount();
+
+  int mds_command(
+    const std::string &mds_spec,
+    const std::vector<std::string>& cmd,
+    const bufferlist& inbl,
+    bufferlist *poutbl, std::string *prs, Context *onfinish);
 
   // these shoud (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf);

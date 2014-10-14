@@ -2582,6 +2582,37 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     ss << "listed " << osdmap.blacklist.size() << " entries";
 
+  } else if (prefix == "osd pool ls") {
+    string detail;
+    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
+    if (!f && detail == "detail") {
+      ostringstream ss;
+      osdmap.print_pools(ss);
+      rdata.append(ss.str());
+    } else {
+      if (f)
+	f->open_array_section("pools");
+      for (map<int64_t,pg_pool_t>::const_iterator it = osdmap.get_pools().begin();
+	   it != osdmap.get_pools().end();
+	   ++it) {
+	if (f) {
+	  if (detail == "detail") {
+	    f->open_object_section("pool");
+	    f->dump_string("pool_name", osdmap.get_pool_name(it->first));
+	    it->second.dump(f.get());
+	    f->close_section();
+	  } else {
+	    f->dump_string("pool_name", osdmap.get_pool_name(it->first));
+	  }
+	} else {
+	  rdata.append(osdmap.get_pool_name(it->first) + "\n");
+	}
+      }
+      if (f) {
+	f->close_section();
+	f->flush(rdata);
+      }
+    }
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -2776,19 +2807,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
         f->open_object_section("recovery");
       }
 
-      stringstream rss, tss;
-      pg_map.pool_recovery_summary(f.get(), &rss, poolid);
-      if (!f && !rss.str().empty())
-        tss << "  " << rss.str() << "\n";
+      list<string> sl;
+      stringstream tss;
+      pg_map.pool_recovery_summary(f.get(), &sl, poolid);
+      if (!f && !sl.empty()) {
+	for (list<string>::iterator p = sl.begin(); p != sl.end(); ++p)
+	  tss << "  " << *p << "\n";
+      }
 
       if (f) {
         f->close_section();
         f->open_object_section("recovery_rate");
       }
 
-      rss.clear();
-      rss.str("");
-
+      ostringstream rss;
       pg_map.pool_recovery_rate_summary(f.get(), &rss, poolid);
       if (!f && !rss.str().empty())
         tss << "  recovery io " << rss.str() << "\n";

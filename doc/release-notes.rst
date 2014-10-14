@@ -2,6 +2,154 @@
  Release Notes
 ===============
 
+v0.86
+=====
+
+This is a release candidate for Giant, which will hopefully be out
+in another week or two.  We did a feature freeze about a month ago
+and since then have been doing only stabilization and bug fixing (and
+a handful on low-risk enhancements).  A fair bit of new functionality
+went into the final sprint, but it's baked for quite a while now and
+we're feeling pretty good about it.
+
+Major items include:
+
+* librados locking refactor to improve scaling and client performance
+* local recovery code (LRC) erasure code plugin to trade some
+  additional storage overhead for improved recovery performance
+* LTTNG tracing framework, with initial tracepoints in librados,
+  librbd, and the OSD FileStore backend
+* separate monitor audit log for all administrative commands
+* asynchronos monitor transaction commits to reduce the impact on
+  monitor read requests while processing updates
+* low-level tool for working with individual OSD data stores for
+  debugging, recovery, and testing
+* many MDS improvements (bug fixes, health reporting)
+
+There are still a handful of known bugs in this release, but nothing
+severe enough to prevent a release.  By and large we are pretty
+pleased with the stability and expect the final Giant release to be
+quite reliable.
+
+Please try this out on your non-production clusters for a preview
+
+Notable Changes
+---------------
+
+* buffer: improve rebuild_page_aligned (Ma Jianpeng)
+* build: fix CentOS 5 (Gerben Meijer)
+* build: fix build on alpha (Michael Cree, Dmitry Smirnov)
+* build: fix yasm check for x32 (Daniel Schepler, Sage Weil)
+* ceph-disk: add Scientific Linux support (Dan van der Ster)
+* ceph-fuse, libcephfs: fix crash in trim_caps (John Spray)
+* ceph-fuse, libcephfs: improve cap trimming (John Spray)
+* ceph-fuse, libcephfs: virtual xattrs for rstat (Yan, Zheng)
+* ceph.conf: update sample (Sebastien Han)
+* ceph.spec: many fixes (Erik Logtenberg, Boris Ranto, Dan Mick, Sandon Van Ness)
+* ceph_objectstore_tool: vastly improved and extended tool for working offline with OSD data stores (David Zafman)
+* common: add config diff admin socket command (Joao Eduardo Luis)
+* common: add rwlock assertion checks (Yehuda Sadeh)
+* crush: clean up CrushWrapper interface (Xioaxi Chen)
+* crush: make ruleset ids unique (Xiaoxi Chen, Loic Dachary)
+* doc: improve manual install docs (Francois Lafont)
+* doc: misc updates (John Wilkins, Loic Dachary, David Moreau Simard, Wido den Hollander. Volker Voigt, Alfredo Deza, Stephen Jahl, Dan van der Ster)
+* global: write pid file even when running in foreground (Alexandre Oliva)
+* hadoop: improve tests (Huamin Chen, Greg Farnum, John Spray)
+* journaler: fix locking (Zheng, Yan)
+* librados, osd: return ETIMEDOUT on failed notify (Sage Weil)
+* librados: fix crash on read op timeout (#9362 Matthias Kiefer, Sage Weil)
+* librados: fix shutdown race (#9130 Sage Weil)
+* librados: fix watch reregistration on acting set change (#9220 Samuel Just)
+* librados: fix watch/notify test (#7934 David Zafman)
+* librados: give Objecter fine-grained locks (Yehuda Sadeh, Sage Weil, John Spray)
+* librados: lttng tracepoitns (Adam Crume)
+* librados: pybind: fix reads when \0 is present (#9547 Mohammad Salehe)
+* librbd: enforce cache size on read requests (Jason Dillaman)
+* librbd: handle blacklisting during shutdown (#9105 John Spray)
+* librbd: lttng tracepoints (Adam Crume)
+* lttng: tracing infrastructure (Noah Watkins, Adam Crume)
+* mailmap: updates (Loic Dachary, Abhishek Lekshmanan, M Ranga Swami Reddy)
+* many many coverity fixes, cleanups (Danny Al-Gaaf)
+* mds: adapt to new Objecter locking, give types to all Contexts (John Spray)
+* mds: add internal health checks (John Spray)
+* mds: avoid tight mon reconnect loop (#9428 Sage Weil)
+* mds: fix crash killing sessions (#9173 John Spray)
+* mds: fix ctime updates (#9514 Greg Farnum)
+* mds: fix replay locking (Yan, Zheng)
+* mds: fix standby-replay cache trimming (#8648 Zheng, Yan)
+* mds: give perfcounters meaningful names (Sage Weil)
+* mds: improve health reporting to monitor (John Spray)
+* mds: improve journal locking (Zheng, Yan)
+* mds: make max file recoveries tunable (Sage Weil)
+* mds: prioritize file recovery when appropriate (Sage Weil)
+* mds: refactor beacon, improve reliability (John Spray)
+* mds: restart on EBLACKLISTED (John Spray)
+* mds: track RECALL progress, report failure (#9284 John Spray)
+* mds: update segment references during journal write (John Spray, Greg Farnum)
+* mds: use meaningful names for clients (John Spray)
+* mds: warn clients which aren't revoking caps (Zheng, Yan, John Spray)
+* mon: add 'osd reweight-by-pg' command (Sage Weil, Guang Yang)
+* mon: add audit log for all admin commands (Joao Eduardo Luis)
+* mon: add cluster fingerprint (Sage Weil)
+* mon: avoid creating unnecessary rule on pool create (#9304 Loic Dachary)
+* mon: do not spam log (Aanchal Agrawal, Sage Weil)
+* mon: fix 'osd perf' reported latency (#9269 Samuel Just)
+* mon: fix double-free of old MOSDBoot (Sage Weil)
+* mon: fix op write latency perfcounter (#9217 Xinxin Shu)
+* mon: fix store check on startup (Joao Eduardo Luis)
+* mon: make paxos transaction commits asynchronous (Sage Weil)
+* mon: preload erasure plugins (#9153 Loic Dachary)
+* mon: prevent cache pools from being used directly by CephFS (#9435 John Spray)
+* mon: use user-provided ruleset for replicated pool (Xiaoxi Chen)
+* mon: verify available disk space on startup (#9502 Joao Eduardo Luis)
+* mon: verify erasure plugin version on load (Loic Dachary)
+* msgr: fix logged address (Yongyue Sun)
+* osd: account for hit_set_archive bytes (Sage Weil)
+* osd: add ISA erasure plugin table cache (Andreas-Joachim Peters)
+* osd: add ability to prehash filestore directories (Guang Yang)
+* osd: add feature bit for erasure plugins (Loic Dachary)
+* osd: add local recovery code (LRC) erasure plugin (Loic Dachary)
+* osd: cap hit_set size (#9339 Samuel Just)
+* osd: clear FDCache on unlink (#8914 Loic Dachary)
+* osd: do not evict blocked objects (#9285 Zhiqiang Wang)
+* osd: fix ISA erasure alignment (Loic Dachary, Andreas-Joachim Peters)
+* osd: fix clone vs cache_evict bug (#8629 Sage Weil)
+* osd: fix crash from duplicate backfill reservation (#8863 Sage Weil)
+* osd: fix dead peer connection checks (#9295 Greg Farnum, Sage Weil)
+* osd: fix keyvaluestore scrub (#8589 Haomai Wang)
+* osd: fix keyvaluestore upgrade (Haomai Wang)
+* osd: fix min_read_recency_for_promote default on upgrade (Zhiqiang Wang)
+* osd: fix mount/remount sync race (#9144 Sage Weil)
+* osd: fix purged_snap initialization on backfill (Sage Weil, Samuel Just, Dan van der Ster, Florian Haas)
+* osd: fix race condition on object deletion (#9480 Somnath Roy)
+* osd: fix snap object writeback from cache tier (#9054 Samuel Just)
+* osd: improve journal shutdown (Ma Jianpeng, Mark Kirkwood)
+* osd: improve locking in OpTracker (Pavan Rallabhandi, Somnath Roy)
+* osd: improve tiering agent arithmetic (Zhiqiang Wang, Sage Weil, Samuel Just)
+* osd: lttng tracepoints for filestore (Noah Watkins)
+* osd: make blacklist encoding deterministic (#9211 Sage Weil)
+* osd: many many important fixes (#8231 #8315 #9113 #9179 #9293 #9294 #9326 #9453 #9481 #9482 #9497 #9574 Samuel Just)
+* osd: misc erasure code plugin fixes (Loic Dachary)
+* osd: preload erasure plugins (#9153 Loic Dachary)
+* osd: shard OpTracker to improve performance (Somnath Roy)
+* osd: use local time for tiering decisions (Zhiqiang Wang)
+* osd: verify erasure plugin version on load (Loic Dachary)
+* rados: fix bench write arithmetic (Jiangheng)
+* rbd: parallelize rbd import, export (Jason Dillaman)
+* rbd: rbd-replay utility to replay captured rbd workload traces (Adam Crume)
+* rbd: use write-back (not write-through) when caching is enabled (Jason Dillaman)
+* rgw: add S3 bucket get location operation (Abhishek Lekshmanan)
+* rgw: add civetweb as default frontent on port 7490 (#9013 Yehuda Sadeh)
+* rgw: allow : in S3 access key (Roman Haritonov)
+* rgw: fix admin create user op (#8583 Ray Lv)
+* rgw: fix log filename suffix (#9353 Alexandre Marangone)
+* rgw: fix usage (Abhishek Lekshmanan)
+* rgw: many fixes for civetweb (Yehuda Sadeh)
+* rgw: subuser creation fixes (#8587 Yehuda Sadeh)
+* rgw: use systemd-run from sysvinit script (JuanJose Galvez)
+* unit test improvements (Loic Dachary)
+* vstart.sh: fix/improve rgw support (Luis Pabon, Abhishek Lekshmanan)
+
 v0.85
 =====
 
@@ -443,6 +591,102 @@ Notable Changes
 * rgw: prevent multiobject PUT race (Yehuda Sadeh)
 * rgw: send user manifest header (Yehuda Sadeh)
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
+
+
+v0.80.6 Firefly
+===============
+
+This is a major bugfix release for firefly, fixing a range of issues
+in the OSD and monitor, particularly with cache tiering.  There are
+also important fixes in librados, with the watch/notify mechanism used
+by librbd, and in radosgw.
+
+A few pieces of new functionality of been backported, including improved
+'ceph df' output (view amount of writeable space per pool), support for
+non-default cluster names when using sysvinit or systemd, and improved
+(and fixed) support for dmcrypt.
+
+We recommend that all v0.80.x Firefly users upgrade to this release.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.6.txt>`.
+
+Notable Changes
+---------------
+
+* build: fix atomic64_t on i386 (#8969 Sage Weil)
+* build: fix build on alpha (Michael Cree, Dmitry Smirnov)
+* build: fix build on hppa (Dmitry Smirnov)
+* build: fix yasm detection on x32 arch (Sage Weil)
+* ceph-disk: fix 'list' function with dmcrypt (Sage Weil)
+* ceph-disk: fix dmcrypt support (Alfredo Deza)
+* ceph: allow non-default cluster to be specified (#8944)
+* common: fix dup log messages to mon (#9080 Sage Weil)
+* global: write pid file when -f is used (systemd, upstart) (Alexandre Oliva)
+* librados: fix crash when read timeout is enabled (#9362 Matthias Kiefer, Sage Weil)
+* librados: fix lock leaks in error paths (#9022 Pavan Rallabhandi)
+* librados: fix watch resend on PG acting set change (#9220 Samuel Just)
+* librados: python: fix aio_read handling with \0 (Mohammad Salehe)
+* librbd: add interface to invalidate cached data (Josh Durgin)
+* librbd: fix crash when using clone of flattened image (#8845 Josh Durgin)
+* librbd: fix error path cleanup on open (#8912 Josh Durgin)
+* librbd: fix null pointer check (Danny Al-Gaaf)
+* librbd: limit dirty object count (Haomai Wang)
+* mds: fix rstats for root and mdsdir (Yan, Zheng)
+* mon: add 'get' command for new cache tier pool properties (Joao Eduardo Luis)
+* mon: add 'osd pool get-quota' (#8523 Joao Eduardo Luis)
+* mon: add cluster fingerprint (Sage Weil)
+* mon: disallow nonsensical cache-mode transitions (#8155 Joao Eduardo Luis)
+* mon: fix cache tier rounding error on i386 (Sage Weil)
+* mon: fix occasional memory leak (#9176 Sage Weil)
+* mon: fix reported latency for 'osd perf' (#9269 Samuel Just)
+* mon: include 'max avail' in 'ceph df' output (Sage Weil, Xioaxi Chen)
+* mon: persistently mark pools where scrub may find incomplete clones (#8882 Sage Weil)
+* mon: preload erasure plugins (Loic Dachary)
+* mon: prevent cache-specific settings on non-tier pools (#8696 Joao Eduardo Luis)
+* mon: reduce log spam (Aanchal Agrawal, Sage Weil)
+* mon: warn when cache pools have no hit_sets enabled (Sage Weil)
+* msgr: fix trivial memory leak (Sage Weil)
+* osd: automatically scrub PGs with invalid stats (#8147 Sage Weil)
+* osd: avoid sharing PG metadata that is not durable (Samuel Just)
+* osd: cap hit_set size (#9339 Samuel Just)
+* osd: create default erasure profile if needed (#8601 Loic Dachary)
+* osd: dump tid as JSON int (not string)  where appropriate (Joao Eduardo Luis)
+* osd: encode blacklist in deterministic order (#9211 Sage Weil)
+* osd: fix behavior when cache tier has no hit_sets enabled (#8982 Sage Weil)
+* osd: fix cache tier flushing of snapshots (#9054 Samuel Just)
+* osd: fix cache tier op ordering when going from full to non-full (#8931 Sage Weil)
+* osd: fix crash on dup recovery reservation (#8863 Sage Weil)
+* osd: fix division by zero when pg_num adjusted with no OSDs (#9052 Sage Weil)
+* osd: fix hint crash in experimental keyvaluestore_dev backend (Hoamai Wang)
+* osd: fix leak in copyfrom cancellation (#8894 Samuel Just)
+* osd: fix locking for copyfrom finish (#8889 Sage Weil)
+* osd: fix long filename handling in backend (#8701 Sage Weil)
+* osd: fix min_size check with backfill (#9497 Samuel Just)
+* osd: fix mount/remount sync race (#9144 Sage Weil)
+* osd: fix object listing + erasure code bug (Guang Yang)
+* osd: fix race on reconnect to failed OSD (#8944 Greg Farnum)
+* osd: fix recovery reservation deadlock (Samuel Just)
+* osd: fix tiering agent arithmetic for negative values (#9082 Karan Singh)
+* osd: improve shutdown order (#9218 Sage Weil)
+* osd: improve subop discard logic (#9259 Samuel Just)
+* osd: introduce optional sleep, io priority for scrub and snap trim (Sage Weil)
+* osd: make scrub check for and remove stale erasure-coded objects (Samuel Just)
+* osd: misc fixes (#9481 #9482 #9179 Sameul Just)
+* osd: mix keyvaluestore_dev improvements (Haomai Wang)
+* osd: only require CRUSH features for rules that are used (#8963 Sage Weil)
+* osd: preload erasure plugins on startup (Loic Dachary)
+* osd: prevent PGs from falling behind when consuming OSDMaps (#7576 Sage Weil)
+* osd: prevent old clients from using tiered pools (#8714 Sage Weil)
+* osd: set min_size on erasure pools to data chunk count (Sage Weil)
+* osd: trim old erasure-coded objects more aggressively (Samuel Just)
+* rados: enforce erasure code alignment (Lluis Pamies-Juarez)
+* rgw: align object stripes with erasure pool alignment (#8442 Yehuda Sadeh)
+* rgw: don't send error body on HEAD for civetweb (#8539 Yehuda Sadeh)
+* rgw: fix crash in CORS preflight request (Yehuda Sadeh)
+* rgw: fix decoding of + in URL (#8702 Brian Rak)
+* rgw: fix object removal on object create (#8972 Patrycja Szabowska, Yehuda Sadeh)
+* systemd: use systemd-run when starting radosgw (JuanJose Galvez)
+* sysvinit: support non-default cluster name (Alfredo Deza)
 
 
 v0.80.5 Firefly
@@ -2402,6 +2646,32 @@ Notable Changes
 * rgw: complete in-progress requests before shutting down
 * rgw: fix S3 auth with response-* query string params (Sylvain Munaut, Yehuda Sadeh)
 * sysvinit: add condrestart command (Dan van der Ster)
+
+
+v0.67.11 "Dumpling"
+===================
+
+This stable update for Dumpling fixes several important bugs that
+affect a small set of users.
+
+We recommend that all Dumpling users upgrade at their convenience.  If
+none of these issues are affecting your deployment there is no
+urgency.
+
+
+Notable Changes
+---------------
+
+* common: fix sending dup cluster log items (#9080 Sage Weil)
+* doc: several doc updates (Alfredo Deza)
+* libcephfs-java: fix build against older JNI headesr (Greg Farnum)
+* librados: fix crash in op timeout path (#9362 Matthias Kiefer, Sage Weil)
+* librbd: fix crash using clone of flattened image (#8845 Josh Durgin)
+* librbd: fix error path cleanup when failing to open image (#8912 Josh Durgin)
+* mon: fix crash when adjusting pg_num before any OSDs are added (#9052 Sage Weil)
+* mon: reduce log noise from paxos (Aanchal Agrawal, Sage Weil)
+* osd: allow scrub and snap trim thread pool IO priority to be adjusted (Sage Weil)
+* osd: fix mount/remount sync race (#9144 Sage Weil)
 
 
 v0.67.10 "Dumpling"

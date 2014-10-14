@@ -104,3 +104,51 @@ TEST(LibRadosPools, PoolCreateWithCrushRule) {
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
+
+TEST(LibRadosPools, PoolGetBaseTier) {
+  rados_t cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  std::string tier_pool_name = pool_name + "-cache";
+  ASSERT_EQ(0, rados_pool_create(cluster, tier_pool_name.c_str()));
+
+  int64_t pool_id = rados_pool_lookup(cluster, pool_name.c_str());
+  ASSERT_GE(pool_id, 0);
+
+  int64_t tier_pool_id = rados_pool_lookup(cluster, tier_pool_name.c_str());
+  ASSERT_GE(tier_pool_id, 0);
+
+
+  int64_t base_tier = 0;
+  EXPECT_EQ(0, rados_pool_get_base_tier(cluster, pool_id, &base_tier));
+  EXPECT_EQ(pool_id, base_tier);
+
+  std::string cmdstr = "{\"prefix\": \"osd tier add\", \"pool\": \"" +
+     pool_name + "\", \"tierpool\":\"" + tier_pool_name + "\", \"force_nonempty\":\"\"}";
+  char *cmd[1];
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+
+  cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
+     tier_pool_name + "\", \"mode\":\"readonly\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+
+  EXPECT_EQ(0, rados_wait_for_latest_osdmap(cluster));
+
+  EXPECT_EQ(0, rados_pool_get_base_tier(cluster, pool_id, &base_tier));
+  EXPECT_EQ(pool_id, base_tier);
+
+  EXPECT_EQ(0, rados_pool_get_base_tier(cluster, tier_pool_id, &base_tier));
+  EXPECT_EQ(pool_id, base_tier);
+
+  int64_t nonexistent_pool_id = (int64_t)((-1ULL) >> 1);
+  EXPECT_EQ(-ENOENT, rados_pool_get_base_tier(cluster, nonexistent_pool_id, &base_tier));
+
+  cmdstr = "{\"prefix\": \"osd tier remove\", \"pool\": \"" +
+     pool_name + "\", \"tierpool\":\"" + tier_pool_name + "\"}";
+  cmd[0] = (char *)cmdstr.c_str();
+  ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
+  ASSERT_EQ(0, rados_pool_delete(cluster, tier_pool_name.c_str()));
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}

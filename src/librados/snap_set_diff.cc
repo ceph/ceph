@@ -68,8 +68,8 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     if (end < a) {
       ldout(cct, 20) << " past end " << end << ", end object does not exist" << dendl;
       *end_exists = false;
+      diff->clear();
       if (start_size) {
-	diff->clear();
 	diff->insert(0, start_size);
       }
       break;

@@ -21,6 +21,9 @@ export PATH="$COVDIR/bin:$PATH"
 
 git fetch
 git reset --hard origin/$branch
+cd ..
+git submodule update
+cd src
 rm -f project.tgz
 make project.tgz
 scp -i ~/coverity_rsa project.tgz sage@ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz

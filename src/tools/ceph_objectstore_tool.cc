@@ -19,6 +19,7 @@
 
 #include "common/Formatter.h"
 #include "common/errno.h"
+#include "common/ceph_argparse.h"
 
 #include "global/global_init.h"
 
@@ -1836,15 +1837,18 @@ int main(int argc, char **argv)
   po::positional_options_description pd;
   pd.add("object", 1).add("objcmd", 1).add("arg1", 1).add("arg2", 1);
 
+  vector<string> ceph_option_strings;
   po::variables_map vm;
-  po::parsed_options parsed =
-   po::command_line_parser(argc, argv).options(all).allow_unregistered().positional(pd).run();
-  po::store( parsed, vm);
   try {
+    po::parsed_options parsed =
+      po::command_line_parser(argc, argv).options(all).allow_unregistered().positional(pd).run();
+    po::store( parsed, vm);
     po::notify(vm);
-  }
-  catch(...) {
-    usage(desc);
+    ceph_option_strings = po::collect_unrecognized(parsed.options,
+						   po::include_positional);
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
+    return 1;
   }
 
   if (vm.count("help")) {
@@ -1978,10 +1982,9 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
-  vector<string> ceph_option_strings = po::collect_unrecognized(
-    parsed.options, po::include_positional);
-  ceph_options.reserve(ceph_option_strings.size());
+  vector<const char *> ceph_options;
+  env_to_vec(ceph_options);
+  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
        ++i) {
@@ -1995,7 +1998,7 @@ int main(int argc, char **argv)
     flags |= SKIP_MOUNT_OMAP;
 
   global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
     //CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
@@ -2041,7 +2044,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  ObjectStore *fs = ObjectStore::create(NULL, type, dpath, jpath, flags);
+  ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
     exit(1);
