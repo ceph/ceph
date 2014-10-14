@@ -1414,6 +1414,7 @@ public:
 
       int prepare(int64_t *pofs, int64_t *pend);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
     };
 
     struct Write {
@@ -1653,19 +1654,15 @@ public:
 
   virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
-  int iterate_obj(void *ctx, rgw_obj& obj,
+  int iterate_obj(RGWObjectCtx& ctx, rgw_obj& obj,
                   off_t ofs, off_t end,
                   uint64_t max_chunk_size,
                   int (*iterate_obj_cb)(rgw_obj&, off_t, off_t, off_t, bool, RGWObjState *, void *),
                   void *arg);
 
-  int get_obj_iterate(void *ctx, RGWRados::Object::Read& read_op, rgw_obj& obj,
-                      off_t ofs, off_t end,
-	              RGWGetDataCB *cb);
-
   int flush_read_list(struct get_obj_data *d);
 
-  int get_obj_iterate_cb(void *ctx, RGWObjState *astate,
+  int get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
                          rgw_obj& obj,
                          off_t obj_ofs, off_t read_ofs, off_t len,
                          bool is_head_obj, void *arg);
