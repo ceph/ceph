@@ -1359,6 +1359,7 @@ public:
 
       int stat(RGWObjVersionTracker *objv_tracker);
       int read(int64_t ofs, int64_t end, bufferlist& bl, RGWObjVersionTracker *objv_tracker);
+      int get_attr(const char *name, bufferlist& dest);
     };
   };
 
@@ -1415,6 +1416,7 @@ public:
       int prepare(int64_t *pofs, int64_t *pend);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
       int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
+      int get_attr(const char *name, bufferlist& dest);
     };
 
     struct Write {
@@ -1616,7 +1618,7 @@ public:
    * dest: bufferlist to store the result in
    * Returns: 0 on success, -ERR# otherwise.
    */
-  virtual int get_attr(RGWObjectCtx& obj_ctx, rgw_obj& obj, const char *name, bufferlist& dest);
+  virtual int system_obj_get_attr(rgw_obj& obj, const char *name, bufferlist& dest);
 
   /**
    * Set an attr on an object.
