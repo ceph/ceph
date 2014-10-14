@@ -2446,17 +2446,17 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
   if (!stray.empty()) {
     if (out)
       *out << "\n";
-    if (f)
-      f->open_object_section("osd");
     for (set<int>::iterator p = stray.begin(); p != stray.end(); ++p) {
       if (out)
 	*out << *p << "\t0\t";
+      if (f)
+        f->open_object_section("osd");
       print_osd_line(*p, out, f);
       if (out)
 	*out << "\n";
+      if (f)
+        f->close_section();
     }
-    if (f)
-      f->close_section();
   }
   if (f)
     f->close_section();
