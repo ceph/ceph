@@ -920,7 +920,7 @@ void RGWGetObj::execute()
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  ret = store->get_obj_iterate(s->obj_ctx, read_op, obj, ofs, end, &cb);
+  ret = read_op.iterate(ofs, end, &cb);
 
   perfcounter->tinc(l_rgw_get_lat,
                    (ceph_clock_now(s->cct) - start_time));
