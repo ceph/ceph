@@ -55,3 +55,4 @@ SetEnv RGW_PRINT_CONTINUE {print_continue}
 
 AllowEncodedSlashes On
 ServerSignature Off
+MaxRequestsPerChild 0
