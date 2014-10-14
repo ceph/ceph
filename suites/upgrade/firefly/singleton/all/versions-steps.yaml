@@ -26,16 +26,10 @@ tasks:
 - parallel:
    - workload
 - print: "**** done workload"
-- install.upgrade:
-    tag: v0.80.5
-- print: "**** done v0.80.5 install.upgrade"
 - parallel:
    - workload1
    - upgrade-sequence1
 - print: "**** done parallel 1"
-- install.upgrade:
-    tag: v0.80.6
-- print: "**** done v0.80.6 install.upgrade"
 - parallel:
    - workload2
    - upgrade-sequence2
@@ -60,6 +54,9 @@ workload1:
            - cls/test_cls_rbd.sh
 upgrade-sequence1:
    sequential:
+   - install.upgrade:
+       tag: v0.80.5
+   - print: "**** done v0.80.5 install.upgrade"
    - ceph.restart: [mon.a]
    - sleep:
        duration: 60
@@ -105,6 +102,9 @@ workload2:
            - cls/test_cls_rbd.sh
 upgrade-sequence2:
    sequential:
+   - install.upgrade:
+       tag: v0.80.6
+   - print: "**** done v0.80.6 install.upgrade"
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
