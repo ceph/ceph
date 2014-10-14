@@ -55,7 +55,10 @@ workload1:
 upgrade-sequence1:
    sequential:
    - install.upgrade:
-       tag: v0.80.5
+       mon.a:
+         tag: v0.80.5
+       mon.b:
+         tag: v0.80.5
    - print: "**** done v0.80.5 install.upgrade"
    - ceph.restart: [mon.a]
    - sleep:
@@ -103,7 +106,10 @@ workload2:
 upgrade-sequence2:
    sequential:
    - install.upgrade:
-       tag: v0.80.6
+       mon.a:
+         tag: v0.80.6
+       mon.b:
+         tag: v0.80.6
    - print: "**** done v0.80.6 install.upgrade"
    - ceph.restart: [osd.0]
    - sleep:
