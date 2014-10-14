@@ -3011,8 +3011,9 @@ void Server::handle_client_file_setlock(MDRequest *mdr)
     break;
 
   default:
-    dout(0) << "got unknown lock type " << set_lock.type
-	    << ", dropping request!" << dendl;
+    dout(10) << "got unknown lock type " << set_lock.type
+	     << ", dropping request!" << dendl;
+    reply_request(mdr, -EOPNOTSUPP);
     return;
   }
 
