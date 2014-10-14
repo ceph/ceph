@@ -479,7 +479,6 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         tmp_vers = tmp_vers.split('-')[0]
     ldir = _get_local_dir(config, remote)
     for cpack in rpm:
-        pk_err_mess = StringIO()
         pkg2add = "{cpack}-{version}".format(cpack=cpack, version=tmp_vers)
         pkg = None
         if ldir:
@@ -492,8 +491,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                         run.Raw(';'), 'fi']
             )
         if pkg is None:
-            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y', ],
-                    stderr=pk_err_mess)
+            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y'])
         else:
             remote.run(
                 args = ['if', 'test', run.Raw('!'), '-e',
