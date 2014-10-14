@@ -210,7 +210,10 @@ static int get_obj_policy_from_attr(CephContext *cct, RGWRados *store, RGWObject
   bufferlist bl;
   int ret = 0;
 
-  ret = store->get_attr(obj_ctx, obj, RGW_ATTR_ACL, bl);
+  RGWRados::Object op_target(store, obj_ctx, obj);
+  RGWRados::Object::Read rop(&op_target);
+
+  ret = rop.get_attr(RGW_ATTR_ACL, bl);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)

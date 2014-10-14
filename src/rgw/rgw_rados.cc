@@ -4140,6 +4140,30 @@ int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **stat
   return ret;
 }
 
+int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
+{
+  RGWRados *store = source->get_store();
+  rgw_obj& obj = source->get_obj();
+
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = store->get_obj_ref(obj, &ref, &bucket, true);
+  if (r < 0) {
+    return r;
+  }
+
+  RGWObjState *state;
+  r = source->get_state(&state);
+  if (r < 0)
+    return r;
+  if (!state->exists)
+    return -ENOENT;
+  if (!state->get_attr(name, dest))
+    return -ENODATA;
+
+  return 0;
+}
+
 /**
  * Get the attributes for an object.
  * bucket: name of the bucket holding the object.
@@ -4148,7 +4172,7 @@ int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **stat
  * dest: bufferlist to store the result in
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::get_attr(RGWObjectCtx& obj_ctx, rgw_obj& obj, const char *name, bufferlist& dest)
+int RGWRados::system_obj_get_attr(rgw_obj& obj, const char *name, bufferlist& dest)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -4156,16 +4180,6 @@ int RGWRados::get_attr(RGWObjectCtx& obj_ctx, rgw_obj& obj, const char *name, bu
   if (r < 0) {
     return r;
   }
-
-  RGWObjState *state;
-  r = get_obj_state(&obj_ctx, obj, &state, NULL);
-  if (r < 0)
-    return r;
-  if (!state->exists)
-    return -ENOENT;
-  if (state->get_attr(name, dest))
-    return 0;
-  return -ENODATA;
 
   ObjectReadOperation op;
 
@@ -4419,7 +4433,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
     }
   }
   if (conds.if_match || conds.if_nomatch) {
-    r = store->get_attr(source->get_ctx(), obj, RGW_ATTR_ETAG, etag);
+    r = get_attr(RGW_ATTR_ETAG, etag);
     if (r < 0)
       return r;
 
@@ -4762,6 +4776,14 @@ int RGWRados::SystemObject::Read::read(int64_t ofs, int64_t end, bufferlist& bl,
   rgw_obj& obj = source->get_obj();
 
   return store->get_system_obj(source->get_ctx(), state, objv_tracker, obj, bl, ofs, end, read_params.cache_info);
+}
+
+int RGWRados::SystemObject::Read::get_attr(const char *name, bufferlist& dest)
+{
+  RGWRados *store = source->get_store();
+  rgw_obj& obj = source->get_obj();
+
+  return store->system_obj_get_attr(obj, name, dest);
 }
 
 struct get_obj_data;
