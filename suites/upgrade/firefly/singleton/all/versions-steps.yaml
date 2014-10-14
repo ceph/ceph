@@ -15,7 +15,7 @@ roles:
   - osd.4
   - osd.5
   - client.0
-  - client.1
+- - client.1
 tasks:
 - install:
     tag: v0.80.4
@@ -62,6 +62,8 @@ upgrade-sequence1:
        mon.a:
          tag: v0.80.5
        mon.b:
+         tag: v0.80.5
+       client.1:
          tag: v0.80.5
    - print: "**** done v0.80.5 install.upgrade"
    - ceph.restart: [mon.a]
@@ -114,6 +116,8 @@ upgrade-sequence2:
          tag: v0.80.6
        mon.b:
          tag: v0.80.6
+       client.1:
+         tag: v0.80.6
    - print: "**** done v0.80.6 install.upgrade"
    - ceph.restart: [osd.0]
    - sleep:
@@ -159,6 +163,8 @@ upgrade-sequence_firefly:
        mon.a:
          branch: firefly
        mon.b:
+         branch: firefly
+       client.1:
          branch: firefly
    - print: "**** done branch: firefly install.upgrade"
    - ceph.restart: [osd.0]
