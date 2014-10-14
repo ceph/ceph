@@ -807,7 +807,11 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, ostream& o)
   if (!object_name.empty()) {
     bufferlist bl;
     rgw_obj obj(bucket, object_name);
-    int ret = store->get_attr(obj_ctx, obj, RGW_ATTR_ACL, bl);
+
+    RGWRados::Object op_target(store, obj_ctx, obj);
+    RGWRados::Object::Read rop(&op_target);
+
+    int ret = rop.get_attr(RGW_ATTR_ACL, bl);
     if (ret < 0)
       return ret;
 
