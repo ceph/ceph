@@ -11,15 +11,17 @@ and then clear it properly fixes this issue.
 
 Based on patch by Lars Marowsky-Bree <lmb@suse.com> in ceph-deploy.
 Created by Vincent Untz <vuntz@suse.com>
+
+(cherry picked from commit 97747491ba64ffe1df344c3c15068afe73e951bb)
 ---
  src/ceph-disk | 7 +++++++
  1 file changed, 7 insertions(+)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index c67f2f3..1113135 100755
+index 5d6071d..5b71985 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
-@@ -916,6 +916,13 @@ def zap(dev):
+@@ -987,6 +987,13 @@ def zap(dev):
              [
                  'sgdisk',
                  '--zap-all',

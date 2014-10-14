@@ -6,6 +6,8 @@ ceph-disk detects OS and Version and from this decides
 to use sysV systemd or upstart. This code needs a bigger
 rewrite so for now just explicitly tell ceph-disk the
 init system.
+
+(cherry picked from commit 0c0a0fe58266cdf54658b77d72eb97b99013b96b)
 ---
  systemd/udev-rules.d-95-ceph-osd.rules | 27 +++++++++++++++++++++++++++
  1 file changed, 27 insertions(+)

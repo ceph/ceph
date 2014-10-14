@@ -1,40 +1,43 @@
-From: Danny Al-Gaaf <dalgaaf@suse.de>
-Date: Thu, 5 Jun 2014 00:08:11 +0200
-Subject: [PATCH] Fix runlevels for start scripts
+From: Danny Kukawka <dkukawka@suse.de>
+Date: Thu, 5 Jun 2014 00:02:26 +0200
+Subject: [PATCH] Rcfiles: remove from runlevel 2
 
 Merge distro patches to git.
 
-This was 0001-fix-runlevels-for-start-scripts.patch
+This was rcfiles-remove-init-2.patch
 
-(cherry picked from commit a3ca39c182bb3ee0d175cdb92d10a86d2ce268ec)
+(cherry picked from commit ab16e3056e8fc7f26855ca0c58c88ed716443dc1)
+
+Author:    Danny Kukawka <dkukawka@suse.de>
+Date:      Thu Jun 5 00:02:26 2014 +0200
 ---
  src/init-ceph.in | 2 +-
  src/init-radosgw | 2 +-
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index b00f36b..84ba532 100644
+index 80476ce..095057c 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@
  
  ### BEGIN INIT INFO
  # Provides:          ceph
--# Default-Start:     3 4 5
-+# Default-Start:     3 5
+-# Default-Start:     2 3 4 5
++# Default-Start:     3 4 5
  # Default-Stop:      0 1 6
  # Required-Start:    $remote_fs $named $network $time
  # Required-Stop:     $remote_fs $named $network $time
 diff --git a/src/init-radosgw b/src/init-radosgw
-index 26ebff7..ecc8314 100644
+index b0f6a9a..a2e6352 100644
 --- a/src/init-radosgw
 +++ b/src/init-radosgw
 @@ -3,7 +3,7 @@
  # Provides:          radosgw
  # Required-Start:    $remote_fs $named $network $time
  # Required-Stop:     $remote_fs $named $network $time
--# Default-Start:     3 4 5
-+# Default-Start:     3 5
+-# Default-Start:     3 5
++# Default-Start:     3 4 5
  # Default-Stop:      0 1 6
  # Short-Description: radosgw RESTful rados gateway
  # Description: radosgw RESTful rados gateway

@@ -4,12 +4,14 @@ Subject: [PATCH] MultiPatch taken from trunk
 
 THis patxh shodul be a series of cherry picks but it wall went wrong.
 Do this patch again from original patches.
+
+(cherry picked from commit 37244e42a6e71e630dc8dcd6281cfbad2879f607)
 ---
  src/init-ceph.in | 21 +++++++++------------
  1 file changed, 9 insertions(+), 12 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index f25238f..12706c2 100644
+index 84ba532..0ed77ab 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@
@@ -30,7 +32,7 @@ index f25238f..12706c2 100644
  # current directory too.
  if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
      BINDIR=.
-@@ -143,20 +143,12 @@ case $1 in
+@@ -146,20 +146,12 @@ case $1 in
      --btrfs | --fsmount)
  	    dofsmount=1
  	    ;;
@@ -51,7 +53,7 @@ index f25238f..12706c2 100644
      --conf | -c)
  	    [ -z "$2" ] && usage_exit
  	    options="$options $1"
-@@ -347,7 +339,11 @@ for name in $what; do
+@@ -370,7 +362,11 @@ for name in $what; do
  		    get_conf osd_weight "" "osd crush initial weight"
  		    defaultweight="$(df -P -k $osd_data/. | tail -1 | awk '{ print sprintf("%.2f",$2/1073741824) }')"
  		    get_conf osd_keyring "$osd_data/keyring" "keyring"
@@ -64,7 +66,7 @@ index f25238f..12706c2 100644
  		fi
  	    fi
  
-@@ -361,6 +357,7 @@ for name in $what; do
+@@ -384,6 +380,7 @@ for name in $what; do
  	    do_cmd_okfail "$cmd" $runarg
  	    if [ "$ERR" != "0" ]; then
  		EXIT_STATUS=$ERR
@@ -72,7 +74,7 @@ index f25238f..12706c2 100644
  	    fi
  
  	    if [ "$type" = "mon" ]; then
-@@ -368,7 +365,7 @@ for name in $what; do
+@@ -391,7 +388,7 @@ for name in $what; do
  		# for the mon data and admin socket.  if so, run
  		# ceph-create-keys.  this is the case for (normal)
  		# chef and ceph-deploy clusters, which is who needs

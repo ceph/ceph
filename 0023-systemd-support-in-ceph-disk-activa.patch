@@ -3,15 +3,17 @@ Date: Tue, 2 Sep 2014 15:54:07 +0200
 Subject: [PATCH] systemd support in ceph-disk activate
 
 previous code just fails for systemd with an error
+
+(cherry picked from commit 6a6de1135aa0d0e0bb3951ab9e63ad1aa0c6b5d3)
 ---
  src/ceph-disk | 15 +++++++++++++++
  1 file changed, 15 insertions(+)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index 1113135..b8d8001 100755
+index 5b71985..8140dcd 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
-@@ -1634,6 +1634,21 @@ def start_daemon(
+@@ -1712,6 +1712,21 @@ def start_daemon(
                      'osd.{osd_id}'.format(osd_id=osd_id),
                      ],
                  )
@@ -32,4 +34,4 @@ index 1113135..b8d8001 100755
 +                )
          else:
              raise Error('{cluster} osd.{osd_id} is not tagged with an init system'.format(
-                     cluster=cluster,
+                 cluster=cluster,

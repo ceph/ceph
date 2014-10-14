@@ -14,7 +14,7 @@ rework with a --tcmalloc-minimal option or somesuch.
  4 files changed, 6 insertions(+), 46 deletions(-)
 
 diff --git a/configure.ac b/configure.ac
-index fb54df1..b7c5ce4 100644
+index eb16aa5..9f12dd6 100644
 --- a/configure.ac
 +++ b/configure.ac
 @@ -348,8 +348,8 @@ AC_ARG_WITH([tcmalloc],

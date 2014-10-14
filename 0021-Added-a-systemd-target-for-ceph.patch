@@ -7,6 +7,8 @@ set boot up sequence after network-online.target local-fs.target for mon osd and
 Thanks to tserong@suse.com for correcting the target behaviour.
 
 Signed of by Owen Synge - osynge@suse.com
+
+(cherry picked from commit 7479f030dd97c94b3db6fb74f3c3f0344dc9e615)
 ---
  systemd/ceph-mds@.service | 5 ++++-
  systemd/ceph-mon@.service | 7 ++++---

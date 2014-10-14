@@ -22,6 +22,7 @@ Signed-off-by: Federico Simoncelli <fsimonce@redhat.com>
 Rebase of c26477448e957faf0d4f51b588b20609c4bc9791
 
 Signed-off-by: Owen Synge <osynge@suse.com>
+(cherry picked from commit a5d9ee110a132d80043cc2369ee50e7ed4743ecf)
 ---
  ceph.spec.in              |  1 +
  src/Makefile.am           |  4 ++++

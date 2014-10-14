@@ -8,6 +8,8 @@ Also check for directories contianing mon/osd deamon settings.
 Added suport for chkconfig using LSB Header
 
 Signed off by osynge@suse.com
+
+(cherry picked from commit b552baad2413ed01115fa408099604fc62610f52)
 ---
  systemd/ceph | 66 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 66 insertions(+)

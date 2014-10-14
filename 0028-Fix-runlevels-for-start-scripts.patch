@@ -13,7 +13,7 @@ This was 0001-fix-runlevels-for-start-scripts.patch
  2 files changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index b00f36b..84ba532 100644
+index 885e504..ee1dc41 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -4,7 +4,7 @@
@@ -26,7 +26,7 @@ index b00f36b..84ba532 100644
  # Required-Start:    $remote_fs $named $network $time
  # Required-Stop:     $remote_fs $named $network $time
 diff --git a/src/init-radosgw b/src/init-radosgw
-index 26ebff7..ecc8314 100644
+index 7ab6709..f4ca860 100644
 --- a/src/init-radosgw
 +++ b/src/init-radosgw
 @@ -3,7 +3,7 @@

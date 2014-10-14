@@ -4,6 +4,8 @@ Subject: [PATCH] Fix bnc#890345 - wrong service name for logrotate.
 
 We've renamed the service to ceph-radosgw, reflect that in
 logrotate config, too.
+
+(cherry picked from commit 5886ee9142d3c115188b92868ce31ae2ca47075a)
 ---
  src/rgw/logrotate.conf | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
