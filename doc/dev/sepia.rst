@@ -11,6 +11,18 @@ Hardware loans or donations are gladly accepted and will be put to
 good use running regression and other automated testing.
 
 
+E-mail and IRC
+--------------
+
+Acitivity within the lab is coordinated in two places:
+
+* `sepia@ceph.com`_ email discussion list.
+
+* #sepia on irc.oftc.net
+
+.. _sepia@ceph.com: http://lists.ceph.com/listinfo.cgi/ceph-qa-ceph.com/
+
+
 Hardware overview
 -----------------
 
