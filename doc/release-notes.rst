@@ -593,6 +593,25 @@ Notable Changes
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
 
 
+v0.80.7 Firefly
+===============
+
+This release fixes a few critical issues with v0.80.6, particularly
+with clusters running mixed versions.
+
+We recommend that all v0.80.x Firefly users upgrade to this release.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.7.txt>`.
+
+Notable Changes
+---------------
+
+* osd: fix invalid memory reference in log trimming (#9731 Samuel Just)
+* osd: fix use-after-free in cache tiering code (#7588 Sage Weil)
+* osd: remove bad backfill assertion for mixed-version clusters (#9696 Samuel Just)
+
+
+
 v0.80.6 Firefly
 ===============
 
