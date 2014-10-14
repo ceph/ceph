@@ -160,6 +160,7 @@ public:
       return *this;
     }
     bool end() const { return cur == 0; }
+    item *get_cur() const { return cur; }
   };
 
   iterator begin() { return iterator(_front); }
