@@ -12,9 +12,6 @@ upgrade-sequence:
    - ceph.restart: [mon.c]
    - sleep:
        duration: 60
-   - ceph.restart: [mds.a]
-   - sleep:
-       duration: 60
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
@@ -31,3 +28,8 @@ upgrade-sequence:
    - sleep:
        duration: 30
    - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
