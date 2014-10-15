@@ -8,3 +8,7 @@ tasks:
    - workload
    - upgrade-sequence0
 - print: "**** done parallel"
+- install.upgrade:
+    client.0:
+      branch: firefly
+- print: "*** client.0 upgraded"  
