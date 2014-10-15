@@ -99,6 +99,8 @@ bool outistty;
 //can be added to the export format.
 struct super_header {
   static const uint32_t super_magic = (shortmagic << 16) | shortmagic;
+  // ver = 1, Initial version
+  // ver = 2, Add OSDSuperblock to pg_begin
   static const uint32_t super_ver = 2;
   static const uint32_t FIXED_LENGTH = 16;
   uint32_t magic;
