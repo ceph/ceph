@@ -25,7 +25,6 @@ struct libradosstriper::MultiAioCompletionImpl {
   Mutex lock;
   Cond cond;
   int ref, rval;
-  bool released;
   int pending_complete, pending_safe;
   rados_callback_t callback_complete, callback_safe;
   void *callback_complete_arg, *callback_safe_arg;
@@ -34,7 +33,7 @@ struct libradosstriper::MultiAioCompletionImpl {
   std::list<bufferlist*> bllist; /// keep temporary buffer lists used for destriping
 
   MultiAioCompletionImpl() : lock("MultiAioCompletionImpl lock", false, false),
-    ref(1), rval(0), released(false),
+    ref(1), rval(0),
     pending_complete(0), pending_safe(0),
     callback_complete(0), callback_safe(0),
     callback_complete_arg(0), callback_safe_arg(0),
@@ -119,12 +118,6 @@ struct libradosstriper::MultiAioCompletionImpl {
     int r = rval;
     lock.Unlock();
     return r;
-  }
-  void release() {
-    lock.Lock();
-    assert(!released);
-    released = true;
-    put_unlock();
   }
   void get() {
     lock.Lock();
