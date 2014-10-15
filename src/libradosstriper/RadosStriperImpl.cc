@@ -669,7 +669,7 @@ int libradosstriper::RadosStriperImpl::write_in_open_object(const std::string& s
     rc = c->get_return_value();
   }
   delete cdata;
-  c->release();
+  c->put();
   return rc;
 }
 

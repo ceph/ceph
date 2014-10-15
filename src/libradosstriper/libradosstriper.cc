@@ -108,7 +108,7 @@ int libradosstriper::MultiAioCompletion::get_return_value()
 void libradosstriper::MultiAioCompletion::release()
 {
   MultiAioCompletionImpl *c = (MultiAioCompletionImpl *)pc;
-  c->release();
+  c->put();
   delete this;
 }
 
