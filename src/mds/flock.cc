@@ -419,8 +419,7 @@ bool ceph_lock_state_t::get_overlapping_locks(ceph_filelock& lock,
     if (share_space(iter, lock)) {
       overlaps.push_front(iter);
     } else if (self_neighbors &&
-               (neighbor_check_lock.client == iter->second.client) &&
-               (neighbor_check_lock.pid == iter->second.pid) &&
+	       ceph_filelock_owner_equal(neighbor_check_lock, iter->second) &&
                share_space(iter, neighbor_check_lock)) {
       self_neighbors->push_front(iter);
     }
