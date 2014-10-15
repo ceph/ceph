@@ -1,5 +1,5 @@
 From: Owen Synge <osynge@suse.com>
-Date: Wed, 15 Oct 2014 10:03:08 +0200
+Date: Wed, 15 Oct 2014 18:06:42 +0200
 Subject: [PATCH] rcceph: wrapper for ceph systemd
 
 systemd is easy to use if you have a wrapper.
@@ -12,16 +12,14 @@ Added support for mask and unmask parameters
 Added support for ceph.target
 Removed support for extra parameter in init script.
 Cleaned up white space
-
-    Signed off by osynge@suse.com
 ---
  systemd/ceph | 67 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
  1 file changed, 67 insertions(+)
- create mode 100755 systemd/ceph
+ create mode 100644 systemd/ceph
 
 diff --git a/systemd/ceph b/systemd/ceph
-new file mode 100755
-index 0000000..ab59a1f
+new file mode 100644
+index 0000000..46b9b37
 --- /dev/null
 +++ b/systemd/ceph
 @@ -0,0 +1,67 @@
@@ -60,7 +58,7 @@ index 0000000..ab59a1f
 +fi
 +prefix="${cluster}-"
 +
-+case $action in start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed  )
++case $action in start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed  )
 +    n=0
 +    if test -n ${lmon} ; then
 +        for s in ${lmon#=${prefix}} ; do
@@ -69,7 +67,7 @@ index 0000000..ab59a1f
 +            ((++n))
 +        done
 +    fi
-+    if test -n ${lmon} ; then
++    if test -n ${losd} ; then
 +        for s in ${losd#=${prefix}} ; do
 +            systemctl "${action}" ceph-osd@${s#$prefix}.service
 +            rc_check
@@ -86,7 +84,7 @@ index 0000000..ab59a1f
 +;;
 +*)
 +    echo "Invalid paramter : $action"
-+    echo "Valid paramters  : start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed"
++    echo "Valid paramters  : start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed"
 +;;
 +esac
 +
