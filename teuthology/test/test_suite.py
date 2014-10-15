@@ -48,7 +48,6 @@ class TestSuiteOffline(object):
             teuthology_branch='teuthology_branch',
             machine_type='machine_type',
             distro='distro',
-            s3_branch='s3_branch',
         )
         output_dict = suite.substitute_placeholders(suite.dict_templ,
                                                     input_dict)

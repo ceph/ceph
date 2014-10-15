@@ -185,15 +185,6 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
             ver=ceph_version))
     log.info("ceph version: {ver}".format(ver=ceph_version))
 
-    # Decide what branch of s3-tests to use
-    if get_branch_info('s3-tests', ceph_branch):
-        s3_branch = ceph_branch
-    else:
-        log.info("branch {0} not in s3-tests.git; will use master for"
-                 " s3-tests".format(ceph_branch))
-        s3_branch = 'master'
-    log.info("s3-tests branch: %s", s3_branch)
-
     if teuthology_branch:
         if not get_branch_info('teuthology', teuthology_branch):
             exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
@@ -226,7 +217,6 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         teuthology_branch=teuthology_branch,
         machine_type=machine_type,
         distro=distro,
-        s3_branch=s3_branch,
     )
     conf_dict = substitute_placeholders(dict_templ, config_input)
     conf_dict.update(kernel_dict)
@@ -700,9 +690,6 @@ dict_templ = {
             'ceph': {
                 'sha1': Placeholder('ceph_hash'),
             }
-        },
-        's3tests': {
-            'branch': Placeholder('s3_branch'),
         },
         'workunit': {
             'sha1': Placeholder('ceph_hash'),
