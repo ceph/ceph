@@ -33,7 +33,17 @@ struct libradosstriper::RadosStriperImpl {
    * struct handling the data needed to pass to the call back
    * function in asynchronous operations
    */
-  struct CompletionData {
+  struct CompletionData : RefCountedObject {
+    /// constructor
+    CompletionData(libradosstriper::RadosStriperImpl * striper,
+		   const std::string& soid,
+		   const std::string& lockCookie,
+		   librados::AioCompletionImpl *userCompletion = 0,
+                   int n = 1);
+    /// destructor
+    virtual ~CompletionData();
+    /// complete method
+    void complete(int r);
     /// striper to be used to handle the write completion
     libradosstriper::RadosStriperImpl *m_striper;
     /// striped object concerned by the write operation
@@ -42,15 +52,6 @@ struct libradosstriper::RadosStriperImpl {
     std::string m_lockCookie;
     /// completion handler
     librados::IoCtxImpl::C_aio_Ack *m_ack;
-    /// constructor
-    CompletionData(libradosstriper::RadosStriperImpl * striper,
-		   const std::string& soid,
-		   const std::string& lockCookie,
-		   librados::AioCompletionImpl *userCompletion = 0);
-    /// destructor
-    virtual ~CompletionData();
-    /// complete method
-    void complete(int r);
   };
 
   /**
@@ -71,7 +72,8 @@ struct libradosstriper::RadosStriperImpl {
 		       librados::AioCompletionImpl *userCompletion,
 		       bufferlist* bl,
 		       std::vector<ObjectExtent>* extents,
-		       std::vector<bufferlist>* resultbl);
+		       std::vector<bufferlist>* resultbl,
+                       int n = 1);
     /// destructor
     virtual ~ReadCompletionData();
     /// complete method
@@ -89,7 +91,8 @@ struct libradosstriper::RadosStriperImpl {
     WriteCompletionData(libradosstriper::RadosStriperImpl * striper,
 			const std::string& soid,
 			const std::string& lockCookie,
-			librados::AioCompletionImpl *userCompletion = 0);
+			librados::AioCompletionImpl *userCompletion = 0,
+                        int n = 1);
     /// destructor
     virtual ~WriteCompletionData();
     /// safe method
