@@ -11,4 +11,4 @@ tasks:
 - install.upgrade:
     client.0:
       branch: firefly
-- print: "*** client.0 upgraded"  
+- print: "*** client.0 upgraded to firefly"  
