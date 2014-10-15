@@ -768,6 +768,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("min_size", get_min_size());
   f->dump_int("crush_ruleset", get_crush_ruleset());
   f->dump_int("object_hash", get_object_hash());
+  f->dump_float("balance_param", get_balance_param());
   f->dump_int("pg_num", get_pg_num());
   f->dump_int("pg_placement_num", get_pgp_num());
   f->dump_unsigned("crash_replay_interval", get_crash_replay_interval());
@@ -991,6 +992,23 @@ ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
   }
 }
 
+ps_t pg_pool_t::raw_pg_to_congruential_pps(pg_t pg) const
+{
+  if (flags & FLAG_HASHPSPOOL) {
+    // Shuffles the original pgid sequence, with poolid being the seed
+    ps_t stable = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+    ps_t pps = (1033*stable + 2*pg.pool() + 1) % pgp_num_mask + pg.pool();
+    return pps;
+  } else {
+    // Legacy behavior; add ps and pool together.  This is not a great
+    // idea because the PGs from each pool will essentially overlap on
+    // top of each other: 0.5 == 1.4 == 2.3 == ...
+    return
+      ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask) +
+      pg.pool();
+  }
+}
+
 uint32_t pg_pool_t::get_random_pg_position(pg_t pg, uint32_t seed) const
 {
   uint32_t r = crush_hash32_2(CRUSH_HASH_RJENKINS1, seed, 123);
@@ -1018,6 +1036,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(size, bl);
     ::encode(crush_ruleset, bl);
     ::encode(object_hash, bl);
+    ::encode(balance_param, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
     __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
@@ -1046,6 +1065,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(size, bl);
     ::encode(crush_ruleset, bl);
     ::encode(object_hash, bl);
+    ::encode(balance_param, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
     __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
@@ -1073,6 +1093,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     ::encode(size, bl);
     ::encode(crush_ruleset, bl);
     ::encode(object_hash, bl);
+    ::encode(balance_param, bl);
     ::encode(pg_num, bl);
     ::encode(pgp_num, bl);
     __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
@@ -1116,6 +1137,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
   ::encode(object_hash, bl);
+  ::encode(balance_param, bl);
   ::encode(pg_num, bl);
   ::encode(pgp_num, bl);
   __u32 lpg_num = 0, lpgp_num = 0;  // tell old code that there are no localized pgs.
@@ -1163,6 +1185,7 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   ::decode(size, bl);
   ::decode(crush_ruleset, bl);
   ::decode(object_hash, bl);
+  ::decode(balance_param, bl);
   ::decode(pg_num, bl);
   ::decode(pgp_num, bl);
   {
@@ -1283,6 +1306,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.size = 2;
   a.crush_ruleset = 3;
   a.object_hash = 4;
+  a.balance_param = 1.0;
   a.pg_num = 6;
   a.pgp_num = 5;
   a.last_change = 9;
@@ -1335,6 +1359,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " min_size " << p.get_min_size()
       << " crush_ruleset " << p.get_crush_ruleset()
       << " object_hash " << p.get_object_hash_name()
+      << " balance_param " << p.get_balance_param()
       << " pg_num " << p.get_pg_num()
       << " pgp_num " << p.get_pgp_num()
       << " last_change " << p.get_last_change();

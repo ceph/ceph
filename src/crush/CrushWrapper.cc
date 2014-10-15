@@ -964,6 +964,10 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
       }
       break;
 
+    case CRUSH_BUCKET_LINEAR:
+      ::encode(((crush_bucket_linear*)crush->buckets[i])->item_weight, bl);
+      break;
+
     default:
       assert(0);
       break;
@@ -1108,6 +1112,9 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
   case CRUSH_BUCKET_STRAW:
     size = sizeof(crush_bucket_straw);
     break;
+  case CRUSH_BUCKET_LINEAR:
+    size = sizeof(crush_bucket_linear);
+    break;
   default:
     {
       char str[128];
@@ -1170,6 +1177,10 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     }
     break;
   }
+
+  case CRUSH_BUCKET_LINEAR:
+    ::decode(((crush_bucket_linear*)bucket)->item_weight, blp);
+    break;
 
   default:
     // We should have handled this case in the first switch statement

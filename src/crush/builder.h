@@ -39,5 +39,9 @@ struct crush_bucket_straw *
 crush_make_straw_bucket(int hash, int type, int size,
 			int *items,
 			int *weights);
+struct crush_bucket_linear *
+crush_make_linear_bucket(int hash, int type, int size,
+			  int *items,
+			  int item_weight);
 
 #endif

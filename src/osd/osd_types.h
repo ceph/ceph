@@ -895,6 +895,7 @@ struct pg_pool_t {
   __u8 size, min_size;      ///< number of osds in each pg
   __u8 crush_ruleset;       ///< crush placement rule set
   __u8 object_hash;         ///< hash mapping object name to ps
+  float balance_param;
 private:
   __u32 pg_num, pgp_num;    ///< number of pgs
 
@@ -982,7 +983,7 @@ public:
 
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
-      crush_ruleset(0), object_hash(0),
+      crush_ruleset(0), object_hash(0), balance_param(1),
       pg_num(0), pgp_num(0),
       last_change(0),
       last_force_op_resend(0),
@@ -1029,6 +1030,7 @@ public:
   unsigned get_min_size() const { return min_size; }
   int get_crush_ruleset() const { return crush_ruleset; }
   int get_object_hash() const { return object_hash; }
+  float get_balance_param() const { return balance_param; }
   const char *get_object_hash_name() const {
     return ceph_str_hash_name(get_object_hash());
   }
@@ -1067,6 +1069,8 @@ public:
 
   unsigned get_pg_num_mask() const { return pg_num_mask; }
   unsigned get_pgp_num_mask() const { return pgp_num_mask; }
+
+  void set_balance_param(float b) { balance_param = b; }
 
   // if pg_num is not a multiple of two, pgs are not equally sized.
   // return, for a given pg, the fraction (denominator) of the total
@@ -1143,6 +1147,7 @@ public:
    * seeds.
    */
   ps_t raw_pg_to_pps(pg_t pg) const;
+  ps_t raw_pg_to_congruential_pps(pg_t pg) const;
 
   /// choose a random hash position within a pg
   uint32_t get_random_pg_position(pg_t pgid, uint32_t seed) const;

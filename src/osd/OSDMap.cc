@@ -1430,13 +1430,13 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
 			ps_t *ppps) const
 {
   // map to osds[]
-  ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
+  ps_t pps = pool.raw_pg_to_congruential_pps(pg);  // placement ps
   unsigned size = pool.get_size();
 
   // what crush rule?
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, *osds, size, osd_weight);
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight, pool.get_balance_param());
 
   _remove_nonexistent_osds(pool, *osds);
 
@@ -1593,6 +1593,15 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _pg_to_osds(*pool, pg, &raw, primary, &pps);
   _raw_to_up_osds(*pool, raw, up, primary);
   _apply_primary_affinity(pps, *pool, up, primary);
+}
+
+int OSDMap::pg_to_up_osds_adaptive(const pg_pool_t& pool, pg_t pg, vector<int>& up) const
+{
+  int primary;
+  vector<int> raw;
+  _pg_to_osds(pool, pg, &raw, &primary, NULL);
+  _raw_to_up_osds(pool, raw, &up, &primary);
+  return up.size();
 }
   
 void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
