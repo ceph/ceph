@@ -1580,6 +1580,13 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
 
+  if (!pgb.superblock.cluster_fsid.is_zero()
+      && pgb.superblock.cluster_fsid != sb.cluster_fsid) {
+    cerr << "Export came from different cluster with fsid "
+         << pgb.superblock.cluster_fsid << std::endl;
+    return 1;
+  }
+
   if (debug) {
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
@@ -2338,6 +2345,10 @@ int main(int argc, char **argv)
 
   p = bl.begin();
   ::decode(superblock, p);
+
+  if (debug) {
+    cerr << "Cluster fsid=" << superblock.cluster_fsid << std::endl;
+  }
 
 #ifdef INTERNAL_TEST2
   fs->set_allow_sharded_objects();
