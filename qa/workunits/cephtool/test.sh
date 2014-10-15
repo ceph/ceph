@@ -105,7 +105,7 @@ function map_enxio_to_eagain()
 
 function check_response()
 {
-	expected_stderr_string=$1
+	expected_string=$1
 	retcode=$2
 	expected_retcode=$3
 	if [ "$expected_retcode" -a $retcode != $expected_retcode ] ; then
@@ -113,9 +113,8 @@ function check_response()
 		exit 1
 	fi
 
-	if ! grep "$expected_stderr_string" $TMPFILE >/dev/null 2>&1 ; then 
-		echo "Didn't find $expected_stderr_string in stderr output" >&2
-		echo "Stderr: " >&2
+	if ! grep "$expected_string" $TMPFILE >/dev/null 2>&1 ; then 
+		echo "Didn't find $expected_string in output" >&2
 		cat $TMPFILE >&2
 		exit 1
 	fi
@@ -360,6 +359,22 @@ function test_auth()
   diff authfile authfile2
   rm authfile authfile2
   ceph auth del client.xx
+  #
+  # get / set auid
+  #
+  local auid=444
+  ceph-authtool --create-keyring --name client.TEST --gen-key --set-uid $auid TEST-keyring
+  ceph auth import --in-file TEST-keyring
+  rm TEST-keyring
+  ceph auth get client.TEST > $TMPFILE
+  check_response "auid = $auid"
+  ceph --format json-pretty auth get client.TEST > $TMPFILE
+  check_response '"auid": '$auid
+  ceph auth list > $TMPFILE
+  check_response "auid: $auid"
+  ceph --format json-pretty auth list > $TMPFILE
+  check_response '"auid": '$auid
+  ceph auth del client.TEST
 }
 
 function test_auth_profiles()
