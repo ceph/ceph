@@ -30,6 +30,7 @@ namespace librados
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
+  class RadosWhereis;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
@@ -62,6 +63,26 @@ namespace librados
 
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
+
+
+  struct whereis {
+    // -------------------------------------------------------------------------
+    int64_t OsdID; //< ID of the OSD hosting this object
+    std::string OsdState; //< state of the OSD hosting this object - either 'active' or 'inactive'
+    int64_t PgSeed; //< Seed of the PG hosting this object
+    std::string IpString; //< Ip as string
+    std::vector<std::string> HostNames; //< optional reverse DNS HostNames for Ip
+    std::map <std::string,std::string> UserMap; //< optional user KV map
+    // -------------------------------------------------------------------------
+    void resolve(); //< try to reverse DNS an OSD IP and store in HostNames
+    // -------------------------------------------------------------------------
+    void dump(bool reversedns=false, void* formatter=NULL) const;
+  };
+
+  typedef struct whereis whereis_t;
+
+  typedef std::vector<whereis_t>  whereis_vector_t;
+
 
   class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::string> {
   public:
@@ -874,6 +895,7 @@ namespace librados
 
     friend class Rados; // Only Rados can use our private constructor to create IoCtxes.
     friend class libradosstriper::RadosStriper; // Striper needs to see our IoCtxImpl
+    friend class librados::RadosWhereis; // Whereis class needs to see our IoCtxImpl
     friend class ObjectWriteOperation;  // copy_from needs to see our IoCtxImpl
 
     IoCtxImpl *io_ctx_impl;
@@ -935,6 +957,10 @@ namespace librados
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);
 
+    /* whereis of objects */
+    static bool whereis(IoCtx &ioctx, const std::string &oid, whereis_vector_t &locations);
+    static std::string dump_whereis(whereis_t &location, bool reversedns=false, void* formatter=NULL);
+
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
@@ -950,7 +976,7 @@ namespace librados
     static AioCompletion *aio_create_completion();
     static AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete,
 						callback_t cb_safe);
-    
+
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
     // We don't allow assignment or copying
