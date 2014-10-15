@@ -66,7 +66,7 @@ dd if=/dev/urandom bs=1M count=1 of=/tmp/sparse2; truncate /tmp/sparse2 -s 2M
 
 # 1M sparse, 1M data
 rbd import $RBD_CREATE_ARGS --order 20 /tmp/sparse1
-rbd ls -l | grep sparse1 | grep '2048K'
+rbd ls -l | grep sparse1 | grep -i '2048K'
 [ "$(objects sparse1)" = '1' ]
 
 # export, compare contents and on-disk size
@@ -77,7 +77,7 @@ rbd rm sparse1
 
 # 1M data, 1M sparse
 rbd import $RBD_CREATE_ARGS --order 20 /tmp/sparse2
-rbd ls -l | grep sparse2 | grep '2048K'
+rbd ls -l | grep sparse2 | grep -i '2048K'
 [ "$(objects sparse2)" = '0' ]
 rbd export sparse2 /tmp/sparse2.out
 compare_files_and_ondisk_sizes /tmp/sparse2 /tmp/sparse2.out
@@ -88,7 +88,7 @@ rbd rm sparse2
 truncate /tmp/sparse1 -s 10M
 # import from stdin just for fun, verify still sparse
 rbd import $RBD_CREATE_ARGS --order 20 - sparse1 < /tmp/sparse1
-rbd ls -l | grep sparse1 | grep '10240K'
+rbd ls -l | grep sparse1 | grep -i '10240K'
 [ "$(objects sparse1)" = '1' ]
 rbd export sparse1 /tmp/sparse1.out
 compare_files_and_ondisk_sizes /tmp/sparse1 /tmp/sparse1.out
@@ -99,7 +99,7 @@ rbd rm sparse1
 dd if=/dev/urandom bs=2M count=1 of=/tmp/sparse2 oflag=append conv=notrunc
 # again from stding
 rbd import $RBD_CREATE_ARGS --order 20 - sparse2 < /tmp/sparse2
-rbd ls -l | grep sparse2 | grep '4096K'
+rbd ls -l | grep sparse2 | grep -i '4096K'
 [ "$(objects sparse2)" = '0 2 3' ]
 rbd export sparse2 /tmp/sparse2.out
 compare_files_and_ondisk_sizes /tmp/sparse2 /tmp/sparse2.out
