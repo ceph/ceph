@@ -463,6 +463,9 @@ struct inode_t {
   version_t file_data_version; // auth only
   version_t xattr_version;
 
+  utime_t last_scrub_stamp;    // start time of last complete scrub
+  version_t last_scrub_version;// (parent) start version of last complete scrub
+
   version_t backtrace_version;
 
   snapid_t oldest_snap;
@@ -473,7 +476,8 @@ struct inode_t {
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
 	      time_warp_seq(0),
-	      version(0), file_data_version(0), xattr_version(0), backtrace_version(0) {
+	      version(0), file_data_version(0), xattr_version(0),
+	      last_scrub_version(0), backtrace_version(0) {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));

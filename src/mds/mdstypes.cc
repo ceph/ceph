@@ -256,7 +256,7 @@ void inline_data_t::decode(bufferlist::iterator &p)
  */
 void inode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 6, bl);
+  ENCODE_START(12, 6, bl);
 
   ::encode(ino, bl);
   ::encode(rdev, bl);
@@ -297,6 +297,9 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(max_size_ever, bl);
   ::encode(inline_data, bl);
   ::encode(quota, bl);
+
+  ::encode(last_scrub_version, bl);
+  ::encode(last_scrub_stamp, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -367,6 +370,11 @@ void inode_t::decode(bufferlist::iterator &p)
     backtrace_version = 0; // force update backtrace
   if (struct_v >= 11)
     ::decode(quota, p);
+
+  if (struct_v >= 12) {
+    ::decode(last_scrub_version, p);
+    ::decode(last_scrub_stamp, p);
+  }
 
   DECODE_FINISH(p);
 }
