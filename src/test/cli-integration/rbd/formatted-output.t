@@ -1,6 +1,6 @@
 ls on empty pool never containing images
 ========================================
-  $ rados -p rbd rm rbd_directory || true
+  $ rados -p rbd rm rbd_directory 2>/dev/null || true
   $ rbd ls
   $ rbd ls --format json
   [] (no-eol)
