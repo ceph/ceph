@@ -898,6 +898,9 @@ def validate_command(sigdict, args, verbose=False):
     turn args into a valid dictionary ready to be sent off as JSON,
     validated against sigdict.
     """
+    if verbose:
+        print >> sys.stderr, \
+            "validate_command: " + " ".join(args)
     found = []
     valid_dict = {}
     if args:
