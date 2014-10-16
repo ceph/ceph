@@ -3195,6 +3195,38 @@ int OSDMonitor::prepare_new_pool(MPoolOp *m)
 			    pg_pool_t::TYPE_REPLICATED, 0, ss);
 }
 
+int OSDMonitor::crush_rename_bucket(const string& srcname,
+				    const string& dstname,
+				    ostream *ss)
+{
+  int ret;
+  //
+  // Avoid creating a pending crush if it does not already exists and
+  // the rename would fail.
+  //
+  if (!_have_pending_crush()) {
+    ret = _get_stable_crush().can_rename_bucket(srcname,
+						dstname,
+						ss);
+    if (ret)
+      return ret;
+  }
+
+  CrushWrapper newcrush;
+  _get_pending_crush(newcrush);
+
+  ret = newcrush.rename_bucket(srcname,
+			       dstname,
+			       ss);
+  if (ret)
+    return ret;
+  
+  pending_inc.crush.clear();
+  newcrush.encode(pending_inc.crush);
+  *ss << "renamed bucket " << srcname << " into " << dstname;
+  return 0;
+}
+
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
@@ -4091,6 +4123,18 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     ss << "added bucket " << name << " type " << typestr
        << " to crush map";
     goto update;
+  } else if (prefix == "osd crush rename-bucket") {
+    string srcname, dstname;
+    cmd_getval(g_ceph_context, cmdmap, "srcname", srcname);
+    cmd_getval(g_ceph_context, cmdmap, "dstname", dstname);
+
+    err = crush_rename_bucket(srcname, dstname, &ss);
+    if (err == -EALREADY) // equivalent to success for idempotency
+      err = 0;
+    if (err)
+      goto reply;
+    else
+      goto update;
   } else if (osdid_present &&
 	     (prefix == "osd crush set" || prefix == "osd crush add")) {
     // <OsdName> is 'osd.<id>' or '<id>', passed as int64_t id
