@@ -101,6 +101,33 @@ int CrushWrapper::rename_item(const string& srcname,
   return set_item_name(oldid, dstname);
 }
 
+int CrushWrapper::can_rename_bucket(const string& srcname,
+                                    const string& dstname,
+                                    ostream *ss) const
+{
+  int ret = can_rename_item(srcname, dstname, ss);
+  if (ret)
+    return ret;
+  int srcid = get_item_id(srcname);
+  if (srcid >= 0) {
+    *ss << "srcname = '" << srcname << "' is not a bucket "
+        << "because its id = " << srcid << " is >= 0";
+    return -ENOTDIR;
+  }
+  return 0;
+}
+
+int CrushWrapper::rename_bucket(const string& srcname,
+                                const string& dstname,
+                                ostream *ss)
+{
+  int ret = can_rename_bucket(srcname, dstname, ss);
+  if (ret < 0)
+    return ret;
+  int oldid = get_item_id(srcname);
+  return set_item_name(oldid, dstname);
+}
+
 void CrushWrapper::find_takes(set<int>& roots) const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
