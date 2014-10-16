@@ -1,5 +1,5 @@
-workload:
-  sequential:
+tasks:
+- sequential:
   - workunit:
       clients:
          client.0:
