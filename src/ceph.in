@@ -612,6 +612,16 @@ def main():
         'log_flush_on_exit':'true',
     }
 
+    if 'injectargs' in childargs:
+        position = childargs.index('injectargs')
+        injectargs = childargs[position:]
+        childargs = childargs[:position]
+        if verbose:
+            print >> sys.stderr, 'Separate childargs {0} from injectargs {1}'.\
+                format(childargs, injectargs)
+    else:
+        injectargs = None
+
     clustername = 'ceph'
     if parsed_args.cluster:
         clustername = parsed_args.cluster
@@ -626,7 +636,6 @@ def main():
             format(e.__class__.__name__)
         return 1
 
-    #tmp = childargs
     childargs = retargs
     if not childargs:
         childargs = []
@@ -745,10 +754,13 @@ def main():
         childargs = childargs[2:]
         is_tell = True
 
-    if is_tell and not len(childargs):
-        print >> sys.stderr, \
+    if is_tell:
+        if injectargs:
+            childargs = injectargs
+        if not len(childargs):
+            print >> sys.stderr, \
                 'Cannot use \'tell\' with interactive mode'
-        return errno.EINVAL
+            return errno.EINVAL
 
     # fetch JSON sigs from command
     # each line contains one command signature (a placeholder name
