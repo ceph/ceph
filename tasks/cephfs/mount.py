@@ -147,6 +147,65 @@ class CephFSMount(object):
         raise RuntimeError("Timed out after {0}s waiting for {1} to become visible from {2}".format(
             i, basename, self.client_id))
 
+    def lock_background(self, basename="background_file"):
+        """
+        Open and lock a files for writing, hold the lock in a background process
+        """
+        assert(self.is_mounted())
+
+        path = os.path.join(self.mountpoint, basename)
+
+        pyscript = dedent("""
+            import time
+            import fcntl
+            import struct
+
+            f = open("{path}", 'w')
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
+            fcntl.fcntl(f, fcntl.F_SETLK, lockdata)
+            while True:
+                time.sleep(1)
+            """).format(path=path)
+
+        log.info("lock file {0}".format(basename))
+        rproc = self._run_python(pyscript)
+        self.background_procs.append(rproc)
+        return rproc
+
+    def check_filelock(self, basename="background_file"):
+        assert(self.is_mounted())
+
+        path = os.path.join(self.mountpoint, basename)
+
+        pyscript = dedent("""
+            import fcntl
+            import errno
+            import struct
+
+            f = open("{path}", 'r')
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except IOError, e:
+                if e.errno == errno.EAGAIN:
+                    pass
+            else:
+                raise RuntimeError("flock on file {path} not found")
+            try:
+                lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
+                fcntl.fcntl(f, fcntl.F_SETLK, lockdata)
+            except IOError, e:
+                if e.errno == errno.EAGAIN:
+                    pass
+            else:
+                raise RuntimeError("posix lock on file {path} not found")
+            """).format(path=path)
+
+        log.info("check lock on file {0}".format(basename))
+        r = self.client_remote.run(args=[
+            'sudo', 'python', '-c', pyscript
+        ])
+
     def write_background(self, basename="background_file"):
         """
         Open a file for writing, complete as soon as you can
