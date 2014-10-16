@@ -975,6 +975,7 @@ static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp
  */
 static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
 {
+  CLS_LOG(20, "write_entry() instance=%s idx=%s flags=%d", instance_entry.key.instance.c_str(), instance_idx.c_str(), instance_entry.flags);
   /* write the instance entry */
   int ret = write_entry(hctx, instance_entry, instance_idx);
   if (ret < 0) {
@@ -985,10 +986,11 @@ static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_en
   get_list_index_key(instance_entry, &instance_list_idx);
 
   if (instance_idx != instance_list_idx) {
+    CLS_LOG(20, "write_entry() idx=%s flags=%d", instance_list_idx.c_str(), instance_entry.flags);
     /* write a new list entry for the object instance */
     ret = write_entry(hctx, instance_entry, instance_list_idx);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: write_entry() instance_list_idx=%s ret=%d", instance_list_idx.c_str(), ret);
+      CLS_LOG(0, "ERROR: write_entry() instance=%s instance_list_idx=%s ret=%d", instance_entry.key.instance.c_str(), instance_list_idx.c_str(), ret);
       return ret;
     }
   }
@@ -1001,27 +1003,32 @@ class BIVerObjEntry {
   cls_rgw_obj_key key;
   string instance_idx;
 
-  struct rgw_bucket_dir_entry list_entry;
   struct rgw_bucket_dir_entry instance_entry;
 
+  bool initialized;
+
 public:
-  BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key) {
+  BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key), initialized(false) {
     encode_obj_index_key(key, &instance_idx);
   }
 
-  int read_instance() {
+  int init() {
     int ret = read_index_entry(hctx, instance_idx, &instance_entry);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: read_index_entry() key=%s ret=%d", instance_idx.c_str(), ret);
       return ret;
     }
+    initialized = true;
+    CLS_LOG(20, "read instance_entry key.name=%s key.instance=%s flags=%d", instance_entry.key.name.c_str(), instance_entry.key.instance.c_str(), instance_entry.flags);
     return 0;
   }
 
-  void init_delete_marker() {
+  void init_as_delete_marker() {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
     instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
+
+    initialized = true;
   }
 
 
@@ -1039,17 +1046,15 @@ public:
     return 0;
   }
 
-  int set_current(uint64_t epoch) {
-    if (instance_entry.ver.epoch > 0) {
-      /* this instance has a previous list entry, remove that entry */
-      int ret = unlink_list_entry();
+  int write_entries(uint64_t flags_set, uint64_t flags_reset) {
+    if (!initialized) {
+      int ret = init();
       if (ret < 0) {
         return ret;
       }
     }
-
-    instance_entry.ver.epoch = epoch;
-    instance_entry.flags |= (RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT);
+    instance_entry.flags |= flags_set;
+    instance_entry.flags &= ~flags_reset;
 
     /* write the instance and list entries */
     int ret = write_obj_entries(hctx, instance_entry, instance_idx);
@@ -1061,6 +1066,77 @@ public:
     return 0;
   }
 
+  int set_current(uint64_t epoch) {
+    if (instance_entry.ver.epoch > 0) {
+      /* this instance has a previous list entry, remove that entry */
+      int ret = unlink_list_entry();
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    instance_entry.ver.epoch = epoch;
+    return write_entries(RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT, 0);
+  }
+
+  int demote_current() {
+    return write_entries(0, RGW_BUCKET_DIRENT_FLAG_CURRENT);
+  }
+};
+
+
+class BIOLHEntry {
+  cls_method_context_t hctx;
+  cls_rgw_obj_key key;
+
+  string olh_data_idx;
+  struct rgw_bucket_olh_entry olh_data_entry;
+
+  bool initialized;
+public:
+  BIOLHEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key), initialized(false) { }
+
+  int init(bool *exists) {
+    /* read olh */
+    int ret = read_olh(hctx, key, &olh_data_entry, &olh_data_idx, exists);
+    if (ret < 0) {
+      return ret;
+    }
+
+    inc_epoch();
+    initialized = true;
+    return 0;
+  }
+
+  void inc_epoch() {
+    olh_data_entry.epoch++;
+  }
+
+  uint64_t get_epoch() {
+    return olh_data_entry.epoch;
+  }
+
+  rgw_bucket_olh_entry& get_entry() {
+    return olh_data_entry;
+  }
+
+  int update(cls_rgw_obj_key& key, bool delete_marker) {
+    olh_data_entry.delete_marker = delete_marker;
+    olh_data_entry.key = key;
+
+    /* write the olh data entry */
+    int ret = write_entry(hctx, olh_data_entry, olh_data_idx);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", olh_data_idx.c_str(), ret);
+      return ret;
+    }
+
+    return 0;
+  }
+
+  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker) {
+    update_olh_log(olh_data_entry, op, op_tag, key, delete_marker);
+  }
 
 };
 
@@ -1094,39 +1170,33 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   BIVerObjEntry obj(hctx, op.key);
+  BIOLHEntry olh(hctx, op.key);
 
   /* read instance entry */
   if (!op.delete_marker) {
-    int ret = obj.read_instance();
+    int ret = obj.init();
     if (ret < 0) {
       return ret;
     }
   } else {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
-    obj.init_delete_marker();
+    obj.init_as_delete_marker();
   }
 
   /* read olh */
   bool olh_found;
-  int ret = read_olh(hctx, op.key, &olh_data_entry, &olh_data_idx, &olh_found);
+  int ret = olh.init(&olh_found);
   if (ret < 0) {
     return ret;
   }
 
   if (olh_found) {
     /* found olh, previous instance is no longer the latest, need to update */
-    string prev_idx;
-    struct rgw_bucket_dir_entry prev_instance_entry;
-    ret = read_key_list_entry(hctx, olh_data_entry.key, &prev_instance_entry, &prev_idx);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: read_key_list_entry() reading previous instance %s ret=%d", prev_idx.c_str(), ret);
-      return ret;
-    }
+    BIVerObjEntry old_obj(hctx, olh.get_entry().key);
 
-    prev_instance_entry.flags &= ~RGW_BUCKET_DIRENT_FLAG_CURRENT;
-    ret = write_entry(hctx, prev_instance_entry, prev_idx);
+    ret = old_obj.demote_current();
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: write_entry() prev_idx=%s ret=%d", prev_idx.c_str(), ret);
+      CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
       return ret;
     }
   }
@@ -1144,26 +1214,21 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
-  olh_data_entry.epoch++;
-  olh_data_entry.delete_marker = op.delete_marker;
-  olh_data_entry.key = op.key;
+  ret = olh.update(op.key, op.delete_marker);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
+    return ret;
+  }
 
   /* write the instance and list entries */
-  ret = obj.set_current(olh_data_entry.epoch);
+  ret = obj.set_current(olh.get_epoch());
   if (ret < 0) {
     return ret;
   }
 
   /* update the olh log */
 
-  update_olh_log(olh_data_entry, CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
-
-  /* write the olh data entry */
-  ret = write_entry(hctx, olh_data_entry, olh_data_idx);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", olh_data_idx.c_str(), ret);
-    return ret;
-  }
+  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
 
   return 0;
 }
