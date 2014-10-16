@@ -952,7 +952,6 @@ static int read_key_list_entry(cls_method_context_t hctx, cls_rgw_obj_key& key, 
 
   int ret = read_index_entry(hctx, *idx, entry);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: read_index_entry() reading previous instance %s ret=%d", idx->c_str(), ret);
     return ret;
   }
 
@@ -1209,8 +1208,16 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
     ret = read_key_list_entry(hctx, no_instance_key, &plain_entry, &plain_idx);
     if (ret >= 0) {
-#warning handle overwrite of non-olh object, need to update log
+#warning handle overwrite of non-olh object, need to update stats
       ret = cls_cxx_map_remove_key(hctx, plain_idx);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: cls_Cxx_map_remove_key() ret=%d", ret);
+        return ret;
+      }
+
+      if (!plain_entry.is_delete_marker()) {
+        olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, plain_entry.key, false);
+      }
     }
   }
 
