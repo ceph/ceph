@@ -35,6 +35,10 @@ tasks:
    - upgrade-sequence2
 - print: "**** done parallel 2"
 - parallel:
+   - workload3
+   - upgrade-sequence3
+- print: "**** done parallel 3"
+- parallel:
    - workload_firefly
    - upgrade-sequence_firefly
 - print: "**** done parallel firefly branch"
@@ -96,7 +100,7 @@ upgrade-sequence1:
    - ceph.restart: [osd.5]
    - sleep:
        duration: 30
-   - print: "**** done ceph.restart all 1"
+   - print: "**** done ceph.restart all 1 mon/mds/osd"
 workload2:
    sequential:
    - workunit:
@@ -149,7 +153,7 @@ upgrade-sequence2:
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
-   - print: "**** done ceph.restart all 2"
+   - print: "**** done ceph.restart all 2 osd/mon/mds"
 workload_firefly:
   sequential:
   - rgw: [client.0]
@@ -167,6 +171,9 @@ upgrade-sequence_firefly:
        client.1:
          branch: firefly
    - print: "**** done branch: firefly install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
@@ -194,7 +201,59 @@ upgrade-sequence_firefly:
    - ceph.restart: [mon.c]
    - sleep:
        duration: 60
+   - print: "**** done ceph.restart all firefly current branch mds/osd/mon"
+workload3:
+   workload:
+     rados:
+       clients: [client.0]
+       ops: 2000
+       objects: 50
+       op_weights:
+         read: 100
+         write: 100
+         delete: 50
+         snap_create: 50
+         snap_remove: 50
+         rollback: 50
+upgrade-sequence3:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v0.80.7
+       mon.b:
+         tag: v0.80.7
+       client.1:
+         tag: v0.80.7
+   - print: "**** done v0.80.7 install.upgrade"
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
-   - print: "**** done ceph.restart all firefly current branch"
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all mix"
+
