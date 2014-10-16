@@ -9,6 +9,7 @@ from datetime import datetime
 
 import teuthology
 from .config import config
+from .job_status import get_status, set_status
 
 report_exceptions = (requests.exceptions.RequestException, socket.error)
 
@@ -288,8 +289,8 @@ class ResultsReporter(object):
             base=self.base_uri, name=run_name,)
         if job_info is None:
             job_info = self.serializer.job_info(run_name, job_id)
-        if dead and job_info.get('success') is None:
-            job_info['status'] = 'dead'
+        if dead and get_status(job_info) is None:
+            set_status(job_info, 'dead')
         job_json = json.dumps(job_info)
         headers = {'content-type': 'application/json'}
         response = self.session.post(run_uri, data=job_json, headers=headers)

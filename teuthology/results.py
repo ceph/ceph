@@ -10,6 +10,7 @@ from textwrap import fill
 import teuthology
 from teuthology import misc
 from teuthology import ls
+from .job_status import get_status
 from .report import ResultsSerializer
 
 log = logging.getLogger(__name__)
@@ -131,7 +132,7 @@ def build_email_body(name, archive_dir, timeout):
         with file(summary_file) as f:
             summary = yaml.safe_load(f)
 
-        if summary['success']:
+        if get_status(summary) == 'pass':
             passed[job] = email_templates['pass_templ'].format(
                 job_id=job,
                 desc=summary.get('description'),

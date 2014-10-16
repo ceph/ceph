@@ -15,6 +15,7 @@ from teuthology import lockstatus
 from teuthology import lock
 from teuthology import misc
 from teuthology import provision
+from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
@@ -147,7 +148,7 @@ def lock_machines(ctx, config):
         yield
     finally:
         if ctx.config.get('unlock_on_failure', False) or \
-           ctx.summary.get('success', False):
+                get_status(ctx.summary) == 'pass':
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
                 lock.unlock_one(ctx, machine, ctx.owner)
@@ -320,11 +321,12 @@ def archive(ctx, config):
         yield
     except Exception:
         # we need to know this below
-        ctx.summary['success'] = False
+        set_status(ctx.summary, 'fail')
         raise
     finally:
+        passed = get_status(ctx.summary) == 'pass'
         if ctx.archive is not None and \
-                not (ctx.config.get('archive-on-error') and ctx.summary['success']):
+                not (ctx.config.get('archive-on-error') and passed):
             log.info('Transferring archived files...')
             logdir = os.path.join(ctx.archive, 'remote')
             if (not os.path.exists(logdir)):
@@ -415,7 +417,7 @@ def coredump(ctx, config):
                 )
             )
 
-        # set success=false if the dir is still there = coredumps were
+        # set status = 'fail' if the dir is still there = coredumps were
         # seen
         for rem in ctx.cluster.remotes.iterkeys():
             r = rem.run(
@@ -428,7 +430,7 @@ def coredump(ctx, config):
                 )
             if r.stdout.getvalue() != 'OK\n':
                 log.warning('Found coredumps on %s, flagging run as failed', rem)
-                ctx.summary['success'] = False
+                set_status(ctx.summary, 'fail')
                 if 'failure_reason' not in ctx.summary:
                     ctx.summary['failure_reason'] = \
                         'Found coredumps on {rem}'.format(rem=rem)
@@ -545,7 +547,7 @@ kern.* -{adir}/syslog/kern.log;RSYSLOG_FileFormat
             stdout = r.stdout.getvalue()
             if stdout != '':
                 log.error('Error in syslog on %s: %s', rem.name, stdout)
-                ctx.summary['success'] = False
+                set_status(ctx.summary, 'fail')
                 if 'failure_reason' not in ctx.summary:
                     ctx.summary['failure_reason'] = \
                         "'{error}' in syslog".format(error=stdout)

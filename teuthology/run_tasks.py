@@ -1,6 +1,7 @@
 import sys
 import logging
 from .sentry import get_client as get_sentry_client
+from .job_status import set_status
 from .misc import get_http_log_path
 from .config import config as teuth_config
 from .exceptions import ConnectionLostError
@@ -54,10 +55,11 @@ def run_tasks(tasks, ctx):
                 manager.__enter__()
                 stack.append((taskname, manager))
     except BaseException as e:
-        ctx.summary['success'] = False
         if isinstance(e, ConnectionLostError):
             # Prevent connection issues being flagged as failures
-            ctx.summary['status'] = 'dead'
+            set_status(ctx.summary, 'dead')
+        else:
+            set_status(ctx.summary, 'fail')
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks.')
@@ -116,10 +118,11 @@ def run_tasks(tasks, ctx):
                 try:
                     suppress = manager.__exit__(*exc_info)
                 except Exception as e:
-                    ctx.summary['success'] = False
                     if isinstance(e, ConnectionLostError):
                         # Prevent connection issues being flagged as failures
-                        ctx.summary['status'] = 'dead'
+                        set_status(ctx.summary, 'dead')
+                    else:
+                        set_status(ctx.summary, 'fail')
                     if 'failure_reason' not in ctx.summary:
                         ctx.summary['failure_reason'] = str(e)
                     log.exception('Manager failed: %s', taskname)
