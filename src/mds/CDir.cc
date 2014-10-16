@@ -180,51 +180,35 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 // CDir
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
+  cache(mdcache), inode(in), frag(fg),
+  first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  item_dirty(this), item_new(this),
+  projected_version(0),  item_dirty(this), item_new(this),
+  num_head_items(0), num_head_null(0),
+  num_snap_items(0), num_snap_null(0),
+  num_dirty(0), committing_version(0), committed_version(0),
+  dir_auth_pins(0), request_pins(0),
+  dir_rep(REP_NONE),
   pop_me(ceph_clock_now(g_ceph_context)),
   pop_nested(ceph_clock_now(g_ceph_context)),
   pop_auth_subtree(ceph_clock_now(g_ceph_context)),
   pop_auth_subtree_nested(ceph_clock_now(g_ceph_context)),
-  bloom(NULL)
+  num_dentries_nested(0), num_dentries_auth_subtree(0),
+  num_dentries_auth_subtree_nested(0),
+  bloom(NULL),
+  dir_auth(CDIR_AUTH_DEFAULT)
 {
   g_num_dir++;
   g_num_dira++;
 
-  inode = in;
-  frag = fg;
-  this->cache = mdcache;
-
-  first = 2;
-  
-  num_head_items = num_head_null = 0;
-  num_snap_items = num_snap_null = 0;
-  num_dirty = 0;
-
-  num_dentries_nested = 0;
-  num_dentries_auth_subtree = 0;
-  num_dentries_auth_subtree_nested = 0;
-
   state = STATE_INITIAL;
 
   memset(&fnode, 0, sizeof(fnode));
-  projected_version = 0;
-
-  committing_version = 0;
-  committed_version = 0;
-
-  // dir_auth
-  dir_auth = CDIR_AUTH_DEFAULT;
 
   // auth
   assert(in->is_dir());
   if (auth) 
     state |= STATE_AUTH;
- 
-  dir_auth_pins = 0;
-  request_pins = 0;
-
-  dir_rep = REP_NONE;
 }
 
 /**
