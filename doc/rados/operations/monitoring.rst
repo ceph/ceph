@@ -277,7 +277,7 @@ The admin socket command enables you to show and set your configuration at
 runtime. See `Viewing a Configuration at Runtime`_ for details.
 
 Additionally, you can set configuration values at runtime directly (i.e., the
-admin socket bypasses the monitor, unlike ``ceph {daemon-type} tell {id}
+admin socket bypasses the monitor, unlike ``ceph tell {daemon-type}.{id}
 injectargs``, which relies on the monitor but doesn't require you to login
 directly to the host in question ).
 

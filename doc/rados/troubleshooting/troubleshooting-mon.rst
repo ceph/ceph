@@ -438,11 +438,11 @@ You have quorum
 
   Either inject the debug option into the monitor you want to debug::
 
-        ceph tell mon.FOO injectargs '--debug_mon 10/10'
+        ceph tell mon.FOO injectargs --debug_mon 10/10
 
   or into all monitors at once::
 
-        ceph tell mon.* injectargs '--debug_mon 10/10'
+        ceph tell mon.* injectargs --debug_mon 10/10
 
 No quourm
 
