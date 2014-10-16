@@ -5,6 +5,7 @@
 # Ceph - scalable distributed file system
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -618,6 +619,26 @@ class TestOSD(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['osd', 'crush',
                                                     'add-bucket', '^^^',
                                                     'type']))
+
+    def test_crush_rename_bucket(self):
+        self.assert_valid_command(['osd', 'crush', 'rename-bucket',
+                                   'srcname', 'dstname'])
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rename-bucket']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rename-bucket',
+													'srcname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rename-bucket', 'srcname',
+                                                    'dstname',
+                                                    'toomany']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rename-bucket', '^^^',
+                                                    'dstname']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'crush',
+                                                    'rename-bucket', 'srcname',
+                                                    '^^^^']))
 
     def check_crush_setter(self, setter):
         self.assert_valid_command(['osd', 'crush', setter,
