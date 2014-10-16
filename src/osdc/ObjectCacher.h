@@ -23,10 +23,15 @@ enum {
   l_objectcacher_first = 25000,
 
   l_objectcacher_cache_ops_hit, // ops we satisfy completely from cache
-  l_objectcacher_cache_ops_miss, // ops we don't satisfy completely from cache
+  l_objectcacher_cache_ops_miss, // ops with no data in the cache
+  l_objectcacher_cache_ops_partial_hit, // ops we satisfy partially from cache
+  l_objectcacher_cache_ops_wait_cow, // ops waiting because of a copy-on-write
 
   l_objectcacher_cache_bytes_hit, // bytes read directly from cache
-  l_objectcacher_cache_bytes_miss, // bytes we couldn't read directly from cache
+  l_objectcacher_cache_bytes_partial_hit, // bytes read directly from cache for partial hits
+  l_objectcacher_cache_bytes_miss, // bytes not in the cache
+  l_objectcacher_cache_bytes_rx, // bytes waiting for pending reads
+  l_objectcacher_cache_bytes_wait_cow, // bytes waiting because of a copy-on-write
 
   l_objectcacher_data_read, // total bytes read out
   l_objectcacher_data_written, // bytes written to cache
@@ -157,6 +162,13 @@ class ObjectCacher {
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
+    }
+
+    //! Returns the size of the overlap between the BufferHead's range and the given range.
+    uint64_t overlap_size(uint64_t start, uint64_t end) {
+      uint64_t overlap_start = MAX(start, ex.start);
+      uint64_t overlap_end = MIN(end, ex.start + ex.length);
+      return overlap_end - overlap_start;
     }
   };
 
