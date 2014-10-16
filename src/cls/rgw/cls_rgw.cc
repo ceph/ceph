@@ -995,6 +995,75 @@ static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_en
   return 0;
 }
 
+
+class BIVerObjEntry {
+  cls_method_context_t hctx;
+  cls_rgw_obj_key key;
+  string instance_idx;
+
+  struct rgw_bucket_dir_entry list_entry;
+  struct rgw_bucket_dir_entry instance_entry;
+
+public:
+  BIVerObjEntry(cls_method_context_t& _hctx, const cls_rgw_obj_key& _key) : hctx(_hctx), key(_key) {
+    encode_obj_index_key(key, &instance_idx);
+  }
+
+  int read_instance() {
+    int ret = read_index_entry(hctx, instance_idx, &instance_entry);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: read_index_entry() key=%s ret=%d", instance_idx.c_str(), ret);
+      return ret;
+    }
+    return 0;
+  }
+
+  void init_delete_marker() {
+    /* a deletion marker, need to initialize it, there's no instance entry for it yet */
+    instance_entry.key = key;
+    instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
+  }
+
+
+  int unlink_list_entry() {
+    if (instance_entry.ver.epoch > 0) {
+      string list_idx;
+      /* this instance has a previous list entry, remove that entry */
+      get_list_index_key(instance_entry, &list_idx);
+      int ret = cls_cxx_map_remove_key(hctx, list_idx);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_idx=%s ret=%d", list_idx.c_str(), ret);
+        return ret;
+      }
+    }
+    return 0;
+  }
+
+  int set_current(uint64_t epoch) {
+    if (instance_entry.ver.epoch > 0) {
+      /* this instance has a previous list entry, remove that entry */
+      int ret = unlink_list_entry();
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    instance_entry.ver.epoch = epoch;
+    instance_entry.flags |= (RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT);
+
+    /* write the instance and list entries */
+    int ret = write_obj_entries(hctx, instance_entry, instance_idx);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: write_obj_entries() instance_idx=%s ret=%d", instance_idx.c_str(), ret);
+      return ret;
+    }
+
+    return 0;
+  }
+
+
+};
+
 /*
  * link an object version to an olh, update the relevant index entries. It will also handle the
  * deletion marker case. We have a few entries that we need to take care of. For object 'foo',
@@ -1024,20 +1093,17 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  struct rgw_bucket_dir_entry instance_entry;
+  BIVerObjEntry obj(hctx, op.key);
 
   /* read instance entry */
-  encode_obj_index_key(op.key, &instance_idx);
   if (!op.delete_marker) {
-    int ret = read_index_entry(hctx, instance_idx, &instance_entry);
+    int ret = obj.read_instance();
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: read_index_entry() key=%s ret=%d", instance_idx.c_str(), ret);
       return ret;
     }
   } else {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
-    instance_entry.key = op.key;
-    instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
+    obj.init_delete_marker();
   }
 
   /* read olh */
@@ -1082,25 +1148,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   olh_data_entry.delete_marker = op.delete_marker;
   olh_data_entry.key = op.key;
 
-  if (instance_entry.ver.epoch > 0) {
-    string list_idx;
-
-    /* this instance has a previous list entry, remove that entry */
-    get_list_index_key(instance_entry, &list_idx);
-    ret = cls_cxx_map_remove_key(hctx, list_idx);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_idx=%s ret=%d", list_idx.c_str(), ret);
-      return ret;
-    }
-  }
-
-  instance_entry.ver.epoch = olh_data_entry.epoch;
-  instance_entry.flags |= (RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT);
-
   /* write the instance and list entries */
-  ret = write_obj_entries(hctx, instance_entry, instance_idx);
+  ret = obj.set_current(olh_data_entry.epoch);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_obj_entries() instance_idx=%s ret=%d", instance_idx.c_str(), ret);
     return ret;
   }
 
