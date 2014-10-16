@@ -1398,12 +1398,9 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
   return 0;
 }
 
-int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
+int get_pg_metadata(bufferlist &bl, metadata_section &ms)
 {
-  ObjectStore::Transaction tran;
-  ObjectStore::Transaction *t = &tran;
   bufferlist::iterator ebliter = bl.begin();
-  metadata_section ms;
   ms.decode(ebliter);
 
 #if DIAGNOSTIC
@@ -1422,14 +1419,6 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   formatter->flush(cout);
   cout << std::endl;
 #endif
-
-  coll_t newcoll(ms.info.pgid);
-  t->collection_rename(coll, newcoll);
-
-  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
-  if (ret) return ret;
-
-  store->apply_transaction(*t);
 
   return 0;
 }
@@ -1518,6 +1507,7 @@ int do_import_rados(string pool)
 
   bool done = false;
   bool found_metadata = false;
+  metadata_section ms;
   while(!done) {
     ret = read_section(file_fd, &type, &ebl);
     if (ret)
@@ -1635,6 +1625,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
 
   bool done = false;
   bool found_metadata = false;
+  metadata_section ms;
   while(!done) {
     ret = read_section(file_fd, &type, &ebl);
     if (ret)
@@ -1651,7 +1642,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, rmcoll, ebl);
+      ret = get_pg_metadata(ebl, ms);
       if (ret) return ret;
       found_metadata = true;
       break;
@@ -1667,6 +1658,16 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     cerr << "Missing metadata section" << std::endl;
     return EFAULT;
   }
+
+  t = new ObjectStore::Transaction;
+  coll_t newcoll(ms.info.pgid);
+  t->collection_rename(rmcoll, newcoll);
+
+  ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
+  if (ret) return ret;
+
+  store->apply_transaction(*t);
+  delete t;
 
   return 0;
 }
