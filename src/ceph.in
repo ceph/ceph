@@ -537,6 +537,9 @@ def main():
     global verbose
     verbose = parsed_args.verbose
 
+    if verbose:
+        print >> sys.stderr, "parsed_args: {0}, childargs: {1}".format(parsed_args, childargs)
+
     if parsed_args.admin_socket_nope:
         print >> sys.stderr, '--admin-socket is used by daemons; '\
         'you probably mean --admin-daemon/daemon'
