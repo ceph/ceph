@@ -51,7 +51,9 @@ namespace librbd {
       format_string(NULL),
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0),
-      object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
+      object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
+      readahead(),
+      total_bytes_read(0)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -158,6 +160,16 @@ namespace librbd {
     } else {
       header_oid = old_header_name(name);
     }
+
+    md_config_t *conf = cct->_conf;
+    vector<uint64_t> alignments;
+    alignments.push_back(stripe_count << order); // object set (in file striping terminology)
+    alignments.push_back(stripe_unit * stripe_count); // stripe
+    alignments.push_back(stripe_unit); // stripe unit
+    readahead.set_trigger_requests(conf->rbd_readahead_trigger_requests);
+    readahead.set_max_readahead_size(conf->rbd_readahead_max_bytes);
+    readahead.set_alignments(alignments);
+
     return 0;
   }
   
@@ -232,6 +244,8 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
     plb.add_u64_counter(l_librbd_notify, "notify");
     plb.add_u64_counter(l_librbd_resize, "resize");
+    plb.add_u64_counter(l_librbd_readahead, "readahead");
+    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
