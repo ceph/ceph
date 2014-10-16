@@ -175,18 +175,14 @@ void Dumper::undump(const char *dump_file)
   object_locator_t oloc(mdsmap->get_metadata_pool());
   SnapContext snapc;
 
-  bool done = false;
-  Cond cond;
-  
   cout << "writing header " << oid << std::endl;
+  C_SaferCond header_cond;
+  lock.Lock();
   objecter->write_full(oid, oloc, snapc, hbl, ceph_clock_now(g_ceph_context), 0, 
 		       NULL, 
-		       new C_SafeCond(&lock, &cond, &done));
-
-  lock.Lock();
-  while (!done)
-    cond.Wait(lock);
+		       &header_cond);
   lock.Unlock();
+  header_cond.wait();
   
   // read
   Filer filer(objecter);
@@ -198,13 +194,12 @@ void Dumper::undump(const char *dump_file)
     uint64_t l = MIN(left, 1024*1024);
     j.read_fd(fd, l);
     cout << " writing " << pos << "~" << l << std::endl;
-    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, new C_SafeCond(&lock, &cond, &done));
-
+    C_SaferCond body_cond;
     lock.Lock();
-    while (!done)
-      cond.Wait(lock);
+    filer.write(ino, &h.layout, snapc, pos, l, j, ceph_clock_now(g_ceph_context), 0, NULL, &body_cond);
     lock.Unlock();
-    
+    body_cond.wait();
+
     pos += l;
     left -= l;
   }
