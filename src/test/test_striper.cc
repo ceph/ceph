@@ -57,6 +57,25 @@ TEST(Striper, EmptyPartialResult)
   ASSERT_EQ(65536u, outbl.length());
 }
 
+TEST(Striper, GetNumObj)
+{
+  ceph_file_layout l;
+  memset(&l, 0, sizeof(l));
+
+  l.fl_object_size = 262144;
+  l.fl_stripe_unit = 4096;
+  l.fl_stripe_count = 3;
+  uint64_t size,numobjs;
+  size = 6999;
+  numobjs = Striper::get_num_objects(l, size);
+  ASSERT_EQ(2u, numobjs);
+  size = 793320;
+  numobjs = Striper::get_num_objects(l, size);
+  ASSERT_EQ(5u, numobjs);
+  size = 805608;
+  numobjs = Striper::get_num_objects(l, size);
+  ASSERT_EQ(6u, numobjs);
+}
 
 
 int main(int argc, char **argv)

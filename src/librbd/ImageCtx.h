@@ -120,7 +120,6 @@ namespace librbd {
     uint64_t get_current_size() const;
     uint64_t get_object_size() const;
     string get_object_name(uint64_t num) const;
-    uint64_t get_num_objects() const;
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;

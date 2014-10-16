@@ -351,13 +351,6 @@ namespace librbd {
     return stripe_count * (1ull << order);
   }
 
-  uint64_t ImageCtx::get_num_objects() const
-  {
-    uint64_t period = get_stripe_period();
-    uint64_t num_periods = (size + period - 1) / period;
-    return num_periods * stripe_count;
-  }
-
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {
