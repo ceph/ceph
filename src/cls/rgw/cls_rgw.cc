@@ -29,6 +29,7 @@ cls_method_handle_t h_rgw_bucket_rebuild_index;
 cls_method_handle_t h_rgw_bucket_prepare_op;
 cls_method_handle_t h_rgw_bucket_complete_op;
 cls_method_handle_t h_rgw_bucket_link_olh;
+cls_method_handle_t h_rgw_bucket_unlink_instance_op;
 cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_obj_remove;
@@ -942,7 +943,9 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, struct r
     CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_key.name.c_str(), ret);
     return ret;
   }
-  *found = (ret != -ENOENT);
+  if (found) {
+    *found = (ret != -ENOENT);
+  }
   return 0;
 }
 
@@ -1032,15 +1035,13 @@ public:
 
 
   int unlink_list_entry() {
-    if (instance_entry.ver.epoch > 0) {
-      string list_idx;
-      /* this instance has a previous list entry, remove that entry */
-      get_list_index_key(instance_entry, &list_idx);
-      int ret = cls_cxx_map_remove_key(hctx, list_idx);
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_idx=%s ret=%d", list_idx.c_str(), ret);
-        return ret;
-      }
+    string list_idx;
+    /* this instance has a previous list entry, remove that entry */
+    get_list_index_key(instance_entry, &list_idx);
+    int ret = cls_cxx_map_remove_key(hctx, list_idx);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_idx=%s ret=%d", list_idx.c_str(), ret);
+      return ret;
     }
     return 0;
   }
@@ -1081,6 +1082,48 @@ public:
   int demote_current() {
     return write_entries(0, RGW_BUCKET_DIRENT_FLAG_CURRENT);
   }
+
+  bool is_delete_marker() {
+    return instance_entry.is_delete_marker();
+  }
+
+  int find_next_key(cls_rgw_obj_key *next_key, bool *found) {
+    string list_idx;
+    /* this instance has a previous list entry, remove that entry */
+    get_list_index_key(instance_entry, &list_idx);
+    /* this is the current head, need to update! */
+    map<string, bufferlist> keys;
+    string filter = key.name; /* list key starts with key name, filter it to avoid a case where we cross to
+                                 different namespace */
+    int ret = cls_cxx_map_get_vals(hctx, list_idx, filter, 1, &keys);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (keys.size() < 1) {
+      *found = false;
+      return 0;
+    }
+
+    rgw_bucket_dir_entry next_entry;
+
+    map<string, bufferlist>::reverse_iterator last = keys.rbegin();
+    try {
+      bufferlist::iterator iter = last->second.begin();
+      ::decode(next_entry, iter);
+    } catch (buffer::error& err) {
+      CLS_LOG(0, "ERROR; failed to decode entry: %s", last->first.c_str());
+      return -EIO;
+    }
+
+    *found = (key.name == next_entry.key.name);
+    if (*found) {
+      *next_key = next_entry.key;
+    }
+
+    return 0;
+  }
+
 };
 
 
@@ -1119,10 +1162,12 @@ public:
     return olh_data_entry;
   }
 
-  int update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
+  }
 
+  int write() {
     /* write the olh data entry */
     int ret = write_entry(hctx, olh_data_entry, olh_data_idx);
     if (ret < 0) {
@@ -1156,7 +1201,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 {
   string olh_data_idx;
   string instance_idx;
-  struct rgw_bucket_olh_entry olh_data_entry;
 
   // decode request
   rgw_cls_link_olh_op op;
@@ -1221,7 +1265,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     }
   }
 
-  ret = olh.update(op.key, op.delete_marker);
+  /* update the olh log */
+  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+
+  olh.update(op.key, op.delete_marker);
+
+  ret = olh.write();
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
     return ret;
@@ -1233,9 +1282,79 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
-  /* update the olh log */
+  return 0;
+}
 
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string olh_data_idx;
+  string instance_idx;
+
+  // decode request
+  rgw_cls_unlink_instance_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_rm_obj_instance_op(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  BIVerObjEntry obj(hctx, op.key);
+  BIOLHEntry olh(hctx, op.key);
+
+  int ret = obj.init();
+  if (ret == -ENOENT) {
+    return 0; /* already removed */
+  }
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: obj.init() returned ret=%d", ret);
+    return ret;
+  }
+
+  ret = olh.init(NULL);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: olh.init() returned ret=%d", ret);
+    return ret;
+  }
+
+  if (olh.get_entry().key == op.key) {
+    /* this is the current head, need to update! */
+    cls_rgw_obj_key next_key;
+    bool found;
+    ret = obj.find_next_key(&next_key, &found);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
+      return ret;
+    }
+
+    if (found) {
+      BIVerObjEntry next(hctx, next_key);
+      ret = next.set_current(olh.get_epoch());
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: next.set_current() returned ret=%d", ret);
+        return ret;
+      }
+
+      olh.update(next_key, next.is_delete_marker());
+
+      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+    }
+  }
+
+  if (!obj.is_delete_marker()) {
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+  }
+
+  ret = obj.unlink_list_entry();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = olh.write();
+  if (ret < 0) {
+    return ret;
+  }
 
   return 0;
 }
@@ -2317,6 +2436,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_prepare_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_prepare_op, &h_rgw_bucket_prepare_op);
   cls_register_cxx_method(h_class, "bucket_complete_op", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_complete_op, &h_rgw_bucket_complete_op);
   cls_register_cxx_method(h_class, "bucket_link_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_link_olh, &h_rgw_bucket_link_olh);
+  cls_register_cxx_method(h_class, "bucket_unlink_instance", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
   cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
   cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
 

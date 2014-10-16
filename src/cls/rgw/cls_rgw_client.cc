@@ -117,6 +117,21 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
   return 0;
 }
 
+int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
+                                   const cls_rgw_obj_key& key, const string& op_tag)
+{
+  bufferlist in, out;
+  struct rgw_cls_unlink_instance_op call;
+  call.key = key;
+  call.op_tag = op_tag;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_unlink_instance", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
 int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated)
 {
