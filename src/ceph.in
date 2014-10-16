@@ -526,8 +526,11 @@ def ping_monitor(cluster_handle, name):
 def main():
     ceph_args = os.environ.get('CEPH_ARGS')
     if ceph_args:
-        sys.argv.extend(ceph_args.split())
-
+        if "injectargs" in sys.argv:
+            i = sys.argv.index("injectargs")
+            sys.argv = sys.argv[:i] + ceph_args.split() + sys.argv[i:]
+        else:
+            sys.argv.extend(ceph_args.split())
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
