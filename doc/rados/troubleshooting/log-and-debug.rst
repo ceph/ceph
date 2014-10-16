@@ -40,14 +40,14 @@ in to a host with a running daemon and execute the following::
 To activate Ceph's debugging output (*i.e.*, ``dout()``) at runtime,  use the
 ``ceph tell`` command to inject arguments into the runtime configuration:: 
 
-	ceph tell {daemon-type}.{daemon id or *} injectargs '--{name} {value} [--{name} {value}]'
+	ceph tell {daemon-type}.{daemon id or *} injectargs --{name} {value} [--{name} {value}]
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the runtime setting to all daemons of a particular type with ``*``, or specify
 a specific daemon's ID (i.e., its number or letter). For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following:: 
 
-	ceph tell osd.0 injectargs '--debug-osd 0/5'
+	ceph tell osd.0 injectargs --debug-osd 0/5
 
 The ``ceph tell`` command goes through the monitors. If you cannot bind to the
 monitor, you can still make the change by logging into the host of the daemon
