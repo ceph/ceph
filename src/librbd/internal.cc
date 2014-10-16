@@ -119,7 +119,7 @@ namespace librbd {
     ictx->snap_lock.put_read();
     ictx->md_lock.put_read();
     info.obj_size = 1ULL << obj_order;
-    info.num_objs = rbd_howmany(info.size, ictx->get_object_size());
+    info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
@@ -155,7 +155,7 @@ namespace librbd {
     uint64_t delete_off = MIN(num_period * period, size);
     // first object we can delete free and clear
     uint64_t delete_start = num_period * ictx->get_stripe_count();
-    uint64_t num_objects = ictx->get_num_objects();
+    uint64_t num_objects = Striper::get_num_objects(ictx->layout, size);
     uint64_t object_size = ictx->get_object_size();
 
     ldout(cct, 10) << "trim_image " << size << " -> " << newsize
@@ -324,7 +324,7 @@ namespace librbd {
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx)
   {
-    uint64_t numseg = ictx->get_num_objects();
+    uint64_t numseg = Striper::get_num_objects(ictx->layout, ictx->get_current_size());
     uint64_t bsize = ictx->get_object_size();
     int r;
     CephContext *cct = ictx->cct;
@@ -2183,9 +2183,7 @@ reprotect_and_return_err:
     }
 
     uint64_t object_size;
-    uint64_t period;
     uint64_t overlap;
-    uint64_t overlap_periods;
     uint64_t overlap_objects;
     ::SnapContext snapc;
 
@@ -2209,10 +2207,8 @@ reprotect_and_return_err:
       assert(ictx->parent_md.overlap <= ictx->size);
 
       object_size = ictx->get_object_size();
-      period = ictx->get_stripe_period();
       overlap = ictx->parent_md.overlap;
-      overlap_periods = (overlap + period - 1) / period;
-      overlap_objects = overlap_periods * ictx->get_stripe_count();
+      overlap_objects = Striper::get_num_objects(ictx->layout, overlap); 
     }
 
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
