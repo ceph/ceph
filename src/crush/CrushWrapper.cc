@@ -641,7 +641,7 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
   return ret;
 }
 
-int CrushWrapper::get_item_weight(int id)
+int CrushWrapper::get_item_weight(int id) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -703,7 +703,7 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
   return changed;
 }
 
-bool CrushWrapper::check_item_present(int id)
+bool CrushWrapper::check_item_present(int id) const
 {
   bool found = false;
 
