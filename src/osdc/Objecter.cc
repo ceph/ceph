@@ -1436,7 +1436,9 @@ int Objecter::_maybe_request_map()
 {
   assert(rwlock.is_locked());
   int flag = 0;
-  if (osdmap_full_flag()) {
+  if (osdmap_full_flag()
+      || osdmap->test_flag(CEPH_OSDMAP_PAUSERD)
+      || osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << "_maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
   } else {
     ldout(cct, 10) << "_maybe_request_map subscribing (onetime) to next osd map" << dendl;
