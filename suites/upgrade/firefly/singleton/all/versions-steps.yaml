@@ -231,8 +231,8 @@ upgrade-sequence3:
        client.1:
          tag: v0.80.7
    - print: "**** done v0.80.7 install.upgrade"
-- ceph.restart:
-    daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
    - sleep:
        duration: 60
     daemons: [mon.a, mon.b, mon.c]
