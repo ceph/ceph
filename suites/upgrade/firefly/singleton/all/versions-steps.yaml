@@ -61,11 +61,11 @@ workload1:
          - rados/test-upgrade-firefly.sh
          - cls
    - print: "**** done rados/test.sh &  cls"
-  - workunit:
-      clients:
-        client.0:
-        - rbd/test_librbd.sh
-  - print: "**** done rbd/test_librbd.sh"
+   - workunit:
+       clients:
+         client.0:
+         - rbd/test_librbd.sh
+   - print: "**** done rbd/test_librbd.sh"
 upgrade-sequence1:
    sequential:
    - install.upgrade:
