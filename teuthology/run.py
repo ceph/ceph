@@ -132,8 +132,7 @@ def main(ctx):
     log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(
         ctx.config, default_flow_style=False).splitlines()))
 
-    ctx.summary = dict(status='pass')
-    set_status(ctx.summary, 'pass')
+    ctx.summary = dict(success=True)
 
     ctx.summary['owner'] = ctx.owner
 

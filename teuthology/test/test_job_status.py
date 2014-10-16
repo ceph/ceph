@@ -52,3 +52,9 @@ class TestJobStatus(object):
         summary = dict()
         job_status.set_status(summary, None)
         assert summary == dict()
+
+    def test_legacy_fail(self):
+        summary = dict(success=True)
+        summary['success'] = False
+        status = job_status.get_status(summary)
+        assert status == 'fail'
