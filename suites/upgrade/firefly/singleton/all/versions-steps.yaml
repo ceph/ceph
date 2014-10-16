@@ -235,7 +235,8 @@ upgrade-sequence3:
        daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
    - sleep:
        duration: 60
-    daemons: [mon.a, mon.b, mon.c]
+   - ceph.restart:   
+       daemons: [mon.a, mon.b, mon.c]
    - sleep:
        duration: 60
    - ceph.restart: [mds.a]
