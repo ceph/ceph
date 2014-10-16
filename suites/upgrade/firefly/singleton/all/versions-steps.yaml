@@ -23,7 +23,7 @@ tasks:
 - ceph:
    fs: xfs
 - print: "**** done ceph xfs"
-- parallel:
+- sequential:
    - workload
 - print: "**** done workload"
 - parallel:
