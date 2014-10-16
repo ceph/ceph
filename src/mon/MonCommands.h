@@ -400,6 +400,11 @@ COMMAND("osd crush add-bucket " \
 	"name=type,type=CephString", \
 	"add no-parent (probably root) crush bucket <name> of type <type>", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush rename-bucket " \
+	"name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"rename bucket <srcname> to <dstname>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush set " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
