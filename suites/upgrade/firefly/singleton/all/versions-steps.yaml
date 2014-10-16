@@ -29,15 +29,15 @@ tasks:
 - parallel:
    - workload1
    - upgrade-sequence1
-- print: "**** done parallel 1"
+- print: "**** done parallel v0.80.5"
 - parallel:
    - workload2
    - upgrade-sequence2
-- print: "**** done parallel 2"
+- print: "**** done parallel v0.80.6"
 - parallel:
    - workload3
    - upgrade-sequence3
-- print: "**** done parallel 3"
+- print: "**** done parallel v0.80.7"
 - parallel:
    - workload_firefly
    - upgrade-sequence_firefly
@@ -53,13 +53,19 @@ workload1:
    - workunit:
        clients:
          client.0:
-           - rbd/import_export.sh
-       env:
-         RBD_CREATE_ARGS: --new-format
+         - rados/load-gen-big.sh
+   - print: "**** done rados/load-gen-big.sh"
    - workunit:
        clients:
          client.0:
-           - cls/test_cls_rbd.sh
+         - rados/test-upgrade-firefly.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls"
+  - workunit:
+      clients:
+        client.0:
+        - rbd/test_librbd.sh
+  - print: "**** done rbd/test_librbd.sh"
 upgrade-sequence1:
    sequential:
    - install.upgrade:
@@ -225,35 +231,14 @@ upgrade-sequence3:
        client.1:
          tag: v0.80.7
    - print: "**** done v0.80.7 install.upgrade"
-   - ceph.restart: [osd.0]
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
    - sleep:
-       duration: 30
-   - ceph.restart: [osd.1]
+       duration: 60
+    daemons: [mon.a, mon.b, mon.c]
    - sleep:
-       duration: 30
+       duration: 60
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
-   - ceph.restart: [osd.2]
-   - sleep:
-       duration: 30
-   - ceph.restart: [mon.a]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.3]
-   - sleep:
-       duration: 30
-   - ceph.restart: [mon.b]
-   - sleep:
-       duration: 60
-   - ceph.restart: [osd.4]
-   - sleep:
-       duration: 30
-   - ceph.restart: [osd.5]
-   - sleep:
-       duration: 60
-   - ceph.restart: [mon.c]
-   - sleep:
-       duration: 60
-   - print: "**** done ceph.restart all mix"
-
+   - print: "**** done ceph.restart daemons grouped"
