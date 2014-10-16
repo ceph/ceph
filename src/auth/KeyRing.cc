@@ -145,6 +145,8 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
     std::ostringstream keyss;
     keyss << p->second.key;
     f->dump_string("key", keyss.str());
+    if (p->second.auid != CEPH_AUTH_UID_DEFAULT)
+      f->dump_int("auid", p->second.auid);
     f->open_object_section("caps");
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
  	 q != p->second.caps.end();
