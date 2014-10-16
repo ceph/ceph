@@ -63,6 +63,70 @@ bool CrushWrapper::is_v3_rule(unsigned ruleid) const
   return false;
 }
 
+int CrushWrapper::can_rename_item(const string& srcname,
+                                  const string& dstname,
+                                  ostream *ss) const
+{
+  if (name_exists(srcname)) {
+    if (name_exists(dstname)) {
+      *ss << "dstname = '" << dstname << "' already exists";
+      return -EEXIST;
+    }
+    if (is_valid_crush_name(dstname)) {
+      return 0;
+    } else {
+      *ss << "srcname = '" << srcname << "' does not match [-_.0-9a-zA-Z]+";
+      return -EINVAL;
+    }
+  } else {
+    if (name_exists(dstname)) {
+      *ss << "srcname = '" << srcname << "' does not exist "
+          << "and dstname = '" << dstname << "' already exists";
+      return -EALREADY;
+    } else {
+      *ss << "srcname = '" << srcname << "' does not exist";
+      return -ENOENT;
+    }
+  }
+}
+
+int CrushWrapper::rename_item(const string& srcname,
+                              const string& dstname,
+                              ostream *ss)
+{
+  int ret = can_rename_item(srcname, dstname, ss);
+  if (ret < 0)
+    return ret;
+  int oldid = get_item_id(srcname);
+  return set_item_name(oldid, dstname);
+}
+
+int CrushWrapper::can_rename_bucket(const string& srcname,
+                                    const string& dstname,
+                                    ostream *ss) const
+{
+  int ret = can_rename_item(srcname, dstname, ss);
+  if (ret)
+    return ret;
+  int srcid = get_item_id(srcname);
+  if (srcid >= 0) {
+    *ss << "srcname = '" << srcname << "' is not a bucket "
+        << "because its id = " << srcid << " is >= 0";
+    return -ENOTDIR;
+  }
+  return 0;
+}
+
+int CrushWrapper::rename_bucket(const string& srcname,
+                                const string& dstname,
+                                ostream *ss)
+{
+  int ret = can_rename_bucket(srcname, dstname, ss);
+  if (ret < 0)
+    return ret;
+  int oldid = get_item_id(srcname);
+  return set_item_name(oldid, dstname);
+}
 
 void CrushWrapper::find_takes(set<int>& roots) const
 {
@@ -641,7 +705,7 @@ int CrushWrapper::update_item(CephContext *cct, int item, float weight, string n
   return ret;
 }
 
-int CrushWrapper::get_item_weight(int id)
+int CrushWrapper::get_item_weight(int id) const
 {
   for (int bidx = 0; bidx < crush->max_buckets; bidx++) {
     crush_bucket *b = crush->buckets[bidx];
@@ -703,7 +767,7 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight)
   return changed;
 }
 
-bool CrushWrapper::check_item_present(int id)
+bool CrushWrapper::check_item_present(int id) const
 {
   bool found = false;
 
