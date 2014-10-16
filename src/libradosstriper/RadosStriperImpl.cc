@@ -382,7 +382,6 @@ static void striper_read_aio_req_complete(rados_striper_multi_completion_t c, vo
     reinterpret_cast<libradosstriper::MultiAioCompletionImpl*>(c);
   cdata->complete(comp->rval);
   delete cdata;
-  comp->ref--;
 }
 
 static void rados_req_read_safe(rados_completion_t c, void *arg)
@@ -491,6 +490,7 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
       break;
   }
   nc->finish_adding_requests();
+  nc->put();
   return r;
 }
 
@@ -683,7 +683,6 @@ static void striper_write_aio_req_complete(rados_striper_multi_completion_t c, v
   cdata->complete(comp->rval);
   if (0 == comp->pending_safe) {
     delete cdata;
-    comp->ref--;
   }
 }
 
@@ -696,7 +695,6 @@ static void striper_write_aio_req_safe(rados_striper_multi_completion_t c, void 
   cdata->safe(comp->rval);
   if (0 == comp->pending_complete) {
     delete cdata;
-    comp->ref--;
   }
 }
 
@@ -715,7 +713,9 @@ int libradosstriper::RadosStriperImpl::aio_write_in_open_object(const std::strin
   nc->set_complete_callback(cdata, striper_write_aio_req_complete);
   nc->set_safe_callback(cdata, striper_write_aio_req_safe);
   // internal asynchronous API
-  return internal_aio_write(soid, nc, bl, len, off, layout);
+  int rc = internal_aio_write(soid, nc, bl, len, off, layout);
+  nc->put();
+  return rc;
 }
 
 static void rados_req_write_safe(rados_completion_t c, void *arg)
