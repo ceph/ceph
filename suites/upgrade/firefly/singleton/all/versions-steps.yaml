@@ -1,0 +1,207 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - scrub
+    fs: xfs
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+tasks:
+- install:
+    tag: v0.80.4
+- print: "**** done v0.80.4 install"
+- ceph:
+   fs: xfs
+- print: "**** done ceph xfs"
+- sequential:
+   - workload
+- print: "**** done workload v0.80.4"
+- parallel:
+   - workload1
+   - upgrade-sequence1
+- print: "**** done parallel v0.80.5"
+- parallel:
+   - workload2
+   - upgrade-sequence2
+- print: "**** done parallel v0.80.6"
+- parallel:
+   - workload_firefly
+   - upgrade-sequence_firefly
+- print: "**** done parallel firefly branch"
+#######################
+workload:
+   workunit:
+      clients:
+         client.0:
+           - suites/blogbench.sh
+workload1:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+         - rados/load-gen-big.sh
+   - print: "**** done rados/load-gen-big.sh"
+   - workunit:
+       clients:
+         client.0:
+         - rados/test.sh
+         - cls
+   - print: "**** done rados/test.sh &  cls"
+   - workunit:
+       clients:
+         client.0:
+         - rbd/test_librbd.sh
+   - print: "**** done rbd/test_librbd.sh"
+upgrade-sequence1:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v0.80.5
+       mon.b:
+         tag: v0.80.5
+       client.1:
+         tag: v0.80.5
+   - print: "**** done v0.80.5 install.upgrade"
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 30
+   - print: "**** done ceph.restart all 1 mon/mds/osd"
+workload2:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - rbd/import_export.sh
+       env:
+         RBD_CREATE_ARGS: --new-format
+   - workunit:
+       clients:
+         client.0:
+           - cls/test_cls_rbd.sh
+upgrade-sequence2:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v0.80.6
+       mon.b:
+         tag: v0.80.6
+       client.1:
+         tag: v0.80.6
+   - print: "**** done v0.80.6 install.upgrade"
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all 2 osd/mon/mds"
+workload_firefly:
+  sequential:
+  - rgw: [client.0]
+  - s3tests:
+      client.0:
+        force-branch: firefly-original
+        rgw_server: client.0
+upgrade-sequence_firefly:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         branch: firefly
+       mon.b:
+         branch: firefly
+       client.1:
+         branch: firefly
+   - print: "**** done branch: firefly install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all firefly current branch mds/osd/mon"
+
