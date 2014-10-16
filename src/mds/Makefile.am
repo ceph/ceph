@@ -2,7 +2,6 @@ libmds_la_SOURCES = \
 	mds/Capability.cc \
 	mds/MDS.cc \
 	mds/Beacon.cc \
-	mds/flock.cc \
 	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \
