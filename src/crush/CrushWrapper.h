@@ -269,6 +269,12 @@ public:
     return 0;
   }
 
+  int can_rename_item(const string& srcname,
+		      const string& dstname,
+		      ostream *ss) const;
+  int rename_item(const string& srcname,
+		  const string& dstname,
+		  ostream *ss);
   // rule names
   bool rule_exists(string name) const {
     build_rmaps();

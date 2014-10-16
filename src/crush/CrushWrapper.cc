@@ -63,6 +63,43 @@ bool CrushWrapper::is_v3_rule(unsigned ruleid) const
   return false;
 }
 
+int CrushWrapper::can_rename_item(const string& srcname,
+                                  const string& dstname,
+                                  ostream *ss) const
+{
+  if (name_exists(srcname)) {
+    if (name_exists(dstname)) {
+      *ss << "dstname = '" << dstname << "' already exists";
+      return -EEXIST;
+    }
+    if (is_valid_crush_name(dstname)) {
+      return 0;
+    } else {
+      *ss << "srcname = '" << srcname << "' does not match [-_.0-9a-zA-Z]+";
+      return -EINVAL;
+    }
+  } else {
+    if (name_exists(dstname)) {
+      *ss << "srcname = '" << srcname << "' does not exist "
+          << "and dstname = '" << dstname << "' already exists";
+      return -EALREADY;
+    } else {
+      *ss << "srcname = '" << srcname << "' does not exist";
+      return -ENOENT;
+    }
+  }
+}
+
+int CrushWrapper::rename_item(const string& srcname,
+                              const string& dstname,
+                              ostream *ss)
+{
+  int ret = can_rename_item(srcname, dstname, ss);
+  if (ret < 0)
+    return ret;
+  int oldid = get_item_id(srcname);
+  return set_item_name(oldid, dstname);
+}
 
 void CrushWrapper::find_takes(set<int>& roots) const
 {
