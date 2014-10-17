@@ -1862,12 +1862,14 @@ CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
  * @typedef rados_watchcb_t
  *
  * Callback activated when a notify is received on a watched
- * object. Parameters are:
- * - opcode undefined
- * - ver version of the watched object
- * - arg application-specific data
+ * object.
+ *
+ * @param opcode undefined
+ * @param ver version of the watched object
+ * @param arg application-specific data
  *
  * @note BUG: opcode is an internal detail that shouldn't be exposed
+ * @note BUG: ver is unused
  */
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
 
@@ -1875,13 +1877,14 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @typedef rados_watchcb2_t
  *
  * Callback activated when a notify is received on a watched
- * object. Parameters are:
- * - arg opaque user-defined value provided to rados_watch2()
- * - notify_id an id for this notify event
- * - handle the watcher handle we are notifying
- * - notifier_id the unique client id for the notifier
- * - data payload from the notifier
- * - datalen length of payload buffer
+ * object.
+ *
+ * @param arg opaque user-defined value provided to rados_watch2()
+ * @param notify_id an id for this notify event
+ * @param handle the watcher handle we are notifying
+ * @param notifier_id the unique client id for the notifier
+ * @param data payload from the notifier
+ * @param datalen length of payload buffer
  */
 typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notify_id,
@@ -1889,6 +1892,20 @@ typedef void (*rados_watchcb2_t)(void *arg,
 				 uint64_t notifier_id,
 				 void *data,
 				 size_t data_len);
+
+/**
+ * @typedef rados_watcherrcb_t
+ *
+ * Callback activated when we encounter an error with the watch session.
+ * This can happen when the location of the objects moves within the
+ * cluster and we fail to register our watch with the new object location,
+ * or when our connection with the object OSD is otherwise interrupted and
+ * we may have missed notify events.
+ *
+ * @param pre opaque user-defined value provided to rados_watch2()
+ * @param err error code
+ */
+  typedef void (*rados_watcherrcb_t)(void *pre, uint64_t cookie, int err);
 
 /**
  * Register an interest in an object
@@ -1937,11 +1954,13 @@ CEPH_RADOS_API int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
  * @param o the object to watch
  * @param handle where to store the internal id assigned to this watch
  * @param watchcb2 what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
  * @param arg opaque value to pass to the callback
  * @returns 0 on success, negative error code on failure
  */
 int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
-		 rados_watchcb2_t watchcb, void *arg);
+		 rados_watchcb2_t watchcb, rados_watcherrcb_t watcherrcb,
+		 void *arg);
 
 /**
  * Unregister an interest in an object
