@@ -1458,6 +1458,8 @@ public:
     bufferlist *poutbl;
     version_t *pobjver;
 
+    uint64_t cookie;   ///< non-zero if this is a watch
+    int last_error;  ///< error from last failed ping|reconnect, if any
     bool registered;
     bool canceled;
     Context *on_reg_ack, *on_reg_commit;
@@ -1471,6 +1473,8 @@ public:
 		 target(object_t(), object_locator_t(), 0),
 		 snap(CEPH_NOSNAP),
 		 poutbl(NULL), pobjver(NULL),
+		 cookie(0),
+		 last_error(0),
 		 registered(false),
 		 canceled(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
@@ -1485,17 +1489,17 @@ public:
     ~LingerOp() {}
   };
 
-  struct C_Linger_Ack : public Context {
+  struct C_Linger_Register : public Context {
     Objecter *objecter;
     LingerOp *info;
-    C_Linger_Ack(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+    C_Linger_Register(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Ack() {
+    ~C_Linger_Register() {
       info->put();
     }
     void finish(int r) {
-      objecter->_linger_ack(info, r);
+      objecter->_linger_register(info, r);
     }
   };
   
@@ -1510,6 +1514,20 @@ public:
     }
     void finish(int r) {
       objecter->_linger_commit(info, r);
+    }
+  };
+
+  struct C_Linger_Reconnect : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    C_Linger_Reconnect(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+      info->get();
+    }
+    ~C_Linger_Reconnect() {
+      info->put();
+    }
+    void finish(int r) {
+      objecter->_linger_reconnect(info, r);
     }
   };
 
@@ -1618,8 +1636,9 @@ public:
 
   void _linger_submit(LingerOp *info);
   void _send_linger(LingerOp *info);
-  void _linger_ack(LingerOp *info, int r);
+  void _linger_register(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
+  void _linger_reconnect(LingerOp *info, int r);
 
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
