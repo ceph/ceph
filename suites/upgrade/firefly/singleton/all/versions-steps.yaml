@@ -25,7 +25,7 @@ tasks:
 - print: "**** done ceph xfs"
 - sequential:
    - workload
-- print: "**** done workload"
+- print: "**** done workload v0.80.4"
 - parallel:
    - workload1
    - upgrade-sequence1
