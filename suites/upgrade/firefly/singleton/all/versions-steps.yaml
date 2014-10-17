@@ -58,7 +58,7 @@ workload1:
    - workunit:
        clients:
          client.0:
-         - rados/test-upgrade-firefly.sh
+         - rados/test.sh
          - cls
    - print: "**** done rados/test.sh &  cls"
    - workunit:
