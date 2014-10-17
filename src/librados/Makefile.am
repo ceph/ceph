@@ -5,6 +5,11 @@ librados_internal_la_SOURCES = \
 	librados/snap_set_diff.cc
 noinst_LTLIBRARIES += librados_internal.la
 
+librados_api_la_SOURCES = \
+	common/buffer.cc \
+	librados/librados.cc
+noinst_LTLIBRARIES += librados_api.la
+
 librados_la_SOURCES = \
 	common/buffer.cc \
 	librados/librados.cc
