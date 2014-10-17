@@ -1895,7 +1895,7 @@ void PG::mark_clean()
 {
   // only mark CLEAN if we have the desired number of replicas AND we
   // are not remapped.
-  if (acting.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
+  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
       up == acting)
     state_set(PG_STATE_CLEAN);
 
