@@ -129,6 +129,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
     m_client->dump_cache(f);
   else if (command == "kick_stale_sessions")
     m_client->_kick_stale_sessions();
+  else if (command == "status")
+    m_client->dump_status(f);
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
@@ -350,6 +352,35 @@ void Client::dump_cache(Formatter *f)
     f->close_section();
 }
 
+void Client::dump_status(Formatter *f)
+{
+  assert(client_lock.is_locked_by_me());
+
+  ldout(cct, 1) << __func__ << dendl;
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  const epoch_t osd_epoch = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
+  if (f) {
+    f->open_object_section("metadata");
+    {
+      for (std::map<std::string, std::string>::const_iterator i = metadata.begin();
+           i != metadata.end(); ++i) {
+        f->dump_string(i->first.c_str(), i->second);
+      }
+    }
+    f->close_section();
+
+    f->dump_int("dentry_count", lru.lru_get_size());
+    f->dump_int("dentry_pinned_count", lru.lru_get_num_pinned());
+    f->dump_int("inode_count", inode_map.size());
+    f->dump_int("mds_epoch", mdsmap->get_epoch());
+    f->dump_int("osd_epoch", osd_epoch);
+    f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
+  }
+}
+
 int Client::init()
 {
   client_lock.Lock();
@@ -426,6 +457,14 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+  ret = admin_socket->register_command("status",
+				       "status",
+				       &m_command_hook,
+				       "show overall client status");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
 
   populate_metadata();
 
@@ -444,6 +483,7 @@ void Client::shutdown()
   admin_socket->unregister_command("mds_sessions");
   admin_socket->unregister_command("dump_cache");
   admin_socket->unregister_command("kick_stale_sessions");
+  admin_socket->unregister_command("status");
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
