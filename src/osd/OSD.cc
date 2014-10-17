@@ -8257,6 +8257,30 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   ShardData* sdata = shard_list[shard_index];
   assert(NULL != sdata);
   sdata->sdata_op_ordering_lock.Lock();
+  
+  //keep wake for the next op for osd_op_worker_wake_time (default 10ms)
+  if (sdata->pqueue.empty() 
+      && sdata->has_waiting_thread == false 
+      && worker_thread_wake_time != (double)0) {
+    sdata->has_waiting_thread = true;
+    utime_t start_time = ceph_clock_now(osd->cct);
+    while (sdata->pqueue.empty()) {  
+      //give chance for enqueue
+      sdata->sdata_op_ordering_lock.Unlock(); 
+      
+      if (ceph_clock_now(osd->cct) - start_time >= worker_thread_wake_time) {
+        //time out, go to sleep
+        sdata->sdata_op_ordering_lock.Lock();
+        break; 
+      } else {
+        //check the pqueue again
+        sdata->sdata_op_ordering_lock.Lock();
+      }
+    }
+    sdata->has_waiting_thread = false;
+  }
+  
+  
   if (sdata->pqueue.empty()) {
     sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
