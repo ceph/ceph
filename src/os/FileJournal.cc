@@ -602,6 +602,7 @@ int FileJournal::dump(ostream& out)
 void FileJournal::start_writer()
 {
   write_stop = false;
+  aio_stop = false;
   write_thread.create();
 #ifdef HAVE_LIBAIO
   write_finish_thread.create();
@@ -612,20 +613,23 @@ void FileJournal::stop_writer()
 {
   {
     Mutex::Locker l(write_lock);
-#ifdef HAVE_LIBAIO
-    Mutex::Locker q(aio_lock);
-#endif
     Mutex::Locker p(writeq_lock);
     write_stop = true;
     writeq_cond.Signal();
+  }
+  write_thread.join();
+
 #ifdef HAVE_LIBAIO
+  // stop aio completeion thread *after* writer thread has stopped
+  // and has submitted all of its io
+  if (aio) {
+    aio_lock.Lock();
+    aio_stop = true;
     aio_cond.Signal();
     write_finish_cond.Signal();
-#endif
-  } 
-  write_thread.join();
-#ifdef HAVE_LIBAIO
-  write_finish_thread.join();
+    aio_lock.Unlock();
+    write_finish_thread.join();
+  }
 #endif
 }
 
@@ -1327,7 +1331,7 @@ void FileJournal::write_finish_thread_entry()
     {
       Mutex::Locker locker(aio_lock);
       if (aio_queue.empty()) {
-	if (write_stop)
+	if (aio_stop)
 	  break;
 	dout(20) << "write_finish_thread_entry sleeping" << dendl;
 	write_finish_cond.Wait(aio_lock);
