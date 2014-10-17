@@ -37,7 +37,7 @@ tasks:
 - parallel:
    - workload3
    - upgrade-sequence3
-- print: "**** done parallel v0.80.7"
+- print: "**** done parallel firefly"
 - parallel:
    - workload-x
    - upgrade-sequence-x
@@ -176,12 +176,12 @@ upgrade-sequence3:
    sequential:
    - install.upgrade:
        mon.a:
-         tag: v0.80.7
+         branch: firefly
        mon.b:
-         tag: v0.80.7
+         branch: firefly
        client.1:
-         tag: v0.80.7
-   - print: "**** done v0.80.7 install.upgrade"
+         branch: firefly
+   - print: "**** done branch: firefly install.upgrade"
    - ceph.restart:
        daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
    - sleep:
