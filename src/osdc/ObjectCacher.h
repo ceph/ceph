@@ -166,8 +166,10 @@ class ObjectCacher {
 
     //! Returns the size of the overlap between the BufferHead's range and the given range.
     uint64_t overlap_size(uint64_t start, uint64_t end) {
-      uint64_t overlap_start = MAX(start, ex.start);
-      uint64_t overlap_end = MIN(end, ex.start + ex.length);
+      assert(ex.start >= 0);
+      assert(ex.length >= 0);
+      uint64_t overlap_start = MAX(start, (uint64_t)ex.start);
+      uint64_t overlap_end = MIN(end, (uint64_t)(ex.start + ex.length));
       return overlap_end - overlap_start;
     }
   };
