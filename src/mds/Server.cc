@@ -3204,6 +3204,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     dout(10) << "got unknown lock type " << set_lock.type
 	     << ", dropping request!" << dendl;
     reply_request(mdr, -EOPNOTSUPP);
+    return;
   }
 
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
