@@ -411,10 +411,20 @@ void Objecter::_send_linger(LingerOp *info)
 
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
 
-  ldout(cct, 15) << "send_linger " << info->linger_id << dendl;
-  vector<OSDOp> opv = info->ops; // need to pass a copy to ops
-  Context *onack = (!info->registered && info->on_reg_ack) ?
-    new C_Linger_Ack(this, info) : NULL;
+  vector<OSDOp> opv;
+  Context *onack = NULL;
+  if (info->registered) {
+    ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
+    onack = new C_Linger_Reconnect(this, info);
+    opv.push_back(OSDOp());
+    opv.back().op.op = CEPH_OSD_OP_WATCH;
+    opv.back().op.watch.cookie = info->cookie;
+    opv.back().op.watch.op = CEPH_OSD_WATCH_OP_RECONNECT;
+  } else {
+    ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
+    onack = new C_Linger_Register(this, info);
+    opv = info->ops;
+  }
   Context *oncommit = new C_Linger_Commit(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
@@ -449,9 +459,9 @@ void Objecter::_send_linger(LingerOp *info)
   logger->inc(l_osdc_linger_send);
 }
 
-void Objecter::_linger_ack(LingerOp *info, int r) 
+void Objecter::_linger_register(LingerOp *info, int r)
 {
-  ldout(cct, 10) << "_linger_ack " << info->linger_id << dendl;
+  ldout(cct, 10) << "_linger_register " << info->linger_id << dendl;
   if (info->on_reg_ack) {
     info->on_reg_ack->complete(r);
     info->on_reg_ack = NULL;
@@ -469,6 +479,12 @@ void Objecter::_linger_commit(LingerOp *info, int r)
   // only tell the user the first time we do this
   info->registered = true;
   info->pobjver = NULL;
+}
+
+void Objecter::_linger_reconnect(LingerOp *info, int r)
+{
+  ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << r
+		 << " (last_error " << info->last_error << ")" << dendl;
 }
 
 void Objecter::unregister_linger(uint64_t linger_id)
@@ -514,6 +530,7 @@ ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& 
   info->mtime = mtime;
   info->target.flags = flags | CEPH_OSD_FLAG_WRITE;
   info->ops = op.ops;
+  info->cookie = cookie;
   info->inbl = inbl;
   info->poutbl = NULL;
   info->pobjver = objver;
