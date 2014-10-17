@@ -1459,6 +1459,7 @@ public:
     version_t *pobjver;
 
     uint64_t cookie;   ///< non-zero if this is a watch
+    utime_t watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
     Mutex watch_lock;
     Cond watch_cond;
@@ -1470,6 +1471,7 @@ public:
     OSDSession *session;
 
     ceph_tid_t register_tid;
+    ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
     LingerOp() : linger_id(0),
@@ -1485,6 +1487,7 @@ public:
 		 on_error(NULL),
 		 session(NULL),
 		 register_tid(0),
+		 ping_tid(0),
 		 map_dne_bound(0) {}
 
     // no copy!
@@ -1533,6 +1536,21 @@ public:
     }
     void finish(int r) {
       objecter->_linger_reconnect(info, r);
+    }
+  };
+
+  struct C_Linger_Ping : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    utime_t sent;
+    C_Linger_Ping(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+      info->get();
+    }
+    ~C_Linger_Ping() {
+      info->put();
+    }
+    void finish(int r) {
+      objecter->_linger_ping(info, r, sent);
     }
   };
 
@@ -1644,6 +1662,8 @@ public:
   void _linger_register(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
   void _linger_reconnect(LingerOp *info, int r);
+  void _send_linger_ping(LingerOp *info);
+  void _linger_ping(LingerOp *info, int r, utime_t sent);
 
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
