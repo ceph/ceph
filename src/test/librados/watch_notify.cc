@@ -41,6 +41,7 @@ public:
 bufferlist notify_bl;
 rados_ioctx_t notify_io;
 const char *notify_oid = 0;
+int notify_err = 0;
 
 static void watch_notify2_test_cb(void *arg,
 				  uint64_t notify_id,
@@ -74,6 +75,11 @@ public:
       sleep(notify_sleep);
     notify_ioctx->notify_ack(notify_oid, notify_id, cookie, reply);
   }
+
+  void handle_error(uint64_t cookie, int err) {
+    std::cout << __func__ << " cookie " << cookie << std::endl;
+    notify_err = err;
+  }
 };
 
 TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
@@ -99,7 +105,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb, NULL));
+      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb,
+		   watch_notify2_test_errcb, NULL));
   char *reply_buf;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
@@ -124,9 +131,11 @@ TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle1, handle2;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle1, watch_notify2_test_cb, NULL));
+      rados_watch2(ioctx, notify_oid, &handle1, watch_notify2_test_cb,
+		   watch_notify2_test_errcb, NULL));
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle2, watch_notify2_test_cb, NULL));
+      rados_watch2(ioctx, notify_oid, &handle2, watch_notify2_test_cb,
+		   watch_notify2_test_errcb, NULL));
   ASSERT_NE(handle1, handle2);
   char *reply_buf;
   size_t reply_buf_len;
@@ -154,7 +163,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb, NULL));
+      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb,
+		   watch_notify2_test_errcb, NULL));
   char *reply_buf;
   size_t reply_buf_len;
   ASSERT_EQ(-ETIMEDOUT, rados_notify2(ioctx, notify_oid,

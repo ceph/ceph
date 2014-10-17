@@ -156,6 +156,8 @@ namespace librados
   public:
     virtual ~WatchCtx2();
     /**
+     * Callback activated when we receive a notify event.
+     *
      * @param notify_id unique id for this notify event
      * @param cookie the watcher we are notifying
      * @param notifier_id the unique client id of the notifier
@@ -165,6 +167,13 @@ namespace librados
 			       uint64_t cookie,
 			       uint64_t notifier_id,
 			       bufferlist& bl) = 0;
+    /**
+     * Callback activated when we encounter an error with the watch.
+     *
+     * @param cookie the watcher with the problem
+     * @param err error
+     */
+    virtual void handle_error(uint64_t cookie, int err) = 0;
   };
 
   struct CEPH_RADOS_API AioCompletion {
