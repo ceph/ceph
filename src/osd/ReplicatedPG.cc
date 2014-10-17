@@ -4312,6 +4312,20 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    t->nop();  // make sure update the object_info on disk!
 	  }
 	  ctx->watch_connects.push_back(w);
+        } else if (op.watch.op == CEPH_OSD_WATCH_OP_RECONNECT) {
+	  if (!oi.watchers.count(make_pair(cookie, entity))) {
+	    result = -ENOTCONN;
+	    break;
+	  }
+	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	  ctx->watch_connects.push_back(w);
+        } else if (op.watch.op == CEPH_OSD_WATCH_OP_PING) {
+	  if (!oi.watchers.count(make_pair(cookie, entity))) {
+	    result = -ENOTCONN;
+	    break;
+	  }
+	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	  result = 0;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_UNWATCH) {
 	  map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator oi_iter =
 	    oi.watchers.find(make_pair(cookie, entity));
