@@ -1679,6 +1679,7 @@ public:
   int olh_init_modification(RGWObjState *state, rgw_obj& olh_obj, string *obj_tag, string *op_tag);
   int olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, string *obj_tag, string *op_tag);
   int bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag);
+  int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag);
   int bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
   int bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver);
@@ -1687,6 +1688,7 @@ public:
                     uint64_t *plast_ver);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
   int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker);
+  int unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj);
 
   int follow_olh(RGWObjectCtx& ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
