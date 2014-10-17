@@ -218,11 +218,11 @@ struct librados::IoCtxImpl {
 
 namespace librados {
 
-  /**
-   * watch/notify info
-   *
-   * Capture state about a watch or an in-progress notify
-   */
+/**
+ * watch/notify info
+ *
+ * Capture state about a watch or an in-progress notify
+ */
 struct WatchNotifyInfo : public RefCountedWaitObject {
   IoCtxImpl *io_ctx_impl;  // parent
   const object_t oid;      // the object
@@ -242,6 +242,12 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
   size_t *notify_reply_buf_len;
   int *notify_rval;
 
+  struct OnError : public Context {
+    WatchNotifyInfo *info;
+    void finish(int r) { assert(0); }
+    void complete(int r);
+  } on_error;
+
   WatchNotifyInfo(IoCtxImpl *io_ctx_impl_,
 		  const object_t& _oc)
     : io_ctx_impl(io_ctx_impl_),
@@ -258,6 +264,7 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
       notify_reply_buf_len(NULL),
       notify_rval(NULL) {
     io_ctx_impl->get();
+    on_error.info = this;
   }
 
   ~WatchNotifyInfo() {

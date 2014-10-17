@@ -683,6 +683,47 @@ struct C_DoWatchNotify : public Context {
   }
 };
 
+struct C_DoWatchError : public Context {
+  librados::RadosClient *rados;
+  uint64_t cookie;
+  int err;
+  C_DoWatchError(librados::RadosClient *r, uint64_t cookie, int err)
+    : rados(r), cookie(cookie), err(err) {}
+  void finish(int r) {
+    rados->do_watch_error(cookie, err);
+  }
+};
+
+void librados::WatchNotifyInfo::OnError::complete(int r)
+{
+  RadosClient *client = info->io_ctx_impl->client;
+  client->finisher.queue(new C_DoWatchError(client, info->cookie, r));
+}
+
+void librados::RadosClient::do_watch_error(uint64_t cookie, int err)
+{
+  Mutex::Locker l(lock);
+  map<uint64_t, WatchNotifyInfo *>::iterator iter =
+    watch_notify_info.find(cookie);
+  if (iter != watch_notify_info.end()) {
+    WatchNotifyInfo *wc = iter->second;
+    assert(wc);
+    if (wc->watch_ctx2) {
+      wc->get();
+      ldout(cct,10) << __func__ << " cookie " << cookie
+		    << " handle_error " << err << dendl;
+      lock.Unlock();
+      wc->watch_ctx2->handle_error(cookie, err);
+      lock.Lock();
+      ldout(cct,10) << __func__ << " cookie " << cookie
+		    << " handle_error " << err << " done" << dendl;
+      wc->put();
+    }
+  } else {
+    ldout(cct,10) << __func__ << " cookie " << cookie << " not found" << dendl;
+  }
+}
+
 void librados::RadosClient::handle_watch_notify(MWatchNotify *m)
 {
   Mutex::Locker l(lock);
