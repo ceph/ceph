@@ -2812,7 +2812,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  r = target->get_state(&state);
+  r = target->get_state(&state, false);
   if (r < 0)
     return r;
 
@@ -3897,7 +3897,7 @@ int RGWRados::Object::Delete::delete_obj()
     return r;
 
   RGWObjState *state;
-  r = target->get_state(&state);
+  r = target->get_state(&state, false);
   if (r < 0)
     return r;
 
@@ -4172,7 +4172,7 @@ int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
   }
 
   RGWObjState *state;
-  r = source->get_state(&state);
+  r = source->get_state(&state, true);
   if (r < 0)
     return r;
   if (!state->exists)
@@ -4237,16 +4237,14 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
   return 0;
 }
 
-int RGWRados::Object::get_state(RGWObjState **pstate)
+int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh)
 {
-#warning FIXME follow_olh
-  bool follow_olh = false;
   return store->get_obj_state(&ctx, obj, pstate, NULL, follow_olh);
 }
 
 int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag)
 {
-  int r = get_state(&state);
+  int r = get_state(&state, false);
   if (r < 0)
     return r;
 
@@ -4414,7 +4412,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   }
 
   RGWObjState *astate;
-  r = source->get_state(&astate);
+  r = source->get_state(&astate, true);
   if (r < 0)
     return r;
 
@@ -4647,7 +4645,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
   RGWObjState *astate;
-  int r = source->get_state(&astate);
+  int r = source->get_state(&astate, true);
   if (r < 0)
     return r;
 
