@@ -928,8 +928,14 @@ bool MDSMonitor::prepare_command(MMonCommand *m)
   }
 
   /* Execute filesystem add/remove, or pass through to filesystem_command */
-  r = management_command(prefix, cmdmap, ss);
-  if (r >= 0 || r != -ENOSYS)
+  r = management_command(m, prefix, cmdmap, ss);
+  if (r >= 0)
+    goto out;
+  
+  if (r == -EAGAIN) {
+    // message has been enqueued for retry; return.
+    return false;
+  } else if (r != -ENOSYS) {
     // MDSMonitor::management_command() returns -ENOSYS if it knows nothing
     // about the command passed to it, in which case we will check whether
     // MDSMonitor::filesystem_command() knows about it.  If on the other hand
@@ -1015,6 +1021,7 @@ int MDSMonitor::_check_pool(
  *         fall through and look for other types of command.
  */
 int MDSMonitor::management_command(
+    MMonCommand *m,
     std::string const &prefix,
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
@@ -1133,6 +1140,14 @@ int MDSMonitor::management_command(
     // Automatically set crash_replay_interval on data pool if it
     // isn't already set.
     if (data_pool->get_crash_replay_interval() == 0) {
+      // We will be changing osdmon's state and requesting the osdmon to
+      // propose.  We thus need to make sure the osdmon is writeable before
+      // we do this, waiting if it's not.
+      if (!mon->osdmon()->is_writeable()) {
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return -EAGAIN;
+      }
+
       r = mon->osdmon()->set_crash_replay_interval(data, g_conf->osd_default_data_pool_replay_window);
       assert(r == 0);  // We just did get_pg_pool so it must exist and be settable
       request_proposal(mon->osdmon());
