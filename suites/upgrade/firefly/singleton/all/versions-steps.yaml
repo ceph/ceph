@@ -209,18 +209,17 @@ upgrade-sequence_firefly:
        duration: 60
    - print: "**** done ceph.restart all firefly current branch mds/osd/mon"
 workload3:
-   workload:
-     rados:
-       clients: [client.0]
-       ops: 2000
-       objects: 50
-       op_weights:
-         read: 100
-         write: 100
-         delete: 50
-         snap_create: 50
-         snap_remove: 50
-         rollback: 50
+  rados:
+    clients: [client.0]
+    ops: 2000
+    objects: 50
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
 upgrade-sequence3:
    sequential:
    - install.upgrade:
