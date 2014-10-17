@@ -33,6 +33,7 @@ class Message;
 class MWatchNotify;
 class MLog;
 class Messenger;
+struct WatchNotifyInfo;
 
 class librados::RadosClient : public Dispatcher
 {
@@ -116,6 +117,7 @@ public:
   void unregister_watch_notify_callback(uint64_t cookie);
   void handle_watch_notify(MWatchNotify *m);
   void do_watch_notify(MWatchNotify *m);
+  void do_watch_error(uint64_t cookie, int err);
 
   int mon_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
