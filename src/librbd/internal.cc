@@ -3147,7 +3147,7 @@ reprotect_and_return_err:
     }
     ictx->md_lock.get_write();
     bool abort = conf->rbd_readahead_disable_after_bytes != 0 &&
-      ictx->total_bytes_read > conf->rbd_readahead_disable_after_bytes;
+      ictx->total_bytes_read > (uint64_t)conf->rbd_readahead_disable_after_bytes;
     ictx->total_bytes_read += total_bytes;
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
