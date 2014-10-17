@@ -1091,7 +1091,8 @@ bool MDSMonitor::management_command(
         // Ensure fs name is not empty so that we can implement
         // commmands that refer to FS by name in future.
         ss << "Filesystem name may not be empty";
-        return -EINVAL;
+        r = -EINVAL;
+        return true;
     }
 
     if (pending_mdsmap.get_enabled()
