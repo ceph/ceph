@@ -1,8 +1,0 @@
-tasks:
-- rgw:
-    default_idle_timeout: 300
-    client.0:
-- s3tests:
-    client.0:
-      rgw_server: client.0
-
