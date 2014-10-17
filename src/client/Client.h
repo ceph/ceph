@@ -440,6 +440,8 @@ protected:
   // force read-only
   void force_session_readonly(MetaSession *s);
 
+  void dump_status(Formatter *f);  // debug
+  
   // trace generation
   ofstream traceout;
 
