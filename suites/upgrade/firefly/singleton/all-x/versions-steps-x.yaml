@@ -210,7 +210,7 @@ upgrade-sequence-x:
          #branch: firefly
        client.1:
          #branch: firefly
-   - print: "**** done branch: firefly install.upgrade"
+   - print: "**** done branch: -x install.upgrade"
    - ceph.restart: [mds.a]
    - sleep:
        duration: 60
