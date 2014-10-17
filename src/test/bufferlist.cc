@@ -151,7 +151,7 @@ TEST(Buffer, constructors) {
 
     unsigned zc_len = 4;
     ::unlink("testfile");
-    ::system("echo ABC > testfile");
+    EXPECT_EQ(0, ::system("echo ABC > testfile"));
     int fd = ::open("testfile", O_RDONLY);
     bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
     EXPECT_EQ(zc_len, ptr.length());
@@ -179,7 +179,7 @@ protected:
   virtual void SetUp() {
     len = 4;
     ::unlink("testfile");
-    ::system("echo ABC > testfile");
+    EXPECT_EQ(0, ::system("echo ABC > testfile"));
     fd = ::open("testfile", O_RDONLY);
     assert(fd >= 0);
   }
@@ -1765,9 +1765,9 @@ TEST(BufferList, read_file) {
   bufferlist bl;
   ::unlink("testfile");
   EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
-  ::system("echo ABC > testfile ; chmod 0 testfile");
+  EXPECT_EQ(0, ::system("echo ABC > testfile ; chmod 0 testfile"));
   EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
-  ::system("chmod +r testfile");
+  EXPECT_EQ(0, ::system("chmod +r testfile"));
   EXPECT_EQ(0, bl.read_file("testfile", &error));
   ::unlink("testfile");
   EXPECT_EQ((unsigned)4, bl.length());
@@ -1778,7 +1778,7 @@ TEST(BufferList, read_file) {
 TEST(BufferList, read_fd) {
   unsigned len = 4;
   ::unlink("testfile");
-  ::system("echo ABC > testfile");
+  EXPECT_EQ(0, ::system("echo ABC > testfile"));
   int fd = -1;
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
