@@ -1108,6 +1108,7 @@ bool MDSMonitor::management_command(
       /* We currently only support one filesystem, so cannot create a second */
       ss << "A filesystem already exists, use `ceph fs rm` if you wish to delete it";
       r = -EINVAL;
+      return true;
     }
 
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
