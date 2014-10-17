@@ -540,7 +540,7 @@ inline bool operator>=(bufferlist& l, bufferlist& r) {
   }
 }
 
-inline bool operator==(bufferlist &l, bufferlist &r) {
+inline bool operator==(const bufferlist &l, const bufferlist &r) {
   if (l.length() != r.length())
     return false;
   for (unsigned p = 0; p < l.length(); p++) {

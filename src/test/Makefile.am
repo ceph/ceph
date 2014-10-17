@@ -724,10 +724,20 @@ ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 
-ceph_test_librbd_SOURCES = test/librbd/test_librbd.cc
-ceph_test_librbd_LDADD = $(LIBRBD) $(LIBRADOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+ceph_test_librbd_SOURCES = \
+	test/librbd/test_librbd.cc \
+	test/librbd/test_ImageWatcher.cc
+ceph_test_librbd_LDADD = \
+	librbd_api.la librbd_internal.la \
+	libcls_rbd_client.la libcls_lock_client.la \
+	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
+	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
+
+if WITH_LTTNG
+ceph_test_librbd_LDADD += $(LIBRBD_TP)
+endif
 
 if LINUX
 # Force use of C++ linker with dummy.cc - LIBKRBD is a C++ library

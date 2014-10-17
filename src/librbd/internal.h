@@ -82,7 +82,7 @@ namespace librbd {
   int snap_set(ImageCtx *ictx, const char *snap_name);
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
-		    std::set<pair<std::string, std::string> > & names);
+		    std::set<std::pair<std::string, std::string> > & names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -98,8 +98,8 @@ namespace librbd {
   int get_size(ImageCtx *ictx, uint64_t *size);
   int get_features(ImageCtx *ictx, uint64_t *features);
   int get_overlap(ImageCtx *ictx, uint64_t *overlap);
-  int get_parent_info(ImageCtx *ictx, string *parent_pool_name,
-		      string *parent_name, string *parent_snap_name);
+  int get_parent_info(ImageCtx *ictx, std::string *parent_pool_name,
+		      std::string *parent_name, std::string *parent_snap_name);
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner);
 
   int remove(librados::IoCtx& io_ctx, const char *imgname,
@@ -165,7 +165,8 @@ namespace librbd {
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
   std::string get_block_oid(const std::string &object_prefix, uint64_t num,
 			    bool old_format);
-  uint64_t oid_to_object_no(const string& oid, const string& object_prefix);
+  uint64_t oid_to_object_no(const std::string& oid,
+			    const std::string& object_prefix);
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len);
   int init_rbd_info(struct rbd_info *info);
   void init_rbd_header(struct rbd_obj_header_ondisk& ondisk,
