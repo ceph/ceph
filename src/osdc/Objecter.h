@@ -1460,9 +1460,12 @@ public:
 
     uint64_t cookie;   ///< non-zero if this is a watch
     int last_error;  ///< error from last failed ping|reconnect, if any
+    Mutex watch_lock;
+    Cond watch_cond;
+
     bool registered;
     bool canceled;
-    Context *on_reg_ack, *on_reg_commit;
+    Context *on_reg_ack, *on_reg_commit, *on_error;
 
     OSDSession *session;
 
@@ -1475,9 +1478,11 @@ public:
 		 poutbl(NULL), pobjver(NULL),
 		 cookie(0),
 		 last_error(0),
+		 watch_lock("Objecter::LingerOp::watch_lock"),
 		 registered(false),
 		 canceled(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
+		 on_error(NULL),
 		 session(NULL),
 		 register_tid(0),
 		 map_dne_bound(0) {}
@@ -1937,11 +1942,11 @@ public:
     return op_submit(o, ctx_budget);
   }
   ceph_tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
-		      ObjectOperation& op,
-		      const SnapContext& snapc, utime_t mtime,
-		      bufferlist& inbl, int flags,
-		      Context *onack, Context *onfinish,
-		      version_t *objver);
+			   ObjectOperation& op,
+			   const SnapContext& snapc, utime_t mtime,
+			   bufferlist& inbl, uint64_t cookie, int flags,
+			   Context *onack, Context *onfinish, Context *onerror,
+			   version_t *objver);
   ceph_tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
 		    ObjectOperation& op,
 		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,

@@ -485,6 +485,14 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
 {
   ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << r
 		 << " (last_error " << info->last_error << ")" << dendl;
+  if (r < 0) {
+    info->watch_lock.Lock();
+    info->last_error = r;
+    info->watch_cond.Signal();
+    if (info->on_error)
+      info->on_error->complete(r);
+    info->watch_lock.Unlock();
+  }
 }
 
 void Objecter::unregister_linger(uint64_t linger_id)
@@ -515,11 +523,12 @@ void Objecter::_unregister_linger(uint64_t linger_id)
 }
 
 ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
-			      ObjectOperation& op,
-			      const SnapContext& snapc, utime_t mtime,
-			      bufferlist& inbl, int flags,
-			      Context *onack, Context *oncommit,
-			      version_t *objver)
+				   ObjectOperation& op,
+				   const SnapContext& snapc, utime_t mtime,
+				   bufferlist& inbl, uint64_t cookie, int flags,
+				   Context *onack, Context *oncommit,
+				   Context *onerror,
+				   version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->target.base_oid = oid;
@@ -536,6 +545,7 @@ ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& 
   info->pobjver = objver;
   info->on_reg_ack = onack;
   info->on_reg_commit = oncommit;
+  info->on_error = onerror;
 
   RWLock::WLocker wl(rwlock);
   _linger_submit(info);
