@@ -486,20 +486,30 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   return ret;
 }
 
-class RadosWatchCtx : public librados::WatchCtx {
+class RadosWatchCtx : public librados::WatchCtx2 {
+  IoCtx& ioctx;
   string name;
 public:
-  RadosWatchCtx(const char *imgname) : name(imgname) {}
+  RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
   virtual ~RadosWatchCtx() {}
-  virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
-    string s;
-    try {
-      bufferlist::iterator iter = bl.begin();
-      ::decode(s, iter);
-    } catch (buffer::error *err) {
-      cout << "could not decode bufferlist, buffer length=" << bl.length() << std::endl;
-    }
-    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << " msg='" << s << "'" << std::endl;
+  void handle_notify(uint64_t notify_id,
+		     uint64_t cookie,
+		     uint64_t notifier_id,
+		     bufferlist& bl) {
+    cout << "NOTIFY"
+	 << " cookie " << cookie
+	 << " notify_id " << notify_id
+	 << " from " << notifier_id
+	 << std::endl;
+    bl.hexdump(cout);
+    bufferlist empty;
+    ioctx.notify_ack(name, notify_id, cookie, empty);
+  }
+  void handle_error(uint64_t cookie, int err) {
+    cout << "ERROR"
+	 << " cookie " << cookie
+	 << " err " << cpp_strerror(err)
+	 << std::endl;
   }
 };
 
@@ -2345,9 +2355,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    RadosWatchCtx ctx(oid.c_str());
+    RadosWatchCtx ctx(io_ctx, oid.c_str());
     uint64_t cookie;
-    ret = io_ctx.watch(oid, 0, &cookie, &ctx);
+    ret = io_ctx.watch2(oid, &cookie, &ctx);
     if (ret != 0)
       cerr << "error calling watch: " << ret << std::endl;
     else {
