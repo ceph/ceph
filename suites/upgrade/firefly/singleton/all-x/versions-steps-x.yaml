@@ -35,9 +35,13 @@ tasks:
    - upgrade-sequence2
 - print: "**** done parallel v0.80.6"
 - parallel:
-   - workload_firefly
-   - upgrade-sequence_firefly
-- print: "**** done parallel firefly branch"
+   - workload3
+   - upgrade-sequence3
+- print: "**** done parallel v0.80.7"
+- parallel:
+   - workload-x
+   - upgrade-sequence-x
+- print: "**** done parallel -x branch"
 #######################
 workload:
    workunit:
@@ -156,22 +160,56 @@ upgrade-sequence2:
    - sleep:
        duration: 60
    - print: "**** done ceph.restart all 2 osd/mon/mds"
-workload_firefly:
+workload3:
+  rados:
+    clients: [client.0]
+    ops: 2000
+    objects: 50
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+upgrade-sequence3:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v0.80.7
+       mon.b:
+         tag: v0.80.7
+       client.1:
+         tag: v0.80.7
+   - print: "**** done v0.80.7 install.upgrade"
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart:   
+       daemons: [mon.a, mon.b, mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart daemons grouped"
+workload-x:
   sequential:
   - rgw: [client.0]
   - s3tests:
       client.0:
         force-branch: firefly-original
         rgw_server: client.0
-upgrade-sequence_firefly:
+upgrade-sequence-x:
    sequential:
    - install.upgrade:
        mon.a:
-         branch: firefly
+         #branch: firefly
        mon.b:
-         branch: firefly
+         #branch: firefly
        client.1:
-         branch: firefly
+         #branch: firefly
    - print: "**** done branch: firefly install.upgrade"
    - ceph.restart: [mds.a]
    - sleep:
@@ -203,5 +241,4 @@ upgrade-sequence_firefly:
    - ceph.restart: [mon.c]
    - sleep:
        duration: 60
-   - print: "**** done ceph.restart all firefly current branch mds/osd/mon"
-
+   - print: "**** done ceph.restart all -x branch mds/osd/mon"
