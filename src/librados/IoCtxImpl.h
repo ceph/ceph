@@ -263,10 +263,6 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
   ~WatchNotifyInfo() {
     io_ctx_impl->put();
   }
-
-  void notify(Mutex *lock, uint8_t opcode, uint64_t ver, uint64_t notify_id,
-	      bufferlist& payload,
-	      int return_code);
 };
 }
 #endif
