@@ -180,7 +180,9 @@ int lockdep_will_lock(const char *name, int id)
   for (map<int, BackTrace *>::iterator p = m.begin();
        p != m.end();
        ++p) {
-    if (p->first == id) {
+
+    // did self thread twice lock the same mutex
+    if (p->first == id || follows[p->first][id]) {
       lockdep_dout(0) << "\n";
       *_dout << "recursive lock of " << name << " (" << id << ")\n";
       BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
@@ -193,42 +195,39 @@ int lockdep_will_lock(const char *name, int id)
       *_dout << dendl;
       assert(0);
     }
-    else if (!follows[p->first][id]) {
-      // new dependency
 
-      // did we just create a cycle?
-      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
-      if (does_follow(id, p->first)) {
-	lockdep_dout(0) << "new dependency " << lock_names[p->first]
-		<< " (" << p->first << ") -> " << name << " (" << id << ")"
-		<< " creates a cycle at\n";
-	bt->print(*_dout);
-	*_dout << dendl;
+    // did we just create a cycle?
+    BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+    if (does_follow(id, p->first)) {
+      lockdep_dout(0) << "new dependency " << lock_names[p->first]
+              << " (" << p->first << ") -> " << name << " (" << id << ")"
+              << " creates a cycle at\n";
+      bt->print(*_dout);
+      *_dout << dendl;
 
-	lockdep_dout(0) << "btw, i am holding these locks:" << dendl;
-	for (map<int, BackTrace *>::iterator q = m.begin();
-	     q != m.end();
-	     ++q) {
-	  lockdep_dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << dendl;
-	  if (q->second) {
-	    lockdep_dout(0) << " ";
-	    q->second->print(*_dout);
-	    *_dout << dendl;
-	  }
-	}
-
-	lockdep_dout(0) << "\n" << dendl;
-
-	// don't add this dependency, or we'll get aMutex. cycle in the graph, and
-	// does_follow() won't terminate.
-
-	assert(0);  // actually, we should just die here.
-      } else {
-	follows[p->first][id] = bt;
-	lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
-	//bt->print(*_dout);
+      lockdep_dout(0) << "btw, i am holding these locks:" << dendl;
+      for (map<int, BackTrace *>::iterator q = m.begin();
+            q != m.end();
+            ++q) {
+        lockdep_dout(0) << "  " << lock_names[q->first] << " (" << q->first << ")" << dendl;
+        if (q->second) {
+          lockdep_dout(0) << " ";
+          q->second->print(*_dout);
+          *_dout << dendl;
+        }
       }
+
+      lockdep_dout(0) << "\n" << dendl;
+
+      // don't add this dependency, or we'll get aMutex. cycle in the graph, and
+      // does_follow() won't terminate.
+      assert(0);  // actually, we should just die here.
     }
+
+    // we are safe
+    follows[p->first][id] = bt;
+    lockdep_dout(10) << lock_names[p->first] << " -> " << name << " at" << dendl;
+    //bt->print(*_dout);
   }
 
   pthread_mutex_unlock(&lockdep_mutex);
@@ -270,6 +269,16 @@ int lockdep_will_unlock(const char *name, int id)
 
   delete held[p][id];
   held[p].erase(id);
+
+  // remove directed edges in the follows
+  map<int, BackTrace *> &m = held[p];
+  for (map<int, BackTrace *>::iterator p = m.begin();
+       p != m.end();
+       ++p) {
+    follows[p->first][id] = NULL;
+  }
+
+
   pthread_mutex_unlock(&lockdep_mutex);
   return id;
 }
