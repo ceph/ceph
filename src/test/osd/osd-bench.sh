@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -21,18 +22,19 @@ source test/osd/osd-test-helpers.sh
 function run() {
     local dir=$1
 
+    export CEPH_MON="127.0.0.1:7106"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=127.0.0.1 "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     local id=a
-    call_TEST_functions $dir $id --public-addr 127.0.0.1 || return 1
+    call_TEST_functions $dir $id || return 1
 }
 
 function TEST_bench() {
     local dir=$1
 
-    run_mon $dir a --public-addr 127.0.0.1 \
+    run_mon $dir a --public-addr $CEPH_MON \
         || return 1
     run_osd $dir 0 || return 1
 
