@@ -1018,8 +1018,10 @@ int MDSMonitor::_check_pool(
 /**
  * Handle a command for creating or removing a filesystem.
  *
- * @return true if such a command was found, else false to
- *         fall through and look for other types of command.
+ * @retval 0        Command was successfully handled and has side effects
+ * @retval -EAGAIN  Message has been queued for retry
+ * @retval -ENOSYS  Unknown command
+ * @retval < 0      An error has occurred; **ss** may have been set.
  */
 int MDSMonitor::management_command(
     MMonCommand *m,
