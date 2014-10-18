@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -54,6 +55,8 @@ function mon_run() {
     ./ceph-mon \
         --id $MON_ID \
         --chdir= \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
@@ -79,6 +82,8 @@ function auth_none() {
 
     ./ceph-mon \
         --id $MON_ID \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
@@ -144,6 +149,8 @@ function makedir() {
     # fail if recursive directory creation is needed
     ./ceph-mon \
         --id $MON_ID \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log

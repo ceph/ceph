@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -30,6 +31,7 @@ export CEPH_CONF=/dev/null
 export CEPH_ARGS="--fsid $FSID"
 CEPH_ARGS+=" --chdir="
 CEPH_ARGS+=" --run-dir=$DIR"
+CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
 CEPH_ARGS+=" --pid-file=$DIR/\$name.pidfile"
@@ -74,6 +76,8 @@ function run_mon() {
     ./ceph-mon \
         --id $MON_ID \
         --mon-data=$mon_dir \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --mon-cluster-log-file=$mon_dir/log \
         --public-addr $MONA \
         "$@"

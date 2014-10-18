@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -46,6 +47,8 @@ function run_mon() {
 
     ./ceph-mon \
         --id $id \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --paxos-propose-interval=0.1 \
         --osd-crush-chooseleaf-type=0 \
         --osd-pool-default-erasure-code-directory=.libs \

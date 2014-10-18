@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -35,6 +36,8 @@ function run_osd() {
         prepare $osd_data || return 1
 
     local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-backfill-full-ratio=.99"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
