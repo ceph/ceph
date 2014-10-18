@@ -247,6 +247,7 @@ WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 #define RGW_BUCKET_DIRENT_FLAG_VER           0x1    /* a versioned object instance */
 #define RGW_BUCKET_DIRENT_FLAG_CURRENT       0x2    /* the last object instance of a versioned object */
 #define RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER 0x4    /* delete marker */
+#define RGW_BUCKET_DIRENT_FLAG_VER_MARKER    0x8    /* object is versioned, a placeholder for the plain entry */
 
 struct rgw_bucket_dir_entry {
   cls_rgw_obj_key key;
@@ -314,6 +315,7 @@ struct rgw_bucket_dir_entry {
   bool is_visible() {
     return is_current() && !is_delete_marker();
   }
+  bool is_valid() { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
