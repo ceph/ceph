@@ -45,7 +45,7 @@ function run_osd() {
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/osd-\$id.log"
-    ceph_args+=" --pid-file=$dir/osd-\$id.pidfile"
+    ceph_args+=" --pid-file=$dir/osd-\$id.pid"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
