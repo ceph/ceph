@@ -32,7 +32,7 @@ function run() {
         run_mon $dir b --public-addr $MONB
     )
 
-    timeout 10 ./ceph --mon-host $MONA mon stat || return 1
+    timeout 360 ./ceph --mon-host $MONA mon stat || return 1
     # check that MONB is indeed a peon
     ./ceph --admin-daemon $dir/b/ceph-mon.b.asok mon_status | 
        grep '"peon"' || return 1
