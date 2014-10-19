@@ -60,13 +60,13 @@ function run_mon() {
         --log-file=$dir/log \
         --mon-cluster-log-file=$dir/log \
         --run-dir=$dir \
-        --pid-file=$dir/pidfile \
+        --pid-file=$dir/\$name.pid \
         "$@"
 }
 
 function kill_daemons() {
     local dir=$1
-    for pidfile in $(find $dir | grep pidfile) ; do
+    for pidfile in $(find $dir | grep '\.pid') ; do
         pid=$(cat $pidfile)
         for try in 0 1 1 1 2 3 ; do
             kill -9 $pid 2> /dev/null || break
