@@ -61,3 +61,10 @@ tasks:
         client.0:
           - cls/test_cls_rbd.sh
 - print: "**** done cls/test_cls_rbd.sh"
+- workunit:
+  sequential:
+  - rgw: [client.0]
+  - s3tests:
+      client.0:
+        force-branch: firefly-original
+        rgw_server: client.0
