@@ -33,6 +33,10 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes);
 
+int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
+                   BIIndexType index_type, cls_rgw_obj_key& key,
+                   string *idx, bufferlist *data);
+
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
                             bool delete_marker, const string& op_tag);
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, const string& op_tag);

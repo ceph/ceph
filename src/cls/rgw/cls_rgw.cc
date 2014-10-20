@@ -33,6 +33,7 @@ cls_method_handle_t h_rgw_bucket_unlink_instance_op;
 cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_obj_remove;
+cls_method_handle_t h_rgw_bi_get_op;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
 cls_method_handle_t h_rgw_user_usage_log_add;
@@ -1677,6 +1678,51 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_bi_get_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  string idx;
+
+  switch (op.type) {
+    case PlainIdx:
+      idx = op.key.name;
+      break;
+    case InstanceIdx:
+      encode_obj_index_key(op.key, &idx);
+      break;
+    case OLHIdx:
+      encode_olh_data_key(op.key, &idx);
+      break;
+    default:
+      CLS_LOG(10, "%s(): invalid key type encoding: %d", __func__, op.type);
+      return -EINVAL;
+  }
+
+  rgw_cls_bi_get_ret op_ret;
+
+  op_ret.type = op.type;
+  op_ret.idx = idx;
+
+  int r = cls_cxx_map_get_val(hctx, idx, &op_ret.data);
+  if (r < 0) {
+      CLS_LOG(10, "%s(): cls_cxx_map_get_val() returned %d", __func__, r);
+      return r;
+  }
+
+  ::encode(op_ret, *out);
+
+  return 0;
+}
+
 int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
 {
   bufferlist::iterator iter = bl.begin();
@@ -2498,6 +2544,8 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
+
+  cls_register_cxx_method(h_class, "bi_get", CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
 
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, "bi_log_trim", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_list_op);

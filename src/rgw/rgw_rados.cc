@@ -6573,6 +6573,23 @@ int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, stri
   return 0;
 }
 
+int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, string *idx, bufferlist *data)
+{
+  librados::IoCtx index_ctx;
+  string oid;
+  int r = open_bucket_index(bucket, index_ctx, oid);
+  if (r < 0)
+    return r;
+
+  cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
+  
+  int ret = cls_rgw_bi_get(index_ctx, oid, index_type, key, idx, data);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
 {
   return gc_pool_ctx.operate(oid, op);

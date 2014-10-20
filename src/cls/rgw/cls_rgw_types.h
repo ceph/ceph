@@ -322,6 +322,12 @@ struct rgw_bucket_dir_entry {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
+enum BIIndexType {
+  InvalidIdx    = 0,
+  PlainIdx      = 1,
+  InstanceIdx   = 2,
+  OLHIdx        = 3,
+};
 
 enum OLHLogOp {
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
