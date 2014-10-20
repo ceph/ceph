@@ -1,0 +1,36 @@
+upgrade-sequence:
+   sequential:
+   - install.upgrade:
+       client.0:
+   - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
+   - install.upgrade:
+       mon.a:
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
+   - install.upgrade:
+       mon.b:
+   - ceph.restart:
+       daemons: [mon.b, mon.c]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - print: "**** done install.upgrade mon.b and mon.c to the version from teuthology-suite arg"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - print: "**** done install.upgrade osd.0 and osd.1 to the version from teuthology-suite arg"
+   - ceph.restart:
+       daemons: [osd.2, osd.3]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - print: "**** done install.upgrade osd.2 and osd.3 to the version from teuthology-suite arg"
