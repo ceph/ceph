@@ -48,7 +48,7 @@ def ssh_keys_user_line_test(line_to_test, username ):
 
 def cleanup_added_key(ctx):
     """
-    Delete the keys and removes ~/.ssh/authorized_keys2 entries we added
+    Delete the keys and removes ~/.ssh/authorized_keys entries we added
     """
     log.info('cleaning up keys added for testing')
 
@@ -60,7 +60,8 @@ def cleanup_added_key(ctx):
             log.info('  cleaning up keys for user {user} on {host}'.format(host=hostname, user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa'.format(user=username))
             misc.delete_file(remote, '/home/{user}/.ssh/id_rsa.pub'.format(user=username))
-            misc.delete_file(remote, '/home/{user}/.ssh/authorized_keys2'.format(user=username))
+            cmd = "sed -i /#TEUTHOLOGY_START/,/#TEUTHOLOGY_END/d /home/{user}/.ssh/authorized_keys".format(user=username).split()
+            remote.run(args=cmd)
 
 @contextlib.contextmanager
 def tweak_ssh_config(ctx, config):   
@@ -135,11 +136,10 @@ def push_keys_to_host(ctx, config, public_key, private_key):
             misc.delete_file(remote, pub_key_file, force=True)
             misc.create_file(remote, pub_key_file, pub_key_data)
 
-            # adding appropriate entries to the authorized_keys2 file for this host
-            auth_keys_file = '/home/{user}/.ssh/authorized_keys2'.format(user=username)
-
-            # now add the list of keys for hosts in ctx to ~/.ssh/authorized_keys2
-            misc.create_file(remote, auth_keys_file, auth_keys_data, str(600))
+            # add appropriate entries to the authorized_keys file for this host
+            auth_keys_file = '/home/{user}/.ssh/authorized_keys'.format(user=username)
+            lines = '#TEUTHOLOGY_START\n' + auth_keys_data + '\n#TEUTHOLOGY_END\n'
+            misc.append_lines_to_file(remote, auth_keys_file, lines)
 
     try: 
         yield

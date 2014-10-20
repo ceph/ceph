@@ -305,8 +305,7 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
     if user is None:
         user = misc.get_user()
 
-    if not vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
-                                     ctx.os_version):
+    if not vps_version_or_type_valid(ctx.machine_type, os_type, os_version):
         log.error('Invalid os-type or version detected -- lock failed')
         return
 
