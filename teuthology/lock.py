@@ -449,6 +449,7 @@ def list_locks(keyed_by_name=False, **kwargs):
         response = requests.get(uri)
     except requests.ConnectionError:
         success = False
+        log.exception("Could not contact lock server: %s", config.lock_server)
     else:
         success = response.ok
     if success:
@@ -457,7 +458,7 @@ def list_locks(keyed_by_name=False, **kwargs):
         else:
             return {node['name']: node
                     for node in response.json()}
-    return None
+    return dict()
 
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
