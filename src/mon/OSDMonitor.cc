@@ -2266,8 +2266,12 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(new_formatter(format));
 
+  OSDMap newmap;
+  newmap.deepish_copy_from(osdmap);
+  newmap.apply_incremental(pending_inc);
+
   if (prefix == "osd stat") {
-    osdmap.print_summary(f.get(), ds);
+    newmap.print_summary(f.get(), ds);
     if (f)
       f->flush(rdata);
     else
@@ -2309,7 +2313,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
     epoch = epochnum;
 
-    OSDMap *p = &osdmap;
+    OSDMap *p = &newmap;
     if (epoch) {
       bufferlist b;
       int err = get_version_full(epoch, b);
@@ -2339,8 +2343,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     } else if (prefix == "osd ls") {
       if (f) {
 	f->open_array_section("osds");
-	for (int i = 0; i < osdmap.get_max_osd(); i++) {
-	  if (osdmap.exists(i)) {
+	for (int i = 0; i < newmap.get_max_osd(); i++) {
+	  if (newmap.exists(i)) {
 	    f->dump_int("osd", i);
 	  }
 	}
@@ -2348,8 +2352,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	f->flush(ds);
       } else {
 	bool first = true;
-	for (int i = 0; i < osdmap.get_max_osd(); i++) {
-	  if (osdmap.exists(i)) {
+	for (int i = 0; i < newmap.get_max_osd(); i++) {
+	  if (newmap.exists(i)) {
 	    if (!first)
 	      ds << "\n";
 	    first = false;
@@ -2375,17 +2379,17 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       p->crush->encode(rdata);
       ss << "got crush map from osdmap epoch " << p->get_epoch();
     }
-    if (p != &osdmap)
+    if (p != &newmap)
       delete p;
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
-      f->dump_unsigned("epoch", osdmap.get_epoch());
-      f->dump_int("max_osd", osdmap.get_max_osd());
+      f->dump_unsigned("epoch", newmap.get_epoch());
+      f->dump_int("max_osd", newmap.get_max_osd());
       f->close_section();
       f->flush(rdata);
     } else {
-      ds << "max_osd = " << osdmap.get_max_osd() << " in epoch " << osdmap.get_epoch();
+      ds << "max_osd = " << newmap.get_max_osd() << " in epoch " << newmap.get_epoch();
       rdata.append(ds);
     }
   } else if (prefix  == "osd find") {
@@ -2396,7 +2400,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = -EINVAL;
       goto reply;
     }
-    if (!osdmap.exists(osd)) {
+    if (!newmap.exists(osd)) {
       ss << "osd." << osd << " does not exist";
       r = -ENOENT;
       goto reply;
@@ -2409,9 +2413,9 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
-    f->dump_stream("ip") << osdmap.get_addr(osd);
+    f->dump_stream("ip") << newmap.get_addr(osd);
     f->open_object_section("crush_location");
-    map<string,string> loc = osdmap.crush->get_full_location(osd);
+    map<string,string> loc = newmap.crush->get_full_location(osd);
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
       f->dump_string(p->first.c_str(), p->second);
     f->close_section();
@@ -2425,7 +2429,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       r = -EINVAL;
       goto reply;
     }
-    if (!osdmap.exists(osd)) {
+    if (!newmap.exists(osd)) {
       ss << "osd." << osd << " does not exist";
       r = -ENOENT;
       goto reply;
@@ -2447,7 +2451,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "object", objstr);
     cmd_getval(g_ceph_context, cmdmap, "nspace", namespacestr);
 
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    int64_t pool = newmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool " << poolstr << " does not exist";
       r = -ENOENT;
@@ -2455,11 +2459,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     object_locator_t oloc(pool, namespacestr);
     object_t oid(objstr);
-    pg_t pgid = osdmap.object_locator_to_pg(oid, oloc);
-    pg_t mpgid = osdmap.raw_pg_to_pg(pgid);
+    pg_t pgid = newmap.object_locator_to_pg(oid, oloc);
+    pg_t mpgid = newmap.raw_pg_to_pg(pgid);
     vector<int> up, acting;
     int up_p, acting_p;
-    osdmap.pg_to_up_acting_osds(mpgid, &up, &up_p, &acting, &acting_p);
+    newmap.pg_to_up_acting_osds(mpgid, &up, &up_p, &acting, &acting_p);
 
     string fullobjname;
     if (!namespacestr.empty())
@@ -2468,7 +2472,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       fullobjname = oid.name;
     if (f) {
       f->open_object_section("osd_map");
-      f->dump_unsigned("epoch", osdmap.get_epoch());
+      f->dump_unsigned("epoch", newmap.get_epoch());
       f->dump_string("pool", poolstr);
       f->dump_int("pool_id", pool);
       f->dump_stream("objname") << fullobjname;
@@ -2487,7 +2491,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->close_section(); // osd_map
       f->flush(rdata);
     } else {
-      ds << "osdmap e" << osdmap.get_epoch()
+      ds << "osdmap e" << newmap.get_epoch()
         << " pool '" << poolstr << "' (" << pool << ")"
         << " object '" << fullobjname << "' ->"
         << " pg " << pgid << " (" << mpgid << ")"
@@ -2506,13 +2510,13 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (whostr == "*") {
       ss << "osds ";
       int c = 0;
-      for (int i = 0; i < osdmap.get_max_osd(); i++)
-	if (osdmap.is_up(i)) {
+      for (int i = 0; i < newmap.get_max_osd(); i++)
+	if (newmap.is_up(i)) {
 	  ss << (c++ ? "," : "") << i;
-	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
+	  mon->try_send_message(new MOSDScrub(newmap.get_fsid(),
 					      pvec.back() == "repair",
 					      pvec.back() == "deep-scrub"),
-				osdmap.get_inst(i));
+				newmap.get_inst(i));
 	}
       r = 0;
       ss << " instructed to " << pvec.back();
@@ -2520,11 +2524,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       long osd = parse_osd_id(whostr.c_str(), &ss);
       if (osd < 0) {
 	r = -EINVAL;
-      } else if (osdmap.is_up(osd)) {
-	mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
+      } else if (newmap.is_up(osd)) {
+	mon->try_send_message(new MOSDScrub(newmap.get_fsid(),
 					    pvec.back() == "repair",
 					    pvec.back() == "deep-scrub"),
-			      osdmap.get_inst(osd));
+			      newmap.get_inst(osd));
 	ss << "osd." << osd << " instructed to " << pvec.back();
       } else {
 	ss << "osd." << osd << " is not up";
@@ -2536,17 +2540,17 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     cmd_getval(g_ceph_context, cmdmap, "auid", auid, int64_t(0));
     if (f)
       f->open_array_section("pools");
-    for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
-	 p != osdmap.pools.end();
+    for (map<int64_t, pg_pool_t>::iterator p = newmap.pools.begin();
+	 p != newmap.pools.end();
 	 ++p) {
       if (!auid || p->second.auid == (uint64_t)auid) {
 	if (f) {
 	  f->open_object_section("pool");
 	  f->dump_int("poolnum", p->first);
-	  f->dump_string("poolname", osdmap.pool_name[p->first]);
+	  f->dump_string("poolname", newmap.pool_name[p->first]);
 	  f->close_section();
 	} else {
-	  ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	  ds << p->first << ' ' << newmap.pool_name[p->first] << ',';
 	}
       }
     }
@@ -2559,8 +2563,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     if (f)
       f->open_array_section("blacklist");
 
-    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = osdmap.blacklist.begin();
-	 p != osdmap.blacklist.end();
+    for (ceph::unordered_map<entity_addr_t,utime_t>::iterator p = newmap.blacklist.begin();
+	 p != newmap.blacklist.end();
 	 ++p) {
       if (f) {
 	f->open_object_section("entry");
@@ -2580,32 +2584,32 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       f->close_section();
       f->flush(rdata);
     }
-    ss << "listed " << osdmap.blacklist.size() << " entries";
+    ss << "listed " << newmap.blacklist.size() << " entries";
 
   } else if (prefix == "osd pool ls") {
     string detail;
     cmd_getval(g_ceph_context, cmdmap, "detail", detail);
     if (!f && detail == "detail") {
       ostringstream ss;
-      osdmap.print_pools(ss);
+      newmap.print_pools(ss);
       rdata.append(ss.str());
     } else {
       if (f)
 	f->open_array_section("pools");
-      for (map<int64_t,pg_pool_t>::const_iterator it = osdmap.get_pools().begin();
-	   it != osdmap.get_pools().end();
+      for (map<int64_t,pg_pool_t>::const_iterator it = newmap.get_pools().begin();
+	   it != newmap.get_pools().end();
 	   ++it) {
 	if (f) {
 	  if (detail == "detail") {
 	    f->open_object_section("pool");
-	    f->dump_string("pool_name", osdmap.get_pool_name(it->first));
+	    f->dump_string("pool_name", newmap.get_pool_name(it->first));
 	    it->second.dump(f.get());
 	    f->close_section();
 	  } else {
-	    f->dump_string("pool_name", osdmap.get_pool_name(it->first));
+	    f->dump_string("pool_name", newmap.get_pool_name(it->first));
 	  }
 	} else {
-	  rdata.append(osdmap.get_pool_name(it->first) + "\n");
+	  rdata.append(newmap.get_pool_name(it->first) + "\n");
 	}
       }
       if (f) {
@@ -2616,14 +2620,14 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    int64_t pool = newmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
       r = -ENOENT;
       goto reply;
     }
 
-    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    const pg_pool_t *p = newmap.get_pg_pool(pool);
     string var;
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
@@ -2771,7 +2775,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     int64_t poolid = -ENOENT;
     bool one_pool = false;
     if (!pool_name.empty()) {
-      poolid = osdmap.lookup_pg_pool_name(pool_name);
+      poolid = newmap.lookup_pg_pool_name(pool_name);
       if (poolid < 0) {
         assert(poolid == -ENOENT);
         ss << "unrecognized pool '" << pool_name << "'";
@@ -2785,20 +2789,20 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
     if (f)
       f->open_array_section("pool_stats");
-    if (osdmap.get_pools().size() == 0) {
+    if (newmap.get_pools().size() == 0) {
       if (!f)
         ss << "there are no pools!";
       goto stats_out;
     }
 
-    for (map<int64_t,pg_pool_t>::const_iterator it = osdmap.get_pools().begin();
-         it != osdmap.get_pools().end();
+    for (map<int64_t,pg_pool_t>::const_iterator it = newmap.get_pools().begin();
+         it != newmap.get_pools().end();
          ++it) {
 
       if (!one_pool)
         poolid = it->first;
 
-      pool_name = osdmap.get_pool_name(poolid);
+      pool_name = newmap.get_pool_name(poolid);
 
       if (f) {
         f->open_object_section("pool");
@@ -2866,14 +2870,14 @@ stats_out:
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
 
-    int64_t poolid = osdmap.lookup_pg_pool_name(pool_name);
+    int64_t poolid = newmap.lookup_pg_pool_name(pool_name);
     if (poolid < 0) {
       assert(poolid == -ENOENT);
       ss << "unrecognized pool '" << pool_name << "'";
       r = -ENOENT;
       goto reply;
     }
-    const pg_pool_t *p = osdmap.get_pg_pool(poolid);
+    const pg_pool_t *p = newmap.get_pg_pool(poolid);
 
     if (f) {
       f->open_object_section("pool_quotas");
@@ -2910,7 +2914,7 @@ stats_out:
       fp = new_formatter("json-pretty");
     boost::scoped_ptr<Formatter> f(fp);
     f->open_array_section("rules");
-    osdmap.crush->list_rules(f.get());
+    newmap.crush->list_rules(f.get());
     f->close_section();
     ostringstream rs;
     f->flush(rs);
@@ -2927,16 +2931,16 @@ stats_out:
     boost::scoped_ptr<Formatter> f(fp);
     if (name == "") {
       f->open_array_section("rules");
-      osdmap.crush->dump_rules(f.get());
+      newmap.crush->dump_rules(f.get());
       f->close_section();
     } else {
-      int ruleno = osdmap.crush->get_rule_id(name);
+      int ruleno = newmap.crush->get_rule_id(name);
       if (ruleno < 0) {
 	ss << "unknown crush ruleset '" << name << "'";
 	r = ruleno;
 	goto reply;
       }
-      osdmap.crush->dump_rule(ruleno, f.get());
+      newmap.crush->dump_rule(ruleno, f.get());
     }
     ostringstream rs;
     f->flush(rs);
@@ -2950,7 +2954,7 @@ stats_out:
       fp = new_formatter("json-pretty");
     boost::scoped_ptr<Formatter> f(fp);
     f->open_object_section("crush_map");
-    osdmap.crush->dump(f.get());
+    newmap.crush->dump(f.get());
     f->close_section();
     ostringstream rs;
     f->flush(rs);
@@ -2964,7 +2968,7 @@ stats_out:
       fp = new_formatter("json-pretty");
     boost::scoped_ptr<Formatter> f(fp);
     f->open_object_section("crush_map_tunables");
-    osdmap.crush->dump_tunables(f.get());
+    newmap.crush->dump_tunables(f.get());
     f->close_section();
     ostringstream rs;
     f->flush(rs);
@@ -2972,7 +2976,7 @@ stats_out:
     rdata.append(rs.str());
   } else if (prefix == "osd erasure-code-profile ls") {
     const map<string,map<string,string> > &profiles =
-      osdmap.get_erasure_code_profiles();
+      newmap.get_erasure_code_profiles();
     if (f)
       f->open_array_section("erasure-code-profiles");
     for(map<string,map<string,string> >::const_iterator i = profiles.begin();
@@ -2993,12 +2997,12 @@ stats_out:
   } else if (prefix == "osd erasure-code-profile get") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
-    if (!osdmap.has_erasure_code_profile(name)) {
+    if (!newmap.has_erasure_code_profile(name)) {
       ss << "unknown erasure code profile '" << name << "'";
       r = -ENOENT;
       goto reply;
     }
-    const map<string,string> &profile = osdmap.get_erasure_code_profile(name);
+    const map<string,string> &profile = newmap.get_erasure_code_profile(name);
     if (f)
       f->open_object_section("profile");
     for (map<string,string>::const_iterator i = profile.begin();
