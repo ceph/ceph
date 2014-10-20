@@ -1762,6 +1762,8 @@ public:
   int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
 
+  int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, string *idx, bufferlist *data);
+
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
                              string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage, bool *is_truncated);

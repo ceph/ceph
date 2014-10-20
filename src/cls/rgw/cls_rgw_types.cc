@@ -109,6 +109,14 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   f->close_section();
 }
 
+void rgw_bucket_olh_entry::dump(Formatter *f) const
+{
+  encode_json("key", key, f);
+  encode_json("delete_marker", delete_marker, f);
+  encode_json("epoch", epoch, f);
+  encode_json("pending_log", pending_log, f);
+}
+
 void rgw_bucket_olh_log_entry::dump(Formatter *f) const
 {
   encode_json("epoch", epoch, f);
