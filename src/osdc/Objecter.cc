@@ -1457,6 +1457,27 @@ void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
   assert(r == 0);
 }
 
+
+/**
+ * Use this together with wait_for_map: this is a pre-check to avoid
+ * allocating a Context for wait_for_map if we can see that we definitely
+ * already have the epoch.
+ *
+ * This does *not* replace the need to handle the return value of wait_for_map:
+ * just because we don't have it in this pre-check doesn't mean we won't
+ * have it when calling back into wait_for_map, since the objecter lock
+ * is dropped in between.
+ */
+bool Objecter::have_map(const epoch_t epoch)
+{
+  RWLock::RLocker rl(rwlock);
+  if (osdmap->get_epoch() >= epoch) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool Objecter::wait_for_map(epoch_t epoch, Context *c, int err)
 {
   RWLock::WLocker wl(rwlock);

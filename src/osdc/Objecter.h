@@ -1808,6 +1808,7 @@ public:
   int get_client_incarnation() const { return client_inc.read(); }
   void set_client_incarnation(int inc) { client_inc.set(inc); }
 
+  bool have_map(epoch_t epoch);
   /// wait for epoch; true if we already have it
   bool wait_for_map(epoch_t epoch, Context *c, int err=0);
   void _wait_for_new_map(Context *c, epoch_t epoch, int err=0);
