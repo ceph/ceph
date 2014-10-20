@@ -1383,7 +1383,9 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 
 protected:
   int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                  map<string, bufferlist>& attrs,
+                  const char *if_match = NULL, const char *if_nomatch = NULL);
 
 public:
   bool immutable_head() { return true; }
@@ -1454,7 +1456,9 @@ static bool is_v2_upload_id(const string& upload_id)
   return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                                              map<string, bufferlist>& attrs,
+                                              const char *if_match, const char *if_nomatch)
 {
   complete_writing_data();
 
@@ -1744,7 +1748,7 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  ret = processor->complete(etag, &mtime, 0, attrs);
+  ret = processor->complete(etag, &mtime, 0, attrs, if_match, if_nomatch);
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,

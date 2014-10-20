@@ -513,6 +513,9 @@ int RGWPutObj_ObjStore_S3::get_params()
 
   policy = s3policy;
 
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
+
   return RGWPutObj_ObjStore::get_params();
 }
 
