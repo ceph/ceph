@@ -77,7 +77,8 @@ def main(args):
 
     # Interpret any relative paths as being relative to ceph-qa-suite (absolute
     # paths are unchanged by this)
-    base_yaml_paths = [os.path.join(suite_repo_path, b) for b in base_yaml_paths]
+    base_yaml_paths = [os.path.join(suite_repo_path, b) for b in
+                       base_yaml_paths]
 
     with NamedTemporaryFile(prefix='schedule_suite_',
                             delete=False) as base_yaml:
@@ -433,7 +434,6 @@ def schedule_suite(job_config,
     schedule one suite.
     returns number of jobs scheduled
     """
-    machine_type = job_config.machine_type
     suite_name = job_config.suite
     count = 0
     log.debug('Suite %s in %s' % (suite_name, path))
@@ -449,12 +449,12 @@ def schedule_suite(job_config,
                     limit=limit))
             break
         if filter_in:
-            if not filter_in in description:
+            if filter_in not in description:
                 if all([x.find(filter_in) < 0 for x in fragment_paths]):
                     continue
         if filter_out:
-            if filter_out in description or any([filter_out in z
-                    for z in fragment_paths]):
+            if filter_out in description or any([filter_out in z for z in
+                                                 fragment_paths]):
                 continue
 
         raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
@@ -471,14 +471,6 @@ def schedule_suite(job_config,
         if exclude_os_type and exclude_os_type == os_type:
             log.info('Skipping due to excluded_os_type: %s facets %s',
                      exclude_os_type, description)
-            continue
-        # We should not run multiple tests (changing distros) unless the
-        # machine is a VPS.
-        # Re-imaging baremetal is not yet supported.
-        if machine_type != 'vps' and os_type and os_type != 'ubuntu':
-            log.info(
-                'Skipping due to non-ubuntu on baremetal facets %s',
-                description)
             continue
 
         log.info(
@@ -509,8 +501,8 @@ def schedule_suite(job_config,
             )
         count += 1
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
-    log.info('Suite %s in %s -- %d jobs were filtered out.' % (suite_name,
-              path, len(configs) - count))
+    log.info('Suite %s in %s -- %d jobs were filtered out.' %
+             (suite_name, path, len(configs) - count))
     return count
 
 

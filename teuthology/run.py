@@ -8,7 +8,7 @@ from traceback import format_tb
 
 import teuthology
 from . import report
-from .job_status import get_status, set_status
+from .job_status import get_status
 from .misc import get_user
 from .misc import read_config
 from .nuke import nuke
