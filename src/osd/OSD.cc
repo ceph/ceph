@@ -5882,7 +5882,8 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
     vector<int> acting;
     int nrep = osdmap->pg_to_acting_osds(pgid.pgid, acting);
     int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role >= 0) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(pgid.pool());
+    if (role == 0 || (role > 0 && !pi->is_erasure())) {
       ++p;  // still me
     } else {
       dout(10) << " discarding waiting ops for " << pgid << dendl;
@@ -7570,7 +7571,9 @@ void OSD::handle_op(OpRequestRef op)
   if (!pg) {
     dout(7) << "hit non-existent pg " << pgid << dendl;
 
-    if (osdmap->get_pg_acting_role(pgid.pgid, whoami) >= 0) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(pgid.pool());
+    int role = osdmap->get_pg_acting_role(pgid.pgid, whoami);
+    if (role == 0 || (role > 0 && !pi->is_erasure())) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
       op->mark_delayed("waiting for pg to exist locally");
