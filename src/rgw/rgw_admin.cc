@@ -221,6 +221,7 @@ enum {
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
+  OPT_BI_GET,
   OPT_OLH_GET,
   OPT_OLH_READLOG,
   OPT_QUOTA_SET,
@@ -262,7 +263,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
 {
   *need_more = false;
   // NOTE: please keep the checks in alphabetical order !!!
-  if (strcmp(cmd, "bilog") == 0 ||
+  if (strcmp(cmd, "bi") == 0 ||
+      strcmp(cmd, "bilog") == 0 ||
       strcmp(cmd, "bucket") == 0 ||
       strcmp(cmd, "buckets") == 0 ||
       strcmp(cmd, "caps") == 0 ||
@@ -386,6 +388,9 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
       return OPT_OLH_GET;
     if (strcmp(cmd, "readlog") == 0)
       return OPT_OLH_READLOG;
+  } else if (strcmp(prev_cmd, "bi") == 0) {
+    if (strcmp(cmd, "get") == 0)
+      return OPT_BI_GET;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -487,6 +492,42 @@ ReplicaLogType get_replicalog_type(const string& name) {
     return ReplicaLog_Bucket;
 
   return ReplicaLog_Invalid;
+}
+
+BIIndexType get_bi_index_type(const string& type_str) {
+  if (type_str == "plain")
+    return PlainIdx;
+  if (type_str == "instance")
+    return InstanceIdx;
+  if (type_str == "olh")
+    return OLHIdx;
+
+  return InvalidIdx;
+}
+
+void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
+{
+  bufferlist::iterator iter = bl.begin();
+  switch (index_type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        ::decode(entry, iter);
+        encode_json("entry", entry, formatter);
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_olh_entry entry;
+        ::decode(entry, iter);
+        encode_json("entry", entry, formatter);
+      }
+      break;
+    default:
+      assert(0);
+      break;
+  }
 }
 
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
@@ -901,10 +942,13 @@ int main(int argc, char **argv)
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
 
+  BIIndexType bi_index_type = PlainIdx;
+
   std::string val;
   std::ostringstream errs;
   string err;
   long long tmp = 0;
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -1067,6 +1111,13 @@ int main(int argc, char **argv)
       replica_log_type = get_replicalog_type(replica_log_type_str);
       if (replica_log_type == ReplicaLog_Invalid) {
         cerr << "ERROR: invalid replica log type" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*)NULL)) {
+      string index_type_str = val;
+      bi_index_type = get_bi_index_type(index_type_str);
+      if (bi_index_type == InvalidIdx) {
+        cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
     } else if (strncmp(*i, "-", 1) == 0) {
@@ -1927,6 +1978,34 @@ next:
     formatter->open_object_section("result");
     encode_json("is_truncated", is_truncated, formatter);
     encode_json("log", log, formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BI_GET) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    rgw_obj obj(bucket, object);
+    if (!object_version.empty()) {
+      obj.set_instance(object_version);
+    }
+
+    string idx;
+    bufferlist bl;
+
+    ret = store->bi_get(bucket, obj, bi_index_type, &idx, &bl);
+    if (ret < 0) {
+      cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    formatter->open_object_section("result");
+    encode_json("idx", idx, formatter);
+    dump_bi_entry(bl, bi_index_type, formatter);
     formatter->close_section();
     formatter->flush(cout);
   }

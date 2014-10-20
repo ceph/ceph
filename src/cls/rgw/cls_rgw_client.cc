@@ -103,6 +103,34 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_at
   o.exec("rgw", "obj_remove", in);
 }
 
+int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
+                   BIIndexType index_type, cls_rgw_obj_key& key,
+                   string *idx,
+                   bufferlist *data)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_get_op call;
+  call.key = key;
+  call.type = index_type;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_get", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_bi_get_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  *idx = op_ret.idx;
+  data->swap(op_ret.data);
+
+  return 0;
+}
+
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
                             bool delete_marker, const string& op_tag)
 {
