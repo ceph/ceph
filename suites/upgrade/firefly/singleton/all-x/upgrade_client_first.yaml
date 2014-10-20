@@ -1,0 +1,49 @@
+# this case tests issue #9419 "dumpling->firefly upgrade, sending setallochint?"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on legacy crush tunables: false
+    log-whitelist:
+      - scrub mismatch
+      - ScrubResult
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+- - client.0
+  - client.1
+tasks:
+- install:
+   branch: dumpling
+- print: "**** done install dumpling" 
+- ceph:
+   fs: xfs
+###########
+tasks:
+   - install.upgrade:
+       client.0:
+   # client.1 will be upgraded as well as it's on the same host as client.0
+   - print: "**** done install.upgrade on clinet.0 and client.1" 
+   - install.upgrade:
+       mon.a:
+       mon.b:
+   - print: "**** done install.upgrade" 
+   - ceph.restart: 
+       daemons: [osd.0, osd.1, osd.2]
+   - print: "**** done restart" 
+   - sequential:
+      - workload
+   - print: "**** done workload" 
+workload:
+  sequential:
+  - workunit:
+      clients:
+        client.0:
+        - rbd/test_librbd_python.sh
+  - print: "**** done rbd/test_librbd_python.sh" 
