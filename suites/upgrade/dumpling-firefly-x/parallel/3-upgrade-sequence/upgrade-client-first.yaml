@@ -1,10 +1,12 @@
-upgrade-sequence:
+upgrade-sequence0:
    sequential:
    - install.upgrade:
        client.0:
+         branch: firefly
    - print: "**** done install.upgrade client.0 to the version from teuthology-suite arg"
    - install.upgrade:
        mon.a:
+         branch: firefly
    - ceph.restart:
        daemons: [mon.a]
        wait-for-healthy: true
@@ -13,6 +15,7 @@ upgrade-sequence:
    - print: "**** done install.upgrade mon.a to the version from teuthology-suite arg"
    - install.upgrade:
        mon.b:
+         branch: firefly
    - ceph.restart:
        daemons: [mon.b, mon.c]
        wait-for-healthy: true
