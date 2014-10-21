@@ -1,7 +1,9 @@
 upgrade-sequence:
    sequential:
    - install.upgrade:
-      all:
+      mon.a:
+         branch: firefly
+      mon.b:
          branch: firefly
    - ceph.restart: [osd.0]
    - sleep:
