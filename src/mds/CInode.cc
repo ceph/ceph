@@ -1177,6 +1177,33 @@ void CInode::clear_dirty_parent()
   }
 }
 
+void CInode::verify_diri_backtrace(bufferlist &bl, int err)
+{
+  if (is_base() || is_dirty_parent())
+    return;
+
+  dout(10) << "verify_diri_backtrace" << dendl;
+
+  if (err == 0) {
+    inode_backtrace_t backtrace;
+    ::decode(backtrace, bl);
+    CDentry *pdn = get_parent_dn();
+    if (backtrace.ancestors.empty() ||
+	backtrace.ancestors[0].dname != pdn->name ||
+	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
+      err = -EINVAL;
+  }
+
+  if (err) {
+    MDS *mds = mdcache->mds;
+    mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
+    assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
+
+    _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
+    mds->mdlog->flush();
+  }
+}
+
 // ------------------
 // parent dir
 
