@@ -8363,11 +8363,15 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, OpRequestRef> item) {
   else
     sdata->pqueue.enqueue(item.second->get_req()->get_source_inst(),
       priority, cost, item);
-  sdata->sdata_op_ordering_lock.Unlock();
-
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
+      
+  if (sdata->has_waiting_thread) {
+    sdata->sdata_op_ordering_lock.Unlock();
+  } else {
+    sdata->sdata_op_ordering_lock.Unlock();
+    sdata->sdata_lock.Lock();
+    sdata->sdata_cond.SignalOne();
+    sdata->sdata_lock.Unlock();
+  }
 
 }
 
@@ -8392,11 +8396,14 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item) {
     sdata->pqueue.enqueue_front(item.second->get_req()->get_source_inst(),
       priority, cost, item);
 
-  sdata->sdata_op_ordering_lock.Unlock();
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
-
+  if (sdata->has_waiting_thread) {
+    sdata->sdata_op_ordering_lock.Unlock();
+  } else {
+    sdata->sdata_op_ordering_lock.Unlock();
+    sdata->sdata_lock.Lock();
+    sdata->sdata_cond.SignalOne();
+    sdata->sdata_lock.Unlock();
+  }
 }
 
 
