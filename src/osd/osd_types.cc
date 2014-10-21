@@ -2384,9 +2384,15 @@ bool pg_interval_t::check_new_interval(
     i.primary = old_acting_primary;
     i.up_primary = old_up_primary;
 
-    if (!i.acting.empty() && i.primary != -1 &&
-	i.acting.size() >=
-	lastmap->get_pools().find(pgid.pool())->second.min_size) {
+    unsigned num_acting = 0;
+    for (vector<int>::const_iterator p = i.acting.begin(); p != i.acting.end();
+	 ++p)
+      if (*p != CRUSH_ITEM_NONE)
+	++num_acting;
+
+    if (num_acting &&
+	i.primary != -1 &&
+	num_acting >= lastmap->get_pools().find(pgid.pool())->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"

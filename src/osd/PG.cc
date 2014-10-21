@@ -1293,7 +1293,6 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
     if (*i != CRUSH_ITEM_NONE)
       ++num_want_acting;
   }
-  assert(want_acting_backfill.size() - want_backfill.size() == num_want_acting);
 
   // This is a bit of a problem, if we allow the pg to go active with
   // want.size() < min_size, we won't consider the pg to have been
@@ -1896,7 +1895,7 @@ void PG::mark_clean()
 {
   // only mark CLEAN if we have the desired number of replicas AND we
   // are not remapped.
-  if (acting.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
+  if (actingset.size() == get_osdmap()->get_pg_size(info.pgid.pgid) &&
       up == acting)
     state_set(PG_STATE_CLEAN);
 

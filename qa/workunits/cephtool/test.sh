@@ -435,8 +435,18 @@ function test_auth_profiles()
 
   ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-ro
   ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rw
-  ceph -n client.xx-profile-rd -k client.xx.keyring auth del client.xx-profile-rd
-  rm -f client.xx.keyring
+  
+  # add a new role-definer with the existing role-definer
+  ceph -n client.xx-profile-rd -k client.xx.keyring \
+    auth add client.xx-profile-rd2 mon 'allow profile role-definer'
+  ceph -n client.xx-profile-rd -k client.xx.keyring \
+    auth export > client.xx.keyring.2
+  # remove old role-definer using the new role-definer
+  ceph -n client.xx-profile-rd2 -k client.xx.keyring.2 \
+    auth del client.xx-profile-rd
+  # remove the remaining role-definer with admin
+  ceph auth del client.xx-profile-rd2
+  rm -f client.xx.keyring client.xx.keyring.2
 }
 
 function test_mon_misc()
