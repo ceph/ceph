@@ -725,8 +725,10 @@ ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 
 ceph_test_librbd_SOURCES = \
+	test/librbd/test_fixture.cc \
 	test/librbd/test_librbd.cc \
-	test/librbd/test_ImageWatcher.cc
+	test/librbd/test_ImageWatcher.cc \
+	test/librbd/test_internal.cc
 ceph_test_librbd_LDADD = \
 	librbd_api.la librbd_internal.la \
 	libcls_rbd_client.la libcls_lock_client.la \
@@ -1058,6 +1060,7 @@ noinst_HEADERS += \
 	test/librados/test.h \
 	test/librados/TestCase.h \
 	test/libradosstriper/TestCase.h \
+	test/librbd/test_fixture.h \
 	test/ObjectMap/KeyValueDBMemory.h \
 	test/omap_bench.h \
 	test/osdc/FakeWriteback.h \
