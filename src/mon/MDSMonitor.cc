@@ -1486,10 +1486,15 @@ bool MDSMonitor::filesystem_command(
 	r = -ENOENT;
 	poolid = -1;
 	ss << "pool '" << poolname << "' does not exist";
+        return true;
       }
     }
     const pg_pool_t *p = mon->osdmon()->osdmap.get_pg_pool(poolid);
-    assert(p != NULL);
+    if (!p) {
+      ss << "pool '" << poolname << "' does not exist";
+      r = -ENOENT;
+      return true;
+    }
     if (p->is_erasure()) {
       // I'm sorry Dave, I'm afraid I can't do that
       r = -EINVAL;
