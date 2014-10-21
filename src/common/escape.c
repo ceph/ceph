@@ -119,11 +119,12 @@ void escape_xml_attr(const char *buf, char *out)
 #define TAB_JESCAPE "\\t"
 #define NEWLINE_JESCAPE "\\n"
 
-int escape_json_attr_len(const char *buf)
+int escape_json_attr_len(const char *buf, int src_len)
 {
 	const char *b;
 	int ret = 0;
-	for (b = buf; *b; ++b) {
+	int i;
+	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
 		switch (c) {
 		case '"':
@@ -156,11 +157,12 @@ int escape_json_attr_len(const char *buf)
 	return ret;
 }
 
-void escape_json_attr(const char *buf, char *out)
+void escape_json_attr(const char *buf, int src_len, char *out)
 {
 	char *o = out;
 	const char *b;
-	for (b = buf; *b; ++b) {
+	int i;
+	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
 		switch (c) {
 		case '"':
@@ -198,3 +200,4 @@ void escape_json_attr(const char *buf, char *out)
 	// null terminator
 	*o = '\0';
 }
+
