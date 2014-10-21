@@ -321,7 +321,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
-  for (int i = 0; i < cct->_conf->ms_event_op_threads; ++i) {
+  for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
     Worker *w = new Worker(this, cct);
     workers.push_back(w);
   }
