@@ -1,5 +1,6 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+#include "test/librbd/test_fixture.h"
 #include "include/int_types.h"
 #include "include/stringify.h"
 #include "include/rados/librados.h"
@@ -25,40 +26,7 @@
 
 using namespace ceph;
 
-#define REQUIRE_FEATURE(feature) { 	  \
-  if (!is_feature_enabled(feature)) { 	  \
-    std::cout << "SKIPPING" << std::endl; \
-    return SUCCEED(); 			  \
-  } 					  \
-}
-
-static bool get_features(uint64_t *features) {
-  const char *c = getenv("RBD_FEATURES");
-  if (c == NULL) {
-    return false;
-  }
-
-  std::stringstream ss(c);
-  if (!(ss >> *features)) {
-    return false;
-  }
-  return true;
-}
-
-static int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
-                           const std::string &name, uint64_t size) {
-  uint64_t features = 0;
-  get_features(&features);
-  int order = 0;
-  return rbd.create2(ioctx, name.c_str(), size, features, &order);
-}
-
-static bool is_feature_enabled(uint64_t feature) {
-  uint64_t features;
-  return (get_features(&features) && (features & feature) == feature);
-}
-
-class TestImageWatcher : public ::testing::Test {
+class TestImageWatcher : public TestFixture {
 public:
 
   TestImageWatcher() : m_watch_ctx(NULL), m_aio_completion_restarts(),
@@ -138,44 +106,9 @@ public:
     uint64_t m_handle;
   };
 
-  static void SetUpTestCase() {
-    _pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_pool_pp(_pool_name, _rados));
-  }
-
-  static void TearDownTestCase() {
-    ASSERT_EQ(0, destroy_one_pool_pp(_pool_name, _rados));
-  }
-
-  static std::string get_temp_image_name() {
-    ++_image_number;
-    return "image" + stringify(_image_number);
-  }
-
-  virtual void SetUp() {
-    ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
-
-    m_image_name = get_temp_image_name();
-    m_image_size = 2 << 20;
-    ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, m_image_name, m_image_size));
-  }
-
   virtual void TearDown() {
-    unlock_image();
     deregister_image_watch();
-
-    for (std::vector<librbd::ImageCtx *>::iterator iter = m_ictxs.begin();
-	 iter != m_ictxs.end(); ++iter) {
-      librbd::close_image(*iter);
-    }
-
-    m_ioctx.close();
-  }
-
-  int open_image(const std::string &image_name, librbd::ImageCtx **ictx) {
-    *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
-    m_ictxs.push_back(*ictx);
-    return librbd::open_image(*ictx);
+    TestFixture::TearDown();
   }
 
   int deregister_image_watch() {
@@ -205,27 +138,6 @@ public:
     return m_notify_acks.empty();
   }
 
-  int lock_image(librbd::ImageCtx &ictx, ClsLockType lock_type,
-		 const std::string &cookie) {
-    int r = rados::cls::lock::lock(&m_ioctx, ictx.header_oid, RBD_LOCK_NAME,
-				   lock_type, cookie, "internal", "", utime_t(),
-				   0);
-    if (r == 0) {
-      m_lock_object = ictx.header_oid;
-      m_lock_cookie = cookie;
-    }
-    return r;
-  }
-
-  int unlock_image() {
-    int r = 0;
-    if (!m_lock_cookie.empty()) {
-      r = rados::cls::lock::unlock(&m_ioctx, m_lock_object, RBD_LOCK_NAME,
-				   m_lock_cookie);
-      m_lock_cookie = "";
-    }
-    return r;
-  }
 
   librbd::AioCompletion *create_aio_completion(librbd::ImageCtx &ictx) {
     librbd::AioCompletion *aio_completion = new librbd::AioCompletion();
@@ -290,18 +202,6 @@ public:
 	    (result != 0 || m_aio_completion_restarts > 0));
   }
 
-  static std::string _pool_name;
-  static librados::Rados _rados;
-  static uint64_t _image_number;
-
-  librados::IoCtx m_ioctx;
-  librbd::RBD m_rbd;
-
-  std::string m_image_name;
-  uint64_t m_image_size;
-
-  std::vector<librbd::ImageCtx *> m_ictxs;
-
   typedef std::pair<NotifyOp, bufferlist> NotifyOpPayload;
   typedef std::list<NotifyOpPayload> NotifyOpPayloads;
 
@@ -315,13 +215,7 @@ public:
   Mutex m_callback_lock;
   Cond m_callback_cond;
 
-  std::string m_lock_object;
-  std::string m_lock_cookie;
 };
-
-std::string TestImageWatcher::_pool_name;
-librados::Rados TestImageWatcher::_rados;
-uint64_t TestImageWatcher::_image_number = 0;
 
 TEST_F(TestImageWatcher, IsLockSupported) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
