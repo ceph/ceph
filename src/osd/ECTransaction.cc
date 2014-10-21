@@ -23,7 +23,6 @@
 #include "os/ObjectStore.h"
 
 struct AppendObjectsGenerator: public boost::static_visitor<void> {
-  typedef void result_type;
   set<hobject_t> *out;
   AppendObjectsGenerator(set<hobject_t> *out) : out(out) {}
   void operator()(const ECTransaction::AppendOp &op) {
@@ -57,7 +56,6 @@ void ECTransaction::get_append_objects(
 }
 
 struct TransGenerator : public boost::static_visitor<void> {
-  typedef void result_type;
   map<hobject_t, ECUtil::HashInfoRef> &hash_infos;
 
   ErasureCodeInterfaceRef &ecimpl;
