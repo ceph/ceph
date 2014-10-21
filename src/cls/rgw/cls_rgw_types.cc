@@ -97,6 +97,7 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   meta.dump(f);
   f->close_section();
   f->dump_string("tag", tag);
+  f->dump_int("flags", (int)flags);
 
   map<string, struct rgw_bucket_pending_info>::const_iterator iter = pending_map.begin();
   f->open_array_section("pending_map");
