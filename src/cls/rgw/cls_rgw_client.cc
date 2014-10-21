@@ -129,6 +129,34 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
+                   const string& name, const string& marker, uint32_t max,
+                   list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_list_op call;
+  call.name = name;
+  call.marker = marker;
+  call.max = max;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_bi_list_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  *entries = op_ret.entries;
+  *is_truncated = op_ret.is_truncated;
+
+  return 0;
+}
+
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
                             bool delete_marker, const string& op_tag)
 {
