@@ -6573,7 +6573,7 @@ int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, stri
   return 0;
 }
 
-int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, string *idx, bufferlist *data)
+int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
   librados::IoCtx index_ctx;
   string oid;
@@ -6583,7 +6583,7 @@ int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, s
 
   cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
   
-  int ret = cls_rgw_bi_get(index_ctx, oid, index_type, key, idx, data);
+  int ret = cls_rgw_bi_get(index_ctx, oid, index_type, key, entry);
   if (ret < 0)
     return ret;
 
