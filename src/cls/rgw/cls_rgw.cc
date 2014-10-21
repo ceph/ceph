@@ -1709,10 +1709,12 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
   rgw_cls_bi_get_ret op_ret;
 
-  op_ret.type = op.type;
-  op_ret.idx = idx;
+  rgw_cls_bi_entry& entry = op_ret.entry;
 
-  int r = cls_cxx_map_get_val(hctx, idx, &op_ret.data);
+  entry.type = op.type;
+  entry.idx = idx;
+
+  int r = cls_cxx_map_get_val(hctx, idx, &entry.data);
   if (r < 0) {
       CLS_LOG(10, "%s(): cls_cxx_map_get_val() returned %d", __func__, r);
       return r;

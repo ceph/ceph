@@ -1994,19 +1994,15 @@ next:
       obj.set_instance(object_version);
     }
 
-    string idx;
-    bufferlist bl;
+    rgw_cls_bi_entry entry;
 
-    ret = store->bi_get(bucket, obj, bi_index_type, &idx, &bl);
+    ret = store->bi_get(bucket, obj, bi_index_type, &entry);
     if (ret < 0) {
       cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    formatter->open_object_section("result");
-    encode_json("idx", idx, formatter);
-    dump_bi_entry(bl, bi_index_type, formatter);
-    formatter->close_section();
+    encode_json("entry", entry, formatter);
     formatter->flush(cout);
   }
 

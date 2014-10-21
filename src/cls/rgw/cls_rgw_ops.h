@@ -414,32 +414,23 @@ struct rgw_cls_bi_get_op {
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_op)
 
 struct rgw_cls_bi_get_ret {
-  BIIndexType type;
-  string idx;
-  bufferlist data;
+  rgw_cls_bi_entry entry;
 
-  rgw_cls_bi_get_ret() : type(PlainIdx) {}
+  rgw_cls_bi_get_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode((uint8_t)type, bl);
-    ::encode(idx, bl);
-    ::encode(data, bl);
+    ::encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    uint8_t c;
-    ::decode(c, bl);
-    type = (BIIndexType)c;
-    ::decode(idx, bl);
-    ::decode(data, bl);
+    ::decode(entry, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
-
 
 struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
