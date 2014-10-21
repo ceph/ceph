@@ -292,7 +292,7 @@ void Objecter::shutdown()
 {
   assert(initialized.read());
 
-  RWLock::WLocker wl(rwlock);
+  rwlock.get_write();
 
   initialized.set(0);
 
@@ -388,6 +388,9 @@ void Objecter::shutdown()
     delete logger;
     logger = NULL;
   }
+
+  // Let go of Objecter write lock so timer thread can shutdown
+  rwlock.unlock();
 
   {
     Mutex::Locker l(timer_lock);
@@ -1544,14 +1547,14 @@ void Objecter::tick()
 
   ldout(cct, 10) << "tick" << dendl;
 
-  // we are only called by C_Tick
-  assert(tick_event);
-  tick_event = NULL;
-
   if (!initialized.read()) {
     // we raced with shutdown
     return;
   }
+
+  // we are only called by C_Tick
+  assert(tick_event);
+  tick_event = NULL;
 
   set<OSDSession*> toping;
 
