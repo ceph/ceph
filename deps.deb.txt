@@ -16,6 +16,7 @@ libboost-program-options-dev
 libboost-system-dev
 libboost-thread-dev
 libbz2-dev
+libcrypto++-dev
 libcurl4-gnutls-dev
 libedit-dev
 libexpat1-dev
