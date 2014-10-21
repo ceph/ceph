@@ -154,7 +154,6 @@ void LevelDBStore::LevelDBTransactionImpl::set(
   const bufferlist &to_set_bl)
 {
   buffers.push_back(to_set_bl);
-  buffers.rbegin()->rebuild();
   bufferlist &bl = *(buffers.rbegin());
   string key = combine_strings(prefix, k);
   keys.push_back(key);
