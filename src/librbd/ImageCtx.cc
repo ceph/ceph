@@ -162,23 +162,23 @@ namespace librbd {
     }
 
     md_config_t *conf = cct->_conf;
-    vector<uint64_t> alignments;
-    alignments.push_back(stripe_count << order); // object set (in file striping terminology)
-    alignments.push_back(stripe_unit * stripe_count); // stripe
-    alignments.push_back(stripe_unit); // stripe unit
     readahead.set_trigger_requests(conf->rbd_readahead_trigger_requests);
     readahead.set_max_readahead_size(conf->rbd_readahead_max_bytes);
-    readahead.set_alignments(alignments);
-
     return 0;
   }
-  
+
   void ImageCtx::init_layout()
   {
     if (stripe_unit == 0 || stripe_count == 0) {
       stripe_unit = 1ull << order;
       stripe_count = 1;
     }
+
+    vector<uint64_t> alignments;
+    alignments.push_back(stripe_count << order); // object set (in file striping terminology)
+    alignments.push_back(stripe_unit * stripe_count); // stripe
+    alignments.push_back(stripe_unit); // stripe unit
+    readahead.set_alignments(alignments);
 
     memset(&layout, 0, sizeof(layout));
     layout.fl_stripe_unit = stripe_unit;
