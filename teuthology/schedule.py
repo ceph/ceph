@@ -34,7 +34,11 @@ def build_config(args):
     for conf_path in config_paths:
         with file(conf_path) as partial_file:
             partial_dict = yaml.safe_load(partial_file)
-        conf_dict = deep_merge(conf_dict, partial_dict)
+        try:
+            conf_dict = deep_merge(conf_dict, partial_dict)
+        except Exception:
+            pprint.pprint("failed to merge {0} into {1}".format(conf_dict, partial_dict))
+            raise
     # strip out targets; the worker will allocate new ones when we run
     # the job with --lock.
     if 'targets' in conf_dict:
