@@ -870,7 +870,6 @@ int AsyncConnection::_process_connection()
     case STATE_CONNECTING_WAIT_IDENTIFY_PEER:
       {
         entity_addr_t paddr, peer_addr_for_me;
-        int port;
         bufferlist myaddrbl;
 
         r = read_until(sizeof(paddr)*2, state_buffer);
@@ -891,7 +890,6 @@ int AsyncConnection::_process_connection()
           lderr(async_msgr->cct) << __func__ <<  " decode peer addr failed " << dendl;
           goto fail;
         }
-        port = peer_addr_for_me.get_port();
         ldout(async_msgr->cct, 20) << __func__ <<  " connect read peer addr "
                              << paddr << " on socket " << sd << dendl;
         if (peer_addr != paddr) {
