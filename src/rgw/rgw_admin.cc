@@ -222,6 +222,7 @@ enum {
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
   OPT_BI_GET,
+  OPT_BI_LIST,
   OPT_OLH_GET,
   OPT_OLH_READLOG,
   OPT_QUOTA_SET,
@@ -391,6 +392,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "bi") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_BI_GET;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_BI_LIST;
   } else if (strcmp(prev_cmd, "region") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REGION_GET;
@@ -1993,6 +1996,43 @@ next:
     }
 
     encode_json("entry", entry, formatter);
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BI_LIST) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    list<rgw_cls_bi_entry> entries;
+    bool is_truncated;
+    if (max_entries < 0) {
+      max_entries = 1000;
+    }
+
+
+    formatter->open_array_section("entries");
+
+    do {
+      entries.clear();
+      ret = store->bi_list(bucket, object, marker, max_entries, &entries, &is_truncated);
+      if (ret < 0) {
+        cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      list<rgw_cls_bi_entry>::iterator iter;
+      for (iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_cls_bi_entry& entry = *iter;
+        encode_json("entry", entry, formatter);
+        marker = entry.idx;
+      }
+      formatter->flush(cout);
+    } while (is_truncated);
+    formatter->close_section();
     formatter->flush(cout);
   }
 
