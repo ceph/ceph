@@ -2,6 +2,7 @@
 # The lrc plugin cannot be used because some OSD are not upgraded
 # yet and would crash.
 #
+tasks: 
 - exec:
     mon.a:
       - |-
