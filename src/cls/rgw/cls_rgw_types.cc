@@ -110,6 +110,51 @@ void rgw_bucket_dir_entry::dump(Formatter *f) const
   f->close_section();
 }
 
+static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
+{
+  bufferlist::iterator iter = bl.begin();
+  switch (index_type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        ::decode(entry, iter);
+        encode_json("entry", entry, formatter);
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_olh_entry entry;
+        ::decode(entry, iter);
+        encode_json("entry", entry, formatter);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void rgw_cls_bi_entry::dump(Formatter *f) const
+{
+  string type_str;
+  switch (type) {
+    case PlainIdx:
+      type_str = "plain";
+      break;
+    case InstanceIdx:
+      type_str = "instance";
+      break;
+    case OLHIdx:
+      type_str = "olh";
+      break;
+    default:
+      type_str = "invalid";
+  }
+  encode_json("type", type_str, f);
+  encode_json("idx", idx, f);
+  dump_bi_entry(data, type, f);
+}
+
 void rgw_bucket_olh_entry::dump(Formatter *f) const
 {
   encode_json("key", key, f);

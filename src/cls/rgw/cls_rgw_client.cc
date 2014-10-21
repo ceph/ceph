@@ -103,8 +103,7 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_at
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,
-                   string *idx,
-                   bufferlist *data)
+                   rgw_cls_bi_entry *entry)
 {
   bufferlist in, out;
   struct rgw_cls_bi_get_op call;
@@ -123,8 +122,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
     return -EIO;
   }
 
-  *idx = op_ret.idx;
-  data->swap(op_ret.data);
+  *entry = op_ret.entry;
 
   return 0;
 }
