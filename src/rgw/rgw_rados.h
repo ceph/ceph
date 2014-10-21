@@ -1769,6 +1769,8 @@ public:
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
 
   int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
+  int bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max,
+              list<rgw_cls_bi_entry> *entries, bool *is_truncated);
 
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
