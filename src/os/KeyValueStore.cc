@@ -1182,6 +1182,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
   Transaction::iterator i = transaction.begin();
   uint64_t op_num = 0;
+  bool exist_clone = false;
 
   while (i.have_op()) {
     if (handle)
@@ -1302,6 +1303,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         coll_t cid = i.decode_cid();
         ghobject_t oid = i.decode_oid();
         ghobject_t noid = i.decode_oid();
+        exist_clone = true;
         r = _clone(cid, oid, noid, t);
       }
       break;
@@ -1313,6 +1315,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         ghobject_t noid = i.decode_oid();
         uint64_t off = i.decode_length();
         uint64_t len = i.decode_length();
+        exist_clone = true;
         r = _clone_range(cid, oid, noid, off, len, off, t);
       }
       break;
@@ -1325,6 +1328,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         uint64_t srcoff = i.decode_length();
         uint64_t len = i.decode_length();
         uint64_t dstoff = i.decode_length();
+        exist_clone = true;
         r = _clone_range(cid, oid, noid, srcoff, len, dstoff, t);
       }
       break;
@@ -1526,10 +1530,9 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       if (!ok) {
         const char *msg = "unexpected error code";
 
-        if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
-                            op == Transaction::OP_CLONE ||
-                            op == Transaction::OP_CLONERANGE2))
-          msg = "ENOENT on clone suggests osd bug";
+        if (exist_clone) {
+          dout(0) << "BUG: clone failed will lead to paritial transaction applied" << dendl;
+        }
 
         if (r == -ENOSPC)
           // For now, if we hit _any_ ENOSPC, crash, before we do any damage
