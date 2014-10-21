@@ -432,6 +432,53 @@ struct rgw_cls_bi_get_ret {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 
+struct rgw_cls_bi_list_op {
+  uint32_t max;
+  string name;
+  string marker;
+
+  rgw_cls_bi_list_op() : max(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(max, bl);
+    ::encode(name, bl);
+    ::encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(max, bl);
+    ::decode(name, bl);
+    ::decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_list_op)
+
+struct rgw_cls_bi_list_ret {
+  list<rgw_cls_bi_entry> entries;
+  bool is_truncated;
+
+  rgw_cls_bi_list_ret() : is_truncated(false) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entries, bl);
+    ::encode(is_truncated, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entries, bl);
+    ::decode(is_truncated, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_list_ret)
+
 struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
