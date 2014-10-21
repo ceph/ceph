@@ -36,7 +36,7 @@ public:
   virtual void dump_unsigned(const char *name, uint64_t u);
   virtual void dump_int(const char *name, int64_t u);
   virtual void dump_float(const char *name, double d);
-  virtual void dump_string(const char *name, std::string s);
+  virtual void dump_string(const char *name, const std::string& s);
   virtual std::ostream& dump_stream(const char *name);
   virtual void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
   virtual int get_len() const;
