@@ -329,6 +329,35 @@ enum BIIndexType {
   OLHIdx        = 3,
 };
 
+struct rgw_cls_bi_entry {
+  BIIndexType type;
+  string idx;
+  bufferlist data;
+
+  rgw_cls_bi_entry() : type(InvalidIdx) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode((uint8_t)type, bl);
+    ::encode(idx, bl);
+    ::encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    type = (BIIndexType)c;
+    ::decode(idx, bl);
+    ::decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
+
 enum OLHLogOp {
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 2,
