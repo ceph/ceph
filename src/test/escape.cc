@@ -56,9 +56,10 @@ TEST(EscapeXml, Utf8) {
 
 static std::string escape_json_attrs(const char *str)
 {
-  int len = escape_json_attr_len(str);
+  int src_len = strlen(str);
+  int len = escape_json_attr_len(str, src_len);
   char out[len];
-  escape_json_attr(str, out);
+  escape_json_attr(str, src_len, out);
   return out;
 }
 
