@@ -1444,7 +1444,7 @@ private:
           sdata_lock(lock_name.c_str()),
           sdata_op_ordering_lock(ordering_lock.c_str()),
           pqueue(max_tok_per_prio, min_cost),
-	  has_waiting_thread(false) {}
+          has_waiting_thread(false) {}
     };
 
     vector<ShardData*> shard_list;
@@ -1456,7 +1456,7 @@ private:
       ShardedOpWQ(uint32_t pnum_shards, OSD *o, time_t ti, ShardedThreadPool* tp):
         ShardedThreadPool::ShardedWQ < pair <PGRef, OpRequestRef> >(ti, ti*10, tp),
         osd(o), num_shards(pnum_shards),
-	worker_thread_wake_time(0, osd->cct->_conf->osd_op_worker_wake_time * 1000) {
+        worker_thread_wake_time(0, osd->cct->_conf->osd_op_worker_wake_time * 1000) {
         for(uint32_t i = 0; i < num_shards; i++) {
           char lock_name[32] = {0};
           snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
