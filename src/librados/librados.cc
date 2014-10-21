@@ -4070,7 +4070,7 @@ extern "C" int rados_omap_get_next(rados_omap_iter_t iter,
 				   size_t *len)
 {
   tracepoint(librados, rados_omap_get_next_enter, iter);
-  RadosOmapIter *it = (RadosOmapIter *)iter;
+  RadosOmapIter *it = static_cast<RadosOmapIter *>(iter);
   if (it->i == it->values.end()) {
     *key = NULL;
     *val = NULL;
@@ -4094,7 +4094,7 @@ extern "C" int rados_omap_get_next(rados_omap_iter_t iter,
 extern "C" void rados_omap_get_end(rados_omap_iter_t iter)
 {
   tracepoint(librados, rados_omap_get_end_enter, iter);
-  RadosOmapIter *it = (RadosOmapIter *)iter;
+  RadosOmapIter *it = static_cast<RadosOmapIter *>(iter);
   delete it;
   tracepoint(librados, rados_omap_get_end_exit);
 }
