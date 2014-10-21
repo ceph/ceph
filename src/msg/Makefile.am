@@ -7,7 +7,9 @@ noinst_HEADERS += \
 	msg/Connection.h \
 	msg/Dispatcher.h \
 	msg/Message.h \
-	msg/Messenger.h
+	msg/Messenger.h \
+	msg/SimplePolicyMessenger.h \
+	msg/msg_types.h
 
 # simple
 libmsg_la_SOURCES += \
