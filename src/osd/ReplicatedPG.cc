@@ -3752,11 +3752,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_NOTIFY:
       ++ctx->num_read;
       {
-	uint32_t ver; // obsolete
 	uint32_t timeout;
         bufferlist bl;
 
 	try {
+	  uint32_t ver; // obsolete
           ::decode(ver, bp);
 	  ::decode(timeout, bp);
           ::decode(bl, bp);
