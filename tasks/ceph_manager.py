@@ -11,6 +11,7 @@ import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from teuthology.orchestra.remote import Remote
+import subprocess
 
 def make_admin_daemon_dir(ctx, remote):
     """
@@ -56,6 +57,12 @@ def mount_osd_data(ctx, remote, osd):
             ]
             )
 
+
+def cmd_exists(cmd):
+    return subprocess.call("type " + cmd, shell=True,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
+
+
 class Thrasher:
     """
     Object used to thrash Ceph
@@ -76,7 +83,10 @@ class Thrasher:
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
-        self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', False)
+        if cmd_exists("ceph_objectstore_tool"):
+            self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', False)
+        else:
+            self.ceph_objectstore_tool = False
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
 
         num_osds = self.in_osds + self.out_osds
