@@ -222,6 +222,7 @@ enum {
   OPT_OBJECT_STAT,
   OPT_OBJECT_REWRITE,
   OPT_BI_GET,
+  OPT_BI_PUT,
   OPT_BI_LIST,
   OPT_OLH_GET,
   OPT_OLH_READLOG,
@@ -392,6 +393,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "bi") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_BI_GET;
+    if (strcmp(cmd, "put") == 0)
+      return OPT_BI_PUT;
     if (strcmp(cmd, "list") == 0)
       return OPT_BI_LIST;
   } else if (strcmp(prev_cmd, "region") == 0) {
@@ -2007,6 +2010,27 @@ next:
 
     encode_json("entry", entry, formatter);
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BI_PUT) {
+    RGWBucketInfo bucket_info;
+    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw_cls_bi_entry entry;
+    ret = read_decode_json(infile, entry);
+    if (ret < 0) {
+      return 1;
+    }
+
+    ret = store->bi_put(bucket, entry);
+    if (ret < 0) {
+      cerr << "ERROR: bi_put(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_BI_LIST) {

@@ -11,6 +11,8 @@
 #define CEPH_RGW_UPDATE 'u'
 #define CEPH_RGW_TAG_TIMEOUT 60*60*24
 
+class JSONObj;
+
 namespace ceph {
   class Formatter;
 }
@@ -52,6 +54,7 @@ struct rgw_bucket_pending_info {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_pending_info*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
@@ -98,6 +101,7 @@ struct rgw_bucket_dir_entry_meta {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
@@ -195,6 +199,7 @@ struct rgw_bucket_entry_ver {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_entry_ver*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
@@ -234,6 +239,7 @@ struct cls_rgw_obj_key {
     f->dump_string("name", name);
     f->dump_string("instance", instance);
   }
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<cls_rgw_obj_key*>& ls) {
     ls.push_back(new cls_rgw_obj_key);
     ls.push_back(new cls_rgw_obj_key);
@@ -318,6 +324,7 @@ struct rgw_bucket_dir_entry {
   bool is_valid() { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
@@ -355,6 +362,7 @@ struct rgw_cls_bi_entry {
   }
 
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
