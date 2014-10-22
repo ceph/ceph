@@ -109,6 +109,8 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'thrashosds task only accepts a dict for configuration'
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('thrashosds', {}))
 
     if 'powercycle' in config:
 
