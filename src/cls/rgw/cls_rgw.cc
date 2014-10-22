@@ -14,6 +14,7 @@
 #include "cls/rgw/cls_rgw_ops.h"
 #include "common/Clock.h"
 #include "common/strtol.h"
+#include "common/escape.h"
 
 #include "global/global_context.h"
 
@@ -34,6 +35,7 @@ cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_obj_remove;
 cls_method_handle_t h_rgw_bi_get_op;
+cls_method_handle_t h_rgw_bi_put_op;
 cls_method_handle_t h_rgw_bi_list_op;
 cls_method_handle_t h_rgw_bi_log_list_op;
 cls_method_handle_t h_rgw_dir_suggest_changes;
@@ -1740,6 +1742,28 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
+static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_bi_put_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  rgw_cls_bi_entry& entry = op.entry;
+
+  int r = cls_cxx_map_set_val(hctx, entry.idx, &entry.data);
+  if (r < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_map_set_val() returned r=%d", __func__, r);
+  }
+
+  return 0;
+}
+
 static int list_plain_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
                               list<rgw_cls_bi_entry> *entries)
 {
@@ -1788,42 +1812,12 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   return count;
 }
 
-static int get_map_vals_starting_at(cls_method_context_t hctx,
-                                const string &start_at,
-                                const string &filter_prefix,
-                                uint64_t max_to_get,
-                                std::map<string, bufferlist> *vals)
+static string escape_str(const string& s)
 {
-  if (max_to_get == 0) {
-    return 0;
-  }
-  bufferlist bl;
-  bool found_first = false;
-
-  if (start_at.substr(0, filter_prefix.size()) == filter_prefix) {
-    int ret = cls_cxx_map_get_val(hctx, start_at, &bl);
-    if (ret < 0 && ret != -ENOENT) {
-      return ret;
-    }
-    found_first = (ret == 0);
-
-    if (found_first) {
-      max_to_get--;
-    }
-  }
-
-  if (max_to_get > 0) {
-    int ret = cls_cxx_map_get_vals(hctx, start_at, filter_prefix, max_to_get, vals);
-    if (ret < 0 && ret != -ENOENT) {
-      return ret;
-    }
-  }
-
-  if (found_first) {
-    (*vals)[start_at] = bl;
-  }
-
-  return 0;
+   int len = escape_json_attr_len(s.c_str(), s.size());
+   char escaped[len];
+   escape_json_attr(s.c_str(), s.size(), escaped);
+   return string(escaped);
 }
 
 static int list_instance_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
@@ -1838,14 +1832,25 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
   }
   int count = 0;
   map<string, bufferlist> keys;
+  string filter = first_instance_idx;
+  bool started = true;
   do {
     if (count >= (int)max) {
       return count;
     }
     keys.clear();
 #define BI_GET_NUM_KEYS 128
-    string filter;
-    int ret = get_map_vals_starting_at(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+    int ret;
+    if (started) {
+      ret = cls_cxx_map_get_val(hctx, start_key, &keys[start_key]);
+      if (ret == -ENOENT) {
+        ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+      }
+      started = false;
+    } else {
+      ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
+    }
+    CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), keys.size());
     if (ret < 0) {
       return ret;
     }
@@ -1857,13 +1862,15 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
       entry.idx = iter->first;
       entry.data = iter->second;
 
+      CLS_LOG(20, "%s(): entry.idx=%s", __func__, escape_str(entry.idx).c_str());
+
       bufferlist::iterator biter = entry.data.begin();
 
       rgw_bucket_dir_entry e;
       try {
         ::decode(e, biter);
       } catch (buffer::error& err) {
-        CLS_LOG(0, "ERROR: %s(): failed to decode buffer", __func__);
+        CLS_LOG(0, "ERROR: %s(): failed to decode buffer (size=%d)", __func__, entry.data.length());
         return -EIO;
       }
 
@@ -2751,6 +2758,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
 
   cls_register_cxx_method(h_class, "bi_get", CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
+  cls_register_cxx_method(h_class, "bi_put", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
   cls_register_cxx_method(h_class, "bi_list", CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
 
   cls_register_cxx_method(h_class, "bi_log_list", CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
