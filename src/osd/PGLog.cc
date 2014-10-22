@@ -934,12 +934,12 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
   // load bounds, based on old OndiskLog encoding.
   uint64_t ondisklog_tail = 0;
   uint64_t ondisklog_head = 0;
-  uint64_t ondisklog_zero_to;
   bool ondisklog_has_checksums;
 
   bufferlist blb;
   store->collection_getattr(coll, "ondisklog", blb);
   {
+    uint64_t ondisklog_zero_to;
     bufferlist::iterator bl = blb.begin();
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ondisklog_has_checksums = (struct_v >= 2);
@@ -947,8 +947,6 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     ::decode(ondisklog_head, bl);
     if (struct_v >= 4)
       ::decode(ondisklog_zero_to, bl);
-    else
-      ondisklog_zero_to = 0;
     if (struct_v >= 5)
       ::decode(divergent_priors, bl);
     DECODE_FINISH(bl);
