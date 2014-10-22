@@ -177,13 +177,14 @@ int StripObjectMap::file_to_extents(uint64_t offset, size_t len,
   if (len == 0)
     return 0;
 
-  uint64_t start, end, strip_offset, extent_offset, extent_len;
+  uint64_t start, end, strip_offset;
   start = offset / strip_size;
   end = (offset + len) / strip_size;
   strip_offset = start * strip_size;
 
   // "offset" may in the middle of first strip object
   if (offset > strip_offset) {
+    uint64_t extent_offset, extent_len;
     extent_offset = offset - strip_offset;
     if (extent_offset + len <= strip_size)
       extent_len = len;
