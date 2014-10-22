@@ -24,9 +24,11 @@ ServerName {host}
   <IfModule !authz_core_module>
     LoadModule authz_core_module {mod_path}/mod_authz_core.so
   </IfModule>
+  <IfModule !mpm_worker_module>
+    LoadModule mpm_worker_module {mod_path}/mod_mpm_worker.so
+  </IfModule>
   User {user}
   Group {group}
-  {apache24_modconfig}
 </IfVersion>
 
 ServerRoot {testdir}/apache
