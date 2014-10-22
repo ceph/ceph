@@ -76,7 +76,7 @@ class Thrasher:
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
-        self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', True)
+        self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', False)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
 
         num_osds = self.in_osds + self.out_osds
