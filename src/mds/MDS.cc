@@ -890,7 +890,6 @@ COMMAND("heap " \
 void MDS::handle_command(MMonCommand *m)
 {
   bufferlist outbl;
-  std::string outs;
   _handle_command_legacy(m->cmd);
   m->put();
 }
