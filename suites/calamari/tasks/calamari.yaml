@@ -1,0 +1,10 @@
+machine_type: vps
+
+tasks:
+- ssh_keys:
+- calamari_setup:
+    iceball_location: http://download.inktank.com/enterprise-testing
+    ice_version: 1.2.2
+    email: calamari@inktank.com
+- calamari_nosetests:
+    calamari_branch: wip-testing-1.2.2
