@@ -209,7 +209,7 @@ public:
    * @return A reference to the map's value for the given key
    */
   VPtr add(const K& key, V *value, bool *existed = NULL) {
-    VPtr val(value, Cleanup(this, key));
+    VPtr val;
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
@@ -224,6 +224,7 @@ public:
       if (existed)      
         *existed = false;
 
+      val = VPtr(value, Cleanup(this, key));
       weak_refs.insert(actual, make_pair(key, val));
       lru_add(key, val, &to_release);
     }
