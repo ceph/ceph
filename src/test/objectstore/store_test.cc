@@ -612,8 +612,7 @@ public:
     boost::uniform_int<> u2(4, max_attr_value_len);
     boost::uniform_int<> u3(0, 100);
     uint64_t size = u0(*rng);
-    uint64_t name_len, value_len;
-    uint64_t get_exist;
+    uint64_t name_len;
     map<string, bufferlist> attrs;
     set<string> keys;
     for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
@@ -622,8 +621,8 @@ public:
 
     while (size--) {
       bufferlist name, value;
-      get_exist = u3(*rng);
-      value_len = u2(*rng);
+      uint64_t get_exist = u3(*rng);
+      uint64_t value_len = u2(*rng);
       filled_byte_array(value, value_len);
       if (get_exist < 50 && keys.size()) {
         set<string>::iterator k = keys.begin();
