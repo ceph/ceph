@@ -68,8 +68,10 @@ function kill_daemons() {
     local dir=$1
     for pidfile in $(find $dir | grep '\.pid') ; do
         pid=$(cat $pidfile)
+        signal=9
         for try in 0 1 1 1 2 3 ; do
-            kill -9 $pid 2> /dev/null || break
+            kill -$signal $pid 2> /dev/null || break
+            signal=0
             sleep $try
         done
     done
