@@ -39,6 +39,7 @@ static int* get_null()
 static void simple_segv_test()
 {
   generic_dout(-1) << "triggering SIGSEGV..." << dendl;
+  // cppcheck-suppress nullPointer
   int i = *get_null();
   std::cout << "i = " << i << std::endl;
 }
