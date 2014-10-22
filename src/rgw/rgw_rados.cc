@@ -6468,6 +6468,21 @@ int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, r
   return 0;
 }
 
+int RGWRados::bi_put(rgw_bucket& bucket, rgw_cls_bi_entry& entry)
+{
+  librados::IoCtx index_ctx;
+  string oid;
+  int r = open_bucket_index(bucket, index_ctx, oid);
+  if (r < 0)
+    return r;
+
+  int ret = cls_rgw_bi_put(index_ctx, oid, entry);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
 int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
   librados::IoCtx index_ctx;
