@@ -85,11 +85,7 @@ public:
   /// clear cached fd for hoid, subsequent lookups will get an empty FD
   void clear(const ghobject_t &hoid) {
     int registry_id = hoid.hobj.hash % registry_shards;
-    registry[registry_id].clear(hoid);
-    if (registry[registry_id].lookup(hoid)) {
-      registry[registry_id].dump_weak_refs();
-      assert(!registry[registry_id].lookup(hoid));
-    }
+    registry[registry_id].purge(hoid);
   }
 
   /// md_config_obs_t
