@@ -9,4 +9,3 @@ tasks:
     timeout: 1200
     chance_pgnum_grow: 1
     chance_pgpnum_fix: 1
-    ceph_objectstore_tool: false
