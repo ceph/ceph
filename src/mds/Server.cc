@@ -3720,7 +3720,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       name.find("ceph.dir.layout") == 0) {
     inode_t *pi;
     string rest;
-    int64_t old_pool = -1;
     if (name.find("ceph.dir.layout") == 0) {
       if (!cur->is_dir()) {
 	reply_request(mdr, -EINVAL);
@@ -3794,7 +3793,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	return;
 
       pi = cur->project_inode();
-      old_pool = pi->layout.fl_pg_pool;
+      int64_t old_pool = pi->layout.fl_pg_pool;
       pi->add_old_pool(old_pool);
       pi->layout = layout;
       pi->ctime = mdr->get_op_stamp();
