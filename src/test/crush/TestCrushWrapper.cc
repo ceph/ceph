@@ -83,12 +83,12 @@ TEST(CrushWrapper, move_bucket) {
 			     ROOT_TYPE, 0, NULL, NULL, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, "root0"));
 
-  int item = 0;
   {
     map<string,string> loc;
     loc["root"] = "root0";
     loc["host"] = "host0";
 
+    int item = 0;
     EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
 				"osd.0", loc));
   }
