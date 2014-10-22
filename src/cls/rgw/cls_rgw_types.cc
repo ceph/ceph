@@ -15,9 +15,23 @@ void rgw_bucket_pending_info::generate_test_instances(list<rgw_bucket_pending_in
 
 void rgw_bucket_pending_info::dump(Formatter *f) const
 {
-  f->dump_int("state", (int)state);
-  f->dump_stream("timestamp") << timestamp;
-  f->dump_int("op", (int)op);
+  encode_json("state", (int)state, f);
+  encode_json("timestamp", timestamp, f);
+  encode_json("op", (int)op, f);
+}
+
+void rgw_bucket_pending_info::decode_json(JSONObj *obj) {
+  int val;
+  JSONDecoder::decode_json("state", val, obj);
+  state = (RGWPendingState)val;
+  JSONDecoder::decode_json("timestamp", timestamp, obj);
+  JSONDecoder::decode_json("op", val, obj);
+  op = (uint8_t)val;
+}
+
+void cls_rgw_obj_key::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("instance", instance, obj);
 }
 
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
@@ -35,14 +49,27 @@ void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entr
 
 void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
 {
-  f->dump_int("category", category);
-  f->dump_unsigned("size", size);
-  f->dump_stream("mtime") << mtime;
-  f->dump_string("etag", etag);
-  f->dump_string("owner", owner);
-  f->dump_string("owner_display_name", owner_display_name);
-  f->dump_string("content_type", content_type);
-  f->dump_unsigned("accounted_size", accounted_size);
+  encode_json("category", (int)category, f);
+  encode_json("size", size, f);
+  encode_json("mtime", mtime, f);
+  encode_json("etag", etag, f);
+  encode_json("owner", owner, f);
+  encode_json("owner_display_name", owner_display_name, f);
+  encode_json("content_type", content_type, f);
+  encode_json("accounted_size", accounted_size, f);
+}
+
+void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
+  int val;
+  JSONDecoder::decode_json("category", val, obj);
+  category = (uint8_t)val;
+  JSONDecoder::decode_json("size", size, obj);
+  JSONDecoder::decode_json("mtime", mtime, obj);
+  JSONDecoder::decode_json("etag", etag, obj);
+  JSONDecoder::decode_json("owner", owner, obj);
+  JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
+  JSONDecoder::decode_json("content_type", content_type, obj);
+  JSONDecoder::decode_json("accounted_size", accounted_size, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
@@ -71,8 +98,13 @@ void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& 
 
 void rgw_bucket_entry_ver::dump(Formatter *f) const
 {
-  f->dump_int("pool", pool);
-  f->dump_unsigned("epoch", epoch);
+  encode_json("pool", pool, f);
+  encode_json("epoch", epoch, f);
+}
+
+void rgw_bucket_entry_ver::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
 }
 
 void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& ls)
@@ -86,28 +118,29 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {
-  f->dump_string("name", key.name);
-  f->dump_string("instance", key.instance);
-  f->open_object_section("ver");
-  ver.dump(f);
-  f->close_section();
-  f->dump_string("locator", locator);
-  f->dump_int("exists", (int)exists);
-  f->open_object_section("meta");
-  meta.dump(f);
-  f->close_section();
-  f->dump_string("tag", tag);
-  f->dump_int("flags", (int)flags);
+  encode_json("name", key.name, f);
+  encode_json("instance", key.instance , f);
+  encode_json("ver", ver , f);
+  encode_json("locator", locator , f);
+  encode_json("exists", exists , f);
+  encode_json("meta", meta , f);
+  encode_json("tag", tag , f);
+  encode_json("flags", (int)flags , f);
+  encode_json("pending_map", pending_map, f);
+}
 
-  map<string, struct rgw_bucket_pending_info>::const_iterator iter = pending_map.begin();
-  f->open_array_section("pending_map");
-  for (; iter != pending_map.end(); ++iter) {
-    f->dump_string("tag", iter->first);
-    f->open_object_section("info");
-    iter->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
+void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("name", key.name, obj);
+  JSONDecoder::decode_json("instance", key.instance , obj);
+  JSONDecoder::decode_json("ver", ver , obj);
+  JSONDecoder::decode_json("locator", locator , obj);
+  JSONDecoder::decode_json("exists", exists , obj);
+  JSONDecoder::decode_json("meta", meta , obj);
+  JSONDecoder::decode_json("tag", tag , obj);
+  int val;
+  JSONDecoder::decode_json("flags", val , obj);
+  flags = (uint16_t)val;
+  JSONDecoder::decode_json("pending_map", pending_map, obj);
 }
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
@@ -127,6 +160,40 @@ static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *form
         rgw_bucket_olh_entry entry;
         ::decode(entry, iter);
         encode_json("entry", entry, formatter);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+void rgw_cls_bi_entry::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("idx", idx, obj);
+  string s;
+  JSONDecoder::decode_json("type", s, obj);
+  if (s == "plain") {
+    type = PlainIdx;
+  } else if (s == "instance") {
+    type = InstanceIdx;
+  } else if (s == "olh") {
+    type = OLHIdx;
+  } else {
+    type = InvalidIdx;
+  }
+  switch (type) {
+    case PlainIdx:
+    case InstanceIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        JSONDecoder::decode_json("entry", entry, obj);
+        ::encode(entry, data);
+      }
+      break;
+    case OLHIdx:
+      {
+        rgw_bucket_dir_entry entry;
+        JSONDecoder::decode_json("entry", entry, obj);
+        ::encode(entry, data);
       }
       break;
     default:

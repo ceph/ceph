@@ -432,6 +432,25 @@ struct rgw_cls_bi_get_ret {
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_get_ret)
 
+struct rgw_cls_bi_put_op {
+  rgw_cls_bi_entry entry;
+
+  rgw_cls_bi_put_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
+
 struct rgw_cls_bi_list_op {
   uint32_t max;
   string name;
