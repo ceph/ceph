@@ -12,6 +12,7 @@ from cStringIO import StringIO
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.orchestra.run import CommandFailedError
 from util.rgw import rgwadmin
 from util.rados import (rados, create_ec_pool,
                                         create_replicated_pool,
@@ -271,7 +272,17 @@ def start_apache(ctx, config):
         if system_type == 'deb':
             apache_name = 'apache2'
         else:
-            apache_name = '/usr/sbin/httpd'
+            try:
+                remote.run(
+                    args=[
+                        'stat',
+                        '/usr/sbin/httpd.worker',
+                    ],
+                )
+                apache_name = '/usr/sbin/httpd.worker'
+            except CommandFailedError:
+                apache_name = '/usr/sbin/httpd'
+
         proc = remote.run(
             args=[
                 'adjust-ulimits',
