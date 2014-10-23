@@ -33,7 +33,6 @@ TEST(str_map, json) {
 }
 
 TEST(str_map, plaintext) {
-  stringstream ss;
   {
     map<string,string> str_map;
     ASSERT_EQ(0, get_str_map(" foo=bar\t\nfrob=nitz   yeah right=   \n\t",
