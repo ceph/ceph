@@ -1770,6 +1770,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
+  if (must_promote) {
+    promote_object(obc, missing_oid, oloc, op);
+    return true;
+  }
+
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
@@ -1786,10 +1791,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       waiting_for_cache_not_full.push_back(op);
       return true;
     }
-    if (!must_promote && can_skip_promote(op, obc)) {
+    if (can_skip_promote(op, obc)) {
       return false;
     }
-    if (op->may_write() || write_ordered || must_promote || !hit_set) {
+    if (op->may_write() || write_ordered || !hit_set) {
       promote_object(obc, missing_oid, oloc, op);
     } else {
       switch (pool.info.min_read_recency_for_promote) {
@@ -1829,10 +1834,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
-    if (must_promote)
-      promote_object(obc, missing_oid, oloc, op);
-    else
-      do_cache_redirect(op, obc);
+    do_cache_redirect(op, obc);
     return true;
 
   case pg_pool_t::CACHEMODE_READONLY:
@@ -1858,7 +1860,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (!must_promote && can_skip_promote(op, obc)) {
+      if (can_skip_promote(op, obc)) {
 	return false;
       }
       promote_object(obc, missing_oid, oloc, op);
@@ -1866,10 +1868,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // If it is a read, we can read, we need to forward it
-    if (must_promote)
-      promote_object(obc, missing_oid, oloc, op);
-    else
-      do_cache_redirect(op, obc);
+    do_cache_redirect(op, obc);
     return true;
 
   default:
