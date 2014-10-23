@@ -1762,6 +1762,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
   }
 
+  if (obc.get() && obc->obs.exists) {
+    return false;
+  }
+
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
@@ -1770,9 +1774,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
 
   case pg_pool_t::CACHEMODE_WRITEBACK:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
@@ -1827,9 +1828,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
     if (must_promote)
       promote_object(obc, missing_oid, oloc, op);
     else
@@ -1838,9 +1836,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 
   case pg_pool_t::CACHEMODE_READONLY:
     // TODO: clean this case up
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
       promote_object(obc, missing_oid, oloc, op);
@@ -1854,10 +1849,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
 
   case pg_pool_t::CACHEMODE_READFORWARD:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
-
     // Do writeback to the cache tier for writes
     if (op->may_write() || write_ordered) {
       if (agent_state &&
