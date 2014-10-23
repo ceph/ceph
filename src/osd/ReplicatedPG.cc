@@ -423,7 +423,7 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
     return true;
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -465,7 +465,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	    << ", recovering"
 	    << dendl;
     eversion_t v;
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -620,7 +620,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
       f->dump_unsigned("osd", *p);
     f->close_section();
-    if (backfill_targets.size() > 0) {
+    if (!backfill_targets.empty()) {
       f->open_array_section("backfill_targets");
       for (set<pg_shard_t>::iterator p = backfill_targets.begin();
 	   p != backfill_targets.end();
@@ -628,7 +628,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
         f->dump_stream("shard") << *p;
       f->close_section();
     }
-    if (actingbackfill.size() > 0) {
+    if (!actingbackfill.empty()) {
       f->open_array_section("actingbackfill");
       for (set<pg_shard_t>::iterator p = actingbackfill.begin();
 	   p != actingbackfill.end();
@@ -9283,7 +9283,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   v = pg_log.get_missing().missing.find(oid)->second.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -10175,7 +10175,7 @@ int ReplicatedPG::prep_object_replica_pushes(
     pg_log.missing_add(soid, v, eversion_t());
     missing_loc.remove_location(soid, pg_whoami);
     bool uhoh = true;
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -10253,7 +10253,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
