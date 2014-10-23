@@ -1103,8 +1103,10 @@ protected:
   /**
    * This function starts up a copy from
    */
-  void promote_object(OpRequestRef op, ObjectContextRef obc,
-		      const hobject_t& missing_object);
+  void promote_object(ObjectContextRef obc,            ///< [optional] obc
+		      const hobject_t& missing_object, ///< oid (if !obc)
+		      const object_locator_t& oloc,    ///< locator for obc|oid
+		      OpRequestRef op);                ///< [optional] client op
 
   /**
    * Check if the op is such that we can skip promote (e.g., DELETE)
