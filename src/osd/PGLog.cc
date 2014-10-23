@@ -939,14 +939,15 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
   bufferlist blb;
   store->collection_getattr(coll, "ondisklog", blb);
   {
-    uint64_t ondisklog_zero_to;
     bufferlist::iterator bl = blb.begin();
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ondisklog_has_checksums = (struct_v >= 2);
     ::decode(ondisklog_tail, bl);
     ::decode(ondisklog_head, bl);
-    if (struct_v >= 4)
+    if (struct_v >= 4) {
+      uint64_t ondisklog_zero_to;
       ::decode(ondisklog_zero_to, bl);
+    }
     if (struct_v >= 5)
       ::decode(divergent_priors, bl);
     DECODE_FINISH(bl);
