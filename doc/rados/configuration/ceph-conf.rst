@@ -426,19 +426,19 @@ useful for increasing/decreasing logging output, enabling/disabling debug
 settings, and even for runtime optimization. The following reflects runtime
 configuration usage::
 
-	ceph {daemon-type} tell {id or *} injectargs '--{name} {value} [--{name} {value}]'
+	ceph tell {daemon-type}.{id or *} injectargs --{name} {value} [--{name} {value}]
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the  runtime setting to all daemons of a particular type with ``*``, or specify
 a specific  daemon's ID (i.e., its number or letter). For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following::
 
-	ceph osd tell 0 injectargs '--debug-osd 20 --debug-ms 1'
+	ceph tell osd.0 injectargs --debug-osd 20 --debug-ms 1
 
 In your ``ceph.conf`` file, you may use spaces when specifying a
 setting name.  When specifying a setting name on the command line,
 ensure that you use an underscore or hyphen (``_`` or ``-``) between
-terms (e.g., ``debug osd`` becomes ``debug-osd``).
+terms (e.g., ``debug osd`` becomes ``--debug-osd``).
 
 
 Viewing a Configuration at Runtime
