@@ -114,7 +114,6 @@ public:
   };
 
   DBObjectMap(KeyValueDB *db) : db(db), header_lock("DBOBjectMap"),
-                                cache_lock("DBObjectMap::CacheLock"),
                                 caches(g_conf->filestore_omap_header_cache_size)
     {}
 
@@ -327,7 +326,6 @@ public:
 private:
   /// Implicit lock on Header->seq
   typedef ceph::shared_ptr<_Header> Header;
-  Mutex cache_lock;
   SimpleLRU<ghobject_t, _Header> caches;
 
   string map_header_key(const ghobject_t &oid);
