@@ -1756,6 +1756,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
   }
 
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const object_locator_t& oloc = m->get_object_locator();
+
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
@@ -1779,23 +1782,23 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return false;
     }
     if (op->may_write() || write_ordered || must_promote || !hit_set) {
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
     } else {
       switch (pool.info.min_read_recency_for_promote) {
       case 0:
-        promote_object(op, obc, missing_oid);
+        promote_object(obc, missing_oid, oloc, op);
         break;
       case 1:
         // Check if in the current hit set
         if (in_hit_set) {
-          promote_object(op, obc, missing_oid);
+          promote_object(obc, missing_oid, oloc, op);
         } else {
           do_cache_redirect(op, obc);
         }
         break;
       default:
         if (in_hit_set) {
-          promote_object(op, obc, missing_oid);
+          promote_object(obc, missing_oid, oloc, op);
         } else {
           // Check if in other hit sets
           map<time_t,HitSetRef>::iterator itor;
@@ -1807,7 +1810,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
             }
           }
           if (in_other_hit_sets) {
-            promote_object(op, obc, missing_oid);
+            promote_object(obc, missing_oid, oloc, op);
           } else {
             do_cache_redirect(op, obc);
           }
@@ -1822,7 +1825,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return false;
     }
     if (must_promote)
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
     else
       do_cache_redirect(op, obc);
     return true;
@@ -1834,7 +1837,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
       return true;
     }
     if (!r) { // it must be a write
@@ -1860,13 +1863,13 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       if (!must_promote && can_skip_promote(op, obc)) {
 	return false;
       }
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
       return true;
     }
 
     // If it is a read, we can read, we need to forward it
     if (must_promote)
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
     else
       do_cache_redirect(op, obc);
     return true;
@@ -1923,10 +1926,11 @@ public:
   }
 };
 
-void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
-				  const hobject_t& missing_oid)
+void ReplicatedPG::promote_object(ObjectContextRef obc,
+				  const hobject_t& missing_oid,
+				  const object_locator_t& oloc,
+				  OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (!obc) { // we need to create an ObjectContext
     assert(missing_oid != hobject_t());
     obc = get_object_context(missing_oid, true);
@@ -1934,16 +1938,18 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
   PromoteCallback *cb = new PromoteCallback(op, obc, this);
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
-  start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
+  object_locator_t my_oloc = oloc;
+  my_oloc.pool = pool.info.tier_of;
+  start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
 	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP);
 
   assert(obc->is_blocked());
-  wait_for_blocked_object(obc->obs.oi.soid, op);
+
+  if (op)
+    wait_for_blocked_object(obc->obs.oi.soid, op);
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -6303,16 +6309,18 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   }
 
   if (r < 0 && !whiteout) {
-    // we need to get rid of the op in the blocked queue
-    map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
-      waiting_for_blocked_object.find(soid);
-    assert(blocked_iter != waiting_for_blocked_object.end());
-    assert(blocked_iter->second.begin()->get() == op.get());
-    blocked_iter->second.pop_front();
-    if (blocked_iter->second.empty()) {
-      waiting_for_blocked_object.erase(blocked_iter);
+    if (op) {
+      // we need to get rid of the op in the blocked queue
+      map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
+	waiting_for_blocked_object.find(soid);
+      assert(blocked_iter != waiting_for_blocked_object.end());
+      assert(blocked_iter->second.begin()->get() == op.get());
+      blocked_iter->second.pop_front();
+      if (blocked_iter->second.empty()) {
+	waiting_for_blocked_object.erase(blocked_iter);
+      }
+      osd->reply_op_error(op, r);
     }
-    osd->reply_op_error(op, r);
     return;
   }
 
