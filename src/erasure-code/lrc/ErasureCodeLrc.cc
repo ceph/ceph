@@ -220,8 +220,9 @@ int ErasureCodeLrc::layers_init()
       layer.parameters["k"] = stringify(layer.data.size());
     if (layer.parameters.find("m") == layer.parameters.end())
       layer.parameters["m"] = stringify(layer.coding.size());
-    if (layer.parameters.find("plugin") == layer.parameters.end())
-      layer.parameters["plugin"] = "jerasure";
+    if (layer.parameters.find("plugin") == layer.parameters.end()) {
+      layer.parameters["plugin"] = subplugin;
+    }
     if (layer.parameters.find("technique") == layer.parameters.end())
       layer.parameters["technique"] = "reed_sol_van";
     if (layer.parameters.find("directory") == layer.parameters.end())
@@ -277,6 +278,9 @@ int ErasureCodeLrc::parse(const map<string,string> &parameters,
 
   if (parameters.count("directory") != 0)
     directory = parameters.find("directory")->second;
+
+  if (parameters.count("subplugin") != 0)
+    subplugin = parameters.find("subplugin")->second;
 
   return parse_ruleset(parameters, ss);
 }

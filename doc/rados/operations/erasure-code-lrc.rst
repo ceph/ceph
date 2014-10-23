@@ -59,6 +59,7 @@ To create a new lrc erasure code profile::
              [ruleset-locality={bucket-type}] \
              [ruleset-failure-domain={bucket-type}] \
              [directory={directory}] \
+             [subplugin={jerasure, isa}] \
              [--force]
 
 Where:
@@ -135,6 +136,14 @@ Where:
 :Type: String
 :Required: No.
 :Default: /usr/lib/ceph/erasure-code
+
+``directory={directory}``
+
+:Description: Set the erasure code **plugin** name which is loaded.
+
+:Type: String
+:Required: No.
+:Default: jerasure
 
 ``--force``
 

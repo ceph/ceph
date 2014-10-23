@@ -58,6 +58,7 @@ public:
   };
   vector<Layer> layers;
   string directory;
+  string subplugin;
   unsigned int chunk_count;
   unsigned int data_chunk_count;
   string ruleset_root;
@@ -73,7 +74,7 @@ public:
   vector<Step> ruleset_steps;
 
   ErasureCodeLrc() :
-    chunk_count(0), data_chunk_count(0), ruleset_root("default")
+    chunk_count(0), data_chunk_count(0), ruleset_root("default"), subplugin("jerasure")
   {
     ruleset_steps.push_back(Step("chooseleaf", "host", 0));
   }
