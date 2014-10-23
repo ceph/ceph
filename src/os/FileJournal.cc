@@ -146,9 +146,6 @@ int FileJournal::_open_block_device()
     return -EINVAL;
   }
 
-  int64_t conf_journal_sz(g_conf->osd_journal_size);
-  conf_journal_sz <<= 20;
-
   dout(10) << __func__ << ": ignoring osd journal size. "
 	   << "We'll use the entire block device (size: " << bdev_sz << ")"
 	   << dendl;
