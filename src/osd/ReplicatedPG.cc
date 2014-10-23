@@ -1789,40 +1789,40 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
     if (op->may_write() || write_ordered || !hit_set) {
       promote_object(obc, missing_oid, oloc, op);
-    } else {
-      switch (pool.info.min_read_recency_for_promote) {
-      case 0:
-        promote_object(obc, missing_oid, oloc, op);
-        break;
-      case 1:
-        // Check if in the current hit set
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, op);
-        } else {
-          do_cache_redirect(op, obc);
-        }
-        break;
-      default:
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, op);
-        } else {
-          // Check if in other hit sets
-          map<time_t,HitSetRef>::iterator itor;
-          bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-            if (itor->second->contains(missing_oid)) {
-              in_other_hit_sets = true;
-              break;
-            }
-          }
-          if (in_other_hit_sets) {
-            promote_object(obc, missing_oid, oloc, op);
-          } else {
-            do_cache_redirect(op, obc);
-          }
-        }
-        break;
+      return true;
+    }
+    switch (pool.info.min_read_recency_for_promote) {
+    case 0:
+      promote_object(obc, missing_oid, oloc, op);
+      break;
+    case 1:
+      // Check if in the current hit set
+      if (in_hit_set) {
+	promote_object(obc, missing_oid, oloc, op);
+      } else {
+	do_cache_redirect(op, obc);
       }
+      break;
+    default:
+      if (in_hit_set) {
+	promote_object(obc, missing_oid, oloc, op);
+      } else {
+	// Check if in other hit sets
+	map<time_t,HitSetRef>::iterator itor;
+	bool in_other_hit_sets = false;
+	for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
+	  if (itor->second->contains(missing_oid)) {
+	    in_other_hit_sets = true;
+	    break;
+	  }
+	}
+	if (in_other_hit_sets) {
+	  promote_object(obc, missing_oid, oloc, op);
+	} else {
+	  do_cache_redirect(op, obc);
+	}
+      }
+      break;
     }
     return true;
 
