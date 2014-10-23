@@ -226,6 +226,36 @@ OSD is in the same rack as the lost chunk.::
                             ]'
         $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
 
+Testing with different Erasure Code backends
+--------------------------------------------
+
+LRC now uses jerasure as the default EC backend. It is possible to
+specify the EC backend/algorithm on a per layer basis using the low
+level configuration. The second argument in layers='[ [ "DDc", "" ] ]'
+is actually an erasure code profile to be used for this level. The
+example below specifies the ISA backend with the cauchy technique to
+be used in the lrcpool.::
+
+        $ ceph osd erasure-code-profile set LRCprofile \
+             plugin=lrc \
+             mapping=DD_ \
+             layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
+        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+
+You could also use a different erasure code profile for for each
+layer.::
+
+        $ ceph osd erasure-code-profile set LRCprofile \
+             plugin=lrc \
+             mapping=__DD__DD \
+             layers='[
+                       [ "_cDD_cDD", "plugin=isa technique=cauchy" ],
+                       [ "cDDD____", "plugin=isa" ],
+                       [ "____cDDD", "plugin=jerasure" ],
+                     ]'
+        $ ceph osd pool create lrcpool 12 12 erasure LRCprofile
+
+
 
 Erasure coding and decoding algorithm
 =====================================
