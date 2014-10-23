@@ -1145,13 +1145,10 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   assert(l.get_locked() == oid);
 
   _Header *header = new _Header();
-  {
-    Mutex::Locker l(cache_lock);
-    if (caches.lookup(oid, header)) {
-      assert(!in_use.count(header->seq));
-      in_use.insert(header->seq);
-      return Header(header, RemoveOnDelete(this));
-    }
+  if (caches.lookup(oid, header)) {
+    assert(!in_use.count(header->seq));
+    in_use.insert(header->seq);
+    return Header(header, RemoveOnDelete(this));
   }
 
   map<string, bufferlist> out;
@@ -1166,10 +1163,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   Header ret(header, RemoveOnDelete(this));
   bufferlist::iterator iter = out.begin()->second.begin();
   ret->decode(iter);
-  {
-    Mutex::Locker l(cache_lock);
-    caches.add(oid, *ret);
-  }
+  caches.add(oid, *ret);
 
   assert(!in_use.count(header->seq));
   in_use.insert(header->seq);
@@ -1271,10 +1265,7 @@ void DBObjectMap::remove_map_header(
   set<string> to_remove;
   to_remove.insert(map_header_key(oid));
   t->rmkeys(HOBJECT_TO_SEQ, to_remove);
-  {
-    Mutex::Locker l(cache_lock);
-    caches.clear(oid);
-  }
+  caches.clear(oid);
 }
 
 void DBObjectMap::set_map_header(
@@ -1289,10 +1280,7 @@ void DBObjectMap::set_map_header(
   map<string, bufferlist> to_set;
   header.encode(to_set[map_header_key(oid)]);
   t->set(HOBJECT_TO_SEQ, to_set);
-  {
-    Mutex::Locker l(cache_lock);
-    caches.add(oid, header);
-  }
+  caches.add(oid, header);
 }
 
 bool DBObjectMap::check_spos(const ghobject_t &oid,
