@@ -2097,6 +2097,16 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
     }
   }
+  if (num_in && g_conf->mon_pg_warn_max_per_osd > 0) {
+    int per = sum_pg_up / num_in;
+    if (per > g_conf->mon_pg_warn_max_per_osd) {
+      ostringstream ss;
+      ss << "too many PGs per OSD (" << per << " > max " << g_conf->mon_pg_warn_max_per_osd << ")";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
   if (!pg_map.pg_stat.empty()) {
     for (ceph::unordered_map<int,pool_stat_t>::const_iterator p = pg_map.pg_pool_sum.begin();
 	 p != pg_map.pg_pool_sum.end();
