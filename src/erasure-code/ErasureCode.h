@@ -30,6 +30,8 @@ namespace ceph {
 
   class ErasureCode : public ErasureCodeInterface {
   public:
+    static const unsigned SIMD_ALIGN;
+
     vector<int> chunk_mapping;
 
     virtual ~ErasureCode() {}
@@ -46,7 +48,8 @@ namespace ceph {
                                             const map<int, int> &available,
                                             set<int> *minimum);
 
-    int encode_prepare(const bufferlist &raw, bufferlist *prepared) const;
+    int encode_prepare(const bufferlist &raw,
+                       map<int, bufferlist> &encoded) const;
 
     virtual int encode(const set<int> &want_to_encode,
                        const bufferlist &in,
@@ -85,6 +88,9 @@ namespace ceph {
 
     virtual int decode_concat(const map<int, bufferlist> &chunks,
 			      bufferlist *decoded);
+
+  private:
+    int chunk_index(unsigned int i) const;
   };
 }
 

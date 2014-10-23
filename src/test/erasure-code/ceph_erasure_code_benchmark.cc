@@ -31,6 +31,7 @@
 #include "common/Clock.h"
 #include "include/utime.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "erasure-code/ErasureCode.h"
 
 namespace po = boost::program_options;
 
@@ -144,6 +145,7 @@ int ErasureCodeBench::encode()
 
   bufferlist in;
   in.append(string(in_size, 'X'));
+  in.rebuild_aligned(ErasureCode::SIMD_ALIGN);
   set<int> want_to_encode;
   for (int i = 0; i < k + m; i++) {
     want_to_encode.insert(i);
@@ -183,6 +185,7 @@ int ErasureCodeBench::decode()
   }
   bufferlist in;
   in.append(string(in_size, 'X'));
+  in.rebuild_aligned(ErasureCode::SIMD_ALIGN);
 
   set<int> want_to_encode;
   for (int i = 0; i < k + m; i++) {
