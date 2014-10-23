@@ -144,6 +144,7 @@ public:
   static raw* create_malloc(unsigned len);
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
+  static raw* create_aligned(unsigned len, unsigned align);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
 
@@ -177,8 +178,15 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const;
 
-    bool is_page_aligned() const { return ((long)c_str() & ~CEPH_PAGE_MASK) == 0; }
-    bool is_n_page_sized() const { return (length() & ~CEPH_PAGE_MASK) == 0; }
+    bool is_aligned(unsigned align) const {
+      return ((long)c_str() & (align-1)) == 0;
+    }
+    bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
+    bool is_n_align_sized(unsigned align) const
+    {
+      return (length() & (align-1)) == 0;
+    }
+    bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -344,7 +352,9 @@ public:
     bool contents_equal(buffer::list& other);
 
     bool can_zero_copy() const;
+    bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
+    bool is_n_align_sized(unsigned align) const;
     bool is_n_page_sized() const;
 
     bool is_zero() const;
@@ -382,6 +392,7 @@ public:
     bool is_contiguous();
     void rebuild();
     void rebuild(ptr& nb);
+    void rebuild_aligned(unsigned align);
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op
