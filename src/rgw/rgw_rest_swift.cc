@@ -463,7 +463,7 @@ int RGWSetTempUrl_ObjStore_SWIFT::get_params()
     temp_url_keys[1] = temp_url;
   }
 
-  if (temp_url_keys.size() == 0)
+  if (temp_url_keys.empty())
     return -EINVAL;
 
   return 0;
