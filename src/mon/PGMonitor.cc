@@ -1105,9 +1105,17 @@ void PGMonitor::map_pg_creates()
        ++p) {
     pg_t pgid = *p;
     pg_t on = pgid;
-    pg_stat_t& s = pg_map.pg_stat[pgid];
-    if (s.parent_split_bits)
-      on = s.parent;
+    pg_stat_t *s = NULL;
+    ceph::unordered_map<pg_t,pg_stat_t>::iterator q = pg_map.pg_stat.find(pgid);
+    if (q == pg_map.pg_stat.end()) {
+      s = &pg_map.pg_stat[pgid];
+    } else {
+      s = &q->second;
+      pg_map.stat_pg_sub(pgid, *s, true);
+    }
+
+    if (s->parent_split_bits)
+      on = s->parent;
 
     vector<int> up, acting;
     int up_primary, acting_primary;
@@ -1118,22 +1126,23 @@ void PGMonitor::map_pg_creates()
       &acting,
       &acting_primary);
 
-    if (s.acting_primary != -1) {
-      pg_map.creating_pgs_by_osd[s.acting_primary].erase(pgid);
-      if (pg_map.creating_pgs_by_osd[s.acting_primary].size() == 0)
-        pg_map.creating_pgs_by_osd.erase(s.acting_primary);
+    if (s->acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[s->acting_primary].erase(pgid);
+      if (pg_map.creating_pgs_by_osd[s->acting_primary].size() == 0)
+        pg_map.creating_pgs_by_osd.erase(s->acting_primary);
     }
-    s.up = up;
-    s.up_primary = up_primary;
-    s.acting = acting;
-    s.acting_primary = acting_primary;
+    s->up = up;
+    s->up_primary = up_primary;
+    s->acting = acting;
+    s->acting_primary = acting_primary;
+    pg_map.stat_pg_add(pgid, *s, true);
 
     // don't send creates for localized pgs
     if (pgid.preferred() >= 0)
       continue;
 
     // don't send creates for splits
-    if (s.parent_split_bits)
+    if (s->parent_split_bits)
       continue;
 
     if (acting_primary != -1) {
