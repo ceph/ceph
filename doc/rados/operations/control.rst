@@ -292,11 +292,11 @@ MDS Subsystem
 
 Change configuration parameters on a running mds. ::
 
-	ceph mds tell {mds-id} injectargs '--{switch} {value} [--{switch} {value}]'
+	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
 
 Example::
 
-	ceph mds tell 0 injectargs '--debug_ms 1 --debug_mds 10'
+	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
 
 Enables debug messages. ::
 
