@@ -18,3 +18,4 @@
 [submodule "src/rocksdb"]
 	path = src/rocksdb
 	url = git://github.com/ceph/rocksdb
+	ignore = dirty
