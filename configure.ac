@@ -565,7 +565,7 @@ AC_ARG_WITH([librocksdb],
 AS_IF([test "x$with_librocksdb" = "xyes"],
             [PKG_CHECK_MODULES([LIBROCKSDB], [rocksdb], [], [true])])
 AS_IF([test "x$with_librocksdb" = "xyes"],
-            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+            [AC_CHECK_LIB([rocksdb], [open], [], [AC_MSG_FAILURE([librocksdb not found])])])
 AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 
 AC_ARG_WITH([librocksdb-static],
