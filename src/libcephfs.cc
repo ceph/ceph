@@ -465,7 +465,7 @@ extern "C" int ceph_closedir(struct ceph_mount_info *cmount, struct ceph_dir_res
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->closedir((dir_result_t*)dirp);
+  return cmount->get_client()->closedir(reinterpret_cast<dir_result_t*>(dirp));
 }
 
 extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
@@ -475,14 +475,14 @@ extern "C" struct dirent * ceph_readdir(struct ceph_mount_info *cmount, struct c
     errno = -ENOTCONN;
     return NULL;
   }
-  return cmount->get_client()->readdir((dir_result_t*)dirp);
+  return cmount->get_client()->readdir(reinterpret_cast<dir_result_t*>(dirp));
 }
 
 extern "C" int ceph_readdir_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, struct dirent *de)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->readdir_r((dir_result_t*)dirp, de);
+  return cmount->get_client()->readdir_r(reinterpret_cast<dir_result_t*>(dirp), de);
 }
 
 extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
@@ -490,7 +490,7 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->readdirplus_r((dir_result_t*)dirp, de, st, stmask);
+  return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, st, stmask);
 }
 
 extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
@@ -498,7 +498,7 @@ extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_res
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->getdents((dir_result_t*)dirp, buf, buflen);
+  return cmount->get_client()->getdents(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
 }
 
 extern "C" int ceph_getdnames(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
@@ -506,28 +506,28 @@ extern "C" int ceph_getdnames(struct ceph_mount_info *cmount, struct ceph_dir_re
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->getdnames((dir_result_t*)dirp, buf, buflen);
+  return cmount->get_client()->getdnames(reinterpret_cast<dir_result_t*>(dirp), buf, buflen);
 }
 
 extern "C" void ceph_rewinddir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
 {
   if (!cmount->is_mounted())
     return;
-  cmount->get_client()->rewinddir((dir_result_t*)dirp);
+  cmount->get_client()->rewinddir(reinterpret_cast<dir_result_t*>(dirp));
 }
 
 extern "C" int64_t ceph_telldir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->telldir((dir_result_t*)dirp);
+  return cmount->get_client()->telldir(reinterpret_cast<dir_result_t*>(dirp));
 }
 
 extern "C" void ceph_seekdir(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp, int64_t offset)
 {
   if (!cmount->is_mounted())
     return;
-  cmount->get_client()->seekdir((dir_result_t*)dirp, offset);
+  cmount->get_client()->seekdir(reinterpret_cast<dir_result_t*>(dirp), offset);
 }
 
 extern "C" int ceph_link (struct ceph_mount_info *cmount, const char *existing,
@@ -1489,7 +1489,7 @@ extern "C" int ceph_ll_opendir(class ceph_mount_info *cmount,
 extern "C" int ceph_ll_releasedir(class ceph_mount_info *cmount,
 				  ceph_dir_result *dir)
 {
-  (void) cmount->get_client()->ll_releasedir((dir_result_t*) dir);
+  (void) cmount->get_client()->ll_releasedir(reinterpret_cast<dir_result_t*>(dir));
   return (0);
 }
 
