@@ -158,10 +158,9 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 void JSONFormatter::print_quoted_string(const std::string& s)
 {
   int len = escape_json_attr_len(s.c_str(), s.size());
-  char *escaped = new char[len];
+  char escaped[len];
   escape_json_attr(s.c_str(), s.size(), escaped);
   m_ss << '\"' << escaped << '\"';
-  delete[] escaped;
 }
 
 void JSONFormatter::print_name(const char *name)
