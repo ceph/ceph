@@ -41,92 +41,9 @@ Provided Utilities
 * ``teuthology-worker`` - Worker daemon to monitor the queue and execute jobs
 
 
-Build
-=====
-Teuthology is not meant to be distributed as a library, therefore we depend
-on the pinned dependencies listed in ``requirements.txt``.  The ``setup.py``
-script will not list any dependencies, and only exists to provide the package
-entry points (a.k.a teuthology's scripts).
-
-To get a copy of the source in one's local directory, execute the following:
-    git clone https://github.com/ceph/teuthology.git
-    cd teuthology
-
-
-Bootstrap for Ubuntu Systems
-----------------------------
-A ``boostrap`` script is provided for automated builds/execution of teuthology
-itself. You can run it directly **only if you are using Ubuntu**.
-
-Teuthology uses several Python packages that are not in the standard
-library. To make the dependencies easier to get right, we use a
-`virtualenv` to manage them. To get started, ensure you have the
-``virtualenv`` and ``pip`` programs installed; e.g. on Debian/Ubuntu::
-
-    sudo apt-get install python-dev python-virtualenv python-pip libevent-dev libmysqlclient-dev python-libvirt
-
-and then run::
-
-    ./bootstrap
-
-
-MacOS X
--------
-
-.. note:: These instructions assume you are using `homebrew <http://brew.sh/>`_
-
-As always, create a ``virtualenv`` specific to teuthology and make sure it
-is activated before proceeding (location doesn't matter, we use an example
-location)::
-
-    mkdir ~/.virtualenvs
-    virtualenv --system-site-packages ~/.virtualenvs/teuthology
-    source ~/.virtualenvs/teuthology/bin/activate
-
-Install the system dependencies::
-
-    brew install libvirt mysql libevent
-
-Make sure you are able to import ``libvirt`` without error::
-
-    python -c "import libvirt"
-
-If python can't find libvirt yet, you may need to do the following:
-
-    cd /Library/Python/{pyversion}/site-packages
-    sudo ln -s /usr/local/Cellar/libvirt/{version}/lib/python{pyversion}/site-packages/* .
-
-Finally, install the teuthology package and ``requirements.txt``::
-
-    python setup.py develop
-    pip install -r requirements.txt
-
-
-Generic install
----------------
-These instructions should help get teuthology installed properly in
-a system that is not OSX or Debian-based.
-
-Install all the system dependencies needed:
-
-* mysql client
-* libevent
-* libvirt (with the Python bindings)
-
-Install Python packaging tools:
-
-* pip
-* virtualenv
-
-In some cases, depending on the OS, you will need a python development package
-with some build helpers that are required to build packages. In Ubuntu, this is
-the ``python-dev`` package.
-
-With a dedicated ``virtualenv`` activated, install the teuthology package and
-``requirements.txt``::
-
-    python setup.py develop
-    pip install -r requirements.txt
+Installation
+============
+See the separate installation documentation.
 
 
 Infrastructure
