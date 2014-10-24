@@ -1,6 +1,6 @@
-==================================================
- `Teuthology` -- The Ceph integration test runner
-==================================================
+===================================================
+`Teuthology` -- The Ceph integration test framework
+===================================================
 
 ``teuthology`` is an automation framework for `Ceph
 <https://github.com/ceph/ceph>`__, written in `Python
@@ -22,6 +22,23 @@ operations on remote hosts over SSH, as implemented by `Paramiko
 `tasks`, each of which perform operations on a remote host over the network.
 
 When testing, it is common to group many `jobs` together to form a `test run`.
+
+
+Provided Utilities
+==================
+* ``teuthology`` - Run individual jobs
+* ``teuthology-coverage`` - Analyze code coverage via lcov
+* ``teuthology-kill`` - Kill running jobs or entire runs
+* ``teuthology-lock`` - Lock, unlock, and update status of machines
+* ``teuthology-ls`` - List job results by examining an archive directory
+* ``teuthology-nuke`` - Attempt to return a machine to a pristine state
+* ``teuthology-queue`` - List, or delete, jobs in the queue
+* ``teuthology-report`` - Submit test results to a web service (we use `paddles <https://github.com/ceph/paddles/>`__)
+* ``teuthology-results`` - Examing a finished run and email results
+* ``teuthology-schedule`` - Schedule a single job
+* ``teuthology-suite`` - Schedule a full run based on a suite (see `suites` in `ceph-qa-suite <https://github.com/ceph/ceph-qa-suite>`__)
+* ``teuthology-updatekeys`` - Update SSH host keys for a mchine
+* ``teuthology-worker`` - Worker daemon to monitor the queue and execute jobs
 
 
 Build
