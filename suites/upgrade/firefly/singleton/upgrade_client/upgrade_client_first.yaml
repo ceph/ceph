@@ -32,7 +32,7 @@ tasks:
     mon.b:
 - print: "**** done install.upgrade" 
 - ceph.restart: 
-    daemons: [osd.0, osd.1, osd.2]
+    daemons: [mon.a, mon.c, osd.0, osd.1]
 - print: "**** done restart all" 
 - workunit:
     branch: firefly
