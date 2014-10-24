@@ -927,6 +927,7 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
   if (directio && (!bl.is_page_aligned() ||
 		   !bl.is_n_page_sized())) {
     bl.rebuild_page_aligned();
+    dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
     if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
 	(pos & ~CEPH_PAGE_MASK) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
