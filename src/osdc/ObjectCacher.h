@@ -449,7 +449,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh);
   void bh_write(BufferHead *bh);
 
-  void trim(uint64_t extra_space = 0);
+  void trim();
   void flush(loff_t amount=0);
 
   /**
