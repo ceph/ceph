@@ -950,14 +950,14 @@ void ObjectCacher::flush(loff_t amount)
 }
 
 
-void ObjectCacher::trim(uint64_t extra_space)
+void ObjectCacher::trim()
 {
   assert(lock.is_locked());
   ldout(cct, 10) << "trim  start: bytes: max " << max_size << "  clean " << get_stat_clean()
 		 << ", objects: max " << max_objects << " current " << ob_lru.lru_get_size()
 		 << dendl;
 
-  while (get_stat_clean() > 0 && (uint64_t) (get_stat_clean() + get_stat_rx() + extra_space) > max_size) {
+  while (get_stat_clean() > 0 && (uint64_t) get_stat_clean() > max_size) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1115,10 +1115,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
            ++bh_it) {
         loff_t clean = get_stat_clean() + get_stat_rx() +
                        bh_it->second->length();
-	if (get_stat_rx() > 0 && static_cast<uint64_t>(clean) > max_size) {
-	  trim(bh_it->second->length());
-	}
-	clean = get_stat_clean() + get_stat_rx() + bh_it->second->length();
         if (get_stat_rx() > 0 && static_cast<uint64_t>(clean) > max_size) {
           // cache is full -- wait for rx's to complete
           ldout(cct, 10) << "readx missed, waiting on cache to free "
