@@ -340,7 +340,6 @@ class ObjectCacher {
   void *flush_set_callback_arg;
 
   vector<ceph::unordered_map<sobject_t, Object*> > objects; // indexed by pool_id
-  list<Context*> waitfor_read;
 
   ceph_tid_t last_read_tid;
 
@@ -435,7 +434,7 @@ class ObjectCacher {
   void bh_read(BufferHead *bh);
   void bh_write(BufferHead *bh);
 
-  void trim(uint64_t extra_space = 0);
+  void trim();
   void flush(loff_t amount=0);
 
   /**
