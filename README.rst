@@ -243,6 +243,18 @@ To see the status of all machines, use the ``--list`` option. This can
 be restricted to particular machines as well::
 
     ./virtualenv/bin/teuthology-lock --list machine1 machine2
+   
+
+Choosing machines for a job
+---------------------------
+
+It is possible to run jobs against machines of one or more  ``machine_type``
+values. It is also possible to tell ``teuthology`` to only select those
+machines which match the following criteria specified in the job's YAML:
+
+* ``os_type`` (e.g. 'rhel', 'ubuntu')
+* ``os_version`` (e.g. '7.0', '14.04')
+* ``arch`` (e.g. 'x86_64')
 
 
 Tasks
