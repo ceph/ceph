@@ -375,8 +375,10 @@ void Objecter::shutdown()
 
   if (tick_event) {
     Mutex::Locker l(timer_lock);
-    if (timer.cancel_event(tick_event))
+    if (timer.cancel_event(tick_event)) {
+      ldout(cct, 10) <<  " successfully canceled tick" << dendl;
       tick_event = NULL;
+    }
   }
 
   if (m_request_state_hook) {
@@ -400,6 +402,7 @@ void Objecter::shutdown()
     timer.shutdown();
   }
 
+  assert(tick_event == NULL);
 }
 
 void Objecter::_send_linger(LingerOp *info)
@@ -1546,14 +1549,15 @@ void Objecter::tick()
 
   ldout(cct, 10) << "tick" << dendl;
 
-  if (!initialized.read()) {
-    // we raced with shutdown
-    return;
-  }
-
   // we are only called by C_Tick
   assert(tick_event);
   tick_event = NULL;
+
+  if (!initialized.read()) {
+    // we raced with shutdown
+    ldout(cct, 10) << __func__ << " raced with shutdown" << dendl;
+    return;
+  }
 
   set<OSDSession*> toping;
 
