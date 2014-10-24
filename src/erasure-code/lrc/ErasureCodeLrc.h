@@ -106,8 +106,6 @@ public:
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
-  int layer_encode(const Layer &layer, vector<bufferlist> &chunks);
-
   virtual int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded);
 
