@@ -1,7 +1,7 @@
 tasks:
    - parallel:
      - workload2
-     - upgrade-sequence
+     - upgrade-sequence2
    - print: "**** done parallel"
    - install.upgrade:
        client.0:
