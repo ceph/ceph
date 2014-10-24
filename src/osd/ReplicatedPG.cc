@@ -11185,7 +11185,7 @@ void ReplicatedPG::hit_set_persist()
       pg_log_entry_t::MODIFY,
       oid,
       ctx->at_version,
-      ctx->obs->oi.version,
+      eversion_t(),
       0,
       osd_reqid_t(),
       ctx->mtime)
