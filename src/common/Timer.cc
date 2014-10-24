@@ -107,6 +107,10 @@ void SafeTimer::timer_thread()
 	lock.Lock();
     }
 
+    // recheck stopping if we dropped the lock
+    if (!safe_callbacks && stopping)
+      break;
+
     ldout(cct,20) << "timer_thread going to sleep" << dendl;
     if (schedule.empty())
       cond.Wait(lock);
