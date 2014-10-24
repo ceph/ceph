@@ -714,7 +714,7 @@ ceph: ceph.in ./ceph_ver.h Makefile
 
 clean-local:
 	rm -f *.so 
-	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' | xargs rm -f
+	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' -o -name "*.o" -o -name "*.lo" | xargs rm -f
 	rm -f ceph java/java/com/ceph/crush/Bucket.class
 
 

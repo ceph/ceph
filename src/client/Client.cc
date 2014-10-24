@@ -4157,7 +4157,7 @@ int Client::resolve_mds(
     // It is a wildcard: use all MDSs
     const std::map<mds_gid_t, MDSMap::mds_info_t> &mds_info = mdsmap->get_mds_info();
 
-    if (mds_info.size() == 0) {
+    if (mds_info.empty()) {
       lderr(cct) << __func__ << ": * passed but no MDS daemons found" << dendl;
       return -ENOENT;
     }

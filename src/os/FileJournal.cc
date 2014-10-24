@@ -1714,7 +1714,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   bufferlist hbl;
   off64_t _next_pos;
   wrap_read_bl(pos, sizeof(*h), &hbl, &_next_pos);
-  h = (entry_header_t *)hbl.c_str();
+  h = reinterpret_cast<entry_header_t *>(hbl.c_str());
 
   if (!h->check_magic(pos, header.get_fsid64())) {
     dout(25) << "read_entry " << pos
@@ -1741,7 +1741,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   entry_header_t *f;
   bufferlist fbl;
   wrap_read_bl(pos, sizeof(*f), &fbl, &pos);
-  f = (entry_header_t *)fbl.c_str();
+  f = reinterpret_cast<entry_header_t *>(fbl.c_str());
   if (memcmp(f, h, sizeof(*f))) {
     if (ss)
       *ss << "bad footer magic, partial entry";
