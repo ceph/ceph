@@ -104,7 +104,7 @@ class Thrasher:
         self.thread = gevent.spawn(self.do_thrash)
         if self.cmd_exists_on_osds("ceph-objectstore-tool"):
             self.ceph_objectstore_tool = \
-                self.config.get('ceph_objectstore_tool', False)
+                self.config.get('ceph_objectstore_tool', True)
             self.test_rm_past_intervals = \
                 self.config.get('test_rm_past_intervals', True)
         else:
