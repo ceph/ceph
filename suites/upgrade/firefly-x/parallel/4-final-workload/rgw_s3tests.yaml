@@ -1,6 +1,7 @@
 tasks:
   - rgw: [client.1]
   - s3tests:
+      branch: giant-noreason
       client.1:
         rgw_server: client.1
         branch: dumpling
