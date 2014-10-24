@@ -3512,6 +3512,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         dout(20) << "validating a dirty CInode; results will be inconclusive"
                  << dendl;
       }
+      if (in->is_symlink()) {
+        // there's nothing to do for symlinks!
+        results->passed_validation = true;
+        return true;
+      }
 
       results->passed_validation = false; // we haven't finished it yet
 
