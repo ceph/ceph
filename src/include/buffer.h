@@ -241,7 +241,7 @@ public:
     // my private bits
     std::list<ptr> _buffers;
     unsigned _len;
-
+    unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
   public:
@@ -317,14 +317,14 @@ public:
 
   public:
     // cons/des
-    list() : _len(0), last_p(this) {}
-    list(unsigned prealloc) : _len(0), last_p(this) {
+    list() : _len(0), _memcopy_count(0), last_p(this) {}
+    list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
     ~list() {}
     
-    list(const list& other) : _buffers(other._buffers), _len(other._len), last_p(this) { }
+    list(const list& other) : _buffers(other._buffers), _len(other._len), _memcopy_count(other._memcopy_count),last_p(this) { }
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
@@ -333,8 +333,8 @@ public:
       return *this;
     }
 
+    unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
-    
     void swap(list& other);
     unsigned length() const {
 #if 0
@@ -363,6 +363,7 @@ public:
     void clear() {
       _buffers.clear();
       _len = 0;
+      _memcopy_count = 0;
       last_p = begin();
     }
     void push_front(ptr& bp) {

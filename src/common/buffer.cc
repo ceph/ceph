@@ -955,6 +955,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::swap(list& other)
   {
     std::swap(_len, other._len);
+    std::swap(_memcopy_count, other._memcopy_count);
     _buffers.swap(other._buffers);
     append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
@@ -1111,6 +1112,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       nb.copy_in(pos, it->length(), it->c_str());
       pos += it->length();
     }
+    _memcopy_count += pos;
     _buffers.clear();
     _buffers.push_back(nb);
   }
@@ -1150,6 +1152,7 @@ void buffer::list::rebuild_aligned(unsigned align)
     if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align))) {
       ptr nb(buffer::create_aligned(unaligned._len, align));
       unaligned.rebuild(nb);
+      _memcopy_count += unaligned._len;
     }
     _buffers.insert(p, unaligned._buffers.front());
   }
