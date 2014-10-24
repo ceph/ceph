@@ -1,4 +1,4 @@
-upgrade-sequence:
+upgrade-sequence2:
    sequential:
    - install.upgrade:
        mon.a:
