@@ -4313,7 +4313,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             goto fail;
           }
 	  iter->upper_bound(start_after);
-	  if (filter_prefix >= start_after) iter->lower_bound(filter_prefix);
+	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
 	  for (uint64_t i = 0;
 	       i < max_return && iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
