@@ -430,6 +430,10 @@ def try_push_job_info(job_config, extra_info=None):
     """
     log = init_logging()
 
+    if not config.results_server:
+        log.warning('No result_server in config; not reporting results')
+        return
+
     if job_config.get('job_id') is None:
         log.warning('No job_id found; not reporting results')
         return
