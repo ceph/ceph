@@ -41,12 +41,12 @@ tasks:
       - rbd/test_librbd_python.sh
 - print: "**** done rbd/test_librbd_python.sh"
 - workunit:
-    branch: firefly
+    branch: dumpling
     clients:
       client.0:
-      - rados/test.sh
+      - rados/test-upgrade-firefly.sh
       - cls
-- print: "**** done rados/test.sh &  cls" 
+- print: "**** done rados/test-upgrade-firefly.sh &  cls" 
 - workunit:
     branch: firefly
     clients:
