@@ -249,7 +249,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
       msgvec[msg.msg_iovlen].iov_len = pb->length();
       msg.msg_iovlen++;
       msglen += pb->length();
-      pb++;
+      ++pb;
       size--;
     }
 
