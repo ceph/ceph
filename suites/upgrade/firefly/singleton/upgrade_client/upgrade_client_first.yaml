@@ -32,6 +32,7 @@ tasks:
     mon.b:
 - print: "**** done install.upgrade" 
 - ceph.restart: 
+    #osd.2 is not upgraded
     daemons: [mon.a, mon.b, mon.c, osd.0, osd.1]
 - print: "**** done restart all" 
 - workunit:
@@ -41,12 +42,11 @@ tasks:
       - rbd/test_librbd_python.sh
 - print: "**** done rbd/test_librbd_python.sh"
 - workunit:
-    branch: firefly
+    branch: dumpling
     clients:
       client.0:
-      - rados/test.sh
-      - cls
-- print: "**** done rados/test.sh &  cls" 
+      - rados/test-upgrade-firefly.sh
+- print: "**** done rados/test-upgrade-firefly.sh" 
 - workunit:
     branch: firefly
     clients:
