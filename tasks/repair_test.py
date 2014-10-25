@@ -282,6 +282,12 @@ def task(ctx, config):
             logger=log.getChild('ceph_manager')
             )
 
+    num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
+    log.info('num_osds is %s' % num_osds)
+
+    while len(ctx.manager.get_osd_status()['up']) < num_osds:
+        time.sleep(10)
+
     tests = [
         gen_repair_test_1(mdataerr(ctx), choose_primary(ctx), "scrub"),
         gen_repair_test_1(mdataerr(ctx), choose_replica(ctx), "scrub"),
