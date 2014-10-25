@@ -33,7 +33,7 @@ tasks:
 - print: "**** done install.upgrade" 
 - ceph.restart: 
     #osd.2 is not upgraded
-    daemons: [mon.a, mon.b, mon.c, osd.0, osd.1, mds.a]
+    daemons: [mon.a, mon.b, mon.c, osd.0, osd.1]
 - print: "**** done restart all" 
 - workunit:
     branch: firefly
@@ -46,8 +46,7 @@ tasks:
     clients:
       client.0:
       - rados/test-upgrade-firefly.sh
-      - cls
-- print: "**** done rados/test-upgrade-firefly.sh &  cls" 
+- print: "**** done rados/test-upgrade-firefly.sh" 
 - workunit:
     branch: firefly
     clients:
