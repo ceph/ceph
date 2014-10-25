@@ -260,6 +260,8 @@ namespace librbd {
 		    ImageCtx *ictx)
   {
     uint64_t ver;
+    bufferlist bl;
+    int r;
 
     if (ictx) {
       ictx->refresh_lock.Lock();
@@ -273,8 +275,13 @@ namespace librbd {
       ver = *pver;
     else
       ver = io_ctx.get_last_version();
-    bufferlist bl;
-    io_ctx.notify(oid, ver, bl);
+
+    r = io_ctx.notify(oid, ver, bl);
+    if (r < 0) {
+      lderr(ictx->cct) << "notify error: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
     return 0;
   }
 
@@ -294,12 +301,17 @@ namespace librbd {
 
   int write_header(IoCtx& io_ctx, const string& header_oid, bufferlist& header)
   {
-    bufferlist bl;
-    int r = io_ctx.write(header_oid, header, header.length(), 0);
+    int r;
 
-    notify_change(io_ctx, header_oid, NULL, NULL);
+    r = io_ctx.write(header_oid, header, header.length(), 0);
+    if (r < 0)
+      return r;
 
-    return r;
+    r = notify_change(io_ctx, header_oid, NULL, NULL);
+    if (r < 0)
+      return r;
+
+    return 0;
   }
 
   int tmap_set(IoCtx& io_ctx, const string& imgname)
@@ -475,7 +487,9 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     ictx->perfcounter->inc(l_librbd_snap_create);
     return 0;
@@ -543,11 +557,12 @@ namespace librbd {
       return r;
 
     r = ictx->data_ctx.selfmanaged_snap_remove(snap_id);
-
     if (r < 0)
       return r;
 
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     ictx->perfcounter->inc(l_librbd_snap_remove);
     return 0;
@@ -592,7 +607,11 @@ namespace librbd {
 					  RBD_PROTECTION_STATUS_PROTECTED);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
+
     return 0;
   }
 
@@ -638,7 +657,10 @@ namespace librbd {
 					  RBD_PROTECTION_STATUS_UNPROTECTING);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     parent_spec pspec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     // search all pools for children depending on this snapshot
@@ -689,7 +711,11 @@ namespace librbd {
 		       << dendl;
       goto reprotect_and_return_err;
     }
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
+
     return 0;
 
 reprotect_and_return_err:
@@ -697,10 +723,14 @@ reprotect_and_return_err:
 						    ictx->header_oid,
 						    snap_id,
 					      RBD_PROTECTION_STATUS_PROTECTED);
-    if (proterr < 0) {
+    if (proterr < 0)
       lderr(ictx->cct) << "snap_unprotect: can't reprotect image" << dendl;
-    }
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    proterr = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (proterr < 0)
+      lderr(ictx->cct) << "snap_unprotect: reprotected image, but, going "
+          "forward, some clients may think image is not protected" << dendl;
+
     return r;
   }
 
@@ -1188,7 +1218,10 @@ reprotect_and_return_err:
     }
 
     if (old_format) {
-      notify_change(io_ctx, old_header_name(srcname), NULL, NULL);
+      r = notify_change(io_ctx, old_header_name(srcname), NULL, NULL);
+      if (r < 0)
+        lderr(cct) << "warning: some clients may not be aware of the new name"
+                   << dendl;
     }
 
     return 0;
@@ -1521,9 +1554,11 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "error writing header: " << cpp_strerror(-r) << dendl;
       return r;
-    } else {
-      notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
     }
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     return 0;
   }
@@ -1552,7 +1587,10 @@ reprotect_and_return_err:
 	return r;
       }
     }
-    resize_helper(ictx, size, prog_ctx);
+
+    r = resize_helper(ictx, size, prog_ctx);
+    if (r < 0)
+      return r;
 
     ldout(cct, 2) << "done." << dendl;
 
@@ -1913,10 +1951,12 @@ reprotect_and_return_err:
       return r;
     }
 
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     ictx->perfcounter->inc(l_librbd_snap_rollback);
-    return r;
+    return 0;
   }
 
   struct CopyProgressCtx {
@@ -2278,7 +2318,10 @@ reprotect_and_return_err:
       }
     }
     ictx->snap_lock.put_read();
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
 
     ldout(cct, 20) << "finished flattening" << dendl;
 
@@ -2343,7 +2386,11 @@ reprotect_and_return_err:
 			       cookie, tag, "", utime_t(), 0);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
+
     return 0;
   }
 
@@ -2362,7 +2409,11 @@ reprotect_and_return_err:
 				 RBD_LOCK_NAME, cookie);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
+
     return 0;
   }
 
@@ -2387,7 +2438,11 @@ reprotect_and_return_err:
 				     RBD_LOCK_NAME, cookie, lock_client);
     if (r < 0)
       return r;
-    notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+
+    r = notify_change(ictx->md_ctx, ictx->header_oid, NULL, ictx);
+    if (r < 0)
+      return r;
+
     return 0;
   }
 
