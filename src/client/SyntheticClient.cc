@@ -1128,7 +1128,10 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     } else if (strcmp(op, "getdir") == 0) {
       const char *a = t.get_string(buf, p);
       list<string> contents;
-      client->getdir(a, contents);
+      int r = client->getdir(a, contents);
+      if (r < 0) {
+        dout(1) << "getdir on " << a << " returns " << r << dendl;
+      }
     } else if (strcmp(op, "opendir") == 0) {
       const char *a = t.get_string(buf, p);
       int64_t b = t.get_int();
@@ -1547,7 +1550,7 @@ int SyntheticClient::clean_dir(string& basedir)
   list<string> contents;
   int r = client->getdir(basedir.c_str(), contents);
   if (r < 0) {
-    dout(1) << "readdir on " << basedir << " returns " << r << dendl;
+    dout(1) << "getdir on " << basedir << " returns " << r << dendl;
     return r;
   }
 
@@ -1606,7 +1609,7 @@ int SyntheticClient::full_walk(string& basedir)
     list<string> contents;
     int r = client->getdir(dir.c_str(), contents);
     if (r < 0) {
-      dout(1) << "readdir on " << dir << " returns " << r << dendl;
+      dout(1) << "getdir on " << dir << " returns " << r << dendl;
       continue;
     }
     
@@ -1801,7 +1804,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   utime_t e = ceph_clock_now(client->cct);
   e -= s;
   if (r < 0) {
-    dout(0) << "read_dirs couldn't readdir " << basedir << ", stopping" << dendl;
+    dout(0) << "getdir couldn't readdir " << basedir << ", stopping" << dendl;
     return -1;
   }
 
