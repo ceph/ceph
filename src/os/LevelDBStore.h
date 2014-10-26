@@ -341,7 +341,10 @@ public:
       // happen when those files are being updated, data is being shuffled
       // and files get removed, in which case there's not much of a problem
       // as we'll get to them next time around.
-      if ((err < 0) && (err != -ENOENT)) {
+      if (err == -ENOENT) {
+	continue;
+      }
+      if (err < 0) {
         lderr(cct) << __func__ << " error obtaining stats for " << fpath
                    << ": " << cpp_strerror(err) << dendl;
         goto err;
