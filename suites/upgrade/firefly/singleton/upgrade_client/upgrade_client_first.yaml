@@ -45,8 +45,8 @@ tasks:
     branch: dumpling
     clients:
       client.0:
-      - rados/test-upgrade-firefly.sh
-- print: "**** done rados/test-upgrade-firefly.sh" 
+      - rados/load-gen-big.sh
+- print: "**** done rados/load-gen-big.sh" 
 - workunit:
     branch: firefly
     clients:
