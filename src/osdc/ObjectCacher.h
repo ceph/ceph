@@ -341,6 +341,8 @@ class ObjectCacher {
 
   vector<ceph::unordered_map<sobject_t, Object*> > objects; // indexed by pool_id
 
+  list<Context*> waitfor_read;
+
   ceph_tid_t last_read_tid;
 
   set<BufferHead*>    dirty_or_tx_bh;
@@ -457,6 +459,7 @@ class ObjectCacher {
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call);
+  void retry_waiting_reads();
 
  public:
   void bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
