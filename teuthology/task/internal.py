@@ -87,17 +87,19 @@ def lock_machines(ctx, config):
                 raise RuntimeError('Error listing machines')
 
         # make sure there are machines for non-automated jobs to run
-        if len(machines) <= to_reserve and ctx.owner.startswith('scheduled'):
+        if len(machines) <= to_reserve + how_many and ctx.owner.startswith('scheduled'):
             if ctx.block:
                 log.info(
-                    'waiting for more machines to be free (need %s see %s)...',
+                    'waiting for more machines to be free (need %s + %s, have %s)...',
+                    to_reserve,
                     how_many,
                     len(machines),
                 )
                 time.sleep(10)
                 continue
             else:
-                assert 0, 'not enough machines free'
+                assert 0, ('not enough machines free; need %s + %s, have %s' %
+                           (to_reserve, how_many, len(machines)))
 
         newly_locked = lock.lock_many(ctx, how_many, machine_type, ctx.owner,
                                       ctx.archive, os_type, os_version, arch)
