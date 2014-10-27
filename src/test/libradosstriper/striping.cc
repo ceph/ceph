@@ -114,25 +114,25 @@ protected:
       uint64_t object_index_in_set = object_nb % stripe_count;
       uint64_t object_start_stripe = nb_full_object_set * stripe_per_objectset + object_index_in_set;
       uint64_t object_start_off = object_start_stripe * stripe_unit;
-       if (actual_size_if_sparse < size and actual_size_if_sparse <= object_start_off) {
-         ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
-       } else {
-         ASSERT_EQ(0, ioctx.stat(oid, &rados_size, &mtime));
-         uint64_t offset;
-         uint64_t stripe_size = stripe_count * stripe_unit;
-         uint64_t set_size = stripe_count * object_size;
-         uint64_t len = 0;
-         for (offset = object_start_off;
-              (offset < (object_start_off) + set_size) && (offset < actual_size_if_sparse);
-              offset += stripe_size) {
-           if (offset + stripe_unit > actual_size_if_sparse) {
-             len += actual_size_if_sparse-offset;
-           } else {
-             len += stripe_unit;
-           }
-         }
-         ASSERT_EQ(len, rados_size);
-       }
+      if (actual_size_if_sparse < size and actual_size_if_sparse <= object_start_off) {
+        ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
+      } else {
+        ASSERT_EQ(0, ioctx.stat(oid, &rados_size, &mtime));
+        uint64_t offset;
+        uint64_t stripe_size = stripe_count * stripe_unit;
+        uint64_t set_size = stripe_count * object_size;
+        uint64_t len = 0;
+        for (offset = object_start_off;
+             (offset < (object_start_off) + set_size) && (offset < actual_size_if_sparse);
+             offset += stripe_size) {
+          if (offset + stripe_unit > actual_size_if_sparse) {
+            len += actual_size_if_sparse-offset;
+          } else {
+            len += stripe_unit;
+          }
+        }
+        ASSERT_EQ(len, rados_size);
+      }
     }
     // check we do not have an extra object behind
     uint64_t rados_size;
