@@ -87,11 +87,6 @@ public:
 				const set<int> &available,
 				set<int> *minimum);
 
-  int layer_minimum_to_decode(const Layer &layer,
-			      const set<int> &want,
-			      const set<int> &available,
-			      set<int> *minimum) const;
-
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const;
