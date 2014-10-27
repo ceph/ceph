@@ -161,18 +161,26 @@ def main(ctx):
         else:
             statuses = list_locks()
         vmachines = []
+        my_vmachines = []
 
-        for vmachine in statuses:
-            if vmachine['vm_host']:
-                if vmachine['locked']:
-                    vmachines.append(vmachine['name'])
+        for machine in statuses:
+            if machine['is_vm'] and machine['locked']:
+                vmachines.append(machine['name'])
+                # keep track of which are ours, so that if we don't
+                # specify machines, the update_keys below can only try
+                # ours
+                if machine['locked_by'] == user:
+                    my_vmachines.append(machine['name'])
         if vmachines:
             # Avoid ssh-keyscans for everybody when listing all machines
-            # Listing specific machines will update the keys.
-            if machines:
-                do_update_keys(vmachines)
-                statuses = [get_status(machine)
-                            for machine in machines]
+            # Listing specific machines will update the keys, and if none
+            # are specified, my_vmachines will also be updated (if any)
+            if machines or not ctx.all:
+                if my_vmachines:
+                    do_update_keys(my_vmachines)
+                if machines:
+                    statuses = [get_status(machine)
+                                for machine in machines]
             else:
                 statuses = list_locks()
         if statuses:
