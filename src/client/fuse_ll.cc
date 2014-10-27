@@ -567,7 +567,7 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
 
-  dir_result_t *dirp = (dir_result_t*)fi->fh;
+  dir_result_t *dirp = reinterpret_cast<dir_result_t*>(fi->fh);
   cfuse->client->seekdir(dirp, off);
 
   struct readdir_context rc;

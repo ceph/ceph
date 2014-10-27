@@ -199,10 +199,9 @@ public:
     struct bt_iter *bt_itr = bt_ctf_get_iter(itr);
 
     uint64_t trace_start = 0;
-    struct bt_ctf_event *evt;
     bool first = true;
     while(true) {
-      evt = bt_ctf_iter_read_event(itr);
+      struct bt_ctf_event *evt = bt_ctf_iter_read_event(itr);
       if(!evt) {
 	break;
       }
