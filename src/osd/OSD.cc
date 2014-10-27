@@ -71,6 +71,7 @@
 #include "messages/MOSDPGTemp.h"
 
 #include "messages/MOSDMap.h"
+#include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGLog.h"
@@ -6114,9 +6115,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  // even if this map isn't from a mon, we may have satisfied our subscription
-  monc->sub_got("osdmap", last);
-
   // missing some?
   bool skip_maps = false;
   if (first > osdmap->get_epoch() + 1) {
@@ -6190,13 +6188,21 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (o->test_flag(CEPH_OSDMAP_FULL))
 	last_marked_full = e;
 
-#warning FIXME: we are unsafely encoding a new full OSDMap
-      if (inc.encode_features & ~CEPH_FEATURES_ALL)
-	derr << "WARNING: encoding full OSDMap with fewer features than the mon"
-	     << dendl;
-
       bufferlist fbl;
       o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
+
+      if (o->get_crc() != inc.full_crc) {
+	dout(2) << "got incremental " << e
+		<< " but failed to encode full with correct crc; requesting"
+		<< dendl;
+	clog->warn() << "failed to encode map e" << e << " with expected crc\n";
+	MMonGetOSDMap *req = new MMonGetOSDMap;
+	req->request_full(e, last);
+	monc->send_mon_message(req);
+	last = e - 1;
+	break;
+      }
+
 
       hobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(META_COLL, fulloid, 0, fbl.length(), fbl);
@@ -6206,6 +6212,16 @@ void OSD::handle_osd_map(MOSDMap *m)
     }
 
     assert(0 == "MOSDMap lied about what maps it had?");
+  }
+
+  // even if this map isn't from a mon, we may have satisfied our subscription
+  monc->sub_got("osdmap", last);
+
+  if (last <= osdmap->get_epoch()) {
+    dout(10) << " no new maps here, dropping" << dendl;
+    delete _t;
+    m->put();
+    return;
   }
 
   if (superblock.oldest_map) {
