@@ -1019,12 +1019,14 @@ def prepare_journal_dev(
             journal_dmcrypt = '/dev/disk/by-partuuid/{journal_uuid}'.format(
                 journal_uuid=journal_uuid,
                 )
+            journal_dev = journal[:-1]
         else:
             return (journal, None, None)
 
     else:
         # it is a whole disk.  create a partition!
         num = None
+        journal_dev = journal
         if journal == data:
             # we're sharing the disk between osd data and journal;
             # make journal be partition number 2, so it's pretty
@@ -1074,7 +1076,7 @@ def prepare_journal_dev(
                         ),
                     '--mbrtogpt',
                     '--',
-                    journal[:-1],
+                    journal_dev,
                 ],
             )
         else:
@@ -1094,7 +1096,7 @@ def prepare_journal_dev(
                         ),
                     '--mbrtogpt',
                     '--',
-                    journal,
+                    journal_dev,
                 ],
             )
 
@@ -1112,7 +1114,7 @@ def prepare_journal_dev(
                 [
                     'partx',
                     '-a',
-                    journal,
+                    journal_dev,
                     ],
                 )
 
@@ -1121,7 +1123,7 @@ def prepare_journal_dev(
             command(
                 [
                     'partprobe',
-                    journal,
+                    journal_dev,
                     ],
                 )
 
