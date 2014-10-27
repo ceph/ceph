@@ -302,10 +302,9 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
           c[k * p + j] = d[k * erasures[p] + j];
         }
       } else {
-        int s = 0;
         // decoding matrix element for coding chunks
         for (i = 0; i < k; i++) {
-          s = 0;
+          int s = 0;
           for (j = 0; j < k; j++)
             s ^= gf_mul(d[j * k + i],
                         encode_coeff[k * erasures[p] + j]);

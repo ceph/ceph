@@ -198,7 +198,6 @@ int ErasureCodeLrc::layers_parse(string description_string,
 int ErasureCodeLrc::layers_init()
 {
   ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
-  int err;
   for (unsigned int i = 0; i < layers.size(); i++) {
     Layer &layer = layers[i];
     int position = 0;
@@ -227,10 +226,10 @@ int ErasureCodeLrc::layers_init()
     if (layer.parameters.find("directory") == layer.parameters.end())
       layer.parameters["directory"] = directory;
     stringstream ss;
-    err = registry.factory(layer.parameters["plugin"],
-			   layer.parameters,
-			   &layer.erasure_code,
-			   ss);
+    int err = registry.factory(layer.parameters["plugin"],
+			       layer.parameters,
+			       &layer.erasure_code,
+			       ss);
     if (err) {
       derr << ss.str() << dendl;
       return err;

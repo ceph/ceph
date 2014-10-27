@@ -91,12 +91,11 @@ int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
   ErasureCodePlugin *plugin;
   {
     Mutex::Locker l(lock);
-    int r = 0;
     plugin = get(plugin_name);
     if (plugin == 0) {
       loading = true;
       assert(parameters.count("directory") != 0);
-      r = load(plugin_name, parameters.find("directory")->second, &plugin, ss);
+      int r = load(plugin_name, parameters.find("directory")->second, &plugin, ss);
       loading = false;
       if (r != 0)
 	return r;
