@@ -278,5 +278,5 @@ int main(int argc, char **argv) {
 }
 
 // Local Variables:
-// compile-command: "cd ../.. ; make unittest_sharedptr_registry && ./unittest_sharedptr_registry # --gtest_filter=*.* --log-to-stderr=true"
+// compile-command: "cd ../.. ; make unittest_shared_cache && ./unittest_shared_cache # --gtest_filter=*.* --log-to-stderr=true"
 // End:
