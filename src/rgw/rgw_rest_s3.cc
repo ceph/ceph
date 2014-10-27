@@ -268,7 +268,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       const char *section_name = (iter->is_delete_marker() ? "DeleteMarker" : "Version");
       s->formatter->open_array_section(section_name);
       s->formatter->dump_string("Key", iter->key.name);
-      s->formatter->dump_string("VersionId", iter->key.instance);
+      string version_id = iter->key.instance;
+      if (version_id.empty()) {
+        version_id = "null";
+      }
+      s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
       dump_time(s, "LastModified", &mtime);
       if (!iter->is_delete_marker()) {
