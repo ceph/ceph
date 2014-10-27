@@ -2,7 +2,7 @@
  Release Notes
 ===============
 
-v0.87 Giant (draft)
+v0.87 Giant
 ===========
 
 This release will form the basis for the stable release Giant,
@@ -46,11 +46,19 @@ Upgrade Sequencing
   moving on to Giant.  We have not tested upgrades directly from
   Emperor, Dumpling, or older releases.
 
-* Upgrade daemons in the following order:
+  We *have* tested:
+
+   * Firefly to Giant
+   * Dumpling to Firefly to Giant
+
+* Please upgrade daemons in the following order:
 
    #. Monitors
    #. OSDs
    #. MDSs and/or radosgw
+
+  Note that the relative ordering of OSDs and monitors should not matter, but
+  we primarily tested upgrading monitors first.
 
 Upgrading from v0.80x Firefly
 -----------------------------
