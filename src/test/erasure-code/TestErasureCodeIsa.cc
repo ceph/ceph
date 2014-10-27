@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -465,12 +466,12 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   }
 
   // loop through all possible loss scenarios
-  bool err = true;
   int cnt_cf = 0;
 
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
+    bool err = true;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -592,12 +593,12 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   }
 
   // loop through all possible loss scenarios
-  bool err = true;
   int cnt_cf = 0;
 
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
+    bool err = true;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -719,12 +720,12 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   }
 
   // loop through all possible loss scenarios
-  bool err = true;
   int cnt_cf = 0;
 
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
+    bool err = true;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -845,12 +846,12 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   }
 
   // loop through all possible loss scenarios
-  bool err = true;
   int cnt_cf = 0;
 
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
+    bool err = true;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);

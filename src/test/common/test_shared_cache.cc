@@ -103,7 +103,6 @@ TEST_F(SharedLRU_all, add) {
   SharedLRUTest cache;
   unsigned int key = 1;
   int value1 = 2;
-  int value2 = 3;
   bool existed = false;
   {
     shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
@@ -111,6 +110,7 @@ TEST_F(SharedLRU_all, add) {
     ASSERT_FALSE(existed);
   }
   {
+    int value2 = 3;
     shared_ptr<int> ptr = cache.add(key, new int(value2), &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_TRUE(existed);
@@ -120,8 +120,8 @@ TEST_F(SharedLRU_all, add) {
 TEST_F(SharedLRU_all, lookup) {
   SharedLRUTest cache;
   unsigned int key = 1;
-  int value = 2;
   {
+    int value = 2;
     ASSERT_TRUE(cache.add(key, new int(value)));
     ASSERT_TRUE(cache.lookup(key));
     ASSERT_EQ(value, *cache.lookup(key));

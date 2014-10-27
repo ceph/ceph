@@ -91,6 +91,7 @@ struct PGRecoveryStats {
     utime_t total_time;       // total time in state
     utime_t min_time, max_time;
 
+    // cppcheck-suppress unreachableCode
     per_state_info() : enter(0), exit(0), events(0) {}
   };
   map<const char *,per_state_info> info;

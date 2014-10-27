@@ -74,7 +74,7 @@ int EventCenter::init(int n)
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
-  file_events = (FileEvent *)malloc(sizeof(FileEvent)*n);
+  file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
   nevent = n;
@@ -106,7 +106,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
       lderr(cct) << __func__ << " event count is exceed." << dendl;
       return -ERANGE;
     }
-    FileEvent *new_events = (FileEvent *)realloc(file_events, sizeof(FileEvent)*new_size);
+    FileEvent *new_events = static_cast<FileEvent *>(realloc(file_events, sizeof(FileEvent)*new_size));
     if (!new_events) {
       lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
       return -errno;

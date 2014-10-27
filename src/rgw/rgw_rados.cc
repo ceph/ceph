@@ -3498,7 +3498,6 @@ int RGWRados::copy_obj_data(void *ctx,
 {
   bufferlist first_chunk;
   RGWObjManifest manifest;
-  map<uint64_t, RGWObjManifestPart> objs;
 
   string tag;
   append_rand_alpha(cct, tag, tag, 32);

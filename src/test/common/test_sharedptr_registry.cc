@@ -174,9 +174,9 @@ TEST_F(SharedPtrRegistry_all, wait_lookup_or_create) {
 TEST_F(SharedPtrRegistry_all, lookup) {
   SharedPtrRegistryTest registry;
   unsigned int key = 1;
-  int value = 2;
   {
     shared_ptr<int> ptr = registry.lookup_or_create(key);
+    int value = 2;
     *ptr = value;
     ASSERT_EQ(value, *registry.lookup(key));
   }
