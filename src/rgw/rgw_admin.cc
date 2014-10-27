@@ -688,7 +688,11 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
         quota.max_objects = max_objects;
       }
       if (have_max_size) {
-        quota.max_size_kb = rgw_rounded_kb(max_size);
+        if (max_size < 0) {
+          quota.max_size_kb = -1;
+        } else {
+          quota.max_size_kb = rgw_rounded_kb(max_size);
+        }
       }
       break;
     case OPT_QUOTA_DISABLE:
