@@ -505,7 +505,7 @@ public:
     uint32_t get_data_length() {
       return largest_data_len;
     }
-    /// offset within the encoded buffer to the start of the first data buffer that's encoded
+    /// offset within the encoded buffer to the start of the largest data buffer that's encoded
     uint32_t get_data_offset() {
       if (largest_data_off_in_tbl) {
 	return largest_data_off_in_tbl +
