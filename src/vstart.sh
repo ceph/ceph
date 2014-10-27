@@ -67,7 +67,7 @@ usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
-usage=$usage"\t-o config\t\t add extra config parameters to mds section\n"
+usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
 usage=$usage"\t-J no journal\t\tdisable filestore journal\n"
 
 
