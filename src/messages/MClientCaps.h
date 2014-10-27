@@ -119,7 +119,7 @@ class MClientCaps : public Message {
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION),
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
       osd_epoch_barrier(oeb){
     memset(&head, 0, sizeof(head));
     head.op = op;
@@ -226,8 +226,8 @@ public:
       ::encode(inline_version, payload);
       ::encode(inline_data, payload);
     } else {
-      header.version = 3;
-      return;
+      ::encode(inline_version, payload);
+      ::encode(bufferlist(), payload);
     }
 
     ::encode(osd_epoch_barrier, payload);
