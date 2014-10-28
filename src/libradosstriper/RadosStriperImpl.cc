@@ -203,6 +203,7 @@ libradosstriper::RadosStriperImpl::RadosExclusiveLock::~RadosExclusiveLock() {
 ///////////////////////// constructor /////////////////////////////
 
 libradosstriper::RadosStriperImpl::RadosStriperImpl(librados::IoCtx& ioctx, librados::IoCtxImpl *ioctx_impl) :
+  lock("RadosStriperImpl m_refCnt lock", false, false),
   m_refCnt(0), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
   m_layout(g_default_file_layout) {}
 

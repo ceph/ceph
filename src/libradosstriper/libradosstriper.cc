@@ -318,6 +318,10 @@ extern "C" int rados_striper_create(rados_ioctx_t ioctx,
 extern "C" void rados_striper_destroy(rados_striper_t striper)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  impl->lock.Lock();
+  while (impl->m_refCnt > 1)
+    impl->cond.Wait(impl->lock);
+  impl->lock.Unlock();
   impl->put();
 }
 
