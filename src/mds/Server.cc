@@ -1935,6 +1935,12 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string&
   dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
   assert(dir->is_auth());
 
+  if (dir->is_bad()) {
+    dout(7) << " bad dirfrag " << *dir << dendl;
+    respond_to_request(mdr, -EIO);
+    return 0;
+  }
+
   client_t client = mdr->get_client();
 
   // does it already exist?
@@ -2964,6 +2970,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
     // fetch
     dout(10) << " incomplete dir contents for readdir on " << *dir << ", fetching" << dendl;
     dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
+    return;
+  }
+
+  if (dir->is_bad()) {
+    dout(10) << " bad dirfrag " << *dir << dendl;
+    respond_to_request(mdr, -EIO);
     return;
   }
 
