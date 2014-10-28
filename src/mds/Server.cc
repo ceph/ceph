@@ -4946,8 +4946,10 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     wrlocks.insert(&straydn->get_dir()->inode->nestlock);
     xlocks.insert(&straydn->lock);
   }
-  if (in->is_dir())
+  if (in->is_dir()) {
     rdlocks.insert(&in->filelock);   // to verify it's empty
+    rdlocks.insert(&in->dirfragtreelock);
+  }
   mds->locker->include_snap_rdlocks(rdlocks, dnl->get_inode());
 
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
@@ -5471,6 +5473,9 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
   dout(10) << "dir_is_nonempty " << *in << dendl;
   assert(in->is_auth());
   assert(in->filelock.can_read(-1));
+  assert(in->dirfragtreelock.can_read(-1));
+
+  bool has_bad = false;
 
   frag_info_t dirstat;
   version_t dirstat_version = in->get_projected_inode()->dirstat.version;
@@ -5485,6 +5490,8 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
 	       << pf->fragstat.size() << " items " << *dir << dendl;
       return true;
     }
+    if (dir->is_bad())
+      has_bad = true;
 
     if (pf->accounted_fragstat.version == dirstat_version)
       dirstat.add(pf->accounted_fragstat);
@@ -5492,7 +5499,18 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
       dirstat.add(pf->fragstat);
   }
 
-  return dirstat.size() != in->get_projected_inode()->dirstat.size();
+  if (!has_bad)
+    return dirstat.size() != in->get_projected_inode()->dirstat.size();
+
+  bool unknown = false;
+  list<frag_t> fgls;
+  in->dirfragtree.get_leaves_under(frag_t(), fgls);
+  for (list<frag_t>::iterator p = fgls.begin(); p != fgls.end(); ++p)
+    if (!in->has_dirfrag(*p)) {
+      unknown = true;
+      break;
+    }
+  return unknown;
 }
 
 
