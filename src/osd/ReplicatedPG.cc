@@ -7058,6 +7058,9 @@ void ReplicatedBackend::issue_op(
       ::encode(t, wr->get_data());
     } else {
       ::encode(*op_t, wr->get_data());
+      int alignment = op_t->get_data_alignment();
+      if (alignment != -1)
+	wr->data_offset = alignment;
     }
 
     ::encode(log_entries, wr->logbl);
