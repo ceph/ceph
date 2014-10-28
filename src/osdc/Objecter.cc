@@ -2054,9 +2054,29 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
-  int primary;
-  vector<int> acting;
-  osdmap->pg_to_acting_osds(pgid, &acting, &primary);
+
+  int min_size = pi->min_size;
+  unsigned pg_num = pi->get_pg_num();
+  int up_primary, acting_primary;
+  vector<int> up, acting;
+  osdmap->pg_to_up_acting_osds(pgid, &up, &up_primary,
+			       &acting, &acting_primary);
+  if (any_change && pg_interval_t::is_new_interval(
+          t->acting_primary,
+	  acting_primary,
+	  t->acting,
+	  acting,
+	  t->up_primary,
+	  up_primary,
+	  t->up,
+	  up,
+	  t->min_size,
+	  min_size,
+	  t->pg_num,
+	  pg_num,
+	  pi->raw_pg_to_pg(pgid))) {
+    force_resend = true;
+  }
 
   bool need_resend = false;
 
@@ -2068,15 +2088,20 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 
   if (t->pgid != pgid ||
       is_pg_changed(
-	t->primary, t->acting, primary, acting, t->used_replica || any_change) ||
+	t->acting_primary, t->acting, acting_primary, acting,
+	t->used_replica || any_change) ||
       force_resend) {
     t->pgid = pgid;
     t->acting = acting;
-    t->primary = primary;
+    t->acting_primary = acting_primary;
+    t->up_primary = up_primary;
+    t->up = up;
+    t->min_size = min_size;
+    t->pg_num = pg_num;
     ldout(cct, 10) << __func__ << " "
 		   << " pgid " << pgid << " acting " << acting << dendl;
     t->used_replica = false;
-    if (primary == -1) {
+    if (acting_primary == -1) {
       t->osd = -1;
     } else {
       int osd;
@@ -2112,7 +2137,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	assert(best >= 0);
 	osd = acting[best];
       } else {
-	osd = primary;
+	osd = acting_primary;
       }
       t->osd = osd;
     }
