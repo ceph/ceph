@@ -149,6 +149,7 @@ struct rgw_cls_link_olh_op {
   cls_rgw_obj_key key;
   bool delete_marker;
   string op_tag;
+  struct rgw_bucket_dir_entry_meta meta;
 
   rgw_cls_link_olh_op() : delete_marker(false) {}
 
@@ -157,6 +158,7 @@ struct rgw_cls_link_olh_op {
     ::encode(key, bl);
     ::encode(delete_marker, bl);
     ::encode(op_tag, bl);
+    ::encode(meta, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -165,6 +167,7 @@ struct rgw_cls_link_olh_op {
     ::decode(key, bl);
     ::decode(delete_marker, bl);
     ::decode(op_tag, bl);
+    ::decode(meta, bl);
     DECODE_FINISH(bl);
   }
 

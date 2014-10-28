@@ -897,7 +897,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   list<rgw_obj>::iterator iter;
   for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false);
+    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false, NULL);
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -1200,7 +1200,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   }
 
   if (versioned_object || is_olh) {
-    r = store->set_olh(obj_ctx, bucket_owner, head_obj, false);
+    r = store->set_olh(obj_ctx, bucket_owner, head_obj, false, NULL);
     if (r < 0) {
       return r;
     }
@@ -3929,7 +3929,13 @@ int RGWRados::Object::Delete::delete_obj()
         store->gen_rand_obj_instance_name(&marker);
       }
 
-      int r = store->set_olh(target->get_ctx(), params.bucket_owner, marker, true);
+      struct rgw_bucket_dir_entry_meta meta;
+
+      meta.owner = params.obj_owner.get_id();
+      meta.owner_display_name = params.obj_owner.get_display_name();
+      meta.mtime = ceph_clock_now(store->ctx());
+
+      int r = store->set_olh(target->get_ctx(), params.bucket_owner, marker, true, &meta);
       if (r < 0) {
         return r;
       }
@@ -4011,13 +4017,16 @@ int RGWRados::Object::Delete::delete_obj()
   return 0;
 }
 
-int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, int versioning_status)
+int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, int versioning_status, ACLOwner *obj_owner)
 {
   RGWRados::Object del_target(this, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket_owner;
   del_op.params.versioning_status = versioning_status;
+  if (obj_owner) {
+    del_op.params.obj_owner = *obj_owner;
+  }
 
   return del_op.delete_obj();
 }
@@ -5477,7 +5486,8 @@ int RGWRados::olh_init_modification(RGWObjState *state, rgw_obj& obj, string *ob
   return ret;
 }
 
-int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag)
+int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag,
+                                    struct rgw_bucket_dir_entry_meta *meta)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -5495,7 +5505,7 @@ int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, c
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, delete_marker, op_tag);
+  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, delete_marker, op_tag, meta);
   if (ret < 0) {
     return ret;
   }
@@ -5659,7 +5669,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
     cls_rgw_obj_key& key = *liter;
     rgw_obj obj_instance(bucket, key.name);
     obj_instance.set_instance(key.instance);
-    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, 0);
+    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, 0, NULL);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
@@ -5704,7 +5714,7 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string
   return 0;
 }
 
-int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker)
+int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta)
 {
   string op_tag;
   string obj_tag;
@@ -5732,7 +5742,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj
     }
   } while (ret == -ECANCELED);
 
-  ret = bucket_index_link_olh(target_obj, delete_marker, op_tag);
+  ret = bucket_index_link_olh(target_obj, delete_marker, op_tag, meta);
   if (ret < 0) {
     ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
     return ret;
