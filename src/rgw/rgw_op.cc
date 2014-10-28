@@ -1100,11 +1100,8 @@ void RGWSetBucketVersioning::execute()
   if (enable_versioning) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
     s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else if (s->bucket_info.versioned()) {
-    s->bucket_info.flags |= BUCKET_VERSIONS_SUSPENDED;
   } else {
-    ret = -EINVAL;
-    goto done;
+    s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
   }
 
   ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
