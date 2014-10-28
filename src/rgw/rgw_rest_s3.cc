@@ -387,13 +387,10 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
 
   s->formatter->open_object_section_in_ns("VersioningConfiguration",
 					  "http://doc.s3.amazonaws.com/doc/2006-03-01/");
-  const char *status;
-  if (!versioned) {
-    status = "Disabled";
-  } else {
-    status = (versioning_enabled ? "Enabled" : "Suspended");
+  if (versioned) {
+    const char *status = (versioning_enabled ? "Enabled" : "Suspended");
+    s->formatter->dump_string("Status", status);
   }
-  s->formatter->dump_string("Status", status);
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
