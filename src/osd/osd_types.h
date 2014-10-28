@@ -1777,6 +1777,25 @@ struct pg_interval_t {
    * Determines whether there is an interval change
    */
   static bool is_new_interval(
+    int old_acting_primary,
+    int new_acting_primary,
+    const vector<int> &old_acting,
+    const vector<int> &new_acting,
+    int old_up_primary,
+    int new_up_primary,
+    const vector<int> &old_up,
+    const vector<int> &new_up,
+    int old_min_size,
+    int new_min_size,
+    unsigned old_pg_num,
+    unsigned new_pg_num,
+    pg_t pgid
+    );
+
+  /**
+   * Determines whether there is an interval change
+   */
+  static bool is_new_interval(
     int old_acting_primary,                     ///< [in] primary as of lastmap
     int new_acting_primary,                     ///< [in] primary as of lastmap
     const vector<int> &old_acting,              ///< [in] acting as of lastmap
