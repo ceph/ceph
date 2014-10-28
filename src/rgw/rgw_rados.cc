@@ -3949,6 +3949,10 @@ int RGWRados::Object::Delete::delete_obj()
     return 0;
   }
 
+  if (obj.get_instance() == "null") {
+    obj.clear_instance();
+  }
+
   rgw_rados_ref ref;
   rgw_bucket bucket;
   int r = store->get_obj_ref(obj, &ref, &bucket);
