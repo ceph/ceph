@@ -799,7 +799,7 @@ void PGLog::_write_log(
   }
   ::encode(log.can_rollback_to, keys["can_rollback_to"]);
 
-  if (to_remove.size())
+  if (!to_remove.empty())
     t.omap_rmkeys(META_COLL, log_oid, to_remove);
   t.omap_setkeys(META_COLL, log_oid, keys);
 }
