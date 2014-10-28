@@ -256,7 +256,7 @@ TEST(SharedCache_all, lru) {
   ASSERT_FALSE(cache.lookup(SIZE-1));
   ASSERT_FALSE(cache.lookup(SIZE));
   ASSERT_TRUE(cache.lookup(SIZE+1));
-  ASSERT_EQ(SIZE+1, *cache.lookup(SIZE+1));
+  ASSERT_EQ((int)SIZE+1, *cache.lookup(SIZE+1));
 
   cache.purge(0);
   ASSERT_FALSE(cache.lookup(0));
