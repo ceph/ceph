@@ -288,3 +288,6 @@ class CephFSMount(object):
 
     def get_global_id(self):
         raise NotImplementedError()
+
+    def get_osd_epoch(self):
+        raise NotImplementedError()

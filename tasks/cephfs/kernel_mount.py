@@ -1,5 +1,7 @@
 from StringIO import StringIO
+import json
 import logging
+from textwrap import dedent
 from teuthology.orchestra.run import CommandFailedError
 from teuthology import misc
 
@@ -167,6 +169,54 @@ class KernelMount(CephFSMount):
             ],
         )
 
+    def _find_debug_dir(self):
+        """
+        Find the debugfs folder for this mount
+        """
+        pyscript = dedent("""
+            import glob
+            import os
+            import json
+
+            def get_id_to_dir():
+                result = {}
+                for dir in glob.glob("/sys/kernel/debug/ceph/*"):
+                    mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
+                    client_id = mds_sessions_lines[1].split()[1].strip('"')
+
+                    result[client_id] = dir
+                return result
+
+            print json.dumps(get_id_to_dir())
+            """)
+
+        p = self.client_remote.run(args=[
+            'sudo', 'python', '-c', pyscript
+        ], stdout=StringIO())
+        client_id_to_dir = json.loads(p.stdout.getvalue())
+
+        try:
+            return client_id_to_dir[self.client_id]
+        except KeyError:
+            log.error("Client id '{0}' debug dir not found (clients seen were: {1})".format(
+                self.client_id, ",".join(client_id_to_dir.keys())
+            ))
+            raise
+
+    def _read_debug_file(self, filename):
+        debug_dir = self._find_debug_dir()
+
+        pyscript = dedent("""
+            import os
+
+            print open(os.path.join("{debug_dir}", "{filename}")).read()
+            """).format(debug_dir=debug_dir, filename=filename)
+
+        p = self.client_remote.run(args=[
+            'sudo', 'python', '-c', pyscript
+        ], stdout=StringIO())
+        return p.stdout.getvalue()
+
     def get_global_id(self):
         """
         Look up the CephFS client ID for this mount, using debugfs.
@@ -174,20 +224,20 @@ class KernelMount(CephFSMount):
 
         assert self.mounted
 
-        pyscript = """
-import glob
-import os
+        mds_sessions = self._read_debug_file("mds_sessions")
+        lines = mds_sessions.split("\n")
+        return int(lines[0].split()[1])
 
-def get_global_id(client_entity_id):
-    for dir in glob.glob("/sys/kernel/debug/ceph/*"):
-        mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
-        return mds_sessions_lines[0].split()[1]
-    raise RuntimeError("Client {{0}} debugfs path not found".format(client_entity_id))
+    def get_osd_epoch(self):
+        """
+        Return 2-tuple of osd_epoch, osd_epoch_barrier
+        """
+        osd_map = self._read_debug_file("osdmap")
+        lines = osd_map.split("\n")
+        epoch = int(lines[0].split()[1])
 
-print get_global_id("{entity_id}")
-""".format(entity_id=self.client_id)
+        mds_sessions = self._read_debug_file("mds_sessions")
+        lines = mds_sessions.split("\n")
+        epoch_barrier = int(lines[2].split()[1].strip('"'))
 
-        p = self.client_remote.run(args=[
-            'sudo', 'python', '-c', pyscript
-        ], stdout=StringIO())
-        return int(p.stdout.getvalue().strip())
+        return epoch, epoch_barrier
