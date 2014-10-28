@@ -1013,23 +1013,31 @@ static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp
   log_entry.delete_marker = delete_marker;
 }
 
+static string escape_str(const string& s)
+{
+   int len = escape_json_attr_len(s.c_str(), s.size());
+   char escaped[len];
+   escape_json_attr(s.c_str(), s.size(), escaped);
+   return string(escaped);
+}
+
 /*
  * write object instance entry, and if needed also the list entry
  */
 static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
 {
-  CLS_LOG(20, "write_entry() instance=%s idx=%s flags=%d", instance_entry.key.instance.c_str(), instance_idx.c_str(), instance_entry.flags);
+  CLS_LOG(20, "write_entry() instance=%s idx=%s flags=%d", escape_str(instance_entry.key.instance).c_str(), instance_idx.c_str(), instance_entry.flags);
   /* write the instance entry */
   int ret = write_entry(hctx, instance_entry, instance_idx);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", instance_idx.c_str(), ret);
+    CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", escape_str(instance_idx).c_str(), ret);
     return ret;
   }
   string instance_list_idx;
   get_list_index_key(instance_entry, &instance_list_idx);
 
   if (instance_idx != instance_list_idx) {
-    CLS_LOG(20, "write_entry() idx=%s flags=%d", instance_list_idx.c_str(), instance_entry.flags);
+    CLS_LOG(20, "write_entry() idx=%s flags=%d", escape_str(instance_list_idx).c_str(), instance_entry.flags);
     /* write a new list entry for the object instance */
     ret = write_entry(hctx, instance_entry, instance_list_idx);
     if (ret < 0) {
@@ -1078,6 +1086,7 @@ public:
     string list_idx;
     /* this instance has a previous list entry, remove that entry */
     get_list_index_key(instance_entry, &list_idx);
+    CLS_LOG(20, "unlink_list_entry() list_idx=%s", escape_str(list_idx).c_str());
     int ret = cls_cxx_map_remove_key(hctx, list_idx);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() list_idx=%s ret=%d", list_idx.c_str(), ret);
@@ -1109,6 +1118,7 @@ public:
 
   int set_current(uint64_t epoch) {
     if (instance_entry.ver.epoch > 0) {
+      CLS_LOG(20, "%s(): instance_entry.ver.epoch=%d epoch=%d", __func__, (int)instance_entry.ver.epoch, (int)epoch);
       /* this instance has a previous list entry, remove that entry */
       int ret = unlink_list_entry();
       if (ret < 0) {
@@ -1263,6 +1273,7 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
     }
   }
 
+  entry.key = key;
   entry.flags = RGW_BUCKET_DIRENT_FLAG_VER_MARKER;
   ret = write_entry(hctx, entry, key.name);
   if (ret < 0) {
@@ -1304,19 +1315,22 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   BIOLHEntry olh(hctx, op.key);
 
   /* read instance entry */
-  if (!op.delete_marker) {
-    int ret = obj.init();
-    if (ret < 0) {
-      return ret;
-    }
-  } else {
-    /* a deletion marker, need to initialize it, there's no instance entry for it yet */
+  int ret = obj.init();
+  if (ret == -ENOENT && op.delete_marker) {
+    ret = 0;
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (op.delete_marker) {
+    /* a deletion marker, need to initialize entry as such */
     obj.init_as_delete_marker();
   }
 
   /* read olh */
   bool olh_found;
-  int ret = olh.init(&olh_found);
+  ret = olh.init(&olh_found);
   if (ret < 0) {
     return ret;
   }
@@ -1375,8 +1389,13 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  BIVerObjEntry obj(hctx, op.key);
-  BIOLHEntry olh(hctx, op.key);
+  cls_rgw_obj_key dest_key = op.key;
+  if (dest_key.instance == "null") {
+    dest_key.instance.clear();
+  }
+
+  BIVerObjEntry obj(hctx, dest_key);
+  BIOLHEntry olh(hctx, dest_key);
 
   int ret = obj.init();
   if (ret == -ENOENT) {
@@ -1393,7 +1412,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  if (olh.get_entry().key == op.key) {
+  if (olh.get_entry().key == dest_key) {
     /* this is the current head, need to update! */
     cls_rgw_obj_key next_key;
     bool found;
@@ -1799,6 +1818,8 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
         return -EIO;
       }
 
+      CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
+
       if (e.key.name != name) {
         return count;
       }
@@ -1810,14 +1831,6 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   } while (!keys.empty());
 
   return count;
-}
-
-static string escape_str(const string& s)
-{
-   int len = escape_json_attr_len(s.c_str(), s.size());
-   char escaped[len];
-   escape_json_attr(s.c_str(), s.size(), escaped);
-   return string(escaped);
 }
 
 static int list_instance_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,

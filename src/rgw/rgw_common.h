@@ -783,7 +783,8 @@ struct RGWBucketInfo
   void decode_json(JSONObj *obj);
 
   bool versioned() { return (flags & BUCKET_VERSIONED) != 0; }
-  bool versioning_enabled() { return (flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
+  int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
+  bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
   RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false) {}
 };
@@ -1167,11 +1168,15 @@ public:
     loc.clear();
   }
 
+  bool have_instance() {
+    return !instance.empty() && instance != "null";
+  }
+
   void set_obj(const string& o) {
     object.reserve(128);
 
     orig_obj = o;
-    if (ns.empty() && instance.empty()) {
+    if (ns.empty() && !have_instance()) {
       if (o.empty()) {
         return;
       }
@@ -1184,7 +1189,7 @@ public:
     } else {
       object = "_";
       object.append(ns);
-      if (!instance.empty()) {
+      if (have_instance()) {
         object.append(string(":") + instance);
       }
       object.append("_");

@@ -2142,7 +2142,7 @@ void RGWDeleteObj::execute()
 
     obj_ctx->set_atomic(obj);
 
-    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
+    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_status());
   }
 }
 
@@ -3002,7 +3002,7 @@ void RGWCompleteMultipart::execute()
   }
 
   // remove the upload obj
-  int r = store->delete_obj(*(RGWObjectCtx *)s->obj_ctx, s->bucket_owner.get_id(), meta_obj, false);
+  int r = store->delete_obj(*(RGWObjectCtx *)s->obj_ctx, s->bucket_owner.get_id(), meta_obj, 0);
   if (r < 0) {
     ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
@@ -3062,7 +3062,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
-        ret = store->delete_obj(*obj_ctx, owner, obj, false);
+        ret = store->delete_obj(*obj_ctx, owner, obj, 0);
         if (ret < 0 && ret != -ENOENT)
           return;
       } else {
@@ -3070,7 +3070,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
-          ret = store->delete_obj(*obj_ctx, owner, loc, false);
+          ret = store->delete_obj(*obj_ctx, owner, loc, 0);
           if (ret < 0 && ret != -ENOENT)
             return;
         }
@@ -3081,7 +3081,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
-  ret = store->delete_obj(*obj_ctx, owner, meta_obj, false);
+  ret = store->delete_obj(*obj_ctx, owner, meta_obj, 0);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -3243,7 +3243,7 @@ void RGWDeleteMultiObj::execute()
     rgw_obj obj(bucket,(*iter));
 
     obj_ctx->set_atomic(obj);
-    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_enabled());
+    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_status());
     if (ret == -ENOENT) {
       ret = 0;
     }

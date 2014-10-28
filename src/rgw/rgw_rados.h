@@ -1448,9 +1448,9 @@ public:
 
       struct DeleteParams {
         string bucket_owner;
-        bool use_versioning;
+        int versioning_status;
 
-        DeleteParams() : use_versioning(false) {}
+        DeleteParams() : versioning_status(0) {}
       } params;
       
       Delete(RGWRados::Object *_target) : target(_target) {}
@@ -1596,7 +1596,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, bool use_versioning);
+  virtual int delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, int versioning_status);
 
   /* Delete a system object */
   virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);

@@ -3864,10 +3864,12 @@ int RGWRados::Object::Delete::delete_obj()
   RGWRados *store = target->get_store();
   rgw_obj& obj = target->get_obj();
 
-  if (params.use_versioning) {
+  if (params.versioning_status & BUCKET_VERSIONED) {
     if (obj.get_instance().empty()) {
       rgw_obj marker = obj;
-      store->gen_rand_obj_instance_name(&marker);
+      if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
+        store->gen_rand_obj_instance_name(&marker);
+      }
 
       int r = store->set_olh(target->get_ctx(), params.bucket_owner, marker, true);
       if (r < 0) {
@@ -3940,17 +3942,6 @@ int RGWRados::Object::Delete::delete_obj()
   if (r < 0)
     return r;
 
-  /* need to insert a delete marker? */
-  if (params.use_versioning && obj.get_instance().empty()) {
-    rgw_obj marker = obj;
-    store->gen_rand_obj_instance_name(&marker);
-
-    r = store->set_olh(target->get_ctx(), params.bucket_owner, marker, true);
-    if (r < 0) {
-      return r;
-    }
-  }
-
   if (ret_not_existed)
     return -ENOENT;
 
@@ -3962,13 +3953,13 @@ int RGWRados::Object::Delete::delete_obj()
   return 0;
 }
 
-int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, bool use_versioning)
+int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, int versioning_status)
 {
   RGWRados::Object del_target(this, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket_owner;
-  del_op.params.use_versioning = use_versioning;
+  del_op.params.versioning_status = versioning_status;
 
   return del_op.delete_obj();
 }
@@ -5546,7 +5537,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
     cls_rgw_obj_key& key = *liter;
     rgw_obj obj_instance(bucket, key.name);
     obj_instance.set_instance(key.instance);
-    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, false);
+    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, 0);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
