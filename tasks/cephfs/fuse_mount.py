@@ -223,11 +223,7 @@ class FuseMount(CephFSMount):
             ],
         )
 
-    def get_global_id(self):
-        """
-        Look up the CephFS client ID for this mount
-        """
-
+    def _admin_socket(self, args):
         pyscript = """
 import glob
 import re
@@ -254,6 +250,20 @@ print find_socket("{client_name}")
 
         # Query client ID from admin socket
         p = self.client_remote.run(
-            args=['sudo', 'ceph', '--admin-daemon', asok_path, 'mds_sessions'],
+            args=['sudo', 'ceph', '--admin-daemon', asok_path] + args,
             stdout=StringIO())
-        return json.loads(p.stdout.getvalue())['id']
+        return json.loads(p.stdout.getvalue())
+
+    def get_global_id(self):
+        """
+        Look up the CephFS client ID for this mount
+        """
+
+        return self._admin_socket(['mds_sessions'])['id']
+
+    def get_osd_epoch(self):
+        """
+        Return 2-tuple of osd_epoch, osd_epoch_barrier
+        """
+        status = self._admin_socket(['status'])
+        return status['osd_epoch'], status['osd_epoch_barrier']
