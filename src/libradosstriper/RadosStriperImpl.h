@@ -192,11 +192,21 @@ struct libradosstriper::RadosStriperImpl {
 
   // reference counting
   void get() {
-    m_refCnt.inc();
+    lock.Lock();
+    m_refCnt++;
+    lock.Unlock();
   }
   void put() {
-    if (m_refCnt.dec() == 0)
-      delete this;
+    bool deleteme = false;
+    lock.Lock();
+    m_refCnt --;
+    cond.Signal();
+    if (m_refCnt == 0) {
+      deleteme = true;
+    }
+    lock.Unlock();
+    if (deleteme)
+        delete this;
   }
 
   // objectid manipulation
@@ -312,7 +322,9 @@ struct libradosstriper::RadosStriperImpl {
   }
 
   // reference counting
-  atomic_t m_refCnt;
+  Mutex lock;
+  int m_refCnt;
+  Cond cond;
 
   // Context
   librados::Rados m_radosCluster;
