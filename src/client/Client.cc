@@ -3860,9 +3860,10 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
   mds_rank_t mds = session->mds_num;
   int dirty = m->get_dirty();
   int cleaned = 0;
+  uint16_t flush_ack_tid = static_cast<uint16_t>(m->get_client_tid());
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
     if ((dirty & (1 << i)) &&
-	(m->get_client_tid() == in->flushing_cap_tid[i]))
+	(flush_ack_tid == in->flushing_cap_tid[i]))
       cleaned |= 1 << i;
   }
 
