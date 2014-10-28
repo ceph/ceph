@@ -171,13 +171,16 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
 }
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
-                            bool delete_marker, const string& op_tag)
+                            bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta)
 {
   bufferlist in, out;
   struct rgw_cls_link_olh_op call;
   call.key = key;
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;
+  if (meta) {
+    call.meta = *meta;
+  }
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_link_olh", in, out);
   if (r < 0)
