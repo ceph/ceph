@@ -1073,10 +1073,11 @@ public:
     return 0;
   }
 
-  void init_as_delete_marker() {
+  void init_as_delete_marker(rgw_bucket_dir_entry_meta& meta) {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
     instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
+    instance_entry.meta = meta;
 
     initialized = true;
   }
@@ -1316,6 +1317,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   /* read instance entry */
   int ret = obj.init();
+  bool existed = (ret == 0);
   if (ret == -ENOENT && op.delete_marker) {
     ret = 0;
   }
@@ -1323,9 +1325,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  bool removing = (existed && !obj.is_delete_marker() && op.delete_marker);
+
   if (op.delete_marker) {
     /* a deletion marker, need to initialize entry as such */
-    obj.init_as_delete_marker();
+    obj.init_as_delete_marker(op.meta);
   }
 
   /* read olh */
@@ -1356,6 +1360,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   /* update the olh log */
   olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+  if (removing) {
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+  }
 
   olh.update(op.key, op.delete_marker);
 
