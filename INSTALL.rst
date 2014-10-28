@@ -1,11 +1,10 @@
 Installation and setup
 ======================
 
-Ubuntu
-------
+Ubuntu & Fedora
+---------------
 
-For better or worse, ``teuthology`` was originally written with Ubuntu in mind.
-Thus, a bootstrap script is provided that will do everything for you assuming
+A bootstrap script is provided that will do everything for you assuming
 you have ``sudo``::
 
     ./bootstrap
