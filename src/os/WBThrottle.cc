@@ -219,6 +219,13 @@ void WBThrottle::clear()
 	 pending_wbs.begin();
        i != pending_wbs.end();
        ++i) {
+#ifdef HAVE_POSIX_FADVISE
+    if (i->second.first.nocache) {
+      int fa_r = posix_fadvise(**i->second.second, 0, 0, POSIX_FADV_DONTNEED);
+      assert(fa_r == 0);
+    }
+#endif
+
     cur_ios -= i->second.first.ios;
     logger->dec(l_wbthrottle_ios_dirtied, i->second.first.ios);
     cur_size -= i->second.first.size;
