@@ -1337,9 +1337,9 @@ void Pipe::fault(bool onread)
     unregister_pipe();
     msgr->lock.Unlock();
 
-    in_q->discard_queue(conn_id);
     if (delay_thread)
       delay_thread->discard();
+    in_q->discard_queue(conn_id);
     discard_out_queue();
 
     // disconnect from Connection, and mark it failed.  future messages
