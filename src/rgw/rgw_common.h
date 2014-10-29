@@ -1168,15 +1168,23 @@ public:
     loc.clear();
   }
 
+  bool have_null_instance() {
+    return instance == "null";
+  }
+
   bool have_instance() {
-    return !instance.empty() && instance != "null";
+    return !instance.empty();
+  }
+
+  bool need_to_encode_instance() {
+    return have_instance() && !have_null_instance();
   }
 
   void set_obj(const string& o) {
     object.reserve(128);
 
     orig_obj = o;
-    if (ns.empty() && !have_instance()) {
+    if (ns.empty() && !need_to_encode_instance()) {
       if (o.empty()) {
         return;
       }
@@ -1189,7 +1197,7 @@ public:
     } else {
       object = "_";
       object.append(ns);
-      if (have_instance()) {
+      if (need_to_encode_instance()) {
         object.append(string(":") + instance);
       }
       object.append("_");
