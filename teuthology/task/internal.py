@@ -168,7 +168,7 @@ def check_lock(ctx, config):
     """
     Check lock status of remote machines.
     """
-    if ctx.config.get('check-locks') == False:
+    if not teuth_config.lock_server or ctx.config.get('check-locks') is False:
         log.info('Lock checking disabled.')
         return
     log.info('Checking locks...')
