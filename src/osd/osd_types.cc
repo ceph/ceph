@@ -744,6 +744,8 @@ std::string pg_state_string(int state)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
     oss << "incomplete+";
+  if (state & PG_STATE_PEERED)
+    oss << "peered+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
