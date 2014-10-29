@@ -4132,11 +4132,13 @@ int RGWRados::get_olh_target_state(RGWObjectCtx& obj_ctx, rgw_obj& obj, RGWObjSt
 int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
 #warning FIXME: get rid objv_tracker for non system objects
 {
+  bool need_follow_olh = follow_olh && !obj.have_instance();
+
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
   *state = s;
   if (s->has_attrs) {
-    if (s->is_olh && follow_olh) {
+    if (s->is_olh && need_follow_olh) {
       return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
     }
     return 0;
@@ -4202,7 +4204,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   if (is_olh(s->attrset)) {
     s->is_olh = true;
 
-    if (follow_olh) {
+    if (need_follow_olh) {
       return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
     }
   }
