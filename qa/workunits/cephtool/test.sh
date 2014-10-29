@@ -113,7 +113,7 @@ function check_response()
 		exit 1
 	fi
 
-	if ! grep "$expected_string" $TMPFILE >/dev/null 2>&1 ; then 
+	if ! grep --quiet -- "$expected_string" $TMPFILE ; then 
 		echo "Didn't find $expected_string in output" >&2
 		cat $TMPFILE >&2
 		exit 1
@@ -160,14 +160,14 @@ function test_mon_injectargs()
   CEPH_ARGS='--mon_debug_dump_location the.dump' ./ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_debug_drop_ping_probability 444' >& $TMPFILE || return 1
-  check_response "osd_debug_drop_ping_probability = '444' osd_debug_op_order = 'true'"
+  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
+  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
   ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'false'"
   ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_debug_drop_ping_probability 555' >& $TMPFILE || return 1
-  check_response "osd_debug_drop_ping_probability = '555' osd_debug_op_order = 'true'" 
+  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
+  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
 }
 
 function test_mon_injectargs_SI()
