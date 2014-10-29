@@ -97,6 +97,23 @@ def validate_distro_version(version, supported_versions):
             if version == part[1][0:len(part[1])-1]:
                 return True
 
+
+def get_statuses(machines):
+    if machines:
+        statuses = []
+        for machine in machines:
+            machine = misc.canonicalize_hostname(machine)
+            status = get_status(machine)
+            if status:
+                statuses.append(status)
+            else:
+                log.error("Lockserver doesn't know about machine: %s" %
+                          machine)
+    else:
+        statuses = list_locks()
+    return statuses
+
+
 def main(ctx):
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
@@ -145,44 +162,22 @@ def main(ctx):
     if ctx.brief or ctx.list or ctx.list_targets:
         assert ctx.desc is None, '--desc does nothing with --list/--brief'
 
-        if machines:
-            statuses = []
-            for machine in machines:
-                machine = misc.canonicalize_hostname(machine)
-                status = get_status(machine)
-                if status:
-                    statuses.append(status)
-                else:
-                    log.error("Lockserver doesn't know about machine: %s" %
-                              machine)
-            # Delete this variable to avoid linter errors when we redefine it
-            # in a list comprehension below
-            del machine
-        else:
-            statuses = list_locks()
+        # we may need to update host keys for vms.  Don't do it for
+        # every vm; however, update any vms included in the list given
+        # to the CLI (machines), or any owned by the specified owner or
+        # invoking user if no machines are specified.
         vmachines = []
-        my_vmachines = []
-
+        statuses = get_statuses(machines)
+        owner = ctx.owner or misc.get_user()
         for machine in statuses:
-            if machine['is_vm'] and machine['locked']:
+            if machine['is_vm'] and machine['locked'] and \
+               (machines or machine['locked_by'] == owner):
                 vmachines.append(machine['name'])
-                # keep track of which are ours, so that if we don't
-                # specify machines, the update_keys below can only try
-                # ours
-                if machine['locked_by'] == user:
-                    my_vmachines.append(machine['name'])
         if vmachines:
-            # Avoid ssh-keyscans for everybody when listing all machines
-            # Listing specific machines will update the keys, and if none
-            # are specified, my_vmachines will also be updated (if any)
-            if machines or not ctx.all:
-                if my_vmachines:
-                    do_update_keys(my_vmachines)
-                if machines:
-                    statuses = [get_status(machine)
-                                for machine in machines]
-            else:
-                statuses = list_locks()
+            log.info("updating host keys for %s", ' '.join(sorted(vmachines)))
+            do_update_keys(vmachines)
+            # get statuses again to refresh any updated keys
+            statuses = get_statuses(machines)
         if statuses:
             if ctx.machine_type:
                 statuses = [_status for _status in statuses
