@@ -5633,6 +5633,9 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
 
   for (iter = log.begin(); iter != log.end(); ++iter) {
     rgw_bucket_olh_log_entry& entry = iter->second;
+    ldout(cct, 20) << "olh_log_entry: op=" << (int)entry.op
+                   << " key=" << entry.key.name << "[" << entry.key.instance << "] "
+                   << (entry.delete_marker ? "(delete)" : "") << dendl;
     switch (entry.op) {
     case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
       remove_instances.push_back(entry.key);
