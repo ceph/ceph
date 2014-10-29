@@ -1795,6 +1795,7 @@ void PG::replay_queued_ops()
   replay_queue.clear();
   requeue_ops(replay);
   requeue_ops(waiting_for_active);
+  assert(waiting_for_peered.empty());
 
   publish_stats_to_osd();
 }
@@ -1827,7 +1828,7 @@ void PG::_activate_committed(epoch_t e)
     state_set(PG_STATE_ACTIVE);
     // waiters
     if (flushes_in_progress == 0) {
-      requeue_ops(waiting_for_active);
+      requeue_ops(waiting_for_peered);
     }
   }
 
@@ -2049,11 +2050,12 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_degraded_object.empty());
   assert(waiting_for_ack.empty());
   assert(waiting_for_ondisk.empty());
+  assert(waiting_for_active.empty());
   split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
-  osd->dequeue_pg(this, &waiting_for_active);
+  osd->dequeue_pg(this, &waiting_for_peered);
   OSD::split_list(
-    &waiting_for_active, &(child->waiting_for_active), match, split_bits);
+    &waiting_for_peered, &(child->waiting_for_peered), match, split_bits);
   {
     Mutex::Locker l(map_lock); // to avoid a race with the osd dispatch
     OSD::split_list(
@@ -4768,7 +4770,7 @@ void PG::start_peering_interval(
     on_role_change();
 
     // take active waiters
-    requeue_ops(waiting_for_active);
+    requeue_ops(waiting_for_peered);
 
   } else {
     // no role change.
@@ -6507,7 +6509,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 
   // waiters
   if (!pg->is_replay() && pg->flushes_in_progress == 0) {
-    pg->requeue_ops(pg->waiting_for_active);
+    pg->requeue_ops(pg->waiting_for_peered);
   }
 
   pg->on_activate();
