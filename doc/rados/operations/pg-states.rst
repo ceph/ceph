@@ -70,3 +70,7 @@ map is ``active + clean``.
 *Remapped*
   The placement group is temporarily mapped to a different set of OSDs from what
   CRUSH specified.
+
+*Undersized*
+  The placement group fewer copies than the configured pool replication level.
+
