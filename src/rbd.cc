@@ -1056,8 +1056,8 @@ public:
         return;
       }
 
-      r = lseek64(m_fd, m_offset, SEEK_SET);
-      if (static_cast<uint64_t>(r) != m_offset) {
+      uint64_t chkret = lseek64(m_fd, m_offset, SEEK_SET);
+      if (chkret != m_offset) {
         cerr << "rbd: error seeking destination image to offset "
              << m_offset << std::endl;
         r = -errno;
