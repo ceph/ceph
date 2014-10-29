@@ -2080,6 +2080,9 @@ public:
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+  bool       is_peered() const {
+    return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
+  }
 
   bool  is_empty() const { return info.last_update == eversion_t(0,0); }
 
