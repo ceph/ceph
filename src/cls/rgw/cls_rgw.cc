@@ -1235,6 +1235,11 @@ public:
     update_olh_log(olh_data_entry, op, op_tag, key, delete_marker);
   }
 
+  bool exists() { return olh_data_entry.exists; }
+
+  void set_exists(bool exists) {
+    olh_data_entry.exists = exists;
+  }
 };
 
 /*
@@ -1341,13 +1346,15 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   if (olh_found) {
-    /* found olh, previous instance is no longer the latest, need to update */
-    BIVerObjEntry old_obj(hctx, olh.get_entry().key);
+    if (olh.exists()) {
+      /* found olh, previous instance is no longer the latest, need to update */
+      BIVerObjEntry old_obj(hctx, olh.get_entry().key);
 
-    ret = old_obj.demote_current();
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
-      return ret;
+      ret = old_obj.demote_current();
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
+        return ret;
+      }
     }
   } else {
     cls_rgw_obj_key key(op.key.name);
@@ -1366,6 +1373,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   olh.update(op.key, op.delete_marker);
+
+  olh.set_exists(true);
 
   ret = olh.write();
   if (ret < 0) {
@@ -1446,8 +1455,12 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
               next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
 
       olh.update(next_key, next.is_delete_marker());
-
       olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+    } else {
+      /* next_key is empty */
+      olh.update(next_key, false);
+      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+      olh.set_exists(false);
     }
   }
 

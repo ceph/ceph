@@ -368,7 +368,8 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
 enum OLHLogOp {
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
-  CLS_RGW_OLH_OP_REMOVE_INSTANCE = 2,
+  CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
+  CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
 };
 
 struct rgw_bucket_olh_log_entry {
@@ -411,8 +412,9 @@ struct rgw_bucket_olh_entry {
   uint64_t epoch;
   map<uint64_t, struct rgw_bucket_olh_log_entry> pending_log;
   string tag;
+  bool exists;
 
-  rgw_bucket_olh_entry() : delete_marker(false), epoch(0) {}
+  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -421,6 +423,7 @@ struct rgw_bucket_olh_entry {
     ::encode(epoch, bl);
     ::encode(pending_log, bl);
     ::encode(tag, bl);
+    ::encode(exists, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -430,6 +433,7 @@ struct rgw_bucket_olh_entry {
     ::decode(epoch, bl);
     ::decode(pending_log, bl);
     ::decode(tag, bl);
+    ::decode(exists, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
