@@ -1,8 +1,8 @@
-tasks:
-- rados:
+workload:
+  rados:
     clients: [client.0]
-    ops: 4000
-    objects: 500
+    ops: 2000
+    objects: 50
     op_weights:
       read: 100
       write: 100
