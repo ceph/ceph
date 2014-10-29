@@ -5523,6 +5523,12 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
       key = entry.key;
       delete_marker = entry.delete_marker;
       break;
+    case CLS_RGW_OLH_OP_UNLINK_OLH:
+      /* treat this as linking into a delete marker */
+      need_to_link = true;
+      key = entry.key;
+      delete_marker = true;
+      break;
     default:
       ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
       return -EIO;
