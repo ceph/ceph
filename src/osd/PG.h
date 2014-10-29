@@ -729,7 +729,12 @@ protected:
   // pg waiters
   unsigned flushes_in_progress;
 
+  // ops waiting on peered
+  list<OpRequestRef>            waiting_for_peered;
+
+  // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
+
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
   map<hobject_t, list<OpRequestRef> > waiting_for_unreadable_object,
