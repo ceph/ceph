@@ -1231,6 +1231,7 @@ public:
   }
 
   void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker) {
+    inc_epoch();
     update_olh_log(olh_data_entry, op, op_tag, key, delete_marker);
   }
 
@@ -1419,7 +1420,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  if (olh.get_entry().key == dest_key) {
+  cls_rgw_obj_key& olh_key = olh.get_entry().key;
+  CLS_LOG(20, "%s(): updating olh log: existing olh entry: %s[%s] (is_delete=%d)", __func__,
+             olh_key.name.c_str(), olh_key.instance.c_str());
+
+  if (olh_key == dest_key) {
     /* this is the current head, need to update! */
     cls_rgw_obj_key next_key;
     bool found;
@@ -1436,6 +1441,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
         CLS_LOG(0, "ERROR: next.set_current() returned ret=%d", ret);
         return ret;
       }
+
+      CLS_LOG(20, "%s(): updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
+              next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
 
       olh.update(next_key, next.is_delete_marker());
 
