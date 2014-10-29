@@ -6,7 +6,7 @@ tasks:
    fs: xfs
 - parallel:
    - workload
-   - upgrade-sequence0
+   - upgrade-sequence
 - print: "**** done parallel"
 - install.upgrade:
     client.0:
