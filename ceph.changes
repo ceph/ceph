@@ -1,4 +1,15 @@
 -------------------------------------------------------------------
+Fri Oct 16 15:43:16 UTC 2014 - osynge@suse.com
+- Removed /etc/init.d/ceph
+  * Redundant as ceph is now systemd based.
+
+-------------------------------------------------------------------
+Thu Oct 16 15:40:31 UTC 2014 - osynge@suse.com
+- Improved rcceph.
+  * Added support for mask unmask
+  * Fixed bug that caused mon only deamosn to be missed.
+
+-------------------------------------------------------------------
 Fri Sep 12 16:42:09 UTC 2014 - osynge@suse.com
 - Added patched 0024-udev-rules-now-explicitly-specify-i.patch
   * udev rules now explicitly specify init system
