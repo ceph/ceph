@@ -729,7 +729,6 @@ protected:
   // pg waiters
   unsigned flushes_in_progress;
 
-  // Ops waiting on backfill_pos to change
   list<OpRequestRef>            waiting_for_active;
   list<OpRequestRef>            waiting_for_cache_not_full;
   list<OpRequestRef>            waiting_for_all_missing;
