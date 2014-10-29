@@ -57,9 +57,11 @@ map is ``active + clean``.
   full ratio.
 
 *Incomplete*
-  Ceph detects that a placement group is missing a necessary period of history 
-  from its log.  If you see this state, report a bug, and try to start any
-  failed OSDs that may contain the needed information.
+  Ceph detects that a placement group is missing information about writes
+  that may have occurred, or does not have enough healthy copies to reach
+  the pool's configured min_size. If you see this state, try to start any
+  failed OSDs that may contain the needed information or temporarily adjust
+  min_size to allow recovery.
 
 *Stale*
   The placement group is in an unknown state - the monitors have not received
