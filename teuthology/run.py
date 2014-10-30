@@ -139,6 +139,10 @@ def main(ctx):
     if ctx.description is not None:
         ctx.summary['description'] = ctx.description
 
+    if not 'tasks' in ctx.config:
+        log.warning('No tasks specified. Continuing anyway...')
+        ctx.config['tasks'] = []
+
     for task in ctx.config['tasks']:
         msg = ('kernel installation shouldn be a base-level item, not part ' +
                'of the tasks list')
