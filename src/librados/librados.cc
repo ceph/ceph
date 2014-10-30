@@ -1964,67 +1964,52 @@ void librados::Rados::test_blacklist_self(bool set)
   client->blacklist_self(set);
 }
 
-int librados::Rados::get_pool_stats(std::list<string>& v, std::map<string, stats_map>& result)
-{
-  string category;
-  return get_pool_stats(v, category, result);
-}
-
-int librados::Rados::get_pool_stats(std::list<string>& v, string& category,
-				    std::map<string, stats_map>& result)
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    stats_map& result)
 {
   map<string,::pool_stat_t> rawresult;
   int r = client->get_pool_stats(v, rawresult);
-  if (r < 0)
-    return r;
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        ++p) {
-    stats_map& c = result[p->first];
-
-    string cat;
-    vector<string> cats;
-
-    if (!category.size()) {
-      cats.push_back(cat);
-      map<string,object_stat_sum_t>::iterator iter;
-      for (iter = p->second.stats.cat_sum.begin(); iter != p->second.stats.cat_sum.end(); ++iter) {
-        cats.push_back(iter->first);
-      }
-    } else {
-      cats.push_back(category);
-    }
-
-    vector<string>::iterator cat_iter;
-    for (cat_iter = cats.begin(); cat_iter != cats.end(); ++cat_iter) {
-      string& cur_category = *cat_iter;
-      object_stat_sum_t *sum;
-
-      if (!cur_category.size()) {
-         sum = &p->second.stats.sum;
-      } else {
-        map<string,object_stat_sum_t>::iterator iter = p->second.stats.cat_sum.find(cur_category);
-        if (iter == p->second.stats.cat_sum.end())
-          continue;
-        sum = &iter->second;
-      }
-
-      pool_stat_t& pv = c[cur_category];
-      pv.num_kb = SHIFT_ROUND_UP(sum->num_bytes, 10);
-      pv.num_bytes = sum->num_bytes;
-      pv.num_objects = sum->num_objects;
-      pv.num_object_clones = sum->num_object_clones;
-      pv.num_object_copies = sum->num_object_copies;
-      pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
-      pv.num_objects_unfound = sum->num_objects_unfound;
-      pv.num_objects_degraded = sum->num_objects_degraded;
-      pv.num_rd = sum->num_rd;
-      pv.num_rd_kb = sum->num_rd_kb;
-      pv.num_wr = sum->num_wr;
-      pv.num_wr_kb = sum->num_wr_kb;
-    }
+    pool_stat_t& pv = result[p->first];
+    object_stat_sum_t *sum = &p->second.stats.sum;
+    pv.num_kb = SHIFT_ROUND_UP(sum->num_bytes, 10);
+    pv.num_bytes = sum->num_bytes;
+    pv.num_objects = sum->num_objects;
+    pv.num_object_clones = sum->num_object_clones;
+    pv.num_object_copies = sum->num_object_copies;
+    pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
+    pv.num_objects_unfound = sum->num_objects_unfound;
+    pv.num_objects_degraded = sum->num_objects_degraded;
+    pv.num_rd = sum->num_rd;
+    pv.num_rd_kb = sum->num_rd_kb;
+    pv.num_wr = sum->num_wr;
+    pv.num_wr_kb = sum->num_wr_kb;
   }
   return r;
+}
+
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    std::map<string, stats_map>& result)
+{
+  stats_map m;
+  int r = get_pool_stats(v, m);
+  if (r < 0)
+    return r;
+  for (map<string,pool_stat_t>::iterator p = m.begin();
+       p != m.end();
+       ++p) {
+    result[p->first][string()] = p->second;
+  }
+  return r;
+}
+
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    string& category, // unused
+				    std::map<string, stats_map>& result)
+{
+  return -EOPNOTSUPP;
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)

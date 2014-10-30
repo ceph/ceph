@@ -991,6 +991,9 @@ namespace librados
     /* listing objects */
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
+		       stats_map& result);
+    /// deprecated; use simpler form.  categories no longer supported.
+    int get_pool_stats(std::list<std::string>& v,
 		       std::map<std::string, stats_map>& stats);
     /// deprecated; categories no longer supported
     int get_pool_stats(std::list<std::string>& v,
