@@ -2,6 +2,7 @@
 #
 # Copyright (C) 2014 Inktank <info@inktank.com>
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Catalyst.net Ltd
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -29,6 +30,8 @@ import stat
 import sys
 import tempfile
 import uuid
+import shlex
+import stat
 
 """
 Prepare:
@@ -73,12 +76,15 @@ knew the GPT partition type.
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 
-JOURNAL_UUID =         '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
-DMCRYPT_JOURNAL_UUID = '45b0969e-9b03-4f30-b4c6-5ec00ceff106'
-OSD_UUID =             '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
-DMCRYPT_OSD_UUID =     '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
-TOBE_UUID =            '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
-DMCRYPT_TOBE_UUID =    '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
+JOURNAL_UUID =              '45b0969e-9b03-4f30-b4c6-b4b80ceff106'
+DMCRYPT_JOURNAL_UUID =      '45b0969e-9b03-4f30-b4c6-5ec00ceff106'
+DMCRYPT_LUKS_JOURNAL_UUID = '45b0969e-9b03-4f30-b4c6-35865ceff106'
+OSD_UUID =                  '4fbd7e29-9d25-41b8-afd0-062c0ceff05d'
+DMCRYPT_OSD_UUID =          '4fbd7e29-9d25-41b8-afd0-5ec00ceff05d'
+DMCRYPT_LUKS_OSD_UUID =     '4fbd7e29-9d25-41b8-afd0-35865ceff05d'
+TOBE_UUID =                 '89c57f98-2fe5-4dc0-89c1-f3ad0ceff2be'
+DMCRYPT_TOBE_UUID =         '89c57f98-2fe5-4dc0-89c1-5ec00ceff2be'
+DMCRYPT_JOURNAL_TOBE_UUID = '89c57f98-2fe5-4dc0-89c1-35865ceff2be'
 
 DEFAULT_FS_TYPE = 'xfs'
 
@@ -776,13 +782,18 @@ def get_fsid(cluster):
 def get_or_create_dmcrypt_key(
     _uuid,
     key_dir,
+    key_size,
+    luks
     ):
     """
     Get path to dmcrypt key or create a new key file.
 
     :return: Path to the dmcrypt key file.
     """
-    path = os.path.join(key_dir, _uuid)
+    if luks:
+        path = os.path.join(key_dir, _uuid + ".luks.key")
+    else:
+        path = os.path.join(key_dir, _uuid)
 
     # already have it?
     if os.path.exists(path):
@@ -791,20 +802,44 @@ def get_or_create_dmcrypt_key(
     # make a new key
     try:
         if not os.path.exists(key_dir):
-            os.makedirs(key_dir)
-        with file('/dev/urandom', 'rb') as i:
-            key = i.read(256)
-            with file(path, 'wb') as key_file:
-                key_file.write(key)
+            try:
+                os.makedirs(key_dir, mode=stat.S_IRUSR + stat.S_IWUSR + stat.S_IXUSR)
+            except IOError:
+                raise Error('unable to write to dm-crypt key directory', key_dir)
+
+        try:
+            with file('/dev/urandom', 'rb') as i:
+                key = i.read(key_size / 8)
+        except IOError:
+            raise Error('unable to read %d bytes of random data' % key_size / 8)
+
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT, stat.S_IRUSR + stat.S_IWUSR)
+        except IOError:
+            raise Error('unable to create dm-crypt key', path)
+
+        try:
+            key_file = os.fdopen(fd, 'w')
+        except IOError:
+            os.close(fd)
+            raise Error('unable to open dm-crypt key', path)
+
+        try:
+            key_file.write(key)
+        except IOError:
+            raise Error('unable to write to dm-crypt key', path)
+
         return path
-    except:
-        raise Error('unable to read or create dm-crypt key', path)
+    except Exception as e:
+        raise Error('unable to read or create dm-crypt key', path, e)
 
 
 def dmcrypt_map(
     rawdev,
     keypath,
     _uuid,
+    cryptsetup_parameters,
+    luks
     ):
     """
     Maps a device to a dmcrypt device.
@@ -812,17 +847,40 @@ def dmcrypt_map(
     :return: Path to the dmcrypt device.
     """
     dev = '/dev/mapper/' + _uuid
-    args = [
+    luksFormat_args = [
+        'cryptsetup',
+        '--batch-mode',
+        '--key-file',
+        keypath,
+        'luksFormat',
+        rawdev,
+        ] + cryptsetup_parameters
+
+    luksOpen_args = [
         'cryptsetup',
         '--key-file',
         keypath,
-        '--key-size', '256',
+        'luksOpen',
+        rawdev,
+        _uuid,
+        ]
+
+    create_args = [
+        'cryptsetup',
+        '--key-file',
+        keypath,
         'create',
         _uuid,
         rawdev,
-        ]
+        ] + cryptsetup_parameters
+
     try:
-        command_check_call(args)
+        if luks:
+            command_check_call(luksFormat_args)
+            command_check_call(luksOpen_args)
+        else:
+            # Plain mode has no format function, nor any validation that the key is correct.
+            command_check_call(create_args)
         return dev
 
     except subprocess.CalledProcessError as e:
@@ -1003,7 +1061,9 @@ def prepare_journal_dev(
     journal_size,
     journal_uuid,
     journal_dm_keypath,
-    ):
+    cryptsetup_parameters,
+    luks
+   ):
 
     if is_partition(journal):
         LOG.debug('Journal %s is a partition', journal)
@@ -1011,8 +1071,13 @@ def prepare_journal_dev(
         return (journal, None, None)
 
     ptype = JOURNAL_UUID
+    ptype_tobe = JOURNAL_UUID
     if journal_dm_keypath:
-        ptype = DMCRYPT_JOURNAL_UUID
+        if luks:
+            ptype = DMCRYPT_LUKS_JOURNAL_UUID
+        else:
+            ptype = DMCRYPT_JOURNAL_UUID
+        ptype_tobe = DMCRYPT_JOURNAL_TOBE_UUID
 
     # it is a whole disk.  create a partition!
     num = None
@@ -1060,7 +1125,7 @@ def prepare_journal_dev(
                     ),
                 '--typecode={num}:{uuid}'.format(
                     num=num,
-                    uuid=ptype,
+                    uuid=ptype_tobe,
                     ),
                 '--mbrtogpt',
                 '--',
@@ -1095,8 +1160,8 @@ def prepare_journal_dev(
                     ],
                 )
 
-        # wait for udev event queue to clear
-        command(
+            # wait for udev event queue to clear
+            command(
             [
                 'udevadm',
                 'settle',
@@ -1109,8 +1174,38 @@ def prepare_journal_dev(
 
         journal_dmcrypt = None
         if journal_dm_keypath:
+            if luks:
+                luksFormat_args = [
+                    'cryptsetup',
+                    '--batch-mode',
+                    '--key-file',
+                    journal_dm_keypath,
+                    'luksFormat',
+                    journal_symlink,
+                    ] + cryptsetup_parameters
+
+                try:
+                    command_check_call(luksFormat_args)
+                except subprocess.CalledProcessError as e:
+                    raise Error('unable to format device for LUKS', journal_symlink, e)
+
             journal_dmcrypt = journal_symlink
             journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
+
+            try:
+                command_check_call(
+                    [
+                        'sgdisk',
+                        '--typecode={num}:{uuid}'.format(
+                            num=num,
+                            uuid=ptype,
+                            ),
+                        '--',
+                        journal,
+                        ],
+                    )
+            except subprocess.CalledProcessError as e:
+                raise Error('unable to mark device as formatted for LUKS', journal_symlink, e)
 
         LOG.debug('Journal is GPT partition %s', journal_symlink)
         return (journal_symlink, journal_dmcrypt, journal_uuid)
@@ -1140,6 +1235,8 @@ def prepare_journal(
     force_file,
     force_dev,
     journal_dm_keypath,
+    cryptsetup_parameters,
+    luks
     ):
 
     if journal is None:
@@ -1161,7 +1258,7 @@ def prepare_journal(
     if stat.S_ISBLK(jmode):
         if force_file:
             raise Error('Journal is not a regular file', journal)
-        return prepare_journal_dev(data, journal, journal_size, journal_uuid, journal_dm_keypath)
+        return prepare_journal_dev(data, journal, journal_size, journal_uuid, journal_dm_keypath, cryptsetup_parameters, luks)
 
     raise Error('Journal %s is neither a block device nor regular file' % journal)
 
@@ -1242,6 +1339,8 @@ def prepare_dev(
     journal_uuid,
     journal_dmcrypt,
     osd_dm_keypath,
+    cryptsetup_parameters,
+    luks
     ):
     """
     Prepare a data/journal combination to be used for an OSD.
@@ -1257,7 +1356,10 @@ def prepare_dev(
     ptype_osd = OSD_UUID
     if osd_dm_keypath:
         ptype_tobe = DMCRYPT_TOBE_UUID
-        ptype_osd = DMCRYPT_OSD_UUID
+        if luks:
+            ptype_osd = DMCRYPT_LUKS_OSD_UUID
+        else:
+            ptype_osd = DMCRYPT_OSD_UUID
 
     rawdev = None
     if is_partition(data):
@@ -1299,7 +1401,7 @@ def prepare_dev(
 
     dev = None
     if osd_dm_keypath:
-        dev = dmcrypt_map(rawdev, osd_dm_keypath, osd_uuid)
+        dev = dmcrypt_map(rawdev, osd_dm_keypath, osd_uuid, cryptsetup_parameters, luks)
     else:
         dev = rawdev
 
@@ -1443,6 +1545,62 @@ def main_prepare(args):
             )
         journal_size = int(journal_size)
 
+        cryptsetup_parameters_str = get_conf(
+            cluster=args.cluster,
+            variable='osd_cryptsetup_parameters',
+            )
+        if cryptsetup_parameters_str is None:
+            cryptsetup_parameters = []
+        else:
+            cryptsetup_parameters = shlex.split(cryptsetup_parameters_str)
+
+        dmcrypt_keysize_str = get_conf(
+            cluster=args.cluster,
+            variable='osd_dmcrypt_key_size',
+            )
+
+        dmcrypt_type = get_conf(
+            cluster=args.cluster,
+            variable='osd_dmcrypt_type',
+            )
+
+        if dmcrypt_type is None:
+            dmcrypt_type = "luks"
+
+        if dmcrypt_type == "plain":
+            if dmcrypt_keysize_str is None:
+                # This value is hard-coded in the udev script
+                dmcrypt_keysize = 256
+            else:
+                dmcrypt_keysize = int(dmcrypt_keysize_str)
+                LOG.warning('''ensure the 95-ceph-osd.rules file has been copied to /etc/udev/rules.d
+ and modified to call cryptsetup with --key-size=%s'''
+                            % dmcrypt_keysize_str)
+
+            if len (cryptsetup_parameters) > 0:
+                LOG.warning('''ensure the 95-ceph-osd.rules file has been copied to /etc/udev/rules.d
+ and modified to call cryptsetup with %s'''
+                            % cryptsetup_parameters_str)
+
+            cryptsetup_parameters = ['--key-size', str(dmcrypt_keysize)] + cryptsetup_parameters
+            luks = False
+        elif dmcrypt_type == "luks":
+            if dmcrypt_keysize_str is None:
+                # As LUKS will hash the 'passphrase' in .luks.key into a key, set a large default
+                # so if not updated for some time, it is still a
+                # reasonable value.
+                #
+                # We don't force this into the cryptsetup_parameters, as we want the cryptsetup defaults
+                # to prevail for the actual LUKS key lengths.
+                dmcrypt_keysize = 1024
+            else:
+                dmcrypt_keysize = int(dmcrypt_keysize_str)
+                cryptsetup_parameters = ['--key-size', str(dmcrypt_keysize)] + cryptsetup_parameters
+
+            luks = True
+        else:
+            raise Error('invalid osd_dmcrypt_type parameter (must be luks or plain): ', dmcrypt_type)
+
         # colocate journal with data?
         if stat.S_ISBLK(dmode) and not is_partition(args.data) and args.journal is None and args.journal_file is None:
             LOG.info('Will colocate journal with data on %s', args.data)
@@ -1455,8 +1613,8 @@ def main_prepare(args):
 
         # dm-crypt keys?
         if args.dmcrypt:
-            journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir)
-            osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir)
+            journal_dm_keypath = get_or_create_dmcrypt_key(args.journal_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
+            osd_dm_keypath = get_or_create_dmcrypt_key(args.osd_uuid, args.dmcrypt_key_dir, dmcrypt_keysize, luks)
 
         # prepare journal
         (journal_symlink, journal_dmcrypt, journal_uuid) = prepare_journal(
@@ -1467,6 +1625,8 @@ def main_prepare(args):
             force_file=args.journal_file,
             force_dev=args.journal_dev,
             journal_dm_keypath=journal_dm_keypath,
+            cryptsetup_parameters=cryptsetup_parameters,
+            luks=luks
             )
 
         # prepare data
@@ -1495,6 +1655,8 @@ def main_prepare(args):
                 journal_uuid=journal_uuid,
                 journal_dmcrypt=journal_dmcrypt,
                 osd_dm_keypath=osd_dm_keypath,
+                cryptsetup_parameters=cryptsetup_parameters,
+                luks=luks
                 )
         else:
             raise Error('not a dir or block device', args.data)
@@ -1531,9 +1693,17 @@ def main_prepare(args):
 
     except Error as e:
         if journal_dm_keypath:
-            os.unlink(journal_dm_keypath)
+            try:
+                os.unlink(journal_dm_keypath)
+            except OSError as e2:
+                if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+                    raise # re-raise exception if a different error occured
         if osd_dm_keypath:
-            os.unlink(osd_dm_keypath)
+            try:
+                os.unlink(osd_dm_keypath)
+            except OSError as e2:
+                if e2.errno != errno.ENOENT: # errno.ENOENT = no such file or directory
+                    raise # re-raise exception if a different error occured
         prepare_lock.release()  # noqa
         raise e
 
@@ -2108,9 +2278,9 @@ def main_activate_all(args):
             continue
         (tag, uuid) = name.split('.')
 
-        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID:
+        if tag == OSD_UUID or tag == DMCRYPT_OSD_UUID or tag == DMCRYPT_LUKS_OSD_UUID:
 
-            if tag == DMCRYPT_OSD_UUID:
+            if tag == DMCRYPT_OSD_UUID or tag == DMCRYPT_LUKS_OSD_UUID:
                 path = os.path.join('/dev/mapper', uuid)
             else:
                 path = os.path.join(dir, name)
@@ -2327,13 +2497,23 @@ def list_dev(dev, uuid_map, journal_map):
     elif ptype == DMCRYPT_OSD_UUID:
         holders = is_held(dev)
         if not holders:
-            desc = ['ceph data (dmcrypt)', 'not currently mapped']
+            desc = ['ceph data (dmcrypt plain)', 'not currently mapped']
         elif len(holders) == 1:
             holder = '/dev/' + holders[0]
             fs_desc = list_dev_osd(holder, uuid_map)
-            desc = ['ceph data (dmcrypt %s)' % holder] + fs_desc
+            desc = ['ceph data (dmcrypt plain %s)' % holder] + fs_desc
         else:
-            desc = ['ceph data (dmcrypt)', 'holders: ' + ','.join(holders)]
+            desc = ['ceph data (dmcrypt plain)', 'holders: ' + ','.join(holders)]
+    elif ptype == DMCRYPT_LUKS_OSD_UUID:
+        holders = is_held(dev)
+        if not holders:
+            desc = ['ceph data (dmcrypt LUKS)', 'not currently mapped']
+        elif len(holders) == 1:
+            holder = '/dev/' + holders[0]
+            fs_desc = list_dev_osd(holder, uuid_map)
+            desc = ['ceph data (dmcrypt LUKS %s)' % holder] + fs_desc
+        else:
+            desc = ['ceph data (dmcrypt LUKS)', 'holders: ' + ','.join(holders)]
     elif ptype == JOURNAL_UUID:
         desc.append('ceph journal')
         part_uuid = get_partition_uuid(dev)
@@ -2342,9 +2522,18 @@ def list_dev(dev, uuid_map, journal_map):
     elif ptype == DMCRYPT_JOURNAL_UUID:
         holders = is_held(dev)
         if len(holders) == 1:
-            desc = ['ceph journal (dmcrypt /dev/%s)' % holders[0]]
+            desc = ['ceph journal (dmcrypt plain /dev/%s)' % holders[0]]
         else:
-            desc = ['ceph journal (dmcrypt)']
+            desc = ['ceph journal (dmcrypt plain)']
+        part_uuid = get_partition_uuid(dev)
+        if part_uuid and part_uuid in journal_map:
+            desc.append('for %s' % journal_map[part_uuid])
+    elif ptype == DMCRYPT_LUKS_JOURNAL_UUID:
+        holders = is_held(dev)
+        if len(holders) == 1:
+            desc = ['ceph journal (dmcrypt LUKS /dev/%s)' % holders[0]]
+        else:
+            desc = ['ceph journal (dmcrypt LUKS)']
         part_uuid = get_partition_uuid(dev)
         if part_uuid and part_uuid in journal_map:
             desc.append('for %s' % journal_map[part_uuid])
@@ -2390,7 +2579,7 @@ def main_list(args):
                             unmount(tpath)
                     except MountError:
                         pass
-            if ptype == DMCRYPT_OSD_UUID:
+            if ptype == DMCRYPT_OSD_UUID or ptype == DMCRYPT_LUKS_OSD_UUID:
                 holders = is_held(dev)
                 if len(holders) == 1:
                     holder = '/dev/' + holders[0]
