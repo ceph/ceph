@@ -24,3 +24,10 @@ v0.90
   JSON output that was consuming the floating point values was previously having
   to interpret the quoted string and will most likely need to be fixed to take
   the unquoted number.
+
+* The 'category' field for objects has been removed.  This was originally added
+  to track PG stat summations over different categories of objects for use by
+  radosgw.  It is no longer has any known users and is prone to abuse because it
+  can lead to a pg_stat_t structure that is unbounded.  The librados API calls
+  that accept this field now ignore it, and the OSD no longers tracks the
+  per-category summations.
