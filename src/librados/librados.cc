@@ -314,10 +314,11 @@ void librados::ObjectWriteOperation::create(bool exclusive)
   o->create(exclusive);
 }
 
-void librados::ObjectWriteOperation::create(bool exclusive, const std::string& category)
+void librados::ObjectWriteOperation::create(bool exclusive,
+					    const std::string& category) // unused
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->create(exclusive, category);
+  o->create(exclusive);
 }
 
 void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
@@ -1021,10 +1022,11 @@ int librados::IoCtx::create(const std::string& oid, bool exclusive)
   return io_ctx_impl->create(obj, exclusive);
 }
 
-int librados::IoCtx::create(const std::string& oid, bool exclusive, const std::string& category)
+int librados::IoCtx::create(const std::string& oid, bool exclusive,
+			    const std::string& category) // unused
 {
   object_t obj(oid);
-  return io_ctx_impl->create(obj, exclusive, category);
+  return io_ctx_impl->create(obj, exclusive);
 }
 
 int librados::IoCtx::write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
@@ -3993,15 +3995,11 @@ extern "C" void rados_write_op_rmxattr(rados_write_op_t write_op,
 
 extern "C" void rados_write_op_create(rados_write_op_t write_op,
                                       int exclusive,
-				      const char* category)
+				      const char* category) // unused
 {
-  tracepoint(librados, rados_write_op_create_enter, write_op, exclusive, category);
+  tracepoint(librados, rados_write_op_create_enter, write_op, exclusive);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
-  if(category) {
-    oo->create(exclusive, category);
-  } else {
-    oo->create(!!exclusive);
-  }
+  oo->create(!!exclusive);
   tracepoint(librados, rados_write_op_create_exit);
 }
 
