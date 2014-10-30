@@ -71,7 +71,7 @@ Upgrading from v0.80x Firefly
   avoids potential data loss when used with older versions of qemu
   that do not support flush.
 
-    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+    leveldb_write_buffer_size = 8*1024*1024  = 33554432   // 8MB
     leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
     leveldb_block_size        = 64*1024       = 65536     // 64KB
     leveldb_compression       = false
@@ -111,7 +111,7 @@ Upgrading from v0.80x Firefly
   configuration files.  Monitors will still maintain the following
   monitor-specific defaults:
 
-    leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
+    leveldb_write_buffer_size = 8*1024*1024  = 33554432   // 8MB
     leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
     leveldb_block_size        = 64*1024       = 65536     // 64KB
     leveldb_compression       = false
