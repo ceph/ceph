@@ -70,7 +70,7 @@ protected:
     size_t val_len = 0;
     while (i < len) {
       ASSERT_EQ(0, rados_omap_get_next(iter, &key, &val, &val_len));
-      if (len == 0 && key == NULL && val == NULL)
+      if (val_len == 0 && key == NULL && val == NULL)
 	break;
       if (key)
 	EXPECT_EQ(std::string(keys[i]), std::string(key));
@@ -101,7 +101,7 @@ protected:
     while (i < len) {
       ASSERT_EQ(0, rados_getxattrs_next(iter, (const char**) &key,
 					(const char**) &val, &val_len));
-      if (len == 0 && key == NULL && val == NULL)
+      if (val_len == 0 && key == NULL && val == NULL)
 	break;
       EXPECT_EQ(std::string(keys[i]), std::string(key));
       EXPECT_EQ(0, memcmp(vals[i], val, val_len));
