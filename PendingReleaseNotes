@@ -31,3 +31,7 @@ v0.90
   can lead to a pg_stat_t structure that is unbounded.  The librados API calls
   that accept this field now ignore it, and the OSD no longers tracks the
   per-category summations.
+
+* The output for 'rados df' has changed.  The 'category' level has been
+  eliminated, so there is now a single stat object per pool.  The structure of
+  the JSON output is different, and the plaintext output has one less column.
