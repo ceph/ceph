@@ -3862,23 +3862,9 @@ void object_info_t::decode(bufferlist::iterator& bl)
   object_locator_t myoloc;
   DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
-  if (struct_v >= 2 && struct_v <= 5) {
-    sobject_t obj;
-    ::decode(obj, bl);
-    ::decode(myoloc, bl);
-    soid = hobject_t(obj.oid, myoloc.key, obj.snap, 0, 0 , "");
-    soid.hash = legacy_object_locator_to_ps(soid.oid, myoloc);
-  } else if (struct_v >= 6) {
-    ::decode(soid, bl);
-    ::decode(myoloc, bl);
-    if (struct_v == 6) {
-      hobject_t hoid(soid.oid, myoloc.key, soid.snap, soid.hash, 0 , "");
-      soid = hoid;
-    }
-  }
-    
-  if (struct_v >= 5)
-    ::decode(category, bl);
+  ::decode(soid, bl);
+  ::decode(myoloc, bl);
+  ::decode(category, bl);
   ::decode(version, bl);
   ::decode(prior_version, bl);
   ::decode(last_reqid, bl);
@@ -3890,22 +3876,19 @@ void object_info_t::decode(bufferlist::iterator& bl)
     ::decode(snaps, bl);
   ::decode(truncate_seq, bl);
   ::decode(truncate_size, bl);
-  if (struct_v >= 3) {
-    // if this is struct_v >= 13, we will overwrite this
-    // below since this field is just here for backwards
-    // compatibility
-    __u8 lo;
-    ::decode(lo, bl);
-    flags = (flag_t)lo;
-  } else {
-    flags = (flag_t)0;
-  }
-  if (struct_v >= 4) {
-    ::decode(old_watchers, bl);
-    eversion_t user_eversion;
-    ::decode(user_eversion, bl);
-    user_version = user_eversion.version;
-  }
+
+  // if this is struct_v >= 13, we will overwrite this
+  // below since this field is just here for backwards
+  // compatibility
+  __u8 lo;
+  ::decode(lo, bl);
+  flags = (flag_t)lo;
+
+  ::decode(old_watchers, bl);
+  eversion_t user_eversion;
+  ::decode(user_eversion, bl);
+  user_version = user_eversion.version;
+
   if (struct_v >= 9) {
     bool uses_tmap = false;
     ::decode(uses_tmap, bl);
