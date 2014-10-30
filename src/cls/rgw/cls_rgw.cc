@@ -1715,6 +1715,12 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return ret;
   }
 
+  ret = cls_cxx_create(hctx, false);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_create returned %d", __func__, ret);
+    return ret;
+  }
+
   map<string, bufferlist> new_attrs;
   for (list<string>::iterator iter = op.keep_attr_prefixes.begin();
        iter != op.keep_attr_prefixes.end(); ++iter) {
