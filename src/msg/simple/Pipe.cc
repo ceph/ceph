@@ -1867,16 +1867,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
   }
 
-  ldout(msgr->cct,20) << "reader got envelope type=" << header.type
+  ldout(msgr->cct,20) << "reader got envelope type=" << le16_to_cpu(header.type)
            << " src " << entity_name_t(header.src)
-           << " front=" << header.front_len
-	   << " data=" << header.data_len
-	   << " off " << header.data_off
+           << " front=" << le32_to_cpu(header.front_len)
+	   << " data=" << le32_to_cpu(header.data_len)
+	   << " off " << le16_to_cpu(header.data_off)
            << dendl;
 
   // verify header crc
-  if (header_crc != header.crc) {
-    ldout(msgr->cct,0) << "reader got bad header crc " << header_crc << " != " << header.crc << dendl;
+  if (header_crc != le32_to_cpu(header.crc)) {
+    ldout(msgr->cct,0) << "reader got bad header crc " << header_crc << " != " << le32_to_cpu(header.crc) << dendl;
     return -1;
   }
 
@@ -1894,7 +1894,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     policy.throttler_messages->get();
   }
 
-  uint64_t message_size = header.front_len + header.middle_len + header.data_len;
+  uint64_t message_size = le32_to_cpu(header.front_len) + le32_to_cpu(header.middle_len) + le32_to_cpu(header.data_len);
   if (message_size) {
     if (policy.throttler_bytes) {
       ldout(msgr->cct,10) << "reader wants " << message_size << " bytes from policy throttler "
@@ -1916,7 +1916,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   utime_t throttle_stamp = ceph_clock_now(msgr->cct);
 
   // read front
-  front_len = header.front_len;
+  front_len = le32_to_cpu(header.front_len);
   if (front_len) {
     bufferptr bp = buffer::create(front_len);
     if (tcp_read(bp.c_str(), front_len) < 0)
@@ -1926,7 +1926,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
 
   // read middle
-  middle_len = header.middle_len;
+  middle_len = le32_to_cpu(header.middle_len);
   if (middle_len) {
     bufferptr bp = buffer::create(middle_len);
     if (tcp_read(bp.c_str(), middle_len) < 0)
@@ -1954,7 +1954,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
       // get a buffer
       connection_state->lock.Lock();
-      map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
+      map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(le64_to_cpu(header.tid));
       if (p != connection_state->rx_buffers.end()) {
 	if (rxbuf.length() == 0 || p->second.second != rxbuf_version) {
 	  ldout(msgr->cct,10) << "reader seleting rx buffer v " << p->second.second
