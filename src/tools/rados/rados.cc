@@ -1493,29 +1493,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       vec.push_back(pool_name);
     }
 
-    map<string, map<string, pool_stat_t> > stats;
-    ret = rados.get_pool_stats(vec, category, stats);
+    map<string,pool_stat_t> stats;
+    ret = rados.get_pool_stats(vec, stats);
     if (ret < 0) {
       cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
       goto out;
     }
 
     if (!formatter) {
-      printf("%-15s %-15s"
+      printf("%-15s "
 	     "%12s %12s %12s %12s "
 	     "%12s %12s %12s %12s %12s\n",
 	     "pool name",
-	     "category",
 	     "KB", "objects", "clones", "degraded",
 	     "unfound", "rd", "rd KB", "wr", "wr KB");
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
     }
-    for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
-      const char *pool_name = c->first.c_str();
-      stats_map& m = c->second;
-      if (formatter) {
+    for (map<string,pool_stat_t>::iterator i = stats.begin();
+	 i != stats.end();
+	 ++i) {
+      const char *pool_name = i->first.c_str();
+      pool_stat_t& s = i->second;
+      if (!formatter) {
+	printf("%-15s "
+	       "%12lld %12lld %12lld %12lld"
+	       "%12lld %12lld %12lld %12lld %12lld\n",
+	       pool_name,
+	       (long long)s.num_kb,
+	       (long long)s.num_objects,
+	       (long long)s.num_object_clones,
+	       (long long)s.num_objects_degraded,
+	       (long long)s.num_objects_unfound,
+	       (long long)s.num_rd, (long long)s.num_rd_kb,
+	         (long long)s.num_wr, (long long)s.num_wr_kb);
+      } else {
         formatter->open_object_section("pool");
         int64_t pool_id = rados.pool_lookup(pool_name);
         formatter->dump_string("name", pool_name);
@@ -1523,53 +1536,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
           formatter->dump_format("id", "%lld", pool_id);
         else
           cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
-        formatter->open_array_section("categories");
-      }
-      for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
-        const char *category = (i->first.size() ? i->first.c_str() : "");
-        pool_stat_t& s = i->second;
-        if (!formatter) {
-          if (!*category)
-            category = "-";
-          printf("%-15s "
-                 "%-15s "
-	         "%12lld %12lld %12lld %12lld"
-	         "%12lld %12lld %12lld %12lld %12lld\n",
-	         pool_name,
-                 category,
-	         (long long)s.num_kb,
-	         (long long)s.num_objects,
-	         (long long)s.num_object_clones,
-	         (long long)s.num_objects_degraded,
-	         (long long)s.num_objects_unfound,
-	         (long long)s.num_rd, (long long)s.num_rd_kb,
-	         (long long)s.num_wr, (long long)s.num_wr_kb);
-        } else {
-          formatter->open_object_section("category");
-          if (category)
-            formatter->dump_string("name", category);
-          formatter->dump_format("size_bytes", "%lld", s.num_bytes);
-          formatter->dump_format("size_kb", "%lld", s.num_kb);
-          formatter->dump_format("num_objects", "%lld", s.num_objects);
-          formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-          formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-          formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-          formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-          formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-          formatter->dump_format("read_ops", "%lld", s.num_rd);
-          formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
-          formatter->dump_format("write_ops", "%lld", s.num_wr);
-          formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
-          formatter->flush(cout);
-        }
-        if (formatter) {
-          formatter->close_section();
-        }
-      }
-      if (formatter) {
-        formatter->close_section();
-        formatter->close_section();
-        formatter->flush(cout);
+	formatter->dump_format("size_bytes", "%lld", s.num_bytes);
+	formatter->dump_format("size_kb", "%lld", s.num_kb);
+	formatter->dump_format("num_objects", "%lld", s.num_objects);
+	formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
+	formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
+	formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
+	formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
+	formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
+	formatter->dump_format("read_ops", "%lld", s.num_rd);
+	formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
+	formatter->dump_format("write_ops", "%lld", s.num_wr);
+	formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
+	formatter->close_section();
       }
     }
 
