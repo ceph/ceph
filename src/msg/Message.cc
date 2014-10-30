@@ -249,18 +249,18 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
-    if (front_crc != footer.front_crc) {
+    if (front_crc != le32_to_cpu(footer.front_crc)) {
       if (cct) {
-	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << le32_to_cpu(footer.front_crc) << dendl;
 	ldout(cct, 20) << " ";
 	front.hexdump(*_dout);
 	*_dout << dendl;
       }
       return 0;
     }
-    if (middle_crc != footer.middle_crc) {
+    if (middle_crc != le32_to_cpu(footer.middle_crc)) {
       if (cct) {
-	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << le32_to_cpu(footer.middle_crc) << dendl;
 	ldout(cct, 20) << " ";
 	middle.hexdump(*_dout);
 	*_dout << dendl;
@@ -270,9 +270,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
 
     if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
       __u32 data_crc = data.crc32c(0);
-      if (data_crc != footer.data_crc) {
+      if (data_crc != le32_to_cpu(footer.data_crc)) {
 	if (cct) {
-	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << le32_to_cpu(footer.data_crc) << dendl;
 	  ldout(cct, 20) << " ";
 	  data.hexdump(*_dout);
 	  *_dout << dendl;
