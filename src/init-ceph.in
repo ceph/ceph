@@ -14,6 +14,10 @@
 
 . /lib/lsb/init-functions
 
+# detect systemd
+SYSTEMD=0
+grep -qs systemd /proc/1/comm && SYSTEMD=1
+
 # if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -21,6 +25,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     SBINDIR=.
     LIBDIR=.
     ETCDIR=.
+    SYSTEMD=0
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
@@ -44,10 +49,6 @@ test -f $LIBDIR/ceph_common.sh || exit 0
 . $LIBDIR/ceph_common.sh
 
 EXIT_STATUS=0
-
-# detect systemd
-SYSTEMD=0
-grep -qs systemd /proc/1/comm && SYSTEMD=1
 
 signal_daemon() {
     name=$1
