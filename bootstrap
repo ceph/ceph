@@ -18,7 +18,7 @@ Linux)
         fi
         ;;
     Fedora)
-        for package in python-pip python-virtualenv libevent-devel libvirt-python; do
+        for package in python-pip python-virtualenv libevent-devel libvirt-python community-mysql-devel; do
 	    if [ "$(rpm -q $package)" == "package $package is not installed" ]; then
 		missing="${missing:+$missing }$package"
 	    fi
