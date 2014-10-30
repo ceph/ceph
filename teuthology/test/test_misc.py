@@ -53,6 +53,11 @@ def test_get_http_log_path():
 
 
 class TestHostnames(object):
+    def setup(self):
+        self.old_lab_domain = config.lab_domain
+
+    def teardown(self):
+        config.lab_domain = self.old_lab_domain
 
     def test_canonicalize_hostname(self):
         host_base = 'box1'
@@ -71,5 +76,17 @@ class TestHostnames(object):
 
     def test_decanonicalize_hostname_nouser(self):
         host = 'box1.front.sepia.ceph.com'
+        result = misc.decanonicalize_hostname(host)
+        assert result == 'box1'
+
+    def test_canonicalize_hostname_otherlab(self):
+        config.lab_domain = 'example.com'
+        host_base = 'box1'
+        result = misc.canonicalize_hostname(host_base)
+        assert result == 'ubuntu@box1.example.com'
+
+    def test_decanonicalize_hostname(self):
+        config.lab_domain = 'example.com'
+        host = 'ubuntu@box1.example.com'
         result = misc.decanonicalize_hostname(host)
         assert result == 'box1'

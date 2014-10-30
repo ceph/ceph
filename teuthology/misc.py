@@ -36,10 +36,12 @@ is_vm = lambda x: x.startswith('vpm') or x.startswith('ubuntu@vpm')
 is_arm = lambda x: x.startswith('tala') or x.startswith(
     'ubuntu@tala') or x.startswith('saya') or x.startswith('ubuntu@saya')
 
-hostname_expr = '(?P<user>.*@)?(?P<shortname>.*)\.front\.sepia\.ceph\.com'
+hostname_expr_templ = '(?P<user>.*@)?(?P<shortname>.*)\.{lab_domain}'
 
 
 def canonicalize_hostname(hostname, user='ubuntu'):
+    hostname_expr = hostname_expr_templ.format(
+        lab_domain=config.lab_domain.replace('.', '\.'))
     match = re.match(hostname_expr, hostname)
     if match:
         match_d = match.groupdict()
@@ -54,13 +56,17 @@ def canonicalize_hostname(hostname, user='ubuntu'):
 
     user_at = user_.strip('@') + '@' if user_ else ''
 
-    ret = '{user_at}{short}.front.sepia.ceph.com'.format(
+    ret = '{user_at}{short}.{lab_domain}'.format(
         user_at=user_at,
-        short=shortname)
+        short=shortname,
+        lab_domain=config.lab_domain,
+    )
     return ret
 
 
 def decanonicalize_hostname(hostname):
+    hostname_expr = hostname_expr_templ.format(
+        lab_domain=config.lab_domain.replace('.', '\.'))
     match = re.match(hostname_expr, hostname)
     if match:
         hostname = match.groupdict()['shortname']
