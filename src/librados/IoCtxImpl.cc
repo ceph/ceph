@@ -400,15 +400,6 @@ int librados::IoCtxImpl::create(const object_t& oid, bool exclusive)
   return operate(oid, &op, NULL);
 }
 
-int librados::IoCtxImpl::create(const object_t& oid, bool exclusive,
-				const std::string& category)
-{
-  ::ObjectOperation op;
-  prepare_assert_ops(&op);
-  op.create(exclusive, category);
-  return operate(oid, &op, NULL);
-}
-
 /*
  * add any version assert operations that are appropriate given the
  * stat in the IoCtx, either the target version assert or any src
