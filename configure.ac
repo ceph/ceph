@@ -47,6 +47,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 case "${target_os}" in
 darwin*)
 	AC_DEFINE([DARWIN], [1], [Define if darwin/osx])
+    darwin="yes"
 	;;
 linux*)
 	linux="yes"
@@ -57,6 +58,7 @@ freebsd*)
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
+AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
