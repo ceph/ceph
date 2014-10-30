@@ -5,7 +5,7 @@ case "$(uname -s)" in
 Linux)
     case "$(lsb_release --id --short)" in
     Ubuntu|Debian)
-        for package in python-dev python-pip python-virtualenv libevent-dev python-libvirt; do
+        for package in python-dev python-pip python-virtualenv libevent-dev python-libvirt libmysqlclient-dev; do
             if [ "$(dpkg --status -- $package|sed -n 's/^Status: //p')" != "install ok installed" ]; then
                 # add a space after old values
                 missing="${missing:+$missing }$package"
