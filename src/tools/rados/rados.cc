@@ -71,7 +71,7 @@ void usage(ostream& out)
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
 "   truncate <obj-name> length       truncate object\n"
-"   create <obj-name> [category]     create object\n"
+"   create <obj-name>                create object\n"
 "   rm <obj-name> ...                remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   clonedata <src-obj> <dst-obj>    clone object data\n"
@@ -1213,7 +1213,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
-  std::string category;
 
   uint64_t min_obj_len = 0;
   uint64_t max_obj_len = 0;
@@ -1261,10 +1260,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("target_nspace");
   if (i != opts.end()) {
     target_nspace = i->second;
-  }
-  i = opts.find("category");
-  if (i != opts.end()) {
-    category = i->second;
   }
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
@@ -2067,12 +2062,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    if (nargs.size() > 2) {
-      string category(nargs[2]);
-      ret = io_ctx.create(oid, true, category);
-    } else {
-      ret = io_ctx.create(oid, true);
-    }
+    ret = io_ctx.create(oid, true);
     if (ret < 0) {
       cerr << "error creating " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2709,8 +2699,6 @@ int main(int argc, const char **argv)
       opts["target_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)NULL)) {
       opts["target_nspace"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
-      opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {
