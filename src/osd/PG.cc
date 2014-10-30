@@ -2375,6 +2375,9 @@ void PG::publish_stats_to_osd()
     if ((state & PG_STATE_ACTIVE) &&
 	!(info.stats.state & PG_STATE_ACTIVE))
       info.stats.last_became_active = now;
+    if ((state & (PG_STATE_ACTIVE|PG_STATE_PEERED)) &&
+	!(info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED)))
+      info.stats.last_became_peered = now;
   }
 
   _update_calc_stats();
@@ -2393,10 +2396,13 @@ void PG::publish_stats_to_osd()
     ++info.stats.reported_seq;
 
     info.stats.last_fresh = now;
+
     if (info.stats.state & PG_STATE_CLEAN)
       info.stats.last_clean = now;
     if (info.stats.state & PG_STATE_ACTIVE)
       info.stats.last_active = now;
+    if (info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED))
+      info.stats.last_peered = now;
     info.stats.last_unstale = now;
     if ((info.stats.state & PG_STATE_DEGRADED) == 0)
       info.stats.last_undegraded = now;
