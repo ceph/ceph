@@ -2018,9 +2018,14 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   bool is_write = t->flags & CEPH_OSD_FLAG_WRITE;
 
   const pg_pool_t *pi = osdmap->get_pg_pool(t->base_oloc.pool);
+  if (!pi) {
+    t->osd = -1;
+    return RECALC_OP_TARGET_POOL_DNE;
+  }
+
   bool force_resend = false;
   bool need_check_tiering = false;
-  if (pi && osdmap->get_epoch() == pi->last_force_op_resend) {
+  if (osdmap->get_epoch() == pi->last_force_op_resend) {
     force_resend = true;
   }
   if (t->target_oid.name.empty() || force_resend) {
@@ -2034,12 +2039,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   
   if (need_check_tiering &&
       (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    if (pi) {
-      if (is_read && pi->has_read_tier())
-	t->target_oloc.pool = pi->read_tier;
-      if (is_write && pi->has_write_tier())
-	t->target_oloc.pool = pi->write_tier;
-    }
+    if (is_read && pi->has_read_tier())
+      t->target_oloc.pool = pi->read_tier;
+    if (is_write && pi->has_write_tier())
+      t->target_oloc.pool = pi->write_tier;
   }
 
   pg_t pgid;
@@ -2047,8 +2050,10 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     assert(t->base_oid.name.empty()); // make sure this is a listing op
     ldout(cct, 10) << __func__ << " have " << t->base_pgid << " pool "
 		   << osdmap->have_pg_pool(t->base_pgid.pool()) << dendl;
-    if (!osdmap->have_pg_pool(t->base_pgid.pool()))
+    if (!osdmap->have_pg_pool(t->base_pgid.pool())) {
+      t->osd = -1;
       return RECALC_OP_TARGET_POOL_DNE;
+    }
     pgid = osdmap->raw_pg_to_pg(t->base_pgid);
   } else {
     int ret = osdmap->object_locator_to_pg(t->target_oid, t->target_oloc,
