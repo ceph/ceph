@@ -19,6 +19,7 @@
 
 class MClientSession : public Message {
   static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 
 public:
   ceph_mds_session_head head;
@@ -31,15 +32,15 @@ public:
   int get_max_caps() const { return head.max_caps; }
   int get_max_leases() const { return head.max_leases; }
 
-  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION) { }
+  MClientSession() : Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION) {
+    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION) {
+    Message(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;
