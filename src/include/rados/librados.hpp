@@ -308,7 +308,9 @@ namespace librados
     }
 
     void create(bool exclusive);
-    void create(bool exclusive, const std::string& category);
+    void create(bool exclusive,
+		const std::string& category); ///< NOTE: category is unused
+
     void write(uint64_t off, const bufferlist& bl);
     void write_full(const bufferlist& bl);
     void append(const bufferlist& bl);
@@ -584,7 +586,8 @@ namespace librados
 
     // create an object
     int create(const std::string& oid, bool exclusive);
-    int create(const std::string& oid, bool exclusive, const std::string& category);
+    int create(const std::string& oid, bool exclusive,
+	       const std::string& category); ///< category is unused
 
     /**
      * write bytes to an object at a specified offset
@@ -989,6 +992,7 @@ namespace librados
     int pool_list(std::list<std::string>& v);
     int get_pool_stats(std::list<std::string>& v,
 		       std::map<std::string, stats_map>& stats);
+    /// deprecated; categories no longer supported
     int get_pool_stats(std::list<std::string>& v,
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);

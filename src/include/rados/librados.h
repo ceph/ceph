@@ -1993,6 +1993,7 @@ void rados_write_op_rmxattr(rados_write_op_t write_op, const char *name);
  * @param exclusive set to either LIBRADOS_CREATE_EXCLUSIVE or
    LIBRADOS_CREATE_IDEMPOTENT
  * will error if the object already exists.
+ * @param category category string (DEPRECATED, HAS NO EFFECT)
  */
 void rados_write_op_create(rados_write_op_t write_op,
                            int exclusive,
