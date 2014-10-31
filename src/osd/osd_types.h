@@ -1321,12 +1321,17 @@ struct object_stat_collection_t {
       p->second.floor(f);
   }
 
+  void add(const object_stat_sum_t& o) {
+    sum.add(o);
+  }
+private:
   void add(const object_stat_sum_t& o, const string& cat) {
     sum.add(o);
     if (cat.length())
       cat_sum[cat].add(o);
   }
 
+public:
   void add(const object_stat_collection_t& o) {
     sum.add(o.sum);
     for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
