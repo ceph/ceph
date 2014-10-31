@@ -1384,28 +1384,6 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     else
       tbl << TextTable::endrow;
 
-    if (verbose) {
-      if (f)
-        f->open_array_section("categories");
-
-      for (map<string,object_stat_sum_t>::iterator it = stat.stats.cat_sum.begin();
-          it != stat.stats.cat_sum.end(); ++it) {
-        if (f) {
-          f->open_object_section(it->first.c_str());
-        } else {
-          tbl << ""
-              << ""
-              << it->first;
-        }
-        dump_object_stat_sum(tbl, f, it->second, avail, verbose);
-        if (f)
-          f->close_section(); // category name
-        else
-          tbl << TextTable::endrow;
-      }
-      if (f)
-        f->close_section(); // categories
-    }
     if (f)
       f->close_section(); // pool
   }
