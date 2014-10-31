@@ -646,6 +646,8 @@ def main():
     # -- means "stop parsing args", but we don't want to see it either
     if '--' in childargs:
         childargs.remove('--')
+    if injectargs and '--' in injectargs:
+        injectargs.remove('--')
 
     # special deprecation warning for 'ceph <type> tell'
     # someday 'mds' will be here too
