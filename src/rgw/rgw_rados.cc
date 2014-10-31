@@ -5650,7 +5650,7 @@ int RGWRados::get_bucket_instance_info(void *ctx, rgw_bucket& bucket, RGWBucketI
                                        time_t *pmtime, map<string, bufferlist> *pattrs)
 {
   string oid;
-  if (!bucket.oid.empty()) {
+  if (bucket.oid.empty()) {
     get_bucket_meta_oid(bucket, oid);
   } else {
     oid = bucket.oid;
