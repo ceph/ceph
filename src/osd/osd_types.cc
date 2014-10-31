@@ -2303,9 +2303,9 @@ void pg_interval_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("primary", primary);
   f->dump_int("up_primary", up_primary);
-  f->close_section();
 }
 
 void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
