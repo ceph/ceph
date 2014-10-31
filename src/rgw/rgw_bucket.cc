@@ -348,7 +348,7 @@ int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& b
 
   rgw_obj obj(bucket, key);
 
-  int ret = store->delete_obj(rctx, bucket_owner, obj, use_versioning, NULL);
+  int ret = store->delete_obj(rctx, bucket_owner, obj, use_versioning);
 
   return ret;
 }

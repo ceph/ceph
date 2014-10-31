@@ -1457,6 +1457,13 @@ public:
 
         DeleteParams() : versioning_status(0) {}
       } params;
+
+      struct DeleteResult {
+        bool delete_marker;
+        string version_id;
+
+        DeleteResult() : delete_marker(false) {}
+      } result;
       
       Delete(RGWRados::Object *_target) : target(_target) {}
 
@@ -1603,7 +1610,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, int versioning_status, ACLOwner *obj_owner);
+  virtual int delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, int versioning_status);
 
   /* Delete a system object */
   virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
@@ -1770,6 +1777,7 @@ public:
   int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
 
+  int bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent);
   int bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry);
   int bi_put(rgw_bucket& bucket, rgw_cls_bi_entry& entry);
   int bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max,
