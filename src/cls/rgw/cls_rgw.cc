@@ -1096,6 +1096,17 @@ public:
     return 0;
   }
 
+  int unlink_instance_entry() {
+    /* this instance has a previous list entry, remove that entry */
+    CLS_LOG(20, "unlink_instance_entry() instance_idx=%s", escape_str(instance_idx).c_str());
+    int ret = cls_cxx_map_remove_key(hctx, instance_idx);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: cls_cxx_map_remove_key() instance_idx=%s ret=%d", instance_idx.c_str(), ret);
+      return ret;
+    }
+    return 0;
+  }
+
   int write_entries(uint64_t flags_set, uint64_t flags_reset) {
     if (!initialized) {
       int ret = init();
@@ -1466,6 +1477,11 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   if (!obj.is_delete_marker()) {
     olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+  } else {
+    ret = obj.unlink_instance_entry();
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   ret = obj.unlink_list_entry();
