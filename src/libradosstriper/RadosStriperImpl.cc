@@ -203,7 +203,7 @@ libradosstriper::RadosStriperImpl::RadosExclusiveLock::~RadosExclusiveLock() {
 ///////////////////////// constructor /////////////////////////////
 
 libradosstriper::RadosStriperImpl::RadosStriperImpl(librados::IoCtx& ioctx, librados::IoCtxImpl *ioctx_impl) :
-  m_refCnt(0), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
+  m_refCnt(0),lock("RadosStriper Refcont", false, false), m_radosCluster(ioctx), m_ioCtx(ioctx), m_ioCtxImpl(ioctx_impl),
   m_layout(g_default_file_layout) {}
 
 ///////////////////////// layout /////////////////////////////
@@ -513,8 +513,17 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
 
 int libradosstriper::RadosStriperImpl::aio_flush() 
 {
+  int ret;
   // pass to the rados level
-  return m_ioCtx.aio_flush();
+  ret = m_ioCtx.aio_flush();
+  if (ret < 0)
+    return ret;
+  //wait all CompletionData are released
+  lock.Lock();
+  while (m_refCnt > 1)
+    cond.Wait(lock);
+  lock.Unlock();
+  return ret;
 }
 
 ///////////////////////// stat and deletion /////////////////////////////
