@@ -5883,19 +5883,20 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   if (oid.snap < CEPH_NOSNAP && !cop->results.snaps.empty()) {
     // verify snap hasn't been deleted
     vector<snapid_t>::iterator p = cop->results.snaps.begin();
+    vector<snapid_t>::iterator q = cop->results.snaps.begin();
+    unsigned cnt = 0;
     while (p != cop->results.snaps.end()) {
       if (pool.info.is_removed_snap(*p)) {
 	dout(10) << __func__ << " clone snap " << *p << " has been deleted"
 		 << dendl;
-	for (vector<snapid_t>::iterator q = p + 1;
-	     q != cop->results.snaps.end();
-	     ++q)
-	  *(q - 1) = *q;
-	cop->results.snaps.resize(cop->results.snaps.size() - 1);
+	p++;
       } else {
-	++p;
+	if (q != p)
+	  *q++ = *p++;
+	cnt++;
       }
     }
+    cop->results.snaps.resize(cnt);
     if (cop->results.snaps.empty()) {
       dout(10) << __func__ << " no more snaps for " << oid << dendl;
       r = -ENOENT;
