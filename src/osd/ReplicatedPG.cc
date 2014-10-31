@@ -5801,7 +5801,6 @@ int ReplicatedPG::fill_in_copy_get(
   // size, mtime
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
-  reply_obj.category = oi.category;
   if (soid.snap < CEPH_NOSNAP) {
     reply_obj.snaps = oi.snaps;
   } else {
@@ -5975,7 +5974,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->results.category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
 	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->rval);
@@ -6345,7 +6343,6 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
       tctx->discard_temp_oid = results->temp_oid;
     }
     tctx->new_obs.oi.size = results->object_size;
-    tctx->new_obs.oi.category = results->category;
     tctx->new_obs.oi.user_version = results->user_version;
 
     if (soid.snap != CEPH_NOSNAP) {
