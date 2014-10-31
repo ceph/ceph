@@ -1446,6 +1446,15 @@ void Pipe::stop_and_wait()
 {
   if (state != STATE_CLOSED)
     stop();
+
+  if (msgr->cct->_conf->ms_inject_internal_delays) {
+    ldout(msgr->cct, 10) << __func__ << " sleep for "
+			 << msgr->cct->_conf->ms_inject_internal_delays
+			 << dendl;
+    utime_t t;
+    t.set_from_double(msgr->cct->_conf->ms_inject_internal_delays);
+    t.sleep();
+  }
   
   // HACK: we work around an annoying deadlock here.  If the fast
   // dispatch method calls mark_down() on itself, it can block here
