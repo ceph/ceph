@@ -4166,14 +4166,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      result = -EINVAL;
 	      goto fail;
 	    }
-	    if (category.size()) {
-	      if (obs.exists && !oi.is_whiteout()) {
-		if (obs.oi.category != category)
-		  result = -EEXIST;  // category cannot be reset
-	      } else {
-		obs.oi.category = category;
-	      }
-	    }
+	    // category is no longer implemented.
 	  }
           if (result >= 0) {
             if (!obs.exists)
