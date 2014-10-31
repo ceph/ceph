@@ -526,9 +526,11 @@ public:
 class RGWDeleteObj : public RGWOp {
 protected:
   int ret;
+  bool delete_marker;
+  string version_id;
 
 public:
-  RGWDeleteObj() : ret(0) {}
+  RGWDeleteObj() : ret(0), delete_marker(false) {}
 
   int verify_permission();
   void pre_exec();

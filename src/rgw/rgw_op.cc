@@ -2139,9 +2139,18 @@ void RGWDeleteObj::execute()
 
     obj_ctx->set_atomic(obj);
 
-    ACLOwner& obj_owner = s->owner;
+    RGWRados::Object del_target(store, *obj_ctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
 
-    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_status(), &obj_owner);
+    del_op.params.bucket_owner = s->bucket_owner.get_id();
+    del_op.params.versioning_status = s->bucket_info.versioning_status();
+    del_op.params.obj_owner = s->owner;
+
+    ret = del_op.delete_obj();
+    if (ret >= 0) {
+      delete_marker = del_op.result.delete_marker;
+      version_id = del_op.result.version_id;
+    }
   }
 }
 
@@ -3001,7 +3010,7 @@ void RGWCompleteMultipart::execute()
   }
 
   // remove the upload obj
-  int r = store->delete_obj(*(RGWObjectCtx *)s->obj_ctx, s->bucket_owner.get_id(), meta_obj, 0, NULL);
+  int r = store->delete_obj(*(RGWObjectCtx *)s->obj_ctx, s->bucket_owner.get_id(), meta_obj, 0);
   if (r < 0) {
     ldout(store->ctx(), 0) << "WARNING: failed to remove object " << meta_obj << dendl;
   }
@@ -3061,7 +3070,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
-        ret = store->delete_obj(*obj_ctx, owner, obj, 0, NULL);
+        ret = store->delete_obj(*obj_ctx, owner, obj, 0);
         if (ret < 0 && ret != -ENOENT)
           return;
       } else {
@@ -3069,7 +3078,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
-          ret = store->delete_obj(*obj_ctx, owner, loc, 0, NULL);
+          ret = store->delete_obj(*obj_ctx, owner, loc, 0);
           if (ret < 0 && ret != -ENOENT)
             return;
         }
@@ -3080,7 +3089,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
-  ret = store->delete_obj(*obj_ctx, owner, meta_obj, 0, NULL);
+  ret = store->delete_obj(*obj_ctx, owner, meta_obj, 0);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -3242,7 +3251,7 @@ void RGWDeleteMultiObj::execute()
     rgw_obj obj(bucket,(*iter));
 
     obj_ctx->set_atomic(obj);
-    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_status(), NULL);
+    ret = store->delete_obj(*obj_ctx, s->bucket_owner.get_id(), obj, s->bucket_info.versioning_status());
     if (ret == -ENOENT) {
       ret = 0;
     }
