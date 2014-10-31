@@ -9,8 +9,9 @@ class Dir {
   ceph::unordered_map<string, Dentry*> dentries;
   xlist<Dentry*> dentry_list;
   uint64_t release_count;
+  uint64_t ordered_count;
 
-  Dir(Inode* in) : release_count(0) { parent_inode = in; }
+  Dir(Inode* in) : release_count(0), ordered_count(0) { parent_inode = in; }
 
   bool is_empty() {  return dentries.empty(); }
 };
