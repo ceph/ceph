@@ -1367,6 +1367,12 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
+  if (!version_id.empty()) {
+    dump_string_header(s, "x-amz-version-id", version_id.c_str());
+  }
+  if (delete_marker) {
+    dump_string_header(s, "x-amz-delete-marker", "true");
+  }
   end_header(s, this);
 }
 

@@ -897,7 +897,7 @@ RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
   list<rgw_obj>::iterator iter;
   for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
     rgw_obj& obj = *iter;
-    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false, NULL);
+    int r = store->delete_obj(obj_ctx, bucket_owner, obj, false);
     if (r < 0 && r != -ENOENT) {
       ldout(store->ctx(), 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
     }
@@ -3923,11 +3923,15 @@ int RGWRados::Object::Delete::delete_obj()
   rgw_obj& obj = target->get_obj();
 
   if (params.versioning_status & BUCKET_VERSIONED) {
-    if (obj.get_instance().empty()) {
+    const string& instance = obj.get_instance();
+    if (instance.empty()) {
       rgw_obj marker = obj;
       if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
         store->gen_rand_obj_instance_name(&marker);
       }
+
+      result.version_id = marker.get_instance();
+      result.delete_marker = true;
 
       struct rgw_bucket_dir_entry_meta meta;
 
@@ -3940,10 +3944,20 @@ int RGWRados::Object::Delete::delete_obj()
         return r;
       }
     } else {
-      int r = store->unlink_obj_instance(target->get_ctx(), params.bucket_owner, obj);
+      rgw_bucket_dir_entry dirent;
+      int r = store->bi_get_instance(obj, &dirent);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
+      bool exists = (r == 0);
+      if (exists) {
+        result.delete_marker = dirent.is_delete_marker();
+      }
+      r = store->unlink_obj_instance(target->get_ctx(), params.bucket_owner, obj);
       if (r < 0) {
         return r;
       }
+      result.version_id = instance;
     }
 
     return 0;
@@ -3960,14 +3974,14 @@ int RGWRados::Object::Delete::delete_obj()
     return r;
   }
 
-  ObjectWriteOperation op;
-
-  r = target->prepare_atomic_modification(op, false, NULL);
+  RGWObjState *state;
+  r = target->get_state(&state, false);
   if (r < 0)
     return r;
 
-  RGWObjState *state;
-  r = target->get_state(&state, false);
+  ObjectWriteOperation op;
+
+  r = target->prepare_atomic_modification(op, false, NULL);
   if (r < 0)
     return r;
 
@@ -4021,16 +4035,13 @@ int RGWRados::Object::Delete::delete_obj()
   return 0;
 }
 
-int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, int versioning_status, ACLOwner *obj_owner)
+int RGWRados::delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj, int versioning_status)
 {
   RGWRados::Object del_target(this, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket_owner;
   del_op.params.versioning_status = versioning_status;
-  if (obj_owner) {
-    del_op.params.obj_owner = *obj_owner;
-  }
 
   return del_op.delete_obj();
 }
@@ -5684,7 +5695,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
     cls_rgw_obj_key& key = *liter;
     rgw_obj obj_instance(bucket, key.name);
     obj_instance.set_instance(key.instance);
-    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, 0, NULL);
+    int ret = delete_obj(obj_ctx, bucket_owner, obj_instance, 0);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "ERROR: delete_obj() returned " << ret << " obj_instance=" << obj_instance << dendl;
       return ret;
@@ -6585,6 +6596,34 @@ int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, stri
   int ret = cls_rgw_bi_log_trim(index_ctx, oid, start_marker, end_marker);
   if (ret < 0)
     return ret;
+
+  return 0;
+}
+
+int RGWRados::bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent)
+{
+  rgw_bucket bucket;
+  rgw_rados_ref ref;
+  int r = get_obj_ref(obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_cls_bi_entry bi_entry;
+  r = bi_get(bucket, obj, InstanceIdx, &bi_entry);
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
+  }
+  if (r < 0) {
+    return r;
+  }
+  bufferlist::iterator iter = bi_entry.data.begin();
+  try {
+    ::decode(*dirent, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode bi_entry()" << dendl;
+    return -EIO;
+  }
 
   return 0;
 }
