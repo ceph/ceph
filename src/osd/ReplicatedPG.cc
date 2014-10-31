@@ -11610,11 +11610,11 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     }
   }
 
-  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL &&
-      hit_set) {
+  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old and/or cold enough?
     int atime = -1, temp = 0;
-    agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
+    if (hit_set)
+      agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
 
     uint64_t atime_upper = 0, atime_lower = 0;
     if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
@@ -11624,8 +11624,13 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
         atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
       }
     }
-    if (atime < 0)
-      atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
+    if (atime < 0) {
+      if (hit_set) {
+        atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
+      } else {
+	atime_upper = 1000000;
+      }
+    }
     if (atime >= 0) {
       agent_state->atime_hist.add(atime);
       agent_state->atime_hist.get_position_micro(atime, &atime_lower,
