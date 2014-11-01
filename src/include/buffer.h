@@ -433,6 +433,11 @@ public:
     char *c_str();
     void substr_of(const list& other, unsigned off, unsigned len);
 
+    /// return a pointer to a contiguous extent of the buffer,
+    /// reallocating as needed
+    char *get_contiguous(unsigned off,  ///< offset
+			 unsigned len); ///< length
+
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */);
     void write(int off, int len, std::ostream& out) const;
