@@ -102,13 +102,13 @@ namespace librbd {
      * layering:
      *
      *                          need copyup
-     * LIBRBD_AIO_WRITE_GUARD ---------------> LIBRBD_AIO_WRITE_COPYUP
+     * LIBRBD_AIO_READ_GUARD ---------------> LIBRBD_AIO_READ_COPYUP
      *           |                                       |
      *           v                                       |
      *         done <------------------------------------/
      *           ^
      *           |
-     * LIBRBD_AIO_WRITE_FLAT
+     * LIBRBD_AIO_READ_FLAT
      *
      * Reads start in LIBRBD_AIO_READ_GUARD or _FLAT, depending on
      * whether there is a parent or not.
