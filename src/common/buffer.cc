@@ -1353,13 +1353,34 @@ void buffer::list::rebuild_page_aligned()
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
+  char *buffer::list::get_contiguous(unsigned orig_off, unsigned len)
+  {
+    if (orig_off + len > length())
+      throw end_of_buffer();
+
+    unsigned off = orig_off;
+    std::list<ptr>::iterator curbuf = _buffers.begin();
+    while (off > 0 && off >= curbuf->length()) {
+      off -= curbuf->length();
+      ++curbuf;
+    }
+
+    if (off + len > curbuf->length()) {
+      // FIXME we'll just rebuild the whole list for now.
+      rebuild();
+      return c_str() + orig_off;
+    }
+
+    return curbuf->c_str() + off;
+  }
+
   void buffer::list::substr_of(const list& other, unsigned off, unsigned len)
   {
     if (off + len > other.length())
       throw end_of_buffer();
 
     clear();
-      
+
     // skip off
     std::list<ptr>::const_iterator curbuf = other._buffers.begin();
     while (off > 0 &&
