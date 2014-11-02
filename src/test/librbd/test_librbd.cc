@@ -21,6 +21,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/config.h"
 
 #include "gtest/gtest.h"
 
@@ -1202,6 +1203,9 @@ TEST(LibRBD, TestClone2)
 
 TEST(LibRBD, TestCOR)
 {
+  g_conf->set_val("rbd_clone_copy_on_read", "true");
+  ASSERT_TRUE(g_conf->rbd_clone_copy_on_read);
+
   rados_t cluster;
   rados_ioctx_t ioctx;
   string pool_name = get_temp_pool_name();
