@@ -349,14 +349,33 @@ void PGMap::update_osd(int osd, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   hash_map<int32_t,osd_stat_t>::iterator o = osd_stat.find(osd);
-  if (o != osd_stat.end())
+  epoch_t old_lec = 0;
+  if (o != osd_stat.end()) {
+    ceph::unordered_map<int32_t,epoch_t>::iterator i = osd_epochs.find(osd);
+    if (i != osd_epochs.end())
+      old_lec = i->second;
     stat_osd_sub(o->second);
+  }
   osd_stat_t& r = osd_stat[osd];
   ::decode(r, p);
   stat_osd_add(r);
 
   // adjust [near]full status
   register_nearfull_status(osd, r);
+
+  // epoch?
+  if (!p.end()) {
+    epoch_t e;
+    ::decode(e, p);
+
+    if (e < min_last_epoch_clean ||
+	(e > min_last_epoch_clean &&
+	 old_lec == min_last_epoch_clean))
+      min_last_epoch_clean = 0;
+  } else {
+    // WARNING: we are not refreshing min_last_epoch_clean!  must be old store
+    // or old mon running.
+  }
 }
 
 void PGMap::remove_osd(int osd)
