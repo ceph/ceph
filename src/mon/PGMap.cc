@@ -315,17 +315,31 @@ void PGMap::update_pg(pg_t pgid, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
-  if (s != pg_stat.end())
+  epoch_t old_lec = 0;
+  if (s != pg_stat.end()) {
+    old_lec = s->second.get_effective_last_epoch_clean();
     stat_pg_sub(pgid, s->second);
+  }
   pg_stat_t& r = pg_stat[pgid];
   ::decode(r, p);
   stat_pg_add(pgid, r);
+
+  epoch_t lec = r.get_effective_last_epoch_clean();
+  if (min_last_epoch_clean &&
+      (lec < min_last_epoch_clean ||  // we did
+       (lec > min_last_epoch_clean && // we might
+	old_lec == min_last_epoch_clean)
+       ))
+    min_last_epoch_clean = 0;
 }
 
 void PGMap::remove_pg(pg_t pgid)
 {
   hash_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
   if (s != pg_stat.end()) {
+    if (min_last_epoch_clean &&
+	s->second.get_effective_last_epoch_clean() == min_last_epoch_clean)
+      min_last_epoch_clean = 0;
     stat_pg_sub(pgid, s->second);
     pg_stat.erase(s);
   }
