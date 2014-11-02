@@ -469,7 +469,6 @@ int FileJournal::open(uint64_t fs_op_seq)
 {
   dout(2) << "open " << fn << " fsid " << fsid << " fs_op_seq " << fs_op_seq << dendl;
 
-  last_committed_seq = fs_op_seq;
   uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
@@ -528,6 +527,16 @@ int FileJournal::open(uint64_t fs_op_seq)
   // find next entry
   read_pos = header.start;
   uint64_t seq = header.start_seq;
+
+  // last_committed_seq is 1 before the start of the journal or
+  // 0 if the start is 0
+  last_committed_seq = seq > 0 ? seq - 1 : seq;
+  if (last_committed_seq < fs_op_seq) {
+    dout(2) << "open advancing committed_seq " << last_committed_seq
+	    << " to fs op_seq " << fs_op_seq << dendl;
+    last_committed_seq = fs_op_seq;
+  }
+
   while (1) {
     bufferlist bl;
     off64_t old_pos = read_pos;
