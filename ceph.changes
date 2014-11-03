@@ -1,4 +1,88 @@
 -------------------------------------------------------------------
+Mon Nov  3 09:34:10 UTC 2014 - tbehrens@suse.com
+
+- Update to 0.80.7:
+  * osd: fix invalid memory reference in log trimming
+  * osd: fix use-after-free in cache tiering code
+  * osd: remove bad backfill assertion for mixed-version clusters
+
+- Update to 0.80.6 (from Oct 14th):
+  * build: fix atomic64_t on i386
+  * build: fix build on alpha
+  * build: fix build on hppa
+  * build: fix yasm detection on x32 arch
+  * ceph-disk: fix 'list' function with dmcrypt
+  * ceph-disk: fix dmcrypt support
+  * ceph: allow non-default cluster to be specified
+  * common: fix dup log messages to mon
+  * global: write pid file when -f is used (systemd, upstart)
+  * librados: fix crash when read timeout is enabled
+  * librados: fix lock leaks in error paths
+  * librados: fix watch resend on PG acting set change
+  * librados: python: fix aio_read handling with \0
+  * librbd: add interface to invalidate cached data
+  * librbd: fix crash when using clone of flattened image
+  * librbd: fix error path cleanup on open
+  * librbd: fix null pointer check
+  * librbd: limit dirty object count
+  * mds: fix rstats for root and mdsdir
+  * mon: add 'get' command for new cache tier pool properties
+  * mon: add 'osd pool get-quota'
+  * mon: add cluster fingerprint
+  * mon: disallow nonsensical cache-mode transitions
+  * mon: fix cache tier rounding error on i386
+  * mon: fix occasional memory leak
+  * mon: fix reported latency for 'osd perf'
+  * mon: include 'max avail' in 'ceph df' output
+  * mon: persistently mark pools where scrub may find incomplete clones
+  * mon: preload erasure plugins
+  * mon: prevent cache-specific settings on non-tier pools
+  * mon: reduce log spam
+  * mon: warn when cache pools have no hit_sets enabled
+  * msgr: fix trivial memory leak
+  * osd: automatically scrub PGs with invalid stats
+  * osd: avoid sharing PG metadata that is not durable
+  * osd: cap hit_set size
+  * osd: create default erasure profile if needed
+  * osd: dump tid as JSON int (not string)  where appropriate
+  * osd: encode blacklist in deterministic order
+  * osd: fix behavior when cache tier has no hit_sets enabled
+  * osd: fix cache tier flushing of snapshots
+  * osd: fix cache tier op ordering when going from full to non-full
+  * osd: fix crash on dup recovery reservation
+  * osd: fix division by zero when pg_num adjusted with no OSDs
+  * osd: fix hint crash in experimental keyvaluestore_dev backend
+  * osd: fix leak in copyfrom cancellation
+  * osd: fix locking for copyfrom finish
+  * osd: fix long filename handling in backend
+  * osd: fix min_size check with backfill
+  * osd: fix mount/remount sync race
+  * osd: fix object listing + erasure code bug
+  * osd: fix race on reconnect to failed OSD
+  * osd: fix recovery reservation deadlock
+  * osd: fix tiering agent arithmetic for negative values
+  * osd: improve shutdown order
+  * osd: improve subop discard logic
+  * osd: introduce optional sleep, io priority for scrub and snap trim
+  * osd: make scrub check for and remove stale erasure-coded objects
+  * osd: misc fixes
+  * osd: mix keyvaluestore_dev improvements
+  * osd: only require CRUSH features for rules that are used
+  * osd: preload erasure plugins on startup
+  * osd: prevent PGs from falling behind when consuming OSDMaps
+  * osd: prevent old clients from using tiered pools
+  * osd: set min_size on erasure pools to data chunk count
+  * osd: trim old erasure-coded objects more aggressively
+  * rados: enforce erasure code alignment
+  * rgw: align object stripes with erasure pool alignment
+  * rgw: don't send error body on HEAD for civetweb
+  * rgw: fix crash in CORS preflight request
+  * rgw: fix decoding of + in URL
+  * rgw: fix object removal on object create
+  * systemd: use systemd-run when starting radosgw
+  * sysvinit: support non-default cluster name
+
+-------------------------------------------------------------------
 Fri Oct 16 15:43:16 UTC 2014 - osynge@suse.com
 - Removed /etc/init.d/ceph
   * Redundant as ceph is now systemd based.

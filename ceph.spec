@@ -43,7 +43,7 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.6
+Version:        0.80.7
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
@@ -121,12 +121,6 @@ Patch0021:      0021-Added-a-systemd-target-for-ceph.patch
 Patch0022:      0022-rcceph-wrapper-for-ceph-systemd.patch
 Patch0023:      0023-systemd-support-in-ceph-disk-activa.patch
 Patch0024:      0024-udev-rules-now-explicitly-specify-i.patch
-Patch0025:      0025-Rcfiles-remove-from-runlevel-2.patch
-Patch0026:      0026-init-radosgw-adjust-for-opensuse.patch
-Patch0027:      0027-init-ceph-add-xfs-support.patch
-Patch0028:      0028-Fix-runlevels-for-start-scripts.patch
-Patch0029:      0029-Fixup-radosgw-daemon-init.patch
-Patch0030:      0030-MultiPatch-taken-from-trunk.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -373,12 +367,6 @@ This package contains Ceph benchmarks and test tools.
 %patch0022 -p1
 %patch0023 -p1
 %patch0024 -p1
-%patch0025 -p1
-%patch0026 -p1
-%patch0027 -p1
-%patch0028 -p1
-%patch0029 -p1
-%patch0030 -p1
 
 %build
 

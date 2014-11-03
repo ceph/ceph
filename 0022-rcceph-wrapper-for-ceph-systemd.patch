@@ -1,28 +1,26 @@
 From: Owen Synge <osynge@suse.com>
-Date: Wed, 15 Oct 2014 18:06:42 +0200
+Date: Wed, 10 Sep 2014 10:13:36 +0200
 Subject: [PATCH] rcceph: wrapper for ceph systemd
 
 systemd is easy to use if you have a wrapper.
 message showing available paramters to rcceph.
 Also check for directories contianing mon/osd deamon settings.
 Added suport for chkconfig using LSB Header
-Fixed bug in intial version when no mon nodes are present.
-Improved error messages
-Added support for mask and unmask parameters
-Added support for ceph.target
-Removed support for extra parameter in init script.
-Cleaned up white space
+
+Signed off by osynge@suse.com
+
+(cherry picked from commit b552baad2413ed01115fa408099604fc62610f52)
 ---
- systemd/ceph | 67 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- 1 file changed, 67 insertions(+)
+ systemd/ceph | 66 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
  create mode 100644 systemd/ceph
 
 diff --git a/systemd/ceph b/systemd/ceph
 new file mode 100644
-index 0000000..46b9b37
+index 0000000..e60dec6
 --- /dev/null
 +++ b/systemd/ceph
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,66 @@
 +#! /bin/bash
 +
 +### BEGIN INIT INFO
@@ -41,52 +39,51 @@ index 0000000..46b9b37
 +rc_reset
 +
 +action=$1 ; shift
-+
-+# we will other command line parameters later.
-+
-+# default cluster name to "ceph"
 +cluster="ceph"
++config=$1 ; shift
 +
 +# Shared variables by many actions
 +dir_mon="/var/lib/ceph/mon/"
 +dir_osd="/var/lib/ceph/osd/"
 +if test -d ${dir_mon} ; then
-+    lmon=`ls ${dir_mon} | grep ${cluster}`
++lmon=`ls ${dir_mon} | grep ${cluster}`
 +fi
 +if test -d ${dir_osd} ; then
-+    losd=`ls ${dir_osd} | grep ${cluster}`
++losd=`ls ${dir_osd} | grep ${cluster}`
 +fi
 +prefix="${cluster}-"
 +
-+case $action in start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed  )
-+    n=0
-+    if test -n ${lmon} ; then
-+        for s in ${lmon#=${prefix}} ; do
-+            systemctl "${action}" ceph-mon@${s#$prefix}.service
-+            rc_check
-+            ((++n))
-+        done
-+    fi
-+    if test -n ${losd} ; then
-+        for s in ${losd#=${prefix}} ; do
-+            systemctl "${action}" ceph-osd@${s#$prefix}.service
-+            rc_check
-+            ((++n))
-+        done
-+    fi
-+    if test $n -gt 0 ; then
-+        rc_status
-+    else
-+        rc_status -u
-+    fi
-+    systemctl "${action}" ceph.target
-+    rc_check
-+;;
-+*)
-+    echo "Invalid paramter : $action"
-+    echo "Valid paramters  : start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed"
-+;;
-+esac
-+
++if test -n "$config" ; then
++	systemctl "${action}" "ceph-mon@${config}.service"
++else
++	case $action in
++    start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed  )
++        n=0
++        if test -n ${lmon} ; then
++            for s in ${lmon#=${prefix}} ; do
++                systemctl "${action}" ceph-mon@${s#$prefix}.service
++                rc_check
++                ((++n))
++            done
++        fi
++        if test -n ${lmon} ; then
++            for s in ${losd#=${prefix}} ; do
++                systemctl "${action}" ceph-osd@${s#$prefix}.service
++                rc_check
++                ((++n))
++            done
++        fi
++        if test $n -gt 0 ; then
++			rc_status
++		else
++			rc_status -u
++		fi
++    ;;
++	*)
++		echo "Invalid paramter : $action"
++        echo "Valid paramters  : start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed"
++	;;
++	esac
++fi
 +rc_exit
 +
