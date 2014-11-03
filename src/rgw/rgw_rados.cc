@@ -5356,7 +5356,10 @@ int RGWRados::olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, s
   attr_name.append(*op_tag);
 
   bufferlist bl;
-#warning FIXME bl need to encode timestamp
+  RGWOLHPendingInfo pending_info;
+  pending_info.time = ceph_clock_now(cct);
+  ::encode(pending_info, bl);
+
   op.setxattr(attr_name.c_str(), bl);
 
   ret = obj_operate(olh_obj, &op);

@@ -81,6 +81,27 @@ struct RGWOLHInfo {
 };
 WRITE_CLASS_ENCODER(RGWOLHInfo)
 
+struct RGWOLHPendingInfo {
+  utime_t time;
+
+  RGWOLHPendingInfo() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(time, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+     DECODE_START(1, bl);
+     ::decode(time, bl);
+     DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(RGWOLHPendingInfo)
+
 struct RGWUsageBatch {
   map<utime_t, rgw_usage_log_entry> m;
 
