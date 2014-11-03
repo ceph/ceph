@@ -338,6 +338,11 @@ const char** MDS::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "mds_op_complaint_time", "mds_op_log_threshold",
     "mds_op_history_size", "mds_op_history_duration",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
     NULL
   };
   return KEYS;
@@ -356,6 +361,25 @@ void MDS::handle_conf_change(const struct md_config_t *conf,
     op_tracker.set_history_size_and_duration(conf->mds_op_history_size,
                                              conf->mds_op_history_duration);
   }
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility")) {
+    update_log_config();
+  }
+}
+
+void MDS::update_log_config()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio) == 0)
+    clog->update_config(log_to_monitors, log_to_syslog,
+			log_channel, log_prio);
+  derr << "log_to_monitors " << log_to_monitors << dendl;
 }
 
 void MDS::create_logger()
@@ -611,6 +635,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
+  update_log_config();
   
   int r = monc->authenticate();
   if (r < 0) {
