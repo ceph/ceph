@@ -820,11 +820,6 @@ public:
   virtual void handle_conf_change(const struct md_config_t *conf,
                                   const std::set<std::string> &changed);
 
-  void update_log_client(LogChannelRef lc, const string &name,
-                         map<string,string> &log_to_monitors,
-                         map<string,string> &log_to_syslog,
-                         map<string,string> &log_channels,
-                         map<string,string> &log_prios);
   void update_log_clients();
   int sanitize_options();
   int preinit();

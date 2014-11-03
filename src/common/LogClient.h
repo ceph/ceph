@@ -133,6 +133,16 @@ public:
 
   typedef shared_ptr<LogChannel> Ref;
 
+  /**
+   * update config values from parsed k/v map for each config option
+   *
+   * Pick out the relevant value based on our channel.
+   */
+  void update_config(map<string,string> &log_to_monitors,
+		     map<string,string> &log_to_syslog,
+		     map<string,string> &log_channels,
+		     map<string,string> &log_prios);
+
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
 
