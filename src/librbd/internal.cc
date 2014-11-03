@@ -2088,6 +2088,10 @@ reprotect_and_return_err:
       RWLock::WLocker l(ictx->md_lock);
       ictx->flush_cache();
     }
+
+		if (!ictx->copyup_queue.empty())
+			ictx->wait_last_completions();
+
     return _snap_set(ictx, snap_name);
   }
 
