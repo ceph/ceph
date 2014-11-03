@@ -39,6 +39,45 @@
 #include "common/config.h"
 
 #define dout_subsys ceph_subsys_monc
+
+int parse_log_client_options(CephContext *cct,
+			     map<string,string> &log_to_monitors,
+			     map<string,string> &log_to_syslog,
+			     map<string,string> &log_channels,
+			     map<string,string> &log_prios)
+{
+  ostringstream oss;
+
+  int r = get_conf_str_map_helper(cct->_conf->clog_to_monitors, oss,
+                                  &log_to_monitors, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_monitors'" << dendl;
+    return r;
+  }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog, oss,
+                              &log_to_syslog, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_syslog'" << dendl;
+    return r;
+  }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_facility, oss,
+                              &log_channels, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
+    return r;
+  }
+
+  r = get_conf_str_map_helper(cct->_conf->clog_to_syslog_level, oss,
+                              &log_prios, CLOG_CHANNEL_DEFAULT);
+  if (r < 0) {
+    lderr(cct) << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
+    return r;
+  }
+  return 0;
+}
+
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, LogClient *logc) {

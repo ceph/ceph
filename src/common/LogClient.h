@@ -31,6 +31,12 @@ struct Connection;
 
 class LogChannel;
 
+int parse_log_client_options(CephContext *cct,
+			     map<string,string> &log_to_monitors,
+			     map<string,string> &log_to_syslog,
+			     map<string,string> &log_channels,
+			     map<string,string> &log_prios);
+
 class LogClientTemp
 {
 public:
