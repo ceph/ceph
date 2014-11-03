@@ -38,6 +38,11 @@ void RGWOLHInfo::dump(Formatter *f) const
   encode_json("target", target, f);
 }
 
+void RGWOLHPendingInfo::dump(Formatter *f) const
+{
+  encode_json("time", time, f);
+}
+
 void RGWObjManifestPart::dump(Formatter *f) const
 {
   f->open_object_section("loc");
