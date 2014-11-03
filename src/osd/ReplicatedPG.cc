@@ -12293,11 +12293,6 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	++stat.num_objects_omap;
     }
 
-    //bufferlist data;
-    //osd->store->read(c, poid, 0, 0, data);
-    //assert(data.length() == p->size);
-    //
-
     if (!next_clone.is_min() && next_clone != soid &&
 	pool.info.allow_incomplete_clones()) {
       // it is okay to be missing one or more clones in a cache tier.
