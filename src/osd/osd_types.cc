@@ -3850,6 +3850,8 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   truncate_size = other.truncate_size;
   flags = other.flags;
   user_version = other.user_version;
+  data_digest = other.data_digest;
+  omap_digest = other.omap_digest;
 }
 
 ps_t object_info_t::legacy_object_locator_to_ps(const object_t &oid, 
@@ -3875,7 +3877,7 @@ void object_info_t::encode(bufferlist& bl) const
        ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(14, 8, bl);
+  ENCODE_START(15, 8, bl);
   ::encode(soid, bl);
   ::encode(myoloc, bl);	//Retained for compatibility
   ::encode((__u32)0, bl); // was category, no longer used
@@ -3901,13 +3903,15 @@ void object_info_t::encode(bufferlist& bl) const
   __u32 _flags = flags;
   ::encode(_flags, bl);
   ::encode(local_mtime, bl);
+  ::encode(data_digest, bl);
+  ::encode(omap_digest, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(bufferlist::iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(13, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   ::decode(soid, bl);
   ::decode(myoloc, bl);
@@ -3970,6 +3974,14 @@ void object_info_t::decode(bufferlist::iterator& bl)
   } else {
     local_mtime = utime_t();
   }
+  if (struct_v >= 15) {
+    ::decode(data_digest, bl);
+    ::decode(omap_digest, bl);
+  } else {
+    data_digest = omap_digest = -1;
+    clear_flag(FLAG_DATA_DIGEST);
+    clear_flag(FLAG_OMAP_DIGEST);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3994,6 +4006,8 @@ void object_info_t::dump(Formatter *f) const
   f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);
+  f->dump_unsigned("data_digest", data_digest);
+  f->dump_unsigned("omap_digest", omap_digest);
   f->open_object_section("watchers");
   for (map<pair<uint64_t, entity_name_t>,watch_info_t>::const_iterator p =
          watchers.begin(); p != watchers.end(); ++p) {
@@ -4025,7 +4039,12 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
   if (oi.flags)
     out << " " << oi.get_flag_string();
   out << " s " << oi.size;
-  out << " uv" << oi.user_version;
+  out << " uv " << oi.user_version;
+  if (oi.is_data_digest())
+    out << " dd " << std::hex << oi.data_digest << std::dec;
+  if (oi.is_omap_digest())
+    out << " od " << std::hex << oi.omap_digest << std::dec;
+
   out << ")";
   return out;
 }
