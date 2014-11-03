@@ -1849,7 +1849,9 @@ reprotect_and_return_err:
 	} else {
 	  do {
 	    uint64_t incompatible_features;
+	    bool read_only = ictx->read_only || ictx->snap_id != CEPH_NOSNAP;
 	    r = cls_client::get_mutable_metadata(&ictx->md_ctx, ictx->header_oid,
+						 read_only,
 						 &ictx->size, &ictx->features,
 						 &incompatible_features,
 						 &ictx->lockers,
