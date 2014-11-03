@@ -30,6 +30,10 @@ namespace librbd {
 	       uint64_t objectno, uint64_t off, uint64_t len,
 	       librados::snap_t snap_id, Context *completion,
 	       bool hide_enoent);
+    AioRequest(ImageCtx *ictx, const std::string &oid,
+               uint64_t objectno, uint64_t off, uint64_t len,
+               const ::SnapContext &snapc, librados::snap_t snap_id,
+               Context *completion, bool hide_enoent);
     virtual ~AioRequest();
 
     void complete(int r)
@@ -57,16 +61,17 @@ namespace librbd {
     AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
+    std::vector<librados::snap_t> m_snaps;
   };
 
   class AioRead : public AioRequest {
   public:
     AioRead(ImageCtx *ictx, const std::string &oid,
 	    uint64_t objectno, uint64_t offset, uint64_t len,
-	    vector<pair<uint64_t,uint64_t> >& be,
+	    vector<pair<uint64_t,uint64_t> >& be, const ::SnapContext &snapc,
 	    librados::snap_t snap_id, bool sparse,
 	    Context *completion)
-      : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
+      : AioRequest(ictx, oid, objectno, offset, len, snapc, snap_id, completion,
 		   false),
 	m_buffer_extents(be),
 	m_tried_parent(false), m_sparse(sparse),
@@ -169,7 +174,6 @@ namespace librbd {
     librados::ObjectWriteOperation m_write;
     librados::ObjectWriteOperation m_copyup;
     uint64_t m_snap_seq;
-    std::vector<librados::snap_t> m_snaps;
 
   private:
     void send_copyup();

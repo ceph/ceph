@@ -25,13 +25,17 @@ namespace librbd {
     m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
-			 librados::snap_t snap_id,
+			 const ::SnapContext &snapc, librados::snap_t snap_id,
 			 Context *completion,
 			 bool hide_enoent) :
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
     m_completion(completion), m_parent_completion(NULL),
-    m_hide_enoent(hide_enoent) {}
+    m_hide_enoent(hide_enoent) {
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+         it != snapc.snaps.end(); ++it)
+      m_snaps.push_back(it->val);
+  }
 
   AioRequest::~AioRequest() {
     if (m_parent_completion) {
@@ -261,18 +265,12 @@ namespace librbd {
 			       const ::SnapContext &snapc, librados::snap_t snap_id,
 			       Context *completion,
 			       bool hide_enoent)
-    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion,
-		 hide_enoent),
+    : AioRequest(ictx, oid, object_no, object_off, len, snapc, snap_id, 
+                 completion, hide_enoent),
       m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
   {
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
-
-    // TODO: find a way to make this less stupid
-    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
-	 it != snapc.snaps.end(); ++it) {
-      m_snaps.push_back(it->val);
-    }
   }
 
   void AbstractWrite::guard_write()

@@ -3136,6 +3136,7 @@ reprotect_and_return_err:
 
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
     ictx->snap_lock.put_read();
 
     // map
@@ -3174,7 +3175,7 @@ reprotect_and_return_err:
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
 	AioRead *req = new AioRead(ictx, q->oid.name, 
 				   q->objectno, q->offset, q->length,
-				   q->buffer_extents,
+				   q->buffer_extents, snapc,
 				   snap_id, true, req_comp);
 	req_comp->set_req(req);
 	c->add_request();
