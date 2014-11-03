@@ -134,4 +134,17 @@ extern std::string get_str_map_key(
     const std::string &key,
     const std::string *fallback_key = NULL);
 
+
+// This function's only purpose is to check whether a given map has only
+// ONE key with an empty value (which would mean that 'get_str_map()' read
+// a map in the form of 'VALUE', without any KEY/VALUE pairs) and, in such
+// event, to assign said 'VALUE' to a given 'def_key', such that we end up
+// with a map of the form "m = { 'def_key' : 'VALUE' }" instead of the
+// original "m = { 'VALUE' : '' }".
+int get_conf_str_map_helper(
+    const std::string &str,
+    std::ostringstream &oss,
+    std::map<std::string,std::string> *m,
+    const std::string &def_key);
+
 #endif
