@@ -2931,8 +2931,8 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
     ldout(cct, 0) << "ERROR: complete_atomic_overwrite returned r=" << r << dendl;
   }
 
-  r = complete_update_index(bucket, obj.object, index_tag, poolid, epoch, size,
-                            ut, etag, content_type, &acl_bl, category, remove_objs);
+  r = complete_update_index(bucket, obj, index_tag, poolid, epoch, size,
+      ut, etag, content_type, &acl_bl, category, remove_objs);
   if (r < 0)
     goto done_cancel;
 
@@ -2948,7 +2948,7 @@ int RGWRados::put_obj_meta_impl(void *ctx, rgw_obj& obj,  uint64_t size,
   return 0;
 
 done_cancel:
-  int ret = complete_update_index_cancel(bucket, obj.object, index_tag);
+  int ret = complete_update_index_cancel(bucket, obj, index_tag);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
   }
@@ -3909,9 +3909,9 @@ int RGWRados::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& ob
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0 || r == -ENOENT) {
     uint64_t epoch = ref.ioctx.get_last_version();
-    r = complete_update_index_del(bucket, obj.object, tag, poolid, epoch);
+    r = complete_update_index_del(bucket, obj, tag, poolid, epoch);
   } else {
-    int ret = complete_update_index_cancel(bucket, obj.object, tag);
+    int ret = complete_update_index_cancel(bucket, obj, tag);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: complete_update_index_cancel returned ret=" << ret << dendl;
     }
@@ -3970,7 +3970,7 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   get_obj_bucket_and_oid_key(obj, bucket, oid, key);
 
   string tag;
-  int r = complete_update_index_del(bucket, obj.object, tag, -1 /* pool */, 0);
+  int r = complete_update_index_del(bucket, obj, tag, -1 /* pool */, 0);
 
   return r;
 }
@@ -4481,13 +4481,12 @@ int RGWRados::prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
       append_rand_alpha(cct, tag, tag, 32);
     }
   }
-  ret = cls_obj_prepare_op(bucket, op, tag,
-                               obj.object, obj.key);
+  ret = cls_obj_prepare_op(bucket, op, tag, obj.object, obj.key, obj.get_hash_object());
 
   return ret;
 }
 
-int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
+int RGWRados::complete_update_index(rgw_bucket& bucket, rgw_obj& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                                     utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
                                     list<string> *remove_objs)
 {
@@ -4495,7 +4494,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
     return 0;
 
   RGWObjEnt ent;
-  ent.name = oid;
+  ent.name = oid.object;
   ent.size = size;
   ent.mtime = ut;
   ent.etag = etag;
@@ -4510,7 +4509,7 @@ int RGWRados::complete_update_index(rgw_bucket& bucket, string& oid, string& tag
   ent.owner_display_name = owner.get_display_name();
   ent.content_type = content_type;
 
-  int ret = cls_obj_complete_add(bucket, tag, poolid, epoch, ent, category, remove_objs);
+  int ret = cls_obj_complete_add(bucket, tag, poolid, epoch, ent, category, remove_objs, oid.get_hash_object());
 
   return ret;
 }
@@ -4629,10 +4628,10 @@ done:
 
   if (update_index) {
     if (ret >= 0) {
-      ret = complete_update_index(bucket, dst_obj.object, tag, poolid, epoch, size,
+      ret = complete_update_index(bucket, dst_obj, tag, poolid, epoch, size,
                                   ut, etag, content_type, &acl_bl, category, NULL);
     } else {
-      int r = complete_update_index_cancel(bucket, dst_obj.object, tag);
+      int r = complete_update_index_cancel(bucket, dst_obj, tag);
       if (r < 0) {
         ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
       }
@@ -6102,11 +6101,11 @@ int RGWRados::cls_rgw_init_index(librados::IoCtx& index_ctx, librados::ObjectWri
 }
 
 int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
-                                 string& name, string& locator)
+                                 string& name, string& locator, const string& index_hash_object)
 {
   librados::IoCtx index_ctx;
   string bucket_obj;
-  int ret = open_bucket_index_shard(bucket, index_ctx, name, &bucket_obj);
+  int ret = open_bucket_index_shard(bucket, index_ctx, index_hash_object, &bucket_obj);
   ldout(cct, 20) << " bucket index object: " << bucket_obj << dendl;
   if (ret < 0)
     return ret;
@@ -6120,11 +6119,11 @@ int RGWRados::cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag
 int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
                                   int64_t pool, uint64_t epoch,
                                   RGWObjEnt& ent, RGWObjCategory category,
-				  list<string> *remove_objs)
+				  list<string> *remove_objs, const string& index_hash_object)
 {
   librados::IoCtx index_ctx;
   string bucket_obj;
-  int ret = open_bucket_index_shard(bucket, index_ctx, ent.name, &bucket_obj);
+  int ret = open_bucket_index_shard(bucket, index_ctx, index_hash_object, &bucket_obj);
   ldout(cct, 20) << " bucket index object: " << bucket_obj << dendl;
   if (ret < 0)
     return ret;
@@ -6153,25 +6152,25 @@ int RGWRados::cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& ta
 int RGWRados::cls_obj_complete_add(rgw_bucket& bucket, string& tag,
                                    int64_t pool, uint64_t epoch,
                                    RGWObjEnt& ent, RGWObjCategory category,
-                                   list<string> *remove_objs)
+                                   list<string> *remove_obj, const string& index_hash_object)
 {
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, pool, epoch, ent, category, remove_objs);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, pool, epoch, ent, category, remove_obj, index_hash_object);
 }
 
 int RGWRados::cls_obj_complete_del(rgw_bucket& bucket, string& tag,
                                    int64_t pool, uint64_t epoch,
-                                   string& name)
+                                   string& name, const string& index_hash_object)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL, index_hash_object);
 }
 
-int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name)
+int RGWRados::cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name, const string& index_hash_object)
 {
   RGWObjEnt ent;
   ent.name = name;
-  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL);
+  return cls_obj_complete_op(bucket, CLS_RGW_OP_ADD, tag, -1 /* pool id */, 0, ent, RGW_OBJ_CATEGORY_NONE, NULL, index_hash_object);
 }
 
 int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout)
@@ -6251,15 +6250,15 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const str
       librados::IoCtx sub_ctx;
       sub_ctx.dup(index_ctx);
       r = check_disk_state(sub_ctx, bucket, dirent, e, updates[vnames[pos]]);
-      if (r < 0) {
-        if (r == -ENOENT)
-          continue;
-        else
+      if (r < 0 && r != -ENOENT) {
           return r;
       }
     }
-    m[e.name] = e;
-    ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
+    if (r >= 0) {
+      m[e.name] = e;
+      ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.name << dendl;
+      ++count;
+    }
 
     // Refresh the candidates map
     candidates.erase(candidates.begin());
@@ -6267,7 +6266,6 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const str
     if (vcurrents[pos] != vends[pos]) {
       candidates[vcurrents[pos]->second.name] = pos;
     }
-    ++count;
   }
 
   // Suggest updates if there is any
@@ -6290,6 +6288,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, const string& start, const str
   }
   if (m.size())
     *last_entry = m.rbegin()->first;
+
   return 0;
 }
 

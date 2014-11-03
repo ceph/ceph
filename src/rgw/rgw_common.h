@@ -1043,6 +1043,9 @@ public:
 
   bool in_extra_data; /* in-memory only member, does not serialize */
 
+  // Represents the hash index source for this object once it is set (non-empty)
+  std::string index_hash_source;
+
   rgw_obj() : in_extra_data(false) {}
   rgw_obj(const char *b, const char *o) : in_extra_data(false) {
     rgw_bucket _b(b);
@@ -1141,6 +1144,9 @@ public:
       return orig_key;
   }
 
+  string& get_hash_object() {
+    return index_hash_source.empty() ? object : index_hash_source;
+  }
   /**
    * Translate a namespace-mangled object name to the user-facing name
    * existing in the given namespace.
