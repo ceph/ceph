@@ -3236,7 +3236,7 @@ reprotect_and_return_err:
                          << " is_safe_and_cb " << rados_aio_is_safe_and_cb(c)
                          << dendl;
 
-    ictx->copyup_queue_lock.Lock();
+    Mutex::Locker l(ictx->copyup_queue_lock);
     for (map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr = ictx->copyup_queue.begin();
           itr != ictx->copyup_queue.end(); ++itr) {
       if (((itr->second).second)->pc == c) {
@@ -3260,6 +3260,5 @@ reprotect_and_return_err:
     }
     ldout(ictx->cct, 20) << "rbd_copyup_cb:: after cleanup: size = "
                          << ictx->copyup_queue.size() << dendl;
-    ictx->copyup_queue_lock.Unlock();
   }
 }

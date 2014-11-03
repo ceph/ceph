@@ -650,7 +650,7 @@ namespace librbd {
 
   void ImageCtx::wait_last_completions()
   {
-    copyup_queue_lock.Lock();
+    Mutex::Locker l(copyup_queue_lock);
     while (!copyup_queue.empty()) {
       map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr
          = copyup_queue.begin();
@@ -671,7 +671,6 @@ namespace librbd {
       copyup_queue.erase(itr);
     }
     ldout(cct,20) << "wait_last_completions:: after cleanup: size = " << copyup_queue.size() << dendl;
-    copyup_queue_lock.Unlock();
   }
 
   ceph::bufferlist* ImageCtx::alloc_copyup_queue_slot(uint64_t ono)
@@ -690,11 +689,10 @@ namespace librbd {
   void ImageCtx::kickoff_copyup(uint64_t ono, librados::AioCompletion *copyup_completion)
   {
     map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr;
-    copyup_queue_lock.Lock();
+    Mutex::Locker l(copyup_queue_lock);
     itr = copyup_queue.find(ono);
     assert(NULL == itr->second.second);
     itr->second.second = copyup_completion;
-    copyup_queue_lock.Unlock();
     ldout(cct, 20) << "kickoff_copyup:: kick off writing slot back, size = "
                    << copyup_queue.size() << dendl;
   }
