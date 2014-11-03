@@ -25,7 +25,23 @@ if MYDIR.endswith('src') and \
         os.environ['LD_LIBRARY_PATH'] = MYLIBPATH
         print >> sys.stderr, DEVMODEMSG
         os.execvp('python', ['python'] + sys.argv)
-    sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
+
+    # Add all Pybind modules
+    pybind_modules = [
+        'pybind/ceph',
+        'pybind/rbd',
+        'pybind/rados',
+        'pybind/cephfs',
+    ]
+
+    pybind_paths = [
+        os.path.join(MYDIR, module)
+        for module in pybind_modules
+    ]
+
+    for pybind_path in pybind_paths:
+        if pybind_path not in sys.path:
+            sys.path.insert(0, pybind_path)
 
 
 def parse_args():
