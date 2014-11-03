@@ -607,14 +607,15 @@ void MDLog::_trim_expired_segments()
     }
     
     dout(10) << "_trim_expired_segments trimming expired "
-	     << ls->seq << "/" << ls->offset << dendl;
+	     << ls->seq << "/0x" << std::hex << ls->offset << std::dec << dendl;
     expired_events -= ls->num_events;
     expired_segments.erase(ls);
     num_events -= ls->num_events;
       
     // this was the oldest segment, adjust expire pos
-    if (journaler->get_expire_pos() < ls->offset)
-      journaler->set_expire_pos(ls->offset);
+    if (journaler->get_expire_pos() < ls->end) {
+      journaler->set_expire_pos(ls->end);
+    }
     
     logger->set(l_mdl_expos, ls->offset);
     logger->inc(l_mdl_segtrm);
