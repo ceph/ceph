@@ -5,6 +5,7 @@ import datetime
 import time
 from textwrap import dedent
 import os
+from StringIO import StringIO
 from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 
@@ -101,7 +102,7 @@ class CephFSMount(object):
     def _run_python(self, pyscript):
         return self.client_remote.run(args=[
             'sudo', 'adjust-ulimits', 'daemon-helper', 'kill', 'python', '-c', pyscript
-        ], wait=False, stdin=run.PIPE)
+        ], wait=False, stdin=run.PIPE, stdout=StringIO())
 
     def run_python(self, pyscript):
         p = self._run_python(pyscript)
@@ -322,3 +323,16 @@ class CephFSMount(object):
 
     def get_osd_epoch(self):
         raise NotImplementedError()
+
+    def path_to_ino(self, fs_path):
+        abs_path = os.path.join(self.mountpoint, fs_path)
+
+        pyscript = dedent("""
+            import os
+            import stat
+
+            print os.stat("{path}").st_ino
+            """).format(path=abs_path)
+        proc = self._run_python(pyscript)
+        proc.wait()
+        return int(proc.stdout.getvalue().strip())
