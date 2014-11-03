@@ -30,6 +30,7 @@ typedef enum {
   CLOG_SEC = 2,
   CLOG_WARN = 3,
   CLOG_ERROR = 4,
+  CLOG_UNKNOWN = -1,
 } clog_type;
 
 static const std::string CLOG_CHANNEL_NONE    = "none";
@@ -42,6 +43,7 @@ static const std::string CLOG_CHANNEL_AUDIT   = "audit";
  */
 int clog_type_to_syslog_level(clog_type t);
 
+clog_type string_to_clog_type(const string& s);
 int string_to_syslog_level(string s);
 int string_to_syslog_facility(string s);
 
