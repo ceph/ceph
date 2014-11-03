@@ -676,14 +676,13 @@ namespace librbd {
 
   ceph::bufferlist* ImageCtx::alloc_copyup_queue_slot(uint64_t ono)
   {
+    assert(copyup_queue_lock.is_locked());
     ceph::bufferlist *entire_object = new ceph::bufferlist();
     pair<ceph::bufferlist*, librados::AioCompletion *> new_entry =
         pair<ceph::bufferlist*, librados::AioCompletion *>(entire_object, NULL);
     pair<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion *> >new_slot =
         pair<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion *> >(ono, new_entry);
-    copyup_queue_lock.Lock();
     copyup_queue.insert(new_slot);
-    copyup_queue_lock.Unlock();
     ldout(cct, 20) << "alloc_copyup_queue_slot:: allocate slot, size = "<< copyup_queue.size() << dendl;
     return entire_object;
   }
