@@ -263,6 +263,9 @@ Configuring Nova
 In order to boot all the virtual machines directly into Ceph, you must
 configure the ephemeral backend for Nova.
 
+Havana and Icehouse
+~~~~~~~~~~~~~~~~~~~
+
 Havana and Icehouse require patches to implement copy-on-write cloning and fix
 bugs with image size and live migration of ephemeral disks on rbd. These are
 available in branches based on upstream Nova `stable/havana`_  and
@@ -292,6 +295,39 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 To ensure a proper live-migration, use the following flags::
 
     libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
+    
+    
+Juno
+~~~~
+
+In Juno, Ceph block device was moved under the ``[libvirt]`` section. 
+On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]`` 
+section and add::
+
+    [libvirt]
+    images_type=rbd
+    images_rbd_pool=vms
+    images_rbd_ceph_conf=/etc/ceph/ceph.conf
+    rbd_user=cinder
+    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+
+
+It is also a good practice to disable file injection. While booting an
+instance, Nova usually attempts to open the rootfs of the virtual machine.
+Then, Nova injects values such as password, ssh keys etc. directly into the
+filesystem. However, it is better to rely on the metadata service and
+``cloud-init``.
+
+On every Compute node, edit ``/etc/nova/nova.conf`` and add the following
+under the ``[libvirt]`` section::
+
+    inject_password=false
+    inject_key=false
+    inject_partition=-2
+
+To ensure a proper live-migration, use the following flags::
+
+    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
 
 
 Restart OpenStack
