@@ -282,10 +282,14 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t features, snap_id;
+  bool read_only = false;
 
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(snap_id, iter);
+    if (!iter.end()) {
+      ::decode(read_only, iter);
+    }
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -309,7 +313,8 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     features = snap.features;
   }
 
-  uint64_t incompatible = features & RBD_FEATURES_INCOMPATIBLE;
+  uint64_t incompatible = (read_only ? features & RBD_FEATURES_INCOMPATIBLE :
+				       features & RBD_FEATURES_RW_INCOMPATIBLE);
   ::encode(features, *out);
   ::encode(incompatible, *out);
 
