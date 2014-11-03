@@ -508,13 +508,17 @@ def update_inventory(node_dict):
     log.info("Updating %s on lock server", name)
     response = requests.put(
         uri,
-        json.dumps(node_dict))
+        json.dumps(node_dict),
+        headers={'content-type': 'application/json'},
+        )
     if response.status_code == 404:
         log.info("Creating new node %s on lock server", name)
         uri = os.path.join(config.lock_server, 'nodes', '')
         response = requests.post(
             uri,
-            json.dumps(node_dict))
+            json.dumps(node_dict),
+            headers={'content-type': 'application/json'},
+        )
     if not response.ok:
         log.error("Node update/creation failed for %s: %s",
                   name, response.text)
