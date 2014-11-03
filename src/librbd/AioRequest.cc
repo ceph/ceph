@@ -268,8 +268,11 @@ namespace librbd {
     librados::ObjectWriteOperation copyup_cor;
     copyup_cor.exec("rbd", "copyup", *m_entire_object);
 
+    cb_args_t *cb_args = new cb_args_t();
+    cb_args->ictx = m_ictx;
+    cb_args->object_no = m_object_no;
     librados::AioCompletion *copyup_completion =
-      librados::Rados::aio_create_completion(m_ictx, NULL, rbd_copyup_cb);
+      librados::Rados::aio_create_completion(cb_args, NULL, rbd_copyup_cb);
     m_ictx->kickoff_copyup(m_object_no, copyup_completion);
     m_ictx->md_ctx.aio_operate(m_oid, copyup_completion, &copyup_cor,
                                snapc.seq.val, snaps);

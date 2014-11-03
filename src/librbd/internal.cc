@@ -3227,7 +3227,7 @@ reprotect_and_return_err:
 
   void rbd_copyup_cb(rados_completion_t c, void *arg)
   {
-    librbd::ImageCtx *ictx = (librbd::ImageCtx *)arg;
+    librbd::ImageCtx *ictx = ((librbd::AioRead::cb_args_t *)arg)->ictx;
 
     ldout(ictx->cct, 20) << "rbd_copyup_cb::looking for aio_completion_impl " << c
                          << ": is_complete " << rados_aio_is_complete(c)
@@ -3237,27 +3237,30 @@ reprotect_and_return_err:
                          << dendl;
 
     Mutex::Locker l(ictx->copyup_queue_lock);
-    for (map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr = ictx->copyup_queue.begin();
-          itr != ictx->copyup_queue.end(); ++itr) {
-      if (((itr->second).second)->pc == c) {
-        librados::AioCompletion *comp = (itr->second).second;
-        rados_aio_release(comp->pc);
-        ldout(ictx->cct, 20) << "rbd_copyup_cb::found aio_completion_impl "<< c
-                             << " in copyup_queue " << comp->pc
-                             << " releasing ono= " << itr->first
-                             << ": is_complete " << rados_aio_is_complete(comp->pc)
-                             << " is_safe " << rados_aio_is_safe(comp->pc)
-                             << " is_complete_and_cb " << rados_aio_is_complete_and_cb(comp->pc)
-                             << " is_safe_and_cb " << rados_aio_is_safe_and_cb(comp->pc)
-                             << dendl;
+    map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator it =
+      ictx->copyup_queue.find(((librbd::AioRead::cb_args_t *)arg)->object_no);
 
-        // free bufferlist holding the entire object
-        delete (itr->second).first;
-        (itr->second).second = NULL;
-        ictx->copyup_queue.erase(itr);
-        break;
-      }
-    }
+    assert(it != ictx->copyup_queue.end());
+    assert(((it->second).second)->pc == c);
+
+    librados::AioCompletion *comp = (it->second).second;
+    rados_aio_release(comp->pc);
+    ldout(ictx->cct, 20) << "rbd_copyup_cb::found aio_completion_impl "<< c
+                         << " in copyup_queue " << comp->pc
+                         << " releasing ono= " << it->first
+                         << ": is_complete " << rados_aio_is_complete(comp->pc)
+                         << " is_safe " << rados_aio_is_safe(comp->pc)
+                         << " is_complete_and_cb " << rados_aio_is_complete_and_cb(comp->pc)
+                         << " is_safe_and_cb " << rados_aio_is_safe_and_cb(comp->pc)
+                         << dendl;
+
+    // free bufferlist holding the entire object
+    delete (it->second).first;
+    (it->second).second = NULL;
+    ictx->copyup_queue.erase(it);
+
+    delete (librbd::AioRead::cb_args_t *)arg;
+
     ldout(ictx->cct, 20) << "rbd_copyup_cb:: after cleanup: size = "
                          << ictx->copyup_queue.size() << dendl;
   }

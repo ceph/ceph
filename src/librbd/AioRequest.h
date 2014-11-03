@@ -88,6 +88,11 @@ namespace librbd {
     }
     std::map<uint64_t, uint64_t> m_ext_map;
 
+    typedef struct {
+      ImageCtx *ictx;
+      uint64_t object_no;
+    } cb_args_t;
+
     friend class C_AioRead;
 
   private:
