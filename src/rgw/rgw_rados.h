@@ -1845,12 +1845,12 @@ public:
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
-                         string& name, string& locator);
+                         string& name, string& locator, const string& index_hash_object);
   int cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
-  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
-  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name);
-  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
+                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs, const string& index_hash_object);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs, const string& index_hash_object);
+  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name, const string& index_hash_object);
+  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name, const string& index_hash_object);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
   int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix, uint32_t hint_num,
                       map<string, RGWObjEnt>& m, bool *is_truncated, string *last_entry,
@@ -1859,20 +1859,20 @@ public:
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int *num_aio);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                            RGWModifyOp op, rgw_obj& oid, string& tag);
-  int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
+  int complete_update_index(rgw_bucket& bucket, rgw_obj& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
 			    list<string> *remove_objs);
-  int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, int64_t pool, uint64_t epoch) {
+  int complete_update_index_del(rgw_bucket& bucket, rgw_obj& oid, string& tag, int64_t pool, uint64_t epoch) {
     if (bucket_is_system(bucket))
       return 0;
 
-    return cls_obj_complete_del(bucket, tag, pool, epoch, oid);
+    return cls_obj_complete_del(bucket, tag, pool, epoch, oid.object, oid.get_hash_object());
   }
-  int complete_update_index_cancel(rgw_bucket& bucket, string& oid, string& tag) {
+  int complete_update_index_cancel(rgw_bucket& bucket, rgw_obj& oid, string& tag) {
     if (bucket_is_system(bucket))
       return 0;
 
-    return cls_obj_complete_cancel(bucket, tag, oid);
+    return cls_obj_complete_cancel(bucket, tag, oid.object, oid.get_hash_object());
   }
   int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
