@@ -3969,6 +3969,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           t->touch(soid);
           ctx->delta_stats.num_objects++;
           obs.exists = true;
+	  obs.oi.new_object();
         }
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
                           op.alloc_hint.expected_write_size);
@@ -4053,7 +4054,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.set_omap_digest(-1);
 	}
+	if (op.extent.offset == 0 && op.extent.length == oi.size)
+	  obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
+	else
+	  obs.oi.clear_data_digest();
       }
       break;
       
@@ -4106,7 +4112,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.set_omap_digest(-1);  // no omap yet
 	}
+	obs.oi.set_data_digest(osd_op.indata.crc32c(-1));
+
 	interval_set<uint64_t> ch;
 	if (oi.size > 0)
 	  ch.insert(0, oi.size);
@@ -4146,6 +4155,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ch.insert(op.extent.offset, op.extent.length);
 	  ctx->modified_ranges.union_of(ch);
 	  ctx->delta_stats.num_wr++;
+	  oi.clear_data_digest();
 	} else {
 	  // no-op
 	}
@@ -4179,6 +4189,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             if (!obs.exists) {
               ctx->delta_stats.num_objects++;
               obs.exists = true;
+	      obs.oi.new_object();
             }
           }
 	}
@@ -4235,6 +4246,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	ctx->delta_stats.num_wr++;
 	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
+
+	oi.clear_data_digest();
       }
       break;
     
@@ -4258,6 +4271,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  t->touch(obs.oi.soid);
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.new_object();
 	}
 	if (op.clonerange.src_offset + op.clonerange.length > src_obc->obs.oi.size) {
 	  dout(10) << " clonerange source " << osd_op.soid << " "
@@ -4269,7 +4283,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	t->clone_range(src_obc->obs.oi.soid,
 		      obs.oi.soid, op.clonerange.src_offset,
 		      op.clonerange.length, op.clonerange.offset);
-		      
+
+	obs.oi.clear_data_digest();
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.clonerange.offset, op.clonerange.length, false);
@@ -4372,6 +4387,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  t->touch(soid);
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.new_object();
 	}
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -4743,7 +4759,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.set_data_digest(-1);
 	}
+	obs.oi.clear_omap_digest();
 	t->touch(soid);
 	map<string, bufferlist> to_set;
 	try {
@@ -4779,7 +4797,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
 	  obs.exists = true;
+	  obs.oi.set_data_digest(-1);
 	}
+	obs.oi.clear_omap_digest();
 	t->touch(soid);
 	t->omap_setheader(soid, osd_op.indata);
 	ctx->delta_stats.num_wr++;
@@ -4805,6 +4825,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.set_omap_digest(-1);
       break;
 
     case CEPH_OSD_OP_OMAPRMKEYS:
@@ -4836,6 +4857,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
+      obs.oi.clear_omap_digest();
       break;
 
     case CEPH_OSD_OP_COPY_GET_CLASSIC:
@@ -5028,6 +5050,7 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     ctx->delta_stats.num_bytes -= oi.size;
   }
   oi.size = 0;
+  oi.new_object();
 
   // disconnect all watchers
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
@@ -5169,6 +5192,14 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
       obs.oi.size = rollback_to->obs.oi.size;
+      if (rollback_to->obs.oi.is_data_digest())
+	obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
+      else
+	obs.oi.clear_data_digest();
+      if (rollback_to->obs.oi.is_omap_digest())
+	obs.oi.set_omap_digest(rollback_to->obs.oi.omap_digest);
+      else
+	obs.oi.clear_omap_digest();
       snapset.head_exists = true;
     }
   }
