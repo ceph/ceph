@@ -381,6 +381,7 @@ private:
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed);
   void create_logger();
+  void update_log_config();
 
   void bcast_mds_map();  // to mounted clients
 
