@@ -1582,7 +1582,7 @@ def main_prepare(args):
             )
 
         if dmcrypt_type is None:
-            dmcrypt_type = "plain"
+            dmcrypt_type = "luks"
 
         if dmcrypt_type == "plain":
             if dmcrypt_keysize_str is None:
