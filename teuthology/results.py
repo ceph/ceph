@@ -64,6 +64,14 @@ def results(args):
 
 
 def generate_coverage(args):
+    coverage_config_keys = ('coverage_output_dir', 'coverage_html_dir',
+                            'coverage_tools_dir')
+    for key in coverage_config_keys:
+        if key not in args.teuthology_config:
+            log.warn(
+                "'%s' not in teuthology config; skipping coverage report",
+                key)
+            return
     log.info('starting coverage generation')
     subprocess.Popen(
         args=[
