@@ -48,15 +48,14 @@ struct ceph_entity_name {
 	__le64 num;
 } __attribute__ ((packed));
 
-typedef enum
-{
+typedef enum {
 	CEPH_ENTITY_TYPE_MON	= 0x01,
 	CEPH_ENTITY_TYPE_MDS	= 0x02,
 	CEPH_ENTITY_TYPE_OSD	= 0x04,
 	CEPH_ENTITY_TYPE_CLIENT	= 0x08,
 	CEPH_ENTITY_TYPE_AUTH	= 0x20,
 	CEPH_ENTITY_TYPE_ANY	= 0xFF,
-} CephEntityType;
+} ceph_entity_type_t;
 
 extern const char *ceph_entity_type_name(int type);
 
