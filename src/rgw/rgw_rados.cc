@@ -4212,8 +4212,18 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   else
     ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
 
+  /* an object might not be olh yet, but could have olh id tag, so we should set it anyway if
+   * it exist, and not only if is_olh() returns true
+   */
+  iter = s->attrset.find(RGW_ATTR_OLH_ID_TAG);
+  if (iter != s->attrset.end()) {
+    s->olh_tag = iter->second;
+  }
+
   if (is_olh(s->attrset)) {
     s->is_olh = true;
+
+    ldout(cct, 20) << __func__ << ": setting s->olh_tag to " << s->olh_tag.c_str() << dendl;
 
     if (need_follow_olh) {
       return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
@@ -5426,13 +5436,13 @@ int RGWRados::obj_operate(rgw_obj& obj, ObjectReadOperation *op)
   return ref.ioctx.operate(ref.oid, op, &outbl);
 }
 
-int RGWRados::olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, string *obj_tag, string *op_tag)
+int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, string *op_tag)
 {
   ObjectWriteOperation op;
 
   assert(olh_obj.get_instance().empty());
 
-  bool curr_olh = is_olh(state->attrset);
+  bool curr_olh = is_olh(state.attrset);
 
   /*
    * 3 possible cases: olh object doesn't exist, it exists as an olh, it exists as a regular object.
@@ -5440,31 +5450,51 @@ int RGWRados::olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, s
    * steps, first change its tag and set the olh pending attrs. Once write is done we'll need to
    * truncate it, remove extra attrs, and send it to the garbage collection. The bucket index olh
    * log will reflect that.
+   *
+   * Need to generate separate olh and obj tags, as olh can be colocated with object data. obj_tag
+   * is used for object data instance, olh_tag for olh instance.
    */
-  if (state->exists) {
+  if (state.exists) {
     /* guard against racing writes */
-    op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, state->obj_tag);
+    bucket_index_guard_olh_op(state, op);
   }
 
-  if (!state->exists || !curr_olh) {
-    /* need to generate a new object tag */
-    if (!state->exists) {
+  if (!state.exists || !curr_olh) {
+    /* need to generate a new object & olh tags */
+    if (!state.exists) {
       op.create(true);
     }
-    int ret = gen_rand_alphanumeric_lower(cct, obj_tag, 32);
+
+    /* obj tag */
+    string obj_tag;
+    int ret = gen_rand_alphanumeric_lower(cct, &obj_tag, 32);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
       return ret;
     }
     bufferlist bl;
-    bl.append(obj_tag->c_str(), obj_tag->size());
+    bl.append(obj_tag.c_str(), obj_tag.size());
     op.setxattr(RGW_ATTR_ID_TAG, bl);
+
+    state.attrset[RGW_ATTR_ID_TAG] = bl;
+    state.obj_tag = bl;
+
+    /* olh tag */
+    string olh_tag;
+    ret = gen_rand_alphanumeric_lower(cct, &olh_tag, 32);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
+      return ret;
+    }
+    bufferlist olh_bl;
+    olh_bl.append(olh_tag.c_str(), olh_tag.size());
+    op.setxattr(RGW_ATTR_OLH_ID_TAG, olh_bl);
+
+    state.attrset[RGW_ATTR_OLH_ID_TAG] = bl;
+    state.olh_tag = olh_bl;
 
     bufferlist verbl;
     op.setxattr(RGW_ATTR_OLH_VER, verbl);
-
-    state->attrset[RGW_ATTR_ID_TAG] = bl;
-    state->obj_tag = bl;
   }
 
 #define OLH_PENDING_TAG_LEN 32
@@ -5489,24 +5519,25 @@ int RGWRados::olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, s
     return ret;
   }
 
-  state->exists = true;
-  state->attrset[attr_name] = bl;
+  state.exists = true;
+  state.attrset[attr_name] = bl;
 
   return 0;
 }
 
-int RGWRados::olh_init_modification(RGWObjState *state, rgw_obj& obj, string *obj_tag, string *op_tag)
+int RGWRados::olh_init_modification(RGWObjState& state, rgw_obj& obj, string *op_tag)
 {
   int ret;
 
   do {
-    ret = olh_init_modification_impl(state, obj, obj_tag, op_tag);
+    ret = olh_init_modification_impl(state, obj, op_tag);
   } while (ret == -EEXIST);
 
   return ret;
 }
 
-int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag,
+int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instance, bool delete_marker,
+                                    const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta)
 {
   rgw_rados_ref ref;
@@ -5525,12 +5556,18 @@ int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, c
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, delete_marker, op_tag, meta);
+  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, olh_state.olh_tag, delete_marker, op_tag, meta);
   if (ret < 0) {
     return ret;
   }
 
   return 0;
+}
+
+void RGWRados::bucket_index_guard_olh_op(RGWObjState& olh_state, ObjectOperation& op)
+{
+  ldout(cct, 20) << __func__ << "(): olh_state.olh_tag=" << string(olh_state.olh_tag.c_str(), olh_state.olh_tag.length()) << dendl;
+  op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_state.olh_tag);
 }
 
 int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag)
@@ -5559,7 +5596,7 @@ int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& 
   return 0;
 }
 
-int RGWRados::bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
+int RGWRados::bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
                                         map<uint64_t, rgw_bucket_olh_log_entry> *log,
                                         bool *is_truncated)
 {
@@ -5578,18 +5615,18 @@ int RGWRados::bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instanc
     return ret;
   }
 
-#warning TODO ensure atomicity, use state
-
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
-  ret = cls_rgw_get_olh_log(index_ctx, oid, key, ver_marker, log, is_truncated);
-  if (ret < 0) {
+
+  ObjectReadOperation op;
+
+  ret = cls_rgw_get_olh_log(index_ctx, oid, op, key, ver_marker, log, is_truncated);
+  if (ret < 0)
     return ret;
-  }
 
   return 0;
 }
 
-int RGWRados::bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver)
+int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -5607,10 +5644,14 @@ int RGWRados::bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver)
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
-  ret = cls_rgw_trim_olh_log(index_ctx, oid, key, ver);
-  if (ret < 0) {
+
+  ObjectWriteOperation op;
+
+  cls_rgw_trim_olh_log(op, oid, key, ver);
+
+  ret = index_ctx.operate(oid, &op);
+  if (ret < 0)
     return ret;
-  }
 
   return 0;
 }
@@ -5622,8 +5663,8 @@ static void op_setxattr(librados::ObjectWriteOperation& op, const char *name, co
   op.setxattr(name, bl);
 }
 
-int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& obj,
-                            bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const string& bucket_owner, rgw_obj& obj,
+                            bufferlist& olh_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                             uint64_t *plast_ver)
 {
   if (log.empty()) {
@@ -5637,7 +5678,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
 
   map<uint64_t, rgw_bucket_olh_log_entry>::iterator iter = log.begin();
 
-  op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
+  op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
   op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
 
   bool need_to_link = false;
@@ -5712,8 +5753,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, const string& bucket_owner, r
     return r;
   }
 
-#warning need to protect the following
-  r = bucket_index_trim_olh_log(obj, last_ver);
+  r = bucket_index_trim_olh_log(state, obj, last_ver);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
   }
@@ -5730,11 +5770,11 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string
   uint64_t ver_marker = 0;
 
   do {
-    int ret = bucket_index_read_olh_log(state, obj, ver_marker, &log, &is_truncated);
+    int ret = bucket_index_read_olh_log(*state, obj, ver_marker, &log, &is_truncated);
     if (ret < 0) {
       return ret;
     }
-    ret = apply_olh_log(obj_ctx, bucket_owner, obj, state->obj_tag, log, &ver_marker);
+    ret = apply_olh_log(obj_ctx, *state, bucket_owner, obj, state->olh_tag, log, &ver_marker);
     if (ret < 0) {
       return ret;
     }
@@ -5746,40 +5786,44 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string
 int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta)
 {
   string op_tag;
-  string obj_tag;
 
   rgw_obj olh_obj = target_obj;
   olh_obj.clear_instance();
 
   RGWObjState *state = NULL;
 
-  int ret;
+  int ret = 0;
 
   do {
-    ret = get_obj_state(&obj_ctx, olh_obj, &state, NULL, false); /* don't follow olh */
-    if (ret < 0)
-      return ret;
-
-    ret = olh_init_modification(state, olh_obj, &obj_tag, &op_tag);
     if (ret == -ECANCELED) {
       obj_ctx.invalidate(olh_obj);
-      continue;
     }
+
+    ret = get_obj_state(&obj_ctx, olh_obj, &state, NULL, false); /* don't follow olh */
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = olh_init_modification(*state, olh_obj, &op_tag);
     if (ret < 0) {
       ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
-      return ret;
+      continue;
+    }
+
+    ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta);
+    if (ret < 0) {
+      ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      continue;
+    }
+
+    ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
+    if (ret < 0) {
+      ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
+      continue;
     }
   } while (ret == -ECANCELED);
 
-  ret = bucket_index_link_olh(target_obj, delete_marker, op_tag, meta);
   if (ret < 0) {
-    ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
-    return ret;
-  }
-
-  ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
-  if (ret < 0) {
-    ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
     return ret;
   }
 
@@ -5789,40 +5833,43 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj
 int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj)
 {
   string op_tag;
-  string obj_tag;
 
   rgw_obj olh_obj = target_obj;
   olh_obj.clear_instance();
 
   RGWObjState *state = NULL;
 
-  int ret;
+  int ret = 0;
 
   do {
+    if (ret == -ECANCELED) {
+      obj_ctx.invalidate(olh_obj);
+    }
+
     ret = get_obj_state(&obj_ctx, olh_obj, &state, NULL, false); /* don't follow olh */
     if (ret < 0)
       return ret;
 
-    ret = olh_init_modification(state, olh_obj, &obj_tag, &op_tag);
-    if (ret == -ECANCELED) {
-      obj_ctx.invalidate(olh_obj);
-      continue;
-    }
+    ret = olh_init_modification(*state, olh_obj, &op_tag);
     if (ret < 0) {
       ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " returned " << ret << dendl;
-      return ret;
+      continue;
+    }
+
+    ret = bucket_index_unlink_instance(target_obj, op_tag);
+    if (ret < 0) {
+      ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " returned " << ret << dendl;
+      continue;
+    }
+
+    ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
+    if (ret < 0) {
+      ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
+      continue;
     }
   } while (ret == -ECANCELED);
 
-  ret = bucket_index_unlink_instance(target_obj, op_tag);
   if (ret < 0) {
-    ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " returned " << ret << dendl;
-    return ret;
-  }
-
-  ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
-  if (ret < 0) {
-    ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
     return ret;
   }
 

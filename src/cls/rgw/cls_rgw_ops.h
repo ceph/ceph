@@ -147,6 +147,7 @@ WRITE_CLASS_ENCODER(rgw_cls_obj_complete_op)
 
 struct rgw_cls_link_olh_op {
   cls_rgw_obj_key key;
+  string olh_tag;
   bool delete_marker;
   string op_tag;
   struct rgw_bucket_dir_entry_meta meta;
@@ -156,6 +157,7 @@ struct rgw_cls_link_olh_op {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(key, bl);
+    ::encode(olh_tag, bl);
     ::encode(delete_marker, bl);
     ::encode(op_tag, bl);
     ::encode(meta, bl);
@@ -165,6 +167,7 @@ struct rgw_cls_link_olh_op {
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
     ::decode(key, bl);
+    ::decode(olh_tag, bl);
     ::decode(delete_marker, bl);
     ::decode(op_tag, bl);
     ::decode(meta, bl);

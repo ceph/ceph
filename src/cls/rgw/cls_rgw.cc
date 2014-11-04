@@ -1251,6 +1251,11 @@ public:
   void set_exists(bool exists) {
     olh_data_entry.exists = exists;
   }
+
+  const string& get_tag() { return olh_data_entry.tag; }
+  void set_tag(const string& tag) {
+    olh_data_entry.tag = tag;
+  }
 };
 
 /*
@@ -1357,6 +1362,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   if (olh_found) {
+    const string& olh_tag = olh.get_tag();
+    if (op.olh_tag != olh_tag) {
+      CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+      return -ECANCELED;
+    }
     if (olh.exists()) {
       /* found olh, previous instance is no longer the latest, need to update */
       BIVerObjEntry old_obj(hctx, olh.get_entry().key);
@@ -1375,6 +1385,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
     olh.inc_epoch();
+    olh.set_tag(op.olh_tag);
   }
 
   /* update the olh log */
