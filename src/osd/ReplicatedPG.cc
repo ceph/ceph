@@ -11553,7 +11553,8 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   } else {
     ob_local_mtime = obc->obs.oi.mtime;
   }
-  if (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) {
+  bool evict_mode_full = (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL);
+  if (!evict_mode_full && (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now)) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
     osd->logger->inc(l_osd_agent_skip);
     return false;
