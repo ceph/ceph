@@ -45,7 +45,7 @@ Darwin)
         if brew list $keg >/dev/null 2>&1; then
             echo "Found $keg"
         else
-            brew install keg
+            brew install $keg
         fi
     done
     ;;
