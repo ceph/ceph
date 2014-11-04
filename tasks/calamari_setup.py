@@ -2,11 +2,14 @@
 Calamari setup task
 """
 import contextlib
-import re
-import os
-import subprocess
 import logging
+import os
+import re
+import requests
+import shutil
+import subprocess
 import webbrowser
+
 from cStringIO import StringIO
 from teuthology.orchestra import run
 from teuthology import contextutil
@@ -14,13 +17,96 @@ from teuthology import misc
 
 log = logging.getLogger(__name__)
 
+ICE_VERSION_DEFAULT = '1.2.2'
+
+
+@contextlib.contextmanager
+def task(ctx, config):
+    """
+    Do the setup of a calamari server.
+
+    - calamari_setup:
+        version: 'v80.1'
+        ice_tool_dir: <directory>
+        iceball_location: <directory>
+
+    Options are:
+
+    version -- ceph version we are testing against (defaults to 80.1)
+    ice_tool_dir -- optional local directory where ice-tool exists or will
+                    be loaded (defaults to src in home directory)
+    ice_version  -- version of ICE we're testing (with default)
+    iceball_location -- Can be an HTTP URL, in which case fetch from this
+                        location, using 'ice_version' and distro information
+                        to select the right tarball.  Can also be a local
+                        path.  If local path is '.', and iceball is
+                        not already present, then we try to build
+                        an iceball using the ice_tool_dir commands.
+    ice_git_location -- location of ice tool on git
+    start_browser -- If True, start a browser.  To be used by runs that will
+                     bring up a browser quickly for human use.  Set to False
+                     for overnight suites that are testing for problems in
+                     the installation itself (defaults to False).
+    email -- email address for the user (defaults to x@y.com)
+    no_epel -- indicates if we should remove epel files prior to yum
+               installations.  Defaults to True.
+    calamari_user -- user name to log into gui (defaults to admin)
+    calamari_password -- calamari user password (defaults to admin)
+    """
+    cal_svr = None
+    start_browser = config.get('start_browser', False)
+    no_epel = config.get('no_epel', True)
+    for remote_, roles in ctx.cluster.remotes.items():
+        if 'client.0' in roles:
+            cal_svr = remote_
+            break
+    if not cal_svr:
+        raise RuntimeError('client.0 not found in roles')
+    with contextutil.nested(
+        lambda: adjust_yum_repos(ctx, cal_svr, no_epel),
+        lambda: calamari_install(config, cal_svr),
+        lambda: ceph_install(ctx, cal_svr),
+        lambda: calamari_connect(ctx, cal_svr),
+        lambda: browser(start_browser, cal_svr.hostname),
+    ):
+        yield
+
+
+@contextlib.contextmanager
+def adjust_yum_repos(ctx, cal_svr, no_epel):
+    """
+    For each remote machine, fix the repos if yum is used.
+    """
+    ice_distro = str(cal_svr.os)
+    if ice_distro.startswith('rhel') or ice_distro.startswith('centos'):
+        if no_epel:
+            for remote in ctx.cluster.remotes:
+                fix_yum_repos(remote, ice_distro)
+    try:
+        yield
+    finally:
+        if ice_distro.startswith('rhel') or ice_distro.startswith('centos'):
+            if no_epel:
+                for remote in ctx.cluster.remotes:
+                    restore_yum_repos(remote)
+
+
+def restore_yum_repos(remote):
+    """
+    Copy the old saved repo back in.
+    """
+    if remote.run(args=['sudo', 'rm', '-rf', '/etc/yum.repos.d']).exitstatus:
+        return False
+    if remote.run(args=['sudo', 'mv', '/etc/yum.repos.d.old',
+                        '/etc/yum.repos.d']).exitstatus:
+        return False
+
 
 def fix_yum_repos(remote, distro):
     """
     For yum calamari installations, the repos.d directory should only
     contain a repo file named rhel<version-number>.repo
     """
-    distroname, distroversion = distro.split()
     if distro.startswith('centos'):
         cmds = [
             'sudo mkdir /etc/yum.repos.d.old'.split(),
@@ -40,10 +126,8 @@ def fix_yum_repos(remote, distro):
             if remote.run(args=cmd).exitstatus:
                 return False
 
-        '''
-        map "distroversion" from Remote.os to a tuple of
-        (repo title, repo name descriptor, apt-mirror repo path chunk)
-        '''
+        # map "distroversion" from Remote.os to a tuple of
+        # (repo title, repo name descriptor, apt-mirror repo path chunk)
         yum_repo_params = {
             'rhel 6.4': ('rhel6-server', 'RHEL', 'rhel6repo-server'),
             'rhel 6.5': ('rhel6-server', 'RHEL', 'rhel6repo-server'),
@@ -70,15 +154,128 @@ def fix_yum_repos(remote, distro):
     return True
 
 
-def restore_yum_repos(remote):
+def get_iceball_with_http(urlbase, ice_version, ice_distro, destdir):
+    '''
+    Copy iceball with http to destdir
+    '''
+    url = '/'.join((
+        urlbase,
+        '{ver}/ICE-{ver}-{distro}.tar.gz'.format(
+            ver=ice_version, distro=ice_distro
+        )
+    ))
+    # stream=True means we don't download until copyfileobj below,
+    # and don't need a temp file
+    r = requests.get(url, stream=True)
+    filename = url.split('/')[-1]
+    with open(filename, 'w') as f:
+        shutil.copyfileobj(r.raw, f)
+    log.info('saved %s as %s' % (url, filename))
+
+
+@contextlib.contextmanager
+def calamari_install(config, cal_svr):
     """
-    Copy the old saved repo back in.
+    Install calamari
+
+    The steps here are:
+        -- Get the iceball, building it if necessary.
+        -- Copy the iceball to the calamari server, and untarring it.
+        -- Running ice-setup.py on the calamari server.
+        -- Running calamari-ctl initialize.
     """
-    if remote.run(args=['sudo', 'rm', '-rf', '/etc/yum.repos.d']).exitstatus:
-        return False
-    if remote.run(args=['sudo', 'mv', '/etc/yum.repos.d.old',
-                        '/etc/yum.repos.d']).exitstatus:
-        return False
+    ice_distro = str(cal_svr.os)
+    ice_distro = ice_distro.replace(" ", "")
+    client_id = str(cal_svr)
+    at_loc = client_id.find('@')
+    if at_loc > 0:
+        client_id = client_id[at_loc + 1:]
+    convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
+               'rhel7.0': 'rhel7', 'debian7': 'wheezy'}
+    version = config.get('version', 'v0.80.1')
+    email = config.get('email', 'x@x.com')
+    ice_tool_dir = config.get('ice_tool_dir', '%s%s%s' %
+                              (os.environ['HOME'], os.sep, 'src'))
+    calamari_user = config.get('calamari_user', 'admin')
+    calamari_password = config.get('calamari_passwd', 'admin')
+    git_icetool_loc = config.get('ice_git_location',
+                                 'git@github.com:inktankstorage')
+    if ice_distro in convert:
+        ice_distro = convert[ice_distro]
+    log.info('calamari server on %s' % ice_distro)
+    iceball_loc = config.get('iceball_location', '.')
+    ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
+    if iceball_loc.startswith('http'):
+        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '.')
+        iceball_loc = '.'
+    elif iceball_loc == '.':
+        ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
+        if not os.path.isdir(ice_tool_loc):
+            try:
+                subprocess.check_call(['git', 'clone',
+                                       git_icetool_loc + os.sep + 
+                                       'ice-tools.git',
+                                       ice_tool_loc])
+            except subprocess.CalledProcessError:
+                raise RuntimeError('client.0 not found in roles')
+        exec_ice = os.path.join(ice_tool_loc, 'iceball', 'ice_repo_tgz.py')
+        try:
+            subprocess.check_call([exec_ice, '-b', version, '-o', ice_distro])
+        except subprocess.CalledProcessError:
+            raise RuntimeError('Unable to create %s distro' % ice_distro)
+    gz_file = ''
+    for file_loc in os.listdir(iceball_loc):
+        sfield = '^ICE-.*{0}\.tar\.gz$'.format(ice_distro)
+        if re.search(sfield, file_loc):
+            if file_loc > gz_file:
+                gz_file = file_loc
+    lgz_file = os.path.join(iceball_loc, gz_file)
+    cal_svr.put_file(lgz_file, os.path.join('/tmp/', gz_file))
+    ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
+                      run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
+    if ret.exitstatus:
+        raise RuntimeError('remote tar failed')
+    icesetdata = 'yes\n%s\nhttp\n' % client_id
+    ice_in = StringIO(icesetdata)
+    ice_setup_io = StringIO()
+    ret = cal_svr.run(args=['sudo', 'python', 'ice_setup.py'], stdin=ice_in,
+                      stdout=ice_setup_io)
+    log.debug(ice_setup_io.getvalue())
+    # Run Calamari-ceph connect.
+    if ret.exitstatus:
+        raise RuntimeError('ice_setup.py failed')
+    icesetdata = '%s\n%s\n%s\n%s\n' % (calamari_user, email, calamari_password,
+                                       calamari_password)
+    ice_in = StringIO(icesetdata)
+    ret = cal_svr.run(args=['sudo', 'calamari-ctl', 'initialize'],
+                      stdin=ice_in, stdout=ice_setup_io)
+    log.debug(ice_setup_io.getvalue())
+    if ret.exitstatus:
+        raise RuntimeError('calamari-ctl initialize failed')
+    try:
+        yield
+    finally:
+        log.info('Cleaning up after Calamari installation')
+
+
+@contextlib.contextmanager
+def ceph_install(ctx, cal_svr):
+    """
+    Install ceph if ceph was not previously installed by teuthology.  This
+    code tests the case where calamari is installed on a brand new system.
+    """
+    loc_inst = False
+    if 'install' not in [x.keys()[0] for x in ctx.config['tasks']]:
+        loc_inst = True
+        ret = deploy_ceph(ctx, cal_svr)
+        if ret:
+            raise RuntimeError('ceph installs failed')
+    try:
+        yield
+    finally:
+        if loc_inst:
+            if not undeploy_ceph(ctx, cal_svr):
+                log.error('Cleanup of Ceph installed by Calamari-setup failed')
 
 
 def deploy_ceph(ctx, cal_svr):
@@ -148,170 +345,6 @@ def undeploy_ceph(ctx, cal_svr):
         ret &= remote.run(args=['sudo', 'rm', '-rf',
                                 '.ssh/known_hosts']).exitstatus
     return ret
-
-
-@contextlib.contextmanager
-def task(ctx, config):
-    """
-    Do the setup of a calamari server.
-
-    - calamari_setup:
-        version: 'v80.1'
-        ice-tool-dir: <directory>
-        iceball-location: <directory>
-
-    Options are:
-
-    version -- ceph version we are testing against (defaults to 80.1)
-    ice-tool-dir -- local directory where ice-tool either exists or will
-                    be loaded (defaults to src in home directory)
-    iceball-location -- location of preconfigured iceball (defaults to .)
-    start-browser -- If True, start a browser.  To be used by runs that will
-                     bring up a browser quickly for human use.  Set to False
-                     for overnight suites that are testing for problems in
-                     the installation itself (defaults to True).
-    email -- email address for the user (defaults to x@y.com)
-    calamari_user -- user name to log into gui (defaults to admin)
-    calamari_password -- calamari user password (defaults to admin)
-
-    If iceball-location is '.', then we try to build a gz file using the
-    ice-tool-dir commands.
-    """
-    cal_svr = None
-    start_browser = config.get('start-browser', True)
-    for remote_, roles in ctx.cluster.remotes.items():
-        if 'client.0' in roles:
-            cal_svr = remote_
-            break
-    if not cal_svr:
-        raise RuntimeError('client.0 not found in roles')
-    with contextutil.nested(
-        lambda: adjust_yum_repos(ctx, cal_svr),
-        lambda: calamari_install(config, cal_svr),
-        lambda: ceph_install(ctx, cal_svr),
-        lambda: calamari_connect(ctx, cal_svr),
-        lambda: browser(start_browser, cal_svr.hostname),
-    ):
-        yield
-
-
-@contextlib.contextmanager
-def adjust_yum_repos(ctx, cal_svr):
-    """
-    For each remote machine, fix the repos if yum is used.
-    """
-    ice_distro = str(cal_svr.os)
-    if ice_distro.startswith('rhel') or ice_distro.startswith('centos'):
-        for remote in ctx.cluster.remotes:
-            fix_yum_repos(remote, ice_distro)
-    try:
-        yield
-    finally:
-        if ice_distro.startswith('rhel') or ice_distro.startswith('centos'):
-            for remote in ctx.cluster.remotes:
-                restore_yum_repos(remote)
-
-
-@contextlib.contextmanager
-def calamari_install(config, cal_svr):
-    """
-    Install calamari
-
-    The steps here are:
-        -- Get the iceball, building it if necessary.
-        -- Copy the iceball to the calamari server, and untarring it.
-        -- Running ice-setup.py on the calamari server.
-        -- Running calamari-ctl initialize.
-    """
-    ice_distro = str(cal_svr.os)
-    ice_distro = ice_distro.replace(" ", "")
-    client_id = str(cal_svr)
-    at_loc = client_id.find('@')
-    if at_loc > 0:
-        client_id = client_id[at_loc + 1:]
-    convert = {'ubuntu12.04': 'precise', 'ubuntu14.04': 'trusty',
-               'rhel7.0': 'rhel7', 'debian7': 'wheezy'}
-    version = config.get('version', 'v0.80.1')
-    ice_tool_dir = config.get('ice-tool-dir', '%s%s%s' %
-                              (os.environ['HOME'], os.sep, 'src'))
-    email = config.get('email', 'x@x.com')
-    ice_tool_dir = config.get('ice-tool-dir', '%s%s%s' %
-                              (os.environ['HOME'], os.sep, 'src'))
-    calamari_user = config.get('calamari-user', 'admin')
-    calamari_password = config.get('calamari-passwd', 'admin')
-    if ice_distro in convert:
-        ice_distro = convert[ice_distro]
-    log.info('calamari server on %s' % ice_distro)
-    iceball_loc = config.get('iceball-location', '.')
-    if iceball_loc == '.':
-        ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
-        if not os.path.isdir(ice_tool_loc):
-            try:
-                subprocess.check_call(['git', 'clone',
-                                       'git@github.com:inktankstorage/' +
-                                       'ice-tools.git',
-                                       ice_tool_loc])
-            except subprocess.CalledProcessError:
-                raise RuntimeError('client.0 not found in roles')
-        exec_ice = os.path.join(ice_tool_loc, 'iceball', 'ice_repo_tgz.py')
-        try:
-            subprocess.check_call([exec_ice, '-b', version, '-o', ice_distro])
-        except subprocess.CalledProcessError:
-            raise RuntimeError('Unable to create %s distro' % ice_distro)
-    gz_file = ''
-    for file_loc in os.listdir(iceball_loc):
-        sfield = '^ICE-.*{0}\.tar\.gz$'.format(ice_distro)
-        if re.search(sfield, file_loc):
-            if file_loc > gz_file:
-                gz_file = file_loc
-    lgz_file = os.path.join(iceball_loc, gz_file)
-    try:
-        subprocess.check_call(['scp', lgz_file, "%s:/tmp" % client_id])
-    except subprocess.CalledProcessError:
-        raise RuntimeError('Copy of ICE zip file failed')
-    ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
-                      run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
-    if ret.exitstatus:
-        raise RuntimeError('remote tar failed')
-    icesetdata = 'yes\n%s\nhttp\n' % client_id
-    ice_in = StringIO(icesetdata)
-    ice_setup_io = StringIO()
-    ret = cal_svr.run(args=['sudo', 'python', 'ice_setup.py'], stdin=ice_in,
-                      stdout=ice_setup_io)
-    # Run Calamari-ceph connect.
-    if ret.exitstatus:
-        raise RuntimeError('ice_setup.py failed')
-    icesetdata = '%s\n%s\n%s\n%s\n' % (calamari_user, email, calamari_password,
-                                       calamari_password)
-    ice_in = StringIO(icesetdata)
-    ret = cal_svr.run(args=['sudo', 'calamari-ctl', 'initialize'],
-                      stdin=ice_in, stdout=ice_setup_io)
-    if ret.exitstatus:
-        raise RuntimeError('calamari-ctl initialize failed')
-    try:
-        yield
-    finally:
-        log.info('Cleaning up after Calamari installation')
-
-
-@contextlib.contextmanager
-def ceph_install(ctx, cal_svr):
-    """
-    Install ceph if ceph was not previously installed by teuthology.  This
-    code tests the case where calamari is installed on a brand new system.
-    """
-    loc_inst = False
-    if 'install' not in [x.keys()[0] for x in ctx.config['tasks']]:
-        loc_inst = True
-        ret = deploy_ceph(ctx, cal_svr)
-        if ret:
-            raise RuntimeError('ceph installs failed')
-    try:
-        yield
-    finally:
-        if loc_inst:
-            if not undeploy_ceph(ctx, cal_svr):
-                log.error('Cleanup of Ceph installed by Calamari-setup failed')
 
 
 @contextlib.contextmanager
