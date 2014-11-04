@@ -1,16 +1,15 @@
-============================
+===============================
  KeyValueStore Config Reference
-============================
+===============================
 
-KeyValueStore is a another OSD backend compared to FileStore. Now it mainly
-use LevelDB as backend.
+``KeyValueStore`` is an alternative OSD backend compared to FileStore.
+Currently, it uses LevelDB as backend. ``KeyValueStore`` doesn't need journal
+device. Each operation will flush into the backend directly.
 
-KeyValueStore doesn't need jounal device, each op will flush into backend
-directly.
 
 ``keyvaluestore backend``
 
-:Description: the backend used by keyvaluestore
+:Description: The backend used by ``KeyValueStore``.
 :Type: String
 :Required: No
 :Default: ``leveldb``
@@ -21,11 +20,14 @@ directly.
 Queue
 =====
 
-The following settings provide limits on the size of keyvaluestore queue.
+The following settings provide limits on the size of the ``KeyValueStore`` 
+queue.
 
 ``keyvaluestore queue max ops``
 
-:Description: Defines the maximum number of in progress operations the keyvaluestore accepts before blocking on queuing new operations.
+:Description: Defines the maximum number of  operations in progress the 
+              ``KeyValueStore`` accepts before blocking on queuing new operations.
+
 :Type: Integer
 :Required: No. Minimal impact on performance.
 :Default: ``50``
@@ -46,7 +48,7 @@ Thread
 
 ``keyvaluestore op threads``
 
-:Description: The number of keyvaluestore operation threads that execute in parallel. 
+:Description: The number of ``KeyValueStore`` operation threads that execute in parallel. 
 :Type: Integer
 :Required: No
 :Default: ``2``
@@ -54,7 +56,7 @@ Thread
 
 ``keyvaluestore op thread timeout``
 
-:Description: The timeout for a keyvaluestore operation thread (in seconds).
+:Description: The timeout for a ``KeyValueStore`` operation thread (in seconds).
 :Type: Integer
 :Required: No
 :Default: ``60``
@@ -62,7 +64,7 @@ Thread
 
 ``keyvaluestore op thread suicide timeout``
 
-:Description: The timeout for a commit operation before cancelling the commit (in seconds). 
+:Description: The timeout for a commit operation before canceling the commit (in seconds). 
 :Type: Integer
 :Required: No
 :Default: ``180``
@@ -74,10 +76,9 @@ Misc
 
 ``keyvaluestore default strip size``
 
-:Description: each object will be split into multi key/value pairs stored into
-              backend.
-              Note: now this option is important to performance for estimable
-              workload
+:Description: Each object will be split into multiple key/value pairs and 
+              stored in the backend. **Note:** The size of the workload has 
+              a significant impact on performance.
 :Type: Integer
 :Required: No
 :Default: ``4096``
@@ -85,8 +86,8 @@ Misc
 
 ``keyvaluestore header cache size``
 
-:Description: the number of header cache, it just like "inode" in local
-              filesystem. The larger cache size will be help for performance
+:Description: The size of the header cache (identical to ``inode`` in the local
+              filesystem). A larger cache size enhances performance.
 
 :Type: Integer
 :Required: No
