@@ -611,6 +611,7 @@ struct RGWObjState {
   bool prefetch_data;
   bool keep_tail;
   bool is_olh;
+  bufferlist olh_tag;
 
   /* important! don't forget to update copy constructor */
 
@@ -1705,15 +1706,16 @@ public:
   int obj_operate(rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(rgw_obj& obj, librados::ObjectReadOperation *op);
 
-  int olh_init_modification(RGWObjState *state, rgw_obj& olh_obj, string *obj_tag, string *op_tag);
-  int olh_init_modification_impl(RGWObjState *state, rgw_obj& olh_obj, string *obj_tag, string *op_tag);
-  int bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag,
-                            struct rgw_bucket_dir_entry_meta *meta);
+  void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
+  int olh_init_modification(RGWObjState& state, rgw_obj& olh_obj, string *op_tag);
+  int olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, string *op_tag);
+  int bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instance, bool delete_marker,
+                            const string& op_tag, struct rgw_bucket_dir_entry_meta *meta);
   int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag);
-  int bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
+  int bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
-  int bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver);
-  int apply_olh_log(RGWObjectCtx& ctx, const string& bucket_owner, rgw_obj& obj,
+  int bucket_index_trim_olh_log(RGWObjState& obj_state, rgw_obj& obj_instance, uint64_t ver);
+  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const string& bucket_owner, rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                     uint64_t *plast_ver);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);

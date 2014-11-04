@@ -168,12 +168,13 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
-int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key,
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta)
 {
   bufferlist in, out;
   struct rgw_cls_link_olh_op call;
   call.key = key;
+  call.olh_tag = string(olh_tag.c_str(), olh_tag.length());
   call.op_tag = op_tag;
   call.delete_marker = delete_marker;
   if (meta) {
@@ -202,7 +203,7 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
   return 0;
 }
 
-int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated)
 {
   bufferlist in, out;
@@ -210,9 +211,15 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, 
   call.olh = olh;
   call.ver_marker = ver_marker;
   ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "bucket_read_olh_log", in, out);
-  if (r < 0)
+  int op_ret;
+  op.exec("rgw", "bucket_read_olh_log", in, &out, &op_ret);
+  int r = io_ctx.operate(oid, &op, NULL);
+  if (r < 0) {
     return r;
+  }
+  if (op_ret < 0) {
+    return op_ret;
+  }
 
   struct rgw_cls_read_olh_log_ret ret;
   try {
@@ -232,18 +239,14 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, 
  return r;
 }
 
-int cls_rgw_trim_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver)
+void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, uint64_t ver)
 {
-  bufferlist in, out;
+  bufferlist in;
   struct rgw_cls_trim_olh_log_op call;
   call.olh = olh;
   call.ver = ver;
   ::encode(call, in);
-  int r = io_ctx.exec(oid, "rgw", "bucket_trim_olh_log", in, out);
-  if (r < 0)
-    return r;
-
- return 0;
+  op.exec("rgw", "bucket_trim_olh_log", in);
 }
 
 int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
