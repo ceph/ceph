@@ -56,6 +56,9 @@ Darwin)
 esac
 
 if [ -z "$NO_CLOBBER" ] || [ ! -e ./virtualenv ]; then
+    if ! which virtualenv > /dev/null; then
+        pip install virtualenv
+    fi
     # site packages needed because libvirt python bindings are not nicely
     # packaged
     virtualenv --system-site-packages --setuptools virtualenv
