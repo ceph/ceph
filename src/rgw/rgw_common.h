@@ -74,6 +74,7 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_OLH_INFO       RGW_ATTR_OLH_PREFIX "info"
 #define RGW_ATTR_OLH_VER        RGW_ATTR_OLH_PREFIX "ver"
+#define RGW_ATTR_OLH_ID_TAG     RGW_ATTR_OLH_PREFIX "idtag"
 #define RGW_ATTR_OLH_PENDING_PREFIX RGW_ATTR_OLH_PREFIX "pending."
 
 #define RGW_BUCKETS_OBJ_SUFFIX ".buckets"

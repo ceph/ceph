@@ -1975,8 +1975,17 @@ next:
     map<uint64_t, rgw_bucket_olh_log_entry> log;
     bool is_truncated;
 
+    RGWObjectCtx rctx(store);
     rgw_obj obj(bucket, object);
-    int ret = store->bucket_index_read_olh_log(NULL, obj, 0, &log, &is_truncated);
+
+    RGWObjState *state;
+
+    int ret = store->get_obj_state(&rctx, obj, &state, NULL, false); /* don't follow olh */
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = store->bucket_index_read_olh_log(*state, obj, 0, &log, &is_truncated);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
