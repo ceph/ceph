@@ -22,7 +22,6 @@ void ECSubWrite::encode(bufferlist &bl) const
   ::encode(reqid, bl);
   ::encode(soid, bl);
   ::encode(stats, bl);
-  ::encode(t, bl);
   ::encode(at_version, bl);
   ::encode(trim_to, bl);
   ::encode(log_entries, bl);
@@ -41,7 +40,6 @@ void ECSubWrite::decode(bufferlist::iterator &bl)
   ::decode(reqid, bl);
   ::decode(soid, bl);
   ::decode(stats, bl);
-  ::decode(t, bl);
   ::decode(at_version, bl);
   ::decode(trim_to, bl);
   ::decode(log_entries, bl);
