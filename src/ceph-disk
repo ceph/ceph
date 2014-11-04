@@ -794,7 +794,7 @@ def get_or_create_dmcrypt_key(
         if not os.path.exists(key_dir):
             os.makedirs(key_dir, stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
         with file('/dev/urandom', 'rb') as i:
-            key = i.read(256)
+            key = i.read(256 / 8)
             fd = os.open(path, os.O_WRONLY|os.O_CREAT,
                          stat.S_IRUSR|stat.S_IWUSR)
             assert os.write(fd, key) == len(key)
