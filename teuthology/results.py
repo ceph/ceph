@@ -55,7 +55,8 @@ def results(args):
         if args.email:
             email_results(
                 subject=subject,
-                from_=args.teuthology_config['results_sending_email'],
+                from_=args.teuthology_config.get('results_sending_email',
+                                                 'teuthology'),
                 to=args.email,
                 body=body,
             )
