@@ -503,6 +503,7 @@ protected:
   string source_zone;
   string client_id;
   string op_id;
+  string etag;
 
   off_t last_ofs;
 
