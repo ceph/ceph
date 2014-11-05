@@ -1305,13 +1305,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        s->formatter->dump_string("ETag", etag);
-      }
+    if (!etag.empty()) {
+      s->formatter->dump_string("ETag", etag);
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
