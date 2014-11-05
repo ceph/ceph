@@ -69,7 +69,8 @@ noinst_HEADERS += \
 	mds/inode_backtrace.h \
 	mds/mds_table_types.h \
 	mds/mdstypes.h \
-	mds/snap.h
+	mds/snap.h \
+	mds/MDSContinuation.h
 
 noinst_HEADERS += \
 	mds/events/ECommitted.h \
