@@ -84,17 +84,20 @@ Mon Nov  3 09:34:10 UTC 2014 - tbehrens@suse.com
 
 -------------------------------------------------------------------
 Fri Oct 16 15:43:16 UTC 2014 - osynge@suse.com
+
 - Removed /etc/init.d/ceph
   * Redundant as ceph is now systemd based.
 
 -------------------------------------------------------------------
 Thu Oct 16 15:40:31 UTC 2014 - osynge@suse.com
+
 - Improved rcceph.
   * Added support for mask unmask
   * Fixed bug that caused mon only deamosn to be missed.
 
 -------------------------------------------------------------------
 Fri Sep 12 16:42:09 UTC 2014 - osynge@suse.com
+
 - Added patched 0024-udev-rules-now-explicitly-specify-i.patch
   * udev rules now explicitly specify init system
 - Improved 0021-Added-a-systemd-target-for-ceph.patch
@@ -102,24 +105,27 @@ Fri Sep 12 16:42:09 UTC 2014 - osynge@suse.com
 
 -------------------------------------------------------------------
 Thu Sep 11 17:55:08 UTC 2014 - osynge@suse.com
+
 - Added chkconfig suport to rcceph with LSB header.
 - systemd all ceph services boot later in process.
   * After online.target local-fs.target
 
 -------------------------------------------------------------------
 Tue Sep  9 23:56:23 UTC 2014 - osynge@suse.com
+
 - Systemd rcceph created
 
 -------------------------------------------------------------------
 Thu Sep  4 21:52:51 UTC 2014 - osynge@suse.com
+
 - Systemd connected to rpm hooks: %pre, %post, %preun, %postun
-  * fix bnc#895063
+  * fix bnc#895063 - uninstalling rpm did not stop ceph services
 
 -------------------------------------------------------------------
 Thu Sep  4 09:08:14 UTC 2014 - mjura@suse.com
 
 - Drop ceph-disk.patch which interfere with external SSD journals
-  * Fix bnc#890737 
+  * Fix bnc#890737 - probs with separate journal ssd
   * Removed work around for instalation of old ceph release on SLE11.
 
 -------------------------------------------------------------------
@@ -138,13 +144,13 @@ Mon Aug 12 11:36:31 UTC 2014 - osynge@suse.com
 Tue Aug  5 08:05:47 UTC 2014 - tbehrens@suse.com
 
 - Add 0016-Fix-bnc-890345-wrong-service-name-f.patch
-  * fix bnc#890345 wrong service name in logrotate config 
+  * fix bnc#890345 wrong service name in logrotate config
 
 -------------------------------------------------------------------
 Thu Jul 31 09:21:07 UTC 2014 - tbehrens@suse.com
 
 - make unit tests run conditional to newer suse versions, since
-  they require python-virtualenv 
+  they require python-virtualenv
 
 -------------------------------------------------------------------
 Thu Jul 31 08:02:41 UTC 2014 - tbehrens@suse.com
@@ -164,7 +170,8 @@ Thu Jul 31 08:02:41 UTC 2014 - tbehrens@suse.com
 Wed Jul 30 23:28:50 UTC 2014 - tbehrens@suse.com
 
 - Add 0015-Convert-remaining-init-script-actio.patch
-  * this fixes bnc#887880 
+  * this fixes bnc#887880 - ceph-radosgw service restart does not
+    work
 
 -------------------------------------------------------------------
 Tue Jul 29 15:49:17 UTC 2014 - tbehrens@suse.com
@@ -283,7 +290,7 @@ Thu Jul 17 10:20:47 UTC 2014 - tbehrens@suse.com
 
 - Add ceph-disk.patch
   re-adding lost sle11 fix for ceph-disk, that got lost during
-  git-ification. Fixes bnc#887684. 
+  git-ification. Fixes bnc#887684 - ceph-disk was failing on SLE11
 
 -------------------------------------------------------------------
 Wed Jul 16 14:17:26 UTC 2014 - tbehrens@suse.com
@@ -299,7 +306,7 @@ Wed Jul 16 12:38:45 UTC 2014 - osynge@suse.com
 -------------------------------------------------------------------
 Wed Jul 16 10:26:52 UTC 2014 - tbehrens@suse.com
 
-- Fix bnc#887127 - require mod_fastcgi for radosgw 
+- Fix bnc#887127 - require mod_fastcgi for radosgw
 
 -------------------------------------------------------------------
 Wed Jul  9 15:00:07 UTC 2014 - osynge@suse.com
@@ -312,7 +319,7 @@ Tue Jul  8 14:57:47 UTC 2014 - tbehrens@suse.com
 
 - Revert Thu Jun 5 10:00:00 CEST 2014 change, auto-generate patches
   from git branch, use update_git.sh to amend spec file
-- this fixes bnc#885203 en passant
+- this fixes bnc#885203 en passant - ceph doesn't show version
 
 -------------------------------------------------------------------
 Thu Jul  3 11:58:04 UTC 2014 - osynge@suse.com
@@ -324,7 +331,7 @@ Wed Jul  2 17:09:10 UTC 2014 - tbehrens@suse.com
 
 - Switch git branch to distro/suse11-0-80-1 for storage 0.5
 - Update tarball to latest git
-- Fix bnc#885304: Fixup radosgw daemon init.    
+- Fix bnc#885304: Fixup radosgw daemon init.
   * This is a fixup for 2cd29db16497917e2e5737b7f1b52dbb77b038c2
     (the late radosgw-init-opensuse.patch), radosgw needs the config
     section name.
@@ -348,9 +355,9 @@ Wed Jul  2 12:34:46 UTC 2014 - osynge@suse.com
 Tue Jul  1 17:27:09 UTC 2014 - osynge@suse.com
 
 - Moved debug tools to debug package.
-  * Reorganized spec file Requires, BuildRequires, and files to 
+  * Reorganized spec file Requires, BuildRequires, and files to
     minimize the differences with Devel:Cloud:4
-- Resolved ceph Changelog conflicts 
+- Resolved ceph Changelog conflicts
   * Was cased by Devel:Cloud:4 and Devel:Storage:0.5:Staging based
     upon different branch of ceph packaging from engineering team.
 - Renamed logrotate.d/radosgw to logrotate.d/ceph-radosgw
@@ -1429,16 +1436,16 @@ Fri Jun  1 12:39:32 UTC 2012 - dkukawka@suse.de
 -------------------------------------------------------------------
 Tue May  8 14:11:10 UTC 2012 - dkukawka@suse.de
 
-- add new patch: 
+- add new patch:
   - ceph-init-create-dirs-only-on-startup.diff: create log/pid
     directories only on startup and not e.g. also on stop.
-    bnc#761180 
+    bnc#761180
 
 -------------------------------------------------------------------
 Tue May  8 13:14:41 UTC 2012 - dkukawka@suse.de
 
 - add new patch:
-  - ceph-common_sh.dont.exit.on.ssh-error.diff: don't exit on 
+  - ceph-common_sh.dont.exit.on.ssh-error.diff: don't exit on
     errors from ssh calls, simply continue. Fix for bnc#752662
 
 -------------------------------------------------------------------
