@@ -85,7 +85,7 @@ class TestHostnames(object):
         result = misc.canonicalize_hostname(host_base)
         assert result == 'ubuntu@box1.example.com'
 
-    def test_decanonicalize_hostname(self):
+    def test_decanonicalize_hostname_otherlab(self):
         config.lab_domain = 'example.com'
         host = 'ubuntu@box1.example.com'
         result = misc.decanonicalize_hostname(host)
