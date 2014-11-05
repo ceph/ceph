@@ -2219,6 +2219,7 @@ void RGWCopyObj::execute()
                         replace_attrs,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
                         &s->req_id, /* use req_id as tag */
+                        &etag,
                         &s->err,
                         copy_obj_progress_cb, (void *)this
                         );
