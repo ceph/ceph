@@ -785,8 +785,6 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   if (!authorized)
     return -EPERM;
 
-  s->perm_mask = RGW_PERM_FULL_CONTROL;
-
   return 0;
 }
 
