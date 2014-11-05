@@ -1284,7 +1284,7 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     set_req_state_err(s, ret);
     dump_errno(s);
 
-    end_header(s, this, "binary/octet-stream");
+    end_header(s, this, "application/xml");
     if (ret == 0) {
       s->formatter->open_object_section("CopyObjectResult");
     }
