@@ -652,6 +652,8 @@ bool ECBackend::handle_message(
   switch (_op->get_req()->get_type()) {
   case MSG_OSD_EC_WRITE: {
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(_op->get_req());
+    bufferlist::iterator p = op->get_data().begin();
+    ::decode(op->op.t, p);
     handle_sub_write(op->op.from, _op, op->op);
     return true;
   }
@@ -1549,6 +1551,7 @@ void ECBackend::start_write(Op *op) {
       op->on_local_applied_sync = 0;
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
+      ::encode(sop.t, r->get_data());
       r->set_priority(cct->_conf->osd_client_op_priority);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
       r->map_epoch = get_parent()->get_epoch();

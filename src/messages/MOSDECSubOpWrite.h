@@ -29,7 +29,7 @@ public:
   ECSubWrite op;
 
   int get_cost() const {
-    return 0;
+    return data.length();
   }
 
   MOSDECSubOpWrite()
@@ -50,6 +50,12 @@ public:
     ::encode(pgid, payload);
     ::encode(map_epoch, payload);
     ::encode(op, payload);
+
+    int alignment = op.t.get_data_alignment();
+    if (alignment != -1)
+      header.data_off = alignment;
+    else
+      header.data_off = 0;
   }
 
   const char *get_type_name() const { return "MOSDECSubOpWrite"; }

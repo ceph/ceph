@@ -95,6 +95,8 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   boost::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  int data_offset; /*indicate the offset of largest data in ObjectStore::Transaction*/
+
   int get_cost() const {
     if (ops.size() == 1 && ops[0].op.op == CEPH_OSD_OP_PULL)
       return ops[0].op.extent.length;
@@ -216,7 +218,7 @@ public:
     if (ops.size())
       header.data_off = ops[0].op.extent.offset;
     else
-      header.data_off = 0;
+      header.data_off = data_offset;
     ::encode(first, payload);
     ::encode(complete, payload);
     ::encode(oloc, payload);
@@ -250,7 +252,8 @@ public:
       old_exists(false), old_size(0),
       version(v),
       first(false), complete(false),
-      hobject_incorrect_pool(false) {
+      hobject_incorrect_pool(false),
+      data_offset(0) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
