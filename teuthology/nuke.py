@@ -512,6 +512,7 @@ def nuke_helper(ctx, should_unlock):
     ctx.cluster.run(args=['sudo', 'rm', '-f',
                           '/lib/firmware/updates/.git/index.lock', ])
 
+    remove_configuration_files(ctx)
     log.info('Reseting syslog output locations...')
     reset_syslog_dir(ctx)
     log.info('Clearing filesystem of test data...')
