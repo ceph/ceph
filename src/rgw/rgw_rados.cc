@@ -3141,6 +3141,7 @@ int RGWRados::copy_obj(void *ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
+               string *petag,
                struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
@@ -3237,6 +3238,10 @@ int RGWRados::copy_obj(void *ctx,
     if (ret < 0)
       goto set_err_state;
 
+    if (petag) {
+      *petag = etag;
+    }
+
     { /* opening scope so that we can do goto, sorry */
       bufferlist& extra_data_bl = processor.get_extra_data();
       if (extra_data_bl.length()) {
@@ -3302,6 +3307,10 @@ set_err_state:
     if (ret < 0)
       return ret;
 
+    if (petag) {
+      *petag = etag;
+    }
+
     return 0;
   }
   
@@ -3331,7 +3340,7 @@ set_err_state:
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, max_chunk_size, mtime, src_attrs, category, ptag, err);
+    return copy_obj_data(ctx, dest_bucket_info.owner, &handle, end, dest_obj, src_obj, max_chunk_size, mtime, src_attrs, category, ptag, petag, err);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -3410,6 +3419,14 @@ set_err_state:
   if (mtime)
     obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
+  if (petag) {
+    map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
+    if (iter != src_attrs.end()) {
+      bufferlist& etagbl = iter->second;
+      *petag = string(etagbl.c_str(), etagbl.length());
+    }
+  }
+
   return 0;
 
 done_ret:
@@ -3446,6 +3463,7 @@ int RGWRados::copy_obj_data(void *ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
+               string *petag,
                struct rgw_err *err)
 {
   bufferlist first_chunk;
@@ -3492,6 +3510,9 @@ int RGWRados::copy_obj_data(void *ctx,
   if (iter != attrs.end()) {
     bufferlist& bl = iter->second;
     etag = string(bl.c_str(), bl.length());
+    if (petag) {
+      *petag = etag;
+    }
   }
 
   ret = processor.complete(etag, NULL, 0, attrs);
