@@ -56,7 +56,7 @@ static int encode_token(CephContext *cct, string& swift_user, string& key, buffe
   return ret;
 }
 
-int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info)
+int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info, string *pswift_user)
 {
   if (strncmp(token, "AUTH_rgwtk", 10) != 0)
     return -EINVAL;
@@ -123,6 +123,7 @@ int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char 
     dout(0) << "NOTICE: tokens mismatch tok=" << buf << dendl;
     return -EPERM;
   }
+  *pswift_user = swift_user;
 
   return 0;
 }
