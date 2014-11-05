@@ -14,6 +14,8 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
+source test/test_btrfs_common.sh
+
 function setup() {
     local dir=$1
     teardown $dir
@@ -23,6 +25,9 @@ function setup() {
 function teardown() {
     local dir=$1
     kill_daemons $dir
+    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+        teardown_btrfs $dir
+    fi
     rm -fr $dir
 }
 
