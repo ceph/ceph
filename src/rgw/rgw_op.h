@@ -358,8 +358,6 @@ public:
   RGWPutObjProcessor *select_processor(bool *is_multipart);
   void dispose_processor(RGWPutObjProcessor *processor);
 
-  int user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs);
-
   int verify_permission();
   void pre_exec();
   void execute();
