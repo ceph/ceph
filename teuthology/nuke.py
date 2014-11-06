@@ -90,6 +90,7 @@ def kill_hadoop(ctx):
                 log.info("Killing PID {0} ({1})".format(pid, cmdline))
                 remote.run(args=["kill", "-9", pid], check_status=False)
 
+
 def find_kernel_mounts(ctx):
     nodes = {}
     log.info('Looking for kernel mounts to handle...')
@@ -280,6 +281,32 @@ def remove_testing_tree(ctx):
 
     for name, proc in nodes.iteritems():
         log.info('Waiting for %s to clear filesystem...', name)
+        proc.wait()
+
+
+def remove_configuration_files(ctx):
+    """
+    Goes through a list of commonly used configuration files used for testing
+    that should not be left behind.
+
+    For example, sometimes ceph-deploy may be configured via
+    ``~/.cephdeploy.conf`` to alter how it handles installation by specifying
+    a default section in its config with custom locations.
+    """
+
+    nodes = {}
+
+    for remote in ctx.cluster.remotes.iterkeys():
+        proc = remote.run(
+            args=[
+                'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
+            ],
+            wait=False,
+        )
+        nodes[remote.name] = proc
+
+    for name, proc in nodes.iteritems():
+        log.info('removing temporary configuration files on %s', name)
         proc.wait()
 
 
@@ -485,6 +512,7 @@ def nuke_helper(ctx, should_unlock):
     ctx.cluster.run(args=['sudo', 'rm', '-f',
                           '/lib/firmware/updates/.git/index.lock', ])
 
+    remove_configuration_files(ctx)
     log.info('Reseting syslog output locations...')
     reset_syslog_dir(ctx)
     log.info('Clearing filesystem of test data...')
