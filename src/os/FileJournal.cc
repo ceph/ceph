@@ -103,12 +103,14 @@ int FileJournal::_open(bool forwrite, bool create)
     goto out_fd;
 
 #ifdef HAVE_LIBAIO
-  aio_ctx = 0;
-  ret = io_setup(128, &aio_ctx);
-  if (ret < 0) {
-    ret = errno;
-    derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
-    goto out_fd;
+  if (aio) {
+    aio_ctx = 0;
+    ret = io_setup(128, &aio_ctx);
+    if (ret < 0) {
+      ret = errno;
+      derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+      goto out_fd;
+    }
   }
 #endif
 
@@ -544,6 +546,7 @@ void FileJournal::close()
 
   // close
   assert(writeq_empty());
+  assert(!must_write_header);
   assert(fd >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1;
@@ -564,9 +567,9 @@ int FileJournal::dump(ostream& out)
   JSONFormatter f(true);
 
   f.open_array_section("journal");
+  uint64_t seq = 0;
   while (1) {
     bufferlist bl;
-    uint64_t seq = 0;
     uint64_t pos = read_pos;
     if (!read_entry(bl, seq)) {
       dout(3) << "journal_replay: end of journal, done." << dendl;
@@ -604,7 +607,8 @@ void FileJournal::start_writer()
   write_stop = false;
   write_thread.create();
 #ifdef HAVE_LIBAIO
-  write_finish_thread.create();
+  if (aio)
+    write_finish_thread.create();
 #endif
 }
 
@@ -613,19 +617,25 @@ void FileJournal::stop_writer()
   {
     Mutex::Locker l(write_lock);
 #ifdef HAVE_LIBAIO
-    Mutex::Locker q(aio_lock);
+    if (aio)
+      aio_lock.Lock();
 #endif
     Mutex::Locker p(writeq_lock);
     write_stop = true;
     writeq_cond.Signal();
 #ifdef HAVE_LIBAIO
-    aio_cond.Signal();
-    write_finish_cond.Signal();
+    if (aio) {
+      aio_cond.Signal();
+      write_finish_cond.Signal();
+      aio_lock.Unlock();
+    }
 #endif
   } 
   write_thread.join();
 #ifdef HAVE_LIBAIO
-  write_finish_thread.join();
+  if (aio) {
+    write_finish_thread.join();
+  }
 #endif
 }
 
@@ -649,6 +659,13 @@ int FileJournal::read_header()
   buffer::ptr bp = buffer::create_page_aligned(block_size);
   bp.zero();
   int r = ::pread(fd, bp.c_str(), bp.length(), 0);
+
+  if (r < 0) {
+    int err = errno;
+    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
+    return -err;
+  }
+
   bl.push_back(bp);
 
   try {
@@ -660,11 +677,6 @@ int FileJournal::read_header()
     return -EINVAL;
   }
 
-  if (r < 0) {
-    int err = errno;
-    dout(0) << "read_header got " << cpp_strerror(err) << dendl;
-    return -err;
-  }
   
   /*
    * Unfortunately we weren't initializing the flags field for new
@@ -1102,7 +1114,7 @@ void FileJournal::write_thread_entry()
   while (1) {
     {
       Mutex::Locker locker(writeq_lock);
-      if (writeq.empty()) {
+      if (writeq.empty() && !must_write_header) {
 	if (write_stop)
 	  break;
 	dout(20) << "write_thread_entry going to sleep" << dendl;
@@ -1113,7 +1125,9 @@ void FileJournal::write_thread_entry()
     }
     
 #ifdef HAVE_LIBAIO
-    if (aio) {
+    //We hope write_finish_thread_entry return until the last aios complete
+    //when set write_stop. But it can't. So don't use aio mode when shutdown.
+    if (aio && !write_stop) {
       Mutex::Locker locker(aio_lock);
       // should we back off to limit aios in flight?  try to do this
       // adaptively so that we submit larger aios once we have lots of
@@ -1164,7 +1178,7 @@ void FileJournal::write_thread_entry()
     }
 
 #ifdef HAVE_LIBAIO
-    if (aio)
+    if (aio && !write_stop)
       do_aio_write(bl);
     else
       do_write(bl);
@@ -1353,7 +1367,7 @@ void FileJournal::write_finish_thread_entry()
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
 	  derr << "aio to " << ai->off << "~" << ai->len
-	       << " got " << cpp_strerror(event[i].res) << dendl;
+	       << " wrote " << event[i].res << dendl;
 	  assert(0 == "unexpected aio error");
 	}
 	dout(10) << "write_finish_thread_entry aio " << ai->off
@@ -1376,7 +1390,7 @@ void FileJournal::check_aio_completion()
   assert(aio_lock.is_locked());
   dout(20) << "check_aio_completion" << dendl;
 
-  bool completed_something = false;
+  bool completed_something = false, signal = false;
   uint64_t new_journaled_seq = 0;
 
   list<aio_info>::iterator p = aio_queue.begin();
@@ -1390,6 +1404,7 @@ void FileJournal::check_aio_completion()
     aio_num--;
     aio_bytes -= p->len;
     aio_queue.erase(p++);
+    signal = true;
   }
 
   if (completed_something) {
@@ -1409,7 +1424,8 @@ void FileJournal::check_aio_completion()
 	queue_completions_thru(journaled_seq);
       }
     }
-
+  }
+  if (signal) {
     // maybe write queue was waiting for aio count to drop?
     aio_cond.Signal();
   }
