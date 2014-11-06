@@ -162,6 +162,4 @@ protected:
 
 typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
 
-
 #endif  // MDS_CONTEXT_H
-
