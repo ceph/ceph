@@ -244,6 +244,38 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "set_parent", inbl, outbl);
     }
 
+    int get_flags(librados::IoCtx *ioctx, const std::string &oid,
+                  snapid_t snap_id, uint64_t *flags)
+    {
+      bufferlist inbl;
+      ::encode(snap_id, inbl);
+
+      bufferlist outbl;
+      int r = ioctx->exec(oid, "rbd", "get_flags", inbl, outbl);
+      if (r < 0) {
+        return r;
+      }
+
+      try {
+        bufferlist::iterator iter = outbl.begin();
+        ::decode(*flags, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
+                  uint64_t flags, uint64_t mask)
+    {
+      bufferlist inbl;
+      ::encode(flags, inbl);
+      ::encode(mask, inbl);
+
+      bufferlist outbl;
+      return ioctx->exec(oid, "rbd", "set_flags", inbl, outbl);
+    }
+
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
     {
       librados::ObjectWriteOperation op;

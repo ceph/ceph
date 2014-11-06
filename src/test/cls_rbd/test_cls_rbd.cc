@@ -52,6 +52,8 @@ using ::librbd::cls_client::get_mutable_metadata;
 using ::librbd::cls_client::object_map_load;
 using ::librbd::cls_client::object_map_resize;
 using ::librbd::cls_client::object_map_update;
+using ::librbd::cls_client::get_flags;
+using ::librbd::cls_client::set_flags;
 
 static char *random_buf(size_t len)
 {
@@ -1018,6 +1020,36 @@ TEST_F(TestClsRbd, object_map_load_enoent)
   string oid = get_temp_image_name();
   BitVector<2> osd_bit_vector;
   ASSERT_EQ(-ENOENT, object_map_load(&ioctx, oid, &osd_bit_vector));
+
+  ioctx.close();
+}
+
+TEST_F(TestClsRbd, flags)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
+
+  uint64_t flags;
+  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  ASSERT_EQ(0U, flags);
+
+  ASSERT_EQ(0, set_flags(&ioctx, oid, 3, 2));
+  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  ASSERT_EQ(2U, flags);
+
+  uint64_t snap_id = 10;
+  ASSERT_EQ(-ENOENT, get_flags(&ioctx, oid, snap_id, &flags));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, snap_id, "snap"));
+
+  ASSERT_EQ(0, set_flags(&ioctx, oid, 31, 4));
+  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  ASSERT_EQ(6U, flags);
+
+  ASSERT_EQ(0, get_flags(&ioctx, oid, snap_id, &flags));
+  ASSERT_EQ(2U, flags);
 
   ioctx.close();
 }
