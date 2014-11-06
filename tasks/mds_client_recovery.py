@@ -335,7 +335,7 @@ class TestClientRecovery(CephFSTestCase):
         # =====================================
         lock_holder = self.mount_a.lock_background()
 
-        self.mount_b.wait_for_visible();
+        self.mount_b.wait_for_visible("background_file-2");
         self.mount_b.check_filelock();
 
         self.fs.mds_stop()
