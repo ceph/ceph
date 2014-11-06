@@ -284,7 +284,7 @@ def remove_testing_tree(ctx):
         proc.wait()
 
 
-def remove_configuration_files(remotes):
+def remove_configuration_files(ctx):
     """
     Goes through a list of commonly used configuration files used for testing
     that should not be left behind.
@@ -296,7 +296,7 @@ def remove_configuration_files(remotes):
 
     nodes = {}
 
-    for remote in remotes:
+    for remote in ctx.cluster.remotes.iterkeys():
         proc = remote.run(
             args=[
                 'rm', '-f', '/home/ubuntu/.cephdeploy.conf'
