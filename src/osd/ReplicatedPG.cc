@@ -3353,6 +3353,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    break;
 	}
 	result = _delete_oid(ctx, true);
+	if (result >= 0) {
+	  // mark that this is a cache eviction to avoid triggering normal
+	  // make_writeable() clone or snapdir object creation in finish_ctx()
+	  ctx->cache_evict = true;
+	}
 	osd->logger->inc(l_osd_tier_evict);
       }
       break;
@@ -4840,6 +4845,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
+      !ctx->cache_evict &&
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
     // clone
     hobject_t coid = soid;
@@ -5160,7 +5166,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  ctx->snapset_obc->obs.exists = false;
 	}
       }
-    } else if (ctx->new_snapset.clones.size()) {
+    } else if (ctx->new_snapset.clones.size() &&
+	       !ctx->cache_evict) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());

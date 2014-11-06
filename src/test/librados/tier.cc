@@ -966,6 +966,82 @@ TEST_F(LibRadosTwoPoolsPP, EvictSnap) {
   }
 }
 
+// this test case reproduces http://tracker.ceph.com/issues/8629
+TEST_F(LibRadosTwoPoolsPP, EvictSnap2) {
+  // create object
+  {
+    bufferlist bl;
+    bl.append("hi there");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  // create a snapshot, clone
+  vector<uint64_t> my_snaps(1);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0],
+							 my_snaps));
+  {
+    bufferlist bl;
+    bl.append("ciao!");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, ioctx.operate("foo", &op));
+  }
+  // configure cache
+  bufferlist inbl;
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
+    "\", \"tierpool\": \"" + cache_pool_name +
+    "\", \"force_nonempty\": \"--force-nonempty\" }",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
+    "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
+    inbl, NULL, NULL));
+  ASSERT_EQ(0, cluster.mon_command(
+    "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
+    "\", \"mode\": \"writeback\"}",
+    inbl, NULL, NULL));
+
+  // wait for maps to settle
+  cluster.wait_for_latest_osdmap();
+
+  // read, trigger a promote on the head
+  {
+    bufferlist bl;
+    ASSERT_EQ(1, ioctx.read("foo", bl, 1, 0));
+    ASSERT_EQ('c', bl[0]);
+  }
+
+  // evict
+  {
+    ObjectReadOperation op;
+    op.cache_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, cache_ioctx.aio_operate(
+      "foo", completion, &op,
+      librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+  }
+
+  // verify the snapdir is not present in the cache pool
+  {
+    ObjectReadOperation op;
+    librados::snap_set_t snapset;
+    op.list_snaps(&snapset, NULL);
+    ioctx.snap_set_read(librados::SNAP_DIR);
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &op,
+				   librados::OPERATION_IGNORE_CACHE, NULL));
+    completion->wait_for_safe();
+    ASSERT_EQ(-ENOENT, completion->get_return_value());
+    completion->release();
+  }
+}
+
 TEST_F(LibRadosTwoPoolsPP, TryFlush) {
   // configure cache
   bufferlist inbl;
