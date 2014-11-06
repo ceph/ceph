@@ -1172,10 +1172,17 @@ void Journaler::_finish_trim(int r, uint64_t to)
 
 void Journaler::handle_write_error(int r)
 {
+  assert(lock.is_locked_by_me());
+
   lderr(cct) << "handle_write_error " << cpp_strerror(r) << dendl;
   if (on_write_error) {
     on_write_error->complete(r);
     on_write_error = NULL;
+    called_write_error = true;
+  } else if (called_write_error) {
+    /* We don't call error handler more than once, subsequent errors are dropped --
+     * this is okay as long as the error handler does something dramatic like respawn */
+    lderr(cct) << __func__ << ": multiple write errors, handler already called" << dendl;
   } else {
     assert(0 == "unhandled write error");
   }
@@ -1325,6 +1332,7 @@ void Journaler::set_write_error_handler(Context *c) {
   Mutex::Locker l(lock);
   assert(!on_write_error);
   on_write_error = wrap_finisher(c);
+  called_write_error = false;
 }
 
 
