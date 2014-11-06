@@ -490,6 +490,9 @@ OPTION(osd_heartbeat_interval, OPT_INT, 6)       // (seconds) how often we ping 
 OPTION(osd_heartbeat_grace, OPT_INT, 20)         // (seconds) how long before we decide a peer has failed
 OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 
+// max number of parallel snap trims/pg
+OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
+
 // minimum number of peers tha tmust be reachable to mark ourselves
 // back up after being wrongly marked down.
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)

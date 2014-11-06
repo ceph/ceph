@@ -4686,7 +4686,10 @@ bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
 void PG::set_last_peering_reset()
 {
   dout(20) << "set_last_peering_reset " << get_osdmap()->get_epoch() << dendl;
-  last_peering_reset = get_osdmap()->get_epoch();
+  if (last_peering_reset != get_osdmap()->get_epoch()) {
+    last_peering_reset = get_osdmap()->get_epoch();
+    reset_interval_flush();
+  }
 }
 
 struct FlushState {
@@ -4740,7 +4743,6 @@ void PG::start_peering_interval(
   const OSDMapRef osdmap = get_osdmap();
 
   set_last_peering_reset();
-  reset_interval_flush();
 
   vector<int> oldacting, oldup;
   int oldrole = get_role();
@@ -5780,7 +5782,28 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
 
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      if (con->has_feature(CEPH_FEATURE_BACKFILL_RESERVATION)) {
+        pg->osd->send_message_osd_cluster(
+          new MBackfillReserve(
+	    MBackfillReserve::REJECT,
+	    spg_t(pg->info.pgid.pgid, it->shard),
+	    pg->get_osdmap()->get_epoch()),
+	  con.get());
+      }
+    }
+  }
+
   pg->osd->recovery_wq.dequeue(pg);
+
+  pg->waiting_on_backfill.clear();
+  pg->finish_recovery_op(hobject_t::get_max());
 
   pg->schedule_backfill_full_retry();
   return transit<NotBackfilling>();
@@ -6036,14 +6059,33 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->send_message_osd_cluster(
-    pg->primary.osd,
-    new MBackfillReserve(
-      MBackfillReserve::GRANT,
-      spg_t(pg->info.pgid.pgid, pg->primary.shard),
-      pg->get_osdmap()->get_epoch()),
-    pg->get_osdmap()->get_epoch());
-  return transit<RepRecovering>();
+
+  double ratio, max_ratio;
+  if (g_conf->osd_debug_reject_backfill_probability > 0 &&
+      (rand()%1000 < (g_conf->osd_debug_reject_backfill_probability*1000.0))) {
+    dout(10) << "backfill reservation rejected after reservation: "
+	     << "failure injection" << dendl;
+    pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+    post_event(RemoteReservationRejected());
+    return discard_event();
+  } else if (pg->osd->too_full_for_backfill(&ratio, &max_ratio) &&
+	     !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation) {
+    dout(10) << "backfill reservation rejected after reservation: full ratio is "
+	     << ratio << ", which is greater than max allowed ratio "
+	     << max_ratio << dendl;
+    pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
+    post_event(RemoteReservationRejected());
+    return discard_event();
+  } else {
+    pg->osd->send_message_osd_cluster(
+      pg->primary.osd,
+      new MBackfillReserve(
+	MBackfillReserve::GRANT,
+	spg_t(pg->info.pgid.pgid, pg->primary.shard),
+	pg->get_osdmap()->get_epoch()),
+      pg->get_osdmap()->get_epoch());
+    return transit<RepRecovering>();
+  }
 }
 
 boost::statechart::result
@@ -6067,7 +6109,7 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->reject_reservation();
-  return transit<RepNotRecovering>();
+  return discard_event();
 }
 
 void PG::RecoveryState::RepRecovering::exit()
