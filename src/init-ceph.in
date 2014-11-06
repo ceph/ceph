@@ -14,9 +14,9 @@
 
 . /lib/lsb/init-functions
 
-# detect systemd
-SYSTEMD=0
-grep -qs systemd /proc/1/comm && SYSTEMD=1
+# detect systemd, also check whether the systemd-run binary exists
+SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
+grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 
 # if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
@@ -25,7 +25,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     SBINDIR=.
     LIBDIR=.
     ETCDIR=.
-    SYSTEMD=0
+    SYSTEMD_RUN=""
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
@@ -300,8 +300,8 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    if [ $SYSTEMD -eq 1 ]; then
-		cmd="systemd-run -r bash -c '$files $cmd --cluster $cluster -f'"
+	    if [ -n "$SYSTEMD_RUN" ]; then
+		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster -f'"
 	    else
 		cmd="$files $wrap $cmd --cluster $cluster $runmode"
 	    fi
