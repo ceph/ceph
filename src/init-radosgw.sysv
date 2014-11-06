@@ -45,9 +45,9 @@ if [ ! -x "$RADOSGW" ]; then
     exit 1
 fi
 
-# detect systemd
-SYSTEMD=0
-grep -qs systemd /proc/1/comm && SYSTEMD=1
+# detect systemd, also check whether the systemd-run binary exists
+SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
+grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
 
 case "$1" in
     start)
@@ -84,8 +84,8 @@ case "$1" in
                 chown $user $log_file
             fi
 
-            if [ $SYSTEMD -eq 1 ]; then
-                systemd-run -r bash -c "ulimit -n 32768; $RADOSGW -n $name"
+            if [ -n "$SYSTEMD_RUN" ]; then
+                $SYSTEMD_RUN -r bash -c "ulimit -n 32768; $RADOSGW -n $name"
             else
                 #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
                 daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
