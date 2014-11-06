@@ -28,8 +28,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd: "
 
-#define rbd_howmany(x, y)  (((x) + (y) - 1) / (y))
-
 using std::map;
 using std::pair;
 using std::set;
