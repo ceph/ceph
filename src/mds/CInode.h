@@ -49,6 +49,9 @@ class Session;
 class MClientCaps;
 struct ObjectOperation;
 class EMetaBlob;
+struct MDRequestImpl;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
+
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -919,7 +922,7 @@ public:
    * been completed.
    */
   void validate_disk_state(validated_data *results,
-                           Context *fin);
+                           MDRequestRef& mdr);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);
 private:

@@ -44,7 +44,7 @@
 #include "global/global_context.h"
 #include "include/assert.h"
 
-#include "common/Continuation.h"
+#include "mds/MDSContinuation.h"
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -3472,9 +3472,9 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
 }
 
 void CInode::validate_disk_state(CInode::validated_data *results,
-                                 Context *fin)
+                                 MDRequestRef &mdr)
 {
-  class ValidationContinuation : public Continuation {
+  class ValidationContinuation : public MDSContinuation {
   public:
     CInode *in;
     CInode::validated_data *results;
@@ -3490,8 +3490,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     ValidationContinuation(CInode *i,
                            CInode::validated_data *data_r,
-                           Context *fin) :
-                             Continuation(fin),
+                           MDRequestRef &mdr) :
+                             MDSContinuation(mdr, i->mdcache->mds->server),
                              in(i),
                              results(data_r),
                              shadow_in(NULL) {
@@ -3520,9 +3520,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       results->passed_validation = false; // we haven't finished it yet
 
-      MDSIOContextWrapper *mdsioc =
-          new MDSIOContextWrapper(in->mdcache->mds, get_callback(BACKTRACE));
-      C_OnFinisher *conf = new C_OnFinisher(mdsioc,
+      C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
                                             &in->mdcache->mds->finisher);
 
       in->fetch_backtrace(conf, &bl);
@@ -3590,8 +3588,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
         in->mdcache->create_unlinked_system_inode(shadow_in,
                                                   in->inode.ino,
                                                   in->inode.mode);
-        shadow_in->fetch(new MDSInternalContextWrapper(in->mdcache->mds,
-                                                       get_callback(INODE)));
+        shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
         return fetch_dirfrag_rstats();
@@ -3636,8 +3633,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           dirfrag->fetch(gather.new_sub(), false);
       }
       if (gather.has_subs()) {
-        gather.set_finisher(new MDSInternalContextWrapper(in->mdcache->mds,
-                                                          get_callback(DIRFRAGS)));
+        gather.set_finisher(get_internal_callback(DIRFRAGS));
         gather.activate();
         return false;
       } else {
@@ -3685,7 +3681,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
   ValidationContinuation *vc = new ValidationContinuation(this,
                                                           results,
-                                                          fin);
+                                                          mdr);
   vc->begin();
 }
 

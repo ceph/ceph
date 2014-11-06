@@ -11506,13 +11506,12 @@ void C_MDS_RetryRequest::finish(int r)
 class C_scrub_dentry_finish : public Context {
 public:
   CInode::validated_data results;
-  MDCache *mdcache;
   MDRequestRef mdr;
   Context *on_finish;
   Formatter *formatter;
-  C_scrub_dentry_finish(MDCache *mdc, MDRequestRef& mdr,
+  C_scrub_dentry_finish(MDRequestRef& mdr,
                         Context *fin, Formatter *f) :
-    mdcache(mdc), mdr(mdr), on_finish(fin), formatter(f) {}
+    mdr(mdr), on_finish(fin), formatter(f) {}
 
   void finish(int r) {
     if (r >= 0) { // we got into the scrubbing dump it
@@ -11522,7 +11521,6 @@ public:
       formatter->dump_int("return_code", r);
       formatter->close_section(); // results
     }
-    mdcache->request_finish(mdr);
     on_finish->complete(r);
   }
 };
@@ -11533,7 +11531,7 @@ void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_VALIDATE);
   filepath fp(path.c_str());
   mdr->set_filepath(fp);
-  C_scrub_dentry_finish *csd = new C_scrub_dentry_finish(this, mdr, fin, f);
+  C_scrub_dentry_finish *csd = new C_scrub_dentry_finish(mdr, fin, f);
   mdr->internal_op_finish = csd;
   mdr->internal_op_private = &csd->results;
   scrub_dentry_work(mdr);
@@ -11556,7 +11554,7 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
   CInode::validated_data *vr =
       static_cast<CInode::validated_data*>(mdr->internal_op_private);
 
-  in->validate_disk_state(vr, mdr->internal_op_finish);
+  in->validate_disk_state(vr, mdr);
   return;
 }
 
@@ -11570,6 +11568,16 @@ void MDCache::flush_dentry(const string& path, Context *fin)
   flush_dentry_work(mdr);
 }
 
+class C_FinishIOMDR : public MDSInternalContextBase {
+protected:
+  MDS *mds;
+  MDRequestRef mdr;
+  MDS *get_mds() { return mds; }
+public:
+  C_FinishIOMDR(MDS *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
+  void finish(int r) { mds->server->respond_to_request(mdr, r); }
+};
+
 void MDCache::flush_dentry_work(MDRequestRef& mdr)
 {
   set<SimpleLock*> rdlocks, wrlocks, xlocks;
@@ -11582,5 +11590,5 @@ void MDCache::flush_dentry_work(MDRequestRef& mdr)
   bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
   if (!locked)
     return;
-  in->flush(new MDSInternalContextWrapper(mds,mdr->internal_op_finish));
+  in->flush(new C_FinishIOMDR(mds, mdr));
 }

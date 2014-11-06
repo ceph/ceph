@@ -910,6 +910,7 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
     if (!mdr->internal_op_finish)
       assert(0 == "trying to respond to internal op without finisher");
     mdr->internal_op_finish->complete(r);
+    mdcache->request_finish(mdr);
   }
 }
 
@@ -7653,4 +7654,3 @@ bool Server::waiting_for_reconnect(client_t c) const
 {
   return client_reconnect_gather.count(c) > 0;
 }
-
