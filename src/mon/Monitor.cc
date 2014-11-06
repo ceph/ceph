@@ -1408,6 +1408,8 @@ void Monitor::handle_probe(MMonProbe *m)
  */
 void Monitor::handle_probe_probe(MMonProbe *m)
 {
+  MMonProbe *r;
+
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
   uint64_t missing = required_features & ~m->get_connection()->get_features();
@@ -1420,12 +1422,26 @@ void Monitor::handle_probe_probe(MMonProbe *m)
       m->required_features = required_features;
       messenger->send_message(r, m->get_connection());
     }
-    m->put();
-    return;
+    goto out;
   }
 
-  MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY,
-			       name, has_ever_joined);
+  if (!is_probing() && !is_synchronizing()) {
+    // If the probing mon is way ahead of us, we need to re-bootstrap.
+    // Normally we capture this case when we initially bootstrap, but
+    // it is possible we pass those checks (we overlap with
+    // quorum-to-be) but fail to join a quorum before it moves past
+    // us.  We need to be kicked back to bootstrap so we can
+    // synchonize, not keep calling elections.
+    if (paxos->get_version() + 1 < m->paxos_first_version) {
+      dout(1) << " peer " << m->get_source_addr() << " has first_committed "
+	      << "ahead of us, re-bootstrapping" << dendl;
+      bootstrap();
+      goto out;
+
+    }
+  }
+
+  r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
@@ -1440,6 +1456,7 @@ void Monitor::handle_probe_probe(MMonProbe *m)
     extra_probe_peers.insert(m->get_source_addr());
   }
 
+ out:
   m->put();
 }
 

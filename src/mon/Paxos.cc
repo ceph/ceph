@@ -449,6 +449,7 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MMonPaxos *last)
 {
   bool need_refresh = false;
+  int from = last->get_source().num();
 
   dout(10) << "handle_last " << *last << dendl;
 
@@ -460,12 +461,13 @@ void Paxos::handle_last(MMonPaxos *last)
 
   // note peer's first_ and last_committed, in case we learn a new
   // commit and need to push it to them.
-  peer_first_committed[last->get_source().num()] = last->first_committed;
-  peer_last_committed[last->get_source().num()] = last->last_committed;
+  peer_first_committed[from] = last->first_committed;
+  peer_last_committed[from] = last->last_committed;
 
-  if (last->first_committed > last_committed+1) {
+  if (last->first_committed > last_committed + 1) {
     dout(5) << __func__
-            << " peon's lowest version is too high for our last committed"
+            << " mon." << from
+	    << " lowest version is too high for our last committed"
             << " (theirs: " << last->first_committed
             << "; ours: " << last_committed << ") -- bootstrap!" << dendl;
     last->put();
@@ -479,6 +481,31 @@ void Paxos::handle_last(MMonPaxos *last)
   need_refresh = store_state(last);
 
   assert(g_conf->paxos_kill_at != 2);
+
+  // is everyone contiguous and up to date?
+  for (map<int,version_t>::iterator p = peer_last_committed.begin();
+       p != peer_last_committed.end();
+       ++p) {
+    if (p->second + 1 < first_committed && first_committed > 1) {
+      dout(5) << __func__
+	      << " peon " << p->first
+	      << " last_committed (" << p->second
+	      << ") is too low for our first_committed (" << first_committed
+	      << ") -- bootstrap!" << dendl;
+      last->put();
+      mon->bootstrap();
+      return;
+    }
+    if (p->second < last_committed) {
+      // share committed values
+      dout(10) << " sending commit to mon." << p->first << dendl;
+      MMonPaxos *commit = new MMonPaxos(mon->get_epoch(),
+					MMonPaxos::OP_COMMIT,
+					ceph_clock_now(g_ceph_context));
+      share_state(commit, peer_first_committed[p->first], p->second);
+      mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
+    }
+  }
 
   // do they accept your pn?
   if (last->pn > accepted_pn) {
@@ -521,21 +548,6 @@ void Paxos::handle_last(MMonPaxos *last)
       // cancel timeout event
       mon->timer.cancel_event(collect_timeout_event);
       collect_timeout_event = 0;
-
-      // share committed values?
-      for (map<int,version_t>::iterator p = peer_last_committed.begin();
-	   p != peer_last_committed.end();
-	   ++p) {
-	if (p->second < last_committed) {
-	  // share committed values
-	  dout(10) << " sending commit to mon." << p->first << dendl;
-	  MMonPaxos *commit = new MMonPaxos(mon->get_epoch(),
-					    MMonPaxos::OP_COMMIT,
-					    ceph_clock_now(g_ceph_context));
-	  share_state(commit, peer_first_committed[p->first], p->second);
-	  mon->messenger->send_message(commit, mon->monmap->get_inst(p->first));
-	}
-      }
       peer_first_committed.clear();
       peer_last_committed.clear();
 
