@@ -48,7 +48,7 @@ export PATH=/sbin:$PATH
 : ${VERBOSE:=false}
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
-: ${PLUGINS:=example jerasure}
+: ${PLUGINS:=example jerasure isa}
 : ${TOTAL_SIZE:=$((10 * 1024 * 1024))}
 : ${SIZES:=4096 $((1024 * 1024))}
 : ${PARAMETERS:=--parameter jerasure-per-chunk-alignment=true}
@@ -150,6 +150,42 @@ function jerasure_test() {
     done
 }
 
+function isa_test() {
+    local plugin=isa
+    local ks="2 3 4 6 10"
+    declare -A k2ms
+    k2ms[2]="1"
+    k2ms[3]="2"
+    k2ms[4]="2 3"
+    k2ms[6]="2 3 4"
+    k2ms[10]="3 4"
+    for technique in reed_sol_van cauchy ; do
+        for size in $SIZES ; do
+            echo "serie encode_${technique}_${size}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    bench $plugin $k $m encode $(($TOTAL_SIZE / $size)) $size 0 \
+                        --parameter technique=$technique
+
+                done
+            done
+        done
+    done
+    for technique in reed_sol_van cauchy ; do
+        for size in $SIZES ; do
+            echo "serie decode_${technique}_${size}"
+            for k in $ks ; do
+                for m in ${k2ms[$k]} ; do
+                    echo
+                    for erasures in $(seq 1 $m) ; do
+                        bench $plugin $k $m decode $(($TOTAL_SIZE / $size)) $size $erasures \
+                            --parameter technique=$technique
+                    done
+                done
+            done
+        done
+    done
+}
 function fplot() {
     local plugin=$1
     local serie
@@ -160,8 +196,8 @@ function fplot() {
             if [ "$serie" ] ; then
                 echo '];'
             fi
-             local serie=$total
-             echo "var $serie = ["
+            local serie=`echo $total | sed 's/cauchy_\([0-9]\)/cauchy_good_\1/g'`
+            echo "var $serie = ["
         else
             local x
             if [ $workload = encode ] ; then
