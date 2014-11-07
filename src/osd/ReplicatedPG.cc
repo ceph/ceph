@@ -1284,7 +1284,7 @@ void ReplicatedPG::do_request(
     }
   }
 
-  assert(is_active() && flushes_in_progress == 0);
+  assert(is_peered() && flushes_in_progress == 0);
   if (pgbackend->handle_message(op))
     return;
 
@@ -10176,7 +10176,7 @@ void ReplicatedPG::on_flushed()
   if (flushes_in_progress == 0) {
     requeue_ops(waiting_for_peered);
   }
-  if (!is_active() || !is_primary()) {
+  if (!is_peered() || !is_primary()) {
     pair<hobject_t, ObjectContextRef> i;
     while (object_contexts.get_next(i.first, &i)) {
       derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
