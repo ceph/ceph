@@ -5538,13 +5538,6 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
   return 0;
 }
 
-static void op_setxattr(librados::ObjectWriteOperation& op, const char *name, const string& val)
-{
-  bufferlist bl;
-  bl.append(val);
-  op.setxattr(name, bl);
-}
-
 int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const string& bucket_owner, rgw_obj& obj,
                             bufferlist& olh_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                             uint64_t *plast_ver)
