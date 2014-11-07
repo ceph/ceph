@@ -1534,6 +1534,11 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     return ret;
   }
 
+  if (olh_data_entry.tag != op.olh_tag) {
+    CLS_LOG(1, "NOTICE: %s(): olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+    return -ECANCELED;
+  }
+
   rgw_cls_read_olh_log_ret op_ret;
 
 #define MAX_OLH_LOG_ENTRIES 1000
@@ -1581,6 +1586,11 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   if (ret < 0 && ret != -ENOENT) {
     CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
     return ret;
+  }
+
+  if (olh_data_entry.tag != op.olh_tag) {
+    CLS_LOG(1, "NOTICE: %s(): olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+    return -ECANCELED;
   }
 
   /* remove all versions up to and including ver from the pending map */
