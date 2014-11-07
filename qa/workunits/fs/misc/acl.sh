@@ -19,7 +19,7 @@ do
 	# inherited ACL from parent directory's default ACL
 	mkdir d1
 	c1=`getfacl d1 | grep -c "nobody:rw"`
-	sudo echo 3 > /proc/sys/vm/drop_caches
+	echo 3 | sudo tee /proc/sys/vm/drop_caches > /dev/null
 	c2=`getfacl d1 | grep -c "nobody:rw"`
 	rmdir d1
 	if [ $c1 -ne 2 ] || [ $c2 -ne 2 ]
