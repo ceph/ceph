@@ -180,6 +180,15 @@ const char *ceph_snap_op_name(int o)
 	return "???";
 }
 
+const char *ceph_watch_event_name(int e)
+{
+	switch (e) {
+	case CEPH_WATCH_EVENT_NOTIFY: return "notify";
+	case CEPH_WATCH_EVENT_NOTIFY_COMPLETE: return "notify_complete";
+	}
+	return "???";
+}
+
 const char *ceph_pool_op_name(int op)
 {
 	switch (op) {
