@@ -775,7 +775,7 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       assert(!!wc->watch_ctx ^ !!wc->watch_ctx2);  // only one is defined
       lock.Unlock();
       if (wc->watch_ctx) {
-	wc->watch_ctx->notify(WATCH_NOTIFY, m->ver, m->bl);
+	wc->watch_ctx->notify(CEPH_WATCH_EVENT_NOTIFY, m->ver, m->bl);
 	// send ACK back to the OSD
 	bufferlist empty;
 	wc->io_ctx_impl->notify_ack(wc->oid, m->notify_id, m->cookie, empty);
