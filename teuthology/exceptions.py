@@ -58,11 +58,14 @@ class ConnectionLostError(Exception):
     """
     Exception thrown when the connection is lost
     """
-    def __init__(self, command):
+    def __init__(self, command, node=None):
         self.command = command
+        self.node = node
 
     def __str__(self):
-        return "SSH connection was lost: {command!r}".format(
+        node_str = 'to %s ' % self.node if self.node else ''
+        return "SSH connection {node_str}was lost: {command!r}".format(
+            node_str=node_str,
             command=self.command,
             )
 

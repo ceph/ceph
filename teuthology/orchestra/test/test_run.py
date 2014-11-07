@@ -229,7 +229,7 @@ class TestRun(object):
             )
 
         assert e.command == 'foo'
-        assert str(e) == "SSH connection was lost: 'foo'"
+        assert str(e) == "SSH connection to HOST was lost: 'foo'"
 
     @fudge.with_fakes
     def test_run_status_lost_socket(self):

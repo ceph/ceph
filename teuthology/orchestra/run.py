@@ -95,7 +95,8 @@ class RemoteProcess(object):
                 transport = self.client.get_transport()
                 if transport is None or not transport.is_active():
                     # look like we lost the connection
-                    raise ConnectionLostError(command=self.command)
+                    raise ConnectionLostError(command=self.command,
+                                              node=self.hostname)
 
                 # connection seems healthy still, assuming it was a
                 # signal; sadly SSH does not tell us which signal
@@ -316,7 +317,7 @@ def run(
     try:
         (host, port) = client.get_transport().getpeername()
     except socket.error:
-        raise ConnectionLostError(command=quote(args))
+        raise ConnectionLostError(command=quote(args), node=name)
 
     if name is None:
         name = host
