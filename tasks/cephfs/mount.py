@@ -160,10 +160,12 @@ class CephFSMount(object):
             import fcntl
             import struct
 
-            f = open("{path}", 'w')
-            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            f1 = open("{path}-1", 'w')
+            fcntl.flock(f1, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            f2 = open("{path}-2", 'w')
             lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
-            fcntl.fcntl(f, fcntl.F_SETLK, lockdata)
+            fcntl.fcntl(f2, fcntl.F_SETLK, lockdata)
             while True:
                 time.sleep(1)
             """).format(path=path)
@@ -183,22 +185,24 @@ class CephFSMount(object):
             import errno
             import struct
 
-            f = open("{path}", 'r')
+            f1 = open("{path}-1", 'r')
             try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(f1, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except IOError, e:
                 if e.errno == errno.EAGAIN:
                     pass
             else:
-                raise RuntimeError("flock on file {path} not found")
+                raise RuntimeError("flock on file {path}-1 not found")
+
+            f2 = open("{path}-2", 'r')
             try:
                 lockdata = struct.pack('hhllhh', fcntl.F_WRLCK, 0, 0, 0, 0, 0)
-                fcntl.fcntl(f, fcntl.F_SETLK, lockdata)
+                fcntl.fcntl(f2, fcntl.F_SETLK, lockdata)
             except IOError, e:
                 if e.errno == errno.EAGAIN:
                     pass
             else:
-                raise RuntimeError("posix lock on file {path} not found")
+                raise RuntimeError("posix lock on file {path}-2 not found")
             """).format(path=path)
 
         log.info("check lock on file {0}".format(basename))
