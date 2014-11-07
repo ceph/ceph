@@ -159,7 +159,7 @@ void Dumper::undump(const char *dump_file)
   cout << "start " << start << " len " << len << std::endl;
   
   Journaler::Header h;
-  h.trimmed_pos = start;
+  h.trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
   h.expire_pos = start;
   h.write_pos = write_pos;
   h.stream_format = format;
