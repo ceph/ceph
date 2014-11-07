@@ -1,0 +1,33 @@
+TRACEPOINT_EVENT(asyncmsgr, process,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_array(uint64_t, stamps, stamps, 11)
+    )
+)
+
+TRACEPOINT_EVENT(asyncmsgr, handle_write,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t,  data_len,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer(uint64_t, data_len, data_len)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)

@@ -1,0 +1,14 @@
+TRACEPOINT_EVENT(filejournal, prep_single_write,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        int32_t,  qlen,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer_hex(int32_t, journalq_len, qlen)
+        ctf_array(uint64_t, stamps, stamps, 3)
+    )
+)
+

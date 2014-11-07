@@ -31,6 +31,16 @@
 #include "auth/Crypto.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
+#include "auth/cephx/CephxSessionHandler.h"
+
+#ifdef WITH_LTTNG
+#include "tracing/pipe.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
+#else
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
+#endif
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -1483,11 +1493,23 @@ void Pipe::stop_and_wait()
     cond.Wait(pipe_lock);
 }
 
+#define TP_READER_TAG_MSG        0
+#define TP_READER_MSG_COMPLETE   1
+#define TP_READER_PIPE_LOCKED    2
+#define TP_READER_PIPE_UNLOCK    3
+#define TP_READER_DISPATCH       4
+#define TP_READER_DISPATCH_DONE  5
+#define TP_READER_PIPE_LOCK2     6
+#define TP_READER_ENQUEUE        7
+#define TP_READER_ENQUEUE_DONE   8
+
 /* read msgs from socket.
  * also, server.
  */
 void Pipe::reader()
 {
+  uint64_t tp_stamps[9] = {0,0,0,0,0,0,0,0,0};
+  
   pipe_lock.Lock();
 
   if (state == STATE_ACCEPTING) {
@@ -1512,6 +1534,8 @@ void Pipe::reader()
 
     pipe_lock.Unlock();
 
+    memset(tp_stamps, 0, sizeof(tp_stamps));
+    
     char tag = -1;
     ldout(msgr->cct,20) << "reader reading tag..." << dendl;
     if (tcp_read((char*)&tag, 1) < 0) {
@@ -1576,9 +1600,13 @@ void Pipe::reader()
     else if (tag == CEPH_MSGR_TAG_MSG) {
       ldout(msgr->cct,20) << "reader got MSG" << dendl;
       Message *m = 0;
+      
+      set_tp_stamp(tp_stamps[TP_READER_TAG_MSG], ceph_clock_now(msgr->cct).to_nsec()/1000);
       int r = read_message(&m, auth_handler.get());
 
+      set_tp_stamp(tp_stamps[TP_READER_MSG_COMPLETE], ceph_clock_now(msgr->cct).to_nsec()/1000);
       pipe_lock.Lock();
+      set_tp_stamp(tp_stamps[TP_READER_PIPE_LOCKED], ceph_clock_now(msgr->cct).to_nsec()/1000);
       
       if (!m) {
 	if (r < 0)
@@ -1639,9 +1667,13 @@ void Pipe::reader()
       } else {
         if (in_q->can_fast_dispatch(m)) {
 	  reader_dispatching = true;
-          pipe_lock.Unlock();
+	  // set_tp_stamp(tp_stamps[TP_READER_PIPE_UNLOCK], ceph_clock_now(msgr->cct).to_nsec()/1000); 
+          // pipe_lock.Unlock();
+	  set_tp_stamp(tp_stamps[TP_READER_DISPATCH], ceph_clock_now(msgr->cct).to_nsec()/1000); 
           in_q->fast_dispatch(m);
-          pipe_lock.Lock();
+	  set_tp_stamp(tp_stamps[TP_READER_DISPATCH_DONE], ceph_clock_now(msgr->cct).to_nsec()/1000); 
+          // pipe_lock.Lock();
+	  // set_tp_stamp(tp_stamps[TP_READER_PIPE_LOCK2], ceph_clock_now(msgr->cct).to_nsec()/1000); 
 	  reader_dispatching = false;
 	  if (state == STATE_CLOSED ||
 	      notify_on_dispatch_done) { // there might be somebody waiting
@@ -1649,9 +1681,12 @@ void Pipe::reader()
 	    cond.Signal();
 	  }
         } else {
+	  set_tp_stamp(tp_stamps[TP_READER_ENQUEUE], ceph_clock_now(msgr->cct).to_nsec()/1000); 
           in_q->enqueue(m, m->get_priority(), conn_id);
+	  set_tp_stamp(tp_stamps[TP_READER_ENQUEUE_DONE], ceph_clock_now(msgr->cct).to_nsec()/1000);
         }
       }
+      tracepoint(pipe, reader, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), m->get_data_len(), tp_stamps);
     }
     
     else if (tag == CEPH_MSGR_TAG_CLOSE) {
@@ -1681,11 +1716,20 @@ void Pipe::reader()
   ldout(msgr->cct,10) << "reader done" << dendl;
 }
 
+#define TP_WRITER_START         0
+#define TP_WRITER_GRAB_MESSAGE  1
+#define TP_WRITER_ENCODE        2
+#define TP_WRITER_ENCODE_DONE   3
+#define TP_WRITER_SEND          4
+#define TP_WRITER_SEND_DONE     5
+
 /* write msgs to socket.
  * also, client.
  */
 void Pipe::writer()
 {
+  uint64_t tp_stamps[6] = {0,0,0,0,0,0};
+  
   pipe_lock.Lock();
   while (state != STATE_CLOSED) {// && state != STATE_WAIT) {
     ldout(msgr->cct,10) << "writer: state = " << get_state_name()
@@ -1771,8 +1815,10 @@ void Pipe::writer()
       }
 
       // grab outgoing message
+      set_tp_stamp(tp_stamps[TP_WRITER_START], ceph_clock_now(msgr->cct).to_nsec()/1000);
       Message *m = _get_next_outgoing();
       if (m) {
+	set_tp_stamp(tp_stamps[TP_WRITER_GRAB_MESSAGE], ceph_clock_now(msgr->cct).to_nsec()/1000);
 	m->set_seq(++out_seq);
 	if (!policy.lossy) {
 	  // put on sent list
@@ -1793,7 +1839,9 @@ void Pipe::writer()
 			      << " " << m << " " << *m << dendl;
 
 	// encode and copy out of *m
+	set_tp_stamp(tp_stamps[TP_WRITER_ENCODE], ceph_clock_now(msgr->cct).to_nsec()/1000);
 	m->encode(features, msgr->crcflags);
+	set_tp_stamp(tp_stamps[TP_WRITER_ENCODE_DONE], ceph_clock_now(msgr->cct).to_nsec()/1000);
 
 	// prepare everything
 	ceph_msg_header& header = m->get_header();
@@ -1823,7 +1871,9 @@ void Pipe::writer()
         pipe_lock.Unlock();
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
+	set_tp_stamp(tp_stamps[TP_WRITER_SEND], ceph_clock_now(msgr->cct).to_nsec()/1000);
 	int rc = write_message(header, footer, blist);
+	set_tp_stamp(tp_stamps[TP_WRITER_SEND_DONE], ceph_clock_now(msgr->cct).to_nsec()/1000);
 
 	pipe_lock.Lock();
 	if (rc < 0) {
@@ -1832,6 +1882,7 @@ void Pipe::writer()
 	  fault();
         }
 	m->put();
+	tracepoint(pipe, writer, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), m->get_data_len(), tp_stamps);
       }
       continue;
     }
@@ -1887,6 +1938,18 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   }
 }
 
+#define TP_RECV_STAMP         0
+#define TP_THROTTLE_STAMP     1
+#define TP_FRONT_STAMP        2
+#define TP_MIDDLE_STAMP       3
+#define TP_DATA_STAMP         4
+#define TP_FOOTER_STAMP       5
+#define TP_DECODE_START_STAMP 6
+#define TP_DECODE_END_STAMP   7
+#define TP_RECV_AUTHENTICATED 8
+#define TP_RECV_MSG_COPY      9
+#define TP_RECV_DONE          10
+
 int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 {
   int ret = -1;
@@ -1896,7 +1959,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ceph_msg_header header; 
   ceph_msg_footer footer;
   __u32 header_crc = 0;
-
+  uint64_t tp_stamps[11] = {0,0,0,0,0,0,0,0,0,0,0};
+  
   if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
     if (tcp_read((char*)&header, sizeof(header)) < 0)
       return -1;
@@ -1933,10 +1997,12 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   bufferlist front, middle, data;
   int front_len, middle_len;
-  unsigned data_len, data_off;
+  unsigned data_len = 0, data_off = 0;
+  int tp_loops = 0;
   int aborted;
-  Message *message;
+  Message *message = NULL;
   utime_t recv_stamp = ceph_clock_now(msgr->cct);
+  set_tp_stamp(tp_stamps[TP_RECV_STAMP], recv_stamp.to_nsec()/1000);
 
   if (policy.throttler_messages) {
     ldout(msgr->cct,10) << "reader wants " << 1 << " message from policy throttler "
@@ -1965,6 +2031,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
 
   utime_t throttle_stamp = ceph_clock_now(msgr->cct);
+  set_tp_stamp(tp_stamps[TP_THROTTLE_STAMP], throttle_stamp.to_nsec()/1000); 
 
   // read front
   front_len = header.front_len;
@@ -1974,6 +2041,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     front.push_back(bp);
     ldout(msgr->cct,20) << "reader got front " << front.length() << dendl;
+    set_tp_stamp(tp_stamps[TP_FRONT_STAMP], ceph_clock_now(msgr->cct).to_nsec()/1000);
   }
 
   // read middle
@@ -1984,6 +2052,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       goto out_dethrottle;
     middle.push_back(bp);
     ldout(msgr->cct,20) << "reader got middle " << middle.length() << dendl;
+    set_tp_stamp(tp_stamps[TP_MIDDLE_STAMP], ceph_clock_now(msgr->cct).to_nsec()/1000);
   }
 
 
@@ -2000,6 +2069,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	
     while (left > 0) {
       // wait for data
+      tp_loops++;
       if (tcp_read_wait() < 0)
 	goto out_dethrottle;
 
@@ -2042,6 +2112,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	left -= got;
       } // else we got a signal or something; just loop.
     }
+    set_tp_stamp(tp_stamps[TP_DATA_STAMP], ceph_clock_now(msgr->cct).to_nsec()/1000);
   }
 
   // footer
@@ -2060,6 +2131,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     footer.sig = 0;
     footer.flags = old_footer.flags;
   }
+  set_tp_stamp(tp_stamps[TP_FOOTER_STAMP], ceph_clock_now(msgr->cct).to_nsec()/1000);
   
   aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
   ldout(msgr->cct,10) << "aborted = " << aborted << dendl;
@@ -2072,16 +2144,17 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
+  set_tp_stamp(tp_stamps[TP_DECODE_START_STAMP], ceph_clock_now(msgr->cct).to_nsec()/1000);
   message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
   }
+  tp_stamps[TP_DECODE_END_STAMP] = ceph_clock_now(msgr->cct).to_nsec()/1000;
 
   //
   //  Check the signature if one should be present.  A zero return indicates success. PLR
   //
-
   if (auth_handler == NULL) {
     ldout(msgr->cct, 10) << "No session security set" << dendl;
   } else {
@@ -2092,6 +2165,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     } 
   }
 
+  tp_stamps[TP_RECV_AUTHENTICATED] = ceph_clock_now(msgr->cct).to_nsec()/1000;
+  
   message->set_byte_throttler(policy.throttler_bytes);
   message->set_message_throttler(policy.throttler_messages);
 
@@ -2103,7 +2178,10 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   message->set_throttle_stamp(throttle_stamp);
   message->set_recv_complete_stamp(ceph_clock_now(msgr->cct));
 
+  tp_stamps[TP_RECV_MSG_COPY] = ceph_clock_now(msgr->cct).to_nsec()/1000;
   *pm = message;
+  tp_stamps[TP_RECV_DONE] = ceph_clock_now(msgr->cct).to_nsec()/1000;
+  tracepoint(pipe, read_message, pthread_self(), message->get_tid(), message->get_seq(), message->get_type(), data_len, tp_loops, tp_stamps); 
   return 0;
 
  out_dethrottle:
@@ -2127,8 +2205,16 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   return ret;
 }
 
+#define TP_DO_SENDMSG_START 0
+#define TP_DO_SENDMSG_END   1
+
 int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 {
+  int tp_loopcnt = 0;
+  int tp_len = len;
+  uint64_t tp_stamps[2] = {0,0};
+  
+  set_tp_stamp(tp_stamps[TP_DO_SENDMSG_START], ceph_clock_now(msgr->cct).to_nsec()/1000);
   while (len > 0) {
     if (0) { // sanity
       int l = 0;
@@ -2136,6 +2222,8 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
 	l += msg->msg_iov[i].iov_len;
       assert(l == len);
     }
+    
+    tp_loopcnt++;
 
     int r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
     if (r == 0) 
@@ -2151,7 +2239,10 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
     }
 
     len -= r;
-    if (len == 0) break;
+    if (len == 0) {
+      set_tp_stamp(tp_stamps[TP_DO_SENDMSG_END], ceph_clock_now(msgr->cct).to_nsec()/1000);
+      break;
+    }
     
     // hrmph.  trim r bytes off the front of our message.
     ldout(msgr->cct,20) << "do_sendmsg short write did " << r << ", still have " << len << dendl;
@@ -2171,6 +2262,7 @@ int Pipe::do_sendmsg(struct msghdr *msg, int len, bool more)
       }
     }
   }
+  tracepoint(pipe, do_sendmsg, peer_addr.in4_addr().sin_addr.s_addr, peer_addr.in4_addr().sin_port, tp_len, tp_loopcnt, tp_stamps);
   return 0;
 }
 

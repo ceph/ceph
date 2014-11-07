@@ -83,4 +83,8 @@ noinst_HEADERS += \
 	msg/xio/XioSubmit.h
 endif
 
+if WITH_LTTNG
+libmsg_la_LIBADD = $(LIBPIPE_TP) $(LIBASYNCMSGR_TP)
+endif
+
 noinst_LTLIBRARIES += libmsg.la

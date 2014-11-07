@@ -79,8 +79,13 @@ using ceph::crypto::SHA1;
 
 #ifdef WITH_LTTNG
 #include "tracing/objectstore.h"
+#include "tracing/filestore.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
 #else
 #define tracepoint(...)
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
 #endif
 
 #define dout_subsys ceph_subsys_filestore
@@ -1782,10 +1787,17 @@ void FileStore::op_queue_release_throttle(Op *o)
   logger->set(l_os_oq_bytes, op_queue_bytes);
 }
 
+#define TP_FSTORE_DO_OP_START              0
+#define TP_FSTORE_DO_OP_TRANSACTIONS_START 1
+#define TP_FSTORE_DO_OP_TRANSACTIONS_END   2
+#define TP_FSTORE_DO_OP_END                3
+
 void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
 {
+  uint64_t tp_stamps[4] = {0,0,0,0};
   wbthrottle.throttle();
   // inject a stall?
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_OP_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   if (g_conf->filestore_inject_stall) {
     int orig = g_conf->filestore_inject_stall;
     dout(5) << "_do_op filestore_inject_stall " << orig << ", sleeping" << dendl;
@@ -1799,10 +1811,14 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   Op *o = osr->peek_queue();
   apply_manager.op_apply_start(o->op);
   dout(5) << "_do_op " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_OP_TRANSACTIONS_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   int r = _do_transactions(o->tls, o->op, &handle);
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_OP_TRANSACTIONS_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   apply_manager.op_apply_finish(o->op);
   dout(10) << "_do_op " << o << " seq " << o->op << " r = " << r
 	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_OP_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
+  tracepoint(filestore, do_op, pthread_self(), o->op, tp_stamps);
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
@@ -1846,10 +1862,23 @@ struct C_JournaledAhead : public Context {
   }
 };
 
+#define TP_FSTORE_TRIGGER_JOURNAL   0
+#define TP_FSTORE_QUEUE_OP          1
+#define TP_FSTORE_QUEUE_OP_DONE     2
+
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  TrackedOpRef osd_op,
 				  ThreadPool::TPHandle *handle)
 {
+
+  uint64_t tp_stamps[3] = {0,0,0};
+  OpRequest * tp_opref = NULL;
+  
+  // for tp_stamps
+  if (osd_op) {
+    tp_opref = reinterpret_cast<OpRequest *>(osd_op.get());
+  }
+
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
@@ -1893,22 +1922,30 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
       dump_transactions(o->tls, o->op, osr);
 
     if (m_filestore_journal_parallel) {
+      set_tp_stamp(tp_stamps[TP_FSTORE_TRIGGER_JOURNAL], ceph_clock_now(g_ceph_context).to_nsec()/1000);
       dout(5) << "queue_transactions (parallel) " << o->op << " " << o->tls << dendl;
       
       _op_journal_transactions(o->tls, o->op, ondisk, osd_op);
+      set_tp_stamp(tp_stamps[TP_FSTORE_QUEUE_OP], ceph_clock_now(g_ceph_context).to_nsec()/1000);
       
       // queue inside submit_manager op submission lock
       queue_op(osr, o);
+      set_tp_stamp(tp_stamps[TP_FSTORE_QUEUE_OP_DONE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
     } else if (m_filestore_journal_writeahead) {
       dout(5) << "queue_transactions (writeahead) " << o->op << " " << o->tls << dendl;
       
       osr->queue_journal(o->op);
+      set_tp_stamp(tp_stamps[TP_FSTORE_TRIGGER_JOURNAL], ceph_clock_now(g_ceph_context).to_nsec()/1000);
 
       _op_journal_transactions(o->tls, o->op,
 			       new C_JournaledAhead(this, osr, o, ondisk),
 			       osd_op);
+      set_tp_stamp(tp_stamps[TP_FSTORE_QUEUE_OP_DONE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
     } else {
       assert(0);
+    }
+    if (tp_opref) {
+      tracepoint(filestore, queue_transactions, pthread_self(), tp_opref->get_reqid().tid, tp_stamps);
     }
     submit_manager.op_submit_finish(op_num);
     return 0;
@@ -1983,22 +2020,33 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   }
 }
 
+#define TP_FSTORE_DO_TAS_START        0
+#define TP_FSTORE_DO_TAS_TA_START     1
+#define TP_FSTORE_DO_TAS_TA_DONE      2
+#define TP_FSTORE_DO_TAS_TP_DONE      3
+
 int FileStore::_do_transactions(
   list<Transaction*> &tls,
   uint64_t op_seq,
   ThreadPool::TPHandle *handle)
 {
+  uint64_t tp_stamps[4] = {0,0,0,0};
   int r = 0;
   int trans_num = 0;
 
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_TAS_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   for (list<Transaction*>::iterator p = tls.begin();
        p != tls.end();
        ++p, trans_num++) {
+    set_tp_stamp(tp_stamps[TP_FSTORE_DO_TAS_TA_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
     r = _do_transaction(**p, op_seq, trans_num, handle);
+    set_tp_stamp(tp_stamps[TP_FSTORE_DO_TAS_TA_DONE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
     if (r < 0)
       break;
     if (handle)
       handle->reset_tp_timeout();
+    set_tp_stamp(tp_stamps[TP_FSTORE_DO_TAS_TP_DONE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
+    tracepoint(filestore, do_transactions, pthread_self(), op_seq, trans_num, tp_stamps);
   }
   
   return r;
@@ -2260,16 +2308,29 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   }
 }
 
+#define TP_FSTORE_DO_TA_START              0
+#define TP_FSTORE_DO_TA_OTHER_OP_START     1
+#define TP_FSTORE_DO_TA_OTHER_OP_END       2
+#define TP_FSTORE_DO_TA_WRITE_START        3
+#define TP_FSTORE_DO_TA_WRITE_DECODE_START 4
+#define TP_FSTORE_DO_TA_WRITE_DECODE_END   5
+#define TP_FSTORE_DO_TA_WRITE_END          6
+#define TP_FSTORE_DO_TA_END                7
+
 unsigned FileStore::_do_transaction(
   Transaction& t, uint64_t op_seq, int trans_num,
   ThreadPool::TPHandle *handle)
 {
+  uint64_t tp_stamps[8] = {0,0,0,0,0,0};
+  int32_t tp_nops = 0;
+
   dout(10) << "_do_transaction on " << &t << dendl;
 
 #ifdef WITH_LTTNG
   const char *osr_name = t.get_osr() ? static_cast<OpSequencer*>(t.get_osr())->get_name().c_str() : "<NULL>";
 #endif
 
+  set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   Transaction::iterator i = t.begin();
   
   SequencerPosition spos(op_seq, trans_num, 0);
@@ -2281,6 +2342,10 @@ unsigned FileStore::_do_transaction(
     int r = 0;
 
     _inject_failure();
+
+    if (op != Transaction::OP_WRITE) {
+      set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_OTHER_OP_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
+    }
 
     switch (op->op) {
     case Transaction::OP_NOP:
@@ -2298,16 +2363,19 @@ unsigned FileStore::_do_transaction(
       
     case Transaction::OP_WRITE:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-        uint64_t off = op->off;
-        uint64_t len = op->len;
-        uint32_t fadvise_flags = i.get_fadvise_flags();
-        bufferlist bl;
-        i.decode_bl(bl);
+        set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_WRITE_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
+	coll_t cid = i.decode_cid();
+	ghobject_t oid = i.decode_oid();
+	uint64_t off = i.decode_length();
+	uint64_t len = i.decode_length();
+	bool replica = i.get_replica();
+	bufferlist bl;
+	i.decode_bl(bl);
+        set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_WRITE_DECODE_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
         tracepoint(objectstore, write_enter, osr_name, off, len);
         if (_check_replay_guard(cid, oid, spos) > 0)
           r = _write(cid, oid, off, len, bl, fadvise_flags);
+        set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_WRITE_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
         tracepoint(objectstore, write_exit, r);
       }
       break;
@@ -2676,6 +2744,10 @@ unsigned FileStore::_do_transaction(
     default:
       derr << "bad op " << op->op << dendl;
       assert(0);
+    }
+    if (op != Transaction::OP_WRITE) {
+      set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_OTHER_OP_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
+      tracepoint(filestore, do_transaction, pthread_self(), op_seq, trans_num, "unknown", "", 0, 0,  op, tp_nops, tp_stamps);
     }
 
     if (r < 0) {
