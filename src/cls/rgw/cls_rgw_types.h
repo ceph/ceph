@@ -402,6 +402,7 @@ struct rgw_bucket_olh_log_entry {
     ::decode(delete_marker, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(list<rgw_bucket_olh_log_entry*>& o);
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
