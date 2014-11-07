@@ -69,7 +69,7 @@ int Dumper::recover_journal(Journaler *journaler)
 }
 
 
-void Dumper::dump(const char *dump_file)
+int Dumper::dump(const char *dump_file)
 {
   int r = 0;
 
@@ -77,7 +77,7 @@ void Dumper::dump(const char *dump_file)
                                        objecter, 0, 0, &timer, &finisher);
   r = recover_journal(&journaler);
   if (r) {
-    return;
+    return r;
   }
   uint64_t start = journaler.get_read_pos();
   uint64_t end = journaler.get_write_pos();
@@ -110,34 +110,56 @@ void Dumper::dump(const char *dump_file)
 	    (unsigned long long)journaler.last_committed.stream_format,
 	    (unsigned long long)journaler.last_committed.trimmed_pos, (unsigned long long)journaler.last_committed.trimmed_pos,
 	    4);
-    int r = safe_write(fd, buf, sizeof(buf));
-    if (r)
-      ceph_abort();
+    r = safe_write(fd, buf, sizeof(buf));
+    if (r) {
+      derr << "Error " << r << " (" << cpp_strerror(r) << ") writing journal file header" << dendl;
+      return r;
+    }
 
     // write the data
-    ::lseek64(fd, start, SEEK_SET);
-    bl.write_fd(fd);
-    ::close(fd);
+    off64_t seeked = ::lseek64(fd, start, SEEK_SET);
+    if (seeked == (off64_t)-1) {
+      r = errno;
+      derr << "Error " << r << " (" << cpp_strerror(r) << ") seeking to 0x" << std::hex << start << std::dec << dendl;
+      ::close(fd);
+      return r;
+    }
+    r = bl.write_fd(fd);
+    if (r) {
+      derr << "Error " << r << " (" << cpp_strerror(r) << ") writing journal file" << dendl;
+      ::close(fd);
+      return r;
+    }
+
+    r = ::close(fd);
+    if (r) {
+      r = errno;
+      derr << "Error " << r << " (" << cpp_strerror(r) << ") closing journal file" << dendl;
+      return r;
+    }
 
     cout << "wrote " << bl.length() << " bytes at offset " << start << " to " << dump_file << "\n"
 	 << "NOTE: this is a _sparse_ file; you can\n"
 	 << "\t$ tar cSzf " << dump_file << ".tgz " << dump_file << "\n"
 	 << "      to efficiently compress it while preserving sparseness." << std::endl;
+    return 0;
   } else {
     int err = errno;
     derr << "unable to open " << dump_file << ": " << cpp_strerror(err) << dendl;
+    return err;
   }
 }
 
-void Dumper::undump(const char *dump_file)
+int Dumper::undump(const char *dump_file)
 {
-
   cout << "undump " << dump_file << std::endl;
   
+  int r = 0;
   int fd = ::open(dump_file, O_RDONLY);
   if (fd < 0) {
-    derr << "couldn't open " << dump_file << ": " << cpp_strerror(errno) << dendl;
-    return;
+    r = errno;
+    derr << "couldn't open " << dump_file << ": " << cpp_strerror(r) << dendl;
+    return r;
   }
 
   // Ceph mds0 journal dump
@@ -145,10 +167,10 @@ void Dumper::undump(const char *dump_file)
   //        length 1097504 (0x10bf20)
 
   char buf[200];
-  int r = safe_read(fd, buf, sizeof(buf));
+  r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return;
+    return r;
   }
 
   long long unsigned start, len, write_pos, format, trimmed_pos;
@@ -164,8 +186,23 @@ void Dumper::undump(const char *dump_file)
     trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
   }
 
+  if (trimmed_pos > start) {
+    derr << std::hex << "Invalid header (trimmed 0x" << trimmed_pos
+      << " > expire 0x" << start << std::dec << dendl;
+    return -EINVAL;
+  }
 
-  cout << "start " << start << " len " << len << std::endl;
+  if (start > write_pos) {
+    derr << std::hex << "Invalid header (expire 0x" << start
+      << " > write 0x" << write_pos << std::dec << dendl;
+    return -EINVAL;
+  }
+
+  cout << "start " << start <<
+    " len " << len <<
+    " write_pos " << write_pos <<
+    " format " << format <<
+    " trimmed_pos " << trimmed_pos << std::endl;
   
   Journaler::Header h;
   h.trimmed_pos = trimmed_pos;
@@ -194,7 +231,7 @@ void Dumper::undump(const char *dump_file)
   r = header_cond.wait();
   if (r != 0) {
     derr << "Failed to write header: " << cpp_strerror(r) << dendl;
-    return;
+    return r;
   }
 
   Filer filer(objecter);
@@ -237,7 +274,7 @@ void Dumper::undump(const char *dump_file)
     r = write_cond.wait();
     if (r != 0) {
       derr << "Failed to write header: " << cpp_strerror(r) << dendl;
-      return;
+      return r;
     }
       
     // Advance
@@ -247,5 +284,6 @@ void Dumper::undump(const char *dump_file)
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   cout << "done." << std::endl;
+  return 0;
 }
 
