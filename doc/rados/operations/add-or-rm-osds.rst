@@ -35,7 +35,7 @@ Add your OSD host to a rack in your cluster, connect it to the network
 and ensure that it has network connectivity. See the `Network Configuration
 Reference`_ for details.
 
-.. _Hardware Recommendations: ../../../install/hardware-recommendations
+.. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
 .. _Network Configuration Reference: ../../configuration/network-config-ref
 

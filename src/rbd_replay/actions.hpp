@@ -20,19 +20,32 @@
 #include "Deser.hpp"
 #include "rbd_loc.hpp"
 
+// Stupid Doxygen requires this or else the typedef docs don't appear anywhere.
+/// @file rbd_replay/actions.hpp
+
 namespace rbd_replay {
 
 typedef uint64_t imagectx_id_t;
 typedef uint64_t thread_id_t;
 
-// Even IDs are normal actions, odd IDs are completions
+/// Even IDs are normal actions, odd IDs are completions.
 typedef uint32_t action_id_t;
 
+/**
+   Dependencies link actions to earlier actions or completions.
+   If an action has a dependency \c d then it waits until \c d.time_delta nanoseconds after the action or completion with ID \c d.id has fired.
+*/
 struct dependency_d {
+  /// ID of the action or completion to wait for.
   action_id_t id;
 
+  /// Nanoseconds of delay to wait until after the action or completion fires.
   uint64_t time_delta;
 
+  /**
+     @param id ID of the action or completion to wait for.
+     @param time_delta Nanoseconds of delay to wait after the action or completion fires.
+   */
   dependency_d(action_id_t id,
 	       uint64_t time_delta)
     : id(id),
@@ -56,15 +69,32 @@ enum io_type {
 class PendingIO;
 
 
+/**
+   %Context through which an Action interacts with its environment.
+ */
 class ActionCtx {
 public:
   virtual ~ActionCtx() {
   }
 
+  /**
+     Returns the image with the given ID.
+     The image must have been previously tracked with put_image(imagectx_id_t,librbd::Image*).
+   */
   virtual librbd::Image* get_image(imagectx_id_t imagectx_id) = 0;
 
+  /**
+     Tracks an image.
+     put_image(imagectx_id_t,librbd::Image*) must not have been called previously with the same ID,
+     and the image must not be NULL.
+   */
   virtual void put_image(imagectx_id_t imagectx_id, librbd::Image* image) = 0;
 
+  /**
+     Stops tracking an Image and release it.
+     This deletes the C++ object, not the image itself.
+     The image must have been previously tracked with put_image(imagectx_id_t,librbd::Image*).
+   */
   virtual void erase_image(imagectx_id_t imagectx_id) = 0;
 
   virtual librbd::RBD* rbd() = 0;
@@ -81,10 +111,22 @@ public:
 
   virtual void stop() = 0;
 
+  /**
+     Maps an image name from the name in the original trace to the name that should be used when replaying.
+     @param image_name name of the image in the original trace
+     @param snap_name name of the snap in the orginal trace
+     @return image name to replay against
+   */
   virtual rbd_loc map_image_name(std::string image_name, std::string snap_name) const = 0;
 };
 
 
+/**
+   Performs an %IO or a maintenance action such as starting or stopping a thread.
+   Actions are read from a replay file and scheduled by Replayer.
+   Corresponds to the IO class, except that Actions are executed by rbd-replay,
+   and IOs are used by rbd-replay-prep for processing the raw trace.
+ */
 class Action {
 public:
   typedef boost::shared_ptr<Action> ptr;
@@ -99,6 +141,7 @@ public:
 
   virtual void perform(ActionCtx &ctx) = 0;
 
+  /// Returns the ID of the completion corresponding to this action.
   action_id_t pending_io_id() {
     return m_id + 1;
   }
@@ -120,6 +163,7 @@ public:
     return m_predecessors;
   }
 
+  /// Reads and constructs an action from the replay file.
   static ptr read_from(Deser &d);
 
 protected:
@@ -137,9 +181,15 @@ private:
   const std::vector<dependency_d> m_predecessors;
 };
 
+/// Writes human-readable debug information about the action to the stream.
+/// @related Action
 std::ostream& operator<<(std::ostream& o, const Action& a);
 
 
+/**
+   Placeholder for partially-constructed actions.
+   Does nothing, and does not appear in the replay file.
+ */
 class DummyAction : public Action {
 public:
   DummyAction(action_id_t id,
@@ -156,6 +206,7 @@ public:
 private:
   std::ostream& dump(std::ostream& o) const;
 };
+
 
 class StopThreadAction : public Action {
 public:

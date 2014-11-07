@@ -41,6 +41,8 @@ using namespace std;
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 
+#include "perfglue/heap_profiler.h"
+
 #include "include/assert.h"
 
 #include "erasure-code/ErasureCodePlugin.h"
@@ -257,6 +259,7 @@ int main(int argc, const char **argv)
 
   global_init(&def_args, args,
               CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON, flags);
+  ceph_heap_profiler_init();
 
   uuid_d fsid;
   std::string val;

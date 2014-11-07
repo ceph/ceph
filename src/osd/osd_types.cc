@@ -2303,9 +2303,9 @@ void pg_interval_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("primary", primary);
   f->dump_int("up_primary", up_primary);
-  f->close_section();
 }
 
 void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
@@ -2329,18 +2329,45 @@ bool pg_interval_t::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
-  OSDMapRef osdmap,
-  OSDMapRef lastmap,
+  int old_min_size,
+  int new_min_size,
+  unsigned old_pg_num,
+  unsigned new_pg_num,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
     old_up_primary != new_up_primary ||
     new_up != old_up ||
-    (!(lastmap->get_pools().count(pgid.pool()))) ||
-    (lastmap->get_pools().find(pgid.pool())->second.min_size !=
-     osdmap->get_pools().find(pgid.pool())->second.min_size)  ||
-    pgid.is_split(lastmap->get_pg_num(pgid.pool()),
-		  osdmap->get_pg_num(pgid.pool()), 0);
+    old_min_size != new_min_size ||
+    pgid.is_split(old_pg_num, new_pg_num, 0);
+}
+
+bool pg_interval_t::is_new_interval(
+  int old_acting_primary,
+  int new_acting_primary,
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  pg_t pgid) {
+  return !(lastmap->get_pools().count(pgid.pool())) ||
+    is_new_interval(old_acting_primary,
+		    new_acting_primary,
+		    old_acting,
+		    new_acting,
+		    old_up_primary,
+		    new_up_primary,
+		    old_up,
+		    new_up,
+		    lastmap->get_pools().find(pgid.pool())->second.min_size,
+		    osdmap->get_pools().find(pgid.pool())->second.min_size,
+		    lastmap->get_pg_num(pgid.pool()),
+		    osdmap->get_pg_num(pgid.pool()),
+		    pgid);
 }
 
 bool pg_interval_t::check_new_interval(
@@ -2384,9 +2411,15 @@ bool pg_interval_t::check_new_interval(
     i.primary = old_acting_primary;
     i.up_primary = old_up_primary;
 
-    if (!i.acting.empty() && i.primary != -1 &&
-	i.acting.size() >=
-	lastmap->get_pools().find(pgid.pool())->second.min_size) {
+    unsigned num_acting = 0;
+    for (vector<int>::const_iterator p = i.acting.begin(); p != i.acting.end();
+	 ++p)
+      if (*p != CRUSH_ITEM_NONE)
+	++num_acting;
+
+    if (num_acting &&
+	i.primary != -1 &&
+	num_acting >= lastmap->get_pools().find(pgid.pool())->second.min_size) {
       if (out)
 	*out << "generate_past_intervals " << i
 	     << ": not rw,"

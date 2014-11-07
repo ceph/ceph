@@ -1005,10 +1005,20 @@ def prepare_journal_dev(
     journal_dm_keypath,
     ):
 
+    reusing_partition = False
+
     if is_partition(journal):
         LOG.debug('Journal %s is a partition', journal)
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
-        return (journal, None, None)
+        if get_partition_type(journal) == JOURNAL_UUID:
+            LOG.debug('Journal %s was previously prepared with ceph-disk. Reusing it.', journal)
+            reusing_partition = True
+            base = get_partition_base(journal)
+            part = journal.replace(base,'')
+            journal = base # needed for later
+        else:
+            LOG.warning('Journal %s was not prepared with ceph-disk. Symlinking directly.', journal)
+            return (journal, None, None)
 
     ptype = JOURNAL_UUID
     if journal_dm_keypath:
@@ -1016,7 +1026,7 @@ def prepare_journal_dev(
 
     # it is a whole disk.  create a partition!
     num = None
-    if journal == data:
+    if journal == data and not reusing_partition:
         # we're sharing the disk between osd data and journal;
         # make journal be partition number 2, so it's pretty
         num = 2
@@ -1024,6 +1034,9 @@ def prepare_journal_dev(
             num=num,
             size=journal_size,
             )
+    elif reusing_partition:
+        num = int(part)
+        journal_part = '' # not used in this case
     else:
         # sgdisk has no way for me to say "whatever is the next
         # free index number" when setting type guids etc, so we
@@ -1038,7 +1051,10 @@ def prepare_journal_dev(
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
 
-    dev_size = get_dev_size(journal)
+    if reusing_partition:
+        dev_size = get_dev_size(base+part)
+    else:
+        dev_size = get_dev_size(journal)
 
     if journal_size > dev_size:
         LOG.error('refusing to create journal on %s' % journal)
@@ -1048,9 +1064,7 @@ def prepare_journal_dev(
         )
 
     try:
-        LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
-        command_check_call(
-            [
+        sgdisk_call = [
                 'sgdisk',
                 '--new={part}'.format(part=journal_part),
                 '--change-name={num}:ceph journal'.format(num=num),
@@ -1065,8 +1079,14 @@ def prepare_journal_dev(
                 '--mbrtogpt',
                 '--',
                 journal,
-            ],
-        )
+            ]
+        if reusing_partition:
+            action= 'Reusing'
+            del sgdisk_call[1] # don't add --new when reusing
+        else:
+            action = 'Creating'
+        LOG.debug('%s journal partition num %d size %d on %s', action, num, journal_size, journal)
+        command_check_call(sgdisk_call)
 
         # try to make sure the kernel refreshes the table.  note
         # that if this gets ebusy, we are probably racing with

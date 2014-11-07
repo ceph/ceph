@@ -325,7 +325,8 @@ int main(int argc, const char *argv[])
   string store(args[0]);
   string new_store(store);
   MonitorStoreConverter converter(store, new_store);
-  assert(!converter.convert());
+  int ret = converter.convert();
+  assert(!ret);
   assert(converter.match());
 
   std::cout << "store successfully converted to new format" << std::endl;

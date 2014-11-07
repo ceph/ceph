@@ -85,8 +85,41 @@ private:
   uint64_t m_max_ts;
 };
 
+class AnonymizedImage {
+public:
+  void init(string image_name, int index) {
+    assert(m_image_name == "");
+    m_image_name = image_name;
+    ostringstream oss;
+    oss << "image" << index;
+    m_anonymized_image_name = oss.str();
+  }
+
+  string image_name() const {
+    return m_image_name;
+  }
+
+  pair<string, string> anonymize(string snap_name) {
+    if (snap_name == "") {
+      return pair<string, string>(m_anonymized_image_name, "");
+    }
+    string& anonymized_snap_name(m_snaps[snap_name]);
+    if (anonymized_snap_name == "") {
+      ostringstream oss;
+      oss << "snap" << m_snaps.size();
+      anonymized_snap_name = oss.str();
+    }
+    return pair<string, string>(m_anonymized_image_name, anonymized_snap_name);
+  }
+
+private:
+  string m_image_name;
+  string m_anonymized_image_name;
+  map<string, string> m_snaps;
+};
+
 static void usage(string prog) {
-  cout << "Usage: " << prog << " [ --window <seconds> ] <trace-input> <replay-output>" << endl;
+  cout << "Usage: " << prog << " [ --window <seconds> ] [ --anonymize ] <trace-input> <replay-output>" << endl;
 }
 
 __attribute__((noreturn)) static void usage_exit(string prog, string msg) {
@@ -104,7 +137,9 @@ public:
       m_recent_completions(io_set_t()),
       m_open_images(set<imagectx_id_t>()),
       m_ios(vector<IO::ptr>()),
-      m_pending_ios(map<uint64_t, IO::ptr>()) {
+      m_pending_ios(map<uint64_t, IO::ptr>()),
+      m_anonymize(false),
+      m_anonymized_images(map<string, AnonymizedImage>()) {
   }
 
   void run(vector<string> args) {
@@ -123,6 +158,8 @@ public:
 	// TODO: test
 	printf("Arg: '%s'\n", arg.c_str() + sizeof("--window="));
 	m_window = (uint64_t)(1e9 * atof(arg.c_str() + sizeof("--window=")));
+      } else if (arg == "--anonymize") {
+	m_anonymize = true;
       } else if (arg == "-h" || arg == "--help") {
 	usage(args[0]);
 	exit(0);
@@ -162,10 +199,9 @@ public:
     struct bt_iter *bt_itr = bt_ctf_get_iter(itr);
 
     uint64_t trace_start = 0;
-    struct bt_ctf_event *evt;
     bool first = true;
     while(true) {
-      evt = bt_ctf_iter_read_event(itr);
+      struct bt_ctf_event *evt = bt_ctf_iter_read_event(itr);
       if(!evt) {
 	break;
       }
@@ -335,7 +371,8 @@ private:
       bool readonly = fields.int64("read_only");
       imagectx_id_t imagectx = fields.uint64("imagectx");
       action_id_t ionum = next_id();
-      IO::ptr io(new OpenImageIO(ionum, ts, threadID, thread->pending_io(), imagectx, name, snap_name, readonly));
+      pair<string, string> aname(map_image_snap(name, snap_name));
+      IO::ptr io(new OpenImageIO(ionum, ts, threadID, thread->pending_io(), imagectx, aname.first, aname.second, readonly));
       io->add_dependencies(m_recent_completions);
       thread->issued_io(io, m_threads);
       m_ios.push_back(io);
@@ -443,6 +480,17 @@ private:
     m_recent_completions.insert(io);
   }
 
+  pair<string, string> map_image_snap(string image_name, string snap_name) {
+    if (!m_anonymize) {
+      return pair<string, string>(image_name, snap_name);
+    }
+    AnonymizedImage& m(m_anonymized_images[image_name]);
+    if (m.image_name() == "") {
+      m.init(image_name, m_anonymized_images.size());
+    }
+    return m.anonymize(snap_name);
+  }
+
   void require_image(uint64_t ts,
 		     Thread::ptr thread,
 		     imagectx_id_t imagectx,
@@ -454,7 +502,8 @@ private:
       return;
     }
     action_id_t ionum = next_id();
-    IO::ptr io(new OpenImageIO(ionum, ts - 2, thread->id(), thread->pending_io(), imagectx, name, snap_name, readonly));
+    pair<string, string> aname(map_image_snap(name, snap_name));
+    IO::ptr io(new OpenImageIO(ionum, ts - 2, thread->id(), thread->pending_io(), imagectx, aname.first, aname.second, readonly));
     io->add_dependencies(m_recent_completions);
     thread->issued_io(io, m_threads);
     m_ios.push_back(io);
@@ -473,6 +522,9 @@ private:
 
   // keyed by completion
   map<uint64_t, IO::ptr> m_pending_ios;
+
+  bool m_anonymize;
+  map<string, AnonymizedImage> m_anonymized_images;
 };
 
 int main(int argc, char** argv) {

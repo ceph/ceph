@@ -400,6 +400,11 @@ COMMAND("osd crush add-bucket " \
 	"name=type,type=CephString", \
 	"add no-parent (probably root) crush bucket <name> of type <type>", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush rename-bucket " \
+	"name=srcname,type=CephString,goodchars=[A-Za-z0-9-_.] " \
+	"name=dstname,type=CephString,goodchars=[A-Za-z0-9-_.]", \
+	"rename bucket <srcname> to <dstname>", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush set " \
 	"name=id,type=CephOsdName " \
 	"name=weight,type=CephFloat,range=0.0 " \
@@ -555,6 +560,9 @@ COMMAND("osd pool rmsnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
 	"remove snapshot <snap> from <pool>", "osd", "rw", "cli,rest")
+COMMAND("osd pool ls " \
+	"name=detail,type=CephChoices,strings=detail,req=false", \
+	"list pools", "osd", "r", "cli,rest")
 COMMAND("osd pool create " \
 	"name=pool,type=CephPoolname " \
 	"name=pg_num,type=CephInt,range=0 " \

@@ -217,6 +217,47 @@ TEST_P(StoreTest, SimpleObjectTest) {
   }
 }
 
+TEST_P(StoreTest, SimpleCloneTest) {
+  int r;
+  coll_t cid = coll_t("coll");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  bufferlist small;
+  small.append("small");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.setattr(cid, hoid, "attr1", small);
+    cerr << "Creating object and set attr " << hoid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid, hoid2);
+    t.rmattr(cid, hoid, "attr1");
+    cerr << "Clone object and rm attr" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 TEST_P(StoreTest, SimpleObjectLongnameTest) {
   int r;
   coll_t cid = coll_t("coll");
@@ -571,8 +612,7 @@ public:
     boost::uniform_int<> u2(4, max_attr_value_len);
     boost::uniform_int<> u3(0, 100);
     uint64_t size = u0(*rng);
-    uint64_t name_len, value_len;
-    uint64_t get_exist;
+    uint64_t name_len;
     map<string, bufferlist> attrs;
     set<string> keys;
     for (map<string, bufferlist>::iterator it = contents[obj].attrs.begin();
@@ -581,8 +621,8 @@ public:
 
     while (size--) {
       bufferlist name, value;
-      get_exist = u3(*rng);
-      value_len = u2(*rng);
+      uint64_t get_exist = u3(*rng);
+      uint64_t value_len = u2(*rng);
       filled_byte_array(value, value_len);
       if (get_exist < 50 && keys.size()) {
         set<string>::iterator k = keys.begin();

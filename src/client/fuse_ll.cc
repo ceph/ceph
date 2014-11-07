@@ -440,7 +440,7 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 			 struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  Fh *fh = (Fh*)fi->fh;
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   bufferlist bl;
   int r = cfuse->client->ll_read(fh, off, size, &bl);
   if (r >= 0)
@@ -453,7 +453,7 @@ static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 			   size_t size, off_t off, struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  Fh *fh = (Fh*)fi->fh;
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_write(fh, off, size, buf);
   if (r >= 0)
     fuse_reply_write(req, r);
@@ -516,7 +516,7 @@ static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino,
 			    struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  Fh *fh = (Fh*)fi->fh;
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_release(fh);
   fuse_reply_err(req, -r);
 }
@@ -525,7 +525,7 @@ static void fuse_ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
 			  struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  Fh *fh = (Fh*)fi->fh;
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   int r = cfuse->client->ll_fsync(fh, datasync);
   fuse_reply_err(req, -r);
 }
@@ -567,7 +567,7 @@ static void fuse_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
 
-  dir_result_t *dirp = (dir_result_t*)fi->fh;
+  dir_result_t *dirp = reinterpret_cast<dir_result_t*>(fi->fh);
   cfuse->client->seekdir(dirp, off);
 
   struct readdir_context rc;
@@ -589,7 +589,7 @@ static void fuse_ll_releasedir(fuse_req_t req, fuse_ino_t ino,
 			       struct fuse_file_info *fi)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
-  dir_result_t *dirp = (dir_result_t*)fi->fh;
+  dir_result_t *dirp = reinterpret_cast<dir_result_t*>(fi->fh);
   cfuse->client->ll_releasedir(dirp);
   fuse_reply_err(req, 0);
 }
@@ -638,6 +638,69 @@ static void fuse_ll_statfs(fuse_req_t req, fuse_ino_t ino)
 
   cfuse->iput(in); // iput required
 }
+
+static void fuse_ll_getlk(fuse_req_t req, fuse_ino_t ino,
+			  struct fuse_file_info *fi, struct flock *lock)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
+
+  int r = cfuse->client->ll_getlk(fh, lock, fi->lock_owner);
+  if (r == 0)
+    fuse_reply_lock(req, lock);
+  else
+    fuse_reply_err(req, -r);
+}
+
+static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
+		          struct fuse_file_info *fi, struct flock *lock, int sleep)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
+
+  // must use multithread if operation may block
+  if (!cfuse->client->cct->_conf->fuse_multithreaded &&
+      sleep && lock->l_type != F_UNLCK) {
+    fuse_reply_err(req, EDEADLK);
+    return;
+  }
+
+  int r = cfuse->client->ll_setlk(fh, lock, fi->lock_owner, sleep, req);
+  fuse_reply_err(req, -r);
+}
+
+static void fuse_ll_interrupt(fuse_req_t req, void* data)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  cfuse->client->ll_interrupt(data);
+}
+
+static void switch_interrupt_cb(void *req, void* data)
+{
+  if (data)
+    fuse_req_interrupt_func((fuse_req_t)req, fuse_ll_interrupt, data);
+  else
+    fuse_req_interrupt_func((fuse_req_t)req, NULL, NULL);
+}
+
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
+static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
+		          struct fuse_file_info *fi, int cmd)
+{
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = (Fh*)fi->fh;
+
+  // must use multithread if operation may block
+  if (!cfuse->client->cct->_conf->fuse_multithreaded &&
+      !(cmd & (LOCK_NB | LOCK_UN))) {
+    fuse_reply_err(req, EDEADLK);
+    return;
+  }
+
+  int r = cfuse->client->ll_flock(fh, cmd, fi->lock_owner, req);
+  fuse_reply_err(req, -r);
+}
+#endif
 
 #if 0
 static int getgroups_cb(void *handle, uid_t uid, gid_t **sgids)
@@ -745,8 +808,8 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  removexattr: fuse_ll_removexattr,
  access: fuse_ll_access,
  create: fuse_ll_create,
- getlk: 0,
- setlk: 0,
+ getlk: fuse_ll_getlk,
+ setlk: fuse_ll_setlk,
  bmap: 0,
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
 #ifdef FUSE_IOCTL_COMPAT
@@ -755,13 +818,15 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  ioctl: 0,
 #endif
  poll: 0,
-#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+#endif
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
  write_buf: 0,
  retrieve_reply: 0,
  forget_multi: 0,
- flock: 0,
- fallocate: fuse_ll_fallocate
+ flock: fuse_ll_flock,
 #endif
+#if FUSE_VERSION > FUSE_MAKE_VERSION(2, 9)
+ fallocate: fuse_ll_fallocate
 #endif
 };
 
@@ -872,6 +937,8 @@ int CephFuse::Handle::start()
   }
 
   fuse_session_add_chan(se, ch);
+
+  client->ll_register_switch_interrupt_cb(switch_interrupt_cb);
 
   /*
    * this is broken:

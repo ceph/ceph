@@ -80,7 +80,7 @@ class MDiscoverReply : public Message {
   std::string error_dentry;   // dentry that was not found (to trigger waiters on asker)
   bool unsolicited;
 
-  __s32 dir_auth_hint;
+  mds_rank_t dir_auth_hint;
 
  public:
   __u8 starts_with;
@@ -101,7 +101,7 @@ class MDiscoverReply : public Message {
 
   int get_starts_with() { return starts_with; }
 
-  int get_dir_auth_hint() { return dir_auth_hint; }
+  mds_rank_t get_dir_auth_hint() const { return dir_auth_hint; }
 
   bool is_unsolicited() { return unsolicited; }
   void mark_unsolicited() { unsolicited = true; }

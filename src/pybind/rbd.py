@@ -450,6 +450,13 @@ class Image(object):
             }
 
     def parent_info(self):
+        """
+        Get information about a cloned image's parent (if any)
+
+        :returns: tuple - ``(pool name, image name, snapshot name)`` components
+                  of the parent image
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
         ret = -errno.ERANGE
         size = 8
         while ret == -errno.ERANGE and size <= 4096:
@@ -466,6 +473,11 @@ class Image(object):
         return (pool.value, name.value, snapname.value)
 
     def old_format(self):
+        """
+        Find out whether the image uses the old RBD format.
+
+        :returns: bool - whether the image uses the old RBD format
+        """
         old = c_uint8()
         ret = self.librbd.rbd_get_old_format(self.image, byref(old))
         if (ret != 0):
@@ -486,6 +498,11 @@ class Image(object):
         return image_size.value
 
     def features(self):
+        """
+        Gets the features bitmask of the image.
+
+        :returns: int - the features bitmask of the image
+        """
         features = c_uint64()
         ret = self.librbd.rbd_get_features(self.image, byref(features))
         if (ret != 0):
@@ -493,6 +510,14 @@ class Image(object):
         return features.value
 
     def overlap(self):
+        """
+        Gets the number of overlapping bytes between the image and its parent
+        image. If open to a snapshot, returns the overlap between the snapshot
+        and the parent image.
+
+        :returns: int - the overlap in bytes
+        :raises: :class:`ImageNotFound` if the image doesn't have a parent
+        """
         overlap = c_uint64()
         ret = self.librbd.rbd_get_overlap(self.image, byref(overlap))
         if (ret != 0):

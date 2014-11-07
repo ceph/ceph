@@ -191,6 +191,7 @@ EXTRA_DIST += \
 	ceph-rest-api \
 	ceph-crush-location \
 	mount.fuse.ceph \
+	rbd-replay-many \
 	rbdmap \
 	yasm-wrapper
 
@@ -623,7 +624,8 @@ bin_SCRIPTS += \
 	ceph-debugpack \
 	ceph-rbdnamer \
 	ceph-post-file \
-	ceph-crush-location
+	ceph-crush-location \
+	rbd-replay-many
 
 BUILT_SOURCES += init-ceph
 
@@ -712,7 +714,7 @@ ceph: ceph.in ./ceph_ver.h Makefile
 
 clean-local:
 	rm -f *.so 
-	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' | xargs rm -f
+	find . -name '*.gcno' -o -name '*.gcda' -o -name '*.lcov' -o -name "*.o" -o -name "*.lo" | xargs rm -f
 	rm -f ceph java/java/com/ceph/crush/Bucket.class
 
 

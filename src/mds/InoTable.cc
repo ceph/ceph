@@ -29,13 +29,13 @@ void InoTable::reset_state()
   free.clear();
   //#ifdef __LP64__
   uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 40;
-  uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 40) - 1;
+  uint64_t len = (uint64_t)1 << 40;
   //#else
   //# warning this looks like a 32-bit system, using small inode numbers.
   //  uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 25;
   //  uint64_t end = ((uint64_t)(mds->get_nodeid()+2) << 25) - 1;
   //#endif
-  free.insert(start, end);
+  free.insert(start, len);
 
   projected_free = free;
 }
@@ -147,9 +147,8 @@ void InoTable::skip_inos(inodeno_t i)
 {
   dout(10) << "skip_inos was " << free << dendl;
   inodeno_t first = free.range_start();
-  inodeno_t last = first + i;
   interval_set<inodeno_t> s;
-  s.insert(first, last);
+  s.insert(first, i);
   s.intersection_of(free);
   free.subtract(s);
   projected_free = free;

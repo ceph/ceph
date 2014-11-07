@@ -42,6 +42,13 @@ static void usage(const char* program) {
   cout << "  --read-only                     Only perform non-destructive operations." << std::endl;
   cout << "  --map-image <rule>              Add a rule to map image names in the trace to" << std::endl;
   cout << "                                  image names in the replay cluster." << std::endl;
+  cout << "  --dump-perf-counters            *Experimental*" << std::endl;
+  cout << "                                  Dump performance counters to standard out before" << std::endl;
+  cout << "                                  an image is closed. Performance counters may be dumped" << std::endl;
+  cout << "                                  multiple times if multiple images are closed, or if" << std::endl;
+  cout << "                                  the same image is opened and closed multiple times." << std::endl;
+  cout << "                                  Performance counters and their meaning may change between" << std::endl;
+  cout << "                                  versions." << std::endl;
   cout << std::endl;
   cout << "Image mapping rules:" << std::endl;
   cout << "A rule of image1@snap1=image2@snap2 would map snap1 of image1 to snap2 of" << std::endl;
@@ -62,6 +69,7 @@ int main(int argc, const char **argv) {
   ImageNameMap image_name_map;
   std::string val;
   std::ostringstream err;
+  bool dump_perf_counters = false;
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -86,6 +94,8 @@ int main(int argc, const char **argv) {
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(argv[0]);
       return 0;
+    } else if (ceph_argparse_flag(args, i, "--dump-perf-counters", (char*)NULL)) {
+      dump_perf_counters = true;
     } else if (get_remainder(*i, "-")) {
       cerr << "Unrecognized argument: " << *i << std::endl;
       return 1;
@@ -112,5 +122,6 @@ int main(int argc, const char **argv) {
   replayer.set_pool_name(pool_name);
   replayer.set_readonly(readonly);
   replayer.set_image_name_map(image_name_map);
+  replayer.set_dump_perf_counters(dump_perf_counters);
   replayer.run(replay_file);
 }

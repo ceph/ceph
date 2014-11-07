@@ -2017,7 +2017,7 @@ void EUpdate::replay(MDS *mds)
   if (had_slaves) {
     dout(10) << "EUpdate.replay " << reqid << " had slaves, expecting a matching ECommitted" << dendl;
     _segment->uncommitted_masters.insert(reqid);
-    set<int> slaves;
+    set<mds_rank_t> slaves;
     mds->mdcache->add_uncommitted_master(reqid, _segment, slaves, true);
   }
   
@@ -2599,7 +2599,7 @@ void ESubtreeMap::replay(MDS *mds)
       // ambiguous!
       mds->mdcache->add_ambiguous_import(p->first, p->second);
       mds->mdcache->adjust_bounded_subtree_auth(dir, p->second,
-						pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
+						mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
     } else {
       // not ambiguous
       mds->mdcache->adjust_bounded_subtree_auth(dir, p->second, mds->get_nodeid());
@@ -2838,7 +2838,7 @@ void EImportStart::replay(MDS *mds)
   }
 
   mds->mdcache->adjust_bounded_subtree_auth(dir, realbounds,
-					    pair<int,int>(mds->get_nodeid(), mds->get_nodeid()));
+					    mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
 
   // open client sessions?
   if (mds->sessionmap.version >= cmapv) {

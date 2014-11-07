@@ -68,7 +68,6 @@ void RGWOp_User_Create::execute()
   bool exclusive;
 
   uint32_t max_buckets;
-  int32_t key_type = KEY_TYPE_UNDEFINED;
 
   RGWUserAdminOpState op_state;
 
@@ -111,6 +110,7 @@ void RGWOp_User_Create::execute()
     op_state.set_secret_key(secret_key);
 
   if (!key_type_str.empty()) {
+    int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
       key_type = KEY_TYPE_SWIFT;
     else if (key_type_str.compare("s3") == 0)
@@ -166,7 +166,6 @@ void RGWOp_User_Modify::execute()
   bool system;
 
   uint32_t max_buckets;
-  int32_t key_type = KEY_TYPE_UNDEFINED;
 
   RGWUserAdminOpState op_state;
 
@@ -214,6 +213,7 @@ void RGWOp_User_Modify::execute()
     op_state.set_generate_key();
 
   if (!key_type_str.empty()) {
+    int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
       key_type = KEY_TYPE_SWIFT;
     else if (key_type_str.compare("s3") == 0)
@@ -459,7 +459,6 @@ void RGWOp_Key_Create::execute()
   std::string secret_key;
   std::string key_type_str;
 
-  int32_t key_type = KEY_TYPE_UNDEFINED;
   bool gen_key;
 
   RGWUserAdminOpState op_state;
@@ -488,6 +487,7 @@ void RGWOp_Key_Create::execute()
     op_state.set_generate_key();
 
   if (!key_type_str.empty()) {
+    int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
       key_type = KEY_TYPE_SWIFT;
     else if (key_type_str.compare("s3") == 0)
@@ -520,8 +520,6 @@ void RGWOp_Key_Remove::execute()
   std::string access_key;
   std::string key_type_str;
 
-  int32_t key_type = KEY_TYPE_UNDEFINED;
-
   RGWUserAdminOpState op_state;
 
   RESTArgs::get_string(s, "uid", uid, &uid);
@@ -540,6 +538,7 @@ void RGWOp_Key_Remove::execute()
     op_state.set_access_key(access_key);
 
   if (!key_type_str.empty()) {
+    int32_t key_type = KEY_TYPE_UNDEFINED;
     if (key_type_str.compare("swift") == 0)
       key_type = KEY_TYPE_SWIFT;
     else if (key_type_str.compare("s3") == 0)

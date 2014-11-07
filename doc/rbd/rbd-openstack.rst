@@ -39,21 +39,21 @@ technology stack.
 
 Three parts of OpenStack integrate with Ceph's block devices:
 
-- **Images**: OpenStack Glance manages images for VMs. Images are immutable. 
+- **Images**: OpenStack Glance manages images for VMs. Images are immutable.
   OpenStack treats images as binary blobs and downloads them accordingly.
 
-- **Volumes**: Volumes are block devices. OpenStack uses volumes to boot VMs, 
-  or to attach volumes to running VMs. OpenStack manages volumes using 
+- **Volumes**: Volumes are block devices. OpenStack uses volumes to boot VMs,
+  or to attach volumes to running VMs. OpenStack manages volumes using
   Cinder services.
 
-- **Guest Disks**: Guest disks are guest operating system disks. By default, 
+- **Guest Disks**: Guest disks are guest operating system disks. By default,
   when you boot a virtual machine, its disk appears as a file on the filesystem
-  of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). Prior 
-  to OpenStack Havana, the only way to boot a VM in Ceph was to use the 
+  of the hypervisor (usually under ``/var/lib/nova/instances/<uuid>/``). Prior
+  to OpenStack Havana, the only way to boot a VM in Ceph was to use the
   boot-from-volume functionality of Cinder. However, now it is possible to boot
-  every virtual machine inside Ceph directly without using Cinder, which is 
-  advantageous because it allows you to perform maintenance operations easily 
-  with the live-migration process. Additionally, if your hypervisor dies it is 
+  every virtual machine inside Ceph directly without using Cinder, which is
+  advantageous because it allows you to perform maintenance operations easily
+  with the live-migration process. Additionally, if your hypervisor dies it is
   also convenient to trigger ``nova evacuate`` and  run the virtual machine
   elsewhere almost seamlessly.
 
@@ -64,8 +64,8 @@ The instructions below detail the setup for Glance, Cinder and Nova, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
 
-.. important:: Ceph doesn’t support QCOW2 for hosting a virtual machine disk. 
-   Thus if you want to boot virtual machines in Ceph (ephemeral backend or boot 
+.. important:: Ceph doesn’t support QCOW2 for hosting a virtual machine disk.
+   Thus if you want to boot virtual machines in Ceph (ephemeral backend or boot
    from volume), the Glance image format must be ``RAW``.
 
 .. tip:: This document describes using Ceph Block Devices with OpenStack Havana.
@@ -168,8 +168,8 @@ temporary copy of the key::
 
 Save the uuid of the secret for configuring ``nova-compute`` later.
 
-.. important:: You don't necessarily need the UUID on all the compute nodes. 
-   However from a platform consistency perspective, it's better to keep the 
+.. important:: You don't necessarily need the UUID on all the compute nodes.
+   However from a platform consistency perspective, it's better to keep the
    same UUID.
 
 .. _cephx authentication: ../../rados/operations/authentication
@@ -195,12 +195,17 @@ If you want to enable copy-on-write cloning of images, also add::
 Note that this exposes the back end location via Glance's API, so the endpoint
 with this option enabled should not be publicly accessible.
 
+Disable the Glance cache management to avoid images getting cached under ``/var/lib/glance/image-cache/``,
+assuming your configuration file has ``flavor = keystone+cachemanagement``::
+
+    [paste_deploy]
+    flavor = keystone
 
 Configuring Cinder
 ------------------
 
 OpenStack requires a driver to interact with Ceph block devices. You must also
-specify the pool name for the block device. On your OpenStack node, edit 
+specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
     volume_driver=cinder.volume.drivers.rbd.RBDDriver
@@ -208,9 +213,11 @@ specify the pool name for the block device. On your OpenStack node, edit
     rbd_ceph_conf=/etc/ceph/ceph.conf
     rbd_flatten_volume_from_snapshot=false
     rbd_max_clone_depth=5
+    rbd_store_chunk_size=4
+    rados_connect_timeout=-1
     glance_api_version=2
 
-If you're using `cephx authentication`_, also configure the user and uuid of 
+If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
     rbd_user=cinder
@@ -253,8 +260,11 @@ These two flags are also used by the Nova ephemeral backend.
 Configuring Nova
 ----------------
 
-In order to boot all the virtual machines directly into Ceph, you must 
+In order to boot all the virtual machines directly into Ceph, you must
 configure the ephemeral backend for Nova.
+
+Havana and Icehouse
+~~~~~~~~~~~~~~~~~~~
 
 Havana and Icehouse require patches to implement copy-on-write cloning and fix
 bugs with image size and live migration of ephemeral disks on rbd. These are
@@ -274,7 +284,7 @@ It is also a good practice to disable file injection. While booting an
 instance, Nova usually attempts to open the rootfs of the virtual machine.
 Then, Nova injects values such as password, ssh keys etc. directly into the
 filesystem. However, it is better to rely on the metadata service and
-``cloud-init``. 
+``cloud-init``.
 
 On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 
@@ -285,6 +295,39 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 To ensure a proper live-migration, use the following flags::
 
     libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
+    
+    
+Juno
+~~~~
+
+In Juno, Ceph block device was moved under the ``[libvirt]`` section. 
+On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]`` 
+section and add::
+
+    [libvirt]
+    images_type=rbd
+    images_rbd_pool=vms
+    images_rbd_ceph_conf=/etc/ceph/ceph.conf
+    rbd_user=cinder
+    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+
+
+It is also a good practice to disable file injection. While booting an
+instance, Nova usually attempts to open the rootfs of the virtual machine.
+Then, Nova injects values such as password, ssh keys etc. directly into the
+filesystem. However, it is better to rely on the metadata service and
+``cloud-init``.
+
+On every Compute node, edit ``/etc/nova/nova.conf`` and add the following
+under the ``[libvirt]`` section::
+
+    inject_password=false
+    inject_key=false
+    inject_partition=-2
+
+To ensure a proper live-migration, use the following flags::
+
+    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
 
 
 Restart OpenStack
@@ -324,10 +367,10 @@ from one format to another. For example::
     qemu-img convert -f qcow2 -O raw precise-cloudimg.img precise-cloudimg.raw
 
 When Glance and Cinder are both using Ceph block devices, the image is a
-copy-on-write clone, so it can create a new volume quickly. In the OpenStack 
-dashboard, you can boot from that volume by performing the following steps: 
+copy-on-write clone, so it can create a new volume quickly. In the OpenStack
+dashboard, you can boot from that volume by performing the following steps:
 
-#. Launch a new instance. 
+#. Launch a new instance.
 #. Choose the image associated to the copy-on-write clone.
 #. Select 'boot from volume'
 #. Select the volume you created.

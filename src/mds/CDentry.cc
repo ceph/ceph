@@ -137,7 +137,7 @@ inodeno_t CDentry::get_ino()
 }
 */
 
-pair<int,int> CDentry::authority()
+mds_authority_t CDentry::authority()
 {
   return dir->authority();
 }

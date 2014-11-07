@@ -389,13 +389,13 @@ private:
    *  ambiguous: <mds1,mds2>         subtree_root
    *             <parent,mds2>       subtree_root     
    */
-  pair<int,int> dir_auth;
+  mds_authority_t dir_auth;
 
  public:
-  pair<int,int> authority();
-  pair<int,int> get_dir_auth() { return dir_auth; }
-  void set_dir_auth(pair<int,int> a);
-  void set_dir_auth(int a) { set_dir_auth(pair<int,int>(a, CDIR_AUTH_UNKNOWN)); }
+  mds_authority_t authority();
+  mds_authority_t get_dir_auth() { return dir_auth; }
+  void set_dir_auth(mds_authority_t a);
+  void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }
@@ -414,9 +414,9 @@ private:
 
 
   // for giving to clients
-  void get_dist_spec(std::set<int>& ls, int auth) {
+  void get_dist_spec(std::set<mds_rank_t>& ls, mds_rank_t auth) {
     if (is_rep()) {
-      for (std::map<int,unsigned>::iterator p = replicas_begin();
+      for (std::map<mds_rank_t,unsigned>::iterator p = replicas_begin();
 	   p != replicas_end(); 
 	   ++p)
 	ls.insert(p->first);
@@ -424,13 +424,13 @@ private:
 	ls.insert(auth);
     }
   }
-  void encode_dirstat(bufferlist& bl, int whoami) {
+  void encode_dirstat(bufferlist& bl, mds_rank_t whoami) {
     /*
      * note: encoding matches struct ceph_client_reply_dirfrag
      */
     frag_t frag = get_frag();
-    __s32 auth;
-    std::set<__s32> dist;
+    mds_rank_t auth;
+    std::set<mds_rank_t> dist;
     
     auth = dir_auth.first;
     if (is_auth()) 
@@ -453,7 +453,7 @@ private:
     ::decode(dir_rep, p);
     ::decode(dir_rep_by, p);
   }
-  void encode_replica(int who, bufferlist& bl) {
+  void encode_replica(mds_rank_t who, bufferlist& bl) {
     __u32 nonce = add_replica(who);
     ::encode(nonce, bl);
     _encode_base(bl);

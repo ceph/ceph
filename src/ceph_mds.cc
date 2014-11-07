@@ -42,6 +42,8 @@ using namespace std;
 
 #include "auth/KeyRing.h"
 
+#include "perfglue/heap_profiler.h"
+
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -92,6 +94,7 @@ int main(int argc, const char **argv)
   env_to_vec(args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON, 0);
+  ceph_heap_profiler_init();
 
   // mds specific args
   MDSMap::DaemonState shadow = MDSMap::STATE_NULL;
@@ -140,6 +143,12 @@ int main(int argc, const char **argv)
   if (g_conf->name.has_default_id()) {
     derr << "must specify '-i name' with the ceph-mds instance name" << dendl;
     usage();
+  }
+
+  if (g_conf->name.get_id().empty() || (g_conf->name.get_id()[0] >= '0' && g_conf->name.get_id()[0] <= '9')) {
+    derr << "deprecation warning: MDS id '" << g_conf->name
+      << "' is invalid and will be forbidden in a future version.  "
+      "MDS names may not start with a numeric digit." << dendl;
   }
 
   Messenger *messenger = Messenger::create(g_ceph_context,

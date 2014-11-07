@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
 #include "include/types.h"
@@ -251,7 +253,8 @@ int cls_rgw_usage_log_read(IoCtx& io_ctx, string& oid, string& user,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated)
 {
-  *is_truncated = false;
+  if (is_truncated)
+    *is_truncated = false;
 
   bufferlist in, out;
   rgw_cls_usage_log_read_op call;

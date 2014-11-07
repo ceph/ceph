@@ -18,6 +18,7 @@ class Dentry;
 class Dir;
 struct SnapRealm;
 struct Inode;
+class ceph_lock_state_t;
 
 struct Cap {
   MetaSession *session;
@@ -70,6 +71,7 @@ struct CapSnap {
 
 // inode flags
 #define I_COMPLETE 1
+#define I_DIR_ORDERED 2
 
 struct Inode {
   CephContext *cct;
@@ -134,12 +136,17 @@ struct Inode {
 
   unsigned flags;
 
+  bool is_complete_and_ordered() {
+    static const unsigned wants = I_COMPLETE | I_DIR_ORDERED;
+    return (flags & wants) == wants;
+  }
+
   // about the dir (if this is one!)
   set<int>  dir_contacts;
   bool      dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<int,Cap*> caps;            // mds -> Cap
+  map<mds_rank_t, Cap*> caps;            // mds -> Cap
   Cap *auth_cap;
   unsigned dirty_caps, flushing_caps;
   uint64_t flushing_cap_seq;
@@ -209,6 +216,10 @@ struct Inode {
     ll_ref -= n;
   }
 
+  // file locks
+  ceph_lock_state_t *fcntl_locks;
+  ceph_lock_state_t *flock_locks;
+
   Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *newlayout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
@@ -223,8 +234,8 @@ struct Inode {
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), 
-      dir(0), dn_set()
+      _ref(0), ll_ref(0), dir(0), dn_set(),
+      fcntl_locks(NULL), flock_locks(NULL)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
@@ -255,7 +266,7 @@ struct Inode {
   bool cap_is_valid(Cap* cap);
   int caps_issued(int *implemented = 0);
   void touch_cap(Cap *cap);
-  void try_touch_cap(int mds);
+  void try_touch_cap(mds_rank_t mds);
   bool caps_issued_mask(unsigned mask);
   int caps_used();
   int caps_file_wanted();

@@ -2,6 +2,9 @@
 #define CEPH_CLIENT_DENTRY_H
 
 #include "include/lru.h"
+#include "include/xlist.h"
+
+#include "mds/mdstypes.h"
 
 class Dir;
 struct Inode;
@@ -14,11 +17,13 @@ class Dentry : public LRUObject {
   Inode   *inode;
   int     ref;                       // 1 if there's a dir beneath me.
   uint64_t offset;
-  int lease_mds;
+  mds_rank_t lease_mds;
   utime_t lease_ttl;
   uint64_t lease_gen;
   ceph_seq_t lease_seq;
   int cap_shared_gen;
+
+  xlist<Dentry*>::item item_dentry_list;
 
   /*
    * ref==1 -> cached, unused
@@ -41,7 +46,10 @@ class Dentry : public LRUObject {
 
   void dump(Formatter *f) const;
 
-  Dentry() : dir(0), inode(0), ref(1), offset(0), lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0) { }
+  Dentry() :
+    dir(0), inode(0), ref(1), offset(0),
+    lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0),
+    item_dentry_list(this)  { }
 private:
   ~Dentry() {
     assert(ref == 0);

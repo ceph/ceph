@@ -1,0 +1,282 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ *
+ * Author: Loic Dachary <loic@dachary.org>
+ *         Cheng Cheng <ccheng.leo@gmail.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU Library Public License as published by
+ * the Free Software Foundation; either version 2, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Library Public License for more details.
+ *
+ */
+
+#include <stdio.h>
+#include <signal.h>
+#include "common/Thread.h"
+#include "common/shared_cache.hpp"
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include <gtest/gtest.h>
+
+using namespace std::tr1;
+
+class SharedLRUTest : public SharedLRU<unsigned int, int> {
+public:
+  Mutex &get_lock() { return lock; }
+  Cond &get_cond() { return cond; }
+  map<unsigned int, pair< weak_ptr<int>, int* > > &get_weak_refs() {
+    return weak_refs;
+  }
+};
+
+class SharedLRU_all : public ::testing::Test {
+public:
+
+  class Thread_wait : public Thread {
+  public:
+    SharedLRUTest &cache;
+    unsigned int key;
+    int value;
+    shared_ptr<int> ptr;
+    enum in_method_t { LOOKUP, LOWER_BOUND } in_method;
+
+    Thread_wait(SharedLRUTest& _cache, unsigned int _key, 
+                int _value, in_method_t _in_method) :
+      cache(_cache),
+      key(_key),
+      value(_value),
+      in_method(_in_method) { }
+
+    virtual void * entry() {
+      switch (in_method) {
+      case LOWER_BOUND:
+        ptr = cache.lower_bound(key);
+        break;
+      case LOOKUP:
+        ptr = shared_ptr<int>(new int);
+        *ptr = value;
+        ptr = cache.lookup(key);
+        break;
+      }
+      return NULL;
+    }
+  };
+
+  static const useconds_t DELAY_MAX = 20 * 1000 * 1000;
+  static useconds_t delay;
+
+  bool wait_for(SharedLRUTest &cache, int waitting) {
+    do {
+      //
+      // the delay variable is supposed to be initialized to zero. It would be fine
+      // to usleep(0) but we take this opportunity to test the loop. It will try 
+      // again and therefore show that the logic ( increasing the delay ) actually
+      // works. 
+      //
+      if (delay > 0)
+        usleep(delay);
+      {
+        Mutex::Locker l(cache.get_lock());
+        if (cache.waiting == waitting) {
+          break;
+        }
+      }
+      if (delay > 0) {
+        cout << "delay " << delay << "us, is not long enough, try again\n";
+      }
+    } while ((delay = delay * 2 + 1) < DELAY_MAX); 
+    return delay < DELAY_MAX;
+  }
+};
+
+useconds_t SharedLRU_all::delay = 0;
+
+TEST_F(SharedLRU_all, add) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value1 = 2;
+  bool existed = false;
+  {
+    shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
+    ASSERT_EQ(value1, *ptr);
+    ASSERT_FALSE(existed);
+  }
+  {
+    int value2 = 3;
+    shared_ptr<int> ptr = cache.add(key, new int(value2), &existed);
+    ASSERT_EQ(value1, *ptr);
+    ASSERT_TRUE(existed);
+  }
+}
+
+TEST_F(SharedLRU_all, lookup) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  {
+    int value = 2;
+    ASSERT_TRUE(cache.add(key, new int(value)));
+    ASSERT_TRUE(cache.lookup(key));
+    ASSERT_EQ(value, *cache.lookup(key));
+  }
+  ASSERT_TRUE(cache.lookup(key));
+}
+
+TEST_F(SharedLRU_all, wait_lookup) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value = 2;
+
+  {
+    shared_ptr<int> ptr(new int);
+    cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
+  }
+  EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
+
+  Thread_wait t(cache, key, value, Thread_wait::LOOKUP);
+  t.create();
+  ASSERT_TRUE(wait_for(cache, 1));
+  EXPECT_EQ(value, *t.ptr);
+  // waiting on a key does not block lookups on other keys
+  EXPECT_FALSE(cache.lookup(key + 12345));
+  {
+    Mutex::Locker l(cache.get_lock());
+    cache.get_weak_refs().erase(key);
+    cache.get_cond().Signal();
+  }
+  ASSERT_TRUE(wait_for(cache, 0));
+  t.join();
+  EXPECT_FALSE(t.ptr);
+}
+
+TEST_F(SharedLRU_all, lower_bound) {
+  SharedLRUTest cache;
+
+  {
+    unsigned int key = 1;
+    ASSERT_FALSE(cache.lower_bound(key));
+    int value = 2;
+
+    ASSERT_TRUE(cache.add(key, new int(value)));
+    ASSERT_TRUE(cache.lower_bound(key));
+    EXPECT_EQ(value, *cache.lower_bound(key));
+  }
+}
+
+TEST_F(SharedLRU_all, wait_lower_bound) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value = 2;
+  unsigned int other_key = key + 1;
+  int other_value = value + 1;
+
+  ASSERT_TRUE(cache.add(other_key, new int(other_value)));
+
+  {
+    shared_ptr<int> ptr(new int);
+    cache.get_weak_refs()[key] = make_pair(ptr, &*ptr);
+  }
+  EXPECT_FALSE(cache.get_weak_refs()[key].first.lock());
+
+  Thread_wait t(cache, key, value, Thread_wait::LOWER_BOUND);
+  t.create();
+  ASSERT_TRUE(wait_for(cache, 1));
+  EXPECT_FALSE(t.ptr);
+  // waiting on a key does not block getting lower_bound on other keys
+  EXPECT_TRUE(cache.lower_bound(other_key));
+  {
+    Mutex::Locker l(cache.get_lock());
+    cache.get_weak_refs().erase(key);
+    cache.get_cond().Signal();
+  }
+  ASSERT_TRUE(wait_for(cache, 0));
+  t.join();
+  EXPECT_TRUE(t.ptr);
+}
+
+TEST_F(SharedLRU_all, clear) {
+  SharedLRUTest cache;
+  unsigned int key = 1;
+  int value = 2;
+  {
+    ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
+    ASSERT_EQ(value, *cache.lookup(key));
+  }
+  ASSERT_TRUE(cache.lookup(key));
+  cache.clear(key);
+  ASSERT_FALSE(cache.lookup(key));
+
+  {
+    ceph::shared_ptr<int> ptr = cache.add(key, new int(value));
+  }
+  ASSERT_TRUE(cache.lookup(key));
+  cache.clear(key);
+  ASSERT_FALSE(cache.lookup(key));
+}
+
+TEST(SharedCache_all, add) {
+  SharedLRU<int, int> cache;
+  unsigned int key = 1;
+  int value = 2;
+  shared_ptr<int> ptr = cache.add(key, new int(value));
+  ASSERT_EQ(ptr, cache.lookup(key));
+  ASSERT_EQ(value, *cache.lookup(key));
+}
+
+TEST(SharedCache_all, lru) {
+  const size_t SIZE = 5;
+  SharedLRU<int, int> cache(NULL, SIZE);
+
+  bool existed = false;
+  shared_ptr<int> ptr = cache.add(0, new int(0), &existed);
+  ASSERT_FALSE(existed);
+  {
+    int *tmpint = new int(0);
+    shared_ptr<int> ptr2 = cache.add(0, tmpint, &existed);
+    ASSERT_TRUE(existed);
+    delete tmpint;
+  }
+  for (size_t i = 1; i < 2*SIZE; ++i) {
+    cache.add(i, new int(i), &existed);
+    ASSERT_FALSE(existed);
+  }
+
+  ASSERT_TRUE(cache.lookup(0));
+  ASSERT_EQ(0, *cache.lookup(0));
+
+  ASSERT_FALSE(cache.lookup(SIZE-1));
+  ASSERT_FALSE(cache.lookup(SIZE));
+  ASSERT_TRUE(cache.lookup(SIZE+1));
+  ASSERT_EQ((int)SIZE+1, *cache.lookup(SIZE+1));
+
+  cache.purge(0);
+  ASSERT_FALSE(cache.lookup(0));
+  shared_ptr<int> ptr2 = cache.add(0, new int(0), &existed);
+  ASSERT_FALSE(ptr == ptr2);
+  ptr = shared_ptr<int>();
+  ASSERT_TRUE(cache.lookup(0));
+}
+
+int main(int argc, char **argv) {
+  vector<const char*> args;
+  argv_to_vec(argc, (const char **)argv, args);
+
+  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  common_init_finish(g_ceph_context);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
+
+// Local Variables:
+// compile-command: "cd ../.. ; make unittest_shared_cache && ./unittest_shared_cache # --gtest_filter=*.* --log-to-stderr=true"
+// End:

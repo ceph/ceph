@@ -351,6 +351,13 @@ public:
 };
 
 /*
+ * The C_GatherBuilder remembers each C_Context created by
+ * C_GatherBuilder.new_sub() in a C_Gather.  When a C_Context created
+ * by new_sub() is complete(), C_Gather forgets about it.  When
+ * C_GatherBuilder notices that there are no C_Context left in
+ * C_Gather, it calls complete() on the C_Context provided as the
+ * second argument of the constructor (finisher).
+ *
  * How to use C_GatherBuilder:
  *
  * 1. Create a C_GatherBuilder on the stack
@@ -359,6 +366,15 @@ public:
  * 3. If you didn't supply a finisher in the C_GatherBuilder constructor,
  *    set one with gather_bld.set_finisher(my_finisher)
  * 4. Call gather_bld.activate()
+ *
+ * Example:
+ *
+ * C_SaferCond all_done;
+ * C_GatherBuilder gb(g_ceph_context, all_done);
+ * j.submit_entry(1, first, 0, gb.new_sub()); // add a C_Context to C_Gather
+ * j.submit_entry(2, first, 0, gb.new_sub()); // add a C_Context to C_Gather
+ * gb.activate(); // consume C_Context as soon as they complete()
+ * all_done.wait(); // all_done is complete() after all new_sub() are complete()
  *
  * The finisher may be called at any point after step 4, including immediately
  * from the activate() function.
