@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.86], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.87], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -47,6 +47,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 case "${target_os}" in
 darwin*)
 	AC_DEFINE([DARWIN], [1], [Define if darwin/osx])
+    darwin="yes"
 	;;
 linux*)
 	linux="yes"
@@ -57,6 +58,7 @@ freebsd*)
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
+AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -565,7 +567,7 @@ AC_ARG_WITH([librocksdb],
 AS_IF([test "x$with_librocksdb" = "xyes"],
             [PKG_CHECK_MODULES([LIBROCKSDB], [rocksdb], [], [true])])
 AS_IF([test "x$with_librocksdb" = "xyes"],
-            [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
+            [AC_CHECK_LIB([rocksdb], [open], [], [AC_MSG_FAILURE([librocksdb not found])])])
 AM_CONDITIONAL(WITH_DLIBROCKSDB, [ test "$with_librocksdb" = "yes" ])
 
 AC_ARG_WITH([librocksdb-static],

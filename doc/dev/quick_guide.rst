@@ -38,32 +38,32 @@ You can also configure ``vstart.sh`` to use only one monitor and one metadata se
 
 	$ MON=1 MDS=1 ./vstart.sh -d -n -x
 
-The system creates three pools on startup: `data`, `metadata`, and `rbd`.  Let's get some stats on
+The system creates three pools on startup: `cephfs_data`, `cephfs_metadata`, and `rbd`.  Let's get some stats on
 the current pools:
 
 .. code::
 
 	$ ./ceph osd pool stats
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
-	pool data id 0
+	pool rbd id 0
+	  nothing is going on
+
+	pool cephfs_data id 1
 	  nothing is going on
 	
-	pool metadata id 1
+	pool cephfs_metadata id 2
 	  nothing is going on
 	
-	pool rbd id 2
-	  nothing is going on
-	
-	$ ./ceph osd pool stats data
+	$ ./ceph osd pool stats cephfs_data
 	*** DEVELOPER MODE: setting PATH, PYTHONPATH and LD_LIBRARY_PATH ***
-	pool data id 0
+	pool cephfs_data id 1
 	  nothing is going on
 
 	$ ./rados df
 	pool name       category                 KB      objects       clones     degraded      unfound     rd        rd KB           wr        wr KB
-	data            -                          0            0            0            0     0            0            0            0            0
-	metadata        -                          2           20            0           40     0            0            0           21            8
 	rbd             -                          0            0            0            0     0            0            0            0            0
+	cephfs_data     -                          0            0            0            0     0            0            0            0            0
+	cephfs_metadata -                          2           20            0           40     0            0            0           21            8
 	  total used        12771536           20
 	  total avail     3697045460
 	  total space     3709816996
@@ -108,9 +108,9 @@ You can now use the swift python client to communicate with the RadosGW.
 
 .. code::
 
-    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
-    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf upload mycontainer ceph
-    $ swift -A http://localhost:8080/auth -U tester:testing -K asdf list
+    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
+    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf upload mycontainer ceph
+    $ swift -A http://localhost:8000/auth -U tester:testing -K asdf list
 
 
 Run unit tests

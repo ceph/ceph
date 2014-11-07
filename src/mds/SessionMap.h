@@ -25,6 +25,7 @@ using std::set;
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "mdstypes.h"
+#include "mds/MDSAuthCaps.h"
 
 class CInode;
 struct MDRequestImpl;
@@ -81,6 +82,7 @@ private:
   int importing_count;
   friend class SessionMap;
 
+
   // Human (friendly) name is soft state generated from client metadata
   void _update_human_name();
   std::string human_name;
@@ -97,6 +99,8 @@ public:
   uint32_t recall_release_count;  // How many caps have I actually revoked?
 
   session_info_t info;                         ///< durable bits
+
+  MDSAuthCaps auth_caps;
 
   ConnectionRef connection;
   xlist<Session*>::item item_session_list;

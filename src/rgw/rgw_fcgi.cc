@@ -33,7 +33,7 @@ void RGWFCGX::init_env(CephContext *cct)
 
 int RGWFCGX::send_status(const char *status, const char *status_name)
 {
-  return print("Status: %s\n", status);
+  return print("Status: %s %s\n", status, status_name);
 }
 
 int RGWFCGX::send_100_continue()

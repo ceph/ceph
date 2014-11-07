@@ -235,10 +235,9 @@ int chain_setxattr(const char *fn, const char *name, const void *val, size_t siz
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
-  size_t chunk_size;
 
   do {
-    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    size_t chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 
@@ -271,10 +270,9 @@ int chain_fsetxattr(int fd, const char *name, const void *val, size_t size)
   int i = 0, pos = 0;
   char raw_name[CHAIN_XATTR_MAX_NAME_LEN * 2 + 16];
   int ret = 0;
-  size_t chunk_size;
 
   do {
-    chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
+    size_t chunk_size = (size < CHAIN_XATTR_MAX_BLOCK_LEN ? size : CHAIN_XATTR_MAX_BLOCK_LEN);
     get_raw_xattr_name(name, i, raw_name, sizeof(raw_name));
     size -= chunk_size;
 

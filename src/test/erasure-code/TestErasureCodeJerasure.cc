@@ -76,9 +76,9 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
 				 &encoded));
     EXPECT_EQ(4u, encoded.size());
     unsigned length =  encoded[0].length();
-    EXPECT_EQ(0, strncmp(encoded[0].c_str(), in.c_str(), length));
-    EXPECT_EQ(0, strncmp(encoded[1].c_str(), in.c_str() + length,
-			 in.length() - length));
+    EXPECT_EQ(0, memcmp(encoded[0].c_str(), in.c_str(), length));
+    EXPECT_EQ(0, memcmp(encoded[1].c_str(), in.c_str() + length,
+			in.length() - length));
 
 
     // all chunks are available
@@ -90,9 +90,9 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
 				   &decoded));
       EXPECT_EQ(2u, decoded.size()); 
       EXPECT_EQ(length, decoded[0].length());
-      EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-      EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
-			   in.length() - length));
+      EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
+			  in.length() - length));
     }
 
     // two chunks are missing 
@@ -109,9 +109,9 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       // always decode all, regardless of want_to_decode
       EXPECT_EQ(4u, decoded.size()); 
       EXPECT_EQ(length, decoded[0].length());
-      EXPECT_EQ(0, strncmp(decoded[0].c_str(), in.c_str(), length));
-      EXPECT_EQ(0, strncmp(decoded[1].c_str(), in.c_str() + length,
-			   in.length() - length));
+      EXPECT_EQ(0, memcmp(decoded[0].c_str(), in.c_str(), length));
+      EXPECT_EQ(0, memcmp(decoded[1].c_str(), in.c_str() + length,
+			  in.length() - length));
     }
   }
 }

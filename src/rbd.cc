@@ -29,6 +29,9 @@
 #include "include/compat.h"
 #include "common/blkdev.h"
 
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/statistics/rolling_sum.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <errno.h>
@@ -418,7 +421,7 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     // weird striping not allowed with format 1!
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
-      cerr << "non-default striping not allowed with format 1; use --format 2"
+      cerr << "non-default striping not allowed with format 1; use --image-format 2"
 	   << std::endl;
       return -EINVAL;
     }
@@ -924,6 +927,20 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
     thread_offset.push_back(start_pos);
   }
 
+  const int WINDOW_SIZE = 5;
+  typedef boost::accumulators::accumulator_set<
+    double, boost::accumulators::stats<
+      boost::accumulators::tag::rolling_sum> > RollingSum;
+
+  RollingSum time_acc(
+    boost::accumulators::tag::rolling_window::window_size = WINDOW_SIZE);
+  RollingSum ios_acc(
+    boost::accumulators::tag::rolling_window::window_size = WINDOW_SIZE);
+  RollingSum off_acc(
+    boost::accumulators::tag::rolling_window::window_size = WINDOW_SIZE);
+  uint64_t cur_ios = 0;
+  uint64_t cur_off = 0;
+
   printf("  SEC       OPS   OPS/SEC   BYTES/SEC\n");
   uint64_t off;
   for (off = 0; off < io_bytes; ) {
@@ -934,6 +951,9 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
       ++i;
       ++ios;
       off += io_size;
+
+      ++cur_ios;
+      cur_off += io_size;
 
       if (pattern == "rand") {
         thread_offset[i] = (rand() % (size / io_size)) * io_size;
@@ -946,12 +966,21 @@ static int do_bench_write(librbd::Image& image, uint64_t io_size,
 
     utime_t now = ceph_clock_now(NULL);
     utime_t elapsed = now - start;
-    if (elapsed.sec() != last.sec()) {
+    if (last.is_zero()) {
+      last = elapsed;
+    } else if (elapsed.sec() != last.sec()) {
+      time_acc(elapsed - last);
+      ios_acc(static_cast<double>(cur_ios));
+      off_acc(static_cast<double>(cur_off));
+      cur_ios = 0;
+      cur_off = 0;
+
+      double time_sum = boost::accumulators::rolling_sum(time_acc);
       printf("%5d  %8d  %8.2lf  %8.2lf\n",
-	     (int)elapsed,
-	     (int)(ios - io_threads),
-	     (double)(ios - io_threads) / elapsed,
-	     (double)(off - io_threads * io_size) / elapsed);
+             (int)elapsed,
+             (int)(ios - io_threads),
+             boost::accumulators::rolling_sum(ios_acc) / time_sum,
+             boost::accumulators::rolling_sum(off_acc) / time_sum);
       last = elapsed;
     }
   }
@@ -1027,8 +1056,8 @@ public:
         return;
       }
 
-      r = lseek64(m_fd, m_offset, SEEK_SET);
-      if (static_cast<uint64_t>(r) != m_offset) {
+      uint64_t chkret = lseek64(m_fd, m_offset, SEEK_SET);
+      if (chkret != m_offset) {
         cerr << "rbd: error seeking destination image to offset "
              << m_offset << std::endl;
         r = -errno;

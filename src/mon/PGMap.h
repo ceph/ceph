@@ -283,10 +283,10 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void recovery_summary(Formatter *f, ostream *out,
+  void recovery_summary(Formatter *f, list<string> *psl,
                         const pool_stat_t& delta_sum) const;
-  void overall_recovery_summary(Formatter *f, ostream *out) const;
-  void pool_recovery_summary(Formatter *f, ostream *out,
+  void overall_recovery_summary(Formatter *f, list<string> *psl) const;
+  void pool_recovery_summary(Formatter *f, list<string> *psl,
                              uint64_t poolid) const;
   void recovery_rate_summary(Formatter *f, ostream *out,
                              const pool_stat_t& delta_sum,

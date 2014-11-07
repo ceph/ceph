@@ -203,9 +203,16 @@ resending pending requests. ::
 	ceph osd pause
 	ceph osd unpause
 
-Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the same weight will receive
-roughly the same number of I/O requests and store approximately the
-same amount of data. ::
+Set the weight of ``{osd-num}`` to ``{weight}``. Two OSDs with the
+same weight will receive roughly the same number of I/O requests and
+store approximately the same amount of data. ``ceph osd reweight``
+sets an override weight on the OSD. This value is in the range 0 to 1,
+and forces CRUSH to re-place (1-weight) of the data that would
+otherwise live on this drive. It does not change the weights assigned
+to the buckets above the OSD in the crush map, and is a corrective
+measure in case the normal CRUSH distribution isn't working out quite
+right. For instance, if one of your OSDs is at 90% and the others are
+at 50%, you could reduce this weight to try and compensate for it. ::
 
 	ceph osd reweight {osd-num} {weight}
 
@@ -285,11 +292,11 @@ MDS Subsystem
 
 Change configuration parameters on a running mds. ::
 
-	ceph mds tell {mds-id} injectargs '--{switch} {value} [--{switch} {value}]'
+	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
 
 Example::
 
-	ceph mds tell 0 injectargs '--debug_ms 1 --debug_mds 10'
+	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
 
 Enables debug messages. ::
 

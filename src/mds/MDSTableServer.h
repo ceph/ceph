@@ -39,12 +39,12 @@ private:
 
  public:
   virtual void handle_query(MMDSTableRequest *m) = 0;
-  virtual void _prepare(bufferlist &bl, uint64_t reqid, int bymds) = 0;
+  virtual void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) = 0;
   virtual bool _commit(version_t tid, MMDSTableRequest *req=NULL) = 0;
   virtual void _rollback(version_t tid) = 0;
   virtual void _server_update(bufferlist& bl) { assert(0); }
 
-  void _note_prepare(int mds, uint64_t reqid) {
+  void _note_prepare(mds_rank_t mds, uint64_t reqid) {
     pending_for_mds[version].mds = mds;
     pending_for_mds[version].reqid = reqid;
     pending_for_mds[version].tid = version;
@@ -76,8 +76,8 @@ private:
   }
 
   // recovery
-  void finish_recovery(set<int>& active);
-  void handle_mds_recovery(int who);
+  void finish_recovery(set<mds_rank_t>& active);
+  void handle_mds_recovery(mds_rank_t who);
 };
 
 #endif

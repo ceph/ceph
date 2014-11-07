@@ -898,6 +898,9 @@ def validate_command(sigdict, args, verbose=False):
     turn args into a valid dictionary ready to be sent off as JSON,
     validated against sigdict.
     """
+    if verbose:
+        print >> sys.stderr, \
+            "validate_command: " + " ".join(args)
     found = []
     valid_dict = {}
     if args:
@@ -1061,6 +1064,25 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                 ret, outbuf, outs = cluster.mon_command(cmd, inbuf, timeout)
             else:
                 ret, outbuf, outs = cluster.mon_command(cmd, inbuf, timeout, target[1])
+        elif target[0] == 'mds':
+            mds_spec = target[1]
+
+            if verbose:
+                print >> sys.stderr, 'submit {0} to mds.{1}'.\
+                    format(cmd, mds_spec)
+
+            try:
+                from cephfs import LibCephFS
+            except ImportError:
+                raise RuntimeError("CephFS unavailable, have you installed libcephfs?")
+
+            filesystem = LibCephFS(cluster.conf_defaults, cluster.conffile)
+            filesystem.conf_parse_argv(cluster.parsed_args)
+
+            filesystem.init()
+            ret, outbuf, outs = \
+                filesystem.mds_command(mds_spec, cmd, inbuf)
+            filesystem.shutdown()
         else:
             raise ArgumentValid("Bad target type '{0}'".format(target[0]))
 
@@ -1109,7 +1131,7 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
 
     except Exception as e:
         if not isinstance(e, ArgumentError):
-            raise RuntimeError('"{0}": exception {1}'.format(cmd, e))
+            raise RuntimeError('"{0}": exception {1}'.format(argdict, e))
         else:
             raise
 

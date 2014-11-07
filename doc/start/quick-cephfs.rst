@@ -28,6 +28,19 @@ Prerequisites
 	ceph -s [-m {monitor-ip-address}] [-k {path/to/ceph.client.admin.keyring}]
 
 
+Create a Filesystem
+===================
+
+You have already created an MDS (`Storage Cluster Quick Start`_) but it will not
+become active until you create some pools and a filesystem.  See :doc:`/cephfs/createfs`.
+
+::
+
+    ceph osd pool create cephfs_data <pg_num>
+    ceph osd pool create cephfs_metadata <pg_num>
+    ceph fs new <fs_name> cephfs_metadata cephfs_data
+
+
 Create a Secret File
 ====================
 

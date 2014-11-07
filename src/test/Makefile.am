@@ -293,6 +293,11 @@ unittest_sharedptr_registry_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sharedptr_registry_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_sharedptr_registry
 
+unittest_shared_cache_SOURCES = test/common/test_shared_cache.cc
+unittest_shared_cache_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_shared_cache_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_shared_cache
+
 unittest_sloppy_crc_map_SOURCES = test/common/test_sloppy_crc_map.cc
 unittest_sloppy_crc_map_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_sloppy_crc_map_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
@@ -555,6 +560,11 @@ unittest_osd_osdcap_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_osd_osdcap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_osd_osdcap
 
+unittest_mds_authcap_SOURCES = test/mds/TestMDSAuthCaps.cc 
+unittest_mds_authcap_LDADD = $(LIBMDS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_mds_authcap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_mds_authcap
+
 unittest_mon_moncap_SOURCES = test/mon/moncap.cc
 unittest_mon_moncap_LDADD = $(LIBMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_mon_moncap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -596,6 +606,11 @@ unittest_rbd_replay_LDADD = $(LIBRBD) \
 	$(UNITTEST_LDADD)
 unittest_rbd_replay_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_rbd_replay
+
+unittest_readahead_SOURCES = test/common/Readahead.cc
+unittest_readahead_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+unittest_readahead_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
+check_PROGRAMS += unittest_readahead
 
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
@@ -923,6 +938,25 @@ bin_DEBUGPROGRAMS += ceph_test_cfuse_cache_invalidate
 
 ceph_test_c_headers_SOURCES = test/test_c_headers.c
 ceph_test_c_headers_LDADD = $(LIBRADOS) $(LIBCEPHFS)
+ceph_test_c_headers_CFLAGS = $(AM_CFLAGS) \
+	-Werror \
+	-Wstrict-prototypes \
+	-Wredundant-decls \
+	-Wall \
+	-Wundef \
+	-Wwrite-strings \
+	-Wmissing-prototypes \
+	-Wendif-labels \
+	-Wmissing-include-dirs \
+	-Wempty-body \
+	-Wnested-externs \
+	-Wformat-security \
+	-Wformat-y2k \
+	-Winit-self \
+	-Wignored-qualifiers \
+	-Wold-style-declaration \
+	-Wold-style-definition \
+	-Wtype-limits
 bin_DEBUGPROGRAMS += ceph_test_c_headers
 
 ceph_test_get_blkdev_size_SOURCES = test/test_get_blkdev_size.cc

@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*
 // vim: ts=8 sw=2 smarttab
 
+#include <climits>
+
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"
@@ -23,6 +25,18 @@ TEST_F(LibRadosIo, SimpleWrite) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   rados_ioctx_set_namespace(ioctx, "nspace");
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+}
+
+TEST_F(LibRadosIo, TooBig) {
+  char buf[1];
+  ASSERT_EQ(-E2BIG, rados_write(ioctx, "A", buf, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, rados_append(ioctx, "A", buf, UINT_MAX));
+  ASSERT_EQ(-E2BIG, rados_write_full(ioctx, "A", buf, UINT_MAX));
+  IoCtx ioctx;
+  bufferlist bl;
+  ASSERT_EQ(-E2BIG, ioctx.write("foo", bl, UINT_MAX, 0));
+  ASSERT_EQ(-E2BIG, ioctx.append("foo", bl, UINT_MAX));
+  // ioctx.write_full no way to overflow bl.length()
 }
 
 TEST_F(LibRadosIo, ReadTimeout) {

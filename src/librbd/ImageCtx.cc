@@ -51,7 +51,9 @@ namespace librbd {
       format_string(NULL),
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0),
-      object_cacher(NULL), writeback_handler(NULL), object_set(NULL)
+      object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
+      readahead(),
+      total_bytes_read(0)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -158,15 +160,25 @@ namespace librbd {
     } else {
       header_oid = old_header_name(name);
     }
+
+    md_config_t *conf = cct->_conf;
+    readahead.set_trigger_requests(conf->rbd_readahead_trigger_requests);
+    readahead.set_max_readahead_size(conf->rbd_readahead_max_bytes);
     return 0;
   }
-  
+
   void ImageCtx::init_layout()
   {
     if (stripe_unit == 0 || stripe_count == 0) {
       stripe_unit = 1ull << order;
       stripe_count = 1;
     }
+
+    vector<uint64_t> alignments;
+    alignments.push_back(stripe_count << order); // object set (in file striping terminology)
+    alignments.push_back(stripe_unit * stripe_count); // stripe
+    alignments.push_back(stripe_unit); // stripe unit
+    readahead.set_alignments(alignments);
 
     memset(&layout, 0, sizeof(layout));
     layout.fl_stripe_unit = stripe_unit;
@@ -232,6 +244,8 @@ namespace librbd {
     plb.add_u64_counter(l_librbd_snap_rollback, "snap_rollback");
     plb.add_u64_counter(l_librbd_notify, "notify");
     plb.add_u64_counter(l_librbd_resize, "resize");
+    plb.add_u64_counter(l_librbd_readahead, "readahead");
+    plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes");
 
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
@@ -349,13 +363,6 @@ namespace librbd {
   uint64_t ImageCtx::get_stripe_period() const
   {
     return stripe_count * (1ull << order);
-  }
-
-  uint64_t ImageCtx::get_num_objects() const
-  {
-    uint64_t period = get_stripe_period();
-    uint64_t num_periods = (size + period - 1) / period;
-    return num_periods * stripe_count;
   }
 
   int ImageCtx::is_snap_protected(snap_t in_snap_id,

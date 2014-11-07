@@ -1078,8 +1078,12 @@ public:
     pg_t base_pgid;      ///< explciti pg target, if any
 
     pg_t pgid;           ///< last pg we mapped to
-    vector<int> acting;  ///< acting for last pg we mapped to
-    int primary;         ///< primary for last pg we mapped to
+    unsigned pg_num;     ///< last pg_num we mapped to
+    vector<int> up;      ///< set of up osds for last pg we mapped to
+    vector<int> acting;  ///< set of acting osds for last pg we mapped to
+    int up_primary;      ///< primary for last pg we mapped to based on the up set
+    int acting_primary;  ///< primary for last pg we mapped to based on the acting set
+    int min_size;        ///< the min size of the pool when were were last mapped
 
     bool used_replica;
     bool paused;
@@ -1091,7 +1095,10 @@ public:
 	base_oid(oid),
 	base_oloc(oloc),
 	precalc_pgid(false),
-	primary(-1),
+	pg_num(0),
+	up_primary(-1),
+	acting_primary(-1),
+	min_size(-1),
 	used_replica(false),
 	paused(false),
 	osd(-1)
@@ -1620,7 +1627,7 @@ public:
     messenger(m), monc(mc),
     osdmap(new OSDMap),
     cct(cct_),
-    initialized(false),
+    initialized(0),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),
     global_op_flags(0),

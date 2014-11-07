@@ -79,7 +79,7 @@ public:
   static void generate_test_instances(list<SnapServer*>& ls);
 
   // server bits
-  void _prepare(bufferlist &bl, uint64_t reqid, int bymds);
+  void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds);
   bool _is_prepared(version_t tid);
   bool _commit(version_t tid, MMDSTableRequest *req=NULL);
   void _rollback(version_t tid);

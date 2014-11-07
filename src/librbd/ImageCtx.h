@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "common/Mutex.h"
+#include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
 #include "include/buffer.h"
@@ -90,6 +91,9 @@ namespace librbd {
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
 
+    Readahead readahead;
+    uint64_t total_bytes_read;
+
     /**
      * Either image_name or image_id must be set.
      * If id is not known, pass the empty std::string,
@@ -120,7 +124,6 @@ namespace librbd {
     uint64_t get_current_size() const;
     uint64_t get_object_size() const;
     string get_object_name(uint64_t num) const;
-    uint64_t get_num_objects() const;
     uint64_t get_stripe_unit() const;
     uint64_t get_stripe_count() const;
     uint64_t get_stripe_period() const;

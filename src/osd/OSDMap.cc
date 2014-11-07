@@ -996,7 +996,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   if (entity_type == CEPH_ENTITY_TYPE_OSD) {
     for (map<string,map<string,string> >::const_iterator p = erasure_code_profiles.begin();
 	 p != erasure_code_profiles.end();
-	 p++) {
+	 ++p) {
       const map<string,string> &profile = p->second;
       map<string,string>::const_iterator plugin = profile.find("plugin");
       if (plugin != profile.end() && (plugin->second == "isa" ||
@@ -2248,18 +2248,8 @@ struct qi {
   qi(int i, int d, float w) : item(i), depth(d), weight(w) {}
 };
 
-void OSDMap::print(ostream& out) const
+void OSDMap::print_pools(ostream& out) const
 {
-  out << "epoch " << get_epoch() << "\n"
-      << "fsid " << get_fsid() << "\n"
-      << "created " << get_created() << "\n"
-      << "modified " << get_modified() << "\n";
-
-  out << "flags " << get_flag_string() << "\n";
-  if (get_cluster_snapshot().length())
-    out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
-  out << "\n";
-
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
     std::string name("<unknown>");
     map<int64_t,string>::const_iterator pni = pool_name.find(p->first);
@@ -2276,6 +2266,21 @@ void OSDMap::print(ostream& out) const
       out << "\tremoved_snaps " << p->second.removed_snaps << "\n";
   }
   out << std::endl;
+}
+
+void OSDMap::print(ostream& out) const
+{
+  out << "epoch " << get_epoch() << "\n"
+      << "fsid " << get_fsid() << "\n"
+      << "created " << get_created() << "\n"
+      << "modified " << get_modified() << "\n";
+
+  out << "flags " << get_flag_string() << "\n";
+  if (get_cluster_snapshot().length())
+    out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
+  out << "\n";
+
+  print_pools(out);
 
   out << "max_osd " << get_max_osd() << "\n";
   for (int i=0; i<get_max_osd(); i++) {
@@ -2441,17 +2446,17 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
   if (!stray.empty()) {
     if (out)
       *out << "\n";
-    if (f)
-      f->open_object_section("osd");
     for (set<int>::iterator p = stray.begin(); p != stray.end(); ++p) {
       if (out)
 	*out << *p << "\t0\t";
+      if (f)
+        f->open_object_section("osd");
       print_osd_line(*p, out, f);
       if (out)
 	*out << "\n";
+      if (f)
+        f->close_section();
     }
-    if (f)
-      f->close_section();
   }
   if (f)
     f->close_section();

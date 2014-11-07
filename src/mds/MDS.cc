@@ -17,6 +17,7 @@
 #include "global/signal_handler.h"
 
 #include "include/types.h"
+#include "include/str_list.h"
 #include "common/entity_name.h"
 #include "common/Clock.h"
 #include "common/signal.h"
@@ -64,6 +65,8 @@
 #include "messages/MMDSTableRequest.h"
 
 #include "messages/MMonCommand.h"
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
 
 #include "auth/AuthAuthorizeHandler.h"
 #include "auth/KeyRing.h"
@@ -95,7 +98,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 								      m->cct->_conf->auth_supported :
 								      m->cct->_conf->auth_service_required)),
   name(n),
-  whoami(-1), incarnation(0),
+  whoami(MDS_RANK_NONE), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
   standby_type(MDSMap::STATE_NULL),
   standby_replaying(false),
@@ -501,7 +504,7 @@ void MDS::send_message(Message *m, Connection *c)
 }
 
 
-void MDS::send_message_mds(Message *m, int mds)
+void MDS::send_message_mds(Message *m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
@@ -520,7 +523,7 @@ void MDS::send_message_mds(Message *m, int mds)
   messenger->send_message(m, mdsmap->get_inst(mds));
 }
 
-void MDS::forward_message_mds(Message *m, int mds)
+void MDS::forward_message_mds(Message *m, mds_rank_t mds)
 {
   assert(mds != whoami);
 
@@ -721,7 +724,7 @@ int MDS::init(MDSMap::DaemonState wanted_state)
     standby_type = wanted_state;
   }
 
-  standby_for_rank = g_conf->mds_standby_for_rank;
+  standby_for_rank = mds_rank_t(g_conf->mds_standby_for_rank);
   standby_for_name.assign(g_conf->mds_standby_for_name);
 
   if (wanted_state == MDSMap::STATE_STANDBY_REPLAY &&
@@ -840,94 +843,314 @@ void MDS::check_ops_in_flight()
   return;
 }
 
+/* This function DOES put the passed message before returning*/
+void MDS::handle_command(MCommand *m)
+{
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  assert(session != NULL);
+
+  int r = 0;
+  cmdmap_t cmdmap;
+  std::stringstream ss;
+  std::string outs;
+  bufferlist outbl;
+  Context *run_after = NULL;
+
+
+  if (!session->auth_caps.allow_all()) {
+    dout(1) << __func__
+      << ": received command from client without `tell` capability: "
+      << m->get_connection()->peer_addr << dendl;
+
+    ss << "permission denied";
+    r = -EPERM;
+  } else if (m->cmd.empty()) {
+    ss << "no command given";
+    outs = ss.str();
+  } else if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    r = -EINVAL;
+    outs = ss.str();
+  } else {
+    r = _handle_command(cmdmap, m->get_data(), &outbl, &outs, &run_after);
+  }
+
+  MCommandReply *reply = new MCommandReply(r, outs);
+  reply->set_tid(m->get_tid());
+  reply->set_data(outbl);
+  m->get_connection()->send_message(reply);
+
+  if (run_after) {
+    run_after->complete(0);
+  }
+
+  m->put();
+}
+
+
+struct MDSCommand {
+  string cmdstring;
+  string helpstring;
+  string module;
+  string perm;
+  string availability;
+} mds_commands[] = {
+
+#define COMMAND(parsesig, helptext, module, perm, availability) \
+  {parsesig, helptext, module, perm, availability},
+
+COMMAND("injectargs " \
+	"name=injected_args,type=CephString,n=N",
+	"inject configuration arguments into running MDS",
+	"mds", "*", "cli,rest")
+COMMAND("exit",
+	"Terminate this MDS",
+	"mds", "*", "cli,rest")
+COMMAND("respawn",
+	"Restart this MDS",
+	"mds", "*", "cli,rest")
+COMMAND("session kill " \
+        "name=session_id,type=CephInt",
+	"End a client session",
+	"mds", "*", "cli,rest")
+COMMAND("cpu_profiler " \
+	"name=arg,type=CephChoices,strings=status|flush",
+	"run cpu profiling on daemon", "mds", "rw", "cli,rest")
+COMMAND("heap " \
+	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
+	"show heap usage info (available only if compiled with tcmalloc)", \
+	"mds", "*", "cli,rest")
+};
+
+// FIXME: reinstate dumpcache as an admin socket command
+//  -- it makes no sense for it to be a remote command when
+//     the output is a local file
+// FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir, export_dir
+//  *if* it makes sense to do so (or should these be admin socket things?)
 
 /* This function DOES put the passed message before returning*/
 void MDS::handle_command(MMonCommand *m)
 {
-  dout(10) << "handle_command args: " << m->cmd << dendl;
-  if (m->cmd[0] == "injectargs") {
-    if (m->cmd.size() < 2) {
+  bufferlist outbl;
+  _handle_command_legacy(m->cmd);
+  m->put();
+}
+
+int MDS::_handle_command(
+    const cmdmap_t &cmdmap,
+    bufferlist const &inbl,
+    bufferlist *outbl,
+    std::string *outs,
+    Context **run_later)
+{
+  assert(outbl != NULL);
+  assert(outs != NULL);
+
+  class SuicideLater : public MDSInternalContext
+  {
+    public:
+
+    SuicideLater(MDS *mds) : MDSInternalContext(mds) {}
+    void finish(int r) {
+      // Wait a little to improve chances of caller getting
+      // our response before seeing us disappear from mdsmap
+      sleep(1);
+
+      mds->suicide();
+    }
+  };
+
+
+  class RespawnLater : public MDSInternalContext
+  {
+    public:
+
+    RespawnLater(MDS *mds) : MDSInternalContext(mds) {}
+    void finish(int r) {
+      // Wait a little to improve chances of caller getting
+      // our response before seeing us disappear from mdsmap
+      sleep(1);
+
+      mds->respawn();
+    }
+  };
+
+  std::stringstream ds;
+  std::stringstream ss;
+  std::string prefix;
+  cmd_getval(cct, cmdmap, "prefix", prefix);
+
+  int r = 0;
+
+  if (prefix == "get_command_descriptions") {
+    int cmdnum = 0;
+    JSONFormatter *f = new JSONFormatter();
+    f->open_object_section("command_descriptions");
+    for (MDSCommand *cp = mds_commands;
+	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {
+
+      ostringstream secname;
+      secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
+      dump_cmddesc_to_json(f, secname.str(), cp->cmdstring, cp->helpstring,
+			   cp->module, cp->perm, cp->availability);
+      cmdnum++;
+    }
+    f->close_section();	// command_descriptions
+
+    f->flush(ds);
+    delete f;
+  } else if (prefix == "injectargs") {
+    vector<string> argsvec;
+    cmd_getval(cct, cmdmap, "injected_args", argsvec);
+
+    if (argsvec.empty()) {
+      r = -EINVAL;
+      ss << "ignoring empty injectargs";
+      goto out;
+    }
+    string args = argsvec.front();
+    for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
+      args += " " + *a;
+    cct->_conf->injectargs(args, &ss);
+  } else if (prefix == "exit") {
+    // We will send response before executing
+    ss << "Exiting...";
+    *run_later = new SuicideLater(this);
+  }
+  else if (prefix == "respawn") {
+    // We will send response before executing
+    ss << "Respawning...";
+    *run_later = new RespawnLater(this);
+  } else if (prefix == "session kill") {
+    // FIXME harmonize `session kill` with admin socket session evict
+    int64_t session_id = 0;
+    bool got = cmd_getval(cct, cmdmap, "session_id", session_id);
+    assert(got);
+    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+
+    if (session) {
+      server->kill_session(session, NULL);
+    } else {
+      r = -ENOENT;
+      ss << "session '" << session_id << "' not found";
+    }
+  } else if (prefix == "heap") {
+    if (!ceph_using_tcmalloc()) {
+      r = -EOPNOTSUPP;
+      ss << "could not issue heap profiler command -- not using tcmalloc!";
+    } else {
+      string heapcmd;
+      cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
+      vector<string> heapcmd_vec;
+      get_str_vec(heapcmd, heapcmd_vec);
+      ceph_heap_profiler_handle_command(heapcmd_vec, ds);
+    }
+  } else if (prefix == "cpu_profiler") {
+    string arg;
+    cmd_getval(cct, cmdmap, "arg", arg);
+    vector<string> argvec;
+    get_str_vec(arg, argvec);
+    cpu_profiler_handle_command(argvec, ds);
+  } else {
+    std::ostringstream ss;
+    ss << "unrecognized command! " << prefix;
+    r = -EINVAL;
+  }
+
+out:
+  *outs = ss.str();
+  outbl->append(ds);
+  return r;
+}
+
+/**
+ * Legacy "mds tell", takes a simple array of args
+ */
+int MDS::_handle_command_legacy(std::vector<std::string> args)
+{
+  dout(10) << "handle_command args: " << args << dendl;
+  if (args[0] == "injectargs") {
+    if (args.size() < 2) {
       derr << "Ignoring empty injectargs!" << dendl;
     }
     else {
       std::ostringstream oss;
       mds_lock.Unlock();
-      g_conf->injectargs(m->cmd[1], &oss);
+      g_conf->injectargs(args[1], &oss);
       mds_lock.Lock();
       derr << "injectargs:" << dendl;
       derr << oss.str() << dendl;
     }
   }
-  else if (m->cmd[0] == "dumpcache") {
-    if (m->cmd.size() > 1)
-      mdcache->dump_cache(m->cmd[1].c_str());
+  else if (args[0] == "dumpcache") {
+    if (args.size() > 1)
+      mdcache->dump_cache(args[1].c_str());
     else
       mdcache->dump_cache();
   }
-  else if (m->cmd[0] == "exit") {
+  else if (args[0] == "exit") {
     suicide();
   }
-  else if (m->cmd[0] == "respawn") {
+  else if (args[0] == "respawn") {
     respawn();
   }
-  else if (m->cmd[0] == "session" && m->cmd[1] == "kill") {
+  else if (args[0] == "session" && args[1] == "kill") {
     Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-							    strtol(m->cmd[2].c_str(), 0, 10)));
+							    strtol(args[2].c_str(), 0, 10)));
     if (session)
       server->kill_session(session, NULL);
     else
       dout(15) << "session " << session << " not in sessionmap!" << dendl;
-  } else if (m->cmd[0] == "issue_caps") {
-    long inum = strtol(m->cmd[1].c_str(), 0, 10);
+  } else if (args[0] == "issue_caps") {
+    long inum = strtol(args[1].c_str(), 0, 10);
     CInode *in = mdcache->get_inode(inodeno_t(inum));
     if (in) {
       bool r = locker->issue_caps(in);
       dout(20) << "called issue_caps on inode "  << inum
 	       << " with result " << r << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (m->cmd[0] == "try_eval") {
-    long inum = strtol(m->cmd[1].c_str(), 0, 10);
-    int mask = strtol(m->cmd[2].c_str(), 0, 10);
+  } else if (args[0] == "try_eval") {
+    long inum = strtol(args[1].c_str(), 0, 10);
+    int mask = strtol(args[2].c_str(), 0, 10);
     CInode * ino = mdcache->get_inode(inodeno_t(inum));
     if (ino) {
       locker->try_eval(ino, mask);
       dout(20) << "try_eval(" << inum << ", " << mask << ")" << dendl;
     } else dout(15) << "inode " << inum << " not in mdcache!" << dendl;
-  } else if (m->cmd[0] == "fragment_dir") {
-    if (m->cmd.size() == 4) {
-      filepath fp(m->cmd[1].c_str());
+  } else if (args[0] == "fragment_dir") {
+    if (args.size() == 4) {
+      filepath fp(args[1].c_str());
       CInode *in = mdcache->cache_traverse(fp);
       if (in) {
 	frag_t fg;
-	if (fg.parse(m->cmd[2].c_str())) {
+	if (fg.parse(args[2].c_str())) {
 	  CDir *dir = in->get_dirfrag(fg);
 	  if (dir) {
 	    if (dir->is_auth()) {
-	      int by = atoi(m->cmd[3].c_str());
+	      int by = atoi(args[3].c_str());
 	      if (by)
 		mdcache->split_dir(dir, by);
 	      else
 		dout(0) << "need to split by >0 bits" << dendl;
 	    } else dout(0) << "dir " << dir->dirfrag() << " not auth" << dendl;
 	  } else dout(0) << "dir " << in->ino() << " " << fg << " dne" << dendl;
-	} else dout(0) << " frag " << m->cmd[2] << " does not parse" << dendl;
+	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
       } else dout(0) << "path " << fp << " not found" << dendl;
     } else dout(0) << "bad syntax" << dendl;
-  } else if (m->cmd[0] == "merge_dir") {
-    if (m->cmd.size() == 3) {
-      filepath fp(m->cmd[1].c_str());
+  } else if (args[0] == "merge_dir") {
+    if (args.size() == 3) {
+      filepath fp(args[1].c_str());
       CInode *in = mdcache->cache_traverse(fp);
       if (in) {
 	frag_t fg;
-	if (fg.parse(m->cmd[2].c_str())) {
+	if (fg.parse(args[2].c_str())) {
 	  mdcache->merge_dir(in, fg);
-	} else dout(0) << " frag " << m->cmd[2] << " does not parse" << dendl;
+	} else dout(0) << " frag " << args[2] << " does not parse" << dendl;
       } else dout(0) << "path " << fp << " not found" << dendl;
     } else dout(0) << "bad syntax" << dendl;
-  } else if (m->cmd[0] == "export_dir") {
-    if (m->cmd.size() == 3) {
-      filepath fp(m->cmd[1].c_str());
-      int target = atoi(m->cmd[2].c_str());
+  } else if (args[0] == "export_dir") {
+    if (args.size() == 3) {
+      filepath fp(args[1].c_str());
+      mds_rank_t target = mds_rank_t(atoi(args[2].c_str()));
       if (target != whoami && mdsmap->is_up(target) && mdsmap->is_in(target)) {
 	CInode *in = mdcache->cache_traverse(fp);
 	if (in) {
@@ -939,23 +1162,26 @@ void MDS::handle_command(MMonCommand *m)
       } else dout(0) << "bad export_dir target syntax" << dendl;
     } else dout(0) << "bad export_dir syntax" << dendl;
   } 
-  else if (m->cmd[0] == "cpu_profiler") {
+  else if (args[0] == "cpu_profiler") {
     ostringstream ss;
-    cpu_profiler_handle_command(m->cmd, ss);
+    cpu_profiler_handle_command(args, ss);
     clog->info() << ss.str();
   }
- else if (m->cmd[0] == "heap") {
-   if (!ceph_using_tcmalloc())
-     clog->info() << "tcmalloc not enabled, can't use heap profiler commands\n";
-   else {
-     ostringstream ss;
-     vector<std::string> cmdargs;
-     cmdargs.insert(cmdargs.begin(), m->cmd.begin()+1, m->cmd.end());
-     ceph_heap_profiler_handle_command(cmdargs, ss);
-     clog->info() << ss.str();
-   }
- } else dout(0) << "unrecognized command! " << m->cmd << dendl;
-  m->put();
+  else if (args[0] == "heap") {
+    if (!ceph_using_tcmalloc())
+      clog->info() << "tcmalloc not enabled, can't use heap profiler commands\n";
+    else {
+      ostringstream ss;
+      vector<std::string> cmdargs;
+      cmdargs.insert(cmdargs.begin(), args.begin()+1, args.end());
+      ceph_heap_profiler_handle_command(cmdargs, ss);
+      clog->info() << ss.str();
+    }
+  } else {
+    dout(0) << "unrecognized command! " << args << dendl;
+  }
+
+  return 0;
 }
 
 /* This function deletes the passed message before returning. */
@@ -966,11 +1192,11 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // note source's map version
   if (m->get_source().is_mds() && 
-      peer_mdsmap_epoch[m->get_source().num()] < epoch) {
+      peer_mdsmap_epoch[mds_rank_t(m->get_source().num())] < epoch) {
     dout(15) << " peer " << m->get_source()
 	     << " has mdsmap epoch >= " << epoch
 	     << dendl;
-    peer_mdsmap_epoch[m->get_source().num()] = epoch;
+    peer_mdsmap_epoch[mds_rank_t(m->get_source().num())] = epoch;
   }
 
   // is it new?
@@ -1007,14 +1233,14 @@ void MDS::handle_mds_map(MMDSMap *m)
 
   // see who i am
   addr = messenger->get_myaddr();
-  whoami = mdsmap->get_rank_gid(monc->get_global_id());
-  state = mdsmap->get_state_gid(monc->get_global_id());
-  incarnation = mdsmap->get_inc_gid(monc->get_global_id());
+  whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
+  state = mdsmap->get_state_gid(mds_gid_t(monc->get_global_id()));
+  incarnation = mdsmap->get_inc_gid(mds_gid_t(monc->get_global_id()));
   dout(10) << "map says i am " << addr << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(state) << dendl;
 
   // mark down any failed peers
-  for (map<uint64_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
+  for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = oldmap->get_mds_info().begin();
        p != oldmap->get_mds_info().end();
        ++p) {
     if (mdsmap->get_mds_info().count(p->first) == 0) {
@@ -1049,7 +1275,7 @@ void MDS::handle_mds_map(MMDSMap *m)
         state == MDSMap::STATE_ONESHOT_REPLAY) {
       // fill in whoami from standby-for-rank. If we let this be changed
       // the logic used to set it here will need to be adjusted.
-      whoami = mdsmap->get_mds_info_gid(monc->get_global_id()).standby_for_rank;
+      whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
     } else {
       if (want_state == MDSMap::STATE_STANDBY) {
         dout(10) << "dropped out of mdsmap, try to re-add myself" << dendl;
@@ -1062,7 +1288,7 @@ void MDS::handle_mds_map(MMDSMap *m)
       } else {
 	// did i get kicked by someone else?
 	if (g_conf->mds_enforce_unique_name) {
-	  if (uint64_t existing = mdsmap->find_mds_gid_by_name(name)) {
+	  if (mds_gid_t existing = mdsmap->find_mds_gid_by_name(name)) {
 	    MDSMap::mds_info_t& i = mdsmap->get_info_gid(existing);
 	    if (i.global_id > monc->get_global_id()) {
 	      dout(1) << "handle_mds_map i (" << addr
@@ -1150,7 +1376,7 @@ void MDS::handle_mds_map(MMDSMap *m)
   if (is_resolve() || is_reconnect() || is_rejoin() ||
       is_clientreplay() || is_active() || is_stopping()) {
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
-      set<int> resolve;
+      set<mds_rank_t> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
       dout(10) << " resolve set is " << resolve << dendl;
       calc_recovery_set();
@@ -1172,14 +1398,14 @@ void MDS::handle_mds_map(MMDSMap *m)
 
     if (oldstate >= MDSMap::STATE_REJOIN) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
-      set<int> olddis, dis;
+      set<mds_rank_t> olddis, dis;
       oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
       oldmap->get_mds_set(olddis, MDSMap::STATE_CLIENTREPLAY);
       oldmap->get_mds_set(olddis, MDSMap::STATE_REJOIN);
       mdsmap->get_mds_set(dis, MDSMap::STATE_ACTIVE);
       mdsmap->get_mds_set(dis, MDSMap::STATE_CLIENTREPLAY);
       mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
-      for (set<int>::iterator p = dis.begin(); p != dis.end(); ++p)
+      for (set<mds_rank_t>::iterator p = dis.begin(); p != dis.end(); ++p)
 	if (*p != whoami &&            // not me
 	    olddis.count(*p) == 0) {  // newly so?
 	  mdcache->kick_discovers(*p);
@@ -1194,12 +1420,12 @@ void MDS::handle_mds_map(MMDSMap *m)
   // did someone go active?
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
       (is_clientreplay() || is_active() || is_stopping())) {
-    set<int> oldactive, active;
+    set<mds_rank_t> oldactive, active;
     oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
     oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
     mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
     mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
-    for (set<int>::iterator p = active.begin(); p != active.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p) 
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
 	handle_mds_recovery(*p);
@@ -1208,10 +1434,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   // did someone fail?
   if (true) {
     // new failed?
-    set<int> oldfailed, failed;
+    set<mds_rank_t> oldfailed, failed;
     oldmap->get_failed_mds_set(oldfailed);
     mdsmap->get_failed_mds_set(failed);
-    for (set<int>::iterator p = failed.begin(); p != failed.end(); ++p)
+    for (set<mds_rank_t>::iterator p = failed.begin(); p != failed.end(); ++p)
       if (oldfailed.count(*p) == 0) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
 	handle_mds_failure(*p);
@@ -1219,9 +1445,9 @@ void MDS::handle_mds_map(MMDSMap *m)
     
     // or down then up?
     //  did their addr/inst change?
-    set<int> up;
+    set<mds_rank_t> up;
     mdsmap->get_up_mds_set(up);
-    for (set<int>::iterator p = up.begin(); p != up.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) 
       if (oldmap->have_inst(*p) &&
 	  oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
 	messenger->mark_down(oldmap->get_inst(*p).addr);
@@ -1230,10 +1456,10 @@ void MDS::handle_mds_map(MMDSMap *m)
   }
   if (is_clientreplay() || is_active() || is_stopping()) {
     // did anyone stop?
-    set<int> oldstopped, stopped;
+    set<mds_rank_t> oldstopped, stopped;
     oldmap->get_stopped_mds_set(oldstopped);
     mdsmap->get_stopped_mds_set(stopped);
-    for (set<int>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
+    for (set<mds_rank_t>::iterator p = stopped.begin(); p != stopped.end(); ++p) 
       if (oldstopped.count(*p) == 0)      // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
   }
@@ -1444,7 +1670,7 @@ void MDS::starting_done()
 void MDS::calc_recovery_set()
 {
   // initialize gather sets
-  set<int> rs;
+  set<mds_rank_t> rs;
   mdsmap->get_recovery_mds_set(rs);
   rs.erase(whoami);
   mdcache->set_recovery_set(rs);
@@ -1710,7 +1936,7 @@ void MDS::recovery_done(int oldstate)
   
   // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
-    set<int> active;
+    set<mds_rank_t> active;
     mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
     snapserver->finish_recovery(active);
   }
@@ -1729,7 +1955,7 @@ void MDS::recovery_done(int oldstate)
   mdcache->populate_mydir();
 }
 
-void MDS::handle_mds_recovery(int who) 
+void MDS::handle_mds_recovery(mds_rank_t who) 
 {
   dout(5) << "handle_mds_recovery mds." << who << dendl;
   
@@ -1743,7 +1969,7 @@ void MDS::handle_mds_recovery(int who)
   waiting_for_active_peer.erase(who);
 }
 
-void MDS::handle_mds_failure(int who)
+void MDS::handle_mds_failure(mds_rank_t who)
 {
   if (who == whoami) {
     dout(5) << "handle_mds_failure for myself; not doing anything" << dendl;
@@ -1950,6 +2176,9 @@ bool MDS::handle_core_message(Message *m)
     break;    
 
     // OSD
+  case MSG_COMMAND:
+    handle_command(static_cast<MCommand*>(m));
+    break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
     if (is_active() && snapserver)
@@ -2039,7 +2268,7 @@ bool MDS::is_stale_message(Message *m)
 {
   // from bad mds?
   if (m->get_source().is_mds()) {
-    int from = m->get_source().num();
+    mds_rank_t from = mds_rank_t(m->get_source().num());
     if (!mdsmap->have_inst(from) ||
 	mdsmap->get_inst(from) != m->get_source_inst() ||
 	mdsmap->is_down(from)) {
@@ -2159,7 +2388,7 @@ bool MDS::_dispatch(Message *m)
   if (el > 30.0 &&
     el < 60.0)*/
   for (int i=0; i<g_conf->mds_thrash_exports; i++) {
-    set<int> s;
+    set<mds_rank_t> s;
     if (!is_active()) break;
     mdsmap->get_mds_set(s, MDSMap::STATE_ACTIVE);
     if (s.size() < 2 || mdcache->get_num_inodes() < 10) 
@@ -2182,10 +2411,10 @@ bool MDS::_dispatch(Message *m)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
 
-    int dest;
+    mds_rank_t dest;
     do {
       int k = rand() % s.size();
-      set<int>::iterator p = s.begin();
+      set<mds_rank_t>::iterator p = s.begin();
       while (k--) ++p;
       dest = *p;
     } while (dest == whoami);
@@ -2281,7 +2510,6 @@ bool MDS::ms_handle_reset(Connection *con)
       dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
       con->set_priv(NULL);
-      sessionmap.remove_session(session);
     }
     session->put();
   } else {
@@ -2307,7 +2535,6 @@ void MDS::ms_handle_remote_reset(Connection *con)
       dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
       con->set_priv(NULL);
-      sessionmap.remove_session(session);
     }
     session->put();
   }
@@ -2353,11 +2580,12 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
       con->set_priv(s);
       s->connection = con;
-      sessionmap.add_session(s);
     } else {
       dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;
       con->set_priv(s->get());
+
+
 
       // Wait until we fully accept the connection before setting
       // s->connection.  In particular, if there are multiple incoming
@@ -2372,15 +2600,29 @@ bool MDS::ms_verify_authorizer(Connection *con, int peer_type,
       // messenger.)
     }
 
-    /*
-    s->caps.set_allow_all(caps_info.allow_all);
- 
-    if (caps_info.caps.length() > 0) {
-      bufferlist::iterator iter = caps_info.caps.begin();
-      s->caps.parse(iter);
-      dout(10) << " session " << s << " has caps " << s->caps << dendl;
+    if (caps_info.allow_all) {
+        // Flag for auth providers that don't provide cap strings
+        s->auth_caps.set_allow_all();
     }
-    */
+
+    bufferlist::iterator p = caps_info.caps.begin();
+    string auth_cap_str;
+    try {
+      ::decode(auth_cap_str, p);
+
+      dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
+      std::ostringstream errstr;
+      int parse_success = s->auth_caps.parse(auth_cap_str, &errstr);
+      if (parse_success == false) {
+        dout(1) << __func__ << ": auth cap parse error: " << errstr.str()
+          << " parsing '" << auth_cap_str << "'" << dendl;
+      }
+    } catch (buffer::error& e) {
+      // Assume legacy auth, defaults to:
+      //  * permit all filesystem ops
+      //  * permit no `tell` ops
+      dout(1) << __func__ << ": cannot decode auth caps bl of length " << caps_info.caps.length() << dendl;
+    }
   }
 
   return true;  // we made a decision (see is_valid)

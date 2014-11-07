@@ -12,7 +12,7 @@
  *
  */
 
-#include "Message.h"
+#include "msg/Message.h"
 #include "Pipe.h"
 #include "SimpleMessenger.h"
 #include "PipeConnection.h"

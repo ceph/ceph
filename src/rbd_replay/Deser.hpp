@@ -20,6 +20,11 @@
 
 namespace rbd_replay {
 
+/**
+   Helper for deserializing data in an architecture-indepdendent way.
+   Everything is read big-endian.
+   @see Ser
+*/
 class Deser {
 public:
   Deser(std::istream &in);

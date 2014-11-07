@@ -146,9 +146,6 @@ int FileJournal::_open_block_device()
     return -EINVAL;
   }
 
-  int64_t conf_journal_sz(g_conf->osd_journal_size);
-  conf_journal_sz <<= 20;
-
   dout(10) << __func__ << ": ignoring osd journal size. "
 	   << "We'll use the entire block device (size: " << bdev_sz << ")"
 	   << dendl;
@@ -930,6 +927,7 @@ void FileJournal::align_bl(off64_t pos, bufferlist& bl)
   if (directio && (!bl.is_page_aligned() ||
 		   !bl.is_n_page_sized())) {
     bl.rebuild_page_aligned();
+    dout(10) << __func__ << " total memcopy: " << bl.get_memcopy_count() << dendl;
     if ((bl.length() & ~CEPH_PAGE_MASK) != 0 ||
 	(pos & ~CEPH_PAGE_MASK) != 0)
       dout(0) << "rebuild_page_aligned failed, " << bl << dendl;
@@ -1367,7 +1365,7 @@ void FileJournal::write_finish_thread_entry()
 	aio_info *ai = (aio_info *)event[i].obj;
 	if (event[i].res != ai->len) {
 	  derr << "aio to " << ai->off << "~" << ai->len
-	       << " got " << cpp_strerror(event[i].res) << dendl;
+	       << " wrote " << event[i].res << dendl;
 	  assert(0 == "unexpected aio error");
 	}
 	dout(10) << "write_finish_thread_entry aio " << ai->off
@@ -1717,7 +1715,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   bufferlist hbl;
   off64_t _next_pos;
   wrap_read_bl(pos, sizeof(*h), &hbl, &_next_pos);
-  h = (entry_header_t *)hbl.c_str();
+  h = reinterpret_cast<entry_header_t *>(hbl.c_str());
 
   if (!h->check_magic(pos, header.get_fsid64())) {
     dout(25) << "read_entry " << pos
@@ -1744,7 +1742,7 @@ FileJournal::read_entry_result FileJournal::do_read_entry(
   entry_header_t *f;
   bufferlist fbl;
   wrap_read_bl(pos, sizeof(*f), &fbl, &pos);
-  f = (entry_header_t *)fbl.c_str();
+  f = reinterpret_cast<entry_header_t *>(fbl.c_str());
   if (memcmp(f, h, sizeof(*f))) {
     if (ss)
       *ss << "bad footer magic, partial entry";

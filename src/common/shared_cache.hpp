@@ -31,11 +31,13 @@ class SharedLRU {
   size_t max_size;
   Cond cond;
   unsigned size;
-
+public:
+  int waiting;
+private:
   map<K, typename list<pair<K, VPtr> >::iterator > contents;
   list<pair<K, VPtr> > lru;
 
-  map<K, WeakVPtr> weak_refs;
+  map<K, pair<WeakVPtr, V*> > weak_refs;
 
   void trim_cache(list<VPtr> *to_release) {
     while (size > max_size) {
@@ -67,9 +69,12 @@ class SharedLRU {
     }
   }
 
-  void remove(const K& key) {
+  void remove(const K& key, V *valptr) {
     Mutex::Locker l(lock);
-    weak_refs.erase(key);
+    typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
+    if (i != weak_refs.end() && i->second.second == valptr) {
+      weak_refs.erase(i);
+    }
     cond.Signal();
   }
 
@@ -79,14 +84,15 @@ class SharedLRU {
     K key;
     Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(key) {}
     void operator()(V *ptr) {
-      cache->remove(key);
+      cache->remove(key, ptr);
       delete ptr;
     }
   };
 
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
-    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), size(0) {}
+    : cct(cct), lock("SharedLRU::lock"), max_size(max_size), 
+      size(0), waiting(0) {}
   
   ~SharedLRU() {
     contents.clear();
@@ -110,12 +116,12 @@ public:
   }
 
   void dump_weak_refs(ostream& out) {
-    for (typename map<K, WeakVPtr>::iterator p = weak_refs.begin();
+    for (typename map<K, pair<WeakVPtr, V*> >::iterator p = weak_refs.begin();
 	 p != weak_refs.end();
 	 ++p) {
       out << __func__ << " " << this << " weak_refs: "
-	  << p->first << " = " << p->second.lock().get()
-	  << " with " << p->second.use_count() << " refs"
+	  << p->first << " = " << p->second.second
+	  << " with " << p->second.first.use_count() << " refs"
 	  << std::endl;
     }
   }
@@ -125,9 +131,21 @@ public:
     {
       Mutex::Locker l(lock);
       if (weak_refs.count(key)) {
-	val = weak_refs[key].lock();
+	val = weak_refs[key].first.lock();
       }
       lru_remove(key);
+    }
+  }
+
+  void purge(const K &key) {
+    VPtr val; // release any ref we have after we drop the lock
+    {
+      Mutex::Locker l(lock);
+      if (weak_refs.count(key)) {
+	val = weak_refs[key].first.lock();
+      }
+      lru_remove(key);
+      weak_refs.erase(key);
     }
   }
 
@@ -151,15 +169,17 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      ++waiting;
       bool retry = false;
       do {
 	retry = false;
 	if (weak_refs.empty())
 	  break;
-	typename map<K, WeakVPtr>::iterator i = weak_refs.lower_bound(key);
+	typename map<K, pair<WeakVPtr, V*> >::iterator i =
+	  weak_refs.lower_bound(key);
 	if (i == weak_refs.end())
 	  --i;
-	val = i->second.lock();
+	val = i->second.first.lock();
 	if (val) {
 	  lru_add(i->first, val, &to_release);
 	} else {
@@ -168,6 +188,7 @@ public:
 	if (retry)
 	  cond.Wait(lock);
       } while (retry);
+      --waiting;
     }
     return val;
   }
@@ -177,12 +198,13 @@ public:
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
+      ++waiting;
       bool retry = false;
       do {
 	retry = false;
-	typename map<K, WeakVPtr>::iterator i = weak_refs.find(key);
+	typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
 	if (i != weak_refs.end()) {
-	  val = i->second.lock();
+	  val = i->second.first.lock();
 	  if (val) {
 	    lru_add(key, val, &to_release);
 	  } else {
@@ -192,6 +214,7 @@ public:
 	if (retry)
 	  cond.Wait(lock);
       } while (retry);
+      --waiting;
     }
     return val;
   }
@@ -209,26 +232,30 @@ public:
    * @return A reference to the map's value for the given key
    */
   VPtr add(const K& key, V *value, bool *existed = NULL) {
-    VPtr val(value, Cleanup(this, key));
+    VPtr val;
     list<VPtr> to_release;
     {
       Mutex::Locker l(lock);
-      typename map<K, WeakVPtr>::iterator actual = weak_refs.lower_bound(key);
+      typename map<K, pair<WeakVPtr, V*> >::iterator actual =
+	weak_refs.lower_bound(key);
       if (actual != weak_refs.end() && actual->first == key) {
         if (existed) 
           *existed = true;
 
-        return actual->second.lock();
+        return actual->second.first.lock();
       }
 
       if (existed)      
         *existed = false;
 
-      weak_refs.insert(actual, make_pair(key, val));
+      val = VPtr(value, Cleanup(this, key));
+      weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       lru_add(key, val, &to_release);
     }
     return val;
   }
+
+  friend class SharedLRUTest;
 };
 
 #endif

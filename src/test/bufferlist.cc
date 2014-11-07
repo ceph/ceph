@@ -151,7 +151,7 @@ TEST(Buffer, constructors) {
 
     unsigned zc_len = 4;
     ::unlink("testfile");
-    ::system("echo ABC > testfile");
+    EXPECT_EQ(0, ::system("echo ABC > testfile"));
     int fd = ::open("testfile", O_RDONLY);
     bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
     EXPECT_EQ(zc_len, ptr.length());
@@ -179,7 +179,7 @@ protected:
   virtual void SetUp() {
     len = 4;
     ::unlink("testfile");
-    ::system("echo ABC > testfile");
+    EXPECT_EQ(0, ::system("echo ABC > testfile"));
     fd = ::open("testfile", O_RDONLY);
     assert(fd >= 0);
   }
@@ -1076,6 +1076,23 @@ TEST(BufferList, buffers) {
   ASSERT_EQ((unsigned)1, bl.buffers().size());
 }
 
+TEST(BufferList, get_contiguous) {
+  bufferptr a("foobarbaz", 9);
+  bufferptr b("123456789", 9);
+  bufferptr c("ABCDEFGHI", 9);
+  bufferlist bl;
+  bl.append(a);
+  bl.append(b);
+  bl.append(c);
+  ASSERT_EQ(3, bl.buffers().size());
+  ASSERT_EQ(0, memcmp("bar", bl.get_contiguous(3, 3), 3));
+  ASSERT_EQ(0, memcmp("456", bl.get_contiguous(12, 3), 3));
+  ASSERT_EQ(0, memcmp("ABC", bl.get_contiguous(18, 3), 3));
+  ASSERT_EQ(3, bl.buffers().size());
+  ASSERT_EQ(0, memcmp("789ABC", bl.get_contiguous(15, 6), 6));
+  ASSERT_LT(bl.buffers().size(), 3);
+}
+
 TEST(BufferList, swap) {
   bufferlist b1;
   b1.append('A');
@@ -1120,6 +1137,52 @@ TEST(BufferList, contents_equal) {
   bufferlist bl3;
   bl3.append("ABC");
   ASSERT_FALSE(bl1.contents_equal(bl3)); // same length different content
+}
+
+TEST(BufferList, is_aligned) {
+  const int SIMD_ALIGN = 32;
+  {
+    bufferlist bl;
+    EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
+  }
+  {
+    bufferlist bl;
+    bufferptr ptr(buffer::create_aligned(2, SIMD_ALIGN));
+    ptr.set_offset(1);
+    ptr.set_length(1);
+    bl.append(ptr);
+    EXPECT_FALSE(bl.is_aligned(SIMD_ALIGN));
+    bl.rebuild_aligned(SIMD_ALIGN);
+    EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
+  }
+  {
+    bufferlist bl;
+    bufferptr ptr(buffer::create_aligned(SIMD_ALIGN + 1, SIMD_ALIGN));
+    ptr.set_offset(1);
+    ptr.set_length(SIMD_ALIGN);
+    bl.append(ptr);
+    EXPECT_FALSE(bl.is_aligned(SIMD_ALIGN));
+    bl.rebuild_aligned(SIMD_ALIGN);
+    EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
+  }
+}
+
+TEST(BufferList, is_n_align_sized) {
+  const int SIMD_ALIGN = 32;
+  {
+    bufferlist bl;
+    EXPECT_TRUE(bl.is_n_align_sized(SIMD_ALIGN));
+  }
+  {
+    bufferlist bl;
+    bl.append_zero(1);
+    EXPECT_FALSE(bl.is_n_align_sized(SIMD_ALIGN));
+  }
+  {
+    bufferlist bl;
+    bl.append_zero(SIMD_ALIGN);
+    EXPECT_TRUE(bl.is_n_align_sized(SIMD_ALIGN));
+  }
 }
 
 TEST(BufferList, is_page_aligned) {
@@ -1765,9 +1828,9 @@ TEST(BufferList, read_file) {
   bufferlist bl;
   ::unlink("testfile");
   EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
-  ::system("echo ABC > testfile ; chmod 0 testfile");
+  EXPECT_EQ(0, ::system("echo ABC > testfile ; chmod 0 testfile"));
   EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
-  ::system("chmod +r testfile");
+  EXPECT_EQ(0, ::system("chmod +r testfile"));
   EXPECT_EQ(0, bl.read_file("testfile", &error));
   ::unlink("testfile");
   EXPECT_EQ((unsigned)4, bl.length());
@@ -1778,7 +1841,7 @@ TEST(BufferList, read_file) {
 TEST(BufferList, read_fd) {
   unsigned len = 4;
   ::unlink("testfile");
-  ::system("echo ABC > testfile");
+  EXPECT_EQ(0, ::system("echo ABC > testfile"));
   int fd = -1;
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));

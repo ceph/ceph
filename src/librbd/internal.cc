@@ -119,7 +119,7 @@ namespace librbd {
     ictx->snap_lock.put_read();
     ictx->md_lock.put_read();
     info.obj_size = 1ULL << obj_order;
-    info.num_objs = rbd_howmany(info.size, ictx->get_object_size());
+    info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
     info.order = obj_order;
     memcpy(&info.block_name_prefix, ictx->object_prefix.c_str(),
 	   min((size_t)RBD_MAX_BLOCK_NAME_SIZE,
@@ -155,7 +155,7 @@ namespace librbd {
     uint64_t delete_off = MIN(num_period * period, size);
     // first object we can delete free and clear
     uint64_t delete_start = num_period * ictx->get_stripe_count();
-    uint64_t num_objects = ictx->get_num_objects();
+    uint64_t num_objects = Striper::get_num_objects(ictx->layout, size);
     uint64_t object_size = ictx->get_object_size();
 
     ldout(cct, 10) << "trim_image " << size << " -> " << newsize
@@ -324,7 +324,7 @@ namespace librbd {
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx)
   {
-    uint64_t numseg = ictx->get_num_objects();
+    uint64_t numseg = Striper::get_num_objects(ictx->layout, ictx->get_current_size());
     uint64_t bsize = ictx->get_object_size();
     int r;
     CephContext *cct = ictx->cct;
@@ -418,10 +418,20 @@ namespace librbd {
 
     for (std::list<string>::const_iterator it = pools.begin();
 	 it != pools.end(); ++it) {
+      int64_t pool_id = rados.pool_lookup(it->c_str());
+      int64_t base_tier;
+      int r = rados.pool_get_base_tier(pool_id, &base_tier);
+      if (r < 0) {
+	return r;
+      }
+      if (base_tier != pool_id) {
+	// pool is a cache; skip it
+	continue;
+      }
       IoCtx ioctx;
       rados.ioctx_create(it->c_str(), ioctx);
       set<string> image_ids;
-      int r = cls_client::get_children(&ioctx, RBD_CHILDREN,
+      r = cls_client::get_children(&ioctx, RBD_CHILDREN,
 				       parent_spec, image_ids);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "Error reading list of children from pool " << *it
@@ -637,6 +647,16 @@ namespace librbd {
     rados.pool_list(pools);
     std::set<std::string> children;
     for (std::list<std::string>::const_iterator it = pools.begin(); it != pools.end(); ++it) {
+      int64_t pool_id = rados.pool_lookup(it->c_str());
+      int64_t base_tier;
+      r = rados.pool_get_base_tier(pool_id, &base_tier);
+      if (r < 0) {
+	return r;
+      }
+      if (base_tier != pool_id) {
+	// pool is a cache; skip it
+	continue;
+      }
       IoCtx pool_ioctx;
       r = rados.ioctx_create(it->c_str(), pool_ioctx);
       if (r < 0) {
@@ -2130,6 +2150,9 @@ reprotect_and_return_err:
   void close_image(ImageCtx *ictx)
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
+
+    ictx->readahead.wait_for_pending();
+
     if (ictx->object_cacher)
       ictx->shutdown_cache(); // implicitly flushes
     else
@@ -2163,9 +2186,7 @@ reprotect_and_return_err:
     }
 
     uint64_t object_size;
-    uint64_t period;
     uint64_t overlap;
-    uint64_t overlap_periods;
     uint64_t overlap_objects;
     ::SnapContext snapc;
 
@@ -2189,10 +2210,8 @@ reprotect_and_return_err:
       assert(ictx->parent_md.overlap <= ictx->size);
 
       object_size = ictx->get_object_size();
-      period = ictx->get_stripe_period();
       overlap = ictx->parent_md.overlap;
-      overlap_periods = (overlap + period - 1) / period;
-      overlap_objects = overlap_periods * ictx->get_stripe_count();
+      overlap_objects = Striper::get_num_objects(ictx->layout, overlap); 
     }
 
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
@@ -3116,6 +3135,65 @@ reprotect_and_return_err:
     return aio_read(ictx, image_extents, buf, bl, c);
   }
 
+  static void readahead(ImageCtx *ictx,
+			const vector<pair<uint64_t,uint64_t> >& image_extents,
+			const md_config_t *conf)
+  {
+    uint64_t total_bytes = 0;
+    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
+	 p != image_extents.end();
+	 ++p) {
+      total_bytes += p->second;
+    }
+    ictx->md_lock.get_write();
+    bool abort = conf->rbd_readahead_disable_after_bytes != 0 &&
+      ictx->total_bytes_read > (uint64_t)conf->rbd_readahead_disable_after_bytes;
+    ictx->total_bytes_read += total_bytes;
+    ictx->snap_lock.get_read();
+    uint64_t image_size = ictx->get_image_size(ictx->snap_id);
+    ictx->snap_lock.put_read();
+    ictx->md_lock.put_write();
+    if (abort) {
+      return;
+    }
+    pair<uint64_t, uint64_t> readahead_extent = ictx->readahead.update(image_extents, image_size);
+    uint64_t readahead_offset = readahead_extent.first;
+    uint64_t readahead_length = readahead_extent.second;
+
+    if (readahead_length > 0) {
+      ldout(ictx->cct, 20) << "(readahead logical) " << readahead_offset << "~" << readahead_length << dendl;
+      map<object_t,vector<ObjectExtent> > readahead_object_extents;
+      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			       readahead_offset, readahead_length, 0, readahead_object_extents);
+      for (map<object_t,vector<ObjectExtent> >::iterator p = readahead_object_extents.begin(); p != readahead_object_extents.end(); ++p) {
+	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
+	  ldout(ictx->cct, 20) << "(readahead) oid " << q->oid << " " << q->offset << "~" << q->length << dendl;
+
+	  struct C_RBD_Readahead : public Context {
+	    ImageCtx *ictx;
+	    object_t oid;
+	    uint64_t offset;
+	    uint64_t length;
+	    C_RBD_Readahead(ImageCtx *ictx, object_t oid, uint64_t offset, uint64_t length)
+	      : ictx(ictx), oid(oid), offset(offset), length(length) { }
+	    void finish(int r) {
+	      ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": " << offset << "+" << length << dendl;
+	      ictx->readahead.dec_pending();
+	    }
+	  };
+
+	  Context *req_comp = new C_RBD_Readahead(ictx, q->oid, q->offset, q->length);
+	  ictx->readahead.inc_pending();
+	  ictx->aio_read_from_cache(q->oid, NULL,
+				    q->length, q->offset,
+				    req_comp);
+	}
+      }
+      ictx->perfcounter->inc(l_librbd_readahead);
+      ictx->perfcounter->inc(l_librbd_readahead_bytes, readahead_length);
+    }
+  }
+
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
 	       char *buf, bufferlist *pbl, AioCompletion *c)
   {
@@ -3129,6 +3207,12 @@ reprotect_and_return_err:
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
     ictx->snap_lock.put_read();
+
+    // readahead
+    const md_config_t *conf = ictx->cct->_conf;
+    if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0) {
+      readahead(ictx, image_extents, conf);
+    }
 
     // map
     map<object_t,vector<ObjectExtent> > object_extents;

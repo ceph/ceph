@@ -190,18 +190,18 @@ void MDBalancer::send_heartbeat()
 
   // my load
   mds_load_t load = get_load(now);
-  map<int, mds_load_t>::value_type val(mds->get_nodeid(), load);
+  map<mds_rank_t, mds_load_t>::value_type val(mds->get_nodeid(), load);
   mds_load.insert(val);
 
   // import_map -- how much do i import from whom
-  map<int, float> import_map;
+  map<mds_rank_t, float> import_map;
   set<CDir*> authsubs;
   mds->mdcache->get_auth_subtrees(authsubs);
   for (set<CDir*>::iterator it = authsubs.begin();
        it != authsubs.end();
        ++it) {
     CDir *im = *it;
-    int from = im->inode->authority().first;
+    mds_rank_t from = im->inode->authority().first;
     if (from == mds->get_nodeid()) continue;
     if (im->get_inode()->is_stray()) continue;
     import_map[from] += im->pop_auth_subtree.meta_load(now, mds->mdcache->decayrate);
@@ -210,16 +210,16 @@ void MDBalancer::send_heartbeat()
 
 
   dout(5) << "mds." << mds->get_nodeid() << " epoch " << beat_epoch << " load " << load << dendl;
-  for (map<int, float>::iterator it = import_map.begin();
+  for (map<mds_rank_t, float>::iterator it = import_map.begin();
        it != import_map.end();
        ++it) {
     dout(5) << "  import_map from " << it->first << " -> " << it->second << dendl;
   }
 
 
-  set<int> up;
+  set<mds_rank_t> up;
   mds->get_mds_map()->get_mds_set(up);
-  for (set<int>::iterator p = up.begin(); p != up.end(); ++p) {
+  for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
@@ -232,9 +232,9 @@ void MDBalancer::send_heartbeat()
 /* This function DOES put the passed message before returning */
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  typedef map<int, mds_load_t> mds_load_map_t;
+  typedef map<mds_rank_t, mds_load_t> mds_load_map_t;
 
-  int who = m->get_source().num();
+  mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
   if (!mds->is_active())
@@ -309,8 +309,8 @@ void MDBalancer::export_empties()
 
 
 
-double MDBalancer::try_match(int ex, double& maxex,
-                             int im, double& maxim)
+double MDBalancer::try_match(mds_rank_t ex, double& maxex,
+                             mds_rank_t im, double& maxim)
 {
   if (maxex <= 0 || maxim <= 0) return 0.0;
 
@@ -424,15 +424,15 @@ void MDBalancer::prep_rebalance(int beat)
   if (g_conf->mds_thrash_exports) {
     //we're going to randomly export to all the mds in the cluster
     my_targets.clear();
-    set<int> up_mds;
+    set<mds_rank_t> up_mds;
     mds->get_mds_map()->get_up_mds_set(up_mds);
-    for (set<int>::iterator i = up_mds.begin();
+    for (set<mds_rank_t>::iterator i = up_mds.begin();
 	 i != up_mds.end();
 	 ++i)
       my_targets[*i] = 0.0;
   } else {
     int cluster_size = mds->get_mds_map()->get_num_in_mds();
-    int whoami = mds->get_nodeid();
+    mds_rank_t whoami = mds->get_nodeid();
     rebalance_time = ceph_clock_now(g_ceph_context);
 
     // reset
@@ -446,7 +446,7 @@ void MDBalancer::prep_rebalance(int beat)
 
     // rescale!  turn my mds_load back into meta_load units
     double load_fac = 1.0;
-    map<int, mds_load_t>::iterator m = mds_load.find(whoami);
+    map<mds_rank_t, mds_load_t>::iterator m = mds_load.find(whoami);
     if ((m != mds_load.end()) && (m->second.mds_load() > 0)) {
       double metald = m->second.auth.meta_load(rebalance_time, mds->mdcache->decayrate);
       double mdsld = m->second.mds_load();
@@ -458,10 +458,10 @@ void MDBalancer::prep_rebalance(int beat)
     }
 
     double total_load = 0;
-    multimap<double,int> load_map;
-    for (int i=0; i<cluster_size; i++) {
-      map<int, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
-      std::pair < map<int, mds_load_t>::iterator, bool > r(mds_load.insert(val));
+    multimap<double,mds_rank_t> load_map;
+    for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
+      map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now(g_ceph_context)));
+      std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
       mds_load_t &load(r.first->second);
 
       double l = load.mds_load() * load_fac;
@@ -476,7 +476,7 @@ void MDBalancer::prep_rebalance(int beat)
       if (whoami == i) my_load = l;
       total_load += l;
 
-      load_map.insert(pair<double,int>( l, i ));
+      load_map.insert(pair<double,mds_rank_t>( l, i ));
     }
 
     // target load
@@ -506,21 +506,21 @@ void MDBalancer::prep_rebalance(int beat)
 
 
     // first separate exporters and importers
-    multimap<double,int> importers;
-    multimap<double,int> exporters;
-    set<int>             importer_set;
-    set<int>             exporter_set;
+    multimap<double,mds_rank_t> importers;
+    multimap<double,mds_rank_t> exporters;
+    set<mds_rank_t>             importer_set;
+    set<mds_rank_t>             exporter_set;
 
-    for (multimap<double,int>::iterator it = load_map.begin();
+    for (multimap<double,mds_rank_t>::iterator it = load_map.begin();
 	 it != load_map.end();
 	 ++it) {
       if (it->first < target_load) {
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
-	importers.insert(pair<double,int>(it->first,it->second));
+	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
       } else {
 	dout(15) << "   mds." << it->second << " is exporter" << dendl;
-	exporters.insert(pair<double,int>(it->first,it->second));
+	exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
 	exporter_set.insert(it->second);
       }
     }
@@ -534,14 +534,14 @@ void MDBalancer::prep_rebalance(int beat)
       dout(15) << "  matching exporters to import sources" << dendl;
 
       // big -> small exporters
-      for (multimap<double,int>::reverse_iterator ex = exporters.rbegin();
+      for (multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
 	   ex != exporters.rend();
 	   ++ex) {
 	double maxex = get_maxex(ex->second);
 	if (maxex <= .001) continue;
 
 	// check importers. for now, just in arbitrary order (no intelligent matching).
-	for (map<int, float>::iterator im = mds_import_map[ex->second].begin();
+	for (map<mds_rank_t, float>::iterator im = mds_import_map[ex->second].begin();
 	     im != mds_import_map[ex->second].end();
 	     ++im) {
 	  double maxim = get_maxim(im->first);
@@ -559,8 +559,8 @@ void MDBalancer::prep_rebalance(int beat)
 	// old way
 	dout(15) << "  matching big exporters to big importers" << dendl;
 	// big exporters to big importers
-	multimap<double,int>::reverse_iterator ex = exporters.rbegin();
-	multimap<double,int>::iterator im = importers.begin();
+	multimap<double,mds_rank_t>::reverse_iterator ex = exporters.rbegin();
+	multimap<double,mds_rank_t>::iterator im = importers.begin();
 	while (ex != exporters.rend() &&
 	       im != importers.end()) {
 	  double maxex = get_maxex(ex->second);
@@ -575,8 +575,8 @@ void MDBalancer::prep_rebalance(int beat)
 	// new way
 	dout(15) << "  matching small exporters to big importers" << dendl;
 	// small exporters to big importers
-	multimap<double,int>::iterator ex = exporters.begin();
-	multimap<double,int>::iterator im = importers.begin();
+	multimap<double,mds_rank_t>::iterator ex = exporters.begin();
+	multimap<double,mds_rank_t>::iterator im = importers.begin();
 	while (ex != exporters.end() &&
 	       im != importers.end()) {
 	  double maxex = get_maxex(ex->second);
@@ -608,7 +608,7 @@ void MDBalancer::try_rebalance()
 
   // make a sorted list of my imports
   map<double,CDir*>    import_pop_map;
-  multimap<int,CDir*>  import_from_map;
+  multimap<mds_rank_t,CDir*>  import_from_map;
   set<CDir*> fullauthsubs;
 
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
@@ -631,9 +631,9 @@ void MDBalancer::try_rebalance()
     }
 
     import_pop_map[ pop ] = im;
-    int from = im->inode->authority().first;
+    mds_rank_t from = im->inode->authority().first;
     dout(15) << "  map: i imported " << *im << " from " << from << dendl;
-    import_from_map.insert(pair<int,CDir*>(from, im));
+    import_from_map.insert(pair<mds_rank_t,CDir*>(from, im));
   }
 
 
@@ -641,10 +641,10 @@ void MDBalancer::try_rebalance()
   // do my exports!
   set<CDir*> already_exporting;
 
-  for (map<int,double>::iterator it = my_targets.begin();
+  for (map<mds_rank_t,double>::iterator it = my_targets.begin();
        it != my_targets.end();
        ++it) {
-    int target = (*it).first;
+    mds_rank_t target = (*it).first;
     double amount = (*it).second;
 
     if (amount < MIN_OFFLOAD) continue;
@@ -662,12 +662,12 @@ void MDBalancer::try_rebalance()
     // search imports from target
     if (import_from_map.count(target)) {
       dout(5) << " aha, looking through imports from target mds." << target << dendl;
-      pair<multimap<int,CDir*>::iterator, multimap<int,CDir*>::iterator> p =
+      pair<multimap<mds_rank_t,CDir*>::iterator, multimap<mds_rank_t,CDir*>::iterator> p =
 	import_from_map.equal_range(target);
       while (p.first != p.second) {
 	CDir *dir = (*p.first).second;
 	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
-	multimap<int,CDir*>::iterator plast = p.first++;
+	multimap<mds_rank_t,CDir*>::iterator plast = p.first++;
 
 	if (dir->inode->is_base() ||
 	    dir->inode->is_stray())
@@ -758,13 +758,13 @@ void MDBalancer::try_rebalance()
 bool MDBalancer::check_targets()
 {
   // get MonMap's idea of my_targets
-  const set<int32_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
+  const set<mds_rank_t>& map_targets = mds->mdsmap->get_mds_info(mds->whoami).export_targets;
 
   bool send = false;
   bool ok = true;
 
   // make sure map targets are in the old_prev_targets map
-  for (set<int32_t>::iterator p = map_targets.begin(); p != map_targets.end(); ++p) {
+  for (set<mds_rank_t>::iterator p = map_targets.begin(); p != map_targets.end(); ++p) {
     if (old_prev_targets.count(*p) == 0)
       old_prev_targets[*p] = 0;
     if (my_targets.count(*p) == 0)
@@ -772,8 +772,8 @@ bool MDBalancer::check_targets()
   }
 
   // check if the current MonMap has all our targets
-  set<int32_t> need_targets;
-  for (map<int,double>::iterator i = my_targets.begin();
+  set<mds_rank_t> need_targets;
+  for (map<mds_rank_t,double>::iterator i = my_targets.begin();
        i != my_targets.end();
        ++i) {
     need_targets.insert(i->first);
@@ -786,8 +786,8 @@ bool MDBalancer::check_targets()
     }
   }
 
-  set<int32_t> want_targets = need_targets;
-  map<int32_t, int>::iterator p = old_prev_targets.begin();
+  set<mds_rank_t> want_targets = need_targets;
+  map<mds_rank_t, int>::iterator p = old_prev_targets.begin();
   while (p != old_prev_targets.end()) {
     if (map_targets.count(p->first) == 0 &&
 	need_targets.count(p->first) == 0) {
@@ -805,7 +805,7 @@ bool MDBalancer::check_targets()
   dout(10) << "check_targets have " << map_targets << " need " << need_targets << " want " << want_targets << dendl;
 
   if (send) {
-    MMDSLoadTargets* m = new MMDSLoadTargets(mds->monc->get_global_id(), want_targets);
+    MMDSLoadTargets* m = new MMDSLoadTargets(mds_gid_t(mds->monc->get_global_id()), want_targets);
     mds->monc->send_mon_message(m);
   }
   return ok;

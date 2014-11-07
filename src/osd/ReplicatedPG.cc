@@ -423,7 +423,7 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
     return true;
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -465,7 +465,7 @@ void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
 	    << ", recovering"
 	    << dendl;
     eversion_t v;
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -620,7 +620,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
     for (vector<int>::iterator p = acting.begin(); p != acting.end(); ++p)
       f->dump_unsigned("osd", *p);
     f->close_section();
-    if (backfill_targets.size() > 0) {
+    if (!backfill_targets.empty()) {
       f->open_array_section("backfill_targets");
       for (set<pg_shard_t>::iterator p = backfill_targets.begin();
 	   p != backfill_targets.end();
@@ -628,7 +628,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
         f->dump_stream("shard") << *p;
       f->close_section();
     }
-    if (actingbackfill.size() > 0) {
+    if (!actingbackfill.empty()) {
       f->open_array_section("actingbackfill");
       for (set<pg_shard_t>::iterator p = actingbackfill.begin();
 	   p != actingbackfill.end();
@@ -3752,11 +3752,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
    case CEPH_OSD_OP_NOTIFY:
       ++ctx->num_read;
       {
-	uint32_t ver; // obsolete
 	uint32_t timeout;
         bufferlist bl;
 
 	try {
+	  uint32_t ver; // obsolete
           ::decode(ver, bp);
 	  ::decode(timeout, bp);
           ::decode(bl, bp);
@@ -5271,7 +5271,10 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
   for (list<OpContext::NotifyAck>::iterator p = ctx->notify_acks.begin();
        p != ctx->notify_acks.end();
        ++p) {
-    dout(10) << "notify_ack " << make_pair(p->watch_cookie, p->notify_id) << dendl;
+    if (p->watch_cookie)
+      dout(10) << "notify_ack " << make_pair(p->watch_cookie.get(), p->notify_id) << dendl;
+    else
+      dout(10) << "notify_ack " << make_pair("NULL", p->notify_id) << dendl;
     for (map<pair<uint64_t, entity_name_t>, WatchRef>::iterator i =
 	   ctx->obc->watchers.begin();
 	 i != ctx->obc->watchers.end();
@@ -9280,7 +9283,7 @@ eversion_t ReplicatedPG::pick_newest_available(const hobject_t& oid)
   v = pg_log.get_missing().missing.find(oid)->second.have;
   dout(10) << "pick_newest_available " << oid << " " << v << " on osd." << osd->whoami << " (local)" << dendl;
 
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -10172,7 +10175,7 @@ int ReplicatedPG::prep_object_replica_pushes(
     pg_log.missing_add(soid, v, eversion_t());
     missing_loc.remove_location(soid, pg_whoami);
     bool uhoh = true;
-    assert(actingbackfill.size() > 0);
+    assert(!actingbackfill.empty());
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
@@ -10250,7 +10253,7 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
   PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
 
   // this is FAR from an optimal recovery order.  pretty lame, really.
-  assert(actingbackfill.size() > 0);
+  assert(!actingbackfill.empty());
   for (set<pg_shard_t>::iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
@@ -11185,7 +11188,7 @@ void ReplicatedPG::hit_set_persist()
       pg_log_entry_t::MODIFY,
       oid,
       ctx->at_version,
-      ctx->obs->oi.version,
+      eversion_t(),
       0,
       osd_reqid_t(),
       ctx->mtime)
@@ -11550,7 +11553,8 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
   } else {
     ob_local_mtime = obc->obs.oi.mtime;
   }
-  if (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now) {
+  bool evict_mode_full = (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL);
+  if (!evict_mode_full && (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now)) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
     osd->logger->inc(l_osd_agent_skip);
     return false;
@@ -11607,11 +11611,11 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
     }
   }
 
-  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL &&
-      hit_set) {
+  if (agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL) {
     // is this object old and/or cold enough?
     int atime = -1, temp = 0;
-    agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
+    if (hit_set)
+      agent_estimate_atime_temp(soid, &atime, NULL /*FIXME &temp*/);
 
     uint64_t atime_upper = 0, atime_lower = 0;
     if (atime < 0 && obc->obs.oi.mtime != utime_t()) {
@@ -11621,8 +11625,13 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
         atime = ceph_clock_now(NULL).sec() - obc->obs.oi.mtime;
       }
     }
-    if (atime < 0)
-      atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
+    if (atime < 0) {
+      if (hit_set) {
+        atime = pool.info.hit_set_period * pool.info.hit_set_count; // "infinite"
+      } else {
+	atime_upper = 1000000;
+      }
+    }
     if (atime >= 0) {
       agent_state->atime_hist.add(atime);
       agent_state->atime_hist.get_position_micro(atime, &atime_lower,
@@ -11654,8 +11663,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 
     // FIXME: ignore temperature for now.
 
-    // KISS: if [lower,upper] spans our target effort, evict it.
-    if (atime_lower >= agent_state->evict_effort)
+    if (1000000 - atime_upper >= agent_state->evict_effort)
       return false;
   }
 
@@ -11909,8 +11917,9 @@ void ReplicatedPG::agent_estimate_atime_temp(const hobject_t& oid,
       return;
   }
   time_t now = ceph_clock_now(NULL).sec();
-  for (map<time_t,HitSetRef>::iterator p = agent_state->hit_set_map.begin();
-       p != agent_state->hit_set_map.end();
+  for (map<time_t,HitSetRef>::reverse_iterator p =
+	 agent_state->hit_set_map.rbegin();
+       p != agent_state->hit_set_map.rend();
        ++p) {
     if (p->second->contains(oid)) {
       if (*atime < 0)

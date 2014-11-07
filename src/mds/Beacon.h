@@ -48,7 +48,7 @@ class Beacon : public Dispatcher
   std::string name;
   version_t epoch;
   CompatSet compat;
-  int standby_for_rank;
+  mds_rank_t standby_for_rank;
   std::string standby_for_name;
   MDSMap::DaemonState want_state;
 
@@ -83,7 +83,7 @@ public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string name);
   ~Beacon();
 
-  void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, int standby_rank_, std::string const &standby_name_);
+  void init(MDSMap const *mdsmap, MDSMap::DaemonState want_state_, mds_rank_t standby_rank_, std::string const &standby_name_);
   void shutdown();
 
   bool ms_dispatch(Message *m); 
@@ -95,7 +95,7 @@ public:
   void notify_want_state(MDSMap::DaemonState const newstate);
   void notify_health(MDS const *mds);
 
-  void set_standby_for(int rank_, std::string const &name_);
+  void set_standby_for(mds_rank_t rank_, std::string const &name_);
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();

@@ -505,7 +505,7 @@ public:
     uint32_t get_data_length() {
       return largest_data_len;
     }
-    /// offset within the encoded buffer to the start of the first data buffer that's encoded
+    /// offset within the encoded buffer to the start of the largest data buffer that's encoded
     uint32_t get_data_offset() {
       if (largest_data_off_in_tbl) {
 	return largest_data_off_in_tbl +
@@ -525,7 +525,7 @@ public:
     int get_data_alignment() {
       if (!largest_data_len)
 	return -1;
-      return (largest_data_off - get_data_offset()) & ~CEPH_PAGE_MASK;
+      return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
     bool empty() {
@@ -1247,6 +1247,14 @@ public:
    * get the most recent "on-disk format version" supported
    */
   virtual uint32_t get_target_version() = 0;
+
+  /**
+   * check whether need journal device
+   *
+   * It's not constant for backend store. FileStore could have journaless mode
+   * and KeyValueStore could have journal device for special backend.
+   */
+  virtual bool need_journal() = 0;
 
   /**
    * check the journal uuid/fsid, without opening

@@ -85,6 +85,8 @@ void ceph_heap_profiler_dump(const char *reason)
   HeapProfilerDump(reason);
 }
 
+#define HEAP_PROFILER_STATS_SIZE 2048
+
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
                                        ostream& out)
 {
@@ -93,9 +95,9 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
       out << "heap profiler not running; can't dump";
       return;
     }
-    char *heap_stats = new char[1024];
-    ceph_heap_profiler_stats(heap_stats, 1024);
-    out << g_conf->name << "dumping heap profile now.\n"
+    char heap_stats[HEAP_PROFILER_STATS_SIZE];
+    ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
+    out << g_conf->name << " dumping heap profile now.\n"
 	<< heap_stats;
     ceph_heap_profiler_dump("admin request");
   } else if (cmd.size() == 1 && cmd[0] == "start_profiler") {
@@ -108,9 +110,9 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
     ceph_heap_release_free_memory();
     out << g_conf->name << " releasing free RAM back to system.";
   } else if (cmd.size() == 1 && cmd[0] == "stats") {
-    char *heap_stats = new char[1024];
-    ceph_heap_profiler_stats(heap_stats, 1024);
-    out << g_conf->name << "tcmalloc heap stats:"
+    char heap_stats[HEAP_PROFILER_STATS_SIZE];
+    ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
+    out << g_conf->name << " tcmalloc heap stats:"
 	<< heap_stats;
   } else {
     out << "unknown command " << cmd;

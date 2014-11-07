@@ -25,6 +25,7 @@
 #include "include/radosstriper/libradosstriper.hpp"
 
 #include "librados/IoCtxImpl.h"
+#include "common/RefCountedObj.h"
 
 struct libradosstriper::RadosStriperImpl {
 
@@ -32,7 +33,17 @@ struct libradosstriper::RadosStriperImpl {
    * struct handling the data needed to pass to the call back
    * function in asynchronous operations
    */
-  struct CompletionData {
+  struct CompletionData : RefCountedObject {
+    /// constructor
+    CompletionData(libradosstriper::RadosStriperImpl * striper,
+		   const std::string& soid,
+		   const std::string& lockCookie,
+		   librados::AioCompletionImpl *userCompletion = 0,
+                   int n = 1);
+    /// destructor
+    virtual ~CompletionData();
+    /// complete method
+    void complete(int r);
     /// striper to be used to handle the write completion
     libradosstriper::RadosStriperImpl *m_striper;
     /// striped object concerned by the write operation
@@ -41,15 +52,6 @@ struct libradosstriper::RadosStriperImpl {
     std::string m_lockCookie;
     /// completion handler
     librados::IoCtxImpl::C_aio_Ack *m_ack;
-    /// constructor
-    CompletionData(libradosstriper::RadosStriperImpl * striper,
-		   const std::string& soid,
-		   const std::string& lockCookie,
-		   librados::AioCompletionImpl *userCompletion = 0);
-    /// destructor
-    virtual ~CompletionData();
-    /// complete method
-    void complete(int r);
   };
 
   /**
@@ -70,7 +72,8 @@ struct libradosstriper::RadosStriperImpl {
 		       librados::AioCompletionImpl *userCompletion,
 		       bufferlist* bl,
 		       std::vector<ObjectExtent>* extents,
-		       std::vector<bufferlist>* resultbl);
+		       std::vector<bufferlist>* resultbl,
+                       int n = 1);
     /// destructor
     virtual ~ReadCompletionData();
     /// complete method
@@ -88,7 +91,8 @@ struct libradosstriper::RadosStriperImpl {
     WriteCompletionData(libradosstriper::RadosStriperImpl * striper,
 			const std::string& soid,
 			const std::string& lockCookie,
-			librados::AioCompletionImpl *userCompletion = 0);
+			librados::AioCompletionImpl *userCompletion = 0,
+                        int n = 1);
     /// destructor
     virtual ~WriteCompletionData();
     /// safe method
@@ -99,11 +103,14 @@ struct libradosstriper::RadosStriperImpl {
    * struct handling the data needed to pass to the call back
    * function in asynchronous read operations of a Rados File
    */
-  struct RadosReadCompletionData {
+  struct RadosReadCompletionData : RefCountedObject {
     /// constructor
     RadosReadCompletionData(MultiAioCompletionImpl *multiAioCompl,
 			    uint64_t expectedBytes,
-			    bufferlist *bl) :
+			    bufferlist *bl,
+			    CephContext *context,
+			    int n = 1) :
+      RefCountedObject(context, n),
       m_multiAioCompl(multiAioCompl), m_expectedBytes(expectedBytes), m_bl(bl) {};
     /// the multi asynch io completion object to be used
     MultiAioCompletionImpl *m_multiAioCompl;
@@ -185,10 +192,19 @@ struct libradosstriper::RadosStriperImpl {
 
   // reference counting
   void get() {
-    m_refCnt.inc();
+    lock.Lock();
+    m_refCnt ++ ;
+    lock.Unlock();
   }
   void put() {
-    if (m_refCnt.dec() == 0)
+    bool deleteme = false;
+    lock.Lock();
+    m_refCnt --;
+    if (m_refCnt == 0)
+      deleteme = true;
+    cond.Signal();
+    lock.Unlock();
+    if (deleteme)
       delete this;
   }
 
@@ -305,7 +321,10 @@ struct libradosstriper::RadosStriperImpl {
   }
 
   // reference counting
-  atomic_t m_refCnt;
+  Cond  cond;
+  int m_refCnt;
+  Mutex lock;
+
 
   // Context
   librados::Rados m_radosCluster;

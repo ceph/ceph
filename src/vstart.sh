@@ -419,7 +419,7 @@ EOF
 	        $SUDO $CEPH_BIN/ceph-authtool --gen-key --name=client.admin --set-uid=0 \
 		    --cap mon 'allow *' \
 		    --cap osd 'allow *' \
-		    --cap mds allow \
+		    --cap mds 'allow *' \
 		    $keyring_fn
 
 		# build a fresh fs monmap, mon fs
@@ -538,11 +538,11 @@ EOF
 			mon 'allow *' osd 'allow *' mds 'allow'
 	    fi
 
-        cmd="$CEPH_ADM osd pool create cephfs_data 128"
+        cmd="$CEPH_ADM osd pool create cephfs_data 8"
         echo $cmd
         $cmd
 
-        cmd="$CEPH_ADM osd pool create cephfs_metadata 128"
+        cmd="$CEPH_ADM osd pool create cephfs_metadata 8"
         echo $cmd
         $cmd
 
@@ -624,6 +624,22 @@ do_rgw()
     local skey='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
     echo "setting up user testid"
     $CEPH_BIN/radosgw-admin user create --uid testid --access-key $akey --secret $skey --display-name 'M. Tester' --email tester@ceph.com -c $conf_fn > /dev/null
+
+    # Create S3-test users
+    # See: https://github.com/ceph/s3-tests
+    echo "setting up s3-test users"
+    $CEPH_BIN/radosgw-admin user create \
+        --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+        --access-key ABCDEFGHIJKLMNOPQRST \
+        --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
+        --display-name youruseridhere \
+        --email s3@example.com -c $conf_fn > /dev/null
+    $CEPH_BIN/radosgw-admin user create \
+        --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
+        --access-key NOPQRSTUVWXYZABCDEFG \
+        --secret nopqrstuvwxyzabcdefghijklmnabcdefghijklm \
+        --display-name john.doe \
+        --email john.doe@example.com -c $conf_fn > /dev/null
 
     # Create Swift user
     echo "setting up user tester"

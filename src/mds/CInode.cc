@@ -113,7 +113,7 @@ ostream& operator<<(ostream& out, CInode& in)
     if (in.is_replicated()) 
       out << in.get_replicas();
   } else {
-    pair<int,int> a = in.authority();
+    mds_authority_t a = in.authority();
     out << " rep@" << a.first;
     if (a.second != CDIR_AUTH_UNKNOWN)
       out << "," << a.second;
@@ -2298,7 +2298,7 @@ void CInode::adjust_nested_auth_pins(int a, void *by)
 
 // authority
 
-pair<int,int> CInode::authority() 
+mds_authority_t CInode::authority() 
 {
   if (inode_auth.first >= 0) 
     return inode_auth;
@@ -2992,13 +2992,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   
   // xattr
   i = pxattr ? pi:oi;
-  bool had_latest_xattrs = cap && (cap->issued() & CEPH_CAP_XATTR_SHARED) &&
-    cap->client_xattr_version == i->xattr_version &&
-    snapid == CEPH_NOSNAP;
 
   // xattr
   bufferlist xbl;
-  if (!had_latest_xattrs) {
+  if ((!cap && !no_caps) ||
+      (cap && cap->client_xattr_version < i->xattr_version) ||
+      (getattr_caps & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
     ::encode(*pxattrs, xbl);

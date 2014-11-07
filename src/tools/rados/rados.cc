@@ -193,6 +193,19 @@ static void usage_exit()
 }
 
 
+template <typename I, typename T>
+static int rados_sistrtoll(I &i, T *val) {
+  std::string err;
+  *val = strict_sistrtoll(i->second.c_str(), &err);
+  if (err != "") {
+    cerr << "Invalid value for " << i->first << ": " << err << std::endl;
+    return -EINVAL;
+  } else {
+    return 0;
+  }
+}
+
+
 static int dump_data(std::string const &filename, bufferlist const &data)
 {
   int fd;
@@ -431,10 +444,9 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
       goto out;
     }
     if (count == 0) {
-      if (!offset) {
-	ret = io_ctx.create(oid, true);
+      if (!offset) { // in case we have to create an empty object
+	ret = io_ctx.write_full(oid, indata); // indata is empty
 	if (ret < 0) {
-	  cerr << "WARNING: could not create object: " << oid << std::endl;
 	  goto out;
 	}
       }
@@ -953,7 +965,9 @@ static int do_lock_cmd(std::vector<const char*> &nargs,
   }
   i = opts.find("lock-duration");
   if (i != opts.end()) {
-    lock_duration = strtol(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &lock_duration)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("lock-type");
   if (i != opts.end()) {
@@ -1232,7 +1246,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
-    concurrent_ios = strtol(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &concurrent_ios)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("run-name");
   if (i != opts.end()) {
@@ -1244,7 +1260,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("block-size");
   if (i != opts.end()) {
-    op_size = strtol(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &op_size)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("snap");
   if (i != opts.end()) {
@@ -1252,47 +1270,69 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
   i = opts.find("snapid");
   if (i != opts.end()) {
-    snapid = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &snapid)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("min-object-size");
   if (i != opts.end()) {
-    min_obj_len = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &min_obj_len)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("max-object-size");
   if (i != opts.end()) {
-    max_obj_len = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &max_obj_len)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("min-op-len");
   if (i != opts.end()) {
-    min_op_len = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &min_op_len)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("max-op-len");
   if (i != opts.end()) {
-    max_op_len = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &max_op_len)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("max-ops");
   if (i != opts.end()) {
-    max_ops = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &max_ops)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("max-backlog");
   if (i != opts.end()) {
-    max_backlog = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &max_backlog)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("target-throughput");
   if (i != opts.end()) {
-    target_throughput = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &target_throughput)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("read-percent");
   if (i != opts.end()) {
-    read_percent = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &read_percent)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("num-objects");
   if (i != opts.end()) {
-    num_objs = strtoll(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &num_objs)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("run-length");
   if (i != opts.end()) {
-    run_length = strtol(i->second.c_str(), NULL, 10);
+    if (rados_sistrtoll(i, &run_length)) {
+      return -EINVAL;
+    }
   }
   i = opts.find("show-time");
   if (i != opts.end()) {
@@ -1567,7 +1607,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
 
-    uint64_t new_auid = strtol(nargs[1], 0, 10);
+    char* endptr = NULL;
+    uint64_t new_auid = strtol(nargs[1], &endptr, 10);
+    if (*endptr) {
+      cerr << "Invalid value for new-auid: '" << nargs[1] << "'" << std::endl;
+      ret = -1;
+      goto out;
+    }
     ret = io_ctx.set_auid(new_auid);
     if (ret < 0) {
       cerr << "error changing auid on pool " << io_ctx.get_pool_name() << ':'
@@ -1629,7 +1675,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
 
     string oid(nargs[1]);
-    long size = atol(nargs[2]);
+    char* endptr = NULL;
+    long size = strtoll(nargs[2], &endptr, 10);
+    if (*endptr) {
+      cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     if (size < 0) {
       cerr << "error, cannot truncate to negative value" << std::endl;
       usage_exit();
@@ -2089,10 +2141,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (nargs.size() < 2)
       usage_exit();
     if (nargs.size() > 2) {
-      auid = strtol(nargs[2], 0, 10);
+      char* endptr = NULL;
+      auid = strtol(nargs[2], &endptr, 10);
+      if (*endptr) {
+	cerr << "Invalid value for auid: '" << nargs[2] << "'" << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
       cerr << "setting auid:" << auid << std::endl;
       if (nargs.size() > 3) {
-	crush_rule = (__u8)strtol(nargs[3], 0, 10);
+	crush_rule = (__u8)strtol(nargs[3], &endptr, 10);
+	if (*endptr) {
+	  cerr << "Invalid value for crush-rule: '" << nargs[3] << "'" << std::endl;
+	  ret = -EINVAL;
+	  goto out;
+	}
 	cerr << "using crush rule " << (int)crush_rule << std::endl;
       }
     }
@@ -2220,7 +2283,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "bench") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    int seconds = atoi(nargs[1]);
+    char* endptr = NULL;
+    int seconds = strtol(nargs[1], &endptr, 10);
+    if (*endptr) {
+      cerr << "Invalid value for seconds: '" << nargs[1] << "'" << std::endl;
+      ret = -EINVAL;
+      goto out;
+    }
     int operation = 0;
     if (strcmp(nargs[2], "write") == 0)
       operation = OP_WRITE;

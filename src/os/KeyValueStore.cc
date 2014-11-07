@@ -93,10 +93,12 @@ static CompatSet get_kv_supported_compat_set() {
 int StripObjectMap::save_strip_header(StripObjectHeaderRef strip_header,
                                       KeyValueDB::Transaction t)
 {
-  strip_header->header->data.clear();
-  ::encode(*strip_header, strip_header->header->data);
+  if (strip_header->updated) {
+    strip_header->header->data.clear();
+    ::encode(*strip_header, strip_header->header->data);
 
-  set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
+    set_header(strip_header->cid, strip_header->oid, *(strip_header->header), t);
+  }
   return 0;
 }
 
@@ -113,6 +115,7 @@ int StripObjectMap::create_strip_header(const coll_t &cid,
   tmp->oid = oid;
   tmp->cid = cid;
   tmp->header = header;
+  tmp->updated = true;
   if (strip_header)
     *strip_header = tmp;
 
@@ -123,7 +126,7 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
                                         const ghobject_t &oid,
                                         StripObjectHeaderRef *strip_header)
 {
-  if (cid != coll_t()) {
+  {
     Mutex::Locker l(lock);
     pair<coll_t, StripObjectHeaderRef> p;
     if (caches.lookup(oid, &p)) {
@@ -148,8 +151,10 @@ int StripObjectMap::lookup_strip_header(const coll_t &cid,
     ::decode(*tmp, bliter);
   }
 
-  if (tmp->strip_size == 0)
+  if (tmp->strip_size == 0) {
     tmp->strip_size = default_strip_size;
+    tmp->updated = true;
+  }
 
   tmp->oid = oid;
   tmp->cid = cid;
@@ -172,13 +177,14 @@ int StripObjectMap::file_to_extents(uint64_t offset, size_t len,
   if (len == 0)
     return 0;
 
-  uint64_t start, end, strip_offset, extent_offset, extent_len;
+  uint64_t start, end, strip_offset;
   start = offset / strip_size;
   end = (offset + len) / strip_size;
   strip_offset = start * strip_size;
 
   // "offset" may in the middle of first strip object
   if (offset > strip_offset) {
+    uint64_t extent_offset, extent_len;
     extent_offset = offset - strip_offset;
     if (extent_offset + len <= strip_size)
       extent_len = len;
@@ -219,7 +225,9 @@ void StripObjectMap::clone_wrap(StripObjectHeaderRef old_header,
   tmp->strip_size = old_header->strip_size;
   tmp->max_size = old_header->max_size;
   tmp->bits = old_header->bits;
+  tmp->updated = true;
   old_header->header = new_origin_header;
+  old_header->updated = true;
 
   if (target_header)
     *target_header = tmp;
@@ -238,6 +246,7 @@ void StripObjectMap::rename_wrap(StripObjectHeaderRef old_header, const coll_t &
   tmp->header = old_header->header;
   tmp->oid = oid;
   tmp->cid = cid;
+  tmp->updated = true;
 
   if (new_header)
     *new_header = tmp;
@@ -287,10 +296,11 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
     StripObjectMap::StripObjectHeaderRef *strip_header,
     bool create_if_missing)
 {
+  uniq_id uid = make_pair(cid, oid);
   StripObjectMap::StripObjectHeaderRef header;
   int r = 0;
 
-  StripHeaderMap::iterator it = strip_headers.find(make_pair(cid, oid));
+  StripHeaderMap::iterator it = strip_headers.find(uid);
   if (it != strip_headers.end()) {
 
     if (!it->second->deleted) {
@@ -317,9 +327,9 @@ int KeyValueStore::BufferTransaction::lookup_cached_header(
     return r;
   }
 
-  strip_headers[make_pair(cid, oid)] = header;
+  strip_headers[uid] = header;
   if (strip_header)
-    *strip_header = strip_headers[make_pair(cid, oid)];
+    *strip_header = header;
   return r;
 }
 
@@ -1173,6 +1183,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
   Transaction::iterator i = transaction.begin();
   uint64_t op_num = 0;
+  bool exist_clone = false;
 
   while (i.have_op()) {
     if (handle)
@@ -1293,6 +1304,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         coll_t cid = i.decode_cid();
         ghobject_t oid = i.decode_oid();
         ghobject_t noid = i.decode_oid();
+        exist_clone = true;
         r = _clone(cid, oid, noid, t);
       }
       break;
@@ -1304,6 +1316,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         ghobject_t noid = i.decode_oid();
         uint64_t off = i.decode_length();
         uint64_t len = i.decode_length();
+        exist_clone = true;
         r = _clone_range(cid, oid, noid, off, len, off, t);
       }
       break;
@@ -1316,6 +1329,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         uint64_t srcoff = i.decode_length();
         uint64_t len = i.decode_length();
         uint64_t dstoff = i.decode_length();
+        exist_clone = true;
         r = _clone_range(cid, oid, noid, srcoff, len, dstoff, t);
       }
       break;
@@ -1517,10 +1531,9 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       if (!ok) {
         const char *msg = "unexpected error code";
 
-        if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
-                            op == Transaction::OP_CLONE ||
-                            op == Transaction::OP_CLONERANGE2))
-          msg = "ENOENT on clone suggests osd bug";
+        if (exist_clone) {
+          dout(0) << "BUG: clone failed will lead to paritial transaction applied" << dendl;
+        }
 
         if (r == -ENOSPC)
           // For now, if we hit _any_ ENOSPC, crash, before we do any damage
@@ -1733,6 +1746,7 @@ int KeyValueStore::_remove(coll_t cid, const ghobject_t& oid,
 
   header->max_size = 0;
   header->bits.clear();
+  header->updated = true;
   r = t.clear_buffer(header);
 
   dout(10) << __func__ << " " << cid << "/" << oid << " = " << r << dendl;
@@ -1811,6 +1825,7 @@ int KeyValueStore::_truncate(coll_t cid, const ghobject_t& oid, uint64_t size,
 
   header->bits.resize(size/header->strip_size+1);
   header->max_size = size;
+  header->updated = true;
 
   dout(10) << __func__ << " " << cid << "/" << oid << " size " << size << " = "
            << r << dendl;
@@ -1914,6 +1929,7 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
   }
   assert(bl_offset == len);
 
+  header->updated = true;
   t.set_buffer_keys(header, OBJECT_STRIP_PREFIX, values);
   dout(10) << __func__ << " " << header->cid << "/" << header->oid << " "
            << offset << "~" << len << " = " << r << dendl;

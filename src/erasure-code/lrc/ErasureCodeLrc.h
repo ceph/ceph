@@ -87,11 +87,6 @@ public:
 				const set<int> &available,
 				set<int> *minimum);
 
-  int layer_minimum_to_decode(const Layer &layer,
-			      const set<int> &want,
-			      const set<int> &available,
-			      set<int> *minimum) const;
-
   virtual int create_ruleset(const string &name,
 			     CrushWrapper &crush,
 			     ostream *ss) const;
@@ -105,8 +100,6 @@ public:
   }
 
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
-
-  int layer_encode(const Layer &layer, vector<bufferlist> &chunks);
 
   virtual int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded);

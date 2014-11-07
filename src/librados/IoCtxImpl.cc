@@ -408,6 +408,8 @@ int librados::IoCtxImpl::create(const object_t& oid, bool exclusive,
 int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
 			       size_t len, uint64_t off)
 {
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   bufferlist mybl;
@@ -418,6 +420,8 @@ int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
 
 int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
 {
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   bufferlist mybl;
@@ -646,6 +650,8 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
   utime_t ut = ceph_clock_now(client->cct);
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
 
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -668,6 +674,8 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
 {
   utime_t ut = ceph_clock_now(client->cct);
 
+  if (len > UINT_MAX/2)
+    return -E2BIG;
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -691,6 +699,8 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 {
   utime_t ut = ceph_clock_now(client->cct);
 
+  if (bl.length() > UINT_MAX/2)
+    return -E2BIG;
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;

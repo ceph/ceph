@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/radosstriper/libradosstriper.h"
@@ -36,7 +38,7 @@ protected:
   {
     // checking first object's rados xattrs
     bufferlist xattrbl;
-    std::string firstOid = getObjName(soid, 0);
+    char* firstOid = getObjName(soid, 0);
     ASSERT_LT(0, ioctx.getxattr(firstOid, "striper.layout.stripe_unit", xattrbl));
     std::string s_xattr(xattrbl.c_str(), xattrbl.length()); // adds 0 byte at the end
     uint64_t stripe_unit = strtoll(s_xattr.c_str(), NULL, 10);
@@ -83,7 +85,7 @@ protected:
       }
       bufferlist stripe_data;
       // check object content
-      std::string oid = getObjName(soid, object_nb);
+      char* oid = getObjName(soid, object_nb);
       int rc = ioctx.read(oid, stripe_data, len, start);
       if (actual_size_if_sparse < size and
           (actual_size_if_sparse+stripe_unit-1)/stripe_unit <= stripe_nb) {
@@ -100,6 +102,7 @@ protected:
         original_data.substr_of(bl, stripe_nb*stripe_unit, len);
         ASSERT_EQ(0, memcmp(original_data.c_str(), stripe_data.c_str(), len));
       }
+      free(oid);
     }
     // checking rados object sizes; we go object by object
     uint64_t nb_full_object_sets = nb_stripes_in_object / stripe_per_objectset;
@@ -109,36 +112,39 @@ protected:
     for (uint64_t object_nb = 0; object_nb < nb_objects; object_nb++) {
       uint64_t rados_size;
       time_t mtime;
-      std::string oid = getObjName(soid, object_nb);
+      char* oid = getObjName(soid, object_nb);
       uint64_t nb_full_object_set = object_nb / stripe_count;
       uint64_t object_index_in_set = object_nb % stripe_count;
       uint64_t object_start_stripe = nb_full_object_set * stripe_per_objectset + object_index_in_set;
       uint64_t object_start_off = object_start_stripe * stripe_unit;
-       if (actual_size_if_sparse < size and actual_size_if_sparse <= object_start_off) {
-         ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
-       } else {
-         ASSERT_EQ(0, ioctx.stat(oid, &rados_size, &mtime));
-         uint64_t offset = object_start_off;
-         uint64_t stripe_size = stripe_count * stripe_unit;
-         uint64_t set_size = stripe_count * object_size;
-         uint64_t len = 0;
-         for (offset = object_start_off;
-              (offset < (object_start_off) + set_size) && (offset < actual_size_if_sparse);
-              offset += stripe_size) {
-           if (offset + stripe_unit > actual_size_if_sparse) {
-             len += actual_size_if_sparse-offset;
-           } else {
-             len += stripe_unit;
-           }
-         }
-         ASSERT_EQ(len, rados_size);
-       }
+      if (actual_size_if_sparse < size and actual_size_if_sparse <= object_start_off) {
+        ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
+      } else {
+        ASSERT_EQ(0, ioctx.stat(oid, &rados_size, &mtime));
+        uint64_t offset;
+        uint64_t stripe_size = stripe_count * stripe_unit;
+        uint64_t set_size = stripe_count * object_size;
+        uint64_t len = 0;
+        for (offset = object_start_off;
+             (offset < (object_start_off) + set_size) && (offset < actual_size_if_sparse);
+             offset += stripe_size) {
+          if (offset + stripe_unit > actual_size_if_sparse) {
+            len += actual_size_if_sparse-offset;
+          } else {
+            len += stripe_unit;
+          }
+        }
+        ASSERT_EQ(len, rados_size);
+      }
+      free(oid);
     }
     // check we do not have an extra object behind
     uint64_t rados_size;
     time_t mtime;
-    std::string oid = getObjName(soid, nb_objects);
+    char* oid = getObjName(soid, nb_objects);
     ASSERT_EQ(-ENOENT, ioctx.stat(oid, &rados_size, &mtime));
+    free(oid);
+    free(firstOid);
   }
 };
   

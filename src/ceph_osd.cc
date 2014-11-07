@@ -107,6 +107,7 @@ int main(int argc, const char **argv)
   bool get_journal_fsid = false;
   bool get_osd_fsid = false;
   bool get_cluster_fsid = false;
+  bool check_need_journal = false;
   std::string dump_pg_log;
 
   std::string val;
@@ -136,6 +137,8 @@ int main(int argc, const char **argv)
       get_osd_fsid = true;
     } else if (ceph_argparse_flag(args, i, "--get-journal-fsid", "--get-journal-uuid", (char*)NULL)) {
       get_journal_fsid = true;
+    } else if (ceph_argparse_flag(args, i, "--check-needs-journal", (char*)NULL)) {
+      check_need_journal = true;
     } else {
       ++i;
     }
@@ -308,6 +311,14 @@ int main(int argc, const char **argv)
     exit(r);
   }
 
+  if (check_need_journal) {
+    if (store->need_journal())
+      cout << "yes" << std::endl;
+    else
+      cout << "no" << std::endl;
+    exit(0);
+  }
+
   string magic;
   uuid_d cluster_fsid, osd_fsid;
   int w;
@@ -452,8 +463,6 @@ int main(int argc, const char **argv)
   r = ms_hb_front_server->bind(hb_front_addr);
   if (r < 0)
     exit(1);
-
-  ms_objecter->bind(g_conf->public_addr);
 
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);

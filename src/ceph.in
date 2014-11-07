@@ -526,8 +526,11 @@ def ping_monitor(cluster_handle, name):
 def main():
     ceph_args = os.environ.get('CEPH_ARGS')
     if ceph_args:
-        sys.argv.extend(ceph_args.split())
-
+        if "injectargs" in sys.argv:
+            i = sys.argv.index("injectargs")
+            sys.argv = sys.argv[:i] + ceph_args.split() + sys.argv[i:]
+        else:
+            sys.argv.extend(ceph_args.split())
     parser, parsed_args, childargs = parse_cmdargs()
 
     if parsed_args.version:
@@ -536,6 +539,9 @@ def main():
 
     global verbose
     verbose = parsed_args.verbose
+
+    if verbose:
+        print >> sys.stderr, "parsed_args: {0}, childargs: {1}".format(parsed_args, childargs)
 
     if parsed_args.admin_socket_nope:
         print >> sys.stderr, '--admin-socket is used by daemons; '\
@@ -609,6 +615,16 @@ def main():
         'log_flush_on_exit':'true',
     }
 
+    if 'injectargs' in childargs:
+        position = childargs.index('injectargs')
+        injectargs = childargs[position:]
+        childargs = childargs[:position]
+        if verbose:
+            print >> sys.stderr, 'Separate childargs {0} from injectargs {1}'.\
+                format(childargs, injectargs)
+    else:
+        injectargs = None
+
     clustername = 'ceph'
     if parsed_args.cluster:
         clustername = parsed_args.cluster
@@ -620,10 +636,9 @@ def main():
         retargs = cluster_handle.conf_parse_argv(childargs)
     except rados.Error as e:
         print >> sys.stderr, 'Error initializing cluster client: {0}'.\
-            format(e.__class__.__name__)
+            format(repr(e))
         return 1
 
-    #tmp = childargs
     childargs = retargs
     if not childargs:
         childargs = []
@@ -742,10 +757,13 @@ def main():
         childargs = childargs[2:]
         is_tell = True
 
-    if is_tell and not len(childargs):
-        print >> sys.stderr, \
+    if is_tell:
+        if injectargs:
+            childargs = injectargs
+        if not len(childargs):
+            print >> sys.stderr, \
                 'Cannot use \'tell\' with interactive mode'
-        return errno.EINVAL
+            return errno.EINVAL
 
     # fetch JSON sigs from command
     # each line contains one command signature (a placeholder name
