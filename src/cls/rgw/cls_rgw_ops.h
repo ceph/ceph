@@ -208,6 +208,7 @@ struct rgw_cls_read_olh_log_op
 {
   cls_rgw_obj_key olh;
   uint64_t ver_marker;
+  string olh_tag;
 
   rgw_cls_read_olh_log_op() : ver_marker(0) {}
 
@@ -215,12 +216,14 @@ struct rgw_cls_read_olh_log_op
     ENCODE_START(1, 1, bl);
     ::encode(olh, bl);
     ::encode(ver_marker, bl);
+    ::encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(olh, bl);
     ::decode(ver_marker, bl);
+    ::decode(olh_tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -257,6 +260,7 @@ struct rgw_cls_trim_olh_log_op
 {
   cls_rgw_obj_key olh;
   uint64_t ver;
+  string olh_tag;
 
   rgw_cls_trim_olh_log_op() : ver(0) {}
 
@@ -264,12 +268,14 @@ struct rgw_cls_trim_olh_log_op
     ENCODE_START(1, 1, bl);
     ::encode(olh, bl);
     ::encode(ver, bl);
+    ::encode(olh_tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(olh, bl);
     ::decode(ver, bl);
+    ::decode(olh_tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
