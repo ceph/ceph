@@ -102,12 +102,13 @@ void Dumper::dump(const char *dump_file)
     // include an informative header
     char buf[200];
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n%c",
+    sprintf(buf, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
 	    rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)bl.length(), (unsigned long long)bl.length(),
 	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
 	    (unsigned long long)journaler.last_committed.stream_format,
+	    (unsigned long long)journaler.last_committed.trimmed_pos, (unsigned long long)journaler.last_committed.trimmed_pos,
 	    4);
     int r = safe_write(fd, buf, sizeof(buf));
     if (r)
@@ -150,16 +151,24 @@ void Dumper::undump(const char *dump_file)
     return;
   }
 
-  long long unsigned start, len, write_pos, format;
+  long long unsigned start, len, write_pos, format, trimmed_pos;
   sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
   sscanf(strstr(buf, "length"), "length %llu", &len);
   sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
   sscanf(strstr(buf, "format"), "format %llu", &format);
+  if (strstr(buf, "trimmed_pos")) {
+    sscanf(strstr(buf, "trimmed_pos"), "trimmed_pos %llu", &trimmed_pos);
+  } else {
+    // Old format dump, any untrimmed objects before expire_pos will
+    // be discarded as trash.
+    trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
+  }
+
 
   cout << "start " << start << " len " << len << std::endl;
   
   Journaler::Header h;
-  h.trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
+  h.trimmed_pos = trimmed_pos;
   h.expire_pos = start;
   h.write_pos = write_pos;
   h.stream_format = format;
