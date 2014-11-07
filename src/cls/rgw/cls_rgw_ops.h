@@ -174,8 +174,8 @@ struct rgw_cls_link_olh_op {
     DECODE_FINISH(bl);
   }
 
+  static void generate_test_instances(list<rgw_cls_link_olh_op *>& o);
   void dump(Formatter *f) const;
-#warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
@@ -199,8 +199,8 @@ struct rgw_cls_unlink_instance_op {
     DECODE_FINISH(bl);
   }
 
+  static void generate_test_instances(list<rgw_cls_unlink_instance_op *>& o);
   void dump(Formatter *f) const;
-#warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_unlink_instance_op)
 
@@ -226,8 +226,8 @@ struct rgw_cls_read_olh_log_op
     ::decode(olh_tag, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(list<rgw_cls_read_olh_log_op *>& o);
   void dump(Formatter *f) const;
-#warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
 
@@ -251,8 +251,8 @@ struct rgw_cls_read_olh_log_ret
     ::decode(is_truncated, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(list<rgw_cls_read_olh_log_ret *>& o);
   void dump(Formatter *f) const;
-#warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_ret)
 
@@ -278,8 +278,8 @@ struct rgw_cls_trim_olh_log_op
     ::decode(olh_tag, bl);
     DECODE_FINISH(bl);
   }
+  static void generate_test_instances(list<rgw_cls_trim_olh_log_op *>& o);
   void dump(Formatter *f) const;
-#warning implement me
 };
 WRITE_CLASS_ENCODER(rgw_cls_trim_olh_log_op)
 
