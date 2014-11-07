@@ -107,6 +107,11 @@ struct CephContext;
 # define CEPH_SETATTR_CTIME 64
 #endif
 
+/* define error codes for the mount function*/
+# define CEPHFS_ERROR_MON_MAP_BUILD 1000
+# define CEPHFS_ERROR_NEW_CLIENT 1002
+# define CEPHFS_ERROR_MESSENGER_START 1003
+
 /**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
@@ -151,7 +156,18 @@ int ceph_create(struct ceph_mount_info **cmount, const char * const id);
 int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext *conf);
 
 /**
+ * Initialize the filesystem client (but do not mount the filesystem yet)
+ *
+ * @returns 0 on success, negative error code on failure
+ */
+int ceph_init(struct ceph_mount_info *cmount);
+
+
+/**
  * Perform a mount using the path for the root of the mount.
+ *
+ * It is optional to call ceph_init before this.  If ceph_init has
+ * not already been called, it will be called in the course of this operation.
  *
  * @param cmount the mount info handle
  * @param root the path for the root of the mount.  This can be an existing
@@ -160,6 +176,38 @@ int ceph_create_with_context(struct ceph_mount_info **cmount, struct CephContext
  * @returns 0 on success, negative error code on failure
  */
 int ceph_mount(struct ceph_mount_info *cmount, const char *root);
+
+
+/**
+ * Execute a management command remotely on an MDS.
+ *
+ * Must have called ceph_init or ceph_mount before calling this.
+ *
+ * @param mds_spec string representing rank, MDS name, GID or '*'
+ * @param cmd array of null-terminated strings
+ * @param cmdlen length of cmd array
+ * @param inbuf non-null-terminated input data to command
+ * @param inbuflen length in octets of inbuf
+ * @param outbuf populated with pointer to buffer (command output data)
+ * @param outbuflen length of allocated outbuf
+ * @param outs populated with pointer to buffer (command error strings)
+ * @param outslen length of allocated outs
+ *
+ * @return 0 on success, negative error code on failure
+ *
+ */
+int ceph_mds_command(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    char **outbuf, size_t *outbuflen,
+    char **outs, size_t *outslen);
+
+/**
+ * Free a buffer, such as those used for output arrays from ceph_mds_command
+ */
+void ceph_buffer_free(char *buf);
 
 /**
  * Unmount a mount handle.

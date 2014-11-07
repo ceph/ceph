@@ -132,8 +132,6 @@ int JournalScanner::scan_header()
 
 int JournalScanner::scan_events()
 {
-  int r;
-
   uint64_t object_size = g_conf->mds_log_segment_size;
   if (object_size == 0) {
     // Default layout object size
@@ -157,7 +155,7 @@ int JournalScanner::scan_events()
     // Read this journal segment
     bufferlist this_object;
     std::string const oid = obj_name(obj_offset);
-    r = io.read(oid, this_object, INT_MAX, 0);
+    int r = io.read(oid, this_object, INT_MAX, 0);
 
     // Handle absent journal segments
     if (r < 0) {

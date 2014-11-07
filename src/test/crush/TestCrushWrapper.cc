@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -82,12 +83,12 @@ TEST(CrushWrapper, move_bucket) {
 			     ROOT_TYPE, 0, NULL, NULL, &root0));
   EXPECT_EQ(0, c->set_item_name(root0, "root0"));
 
-  int item = 0;
   {
     map<string,string> loc;
     loc["root"] = "root0";
     loc["host"] = "host0";
 
+    int item = 0;
     EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
 				"osd.0", loc));
   }
@@ -123,6 +124,75 @@ TEST(CrushWrapper, move_bucket) {
     EXPECT_EQ("root", loc.first);
     EXPECT_EQ("root1", loc.second);
   }
+
+  delete c;
+}
+
+TEST(CrushWrapper, rename_bucket_or_item) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 2;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int HOST_TYPE = 1;
+  c->set_type_name(HOST_TYPE, "host");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int root0;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, 0, NULL, NULL, &root0));
+  EXPECT_EQ(0, c->set_item_name(root0, "root0"));
+
+  int item = 0;
+  {
+    map<string,string> loc;
+    loc["root"] = "root0";
+    loc["host"] = "host0";
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+  item++;
+  {
+    map<string,string> loc;
+    loc["root"] = "root0";
+    loc["host"] = "host1";
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.1", loc));
+  }
+
+  stringstream ss;
+  EXPECT_EQ(-EINVAL, c->can_rename_item("host0", "????", &ss));
+  EXPECT_EQ(-EINVAL, c->rename_item("host0", "????", &ss));
+  EXPECT_EQ(-EINVAL, c->can_rename_bucket("host0", "????", &ss));
+  EXPECT_EQ(-EINVAL, c->rename_bucket("host0", "????", &ss));
+
+  EXPECT_EQ(-EEXIST, c->can_rename_item("host0", "host1", &ss));
+  EXPECT_EQ(-EEXIST, c->rename_item("host0", "host1", &ss));
+  EXPECT_EQ(-EEXIST, c->can_rename_bucket("host0", "host1", &ss));
+  EXPECT_EQ(-EEXIST, c->rename_bucket("host0", "host1", &ss));
+
+  EXPECT_EQ(-EALREADY, c->can_rename_item("gone", "host1", &ss));
+  EXPECT_EQ(-EALREADY, c->rename_item("gone", "host1", &ss));
+  EXPECT_EQ(-EALREADY, c->can_rename_bucket("gone", "host1", &ss));
+  EXPECT_EQ(-EALREADY, c->rename_bucket("gone", "host1", &ss));
+
+  EXPECT_EQ(-ENOENT, c->can_rename_item("doesnotexist", "somethingelse", &ss));
+  EXPECT_EQ(-ENOENT, c->rename_item("doesnotexist", "somethingelse", &ss));
+  EXPECT_EQ(-ENOENT, c->can_rename_bucket("doesnotexist", "somethingelse", &ss));
+  EXPECT_EQ(-ENOENT, c->rename_bucket("doesnotexist", "somethingelse", &ss));
+
+  EXPECT_EQ(-ENOTDIR, c->can_rename_bucket("osd.1", "somethingelse", &ss));
+  EXPECT_EQ(-ENOTDIR, c->rename_bucket("osd.1", "somethingelse", &ss));
+
+  int host0id = c->get_item_id("host0");
+  EXPECT_EQ(0, c->rename_bucket("host0", "host0renamed", &ss));
+  EXPECT_EQ(host0id, c->get_item_id("host0renamed"));
+
+  int osd0id = c->get_item_id("osd0");
+  EXPECT_EQ(0, c->rename_item("osd.0", "osd0renamed", &ss));
+  EXPECT_EQ(osd0id, c->get_item_id("osd0renamed"));
 
   delete c;
 }

@@ -709,9 +709,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
       }
     }
 
-    ls.splice(ls.end(), waitfor_read);
-    waitfor_read.clear();
-
     // apply to bh's!
     loff_t opos = start;
     while (true) {
@@ -1113,26 +1110,13 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       for (map<loff_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
            ++bh_it) {
-        loff_t clean = get_stat_clean() + get_stat_rx() +
-                       bh_it->second->length();
-        if (get_stat_rx() > 0 && static_cast<uint64_t>(clean) > max_size) {
-          // cache is full -- wait for rx's to complete
-          ldout(cct, 10) << "readx missed, waiting on cache to free "
-                         << (clean - max_size) << " bytes" << dendl;
-          if (success) {
-            waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish));
-          }
-          bh_remove(o, bh_it->second);
-          delete bh_it->second;
-        } else {
-          bh_read(bh_it->second);
-          if (success && onfinish) {
-            ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second 
-                     << " off " << bh_it->first << dendl;
-	    bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
-          }
-          bytes_not_in_cache += bh_it->second->length();
+        bh_read(bh_it->second);
+        if (success && onfinish) {
+          ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second 
+                   << " off " << bh_it->first << dendl;
+	  bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
         }
+        bytes_not_in_cache += bh_it->second->length();
 	success = false;
       }
 

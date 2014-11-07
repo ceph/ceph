@@ -41,22 +41,24 @@ int main(int argc, char **argv) {
   po::positional_options_description p;
   p.add("command", 1);
 
+  vector<string> ceph_option_strings;
   po::variables_map vm;
-  po::parsed_options parsed =
-    po::command_line_parser(argc, argv).options(desc).positional(p).run();
-  po::store(
-    parsed,
-    vm);
   try {
+    po::parsed_options parsed =
+      po::command_line_parser(argc, argv).options(desc).positional(p).allow_unregistered().run();
+    po::store(
+	      parsed,
+	      vm);
     po::notify(vm);
-  } catch (...) {
-    cout << desc << std::endl;
+
+    ceph_option_strings = po::collect_unrecognized(parsed.options,
+						   po::include_positional);
+  } catch(po::error &e) {
+    std::cerr << e.what() << std::endl;
     return 1;
   }
 
   vector<const char *> ceph_options, def_args;
-  vector<string> ceph_option_strings = po::collect_unrecognized(
-    parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();

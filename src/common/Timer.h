@@ -24,7 +24,6 @@
 class CephContext;
 class Context;
 class SafeTimerThread;
-class RWTimerThread;
 
 class SafeTimer
 {
@@ -62,76 +61,6 @@ public:
    * */
   SafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
   ~SafeTimer();
-
-  /* Call with the event_lock UNLOCKED.
-   *
-   * Cancel all events and stop the timer thread.
-   *
-   * If there are any events that still have to run, they will need to take
-   * the event_lock first. */
-  void init();
-  void shutdown();
-
-  /* Schedule an event in the future
-   * Call with the event_lock LOCKED */
-  void add_event_after(double seconds, Context *callback);
-  void add_event_at(utime_t when, Context *callback);
-
-  /* Cancel an event.
-   * Call with the event_lock LOCKED
-   *
-   * Returns true if the callback was cancelled.
-   * Returns false if you never addded the callback in the first place.
-   */
-  bool cancel_event(Context *callback);
-
-  /* Cancel all events.
-   * Call with the event_lock LOCKED
-   *
-   * When this function returns, all events have been cancelled, and there are no
-   * more in progress.
-   */
-  void cancel_all_events();
-
-};
-
-class RWTimer
-{
-  // This class isn't supposed to be copied
-  RWTimer(const RWTimer &rhs);
-  RWTimer& operator=(const RWTimer &rhs);
-
-  CephContext *cct;
-  RWLock& rwlock;
-  Mutex lock;
-  Cond cond;
-  bool safe_callbacks;
-
-  friend class RWTimerThread;
-  RWTimerThread *thread;
-
-  void timer_thread();
-  void _shutdown();
-
-  std::multimap<utime_t, Context*> schedule;
-  std::map<Context*, std::multimap<utime_t, Context*>::iterator> events;
-  atomic_t stopping;
-
-  void dump(const char *caller = 0) const;
-
-public:
-  /* Safe callbacks determines whether callbacks are called with the lock
-   * held.
-   *
-   * safe_callbacks = true (default option) guarantees that a cancelled
-   * event's callback will never be called.
-   *
-   * Under some circumstances, holding the lock can cause lock cycles.
-   * If you are able to relax requirements on cancelled callbacks, then
-   * setting safe_callbacks = false eliminates the lock cycle issue.
-   * */
-  RWTimer(CephContext *cct, RWLock &rwl, bool safe_callbacks=true);
-  ~RWTimer();
 
   /* Call with the event_lock UNLOCKED.
    *

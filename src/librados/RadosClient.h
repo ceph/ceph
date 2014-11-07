@@ -32,7 +32,7 @@ struct md_config_t;
 class Message;
 class MWatchNotify;
 class MLog;
-class SimpleMessenger;
+class Messenger;
 
 class librados::RadosClient : public Dispatcher
 {
@@ -47,7 +47,7 @@ private:
   } state;
 
   MonClient monclient;
-  SimpleMessenger *messenger;
+  Messenger *messenger;
 
   uint64_t instance_id;
 
@@ -102,6 +102,7 @@ public:
   int pool_create(string& name, unsigned long long auid=0, __u8 crush_rule=0);
   int pool_create_async(string& name, PoolAsyncCompletionImpl *c, unsigned long long auid=0,
 			__u8 crush_rule=0);
+  int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);
   int pool_delete(const char *name);
 
   int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);

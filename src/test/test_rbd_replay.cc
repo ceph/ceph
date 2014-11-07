@@ -169,12 +169,12 @@ TEST(RBDReplay, rbd_loc_parse) {
   EXPECT_FALSE(m.parse("a@b/c"));
 }
 
-static IO::ptr mkio(action_id_t ionum, ...) {
+static IO::ptr mkio(action_id_t ionum, int num_expected, ...) {
   IO::ptr io(new StartThreadIO(ionum, ionum, 0));
 
   va_list ap;
-  va_start(ap, ionum);
-  while (true) {
+  va_start(ap, num_expected);
+  for (int i = 0; i < num_expected ; i++) {
     IO::ptr* dep = va_arg(ap, IO::ptr*);
     if (!dep) {
       break;
@@ -190,15 +190,15 @@ TEST(RBDReplay, batch_unreachable_from) {
   io_set_t deps;
   io_set_t base;
   io_set_t unreachable;
-  IO::ptr io1(mkio(1, NULL));
-  IO::ptr io2(mkio(2, &io1, NULL));
-  IO::ptr io3(mkio(3, &io2, NULL));
-  IO::ptr io4(mkio(4, &io1, NULL));
-  IO::ptr io5(mkio(5, &io2, &io4, NULL));
-  IO::ptr io6(mkio(6, &io3, &io5, NULL));
-  IO::ptr io7(mkio(7, &io4, NULL));
-  IO::ptr io8(mkio(8, &io5, &io7, NULL));
-  IO::ptr io9(mkio(9, &io6, &io8, NULL));
+  IO::ptr io1(mkio(1, 0));
+  IO::ptr io2(mkio(2, 1, &io1));
+  IO::ptr io3(mkio(3, 1, &io2));
+  IO::ptr io4(mkio(4, 1, &io1));
+  IO::ptr io5(mkio(5, 2, &io2, &io4));
+  IO::ptr io6(mkio(6, 2, &io3, &io5));
+  IO::ptr io7(mkio(7, 1, &io4));
+  IO::ptr io8(mkio(8, 2, &io5, &io7));
+  IO::ptr io9(mkio(9, 2, &io6, &io8));
   // 1 (deps) <-- 2 (deps) <-- 3 (deps)
   // ^            ^            ^
   // |            |            |

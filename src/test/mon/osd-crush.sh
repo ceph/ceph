@@ -175,6 +175,17 @@ EOF
 
 }
 
+function TEST_crush_rename_bucket() {
+    local dir=$1
+
+    ./ceph osd crush add-bucket host1 host
+    ! ./ceph osd tree | grep host2 || return 1
+    ./ceph osd crush rename-bucket host1 host2 || return 1
+    ./ceph osd tree | grep host2 || return 1
+    ./ceph osd crush rename-bucket host1 host2 || return 1 # idempotency
+    ./ceph osd crush rename-bucket nonexistent something 2>&1 | grep "Error ENOENT" || return 1
+}
+
 main osd-crush
 
 # Local Variables:

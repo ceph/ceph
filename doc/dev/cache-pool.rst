@@ -8,7 +8,7 @@ Use a pool of fast storage devices (probably SSDs) and use it as a
 cache for an existing larger pool.
 
 Use a replicated pool as a front-end to service most I/O, and destage
-cold data to a separate erasure coded pool that does not current (and
+cold data to a separate erasure coded pool that does not currently (and
 cannot efficiently) handle the workload.
 
 We should be able to create and add a cache pool to an existing pool

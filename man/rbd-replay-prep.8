@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD-REPLAY-PREP" "8" "August 11, 2014" "dev" "Ceph"
+.TH "RBD-REPLAY-PREP" "8" "August 21, 2014" "dev" "Ceph"
 .SH NAME
 rbd-replay-prep \- prepare captured rados block device (RBD) workloads for replay
 .
@@ -59,7 +59,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 ..
 .SH SYNOPSIS
 .nf
-\fBrbd\-replay\-prep\fP [ \-\-window \fIseconds\fP ] \fItrace_dir\fP \fIreplay_file\fP
+\fBrbd\-replay\-prep\fP [ \-\-window \fIseconds\fP ] [ \-\-anonymize ] \fItrace_dir\fP \fIreplay_file\fP
 .fi
 .sp
 .SH DESCRIPTION
@@ -70,6 +70,11 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .TP
 .B \-\-window seconds
 Requests further apart than \(aqseconds\(aq seconds are assumed to be independent.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-anonymize
+Anonymizes image and snap names.
 .UNINDENT
 .SH EXAMPLES
 .sp

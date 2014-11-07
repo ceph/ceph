@@ -70,7 +70,7 @@ function kill_daemons() {
 function call_TEST_functions() {
     local dir=$1
     shift
-    local id=$2
+    local id=$1
     shift
 
     setup $dir || return 1

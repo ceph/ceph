@@ -5,7 +5,7 @@ Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_char, c_int, c_long, \
     c_ulong, create_string_buffer, byref, Structure, c_uint64, c_ubyte, \
-    pointer, CFUNCTYPE
+    pointer, CFUNCTYPE, c_int64
 from ctypes.util import find_library
 import ctypes
 import errno
@@ -205,6 +205,10 @@ Rados object in state %s." % (self.state))
                 raise Error("Unexpected error")
         else:
             self.librados = CDLL(librados_path)
+
+        self.parsed_args = []
+        self.conf_defaults = conf_defaults
+        self.conffile = conffile
         self.cluster = c_void_p()
         self.rados_id = rados_id
         if rados_id is not None and not isinstance(rados_id, str):
@@ -312,6 +316,7 @@ Rados object in state %s." % (self.state))
         # list to eliminate any missing args
 
         retargs = [a for a in cretargs if a is not None]
+        self.parsed_args = args
         return retargs
 
     def conf_parse_env(self, var='CEPH_ARGS'):
@@ -470,6 +475,56 @@ Rados object in state %s." % (self.state))
         else:
             raise make_ex(ret, "error looking up pool '%s'" % pool_name)
 
+    def pool_lookup(self, pool_name):
+        """
+        Returns a pool's ID based on its name.
+
+        :param pool_name: name of the pool to look up
+        :type pool_name: str
+
+        :raises: :class:`TypeError`, :class:`Error`
+        :returns: int - pool ID, or None if it doesn't exist
+        """
+        self.require_state("connected")
+        if not isinstance(pool_name, str):
+            raise TypeError('pool_name must be a string')
+        ret = run_in_thread(self.librados.rados_pool_lookup,
+                            (self.cluster, c_char_p(pool_name)))
+        if (ret >= 0):
+            return int(ret)
+        elif (ret == -errno.ENOENT):
+            return None
+        else:
+            raise make_ex(ret, "error looking up pool '%s'" % pool_name)
+
+    def pool_reverse_lookup(self, pool_id):
+        """
+        Returns a pool's name based on its ID.
+
+        :param pool_id: ID of the pool to look up
+        :type pool_id: int
+
+        :raises: :class:`TypeError`, :class:`Error`
+        :returns: string - pool name, or None if it doesn't exist
+        """
+        self.require_state("connected")
+        if not isinstance(pool_id, int):
+            raise TypeError('pool_id must be an integer')
+        size = c_size_t(512)
+        while True:
+            c_name = create_string_buffer(size.value)
+            ret = run_in_thread(self.librados.rados_pool_reverse_lookup,
+                                (self.cluster, c_int64(pool_id), byref(c_name), size))
+            if ret > size.value:
+                size = c_size_t(ret)
+            elif ret == -errno.ENOENT:
+                return None
+            elif ret < 0:
+                raise make_ex(ret, "error reverse looking up pool '%s'" % pool_id)
+            else:
+                return c_name.value
+                break
+
     def create_pool(self, pool_name, auid=None, crush_rule=None):
         """
         Create a pool:
@@ -512,6 +567,22 @@ Rados object in state %s." % (self.state))
                                 c_uint64(auid), c_ubyte(crush_rule)))
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
+
+    def get_pool_base_tier(self, pool_id):
+        """
+        Get base pool
+
+        :returns: base pool, or pool_id if tiering is not configured for the pool
+        """
+        self.require_state("connected")
+        if not isinstance(pool_id, int):
+            raise TypeError('pool_id must be an int')
+        base_tier = c_int64(0)
+        ret = run_in_thread(self.librados.rados_pool_get_base_tier,
+                            (self.cluster, c_int64(pool_id), byref(base_tier)))
+        if ret < 0:
+            raise make_ex(ret, "get_pool_base_tier(%d)" % pool_id)
+        return base_tier.value
 
     def delete_pool(self, pool_name):
         """
@@ -684,6 +755,10 @@ Rados object in state %s." % (self.state))
             run_in_thread(self.librados.rados_buffer_free, (outsp.contents,))
 
         return (ret, my_outbuf, my_outs)
+
+    def wait_for_latest_osdmap(self):
+        self.require_state("connected")
+        return run_in_thread(self.librados.rados_wait_for_latest_osdmap, (self.cluster,))
 
 class ObjectIterator(object):
     """rados.Ioctx Object iterator"""

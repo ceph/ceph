@@ -66,10 +66,11 @@ class StripObjectMap: public GenericObjectMap {
                    // also block read operation which not should be permitted.
     coll_t cid;
     ghobject_t oid;
+    bool updated;
     bool deleted;
     map<pair<string, string>, bufferlist> buffers;  // pair(prefix, key)
 
-    StripObjectHeader(): strip_size(default_strip_size), max_size(0), deleted(false) {}
+    StripObjectHeader(): strip_size(default_strip_size), max_size(0), updated(false), deleted(false) {}
 
     void encode(bufferlist &bl) const {
       ENCODE_START(1, 1, bl);
@@ -483,6 +484,7 @@ class KeyValueStore : public ObjectStore,
   uint32_t get_target_version() {
     return target_version;
   }
+  bool need_journal() { return false; };
   int peek_journal_fsid(uuid_d *id) {
     *id = fsid;
     return 0;

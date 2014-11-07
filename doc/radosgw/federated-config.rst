@@ -361,7 +361,7 @@ for your Ceph Storage Cluster(s). For example::
 Then, update each :term:`Ceph Node` with the updated Ceph configuration
 file. For example:: 
 
-	ceph-deploy --overwrite-conf config {node1} {node2} {nodex}	
+	ceph-deploy --overwrite-conf config push {node1} {node2} {nodex}	
 
 
 .. note:: When you use this procedure to configure the secondary region, 

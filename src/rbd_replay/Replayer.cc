@@ -226,7 +226,18 @@ void Replayer::put_image(imagectx_id_t imagectx_id, librbd::Image *image) {
 
 void Replayer::erase_image(imagectx_id_t imagectx_id) {
   boost::unique_lock<boost::shared_mutex> lock(m_images_mutex);
-  delete m_images[imagectx_id];
+  librbd::Image* image = m_images[imagectx_id];
+  if (m_dump_perf_counters) {
+    string command = "perf dump";
+    cmdmap_t cmdmap;
+    string format = "json-pretty";
+    bufferlist out;
+    g_ceph_context->do_command(command, cmdmap, format, &out);
+    out.write_stream(cout);
+    cout << std::endl;
+    cout.flush();
+  }
+  delete image;
   m_images.erase(imagectx_id);
 }
 
@@ -281,6 +292,16 @@ void Replayer::wait_for_actions(const vector<dependency_d> &deps) {
 
 void Replayer::clear_images() {
   boost::unique_lock<boost::shared_mutex> lock(m_images_mutex);
+  if (m_dump_perf_counters && !m_images.empty()) {
+    string command = "perf dump";
+    cmdmap_t cmdmap;
+    string format = "json-pretty";
+    bufferlist out;
+    g_ceph_context->do_command(command, cmdmap, format, &out);
+    out.write_stream(cout);
+    cout << std::endl;
+    cout.flush();
+  }
   pair<imagectx_id_t, librbd::Image*> p;
   BOOST_FOREACH(p, m_images) {
     delete p.second;

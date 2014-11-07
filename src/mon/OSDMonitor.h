@@ -261,6 +261,9 @@ private:
   bool prepare_pool_op (MPoolOp *m);
   bool prepare_pool_op_create (MPoolOp *m);
   bool prepare_pool_op_delete(MPoolOp *m);
+  int crush_rename_bucket(const string& srcname,
+			  const string& dstname,
+			  ostream *ss);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,

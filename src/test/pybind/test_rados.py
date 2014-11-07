@@ -88,6 +88,36 @@ class TestRados(object):
         eq(set(['a' * 500]), self.list_non_default_pools())
         self.rados.delete_pool('a' * 500)
 
+    def test_get_pool_base_tier(self):
+        self.rados.create_pool('foo')
+        try:
+            self.rados.create_pool('foo-cache')
+            try:
+                pool_id = self.rados.pool_lookup('foo')
+                tier_pool_id = self.rados.pool_lookup('foo-cache')
+
+                cmd = {"prefix":"osd tier add", "pool":"foo", "tierpool":"foo-cache", "force_nonempty":""}
+                ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                eq(ret, 0)
+
+                try:
+                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly"}
+                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                    eq(ret, 0)
+
+                    eq(self.rados.wait_for_latest_osdmap(), 0)
+
+                    eq(pool_id, self.rados.get_pool_base_tier(pool_id))
+                    eq(pool_id, self.rados.get_pool_base_tier(tier_pool_id))
+                finally:
+                    cmd = {"prefix":"osd tier remove", "pool":"foo", "tierpool":"foo-cache"}
+                    ret, buf, errs = self.rados.mon_command(json.dumps(cmd), '', timeout=30)
+                    eq(ret, 0)
+            finally:
+                self.rados.delete_pool('foo-cache')
+        finally:
+            self.rados.delete_pool('foo')
+
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
         eq(len(fsid), 36)

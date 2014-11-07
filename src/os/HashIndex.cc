@@ -476,10 +476,9 @@ int HashIndex::recursive_create_path(vector<string>& path, int level)
 {
   if (level == 0)
     return 0;
-  int ret;
   for (int i = 0; i < 16; ++i) {
     path.push_back(to_hex(i));
-    ret = create_path(path);
+    int ret = create_path(path);
     if (ret < 0 && ret != -EEXIST)
       return ret;
     ret = recursive_create_path(path, level - 1);

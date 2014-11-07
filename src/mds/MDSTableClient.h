@@ -80,7 +80,7 @@ public:
     ack_waiters[tid].push_back(c);
   }
 
-  void handle_mds_failure(int mds);
+  void handle_mds_failure(mds_rank_t mds);
 
   // child must implement
   virtual void resend_queries() = 0;

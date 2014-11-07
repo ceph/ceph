@@ -144,6 +144,7 @@ public:
   static raw* create_malloc(unsigned len);
   static raw* claim_malloc(unsigned len, char *buf);
   static raw* create_static(unsigned len, char *buf);
+  static raw* create_aligned(unsigned len, unsigned align);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
 
@@ -177,8 +178,15 @@ public:
     bool at_buffer_head() const { return _off == 0; }
     bool at_buffer_tail() const;
 
-    bool is_page_aligned() const { return ((long)c_str() & ~CEPH_PAGE_MASK) == 0; }
-    bool is_n_page_sized() const { return (length() & ~CEPH_PAGE_MASK) == 0; }
+    bool is_aligned(unsigned align) const {
+      return ((long)c_str() & (align-1)) == 0;
+    }
+    bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
+    bool is_n_align_sized(unsigned align) const
+    {
+      return (length() & (align-1)) == 0;
+    }
+    bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
 
     // accessors
     raw *get_raw() const { return _raw; }
@@ -233,7 +241,7 @@ public:
     // my private bits
     std::list<ptr> _buffers;
     unsigned _len;
-
+    unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
   public:
@@ -309,14 +317,14 @@ public:
 
   public:
     // cons/des
-    list() : _len(0), last_p(this) {}
-    list(unsigned prealloc) : _len(0), last_p(this) {
+    list() : _len(0), _memcopy_count(0), last_p(this) {}
+    list(unsigned prealloc) : _len(0), _memcopy_count(0), last_p(this) {
       append_buffer = buffer::create(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
     ~list() {}
     
-    list(const list& other) : _buffers(other._buffers), _len(other._len), last_p(this) { }
+    list(const list& other) : _buffers(other._buffers), _len(other._len), _memcopy_count(other._memcopy_count),last_p(this) { }
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
@@ -325,8 +333,8 @@ public:
       return *this;
     }
 
+    unsigned get_memcopy_count() const {return _memcopy_count; }
     const std::list<ptr>& buffers() const { return _buffers; }
-    
     void swap(list& other);
     unsigned length() const {
 #if 0
@@ -344,7 +352,9 @@ public:
     bool contents_equal(buffer::list& other);
 
     bool can_zero_copy() const;
+    bool is_aligned(unsigned align) const;
     bool is_page_aligned() const;
+    bool is_n_align_sized(unsigned align) const;
     bool is_n_page_sized() const;
 
     bool is_zero() const;
@@ -353,6 +363,7 @@ public:
     void clear() {
       _buffers.clear();
       _len = 0;
+      _memcopy_count = 0;
       last_p = begin();
     }
     void push_front(ptr& bp) {
@@ -382,6 +393,7 @@ public:
     bool is_contiguous();
     void rebuild();
     void rebuild(ptr& nb);
+    void rebuild_aligned(unsigned align);
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op
@@ -421,6 +433,11 @@ public:
     const char& operator[](unsigned n) const;
     char *c_str();
     void substr_of(const list& other, unsigned off, unsigned len);
+
+    /// return a pointer to a contiguous extent of the buffer,
+    /// reallocating as needed
+    char *get_contiguous(unsigned off,  ///< offset
+			 unsigned len); ///< length
 
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */);

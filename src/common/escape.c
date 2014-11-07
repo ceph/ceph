@@ -22,6 +22,7 @@
  */
 
 /* Static string length */
+// cppcheck-suppress sizeofDivisionMemfunc
 #define SSTRL(x) ((sizeof(x)/sizeof(x[0])) - 1)
 
 #define LESS_THAN_XESCAPE		"&lt;"
