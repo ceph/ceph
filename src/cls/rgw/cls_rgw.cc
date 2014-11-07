@@ -336,41 +336,6 @@ static void split_key(const string& key, list<string>& vals)
 }
 
 /*
- * object index key structure:
- *
- * <obj name>\0[i<instance id>]
- */
-static void decode_obj_index_key(const string& index_key, cls_rgw_obj_key *key)
-{
-  size_t len = strlen(index_key.c_str());
-
-  key->instance.clear();
-
-  if (len == index_key.size()) {
-    key->name = index_key;
-    return;
-  }
-
-  list<string> vals;
-  split_key(index_key, vals);
-
-  assert(!vals.empty());
-
-  list<string>::iterator iter = vals.begin();
-  key->name = *iter;
-  iter++;
-
-  assert(iter != vals.end());
-
-  for (; iter != vals.end(); ++iter) {
-    string& val = *iter;
-    if (val[0] == 'i') {
-      key->instance = val.substr(1);
-    }
-  }
-}
-
-/*
  * list index key structure:
  *
  * <obj name>\0[v<ver>\0i<instance id>]
@@ -992,16 +957,6 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, struct r
   return 0;
 }
 
-static int read_key_list_entry(cls_method_context_t hctx, cls_rgw_obj_key& key, rgw_bucket_dir_entry *entry, string *idx)
-{
-  int ret = read_key_entry(hctx, key, idx, entry);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
-}
-
 static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
                            cls_rgw_obj_key& key, bool delete_marker)
 {
@@ -1451,9 +1406,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  cls_rgw_obj_key& olh_key = olh.get_entry().key;
-  CLS_LOG(20, "%s(): updating olh log: existing olh entry: %s[%s] (is_delete=%d)", __func__,
-             olh_key.name.c_str(), olh_key.instance.c_str());
+  rgw_bucket_olh_entry& olh_entry = olh.get_entry();
+  cls_rgw_obj_key& olh_key = olh_entry.key;
+  CLS_LOG(20, "%s(): updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
+             olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
 
   if (olh_key == dest_key) {
     /* this is the current head, need to update! */
@@ -1934,7 +1890,7 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     } else {
       ret = cls_cxx_map_get_vals(hctx, start_key, filter, BI_GET_NUM_KEYS, &keys);
     }
-    CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), keys.size());
+    CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
