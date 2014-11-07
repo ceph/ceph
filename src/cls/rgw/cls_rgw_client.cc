@@ -204,12 +204,14 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
 }
 
 int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                        const string& olh_tag,
                         map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated)
 {
   bufferlist in, out;
   struct rgw_cls_read_olh_log_op call;
   call.olh = olh;
   call.ver_marker = ver_marker;
+  call.olh_tag = olh_tag;
   ::encode(call, in);
   int op_ret;
   op.exec("rgw", "bucket_read_olh_log", in, &out, &op_ret);
@@ -239,12 +241,13 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperatio
  return r;
 }
 
-void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, uint64_t ver)
+void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
 {
   bufferlist in;
   struct rgw_cls_trim_olh_log_op call;
   call.olh = olh;
   call.ver = ver;
+  call.olh_tag = olh_tag;
   ::encode(call, in);
   op.exec("rgw", "bucket_trim_olh_log", in);
 }
