@@ -970,13 +970,13 @@ public:
   void replay_queued_ops();
   void activate(
     ObjectStore::Transaction& t,
-    epoch_t query_epoch,
+    epoch_t activation_epoch,
     list<Context*>& tfin,
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int,
       vector<pair<pg_notify_t, pg_interval_map_t> > > *activator_map,
     RecoveryCtx *ctx);
-  void _activate_committed(epoch_t e);
+  void _activate_committed(epoch_t epoch, epoch_t activation_epoch);
   void all_activated_and_committed();
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
@@ -1369,11 +1369,11 @@ public:
     }
   };
   struct Activate : boost::statechart::event< Activate > {
-    epoch_t query_epoch;
+    epoch_t activation_epoch;
     Activate(epoch_t q) : boost::statechart::event< Activate >(),
-			  query_epoch(q) {}
+			  activation_epoch(q) {}
     void print(std::ostream *out) const {
-      *out << "Activate from " << query_epoch;
+      *out << "Activate from " << activation_epoch;
     }
   };
   struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
