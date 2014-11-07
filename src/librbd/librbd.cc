@@ -1156,6 +1156,12 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
   vector<librbd::snap_info_t> cpp_snaps;
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_list_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snaps);
+
+  if (!max_snaps) {
+    tracepoint(librbd, snap_list_exit, -EINVAL, 0);
+    return -EINVAL;
+  }
+
   int r = librbd::snap_list(ictx, cpp_snaps);
   if (r == -ENOENT) {
     tracepoint(librbd, snap_list_exit, 0, *max_snaps);
@@ -1164,10 +1170,6 @@ extern "C" int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
   if (r < 0) {
     tracepoint(librbd, snap_list_exit, r, *max_snaps);
     return r;
-  }
-  if (!max_snaps) {
-    tracepoint(librbd, snap_list_exit, -EINVAL, *max_snaps);
-    return -EINVAL;
   }
   if (*max_snaps < (int)cpp_snaps.size() + 1) {
     *max_snaps = (int)cpp_snaps.size() + 1;
