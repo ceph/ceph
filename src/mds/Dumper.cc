@@ -160,7 +160,7 @@ void Dumper::undump(const char *dump_file)
   inodeno_t ino = MDS_INO_LOG_OFFSET + rank;
 
   Journaler::Header h;
-  h.trimmed_pos = start;
+  h.trimmed_pos = start - (start % g_default_file_layout.fl_object_size);
   h.expire_pos = start;
   h.write_pos = start+len;
   h.magic = CEPH_FS_ONDISK_MAGIC;
