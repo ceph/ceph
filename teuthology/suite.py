@@ -448,14 +448,28 @@ def schedule_suite(job_config,
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))
             break
+        # Break apart the filter parameter (one string) into comma separated
+        # components to be used in searches.
         if filter_in:
-            if filter_in not in description:
-                if all([x.find(filter_in) < 0 for x in fragment_paths]):
+            filter_list = [x.strip() for x in filter_in.split(',')]
+            if not any([x in description for x in filter_list]):
+                all_filt = []
+                for filt_samp in filter_list:
+                    all_filt.extend([x.find(filt_samp) < 0 for x in fragment_paths])
+                if all(all_filt):
                     continue
         if filter_out:
-            if filter_out in description or any([filter_out in z for z in
-                                                 fragment_paths]):
+            filter_list = [x.strip() for x in filter_out.split(',')]
+            if any([x in description for x in filter_list]):
                 continue
+            all_filt_val = False
+            for filt_samp in filter_list:
+                flist = [filt_samp in x for x in fragment_paths]
+                if any(flist):
+                    all_filt_val = True
+                    continue
+            if all_filt_val:
+                continue        
 
         raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 
