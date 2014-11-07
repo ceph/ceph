@@ -65,9 +65,12 @@ Scheduler arguments:
   --timeout <timeout>         How long, in seconds, to wait for jobs to finish
                               before sending email. This does not kill jobs.
                               [default: 32400]
-  --filter <string>           Only run jobs containing the string specified.
-  --filter-out <string>       Do not run jobs containing the string specified.
-
+  --filter KEYWORDS           Only run jobs whose name contains at least one
+                              of the keywords in the comma separated keyword
+                              string specified.
+  --filter-out KEYWORDS       Do not run jobs whose name contains any of
+                              the keywords in the comma separated keyword
+                              string specified.
 """
 
 

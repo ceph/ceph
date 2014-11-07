@@ -448,6 +448,8 @@ def schedule_suite(job_config,
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))
             break
+        # Break apart the filter parameter (one string) into comma separated
+        # components to be used in searches.
         if filter_in:
             filter_list = [x.strip() for x in filter_in.split(',')]
             if not any([x in description for x in filter_list]):
