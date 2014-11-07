@@ -5615,11 +5615,13 @@ int RGWRados::bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instanc
     return ret;
   }
 
+  string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
+
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
 
   ObjectReadOperation op;
 
-  ret = cls_rgw_get_olh_log(index_ctx, oid, op, key, ver_marker, log, is_truncated);
+  ret = cls_rgw_get_olh_log(index_ctx, oid, op, key, ver_marker, olh_tag, log, is_truncated);
   if (ret < 0)
     return ret;
 
@@ -5643,11 +5645,13 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
     return ret;
   }
 
+  string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
+
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
 
   ObjectWriteOperation op;
 
-  cls_rgw_trim_olh_log(op, oid, key, ver);
+  cls_rgw_trim_olh_log(op, oid, key, ver, olh_tag);
 
   ret = index_ctx.operate(oid, &op);
   if (ret < 0)
