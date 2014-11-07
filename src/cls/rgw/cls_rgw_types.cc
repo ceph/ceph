@@ -232,6 +232,18 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("exists", exists, f);
 }
 
+void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
+{
+  rgw_bucket_olh_log_entry *entry = new rgw_bucket_olh_log_entry;
+  entry->epoch = 1234;
+  entry->op = CLS_RGW_OLH_OP_LINK_OLH;
+  entry->op_tag = "op_tag";
+  entry->key.name = "key.name";
+  entry->key.instance = "key.instance";
+  entry->delete_marker = true;
+  o.push_back(new rgw_bucket_olh_log_entry);
+}
+
 void rgw_bucket_olh_log_entry::dump(Formatter *f) const
 {
   encode_json("epoch", epoch, f);
