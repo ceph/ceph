@@ -101,7 +101,7 @@ void Notify::do_timeout()
   }
 
   in_progress_watchers = 0; // we give up
-  timed_out = true;         // we will send the client and error code
+  timed_out = true;         // we will send the client an error code
   maybe_complete_notify();
   assert(complete);
   set<WatchRef> _watchers;
