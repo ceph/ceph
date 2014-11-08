@@ -11835,11 +11835,7 @@ void ReplicatedPG::agent_choose_mode(bool restart)
     // set effort in [0..1] range based on where we are between
     evict_mode = TierAgentState::EVICT_MODE_SOME;
     uint64_t over = full_micro - evict_target;
-    uint64_t span;
-    if (evict_target >= 1000000)
-      span = 1;
-    else
-      span = 1000000 - evict_target;
+    uint64_t span  = 1000000 - evict_target;
     evict_effort = MAX(over * 1000000 / span,
 		       (unsigned)(1000000.0 * g_conf->osd_agent_min_evict_effort));
 
