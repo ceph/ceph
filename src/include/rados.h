@@ -448,11 +448,12 @@ enum {
 
 enum {
 	CEPH_OSD_WATCH_OP_UNWATCH = 0,
-	CEPH_OSD_WATCH_OP_WATCH = 1,
+	CEPH_OSD_WATCH_OP_LEGACY_WATCH = 1,
 	/* note: use only ODD ids to prevent pre-giant code from
 	   interpreting the op as UNWATCH */
-	CEPH_OSD_WATCH_OP_RECONNECT = 3,
-	CEPH_OSD_WATCH_OP_PING = 5,
+	CEPH_OSD_WATCH_OP_WATCH = 3,
+	CEPH_OSD_WATCH_OP_RECONNECT = 5,
+	CEPH_OSD_WATCH_OP_PING = 7,
 };
 
 const char *ceph_osd_watch_op_name(int o);
