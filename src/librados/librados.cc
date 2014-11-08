@@ -3794,12 +3794,17 @@ extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
 			    void *arg)
 {
   tracepoint(librados, rados_watch2_enter, io, o, handle, watchcb, arg);
-  uint64_t *cookie = handle;
-  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
-  int ret = ctx->watch(oid, cookie, NULL, wc);
-  tracepoint(librados, rados_watch_exit, ret, *handle);
+  int ret;
+  if (!watchcb || !o || !handle) {
+    ret = -EINVAL;
+  } else {
+    uint64_t *cookie = handle;
+    librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+    object_t oid(o);
+    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
+    ret = ctx->watch(oid, cookie, NULL, wc);
+  }
+  tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
   return ret;
 }
 
