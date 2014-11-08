@@ -278,6 +278,31 @@ void MDRequestImpl::drop_local_auth_pins()
   MutationImpl::drop_local_auth_pins();
 }
 
+const filepath& MDRequestImpl::get_filepath()
+{
+  if (client_request)
+    return client_request->get_filepath();
+  return more()->filepath1;
+}
+
+const filepath& MDRequestImpl::get_filepath2()
+{
+  if (client_request)
+    return client_request->get_filepath2();
+  return more()->filepath2;
+}
+
+void MDRequestImpl::set_filepath(const filepath& fp)
+{
+  assert(!client_request);
+  more()->filepath1 = fp;
+}
+void MDRequestImpl::set_filepath2(const filepath& fp)
+{
+  assert(!client_request);
+  more()->filepath2 = fp;
+}
+
 void MDRequestImpl::print(ostream &out)
 {
   out << "request(" << reqid;
@@ -327,6 +352,7 @@ void MDRequestImpl::_dump(utime_t now, Formatter *f) const
       assert(internal_op != -1);
       f->dump_string("op_type", "internal_op");
       f->dump_int("internal_op", internal_op);
+      f->dump_string("op_name", ceph_mds_op_name(internal_op));
     }
   }
   {

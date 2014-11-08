@@ -206,6 +206,7 @@ noinst_HEADERS += \
 	common/hobject.h \
 	common/linux_version.h \
 	common/module.h \
+	common/Continuation.h \
 	common/Readahead.h
 
 noinst_LTLIBRARIES += libcommon.la

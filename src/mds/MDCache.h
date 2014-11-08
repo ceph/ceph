@@ -696,6 +696,8 @@ private:
 
 public:
   void init_layouts();
+  void create_unlinked_system_inode(CInode *in, inodeno_t ino,
+                                    int mode) const;
   CInode *create_system_inode(inodeno_t ino, int mode);
   CInode *create_root_inode();
 
@@ -864,9 +866,11 @@ public:
 	dn->get_dir()->get_inode()->is_stray())
       eval_stray(dn, delay);
   }
+
+  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
+
 protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
-  void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
   void purge_stray(CDentry *dn);
   void _purge_stray_purged(CDentry *dn, int r=0);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
@@ -1028,7 +1032,10 @@ public:
     while (n--) ++p;
     return p->second;
   }
-
+  void scrub_dentry(const string& path, Formatter *f, Context *fin);
+  void scrub_dentry_work(MDRequestRef& mdr);
+  void flush_dentry(const string& path, Context *fin);
+  void flush_dentry_work(MDRequestRef& mdr);
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

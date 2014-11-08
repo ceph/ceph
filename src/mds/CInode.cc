@@ -44,6 +44,8 @@
 #include "global/global_context.h"
 #include "include/assert.h"
 
+#include "mds/MDSContinuation.h"
+
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << inode.ino << ") "
@@ -950,6 +952,32 @@ void CInode::_stored(version_t v, Context *fin)
   fin->complete(0);
 }
 
+void CInode::flush(MDSInternalContextBase *fin)
+{
+  dout(10) << "flush " << *this << dendl;
+  assert(is_auth() && can_auth_pin());
+
+  MDSGatherBuilder gather(g_ceph_context);
+
+  if (is_dirty_parent()) {
+    store_backtrace(gather.new_sub());
+  }
+  if (is_dirty()) {
+    if (is_base()) {
+      store(gather.new_sub());
+    } else {
+      parent->dir->commit(0, gather.new_sub());
+    }
+  }
+
+  if (gather.has_subs()) {
+    gather.set_finisher(fin);
+    gather.activate();
+  } else {
+    fin->complete(0);
+  }
+}
+
 struct C_IO_Inode_Fetched : public CInodeIOContext {
   bufferlist bl, bl2;
   Context *fin;
@@ -1111,6 +1139,17 @@ void CInode::_stored_backtrace(version_t v, Context *fin)
     clear_dirty_parent();
   if (fin)
     fin->complete(0);
+}
+
+void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
+{
+  int64_t pool;
+  if (is_dir())
+    pool = mdcache->mds->mdsmap->get_metadata_pool();
+  else
+    pool = inode.layout.fl_pg_pool;
+
+  mdcache->fetch_backtrace(inode.ino, pool, *backtrace, fin);
 }
 
 void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
@@ -3431,3 +3470,255 @@ void InodeStore::generate_test_instances(list<InodeStore*> &ls)
   ls.push_back(populated);
 }
 
+void CInode::validate_disk_state(CInode::validated_data *results,
+                                 MDRequestRef &mdr)
+{
+  class ValidationContinuation : public MDSContinuation {
+  public:
+    CInode *in;
+    CInode::validated_data *results;
+    bufferlist bl;
+    CInode *shadow_in;
+
+    enum {
+      START = 0,
+      BACKTRACE,
+      INODE,
+      DIRFRAGS
+    };
+
+    ValidationContinuation(CInode *i,
+                           CInode::validated_data *data_r,
+                           MDRequestRef &mdr) :
+                             MDSContinuation(mdr, i->mdcache->mds->server),
+                             in(i),
+                             results(data_r),
+                             shadow_in(NULL) {
+      set_callback(START, static_cast<Continuation::stagePtr>(&ValidationContinuation::_start));
+      set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
+      set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
+      set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
+    }
+
+    ~ValidationContinuation() {
+      delete shadow_in;
+    }
+
+    bool _start(int rval) {
+      if (in->is_dirty()) {
+        MDCache *mdcache = in->mdcache;
+        inode_t& inode = in->inode;
+        dout(20) << "validating a dirty CInode; results will be inconclusive"
+                 << dendl;
+      }
+      if (in->is_symlink()) {
+        // there's nothing to do for symlinks!
+        results->passed_validation = true;
+        return true;
+      }
+
+      results->passed_validation = false; // we haven't finished it yet
+
+      C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
+                                            &in->mdcache->mds->finisher);
+
+      in->fetch_backtrace(conf, &bl);
+      return false;
+    }
+
+    bool _backtrace(int rval) {
+      // set up basic result reporting and make sure we got the data
+      results->performed_validation = true; // at least, some of it!
+      results->backtrace.checked = true;
+      results->backtrace.ondisk_read_retval = rval;
+      results->backtrace.passed = false; // we'll set it true if we make it
+      if (rval != 0) {
+        results->backtrace.error_str << "failed to read off disk; see retval";
+        return true;
+      }
+
+      // extract the backtrace, and compare it to a newly-constructed one
+      try {
+        bufferlist::iterator p = bl.begin();
+        ::decode(results->backtrace.ondisk_value, p);
+      } catch (buffer::malformed_input) {
+        results->backtrace.passed = false;
+        results->backtrace.error_str << "failed to decode on-disk backtrace!";
+        return true;
+      }
+      int64_t pool;
+      if (in->is_dir())
+        pool = in->mdcache->mds->mdsmap->get_metadata_pool();
+      else
+        pool = in->inode.layout.fl_pg_pool;
+      inode_backtrace_t& memory_backtrace = results->backtrace.memory_value;
+      in->build_backtrace(pool, memory_backtrace);
+      bool equivalent, divergent;
+      int memory_newer =
+          memory_backtrace.compare(results->backtrace.ondisk_value,
+                                   &equivalent, &divergent);
+      if (equivalent) {
+        results->backtrace.passed = true;
+      } else {
+        results->backtrace.passed = false; // we couldn't validate :(
+        if (divergent || memory_newer <= 0) {
+          // we're divergent, or don't have a newer version to write
+          results->backtrace.error_str <<
+              "On-disk backtrace is divergent or newer";
+          return true;
+        }
+      }
+
+      // quit if we're a file, or kick off directory checks otherwise
+      // TODO: validate on-disk inode for non-base directories
+      if (in->is_file() || in->is_symlink()) {
+        results->passed_validation = true;
+        return true;
+      }
+
+      return validate_directory_data();
+    }
+
+    bool validate_directory_data() {
+      assert(in->is_dir());
+
+      if (in->is_base()) {
+        shadow_in = new CInode(in->mdcache);
+        in->mdcache->create_unlinked_system_inode(shadow_in,
+                                                  in->inode.ino,
+                                                  in->inode.mode);
+        shadow_in->fetch(get_internal_callback(INODE));
+        return false;
+      } else {
+        return fetch_dirfrag_rstats();
+      }
+    }
+
+    bool _inode_disk(int rval) {
+      results->inode.checked = true;
+      results->inode.ondisk_read_retval = rval;
+      results->inode.passed = false;
+      results->inode.ondisk_value = shadow_in->inode;
+      results->inode.memory_value = in->inode;
+
+      inode_t& si = shadow_in->inode;
+      inode_t& i = in->inode;
+      if (si.version > i.version) {
+        // uh, what?
+        results->inode.error_str << "On-disk inode is newer than in-memory one!";
+        return true;
+      } else {
+        bool divergent = false;
+        int r = i.compare(si, &divergent);
+        results->inode.passed = !divergent && r >= 0;
+        if (!results->inode.passed) {
+          results->inode.error_str <<
+              "On-disk inode is divergent or newer than in-memory one!";
+          return true;
+        }
+      }
+      return fetch_dirfrag_rstats();
+    }
+
+    bool fetch_dirfrag_rstats() {
+      MDSGatherBuilder gather(g_ceph_context);
+      std::list<frag_t> frags;
+      in->dirfragtree.get_leaves(frags);
+      for (list<frag_t>::iterator p = frags.begin();
+          p != frags.end();
+          ++p) {
+        CDir *dirfrag = in->get_or_open_dirfrag(in->mdcache, *p);
+        if (!dirfrag->is_complete())
+          dirfrag->fetch(gather.new_sub(), false);
+      }
+      if (gather.has_subs()) {
+        gather.set_finisher(get_internal_callback(DIRFRAGS));
+        gather.activate();
+        return false;
+      } else {
+        return immediate(DIRFRAGS, 0);
+      }
+    }
+
+    bool _dirfrags(int rval) {
+      // basic reporting setup
+      results->raw_rstats.checked = true;
+      results->raw_rstats.ondisk_read_retval = rval;
+      results->raw_rstats.passed = false; // we'll set it true if we make it
+      if (rval != 0) {
+        results->raw_rstats.error_str << "Failed to read dirfrags off disk";
+        return true;
+      }
+
+      // check each dirfrag...
+      nest_info_t& sub_info = results->raw_rstats.ondisk_value;
+      for (map<frag_t,CDir*>::iterator p = in->dirfrags.begin();
+          p != in->dirfrags.end();
+          ++p) {
+        if (!p->second->is_complete()) {
+          results->raw_rstats.error_str << "dirfrag is INCOMPLETE despite fetching; probably too large compared to MDS cache size?\n";
+          return true;
+        }
+        assert(p->second->check_rstats());
+        sub_info.add(p->second->fnode.accounted_rstat);
+      }
+      // ...and that their sum matches our inode settings
+      results->raw_rstats.memory_value = in->inode.rstat;
+      sub_info.rsubdirs++; // it gets one to account for self
+      if (!sub_info.same_sums(in->inode.rstat)) {
+        results->raw_rstats.error_str
+        << "freshly-calculated rstats don't match existing ones";
+        return true;
+      }
+      results->raw_rstats.passed = true;
+      // Hurray! We made it through!
+      results->passed_validation = true;
+      return true;
+    }
+  };
+
+
+  ValidationContinuation *vc = new ValidationContinuation(this,
+                                                          results,
+                                                          mdr);
+  vc->begin();
+}
+
+void CInode::validated_data::dump(Formatter *f) const
+{
+  f->open_object_section("results");
+  {
+    f->dump_bool("performed_validation", performed_validation);
+    f->dump_bool("passed_validation", passed_validation);
+    f->open_object_section("backtrace");
+    {
+      f->dump_bool("checked", backtrace.checked);
+      f->dump_bool("passed", backtrace.passed);
+      f->dump_int("read_ret_val", backtrace.ondisk_read_retval);
+      f->dump_stream("ondisk_value") << backtrace.ondisk_value;
+      f->dump_stream("memoryvalue") << backtrace.memory_value;
+      f->dump_stream("error_str") << backtrace.error_str;
+    }
+    f->close_section(); // backtrace
+    f->open_object_section("raw_rstats");
+    {
+      f->dump_bool("checked", raw_rstats.checked);
+      f->dump_bool("passed", raw_rstats.passed);
+      f->dump_int("read_ret_val", raw_rstats.ondisk_read_retval);
+      f->dump_stream("ondisk_value") << raw_rstats.ondisk_value;
+      f->dump_stream("memory_value") << raw_rstats.memory_value;
+      f->dump_stream("error_str") << raw_rstats.error_str;
+    }
+    f->close_section(); // raw_rstats
+    // dump failure return code
+    int rc = 0;
+    if (backtrace.checked && backtrace.ondisk_read_retval)
+      rc = backtrace.ondisk_read_retval;
+    if (inode.checked && inode.ondisk_read_retval)
+      rc = inode.ondisk_read_retval;
+    if (raw_rstats.checked && raw_rstats.ondisk_read_retval)
+      rc = raw_rstats.ondisk_read_retval;
+    f->dump_int("return_code", rc);
+  }
+  f->close_section(); // results
+}

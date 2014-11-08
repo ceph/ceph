@@ -209,6 +209,14 @@ struct nest_info_t : public scatter_info_t {
     rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
   }
 
+  bool same_sums(const nest_info_t &o) const {
+    return rctime == o.rctime &&
+        rbytes == o.rbytes &&
+        rfiles == o.rfiles &&
+        rsubdirs == o.rsubdirs &&
+        rsnaprealms == o.rsnaprealms;
+  }
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
@@ -315,6 +323,11 @@ inline bool operator==(const client_writeable_range_t& l,
  * inode_t
  */
 struct inode_t {
+  /**
+   * ***************
+   * Do not forget to add any new fields to the compare() function.
+   * ***************
+   */
   // base (immutable)
   inodeno_t ino;
   uint32_t   rdev;    // if special file
@@ -454,6 +467,21 @@ struct inode_t {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_t*>& ls);
+  /**
+   * Compare this inode_t with another that represent *the same inode*
+   * at different points in time.
+   * @pre The inodes are the same ino
+   *
+   * @param other The inode_t to compare ourselves with
+   * @param divergent A bool pointer which will be set to true
+   * if the values are different in a way that can't be explained
+   * by one being a newer version than the other.
+   *
+   * @returns 1 if we are newer than the other, 0 if equal, -1 if older.
+   */
+  int compare(const inode_t &other, bool *divergent) const;
+private:
+  bool older_is_consistent(const inode_t &other) const;
 };
 WRITE_CLASS_ENCODER(inode_t)
 
