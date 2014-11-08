@@ -3771,16 +3771,24 @@ extern "C" int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
 
 struct C_WatchCB2 : public librados::WatchCtx2 {
   rados_watchcb2_t wcb;
+  rados_watchfailcb_t failcb;
   rados_watcherrcb_t errcb;
   void *arg;
   C_WatchCB2(rados_watchcb2_t _wcb,
+	     rados_watchfailcb_t _failcb,
 	     rados_watcherrcb_t _errcb,
-	     void *_arg) : wcb(_wcb), errcb(_errcb), arg(_arg) {}
+	     void *_arg) : wcb(_wcb), failcb(_failcb), errcb(_errcb), arg(_arg) {}
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
 		     uint64_t notifier_gid,
 		     bufferlist& bl) {
     wcb(arg, notify_id, cookie, notifier_gid, bl.c_str(), bl.length());
+  }
+  void handle_failed_notify(uint64_t notify_id,
+			    uint64_t cookie,
+			    uint64_t notifier_gid) {
+    if (failcb)
+      failcb(arg, notify_id, cookie, notifier_gid);
   }
   void handle_error(uint64_t cookie, int err) {
     if (errcb)
@@ -3790,6 +3798,7 @@ struct C_WatchCB2 : public librados::WatchCtx2 {
 
 extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
 			    rados_watchcb2_t watchcb,
+			    rados_watchfailcb_t watchfailcb,
 			    rados_watcherrcb_t watcherrcb,
 			    void *arg)
 {
@@ -3801,7 +3810,7 @@ extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
     uint64_t *cookie = handle;
     librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
     object_t oid(o);
-    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
+    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watchfailcb, watcherrcb, arg);
     ret = ctx->watch(oid, cookie, NULL, wc);
   }
   tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);

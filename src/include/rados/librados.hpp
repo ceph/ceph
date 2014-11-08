@@ -167,6 +167,22 @@ namespace librados
 			       uint64_t cookie,
 			       uint64_t notifier_id,
 			       bufferlist& bl) = 0;
+
+    /**
+     * Callback activated when we are too slow to ack a notify
+     *
+     * If we fail to ack a notify or our ack doesn't arrive in time
+     * and a notify timeout is triggered for another client, this
+     * callback will be triggered to let us know about it.
+     *
+     * @param notify_id unique id for this notify event
+     * @param cookie the watcher we are notifying
+     * @param notifier_id the unique client id of the notifier
+     */
+    virtual void handle_failed_notify(uint64_t notify_id,
+				      uint64_t cookie,
+				      uint64_t notifier_id) = 0;
+
     /**
      * Callback activated when we encounter an error with the watch.
      *

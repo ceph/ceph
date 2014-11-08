@@ -505,6 +505,15 @@ public:
     bufferlist empty;
     ioctx.notify_ack(name, notify_id, cookie, empty);
   }
+  void handle_failed_notify(uint64_t notify_id,
+			    uint64_t cookie,
+			    uint64_t notifier_id) {
+    cout << "FAILED_NOTIFY"
+	 << " cookie " << cookie
+	 << " notify_id " << notify_id
+	 << " from " << notifier_id
+	 << std::endl;
+  }
   void handle_error(uint64_t cookie, int err) {
     cout << "ERROR"
 	 << " cookie " << cookie
