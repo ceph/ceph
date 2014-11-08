@@ -45,19 +45,26 @@ int notify_err = 0;
 
 static void watch_notify2_test_cb(void *arg,
 				  uint64_t notify_id,
-				  uint64_t handle,
+				  uint64_t cookie,
 				  uint64_t notifier_gid,
 				  void *data,
 				  size_t data_len)
 {
   std::cout << __func__ << " from " << notifier_gid << " notify_id " << notify_id
-	    << " handle " << handle << std::endl;
+	    << " cookie " << cookie << std::endl;
   assert(notifier_gid > 0);
+  notify_cookies.insert(cookie);
   notify_bl.clear();
   notify_bl.append((char*)data, data_len);
   if (notify_sleep)
     sleep(notify_sleep);
-  rados_notify_ack(notify_io, notify_oid, notify_id, handle, "reply", 5);
+  rados_notify_ack(notify_io, notify_oid, notify_id, cookie, "reply", 5);
+}
+
+static void watch_notify2_test_errcb(void *arg, uint64_t cookie, int err)
+{
+  std::cout << __func__ << " cookie " << cookie << std::endl;
+  notify_err = err;
 }
 
 IoCtx *notify_ioctx;
