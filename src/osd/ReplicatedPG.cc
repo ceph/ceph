@@ -4325,6 +4325,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    result = -ENOTCONN;
 	    break;
 	  }
+	  map<pair<uint64_t,entity_name_t>,WatchRef>::iterator p =
+	    obc->watchers.find(make_pair(cookie, entity));
+	  if (p == obc->watchers.end()) {
+	    result = -ETIMEDOUT;
+	    break;
+	  }
 	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  result = 0;
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_UNWATCH) {
