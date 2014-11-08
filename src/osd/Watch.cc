@@ -290,6 +290,7 @@ Watch::Watch(
     timeout(timeout),
     cookie(cookie),
     addr(addr),
+    will_ping(false),
     entity(entity),
     discarded(false) {
   dout(10) << "Watch()" << dendl;
@@ -315,6 +316,7 @@ void Watch::register_cb()
 {
   Mutex::Locker l(osd->watch_lock);
   dout(15) << "registering callback, timeout: " << timeout << dendl;
+  assert(cb == NULL);
   cb = new HandleWatchTimeout(self.lock());
   osd->watch_timer.add_event_after(
     timeout,
@@ -335,10 +337,19 @@ void Watch::unregister_cb()
   cb = NULL;
 }
 
-void Watch::connect(ConnectionRef con)
+void Watch::got_ping(utime_t t)
+{
+  last_ping = t;
+  assert(conn);
+  unregister_cb();
+  register_cb();
+}
+
+void Watch::connect(ConnectionRef con, bool _will_ping)
 {
   dout(10) << "connecting" << dendl;
   conn = con;
+  will_ping = _will_ping;
   OSD::Session* sessionref(static_cast<OSD::Session*>(con->get_priv()));
   if (sessionref) {
     sessionref->wstate.addWatch(self.lock());
@@ -349,14 +360,20 @@ void Watch::connect(ConnectionRef con)
       send_notify(i->second);
     }
   }
-  unregister_cb();
+  if (will_ping) {
+    last_ping = ceph_clock_now(NULL);
+    register_cb();
+  } else {
+    unregister_cb();
+  }
 }
 
 void Watch::disconnect()
 {
   dout(10) << "disconnect" << dendl;
   conn = ConnectionRef();
-  register_cb();
+  if (!will_ping)
+    register_cb();
 }
 
 void Watch::discard()
@@ -407,9 +424,20 @@ void Watch::remove()
 
 void Watch::start_notify(NotifyRef notif)
 {
-  dout(10) << "start_notify " << notif->notify_id << dendl;
   assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
+  if (will_ping) {
+    utime_t cutoff = ceph_clock_now(NULL);
+    cutoff.sec_ref() -= timeout;
+    if (last_ping < cutoff) {
+      dout(10) << __func__ << " " << notif->notify_id
+	       << " last_ping " << last_ping << " < cutoff " << cutoff
+	       << ", disconnecting" << dendl;
+      disconnect();
+      return;
+    }
+  }
+  dout(10) << "start_notify " << notif->notify_id << dendl;
   in_progress_notifies[notif->notify_id] = notif;
   notif->start_watcher(self.lock());
   if (connected())
@@ -434,6 +462,8 @@ void Watch::send_notify(NotifyRef notif)
 
 void Watch::send_failed_notify(Notify *notif)
 {
+  if (!conn)
+    return;
   bufferlist empty;
   MWatchNotify *reply(new MWatchNotify(cookie, notif->version, notif->notify_id,
 				       CEPH_WATCH_EVENT_FAILED_NOTIFY, empty));
