@@ -188,8 +188,12 @@ void Notify::maybe_complete_notify()
     reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
-    osd->send_message_osd_client(reply, client.get());
+    client->send_message(reply);
     unregister_cb();
+
+    for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
+      (*p)->send_failed_notify(this);
+    }
     complete = true;
   }
 }
@@ -425,7 +429,16 @@ void Watch::send_notify(NotifyRef notif)
     cookie, notif->version, notif->notify_id,
     CEPH_WATCH_EVENT_NOTIFY, notif->payload);
   notify_msg->notifier_gid = notif->client_gid;
-  osd->send_message_osd_client(notify_msg, conn.get());
+  conn->send_message(notify_msg);
+}
+
+void Watch::send_failed_notify(Notify *notif)
+{
+  bufferlist empty;
+  MWatchNotify *reply(new MWatchNotify(cookie, notif->version, notif->notify_id,
+				       CEPH_WATCH_EVENT_FAILED_NOTIFY, empty));
+  reply->notifier_gid = notif->client_gid;
+  conn->send_message(reply);
 }
 
 void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)

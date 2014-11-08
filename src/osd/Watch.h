@@ -190,6 +190,9 @@ public:
   /// Unregisters the timeout callback
   void unregister_cb();
 
+  /// send a failed notify message
+  void send_failed_notify(Notify *notif);
+
   /// NOTE: must be called with pg lock held
   ~Watch();
 

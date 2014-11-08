@@ -132,6 +132,7 @@ struct ceph_dir_layout {
 enum {
 	CEPH_WATCH_EVENT_NOTIFY		  = 1, /* notifying watcher */
 	CEPH_WATCH_EVENT_NOTIFY_COMPLETE  = 2, /* notifier notified when done */
+	CEPH_WATCH_EVENT_FAILED_NOTIFY    = 3, /* we made a notify time out */
 };
 
 const char *ceph_watch_event_name(int o);
