@@ -56,7 +56,6 @@ class Notify {
   WNotifyRef self;
   ConnectionRef client;
   uint64_t client_gid;
-  unsigned in_progress_watchers;
   bool complete;
   bool discarded;
   bool timed_out;  ///< true if the notify timed out
@@ -80,7 +79,7 @@ class Notify {
     return discarded || complete;
   }
 
-  /// Sends notify completion if in_progress_watchers == 0
+  /// Sends notify completion if watchers.empty() or timeout
   void maybe_complete_notify();
 
   /// Called on Notify timeout
@@ -89,7 +88,6 @@ class Notify {
   Notify(
     ConnectionRef client,
     uint64_t client_gid,
-    unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,
     uint64_t cookie,
@@ -107,7 +105,7 @@ public:
   string gen_dbg_prefix() {
     stringstream ss;
     ss << "Notify(" << make_pair(cookie, notify_id) << " "
-       << " in_progress_watchers=" << in_progress_watchers
+       << " watchers=" << watchers.size()
        << ") ";
     return ss.str();
   }
@@ -117,7 +115,6 @@ public:
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
     uint64_t client_gid,
-    unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,
     uint64_t cookie,
