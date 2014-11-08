@@ -155,6 +155,7 @@ struct dir_result_t {
   string last_name;      // last entry in previous chunk
 
   uint64_t release_count;
+  uint64_t ordered_count;
   int start_shared_gen;  // dir shared_gen at start of readdir
 
   frag_t buffer_frag;
@@ -534,7 +535,7 @@ protected:
 			      int issued);
   Inode *add_update_inode(InodeStat *st, utime_t ttl, MetaSession *session);
   Dentry *insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dlease, 
-			      Inode *in, utime_t from, MetaSession *session, bool set_offset,
+			      Inode *in, utime_t from, MetaSession *session,
 			      Dentry *old_dentry = NULL);
   void update_dentry_lease(Dentry *dn, LeaseStat *dlease, utime_t from, MetaSession *session);
 
