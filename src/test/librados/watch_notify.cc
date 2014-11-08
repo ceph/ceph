@@ -39,6 +39,7 @@ public:
 
 // notify 2
 bufferlist notify_bl;
+std::set<uint64_t> notify_cookies;
 rados_ioctx_t notify_io;
 const char *notify_oid = 0;
 int notify_err = 0;
@@ -74,8 +75,10 @@ public:
   void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
 		     bufferlist& bl)
   {
-    std::cout << __func__ << std::endl;
+    std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
+	      << " notifier_gid " << notifier_gid << std::endl;
     notify_bl = bl;
+    notify_cookies.insert(cookie);
     bufferlist reply;
     reply.append("reply", 5);
     if (notify_sleep)
@@ -107,6 +110,7 @@ TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
 TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   notify_io = ioctx;
   notify_oid = "foo";
+  notify_cookies.clear();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
@@ -125,6 +129,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
   ASSERT_EQ(1, reply_map.size());
+  ASSERT_EQ(1, notify_cookies.size());
+  ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   rados_unwatch(ioctx, notify_oid, handle);
@@ -133,6 +139,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
 TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   notify_io = ioctx;
   notify_oid = "foo";
+  notify_cookies.clear();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
@@ -156,6 +163,9 @@ TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   ::decode(reply_map, reply_p);
   ASSERT_EQ(2, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
+  ASSERT_EQ(2, notify_cookies.size());
+  ASSERT_EQ(1, notify_cookies.count(handle1));
+  ASSERT_EQ(1, notify_cookies.count(handle2));
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   rados_unwatch(ioctx, notify_oid, handle1);
   rados_unwatch(ioctx, notify_oid, handle2);
@@ -165,6 +175,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_sleep = 3; // 3s
+  notify_cookies.clear();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
@@ -177,6 +188,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   ASSERT_EQ(-ETIMEDOUT, rados_notify2(ioctx, notify_oid,
 				      "notify", 6, 1000, // 1s
 				      &reply_buf, &reply_buf_len));
+  ASSERT_EQ(1, notify_cookies.size());
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
@@ -204,6 +216,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
+  notify_cookies.clear();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -220,6 +233,8 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
   bufferlist::iterator p = bl_reply.begin();
   std::multimap<uint64_t,bufferlist> reply_map;
   ::decode(reply_map, p);
+  ASSERT_EQ(1, notify_cookies.size());
+  ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -230,6 +245,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
   notify_sleep = 3;  // 3s
+  notify_cookies.clear();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -241,6 +257,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
   ASSERT_EQ(watches.size(), 1u);
+  ASSERT_EQ(0, notify_cookies.size());
   bufferlist bl2, bl_reply;
   ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */, &bl_reply));
   ioctx.unwatch(notify_oid, handle);
