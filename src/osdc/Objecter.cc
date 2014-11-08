@@ -1673,7 +1673,7 @@ void Objecter::tick()
         assert(op->session);
         ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
         toping.insert(op->session);
-	if (op->cookie)
+	if (op->cookie && !op->last_error)
 	  _send_linger_ping(op);
       }
       for (map<uint64_t,CommandOp*>::iterator p = s->command_ops.begin();
