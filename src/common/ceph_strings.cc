@@ -185,6 +185,7 @@ const char *ceph_watch_event_name(int e)
 	switch (e) {
 	case CEPH_WATCH_EVENT_NOTIFY: return "notify";
 	case CEPH_WATCH_EVENT_NOTIFY_COMPLETE: return "notify_complete";
+	case CEPH_WATCH_EVENT_FAILED_NOTIFY: return "failed_notify";
 	}
 	return "???";
 }
