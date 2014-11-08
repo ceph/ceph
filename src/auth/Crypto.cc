@@ -63,6 +63,22 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
 }
 
 // ---------------------------------------------------
+CryptoNone *CryptoNone::_instance = NULL;
+CryptoAES *CryptoAES::clean_instance = NULL;
+
+CryptoNone *CryptoNone::instance()
+{
+    if(_instance == NULL)
+        _instance = new CryptoNone();
+
+    return _instance;
+}
+
+void CryptoNone::clean_instance()
+{
+    delete _instance;
+    _instance = NULL;
+}
 
 int CryptoNone::create(bufferptr& secret)
 {
@@ -215,6 +231,20 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
 #else
 # error "No supported crypto implementation found."
 #endif
+
+CryptoAES *CryptoAES::instance()
+{
+    if(_instance == NULL)
+        _instance = new CryptoAES();
+
+    return _instance;
+}
+
+void CryptoAES::clean_instance()
+{
+    delete _instance;
+    _instance = NULL;
+}
 
 int CryptoAES::create(bufferptr& secret)
 {

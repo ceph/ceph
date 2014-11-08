@@ -133,6 +133,10 @@ class CryptoNone : public CryptoHandler {
 public:
   CryptoNone() { }
   ~CryptoNone() {}
+
+  static CryptoNone *instance();
+  static void clean_instance();
+
   int get_type() const {
     return CEPH_CRYPTO_NONE;
   }
@@ -142,12 +146,19 @@ public:
 	      bufferlist& out, std::string &error) const;
   void decrypt(const bufferptr& secret, const bufferlist& in,
 	      bufferlist& out, std::string &error) const;
+
+private:
+    static CryptoNone *_instance;
 };
 
 class CryptoAES : public CryptoHandler {
 public:
   CryptoAES() { }
   ~CryptoAES() {}
+
+  static CryptoAES *instance();
+  static void clean_instance();
+
   int get_type() const {
     return CEPH_CRYPTO_AES;
   }
@@ -157,6 +168,9 @@ public:
 	       bufferlist& out, std::string &error) const;
   void decrypt(const bufferptr& secret, const bufferlist& in, 
 	      bufferlist& out, std::string &error) const;
+
+private:
+    static CryptoAES *_instance;
 };
 
 #endif
