@@ -1084,13 +1084,13 @@ TEST(BufferList, get_contiguous) {
   bl.append(a);
   bl.append(b);
   bl.append(c);
-  ASSERT_EQ(3, bl.buffers().size());
+  ASSERT_EQ(3u, bl.buffers().size());
   ASSERT_EQ(0, memcmp("bar", bl.get_contiguous(3, 3), 3));
   ASSERT_EQ(0, memcmp("456", bl.get_contiguous(12, 3), 3));
   ASSERT_EQ(0, memcmp("ABC", bl.get_contiguous(18, 3), 3));
-  ASSERT_EQ(3, bl.buffers().size());
+  ASSERT_EQ(3u, bl.buffers().size());
   ASSERT_EQ(0, memcmp("789ABC", bl.get_contiguous(15, 6), 6));
-  ASSERT_LT(bl.buffers().size(), 3);
+  ASSERT_LT(bl.buffers().size(), 3u);
 }
 
 TEST(BufferList, swap) {
