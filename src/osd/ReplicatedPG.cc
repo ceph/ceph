@@ -4303,7 +4303,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	watch_info_t w(cookie, cct->_conf->osd_client_watch_timeout,
 	  ctx->op->get_req()->get_connection()->get_peer_addr());
-	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH) {
+	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
+	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
 	  if (oi.watchers.count(make_pair(cookie, entity))) {
 	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  } else {
