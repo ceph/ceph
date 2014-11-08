@@ -326,10 +326,9 @@ void MDCache::init_layouts()
   }
 }
 
-CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
+void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
+                                              int mode) const
 {
-  dout(0) << "creating system inode with ino:" << ino << dendl;
-  CInode *in = new CInode(this);
   in->inode.ino = ino;
   in->inode.version = 1;
   in->inode.xattr_version = 1;
@@ -357,9 +356,16 @@ CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
     else
       in->inode_auth = mds_authority_t(mds_rank_t(in->ino() - MDS_INO_MDSDIR_OFFSET), CDIR_AUTH_UNKNOWN);
     in->open_snaprealm();  // empty snaprealm
+    assert(!in->snaprealm->parent); // created its own
     in->snaprealm->srnode.seq = 1;
   }
-  
+}
+
+CInode *MDCache::create_system_inode(inodeno_t ino, int mode)
+{
+  dout(0) << "creating system inode with ino:" << ino << dendl;
+  CInode *in = new CInode(this);
+  create_unlinked_system_inode(in, ino, mode);
   add_inode(in);
   return in;
 }
@@ -4219,127 +4225,6 @@ public:
   }
 };
 
-#if 0
-/**
- * parallel_fetch -- make a pass at fetching a bunch of paths in parallel
- *
- * @param pathmap map of inodeno to full pathnames.  we remove items
- *            from this map as we discover we have them.
- *
- *	      returns true if there is work to do, false otherwise.
- */
-
-bool MDCache::parallel_fetch(map<inodeno_t,filepath>& pathmap, set<inodeno_t>& missing)
-{
-  dout(10) << "parallel_fetch on " << pathmap.size() << " paths" << dendl;
-
-  C_GatherBuilder gather_bld(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
-
-  // scan list
-  set<CDir*> fetch_queue;
-  map<inodeno_t,filepath>::iterator p = pathmap.begin();
-  while (p != pathmap.end()) {
-    // do we have the target already?
-    CInode *cur = get_inode(p->first);
-    if (cur) {
-      dout(15) << " have " << *cur << dendl;
-      pathmap.erase(p++);
-      continue;
-    }
-
-    // traverse
-    dout(17) << " missing " << p->first << " at " << p->second << dendl;
-    if (parallel_fetch_traverse_dir(p->first, p->second, fetch_queue,
-				    missing, gather_bld))
-      pathmap.erase(p++);
-    else
-      ++p;
-  }
-
-  if (pathmap.empty() && (!gather_bld.has_subs())) {
-    dout(10) << "parallel_fetch done" << dendl;
-    assert(fetch_queue.empty());
-    return false;
-  }
-
-  // do a parallel fetch
-  for (set<CDir*>::iterator p = fetch_queue.begin();
-       p != fetch_queue.end();
-       ++p) {
-    dout(10) << "parallel_fetch fetching " << **p << dendl;
-    (*p)->fetch(gather_bld.new_sub());
-  }
-  
-  if (gather_bld.get()) {
-    gather_bld.activate();
-    return true;
-  }
-  return false;
-}
-
-// true if we're done with this path
-bool MDCache::parallel_fetch_traverse_dir(inodeno_t ino, filepath& path,
-					  set<CDir*>& fetch_queue, set<inodeno_t>& missing,
-					  C_GatherBuilder &gather_bld)
-{
-  CInode *cur = get_inode(path.get_ino());
-  if (!cur) {
-    dout(5) << " missing " << path << " base ino " << path.get_ino() << dendl;
-    missing.insert(ino);
-    return true;
-  }
-
-  for (unsigned i=0; i<path.depth(); i++) {
-    dout(20) << " path " << path << " seg " << i << "/" << path.depth() << ": " << path[i]
-	     << " under " << *cur << dendl;
-    if (!cur->is_dir()) {
-      dout(5) << " bad path " << path << " ENOTDIR at " << path[i] << dendl;
-      missing.insert(ino);
-      return true;
-    }
-      
-    frag_t fg = cur->pick_dirfrag(path[i]);
-    CDir *dir = cur->get_or_open_dirfrag(this, fg);
-    CDentry *dn = dir->lookup(path[i]);
-    CDentry::linkage_t *dnl = dn ? dn->get_linkage() : NULL;
-
-    if (!dnl || dnl->is_null()) {
-      if (!dir->is_auth()) {
-	dout(10) << " not dirfrag auth " << *dir << dendl;
-	return true;
-      }
-      if (dnl || dir->is_complete()) {
-	// probably because the client created it and held a cap but it never committed
-	// to the journal, and the op hasn't replayed yet.
-	dout(5) << " dne (not created yet?) " << ino << " at " << path << dendl;
-	missing.insert(ino);
-	return true;
-      }
-      // fetch dir
-      fetch_queue.insert(dir);
-      return false;
-    }
-
-    cur = dnl->get_inode();
-    if (!cur) {
-      assert(dnl->is_remote());
-      cur = get_inode(dnl->get_remote_ino());
-      if (cur) {
-	dn->link_remote(dnl, cur);
-      } else {
-	// open remote ino
-	open_remote_ino(dnl->get_remote_ino(), gather_bld.new_sub());
-	return false;
-      }
-    }
-  }
-
-  dout(5) << " ino not found " << ino << " at " << path << dendl;
-  missing.insert(ino);
-  return true;
-}
-#endif
-
 /*
  * rejoin_scour_survivor_replica - remove source from replica list on unmentioned objects
  *
@@ -5466,32 +5351,6 @@ void MDCache::do_delayed_cap_imports()
   dout(10) << "do_delayed_cap_imports" << dendl;
 
   assert(delayed_imported_caps.empty());
-#if 0
-  map<client_t,set<CInode*> > d;
-  d.swap(delayed_imported_caps);
-
-  for (map<client_t,set<CInode*> >::iterator p = d.begin();
-       p != d.end();
-       ++p) {
-    for (set<CInode*>::iterator q = p->second.begin();
-	 q != p->second.end();
-	 ++q) {
-      CInode *in = *q;
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->first.v));
-      if (session) {
-	Capability *cap = in->get_client_cap(p->first);
-	if (cap) {
-	  do_cap_import(session, in, cap);  // note: this may fail and requeue!
-	  cap->dec_suppress();
-	}
-      }
-      in->auth_unpin(this);
-
-      if (in->is_head())
-	mds->locker->issue_caps(in);
-    }
-  }    
-#endif
 }
 
 struct C_MDC_OpenSnapParents : public MDCacheContext {
@@ -7544,17 +7403,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     }
     */
 
-    // must read directory hard data (permissions, x bit) to traverse
-#if 0    
-    if (!noperm && 
-	!mds->locker->rdlock_try(&cur->authlock, client, 0)) {
-      dout(7) << "traverse: waiting on authlock rdlock on " << *cur << dendl;
-      cur->authlock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
-      return 1;
-    }
-#endif
-    
-
     // make sure snaprealm parents are open...
     if (cur->snaprealm && !cur->snaprealm->open && mdr &&
 	!cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
@@ -7622,42 +7470,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
         }        
       }
 
-      // forwarder wants replicas?
-#if 0
-      if (mdr && mdr->client_request && 
-	  mdr->client_request->get_mds_wants_replica_in_dirino()) {
-	dout(30) << "traverse: REP is here, " 
-		 << mdr->client_request->get_mds_wants_replica_in_dirino() 
-		 << " vs " << curdir->dirfrag() << dendl;
-	
-	if (mdr->client_request->get_mds_wants_replica_in_dirino() == curdir->ino() &&
-	    curdir->is_auth() && 
-	    curdir->is_rep() &&
-	    curdir->is_replica(req->get_source().num()) &&
-	    dn->is_auth()
-	    ) {
-	  assert(req->get_source().is_mds());
-	  int from = req->get_source().num();
-	  
-	  if (dn->is_replica(from)) {
-	    dout(15) << "traverse: REP would replicate to mds." << from << ", but already cached_by " 
-		     << req->get_source() << " dn " << *dn << dendl; 
-	  } else {
-	    dout(10) << "traverse: REP replicating to " << req->get_source() << " dn " << *dn << dendl;
-	    MDiscoverReply *reply = new MDiscoverReply(curdir->dirfrag());
-	    reply->mark_unsolicited();
-	    reply->starts_with = MDiscoverReply::DENTRY;
-	    replicate_dentry(dn, from, reply->trace);
-	    if (dnl->is_primary())
-	      replicate_inode(in, from, reply->trace);
-	    if (req->get_source() != req->get_orig_source())
-	      mds->send_message_mds(reply, req->get_source().num());
-	    else mds->send_message(reply->req->get_connnection());
-	  }
-	}
-      }
-#endif
-      
       // add to trace, continue.
       cur = in;
       touch_inode(cur);
@@ -7741,16 +7553,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
 	dout(7) << "traverse: forwarding, not auth for " << *curdir << dendl;
 	
-#if 0
-	// request replication?
-	if (mdr && mdr->client_request && curdir->is_rep()) {
-	  dout(15) << "traverse: REP fw to mds." << dauth << ", requesting rep under "
-		   << *curdir << " req " << *(MClientRequest*)req << dendl;
-	  mdr->client_request->set_mds_wants_replica_in_dirino(curdir->ino());
-	  req->clear_payload();  // reencode!
-	}
-#endif
-	
 	if (mdr) 
 	  request_forward(mdr, dauth.first);
 	else
@@ -7772,41 +7574,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     assert(mdr->snapid == snapid);
   return 0;
 }
-
-#if 0
-/**
- * Find out if the MDS is auth for a given path.
- *
- * Returns true if:
- * 1) The full path DNE and we are auth for the deepest existing piece
- * 2) We are auth for the inode linked to by the last dentry.
- */
-bool MDCache::path_is_mine(filepath& path)
-{
-  dout(15) << "path_is_mine " << path.get_ino() << " " << path << dendl;
-  
-  CInode *cur = get_inode(path.get_ino());
-  if (!cur)
-    return false;  // who knows!
-
-  for (unsigned i=0; i<path.depth(); i++) {
-    dout(15) << "path_is_mine seg " << i << ": " << path[i] << " under " << *cur << dendl;
-    frag_t fg = cur->pick_dirfrag(path[i]);
-    CDir *dir = cur->get_dirfrag(fg);
-    if (!dir)
-      return cur->is_auth();
-    CDentry *dn = dir->lookup(path[i]);
-    CDentry::linkage_t *dnl = dn->get_linkage();
-    if (!dn || dnl->is_null())
-      return dir->is_auth();
-    if (!dnl->is_primary())
-      return false;
-    cur = dnl->get_inode();
-  }
-
-  return cur->is_auth();
-}
-#endif
 
 CInode *MDCache::cache_traverse(const filepath& fp)
 {
@@ -8683,12 +8450,15 @@ void MDCache::request_finish(MDRequestRef& mdr)
 void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 {
   mdr->mark_event("forwarding request");
-  if (mdr->client_request->get_source().is_client()) {
+  if (mdr->client_request && mdr->client_request->get_source().is_client()) {
     dout(7) << "request_forward " << *mdr << " to mds." << who << " req "
             << *mdr->client_request << dendl;
     mds->forward_message_mds(mdr->client_request, who);
     mdr->client_request = 0;
     if (mds->logger) mds->logger->inc(l_mds_forward);
+  } else if (mdr->internal_op >= 0) {
+    dout(10) << "request_forward on internal op; cancelling" << dendl;
+    mdr->internal_op_finish->complete(-EXDEV);
   } else {
     dout(7) << "request_forward drop " << *mdr << " req " << *mdr->client_request
             << " was from mds" << dendl;
@@ -8714,6 +8484,12 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
       break;
     case CEPH_MDS_OP_EXPORTDIR:
       migrator->dispatch_export_dir(mdr);
+      break;
+    case CEPH_MDS_OP_VALIDATE:
+      scrub_dentry_work(mdr);
+      break;
+    case CEPH_MDS_OP_FLUSH:
+      flush_dentry_work(mdr);
       break;
     default:
       assert(0);
@@ -11728,4 +11504,94 @@ void C_MDS_RetryRequest::finish(int r)
 {
   mdr->retry++;
   cache->dispatch_request(mdr);
+}
+
+class C_scrub_dentry_finish : public Context {
+public:
+  CInode::validated_data results;
+  MDRequestRef mdr;
+  Context *on_finish;
+  Formatter *formatter;
+  C_scrub_dentry_finish(MDRequestRef& mdr,
+                        Context *fin, Formatter *f) :
+    mdr(mdr), on_finish(fin), formatter(f) {}
+
+  void finish(int r) {
+    if (r >= 0) { // we got into the scrubbing dump it
+      results.dump(formatter);
+    } else { // we failed the lookup or something; dump ourselves
+      formatter->open_object_section("results");
+      formatter->dump_int("return_code", r);
+      formatter->close_section(); // results
+    }
+    on_finish->complete(r);
+  }
+};
+
+void MDCache::scrub_dentry(const string& path, Formatter *f, Context *fin)
+{
+  dout(10) << "scrub_dentry " << path << dendl;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_VALIDATE);
+  filepath fp(path.c_str());
+  mdr->set_filepath(fp);
+  C_scrub_dentry_finish *csd = new C_scrub_dentry_finish(mdr, fin, f);
+  mdr->internal_op_finish = csd;
+  mdr->internal_op_private = &csd->results;
+  scrub_dentry_work(mdr);
+}
+
+void MDCache::scrub_dentry_work(MDRequestRef& mdr)
+{
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (NULL == in)
+    return;
+
+  // TODO: Remove this restriction
+  assert(in->is_auth());
+
+  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!locked)
+    return;
+
+  CInode::validated_data *vr =
+      static_cast<CInode::validated_data*>(mdr->internal_op_private);
+
+  in->validate_disk_state(vr, mdr);
+  return;
+}
+
+void MDCache::flush_dentry(const string& path, Context *fin)
+{
+  dout(10) << "flush_dentry " << path << dendl;
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FLUSH);
+  filepath fp(path.c_str());
+  mdr->set_filepath(fp);
+  mdr->internal_op_finish = fin;
+  flush_dentry_work(mdr);
+}
+
+class C_FinishIOMDR : public MDSInternalContextBase {
+protected:
+  MDS *mds;
+  MDRequestRef mdr;
+  MDS *get_mds() { return mds; }
+public:
+  C_FinishIOMDR(MDS *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
+  void finish(int r) { mds->server->respond_to_request(mdr, r); }
+};
+
+void MDCache::flush_dentry_work(MDRequestRef& mdr)
+{
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, rdlocks, true);
+  if (NULL == in)
+    return;
+
+  // TODO: Is this necessary? Fix it if so
+  assert(in->is_auth());
+  bool locked = mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks);
+  if (!locked)
+    return;
+  in->flush(new C_FinishIOMDR(mds, mdr));
 }
