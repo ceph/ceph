@@ -43,6 +43,7 @@ std::set<uint64_t> notify_cookies;
 rados_ioctx_t notify_io;
 const char *notify_oid = 0;
 int notify_err = 0;
+bool notify_failed = false;
 
 static void watch_notify2_test_cb(void *arg,
 				  uint64_t notify_id,
@@ -62,6 +63,16 @@ static void watch_notify2_test_cb(void *arg,
   rados_notify_ack(notify_io, notify_oid, notify_id, cookie, "reply", 5);
 }
 
+static void watch_notify2_test_failcb(void *arg,
+				      uint64_t notify_id,
+				      uint64_t cookie,
+				      uint64_t notifier_gid)
+{
+  std::cout << __func__ << " from " << notifier_gid << " notify_id " << notify_id
+	    << " cookie " << cookie << std::endl;
+  notify_failed = true;
+}
+
 static void watch_notify2_test_errcb(void *arg, uint64_t cookie, int err)
 {
   std::cout << __func__ << " cookie " << cookie << std::endl;
@@ -73,8 +84,7 @@ class WatchNotifyTestCtx2 : public WatchCtx2
 {
 public:
   void handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_gid,
-		     bufferlist& bl)
-  {
+		     bufferlist& bl) {
     std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
 	      << " notifier_gid " << notifier_gid << std::endl;
     notify_bl = bl;
@@ -84,6 +94,13 @@ public:
     if (notify_sleep)
       sleep(notify_sleep);
     notify_ioctx->notify_ack(notify_oid, notify_id, cookie, reply);
+  }
+
+  void handle_failed_notify(uint64_t notify_id, uint64_t cookie,
+			    uint64_t notifier_gid) {
+    std::cout << __func__ << " cookie " << cookie << " notify_id " << notify_id
+	      << " notifier_gid " << notifier_gid << std::endl;
+    notify_failed = true;
   }
 
   void handle_error(uint64_t cookie, int err) {
@@ -116,7 +133,9 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb,
+      rados_watch2(ioctx, notify_oid, &handle,
+		   watch_notify2_test_cb,
+		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   char *reply_buf;
   size_t reply_buf_len;
@@ -145,10 +164,14 @@ TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle1, handle2;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle1, watch_notify2_test_cb,
+      rados_watch2(ioctx, notify_oid, &handle1,
+		   watch_notify2_test_cb,
+		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle2, watch_notify2_test_cb,
+      rados_watch2(ioctx, notify_oid, &handle2,
+		   watch_notify2_test_cb,
+		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   ASSERT_NE(handle1, handle2);
   char *reply_buf;
@@ -176,12 +199,15 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   notify_oid = "foo";
   notify_sleep = 3; // 3s
   notify_cookies.clear();
+  notify_failed = false;
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
   uint64_t handle;
   ASSERT_EQ(0,
-      rados_watch2(ioctx, notify_oid, &handle, watch_notify2_test_cb,
+      rados_watch2(ioctx, notify_oid, &handle,
+		   watch_notify2_test_cb,
+		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   char *reply_buf;
   size_t reply_buf_len;
@@ -189,6 +215,10 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
 				      "notify", 6, 1000, // 1s
 				      &reply_buf, &reply_buf_len));
   ASSERT_EQ(1, notify_cookies.size());
+  int wait = 10;
+  while (!notify_failed && --wait)
+    sleep(1);
+    ASSERT_TRUE(notify_failed);
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
@@ -246,6 +276,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   notify_ioctx = &ioctx;
   notify_sleep = 3;  // 3s
   notify_cookies.clear();
+  notify_failed = true;
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
@@ -260,6 +291,10 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   ASSERT_EQ(0, notify_cookies.size());
   bufferlist bl2, bl_reply;
   ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */, &bl_reply));
+  int wait = 10;
+  while (!notify_failed && --wait)
+    sleep(1);
+  ASSERT_TRUE(notify_failed);
   ioctx.unwatch(notify_oid, handle);
 }
 

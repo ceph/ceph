@@ -1894,6 +1894,22 @@ typedef void (*rados_watchcb2_t)(void *arg,
 				 size_t data_len);
 
 /**
+ * @typedef rados_watchfailcb_t
+ *
+ * Callback activated when a notify is not acked in a timely manner,
+ * resulting in a timeout for the notifier.
+ *
+ * @param arg opaque user-defined value provided to rados_watch2()
+ * @param notify_id an id for this notify event
+ * @param handle the watcher handle we are notifying
+ * @param notifier_id the unique client id for the notifier
+ */
+typedef void (*rados_watchfailcb_t)(void *arg,
+				    uint64_t notify_id,
+				    uint64_t handle,
+				    uint64_t notifier_id);
+
+/**
  * @typedef rados_watcherrcb_t
  *
  * Callback activated when we encounter an error with the watch session.
@@ -1954,12 +1970,15 @@ CEPH_RADOS_API int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
  * @param o the object to watch
  * @param handle where to store the internal id assigned to this watch
  * @param watchcb2 what to do when a notify is received on this object
+ * @param watchfailcb what to do when a notify is not acked in time
  * @param watcherrcb what to do when the watch session encounters an error
  * @param arg opaque value to pass to the callback
  * @returns 0 on success, negative error code on failure
  */
 int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
-		 rados_watchcb2_t watchcb, rados_watcherrcb_t watcherrcb,
+		 rados_watchcb2_t watchcb,
+		 rados_watchfailcb_t watchfailcb,
+		 rados_watcherrcb_t watcherrcb,
 		 void *arg);
 
 /**

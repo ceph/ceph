@@ -749,6 +749,9 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
     assert(wc);
     if (wc->notify_lock) {
       // we sent a notify and it completed (or failed)
+      // NOTE: opcode may be either NOTIFY (older OSDs) or NOTIFY_COMPLETE
+      // (newer OSDs).  In practice it doesn't matter because completion is the
+      // only kind of event we get on notify cookies.
       ldout(cct,10) << __func__ << " completed notify " << *m << dendl;
       wc->notify_lock->Lock();
       *wc->notify_done = true;
@@ -766,7 +769,7 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       }
       wc->notify_cond->Signal();
       wc->notify_lock->Unlock();
-    } else {
+    } else if (m->opcode == CEPH_WATCH_EVENT_NOTIFY) {
       // we are watcher and got a notify
       ldout(cct,10) << __func__ << " got notify " << *m << dendl;
       wc->get();
@@ -787,6 +790,24 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       lock.Lock();
       ldout(cct,10) << __func__ << " notify done" << dendl;
       wc->put();
+    } else if (m->opcode == CEPH_WATCH_EVENT_FAILED_NOTIFY) {
+      // we are watcher and failed to ack a notify in time, causing it to time
+      // out.
+      ldout(cct,10) << __func__ << " failed notify " << *m << dendl;
+      wc->get();
+      // trigger the callback
+      assert(!!wc->watch_ctx ^ !!wc->watch_ctx2);  // only one is defined
+      lock.Unlock();
+      if (wc->watch_ctx2) {
+	wc->watch_ctx2->handle_failed_notify(m->notify_id, m->cookie,
+					     m->notifier_gid);
+      }
+      lock.Lock();
+      ldout(cct,10) << __func__ << " failed notify done" << dendl;
+      wc->put();
+    } else {
+      lderr(cct) << __func__ << " got unknown event " << m->opcode
+		 << " " << ceph_watch_event_name(m->opcode) << dendl;
     }
   } else {
     ldout(cct, 4) << __func__ << " unknown cookie " << m->cookie << dendl;
