@@ -2072,7 +2072,6 @@ void CDir::_committed(version_t v)
 
 
 
-
 // IMPORT/EXPORT
 
 void CDir::encode_export(bufferlist& bl)
