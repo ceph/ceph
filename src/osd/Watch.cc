@@ -29,7 +29,6 @@ static ostream& _prefix(
 Notify::Notify(
   ConnectionRef client,
   uint64_t client_gid,
-  unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
   uint64_t cookie,
@@ -37,7 +36,6 @@ Notify::Notify(
   uint64_t version,
   OSDService *osd)
   : client(client), client_gid(client_gid),
-    in_progress_watchers(num_watchers),
     complete(false),
     discarded(false),
     timed_out(false),
@@ -53,7 +51,6 @@ Notify::Notify(
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
   uint64_t client_gid,
-  unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
   uint64_t cookie,
@@ -62,7 +59,7 @@ NotifyRef Notify::makeNotifyRef(
   OSDService *osd) {
   NotifyRef ret(
     new Notify(
-      client, client_gid, num_watchers,
+      client, client_gid,
       payload, timeout,
       cookie, notify_id,
       version, osd));
@@ -100,7 +97,6 @@ void Notify::do_timeout()
     return;
   }
 
-  in_progress_watchers = 0; // we give up
   timed_out = true;         // we will send the client an error code
   maybe_complete_notify();
   assert(complete);
@@ -160,9 +156,8 @@ void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
   dout(10) << "complete_watcher" << dendl;
   if (is_discarded())
     return;
-  assert(in_progress_watchers > 0);
+  assert(watchers.count(watch));
   watchers.erase(watch);
-  --in_progress_watchers;
   notify_replies.insert(make_pair(watch->get_watcher_gid(), reply_bl));
   maybe_complete_notify();
 }
@@ -173,18 +168,17 @@ void Notify::complete_watcher_remove(WatchRef watch)
   dout(10) << __func__ << dendl;
   if (is_discarded())
     return;
-  assert(in_progress_watchers > 0);
+  assert(watchers.count(watch));
   watchers.erase(watch);
-  --in_progress_watchers;
   maybe_complete_notify();
 }
 
 void Notify::maybe_complete_notify()
 {
   dout(10) << "maybe_complete_notify -- "
-	   << in_progress_watchers
+	   << watchers.size()
 	   << " in progress watchers " << dendl;
-  if (!in_progress_watchers) {
+  if (watchers.empty() || timed_out) {
     bufferlist bl;
     ::encode(notify_replies, bl);
     bufferlist empty;
@@ -213,7 +207,6 @@ void Notify::init()
   Mutex::Locker l(lock);
   register_cb();
   maybe_complete_notify();
-  assert(in_progress_watchers == watchers.size());
 }
 
 #define dout_subsys ceph_subsys_osd
