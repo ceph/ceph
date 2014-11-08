@@ -441,7 +441,7 @@ public:
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
 
     // side effects
-    list<watch_info_t> watch_connects;
+    list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
     list<watch_info_t> watch_disconnects;
     list<notify_info_t> notifies;
     struct NotifyAck {

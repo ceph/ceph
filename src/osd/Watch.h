@@ -165,9 +165,12 @@ class Watch {
   std::map<uint64_t, NotifyRef> in_progress_notifies;
 
   // Could have watch_info_t here, but this file includes osd_types.h
-  uint32_t timeout;
+  uint32_t timeout; ///< timeout in seconds
   uint64_t cookie;
   entity_addr_t addr;
+
+  bool will_ping;    ///< is client new enough to ping the watch
+  utime_t last_ping; ///< last cilent ping
 
   entity_name_t entity;
   bool discarded;
@@ -189,6 +192,12 @@ class Watch {
 public:
   /// Unregisters the timeout callback
   void unregister_cb();
+
+  /// note receipt of a ping
+  void got_ping(utime_t t);
+  utime_t get_last_ping() const {
+    return last_ping;
+  }
 
   /// send a failed notify message
   void send_failed_notify(Notify *notif);
@@ -226,7 +235,8 @@ public:
 
   /// Transitions Watch to connected, unregister_cb, resends pending Notifies
   void connect(
-    ConnectionRef con ///< [in] Reference to new connection
+    ConnectionRef con, ///< [in] Reference to new connection
+    bool will_ping     ///< [in] client is new and will send pings
     );
 
   /// Transitions watch to disconnected, register_cb
