@@ -18,6 +18,8 @@
 #include <stdlib.h>
 #include <ostream>
 
+#include "blkin/ztracer.hpp"
+
 #include <boost/intrusive_ptr.hpp>
 // Because intusive_ptr clobbers our assert...
 #include "include/assert.h"
@@ -340,6 +342,9 @@ protected:
   // currently throttled.
   uint64_t dispatch_throttle_size;
 
+  ZTracer::ZTraceEndpointRef message_endpoint;
+  ZTracer::ZTraceRef master_trace;
+  ZTracer::ZTraceRef messenger_trace;
   friend class Messenger;
 
 public:
@@ -350,6 +355,7 @@ public:
       dispatch_throttle_size(0) {
     memset(&header, 0, sizeof(header));
     memset(&footer, 0, sizeof(footer));
+    trace_end_after_span = false;
   };
   Message(int t, int version=1, int compat_version=0)
     : connection(NULL),
@@ -363,8 +369,10 @@ public:
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
+    trace_end_after_span = false;
   }
 
+  bool trace_end_after_span;
   Message *get() {
     return static_cast<Message *>(RefCountedObject::get());
   }
@@ -394,6 +402,9 @@ public:
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
+  ZTracer::ZTraceRef get_master_trace() { return master_trace; }
+  ZTracer::ZTraceRef get_messenger_trace() { return messenger_trace; }
+  void set_messenger_trace(ZTracer::ZTraceRef t) { messenger_trace = t; }
 
   /*
    * If you use get_[data, middle, payload] you shouldn't
@@ -525,6 +536,15 @@ public:
   virtual void dump(Formatter *f) const;
 
   void encode(uint64_t features, bool datacrc);
+
+  int init_trace_info();
+  int init_trace_info(struct blkin_trace_info *tinfo);
+  int init_trace_info(ZTracer::ZTraceRef t);
+  void trace(string event);
+  void trace(string key, string val);
+  int trace_basic_info();
+  virtual void trace_msg_info() { };
+  virtual bool create_message_endpoint();
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
@@ -540,5 +560,6 @@ inline ostream& operator<<(ostream& out, Message& m) {
 
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
+
 
 #endif

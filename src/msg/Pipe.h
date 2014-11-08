@@ -151,6 +151,7 @@ class DispatchQueue;
     ceph::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
+    ZTracer::ZTraceEndpointRef pipe_endpoint;
     friend class SimpleMessenger;
     ConnectionRef connection_state;
 
@@ -174,6 +175,7 @@ class DispatchQueue;
     uint64_t in_seq, in_seq_acked;
     
     void set_socket_options();
+    void set_endpoint();
 
     int accept();   // server handshake
     int connect();  // client handshake

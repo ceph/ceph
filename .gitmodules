@@ -15,3 +15,6 @@
 	path = src/erasure-code/jerasure/gf-complete
 	url = https://github.com/ceph/gf-complete.git
 	branch = v1-ceph
+[submodule "src/blkin"]
+	path = src/blkin
+	url = https://github.com/agshew/blkin.git

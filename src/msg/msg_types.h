@@ -343,6 +343,7 @@ struct entity_addr_t {
   }
 
   void dump(Formatter *f) const;
+  int to_string(string &host, int &port);
 
   static void generate_test_instances(list<entity_addr_t*>& o);
 };

@@ -240,6 +240,17 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
 	  << ", request: " << *op->request << dendl;
 }
 
+void OpTracker::trace_event(TrackedOp *op, TrackedOpTraceRef t, const string &evt, TrackedOpEndpointRef ep)
+{
+  t->event(evt, ep);
+}
+
+void OpTracker::trace_keyval(TrackedOp *op, TrackedOpTraceRef t, const string &key,
+			     const string &val, TrackedOpEndpointRef ep)
+{
+  t->keyval(key, val, ep);
+}
+
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
   if (!tracker->tracking_enabled) {
     op->request->clear_data();
@@ -247,6 +258,7 @@ void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
     return;
   }
   op->mark_event("done");
+  op->trace_osd("Span ended");
   tracker->unregister_inflight_op(op);
   // Do not delete op, unregister_inflight_op took control
 }
@@ -276,4 +288,115 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
     _dump(now, f);
     f->close_section();
   }
+}
+
+bool TrackedOp::create_osd_trace(TrackedOpEndpointRef ep)
+{
+  string name = "OSD Handling op";
+  if (!request) {
+    return false;
+  }
+
+  TrackedOpTraceRef mt = request->get_master_trace();
+  if (!mt) {
+    return false;
+  }
+
+  osd_trace = ZTracer::create_ZTrace(name, mt, ep);
+  return true;
+}
+
+void TrackedOp::trace_osd(string event)
+{
+  if (!osd_trace) {
+    return;
+  }
+
+  tracker->trace_event(this, osd_trace, event, osd_trace->get_endpoint());
+}
+
+void TrackedOp::trace_osd(string key, string val)
+{
+  if (!osd_trace) {
+    return;
+  }
+
+  tracker->trace_keyval(this, osd_trace, key, val, osd_trace->get_endpoint());
+}
+
+
+bool TrackedOp::create_pg_trace(TrackedOpEndpointRef ep)
+{
+  string name = "PG";
+  if (!request) {
+    return false;
+  }
+
+  TrackedOpTraceRef mt = request->get_master_trace();
+  if (!mt) {
+    return false;
+  }
+
+  pg_trace = ZTracer::create_ZTrace(name, mt, ep);
+  return true;
+}
+
+void TrackedOp::trace_pg(string event)
+{
+  if (!pg_trace) {
+    return;
+  }
+
+  tracker->trace_event(this, osd_trace, event, pg_trace->get_endpoint());
+}
+
+void TrackedOp::get_pg_trace_info(struct blkin_trace_info *info)
+{
+  if (!pg_trace) {
+    return;
+  }
+
+  osd_trace->get_trace_info(info);
+}
+
+bool TrackedOp::create_journal_trace(TrackedOpEndpointRef ep)
+{
+  string name = "Journal access";
+
+  if (!osd_trace) {
+    return false;
+  }
+
+  journal_trace = ZTracer::create_ZTrace(name, osd_trace, ep);
+  return true;
+}
+
+void TrackedOp::trace_journal(string event)
+{
+  if (!journal_trace) {
+    return;
+  }
+
+  tracker->trace_event(this, journal_trace, event, journal_trace->get_endpoint());
+}
+
+bool TrackedOp::create_filestore_trace(TrackedOpEndpointRef ep)
+{
+  string name = "Filestore access";
+
+  if (!osd_trace) {
+    return false;
+  }
+
+  filestore_trace = ZTracer::create_ZTrace(name, osd_trace, ep);
+  return true;
+}
+
+void TrackedOp::trace_filestore(string event)
+{
+  if (!filestore_trace) {
+    return;
+  }
+
+  tracker->trace_event(this, filestore_trace, event, filestore_trace->get_endpoint());
 }

@@ -116,7 +116,7 @@ AM_CCASFLAGS = -f elf64
 #####################
 ## library definitions and dependencies
 
-EXTRALIBS = -luuid -lm
+EXTRALIBS = -luuid -lm -lzipkin-cpp
 if FREEBSD
 EXTRALIBS += -lexecinfo
 endif # FREEBSD
