@@ -9,7 +9,7 @@ pools for storing data. A pool provides you with:
   For replicated pools, it is the desired number of copies/replicas of an object. 
   A typical configuration stores an object and one additional copy
   (i.e., ``size = 2``), but you can determine the number of copies/replicas.
-  For erasure coded pools, it is the number of coding chunks
+  For `erasure coded pools <../erasure-code>`_, it is the number of coding chunks
   (i.e. ``m=2`` in the **erasure code profile**)
   
 - **Placement Groups**: You can set the number of placement groups for the pool.
@@ -30,7 +30,6 @@ pools for storing data. A pool provides you with:
 
 To organize data into pools, you can list, create, and remove pools. 
 You can also view the utilization statistics for each pool.
-
 
 List Pools
 ==========
@@ -98,8 +97,9 @@ Where:
 
 :Description: The pool type which may either be **replicated** to
               recover from lost OSDs by keeping multiple copies of the
-              objects or **erasure** to get a kind of generalized
-              RAID5 capability. The **replicated** pools require more
+              objects or **erasure** to get a kind of
+              `generalized RAID5 <../erasure-code>`_ capability.
+              The **replicated** pools require more
               raw storage but implement all Ceph operations. The
               **erasure** pools require less raw storage but only
               implement a subset of the available operations.
