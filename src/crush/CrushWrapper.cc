@@ -837,6 +837,16 @@ void CrushWrapper::reweight(CephContext *cct)
   }
 }
 
+bool CrushWrapper::check_rule_id_matches_ruleset_id() const
+{
+  for (int rno = 0; rno < get_max_rules(); rno++) {
+    if (rule_exists(rno)
+	&& get_rule_mask_ruleset(rno)!=rno)
+       return false;
+  }
+  return true;
+}
+
 int CrushWrapper::add_simple_ruleset(string name, string root_name,
                                      string failure_domain_name,
                                      string mode,

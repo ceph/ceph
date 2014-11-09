@@ -543,6 +543,52 @@ TEST(CrushWrapper, is_valid_crush_loc) {
   }
 }
 
+TEST(CrushWrapper, rule_id_match_ruleset_id) {
+  CrushWrapper *c = new CrushWrapper;
+
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  string failure_domain_type("osd");
+  string root_name("default");
+  int rootno;
+  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		ROOT_TYPE, 0, NULL, NULL, &rootno);
+  c->set_item_name(rootno, root_name);
+
+  int item = 0;
+
+  pair <string,string> loc;
+  int ret;
+  loc = c->get_immediate_parent(item, &ret);
+  EXPECT_EQ(-ENOENT, ret);
+
+  {
+    map<string,string> loc;
+    loc["root"] = root_name;
+
+    EXPECT_EQ(0, c->insert_item(g_ceph_context, item, 1.0,
+				"osd.0", loc));
+  }
+
+  string name("NAME");
+  int rule_id = c->add_simple_ruleset(name, root_name, failure_domain_type,
+				      "firstn", pg_pool_t::TYPE_ERASURE);
+  EXPECT_EQ(0, rule_id);
+
+  CrushWrapper newcrush;
+  bufferlist bl;
+  bufferlist::iterator p = bl.begin();
+  {
+    EXPECT_EQ(rule_id, c->get_rule_mask_ruleset(rule_id));
+    c->encode(bl);
+    newcrush.decode(p);
+    EXPECT_EQ(true, newcrush.is_rule_id_matches_ruleset_id);
+  }
+}
+
 TEST(CrushWrapper, dump_rules) {
   CrushWrapper *c = new CrushWrapper;
 

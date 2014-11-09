@@ -94,6 +94,7 @@ public:
     crush = crush_create();
     assert(crush);
     have_rmaps = false;
+    is_rule_id_matches_ruleset_id = false;
 
     set_tunables_default();
   }
@@ -864,6 +865,7 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    is_rule_id_matches_ruleset_id = check_rule_id_matches_ruleset_id();
   }
 
   void start_choose_profile() {
@@ -890,8 +892,21 @@ public:
     crush->max_devices = m;
   }
 
-  int find_rule(int ruleset, int type, int size) const {
+  int find_rule(int ruleset, int type, int size) {
     if (!crush) return -1;
+    if (is_rule_id_matches_ruleset_id) {
+      if (rule_exists(ruleset) &&
+	  get_rule_mask_ruleset(ruleset) == ruleset &&
+	  get_rule_mask_type(ruleset) == type &&
+	  get_rule_mask_min_size(ruleset) <= size &&
+	  get_rule_mask_max_size(ruleset) >= size) {
+
+	return ruleset;
+      }	else {
+	is_rule_id_matches_ruleset_id = false;
+	return -1;
+      }
+    }
     return crush_find_rule(crush, ruleset, type, size);
   }
 
@@ -904,6 +919,9 @@ public:
 
     return false;
   }
+
+  bool is_rule_id_matches_ruleset_id;
+  bool check_rule_id_matches_ruleset_id() const;
 
   /**
    * Return the lowest numbered ruleset of type `type`
