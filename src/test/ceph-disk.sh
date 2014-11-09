@@ -15,6 +15,9 @@
 # GNU Library Public License for more details.
 #
 set -xe
+
+source test/test_btrfs_common.sh
+
 PS4='${FUNCNAME[0]}: $LINENO: '
 
 export PATH=:$PATH # make sure program from sources are prefered
@@ -51,6 +54,10 @@ function setup() {
 
 function teardown() {
     kill_daemons
+    if [ $(stat -f -c '%T' .) == "btrfs" ]; then
+        rm -fr $DIR/*/*db
+        teardown_btrfs $DIR
+    fi
     rm -fr $DIR
 }
 
