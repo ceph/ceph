@@ -369,9 +369,12 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
 {
   store->backend->set_keys(strip_header->header, prefix, values, t);
 
-  for (map<string, bufferlist>::iterator iter = values.begin();
-       iter != values.end(); ++iter) {
-    strip_header->buffers[make_pair(prefix, iter->first)].swap(iter->second);
+  if (strip_header->enable_buffers){
+    for (map<string, bufferlist>::iterator iter = values.begin();
+         iter != values.end(); ++iter) {
+      Mutex::Locker l(strip_header->buffers_mutex);
+      strip_header->buffers[make_pair(prefix, iter->first)].swap(iter->second);
+    }
   }
 }
 
@@ -380,6 +383,7 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
      const set<string> &keys)
 {
   for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+    Mutex::Locker l(strip_header->buffers_mutex);
     strip_header->buffers[make_pair(prefix, *iter)] = bufferlist();
   }
 
@@ -389,6 +393,7 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
 void KeyValueStore::BufferTransaction::clear_buffer_keys(
      StripObjectMap::StripObjectHeaderRef strip_header, const string &prefix)
 {
+  Mutex::Locker l(strip_header->buffers_mutex);
   for (map<pair<string, string>, bufferlist>::iterator iter = strip_header->buffers.begin();
        iter != strip_header->buffers.end(); ++iter) {
     if (iter->first.first == prefix)

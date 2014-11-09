@@ -764,6 +764,7 @@ OPTION(keyvaluestore_op_thread_timeout, OPT_INT, 60)
 OPTION(keyvaluestore_op_thread_suicide_timeout, OPT_INT, 180)
 OPTION(keyvaluestore_default_strip_size, OPT_INT, 4096) // Only affect new object
 OPTION(keyvaluestore_max_expected_write_size, OPT_U64, 1ULL << 24) // bytes
+OPTION(keyvaluestore_header_cache, OPT_BOOL, false)    // Header cache off by default
 OPTION(keyvaluestore_header_cache_size, OPT_INT, 4096)    // Header cache size
 OPTION(keyvaluestore_backend, OPT_STR, "leveldb")
 

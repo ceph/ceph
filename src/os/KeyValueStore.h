@@ -69,8 +69,10 @@ class StripObjectMap: public GenericObjectMap {
     bool updated;
     bool deleted;
     map<pair<string, string>, bufferlist> buffers;  // pair(prefix, key)
+    Mutex buffers_mutex;
+    bool enable_buffers;
 
-    StripObjectHeader(): strip_size(default_strip_size), max_size(0), updated(false), deleted(false) {}
+    StripObjectHeader(): strip_size(default_strip_size), max_size(0), updated(false), deleted(false), buffers_mutex("StripObjectHeader::buffers_mutex"), enable_buffers(g_conf->keyvaluestore_header_cache){}
 
     void encode(bufferlist &bl) const {
       ENCODE_START(1, 1, bl);
