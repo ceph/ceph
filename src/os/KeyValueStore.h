@@ -68,7 +68,6 @@ class StripObjectMap: public GenericObjectMap {
     ghobject_t oid;
     bool updated;
     bool deleted;
-    map<pair<string, string>, bufferlist> buffers;  // pair(prefix, key)
 
     StripObjectHeader(): strip_size(default_strip_size), max_size(0), updated(false), deleted(false) {}
 
@@ -249,6 +248,8 @@ class KeyValueStore : public ObjectStore,
 
     //Dirty records
     StripHeaderMap strip_headers;
+    map< uniq_id, map<pair<string, string>, bufferlist> > buffers;  // pair(prefix, key),to buffer updated data in one transaction
+
     list<Context*> finishes;
 
     KeyValueStore *store;
