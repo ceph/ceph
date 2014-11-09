@@ -506,6 +506,10 @@ void Objecter::_send_linger_ping(LingerOp *info)
     ldout(cct, 10) << __func__ << " " << info->linger_id << " SKIPPING" << dendl;
     return;
   }
+  if (osdmap->test_flag(CEPH_OSDMAP_PAUSERD)) {
+    ldout(cct, 10) << __func__ << " PAUSERD" << dendl;
+    return;
+  }
 
   utime_t now = ceph_clock_now(NULL);
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now << dendl;
