@@ -1814,33 +1814,8 @@ ceph_tid_t Objecter::_op_submit_with_budget(Op *op, RWLock::Context& lc, int *ct
   return tid;
 }
 
-ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
+void Objecter::_send_op_account(Op *op)
 {
-  assert(rwlock.is_locked());
-
-  ldout(cct, 10) << __func__ << " op " << op << dendl;
-
-  // pick target
-  assert(op->session == NULL);
-  OSDSession *s = NULL;
-
-  bool const check_for_latest_map = _calc_target(&op->target) == RECALC_OP_TARGET_POOL_DNE;
-
-  // Try to get a session, including a retry if we need to take write lock
-  int r = _get_session(op->target.osd, &s, lc);
-  if (r == -EAGAIN) {
-    assert(s == NULL);
-    lc.promote();
-    r = _get_session(op->target.osd, &s, lc);
-  }
-  assert(r == 0);
-  assert(s);  // may be homeless
-
-  // We may need to take wlock if we will need to _set_op_map_check later.
-  if (check_for_latest_map && !lc.is_wlocked()) {
-    lc.promote();
-  }
-
   inflight_ops.inc();
 
   // add to gather set(s)
@@ -1899,6 +1874,36 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     if (code)
       logger->inc(code);
   }
+}
+
+ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
+{
+  assert(rwlock.is_locked());
+
+  ldout(cct, 10) << __func__ << " op " << op << dendl;
+
+  // pick target
+  assert(op->session == NULL);
+  OSDSession *s = NULL;
+
+  bool const check_for_latest_map = _calc_target(&op->target) == RECALC_OP_TARGET_POOL_DNE;
+
+  // Try to get a session, including a retry if we need to take write lock
+  int r = _get_session(op->target.osd, &s, lc);
+  if (r == -EAGAIN) {
+    assert(s == NULL);
+    lc.promote();
+    r = _get_session(op->target.osd, &s, lc);
+  }
+  assert(r == 0);
+  assert(s);  // may be homeless
+
+  // We may need to take wlock if we will need to _set_op_map_check later.
+  if (check_for_latest_map && !lc.is_wlocked()) {
+    lc.promote();
+  }
+
+  _send_op_account(op);
 
   // send?
   ldout(cct, 10) << "_op_submit oid " << op->target.base_oid
