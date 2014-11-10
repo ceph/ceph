@@ -908,6 +908,7 @@ public:
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed);
+  void update_log_config();
   void check_config();
 
 protected:

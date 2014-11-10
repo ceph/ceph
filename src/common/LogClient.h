@@ -31,6 +31,12 @@ struct Connection;
 
 class LogChannel;
 
+int parse_log_client_options(CephContext *cct,
+			     map<string,string> &log_to_monitors,
+			     map<string,string> &log_to_syslog,
+			     map<string,string> &log_channels,
+			     map<string,string> &log_prios);
+
 class LogClientTemp
 {
 public:
@@ -133,10 +139,20 @@ public:
 
   typedef shared_ptr<LogChannel> Ref;
 
-private:
+  /**
+   * update config values from parsed k/v map for each config option
+   *
+   * Pick out the relevant value based on our channel.
+   */
+  void update_config(map<string,string> &log_to_monitors,
+		     map<string,string> &log_to_syslog,
+		     map<string,string> &log_channels,
+		     map<string,string> &log_prios);
+
   void do_log(clog_type prio, std::stringstream& ss);
   void do_log(clog_type prio, const std::string& s);
 
+private:
   CephContext *cct;
   LogClient *parent;
   Mutex channel_lock;
