@@ -648,6 +648,10 @@ function test_mon_mds()
   data3_pool=$(ceph osd dump | grep 'pool.*data3' | awk '{print $2;}')
   ceph mds add_data_pool $data2_pool
   ceph mds add_data_pool $data3_pool
+  ceph mds add_data_pool 100 >& $TMPFILE || true
+  check_response "Error ENOENT"
+  ceph mds add_data_pool foobarbaz >& $TMPFILE || true
+  check_response "Error ENOENT"
   ceph mds remove_data_pool $data2_pool
   ceph mds remove_data_pool $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it

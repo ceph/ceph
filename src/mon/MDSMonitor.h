@@ -106,12 +106,11 @@ class MDSMonitor : public PaxosService {
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
       std::stringstream &ss);
-  bool filesystem_command(
+  int filesystem_command(
       MMonCommand *m,
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss,
-      int &r);
+      std::stringstream &ss);
 
   // beacons
   struct beacon_info_t {
