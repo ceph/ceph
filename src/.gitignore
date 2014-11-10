@@ -30,6 +30,7 @@ Makefile
 /ceph_multi_stress_watch
 /ceph_erasure_code
 /ceph_erasure_code_benchmark
+/ceph_erasure_code_non_regression
 /ceph_psim
 /ceph_radosacl
 /ceph_rgw_jsonparser
