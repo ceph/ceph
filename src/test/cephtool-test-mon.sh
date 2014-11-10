@@ -14,17 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-code=0
-echo "Run unit tests that need a cluster, using vstart.sh"
-while read line ; do
-  echo "================ START ================"
-  echo "$line"
-  echo "======================================="
-  if ! test/vstart_wrapper.sh $line ; then
-      code=1
-  fi
-  echo "================ STOP ================="  
-done <<EOF
-../qa/workunits/cephtool/test.sh --asok-does-not-need-root
-EOF
-exit $code
+MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7202 test/vstart_wrapper.sh \
+    ../qa/workunits/cephtool/test.sh \
+    --test-mon \
+    --asok-does-not-need-root

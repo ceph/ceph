@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -22,8 +23,7 @@ export CEPH_CONF=/dev/null
 unset CEPH_ARGS
 MON_ID=a
 MON_DIR=$DIR/$MON_ID
-PORT=7451
-MONA=127.0.0.1:$PORT
+CEPH_MON=127.0.0.1:7110
 TIMEOUT=360
 
 function setup() {
@@ -46,7 +46,7 @@ function mon_mkfs() {
         --mkfs \
         --mon-data=$MON_DIR \
         --mon-initial-members=$MON_ID \
-        --mon-host=$MONA \
+        --mon-host=$CEPH_MON \
         "$@"
 }
 
@@ -54,13 +54,15 @@ function mon_run() {
     ./ceph-mon \
         --id $MON_ID \
         --chdir= \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --log-file=$MON_DIR/log \
         --mon-cluster-log-file=$MON_DIR/log \
         --run-dir=$MON_DIR \
         --pid-file=$MON_DIR/pidfile \
-        --public-addr $MONA \
+        --public-addr $CEPH_MON \
         "$@"
 }
 
@@ -79,6 +81,8 @@ function auth_none() {
 
     ./ceph-mon \
         --id $MON_ID \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mon-data=$MON_DIR \
         --extract-monmap $MON_DIR/monmap
@@ -89,7 +93,7 @@ function auth_none() {
 
     mon_run --auth-supported=none
     
-    timeout $TIMEOUT ./ceph --mon-host $MONA mon stat || return 1
+    timeout $TIMEOUT ./ceph --mon-host $CEPH_MON mon stat || return 1
 }
 
 function auth_cephx_keyring() {
@@ -108,7 +112,7 @@ EOF
     timeout $TIMEOUT ./ceph \
         --name mon. \
         --keyring $MON_DIR/keyring \
-        --mon-host $MONA mon stat || return 1
+        --mon-host $CEPH_MON mon stat || return 1
 }
 
 function auth_cephx_key() {
@@ -135,7 +139,7 @@ function auth_cephx_key() {
     timeout $TIMEOUT ./ceph \
         --name mon. \
         --keyring $MON_DIR/keyring \
-        --mon-host $MONA mon stat || return 1
+        --mon-host $CEPH_MON mon stat || return 1
 }
 
 function makedir() {
@@ -144,6 +148,8 @@ function makedir() {
     # fail if recursive directory creation is needed
     ./ceph-mon \
         --id $MON_ID \
+        --mon-osd-full-ratio=.99 \
+        --mon-data-avail-crit=1 \
         --osd-pool-default-erasure-code-directory=.libs \
         --mkfs \
         --mon-data=$toodeep 2>&1 | tee $DIR/makedir.log

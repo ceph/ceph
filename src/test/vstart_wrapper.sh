@@ -15,27 +15,23 @@
 # GNU Library Public License for more details.
 #
 
+source test/mon/mon-test-helpers.sh
 
-export CEPH_DIR="$PWD/"
-export CEPH_DEV_DIR="$CEPH_DIR/test_dev"
-export CEPH_OUT_DIR="$CEPH_DIR/test_out"
-
-function vstart_teardown()
-{
-    ./stop.sh
-}
+export CEPH_DIR="$PWD/test-$CEPH_PORT"
+export CEPH_DEV_DIR="$CEPH_DIR/dev"
+export CEPH_OUT_DIR="$CEPH_DIR/out"
 
 function vstart_setup()
 {
     rm -fr $CEPH_DEV_DIR $CEPH_OUT_DIR
     mkdir -p $CEPH_DEV_DIR
-    trap "vstart_teardown ; rm -f $TMPFILE" EXIT
+    trap "teardown $CEPH_DIR" EXIT
     export LC_ALL=C # some tests are vulnerable to i18n
-    MDS=1 MON=1 OSD=3 ./vstart.sh \
+    ./vstart.sh \
         -o 'paxos propose interval = 0.01' \
-        -n -l mon osd mds || return 1
+        -n -l $VSTART_ARGS || return 1
     export PATH=.:$PATH
-    export CEPH_CONF=ceph.conf
+    export CEPH_CONF=$CEPH_DIR/ceph.conf
 
     crit=$(expr 100 - $(ceph-conf --show-config-value mon_data_avail_crit))
     if [ $(df . | perl -ne 'print if(s/.*\s(\d+)%.*/\1/)') -ge $crit ] ; then
@@ -54,13 +50,9 @@ EOF
 
 function main()
 {
-    if [[ $(pwd) =~ /src$ ]] && [ -d .libs ] && [ -d pybind ] ; then
-        vstart_setup || return 1
-    else
-        trap "rm -f $TMPFILE" EXIT
-    fi
-    
-    "$@" || return 1
+    teardown $CEPH_DIR
+    vstart_setup || return 1
+    CEPH_CONF=$CEPH_DIR/ceph.conf "$@" || return 1
 }
 
 main "$@"

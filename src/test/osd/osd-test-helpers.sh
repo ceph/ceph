@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -35,6 +36,8 @@ function run_osd() {
         prepare $osd_data || return 1
 
     local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-backfill-full-ratio=.99"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
     ceph_args+=" --osd-journal-size=100"
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
@@ -42,7 +45,7 @@ function run_osd() {
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/osd-\$id.log"
-    ceph_args+=" --pid-file=$dir/osd-\$id.pidfile"
+    ceph_args+=" --pid-file=$dir/osd-\$id.pid"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -56,9 +59,8 @@ function run_osd() {
     ./ceph osd crush create-or-move "$id" 1 root=default host=localhost
 
     status=1
-    # Workaround for http://tracker.ceph.com/issues/8630
     for ((i=0; i < 60; i++)); do
-        if ! ceph osd dump | grep "osd.$id up"; then
+        if ! ./ceph osd dump | grep "osd.$id up"; then
             sleep 1
         else
             status=0
