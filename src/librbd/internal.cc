@@ -1288,7 +1288,6 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(ictx->cct) << "error opening parent image: " << cpp_strerror(r)
 		       << dendl;
-      close_image(ictx->parent);
       ictx->parent = NULL;
       return r;
     }
