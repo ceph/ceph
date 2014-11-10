@@ -451,76 +451,21 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
-void Monitor::update_log_client(
-    LogChannelRef lc, const string &name,
-    map<string,string> &log_to_monitors,
-    map<string,string> &log_to_syslog,
-    map<string,string> &log_channels,
-    map<string,string> &log_prios)
-{
-  bool to_monitors = (get_str_map_key(log_to_monitors, name,
-                                      &CLOG_CHANNEL_DEFAULT) == "true");
-  bool to_syslog = (get_str_map_key(log_to_syslog, name,
-                                    &CLOG_CHANNEL_DEFAULT) == "true");
-  string syslog_facility = get_str_map_key(log_channels, name,
-                                           &CLOG_CHANNEL_DEFAULT);
-  string prio = get_str_map_key(log_prios, name, &CLOG_CHANNEL_DEFAULT);
-
-  lc->set_log_to_monitors(to_monitors);
-  lc->set_log_to_syslog(to_syslog);
-  lc->set_syslog_facility(syslog_facility);
-  lc->set_log_channel(name);
-  lc->set_log_prio(prio);
-
-  dout(15) << __func__ << " " << name << "("
-           << " to_monitors: " << (to_monitors ? "true" : "false")
-           << " to_syslog: " << (to_syslog ? "true" : "false")
-           << " syslog_facility: " << syslog_facility
-           << " prio: " << prio << ")" << dendl;
-}
-
 void Monitor::update_log_clients()
 {
   map<string,string> log_to_monitors;
   map<string,string> log_to_syslog;
   map<string,string> log_channel;
   map<string,string> log_prio;
-  ostringstream oss;
 
-  int r = get_conf_str_map_helper(g_conf->clog_to_monitors, oss,
-                                  &log_to_monitors, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_monitors'" << dendl;
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio))
     return;
-  }
 
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog, oss,
-                              &log_to_syslog, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog'" << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog_facility, oss,
-                              &log_channel, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog_level, oss,
-                              &log_prio, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
-    return;
-  }
-
-  update_log_client(clog, CLOG_CHANNEL_CLUSTER,
-                    log_to_monitors, log_to_syslog,
-                    log_channel, log_prio);
-  update_log_client(audit_clog, CLOG_CHANNEL_AUDIT,
-                    log_to_monitors, log_to_syslog,
-                    log_channel, log_prio);
+  clog->update_config(log_to_monitors, log_to_syslog,
+		      log_channel, log_prio);
+  audit_clog->update_config(log_to_monitors, log_to_syslog,
+			    log_channel, log_prio);
 }
 
 int Monitor::sanitize_options()

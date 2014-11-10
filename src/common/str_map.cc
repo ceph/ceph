@@ -128,3 +128,32 @@ string get_str_map_key(
   }
   return string();
 }
+
+// This function's only purpose is to check whether a given map has only
+// ONE key with an empty value (which would mean that 'get_str_map()' read
+// a map in the form of 'VALUE', without any KEY/VALUE pairs) and, in such
+// event, to assign said 'VALUE' to a given 'def_key', such that we end up
+// with a map of the form "m = { 'def_key' : 'VALUE' }" instead of the
+// original "m = { 'VALUE' : '' }".
+int get_conf_str_map_helper(
+    const string &str,
+    ostringstream &oss,
+    map<string,string> *m,
+    const string &def_key)
+{
+  int r = get_str_map(str, m);
+
+  if (r < 0) {
+    return r;
+  }
+
+  if (r >= 0 && m->size() == 1) {
+    map<string,string>::iterator p = m->begin();
+    if (p->second.empty()) {
+      string s = p->first;
+      m->erase(s);
+      (*m)[def_key] = s;
+    }
+  }
+  return r;
+}
