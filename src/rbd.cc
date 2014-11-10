@@ -174,6 +174,8 @@ static string feature_str(uint64_t feature)
     return "striping";
   case RBD_FEATURE_EXCLUSIVE_LOCK:
     return "exclusive";
+  case RBD_FEATURE_OBJECT_MAP:
+    return "object map";
   default:
     return "";
   }
@@ -183,7 +185,7 @@ static string features_str(uint64_t features)
 {
   string s = "";
 
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_EXCLUSIVE_LOCK;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
        feature <<= 1) {
     if (feature & features) {
       if (s.size())
@@ -197,7 +199,7 @@ static string features_str(uint64_t features)
 static void format_features(Formatter *f, uint64_t features)
 {
   f->open_array_section("features");
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_EXCLUSIVE_LOCK;
+  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
        feature <<= 1) {
     f->dump_string("feature", feature_str(feature));
   }
@@ -437,7 +439,8 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     r = rbd.create(io_ctx, imgname, size, order);
   } else {
     if (features == 0) {
-      features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
+      features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK |
+		 RBD_FEATURE_OBJECT_MAP;
     }
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
@@ -2469,7 +2472,8 @@ int main(int argc, const char **argv)
   bool format_specified = false,
     output_format_specified = false;
   int format = 1;
-  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
+  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK |
+		      RBD_FEATURE_OBJECT_MAP;
   const char *imgname = NULL, *snapname = NULL, *destname = NULL,
     *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
@@ -2573,7 +2577,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
       resize_allow_shrink = true;
     } else if (ceph_argparse_flag(args, i, "--image-shared", (char *)NULL)) {
-      features &= ~RBD_FEATURE_EXCLUSIVE_LOCK;
+      features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       long long ret = strict_strtoll(val.c_str(), 10, &parse_err);
       if (parse_err.empty()) {

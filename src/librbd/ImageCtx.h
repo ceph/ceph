@@ -9,11 +9,13 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <boost/optional.hpp>
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
+#include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -65,7 +67,7 @@ namespace librbd {
     /**
      * Lock ordering:
      * owner_lock, md_lock, cache_lock, snap_lock, parent_lock, refresh_lock,
-     * aio_lock
+     * object_map_lock, aio_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -75,6 +77,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    RWLock object_map_lock; // protects object map updates
     Mutex aio_lock; // protects pending_aio and pending_aio_cond
     Mutex copyup_list_lock; // protects copyup_waiting_list
 
@@ -108,6 +111,8 @@ namespace librbd {
 
     Cond pending_aio_cond;
     uint64_t pending_aio;
+
+    ceph::BitVector<2> object_map;
 
     /**
      * Either image_name or image_id must be set.
@@ -174,6 +179,13 @@ namespace librbd {
 				  uint64_t overlap);
     void wait_for_pending_aio();
     void wait_for_pending_copyup();
+
+    int refresh_object_map();
+    int resize_object_map(uint8_t default_object_state);
+    int update_object_map(uint64_t object_no, uint8_t object_state);
+    int update_object_map(uint64_t start_object_no, uint64_t end_object_no,
+			  uint8_t new_state,
+			  const boost::optional<uint8_t> &current_state);
   };
 }
 
