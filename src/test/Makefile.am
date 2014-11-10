@@ -232,6 +232,9 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 ## Unit tests
 
 check_SCRIPTS += \
+	test/cephtool-test-osd.sh \
+	test/cephtool-test-mon.sh \
+	test/cephtool-test-mds.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
@@ -242,8 +245,7 @@ check_SCRIPTS += \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/ceph-disk.sh \
-	test/mon/mon-handle-forward.sh \
-	test/vstart_wrapped_tests.sh
+	test/mon/mon-handle-forward.sh
 
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
