@@ -179,8 +179,8 @@ int do_rados_export(ThreadPool *tp, IoCtx& io_ctx,
       IoCtxDistributor *io_ctx_dist, const char *dir_name,
       bool create, bool force, bool delete_after)
 {
-  librados::ObjectIterator oi = io_ctx.objects_begin();
-  librados::ObjectIterator oi_end = io_ctx.objects_end();
+  librados::NObjectIterator oi = io_ctx.nobjects_begin();
+  librados::NObjectIterator oi_end = io_ctx.nobjects_end();
   auto_ptr <ExportDir> export_dir;
   export_dir.reset(ExportDir::create_for_writing(dir_name, 1, create));
   if (!export_dir.get())
@@ -188,7 +188,7 @@ int do_rados_export(ThreadPool *tp, IoCtx& io_ctx,
   ExportLocalFileWQ export_object_wq(io_ctx_dist, time(NULL),
 				     tp, export_dir.get(), force);
   for (; oi != oi_end; ++oi) {
-    export_object_wq.queue(new std::string((*oi).first));
+    export_object_wq.queue(new std::string((*oi).get_oid()));
   }
   export_object_wq.drain();
 
