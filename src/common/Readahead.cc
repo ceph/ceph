@@ -131,7 +131,7 @@ void Readahead::dec_pending(int count) {
 void Readahead::wait_for_pending() {
   m_pending_lock.Lock();
   while (m_pending > 0) {
-    m_pending_cond.Wait(m_lock);
+    m_pending_cond.Wait(m_pending_lock);
   }
   m_pending_lock.Unlock();
 }
