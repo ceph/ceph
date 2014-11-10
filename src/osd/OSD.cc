@@ -2012,6 +2012,7 @@ int OSD::init()
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
+  update_log_config();
 
   osd_tp.start();
   osd_op_tp.start();
@@ -4943,6 +4944,11 @@ COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
 	"osd", "rw", "cli,rest")
+COMMAND("cluster_log " \
+	"name=level,type=CephChoices,strings=error,warning,info,debug " \
+	"name=message,type=CephString,n=N",
+	"log a message to the cluster log",
+	"osd", "rw", "cli,rest")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false ", \
@@ -5045,6 +5051,27 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     osd_lock.Unlock();
     cct->_conf->injectargs(args, &ss);
     osd_lock.Lock();
+  }
+  else if (prefix == "cluster_log") {
+    vector<string> msg;
+    cmd_getval(cct, cmdmap, "message", msg);
+    if (msg.empty()) {
+      r = -EINVAL;
+      ss << "ignoring empty log message";
+      goto out;
+    }
+    string message = msg.front();
+    for (vector<string>::iterator a = ++msg.begin(); a != msg.end(); ++a)
+      message += " " + *a;
+    string lvl;
+    cmd_getval(cct, cmdmap, "level", lvl);
+    clog_type level = string_to_clog_type(lvl);
+    if (level < 0) {
+      r = -EINVAL;
+      ss << "unknown level '" << lvl << "'";
+      goto out;
+    }
+    clog->do_log(level, message);
   }
 
   // either 'pg <pgid> <command>' or
@@ -8487,6 +8514,11 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_pg_epoch_persisted_max_stale",
     "osd_disk_thread_ioprio_class",
     "osd_disk_thread_ioprio_priority",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
     NULL
   };
   return KEYS;
@@ -8522,8 +8554,27 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     service.map_bl_cache.set_size(cct->_conf->osd_map_cache_size);
     service.map_bl_inc_cache.set_size(cct->_conf->osd_map_cache_size);
   }
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility")) {
+    update_log_config();
+  }
 
   check_config();
+}
+
+void OSD::update_log_config()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio) == 0)
+    clog->update_config(log_to_monitors, log_to_syslog,
+			log_channel, log_prio);
+  derr << "log_to_monitors " << log_to_monitors << dendl;
 }
 
 void OSD::check_config()
