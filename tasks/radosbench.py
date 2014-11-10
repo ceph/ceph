@@ -73,6 +73,7 @@ def task(ctx, config):
                           'ceph-coverage',
                           '{tdir}/archive/coverage',
                           'rados',
+			  '--no-log-to-stderr',
                           '--name', role,
                           '-p' , pool,
                           'bench', str(config.get('time', 360)), 'write',
