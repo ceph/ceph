@@ -418,6 +418,8 @@ int main(int argc, const char **argv)
     global_init_chdir(g_ceph_context);
   }
 
+  ZTracer::ztrace_init();
+
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
 
   Monitor::StoreConverter converter(g_conf->mon_data, store);
