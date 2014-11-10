@@ -50,7 +50,7 @@ class Processor : public Thread {
   int listen_sd;
   uint64_t nonce;
 
-  public:
+ public:
   Processor(AsyncMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
 
   void *entry();
@@ -62,18 +62,37 @@ class Processor : public Thread {
 };
 
 class Worker : public Thread {
-  AsyncMessenger *msgr;
+  CephContext *cct;
   bool done;
 
  public:
   EventCenter center;
-  Worker(AsyncMessenger *m, CephContext *c): msgr(m), done(false), center(c) {
+  Worker(CephContext *c): cct(c), done(false), center(c) {
     center.init(5000);
   }
   void *entry();
   void stop();
 };
 
+
+class WorkerPool {
+  WorkerPool() {}
+  WorkerPool(const WorkerPool &);
+  WorkerPool& operator=(const WorkerPool &);
+  static uint64_t seq;
+  static bool started;
+  static vector<Worker*> workers;
+  static WorkerPool *pool;
+  static Mutex lock;
+
+ public:
+  static WorkerPool *init(CephContext *cct);
+  static void start();
+  static Worker *get_worker() {
+    assert(pool);
+    return workers[(seq++)%workers.size()];
+  }
+};
 
 /*
  * AsyncMessenger is represented for maintaining a set of asynchronous connections,
@@ -170,8 +189,7 @@ public:
 
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
-    Worker *w = workers[conn_id % workers.size()];
-    conn_id++;
+    Worker *w = pool->get_worker();
     return new AsyncConnection(cct, this, &w->center);
   }
 
@@ -231,8 +249,7 @@ private:
   int _send_message(Message *m, const entity_inst_t& dest);
 
  private:
-  vector<Worker*> workers;
-  int conn_id;
+  WorkerPool *pool;
 
   Processor processor;
   friend class Processor;
