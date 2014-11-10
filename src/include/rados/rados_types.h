@@ -14,4 +14,13 @@ struct obj_watch_t {
   uint32_t timeout_seconds;
 }; 
 
+/**
+ * @defines
+ *
+ * Pass as nspace argument to rados_ioctx_set_namespace()
+ * before calling rados_nobjects_list_open() to return
+ * all objects in all namespaces.
+ */
+#define	LIBRADOS_ALL_NSPACES "\001"
+
 #endif

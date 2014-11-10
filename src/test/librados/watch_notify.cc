@@ -82,6 +82,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   sem_destroy(&sem);
+  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
 TEST_F(LibRadosWatchNotifyEC, WatchNotifyTest) {
@@ -134,6 +135,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeoutTestPP) {
 
   ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
   sem_destroy(&sem);
+  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
 
