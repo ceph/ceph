@@ -227,10 +227,10 @@ int do_rados_import(ThreadPool *tp, IoCtx &io_ctx, IoCtxDistributor* io_ctx_dist
   if (delete_after) {
     ImportValidateExistingWQ import_val_wq(export_dir.get(), io_ctx_dist,
 					   time(NULL), tp);
-    librados::ObjectIterator oi = io_ctx.objects_begin();
-    librados::ObjectIterator oi_end = io_ctx.objects_end();
+    librados::NObjectIterator oi = io_ctx.nobjects_begin();
+    librados::NObjectIterator oi_end = io_ctx.nobjects_end();
     for (; oi != oi_end; ++oi) {
-      import_val_wq.queue(new std::string((*oi).first));
+      import_val_wq.queue(new std::string((*oi).get_oid()));
     }
     import_val_wq.drain();
   }

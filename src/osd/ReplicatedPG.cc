@@ -57,6 +57,7 @@
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
+#include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
@@ -775,7 +776,8 @@ bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
   if (pg_log.get_missing().missing.empty())
     return false;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
-    if (p->op.op == CEPH_OSD_OP_PGLS) {
+    // TODO: Need CEPH_OSD_OP_PGLS_FILTER and CEPH_OSD_OP_PGNLS_FILTER, See bug #9439
+    if (p->op.op == CEPH_OSD_OP_PGLS || p->op.op == CEPH_OSD_OP_PGNLS) {
       if (op->get_snapid() != CEPH_NOSNAP) {
 	return true;
       }
@@ -805,6 +807,162 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
     OSDOp& osd_op = *p;
     bufferlist::iterator bp = p->indata.begin();
     switch (p->op.op) {
+    case CEPH_OSD_OP_PGNLS_FILTER:
+      try {
+	::decode(cname, bp);
+	::decode(mname, bp);
+      }
+      catch (const buffer::error& e) {
+	dout(0) << "unable to decode PGLS_FILTER description in " << *m << dendl;
+	result = -EINVAL;
+	break;
+      }
+      result = get_pgls_filter(bp, &filter);
+      if (result < 0)
+        break;
+
+      assert(filter);
+
+      // fall through
+
+    case CEPH_OSD_OP_PGNLS:
+      if (m->get_pg() != info.pgid.pgid) {
+        dout(10) << " pgnls pg=" << m->get_pg() << " != " << info.pgid << dendl;
+	result = 0; // hmm?
+      } else {
+	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
+
+        dout(10) << " pgnls pg=" << m->get_pg() << " count " << list_size << dendl;
+	// read into a buffer
+        vector<hobject_t> sentries;
+        pg_nls_response_t response;
+	try {
+	  ::decode(response.handle, bp);
+	}
+	catch (const buffer::error& e) {
+	  dout(0) << "unable to decode PGNLS handle in " << *m << dendl;
+	  result = -EINVAL;
+	  break;
+	}
+
+	hobject_t next;
+	hobject_t current = response.handle;
+	osr->flush();
+	int r = pgbackend->objects_list_partial(
+	  current,
+	  list_size,
+	  list_size,
+	  snapid,
+	  &sentries,
+	  &next);
+	if (r != 0) {
+	  result = -EINVAL;
+	  break;
+	}
+
+	assert(snapid == CEPH_NOSNAP || pg_log.get_missing().missing.empty());
+	map<hobject_t, pg_missing_t::item>::const_iterator missing_iter =
+	  pg_log.get_missing().missing.lower_bound(current);
+	vector<hobject_t>::iterator ls_iter = sentries.begin();
+	hobject_t _max = hobject_t::get_max();
+	while (1) {
+	  const hobject_t &mcand =
+	    missing_iter == pg_log.get_missing().missing.end() ?
+	    _max :
+	    missing_iter->first;
+	  const hobject_t &lcand =
+	    ls_iter == sentries.end() ?
+	    _max :
+	    *ls_iter;
+
+	  hobject_t candidate;
+	  if (mcand == lcand) {
+	    candidate = mcand;
+	    if (!mcand.is_max()) {
+	      ++ls_iter;
+	      ++missing_iter;
+	    }
+	  } else if (mcand < lcand) {
+	    candidate = mcand;
+	    assert(!mcand.is_max());
+	    ++missing_iter;
+	  } else {
+	    candidate = lcand;
+	    assert(!lcand.is_max());
+	    ++ls_iter;
+	  }
+
+	  if (candidate >= next) {
+	    break;
+	  }
+
+	  if (response.entries.size() == list_size) {
+	    next = candidate;
+	    break;
+	  }
+
+	  // skip snapdir objects
+	  if (candidate.snap == CEPH_SNAPDIR)
+	    continue;
+
+	  if (candidate.snap < snapid)
+	    continue;
+
+	  if (snapid != CEPH_NOSNAP) {
+	    bufferlist bl;
+	    if (candidate.snap == CEPH_NOSNAP) {
+	      pgbackend->objects_get_attr(
+		candidate,
+		SS_ATTR,
+		&bl);
+	      SnapSet snapset(bl);
+	      if (snapid <= snapset.seq)
+		continue;
+	    } else {
+	      bufferlist attr_bl;
+	      pgbackend->objects_get_attr(
+		candidate, OI_ATTR, &attr_bl);
+	      object_info_t oi(attr_bl);
+	      vector<snapid_t>::iterator i = find(oi.snaps.begin(),
+						  oi.snaps.end(),
+						  snapid);
+	      if (i == oi.snaps.end())
+		continue;
+	    }
+	  }
+
+	  // skip internal namespace
+	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
+	    continue;
+
+	  // skip wrong namespace
+	  if (m->get_object_locator().nspace != librados::all_nspaces &&
+               candidate.get_namespace() != m->get_object_locator().nspace)
+	    continue;
+
+	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	    continue;
+
+	  librados::ListObjectImpl item;
+	  item.nspace = candidate.get_namespace();
+	  item.oid = candidate.oid.name;
+	  item.locator = candidate.get_key();
+	  response.entries.push_back(item);
+	}
+	if (next.is_max() &&
+	    missing_iter == pg_log.get_missing().missing.end() &&
+	    ls_iter == sentries.end()) {
+	  result = 1;
+	}
+	response.handle = next;
+	::encode(response, osd_op.outdata);
+	if (filter)
+	  ::encode(filter_out, osd_op.outdata);
+	dout(10) << " pgnls result=" << result << " outdata.length()="
+		 << osd_op.outdata.length() << dendl;
+      }
+      break;
+
     case CEPH_OSD_OP_PGLS_FILTER:
       try {
 	::decode(cname, bp);

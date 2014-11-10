@@ -15,6 +15,7 @@ from datetime import datetime
 
 ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
+LIBRADOS_ALL_NSPACES = '\001'
 
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
@@ -765,7 +766,7 @@ class ObjectIterator(object):
     def __init__(self, ioctx):
         self.ioctx = ioctx
         self.ctx = c_void_p()
-        ret = run_in_thread(self.ioctx.librados.rados_objects_list_open,
+        ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_open,
                             (self.ioctx.io, byref(self.ctx)))
         if ret < 0:
             raise make_ex(ret, "error iterating over the objects in ioctx '%s'" \
@@ -783,14 +784,15 @@ class ObjectIterator(object):
         """
         key = c_char_p()
         locator = c_char_p()
-        ret = run_in_thread(self.ioctx.librados.rados_objects_list_next,
-                            (self.ctx, byref(key), byref(locator)))
+        nspace = c_char_p()
+        ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_next,
+                            (self.ctx, byref(key), byref(locator), byref(nspace)))
         if ret < 0:
             raise StopIteration()
-        return Object(self.ioctx, key.value, locator.value)
+        return Object(self.ioctx, key.value, locator.value, nspace.value)
 
     def __del__(self):
-        run_in_thread(self.ioctx.librados.rados_objects_list_close, (self.ctx,))
+        run_in_thread(self.ioctx.librados.rados_nobjects_list_close, (self.ctx,))
 
 class XattrIterator(object):
     """Extended attribute iterator"""
@@ -960,6 +962,7 @@ class Ioctx(object):
         self.io = io
         self.state = "open"
         self.locator_key = ""
+        self.nspace = ""
         self.safe_cbs = {}
         self.complete_cbs = {}
         RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
@@ -1252,6 +1255,37 @@ class Ioctx(object):
         :returns: locator_key
         """
         return self.locator_key
+
+    def set_namespace(self, nspace):
+        """
+        Set the namespace for objects within an io context.
+
+        The namespace in addition to the object name fully identifies
+        an object. This affects all subsequent operations of the io context
+        - until a different namespace is set, all objects in this io context
+        will be placed in the same namespace.
+
+        :param nspace: the namespace to use, or None/"" for the default namespace
+        :type nspace: str
+
+        :raises: :class:`TypeError`
+        """
+        self.require_ioctx_open()
+        if nspace is None:
+            nspace = ""
+        if not isinstance(nspace, str):
+            raise TypeError('namespace must be a string')
+        run_in_thread(self.librados.rados_ioctx_set_namespace,
+                     (self.io, c_char_p(nspace)))
+        self.nspace = nspace
+
+    def get_namespace(self):
+        """
+        Get the namespace of context
+
+        :returns: namespace
+        """
+        return self.nspace
 
     def close(self):
         """
@@ -1717,23 +1751,37 @@ def set_object_locator(func):
             return func(self, *args, **kwargs)
     return retfunc
 
+def set_object_namespace(func):
+    def retfunc(self, *args, **kwargs):
+        if self.nspace is None:
+            raise LogicError("Namespace not set properly in context")
+        old_nspace = self.ioctx.get_namespace()
+        self.ioctx.set_namespace(self.nspace)
+        retval = func(self, *args, **kwargs)
+        self.ioctx.set_namespace(old_nspace)
+        return retval
+    return retfunc
+
 class Object(object):
     """Rados object wrapper, makes the object look like a file"""
-    def __init__(self, ioctx, key, locator_key=None):
+    def __init__(self, ioctx, key, locator_key=None, nspace=None):
         self.key = key
         self.ioctx = ioctx
         self.offset = 0
         self.state = "exists"
         self.locator_key = locator_key
+        self.nspace = "" if nspace is None else nspace
 
     def __str__(self):
-        return "rados.Object(ioctx=%s,key=%s)" % (str(self.ioctx), self.key)
+        return "rados.Object(ioctx=%s,key=%s,nspace=%s,locator=%s)" % \
+        (str(self.ioctx), self.key, "--default--" if self.nspace is "" else self.nspace, self.locator_key)
 
     def require_object_exists(self):
         if self.state != "exists":
             raise ObjectStateError("The object is %s" % self.state)
 
     @set_object_locator
+    @set_object_namespace
     def read(self, length = 1024*1024):
         self.require_object_exists()
         ret = self.ioctx.read(self.key, length, self.offset)
@@ -1741,6 +1789,7 @@ class Object(object):
         return ret
 
     @set_object_locator
+    @set_object_namespace
     def write(self, string_to_write):
         self.require_object_exists()
         ret = self.ioctx.write(self.key, string_to_write, self.offset)
@@ -1748,12 +1797,14 @@ class Object(object):
         return ret
 
     @set_object_locator
+    @set_object_namespace
     def remove(self):
         self.require_object_exists()
         self.ioctx.remove_object(self.key)
         self.state = "removed"
 
     @set_object_locator
+    @set_object_namespace
     def stat(self):
         self.require_object_exists()
         return self.ioctx.stat(self.key)
@@ -1763,21 +1814,25 @@ class Object(object):
         self.offset = position
 
     @set_object_locator
+    @set_object_namespace
     def get_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.get_xattr(self.key, xattr_name)
 
     @set_object_locator
+    @set_object_namespace
     def get_xattrs(self):
         self.require_object_exists()
         return self.ioctx.get_xattrs(self.key)
 
     @set_object_locator
+    @set_object_namespace
     def set_xattr(self, xattr_name, xattr_value):
         self.require_object_exists()
         return self.ioctx.set_xattr(self.key, xattr_name, xattr_value)
 
     @set_object_locator
+    @set_object_namespace
     def rm_xattr(self, xattr_name):
         self.require_object_exists()
         return self.ioctx.rm_xattr(self.key, xattr_name)

@@ -149,8 +149,12 @@ typedef void *rados_config_t;
  * - snapshot id to read from (see rados_ioctx_snap_set_read())
  * - object locator for all single-object operations (see
  *   rados_ioctx_locator_set_key())
+ * - namespace for all single-object operations (see
+ *   rados_ioctx_set_namespace()).  Set to LIBRADOS_ALL_NSPACES
+ *   before rados_nobjects_list_open() will list all objects in all
+ *   namespaces.
  *
- * @warning changing any of these settings is not thread-safe -
+ * @warning Changing any of these settings is not thread-safe -
  * librados users must synchronize any of these changes on their own,
  * or use separate io contexts for each thread
  */
@@ -160,9 +164,9 @@ typedef void *rados_ioctx_t;
  * @typedef rados_list_ctx_t
  *
  * An iterator for listing the objects in a pool.
- * Used with rados_objects_list_open(),
- * rados_objects_list_next(), and
- * rados_objects_list_close().
+ * Used with rados_nobjects_list_open(),
+ * rados_nobjects_list_next(), and
+ * rados_nobjects_list_close().
  */
 typedef void *rados_list_ctx_t;
 
@@ -327,8 +331,8 @@ int rados_create2(rados_t *pcluster, const char *const clustername,
 int rados_create_with_context(rados_t *cluster, rados_config_t cct);
 
 /**
- * Ping the monitor with ID @p mon_id, storing the resulting reply in
- * @p buf (if specified) with a maximum size of @p len.
+ * Ping the monitor with ID mon_id, storing the resulting reply in
+ * buf (if specified) with a maximum size of len.
  *
  * The result buffer is allocated on the heap; the caller is
  * expected to release that memory with rados_buffer_free().  The
@@ -338,7 +342,7 @@ int rados_create_with_context(rados_t *cluster, rados_config_t cct);
  * @param      cluster    cluster handle
  * @param[in]  mon_id     ID of the monitor to ping
  * @param[out] outstr     double pointer with the resulting reply
- * @param[out] outstrlen  pointer with the size of the reply in @p outstr
+ * @param[out] outstrlen  pointer with the size of the reply in outstr
  */
 int rados_ping_monitor(rados_t cluster, const char *mon_id,
                        char **outstr, size_t *outstrlen);
@@ -816,7 +820,7 @@ void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
 /** @} obj_loc */
 
 /**
- * @defgroup librados_h_list_obj Listing Objects
+ * @defgroup librados_h_list_nobj New Listing Objects
  * @{
  */
 /**
@@ -826,7 +830,7 @@ void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace);
  * @param ctx the handle to store list context in
  * @returns 0 on success, negative error code on failure
  */
-int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
+int rados_nobjects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
 
 /**
  * Return hash position of iterator, rounded to the current PG
@@ -834,7 +838,7 @@ int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
  * @param ctx iterator marking where you are in the listing
  * @returns current hash position, rounded to the current pg
  */
-uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+uint32_t rados_nobjects_list_get_pg_hash_position(rados_list_ctx_t ctx);
 
 /**
  * Reposition object iterator to a different hash position
@@ -843,7 +847,7 @@ uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
  * @param pos hash position to move to
  * @returns actual (rounded) position we moved to
  */
-uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
+uint32_t rados_nobjects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
 
 /**
  * Get the next object name and locator in the pool
@@ -853,10 +857,12 @@ uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
  * @param ctx iterator marking where you are in the listing
  * @param entry where to store the name of the entry
  * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
  * @returns 0 on success, negative error code on failure
  * @returns -ENOENT when there are no more objects to list
  */
-int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key);
+int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry,
+	const char **key, const char **nspace);
 
 /**
  * Close the object listing handle.
@@ -865,6 +871,39 @@ int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char
  * The handle should not be used after it has been closed.
  *
  * @param ctx the handle to close
+ */
+void rados_nobjects_list_close(rados_list_ctx_t ctx);
+
+/** @} New Listing Objects */
+
+/**
+ * @defgroup librados_h_list_obj Deprecated Listing Objects
+ *
+ * Older listing objects interface.  Please use the new interface.
+ * @{
+ */
+/**
+ * @warning Deprecated: Use rados_nobjects_list_open() instead
+ */
+int rados_objects_list_open(rados_ioctx_t io, rados_list_ctx_t *ctx);
+
+/**
+ * @warning Deprecated: Use rados_nobjects_list_get_pg_hash_position() instead
+ */
+uint32_t rados_objects_list_get_pg_hash_position(rados_list_ctx_t ctx);
+
+/**
+ * @warning Deprecated: Use rados_nobjects_list_seek() instead
+ */
+uint32_t rados_objects_list_seek(rados_list_ctx_t ctx, uint32_t pos);
+
+/**
+ * @warning Deprecated: Use rados_nobjects_list_next() instead
+ */
+int rados_objects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key);
+
+/**
+ * @warning Deprecated: Use rados_nobjects_list_close() instead
  */
 void rados_objects_list_close(rados_list_ctx_t ctx);
 
@@ -932,15 +971,7 @@ int rados_ioctx_snap_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
 
 /**
- * Rollback an object to a pool snapshot *DEPRECATED*
- *
- * Deprecated interface which is not rados_ioctx_snap_rollback()
- * This function could go away in the future
- *
- * @param io the pool in which the object is stored
- * @param oid the name of the object to rollback
- * @param snapname which snapshot to rollback to
- * @returns 0 on success, negative error code on failure
+ * @warning Deprecated: Use rados_ioctx_snap_rollback() instead
  */
 int rados_rollback(rados_ioctx_t io, const char *oid,
 		   const char *snapname);
@@ -1785,7 +1816,7 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  * @note BUG: watch timeout should be configurable
  * @note BUG: librados should provide a way for watchers to notice connection resets
  * @note BUG: the ver parameter does not work, and -ERANGE will never be returned
- *            (http://www.tracker.newdream.net/issues/2592)
+ *            (See URL tracker.ceph.com/issues/2592)
  *
  * @param io the pool the object is in
  * @param o the object to watch

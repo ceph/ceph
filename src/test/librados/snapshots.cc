@@ -256,7 +256,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, RollbackPP) {
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
-  readioctx.set_namespace(ns);
+  readioctx.set_namespace(nspace);
   readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
 
   my_snaps.push_back(-2);
@@ -340,7 +340,7 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
-  readioctx.set_namespace(ns);
+  readioctx.set_namespace(nspace);
   readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
 
   my_snaps.push_back(-2);
@@ -714,7 +714,7 @@ TEST_F(LibRadosSnapshotsSelfManagedECPP, RollbackPP) {
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
-  readioctx.set_namespace(ns);
+  readioctx.set_namespace(nspace);
   readioctx.snap_set_read(LIBRADOS_SNAP_DIR);
 
   my_snaps.push_back(-2);

@@ -1,6 +1,11 @@
 v0.86
 -----
 
+* New ability to list all objects from all namespaces can fail or return
+  incomplete results when not all OSDs have been upgraded.  Features
+  rados --all ls, rados cppool, rados export, rados cache-flush-evict-all
+  and rados cache-try-flush-evict-all can also fail or return incomplete
+  results.
 
 
 v0.87
