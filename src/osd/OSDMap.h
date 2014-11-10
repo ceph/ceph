@@ -672,19 +672,18 @@ public:
     if (i == get_pools().end()) {
       return false;
     }
+    if (!i->second.ec_pool()) {
+      *out = spg_t(pgid);
+      return true;
+    }
     int primary;
     vector<int> acting;
     pg_to_acting_osds(pgid, &acting, &primary);
-    if (i->second.ec_pool()) {
-      for (uint8_t i = 0; i < acting.size(); ++i) {
-	if (acting[i] == primary) {
-	  *out = spg_t(pgid, shard_id_t(i));
-	  return true;
-	}
+    for (uint8_t i = 0; i < acting.size(); ++i) {
+      if (acting[i] == primary) {
+        *out = spg_t(pgid, shard_id_t(i));
+        return true;
       }
-    } else {
-      *out = spg_t(pgid);
-      return true;
     }
     return false;
   }
