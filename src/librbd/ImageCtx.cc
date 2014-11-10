@@ -55,7 +55,7 @@ namespace librbd {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
-      stripe_unit(0), stripe_count(0),
+      stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
@@ -687,8 +687,9 @@ namespace librbd {
 
   bool ImageCtx::object_may_exist(uint64_t object_no) const
   {
-    // Fall back to default logic if object map is disabled
-    if ((features & RBD_FEATURE_OBJECT_MAP) == 0 /* || invalid map */) {
+    // Fall back to default logic if object map is disabled or invalid
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0 ||
+        ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0)) {
       return true;
     }
 
@@ -710,7 +711,7 @@ namespace librbd {
     if (r < 0) {
       lderr(cct) << "error refreshing object map: " << cpp_strerror(r)
 		 << dendl;
-      // TODO: flag object map as invalid
+      invalidate_object_map();
       object_map.clear();
       return r;
     }
@@ -723,7 +724,7 @@ namespace librbd {
       // resize op might have been interrupted
       lderr(cct) << "incorrect object map size: " << object_map.size()
 		 << " != " << num_objs << dendl;
-      // TODO: flag object map as invalid
+      invalidate_object_map();
       return -EINVAL;
     }
     return 0;
@@ -745,7 +746,7 @@ namespace librbd {
       lderr(cct) << "error resizing object map: size=" << num_objs << ", "
                  << "state=" << default_object_state << ", "
                  << "error=" << cpp_strerror(r) << dendl;
-      // TODO: flag object map as invalid
+      invalidate_object_map();
       return 0;
     }
 
@@ -773,7 +774,8 @@ namespace librbd {
 
     RWLock::WLocker l(object_map_lock);
     assert(start_object_no <= end_object_no);
-    assert(/* flagged as invalid || */ end_object_no <= object_map.size());
+    assert(end_object_no <= object_map.size() ||
+	   (flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
     if (end_object_no > object_map.size()) {
       ldout(cct, 20) << "skipping update of invalid object map" << dendl;
       return 0;
@@ -803,7 +805,7 @@ namespace librbd {
     int r = data_ctx.operate(object_map_name(id), &op);
     if (r < 0) {
       lderr(cct) << "object map update failed: " << cpp_strerror(r) << dendl;
-      // TODO: remove RBD_FEATURE_EXCLUSIVE_LOCK feature on image
+      invalidate_object_map();
     } else {
       for (uint64_t object_no = start_object_no; object_no < end_object_no;
            ++object_no) {
@@ -813,5 +815,16 @@ namespace librbd {
       }
     }
     return r;
+  }
+
+  void ImageCtx::invalidate_object_map()
+  {
+    flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+    int r = cls_client::set_flags(&md_ctx, header_oid, flags,
+                                  RBD_FLAG_OBJECT_MAP_INVALID);
+    if (r < 0) {
+      lderr(cct) << "Failed to invalidate object map: " << cpp_strerror(r)
+                 << dendl;
+    }
   }
 }
