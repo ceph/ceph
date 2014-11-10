@@ -960,6 +960,7 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
 {
   pg_t parent;
   int split_bits = 0;
+  bool parent_found = false;
   if (!new_pool) {
     parent = pgid;
     while (1) {
@@ -973,6 +974,7 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
       if (pg_map.pg_stat.count(parent) &&
 	  pg_map.pg_stat[parent].state != PG_STATE_CREATING) {
 	dout(10) << "  parent is " << parent << dendl;
+	parent_found = true;
 	break;
       }
     }
@@ -984,10 +986,17 @@ void PGMonitor::register_pg(pg_pool_t& pool, pg_t pgid, epoch_t epoch, bool new_
   stats.parent = parent;
   stats.parent_split_bits = split_bits;
 
-  utime_t now = ceph_clock_now(g_ceph_context);
-  stats.last_scrub_stamp = now;
-  stats.last_deep_scrub_stamp = now;
-  stats.last_clean_scrub_stamp = now;
+  if (parent_found) {
+    stats.last_scrub_stamp = pg_map.pg_stat[parent].last_scrub_stamp;
+    stats.last_deep_scrub_stamp = pg_map.pg_stat[parent].last_deep_scrub_stamp;
+    stats.last_clean_scrub_stamp = pg_map.pg_stat[parent].last_clean_scrub_stamp;
+  } else {
+    utime_t now = ceph_clock_now(g_ceph_context);
+    stats.last_scrub_stamp = now;
+    stats.last_deep_scrub_stamp = now;
+    stats.last_clean_scrub_stamp = now;
+  }
+
 
   if (split_bits == 0) {
     dout(10) << "register_new_pgs  will create " << pgid << dendl;
@@ -1175,6 +1184,9 @@ void PGMonitor::send_pg_creates(int osd, Connection *con)
     m->mkpg[*q] = pg_create_t(pg_map.pg_stat[*q].created,
 			      pg_map.pg_stat[*q].parent,
 			      pg_map.pg_stat[*q].parent_split_bits);
+    // Need the create time from the monitor using his clock to set last_scrub_stamp
+    // upon pg creation.
+    m->ctimes[*q] = pg_map.pg_stat[*q].last_scrub_stamp;
   }
 
   if (con) {
