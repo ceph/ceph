@@ -556,8 +556,13 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
 
-  Context *onack = new C_aio_Ack(c);
-  Context *oncommit = new C_aio_Safe(c);
+  Context *onack = 0;
+  Context *oncommit = 0;
+
+  if(c->callback_complete)
+    onack = new C_aio_Ack(c);
+  if(c->callback_safe)
+    oncommit = new C_aio_Safe(c);
 
   c->io = this;
   queue_aio_write(c);
