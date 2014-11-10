@@ -18,12 +18,14 @@
 /* New-style rbd image 'foo' consists of objects
  *   rbd_id.foo              - id of image
  *   rbd_header.<id>         - image metadata
+ *   rbd_object_map.<id>     - optional image object map
  *   rbd_data.<id>.00000000
  *   rbd_data.<id>.00000001
  *   ...                     - data
  */
 
 #define RBD_HEADER_PREFIX      "rbd_header."
+#define RBD_OBJECT_MAP_PREFIX  "rbd_object_map."
 #define RBD_DATA_PREFIX        "rbd_data."
 #define RBD_ID_PREFIX          "rbd_id."
 
