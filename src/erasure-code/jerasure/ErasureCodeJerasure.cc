@@ -199,7 +199,7 @@ int ErasureCodeJerasureReedSolomonVandermonde::parse(const map<std::string,std::
     w = DEFAULT_W;
     err = -EINVAL;
   }
-  err |= to_bool("jerasure-per-chunk-alignement", parameters,
+  err |= to_bool("jerasure-per-chunk-alignment", parameters,
 		 &per_chunk_alignment, false, ss);
   return err;
 }
@@ -306,7 +306,7 @@ int ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &paramet
     err = -EINVAL;
   }
   err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
-  err |= to_bool("jerasure-per-chunk-alignement", parameters,
+  err |= to_bool("jerasure-per-chunk-alignment", parameters,
 		 &per_chunk_alignment, false, ss);
   return err;
 }
