@@ -96,6 +96,7 @@ namespace librbd {
     parent_info parent_md;
     ImageCtx *parent;
     uint64_t stripe_unit, stripe_count;
+    uint64_t flags;
 
     ceph_file_layout layout;
 
@@ -189,6 +190,7 @@ namespace librbd {
     int update_object_map(uint64_t start_object_no, uint64_t end_object_no,
 			  uint8_t new_state,
 			  const boost::optional<uint8_t> &current_state);
+    void invalidate_object_map();
   };
 }
 
