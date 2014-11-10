@@ -68,6 +68,11 @@ namespace librbd {
     return image_name + RBD_SUFFIX;
   }
 
+  const string object_map_name(const string &image_id)
+  {
+    return RBD_OBJECT_MAP_PREFIX + image_id;
+  }
+
   int detect_format(IoCtx &io_ctx, const string &name,
 		    bool *old_format, uint64_t *size)
   {

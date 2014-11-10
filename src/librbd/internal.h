@@ -72,9 +72,14 @@ namespace librbd {
     }
   };
 
+  static const uint8_t OBJECT_NONEXISTENT = 0;
+  static const uint8_t OBJECT_EXISTS = 1;
+  static const uint8_t OBJECT_PENDING = 2;
+
   const std::string id_obj_name(const std::string &name);
   const std::string header_name(const std::string &image_id);
   const std::string old_header_name(const std::string &image_name);
+  const std::string object_map_name(const std::string &image_id);
 
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
