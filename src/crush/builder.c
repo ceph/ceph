@@ -308,6 +308,10 @@ static int parent(int n)
 
 static int calc_depth(int size)
 {
+	if (size == 0) {
+		return 0;
+	}
+
 	int depth = 1;
 	int t = size - 1;
 	while (t) {
@@ -335,6 +339,16 @@ crush_make_tree_bucket(int hash, int type, int size,
 	bucket->h.hash = hash;
 	bucket->h.type = type;
 	bucket->h.size = size;
+
+	if (size == 0) {
+		bucket->h.items = NULL;
+		bucket->h.perm = NULL;
+		bucket->h.weight = 0;
+		bucket->node_weights = NULL;
+		bucket->num_nodes = 0;
+		/* printf("size 0 depth 0 nodes 0\n"); */
+		return bucket;
+	}
 
 	bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
@@ -652,10 +666,19 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	node = crush_calc_tree_node(newsize-1);
 	bucket->node_weights[node] = weight;
 
+	/* if the depth increase, we need to initialize the new root node's weight before add bucket item */
+	int root = bucket->num_nodes/2;
+	if (depth >= 2 && (node - 1) == root) {
+		/* if the new item is the first node in right sub tree, so
+		* the root node initial weight is left sub tree's weight
+		*/
+		bucket->node_weights[root] = bucket->node_weights[root/2];
+	}
+
 	for (j=1; j<depth; j++) {
 		node = parent(node);
 
-                if (!crush_addition_is_unsafe(bucket->node_weights[node], weight))
+                if (crush_addition_is_unsafe(bucket->node_weights[node], weight))
                         return -ERANGE;
 
 		bucket->node_weights[node] += weight;
@@ -666,6 +689,7 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 	
+	bucket->h.items[newsize-1] = item;
         bucket->h.weight += weight;
         bucket->h.size++;
 
