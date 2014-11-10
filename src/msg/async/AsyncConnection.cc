@@ -1822,12 +1822,12 @@ void AsyncConnection::_stop(bool external)
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+  if (policy.lossy)
+    was_session_reset();
   center->dispatch_event_external(reset_handler);
   shutdown_socket();
   discard_out_queue();
   outcoming_bl.clear();
-  if (policy.lossy)
-    was_session_reset();
   open_write = false;
   state = STATE_CLOSED;
   ::close(sd);
