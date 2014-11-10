@@ -250,6 +250,16 @@ ostream& operator<<(ostream& out, const CInode& in)
   return out;
 }
 
+ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si)
+{
+  out << "{scrub_start_version: " << si.scrub_start_version
+      << ", scrub_start_stamp: " << si.scrub_start_stamp
+      << ", last_scrub_version: " << si.last_scrub_version
+      << ", last_scrub_stamp: " << si.last_scrub_stamp;
+  return out;
+}
+
+
 
 void CInode::print(ostream& out)
 {
@@ -352,12 +362,22 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
     if (px)
       *px = *get_projected_xattrs();
   }
+
+  projected_inode_t &pi = *projected_nodes.back();
+
   if (px) {
-    projected_nodes.back()->xattrs = px;
+    pi.xattrs = px;
     ++num_projected_xattrs;
   }
-  dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
-  return projected_nodes.back()->inode;
+
+  if (scrub_infop && scrub_infop->last_scrub_dirty) {
+    pi.inode->last_scrub_stamp = scrub_infop->last_scrub_stamp;
+    pi.inode->last_scrub_version = scrub_infop->last_scrub_version;
+    scrub_infop->last_scrub_dirty = false;
+    scrub_maybe_delete_info();
+  }
+  dout(15) << "project_inode " << pi.inode << dendl;
+  return pi.inode;
 }
 
 void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
@@ -3985,3 +4005,138 @@ void CInode::dump(Formatter *f) const
   f->close_section();
 }
 
+/****** Scrub Stuff *****/
+void CInode::scrub_info_create() const
+{
+  dout(25) << __func__ << dendl;
+  assert(!scrub_infop);
+
+  // break out of const-land to set up implicit initial state
+  CInode *me = const_cast<CInode*>(this);
+  inode_t *in = me->get_projected_inode();
+
+  scrub_info_t *si = new scrub_info_t();
+  si->scrub_start_stamp = si->last_scrub_stamp = in->last_scrub_stamp;
+  si->scrub_start_version = si->last_scrub_version = in->last_scrub_version;
+
+  me->scrub_infop = si;
+}
+
+void CInode::scrub_maybe_delete_info()
+{
+  if (scrub_infop &&
+      !scrub_infop->scrub_in_progress &&
+      !scrub_infop->last_scrub_dirty) {
+    delete scrub_infop;
+    scrub_infop = NULL;
+  }
+}
+
+void CInode::scrub_initialize(version_t scrub_version)
+{
+  dout(20) << __func__ << " with scrub_version "
+           << scrub_version << dendl;
+  assert(!scrub_infop || !scrub_infop->scrub_in_progress);
+  scrub_info();
+  if (!scrub_infop)
+    scrub_infop = new scrub_info_t();
+  else
+    assert(!scrub_infop->scrub_in_progress);
+
+  if (get_projected_inode()->is_dir()) {
+    // fill in dirfrag_stamps with initial state
+    std::list<frag_t> frags;
+    dirfragtree.get_leaves(frags);
+    for (std::list<frag_t>::iterator i = frags.begin();
+        i != frags.end();
+        ++i) {
+      scrub_infop->dirfrag_stamps[*i];
+    }
+  }
+  scrub_infop->scrub_in_progress = true;
+  scrub_infop->scrub_start_version = scrub_version;
+  scrub_infop->scrub_start_stamp = ceph_clock_now(g_ceph_context);
+  // right now we don't handle remote inodes
+}
+
+int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
+{
+  dout(20) << __func__ << dendl;
+  assert(scrub_infop && scrub_infop->scrub_in_progress);
+
+  if (!is_dir()) {
+    return -ENOTDIR;
+  }
+
+  std::map<frag_t, scrub_stamp_info_t>::iterator i =
+      scrub_infop->dirfrag_stamps.begin();
+
+  while (i != scrub_infop->dirfrag_stamps.end()) {
+    if (i->second.scrub_start_version < scrub_infop->scrub_start_version) {
+      i->second.scrub_start_version = get_projected_version();
+      i->second.scrub_start_stamp = ceph_clock_now(g_ceph_context);
+      *out_dirfrag = i->first;
+      dout(20) << " return frag " << *out_dirfrag << dendl;
+      return 0;
+    }
+    ++i;
+  }
+
+  dout(20) << " no frags left, ENOENT " << dendl;
+  return ENOENT;
+}
+
+void CInode::scrub_dirfrags_scrubbing(list<frag_t>* out_dirfrags)
+{
+  assert(out_dirfrags != NULL);
+  assert(scrub_infop != NULL);
+
+  out_dirfrags->clear();
+  std::map<frag_t, scrub_stamp_info_t>::iterator i =
+      scrub_infop->dirfrag_stamps.begin();
+
+  while (i != scrub_infop->dirfrag_stamps.end()) {
+    if (i->second.scrub_start_version >= scrub_infop->scrub_start_version) {
+      if (i->second.last_scrub_version < scrub_infop->scrub_start_version)
+        out_dirfrags->push_back(i->first);
+    } else {
+      return;
+    }
+
+    ++i;
+  }
+}
+
+void CInode::scrub_dirfrag_finished(frag_t dirfrag)
+{
+  dout(20) << __func__ << " on frag " << dirfrag << dendl;
+  assert(scrub_infop && scrub_infop->scrub_in_progress);
+
+  std::map<frag_t, scrub_stamp_info_t>::iterator i =
+      scrub_infop->dirfrag_stamps.find(dirfrag);
+  assert(i != scrub_infop->dirfrag_stamps.end());
+
+  scrub_stamp_info_t &si = i->second;
+  si.last_scrub_stamp = si.scrub_start_stamp;
+  si.last_scrub_version = si.scrub_start_version;
+}
+
+void CInode::scrub_finished(Context **c) {
+  dout(20) << __func__ << dendl;
+  assert(scrub_info()->scrub_in_progress);
+  for (std::map<frag_t, scrub_stamp_info_t>::iterator i =
+      scrub_infop->dirfrag_stamps.begin();
+      i != scrub_infop->dirfrag_stamps.end();
+      ++i) {
+    if(i->second.last_scrub_version != i->second.scrub_start_version) {
+      derr << i->second.last_scrub_version << " != "
+        << i->second.scrub_start_version << dendl;
+    }
+    assert(i->second.last_scrub_version == i->second.scrub_start_version);
+  }
+  scrub_infop->last_scrub_version = scrub_infop->scrub_start_version;
+  scrub_infop->last_scrub_stamp = scrub_infop->scrub_start_stamp;
+  scrub_infop->last_scrub_dirty = true;
+  scrub_infop->scrub_in_progress = false;
+  parent->scrub_finished(c);
+}
