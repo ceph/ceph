@@ -73,7 +73,8 @@ libcommon_internal_la_SOURCES = \
 	common/linux_version.c \
 	common/module.c \
 	common/Readahead.cc \
-	common/Cycles.cc
+	common/Cycles.cc \
+	common/ContextCompletion.cc
 
 # these should go out of libcommon_internal
 libcommon_internal_la_SOURCES += \
@@ -220,7 +221,8 @@ noinst_HEADERS += \
 	common/Continuation.h \
 	common/Readahead.h \
 	common/Cycles.h \
-	common/Initialize.h
+	common/Initialize.h \
+	common/ContextCompletion.h
 
 libsecret_la_SOURCES = common/secret.c
 libsecret_la_LIBADD = $(KEYUTILS_LIB)
