@@ -22,7 +22,6 @@ run_cli_tests() {
 }
 
 run_api_tests() {
-    recreate_pool rbd
     # skip many_snaps since it takes several minutes
     nosetests -v test_rbd -e '.*many_snaps'
     # ceph_test_librbd creates its own pools
