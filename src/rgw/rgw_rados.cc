@@ -4315,7 +4315,7 @@ int RGWRados::prepare_get_obj(void *ctx, rgw_obj& obj,
 
     if (mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *mod_ptr << " Last-Modified: " << ctime << dendl;
-      if (ctime < *mod_ptr) {
+      if (ctime <= *mod_ptr) {
         r = -ERR_NOT_MODIFIED;
         goto done_err;
       }
