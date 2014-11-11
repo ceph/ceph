@@ -339,13 +339,18 @@ int KeyValueStore::BufferTransaction::get_buffer_keys(
 {
   set<string> need_lookup;
 
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
   for (set<string>::iterator it = keys.begin(); it != keys.end(); ++it) {
-    map<pair<string, string>, bufferlist>::iterator i =
-        strip_header->buffers.find(make_pair(prefix, *it));
-
-    if (i != strip_header->buffers.end()) {
-      (*out)[*it].swap(i->second);
-    } else {
+    map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+    if ( obj_it != buffers.end() ) {
+      map<pair<string, string>, bufferlist>::iterator i =
+          obj_it->second.find(make_pair(prefix, *it));
+      if (i != obj_it->second.end()) {
+        (*out)[*it].swap(i->second);
+      } else {
+        need_lookup.insert(*it);
+      }
+    }else {
       need_lookup.insert(*it);
     }
   }
@@ -369,9 +374,10 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
 {
   store->backend->set_keys(strip_header->header, prefix, values, t);
 
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
   for (map<string, bufferlist>::iterator iter = values.begin();
        iter != values.end(); ++iter) {
-    strip_header->buffers[make_pair(prefix, iter->first)].swap(iter->second);
+    buffers[uid][make_pair(prefix, iter->first)].swap(iter->second);
   }
 }
 
@@ -379,8 +385,12 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
      StripObjectMap::StripObjectHeaderRef strip_header, const string &prefix,
      const set<string> &keys)
 {
-  for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-    strip_header->buffers[make_pair(prefix, *iter)] = bufferlist();
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+  if ( obj_it != buffers.end() ) {
+    for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      obj_it->second[make_pair(prefix, *iter)] = bufferlist();
+    }
   }
 
   return store->backend->rm_keys(strip_header->header, prefix, keys, t);
@@ -389,10 +399,14 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
 void KeyValueStore::BufferTransaction::clear_buffer_keys(
      StripObjectMap::StripObjectHeaderRef strip_header, const string &prefix)
 {
-  for (map<pair<string, string>, bufferlist>::iterator iter = strip_header->buffers.begin();
-       iter != strip_header->buffers.end(); ++iter) {
-    if (iter->first.first == prefix)
-      iter->second = bufferlist();
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+  if ( obj_it != buffers.end() ) {
+    for (map<pair<string, string>, bufferlist>::iterator iter = obj_it->second.begin();
+         iter != obj_it->second.end(); ++iter) {
+      if (iter->first.first == prefix)
+        iter->second = bufferlist();
+    }
   }
 }
 
@@ -1631,20 +1645,26 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeaderRef header,
                                   extents);
   map<string, bufferlist> out;
   set<string> keys;
+  pair<coll_t, ghobject_t> uid = make_pair(header->cid, header->oid);
 
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
     bufferlist old;
     string key = strip_object_key(iter->no);
 
-    if (bt && header->buffers.count(make_pair(OBJECT_STRIP_PREFIX, key))) {
+    map< pair<coll_t, ghobject_t>, map<pair<string, string>, bufferlist> >::iterator obj_it;
+    if ( bt ){
+      obj_it = bt->buffers.find(uid);
+    }
+    if ( bt && obj_it != bt->buffers.end() && obj_it->second.count(make_pair(OBJECT_STRIP_PREFIX, key))) {
       // use strip_header buffer
       assert(header->bits[iter->no]);
-      out[key] = header->buffers[make_pair(OBJECT_STRIP_PREFIX, key)];
-    } else if (header->bits[iter->no]) {
+      out[key] = obj_it->second[make_pair(OBJECT_STRIP_PREFIX, key)];
+    }else if (header->bits[iter->no]) {
       keys.insert(key);
     }
   }
+
 
   int r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
   if (r < 0) {
