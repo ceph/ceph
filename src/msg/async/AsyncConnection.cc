@@ -1998,7 +1998,7 @@ void AsyncConnection::handle_write()
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   bufferlist bl;
-  int r;
+  int r = 0;
   if (state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE) {
     if (keepalive) {
       _send_keepalive_or_ack();
@@ -2027,7 +2027,14 @@ void AsyncConnection::handle_write()
       bl.append((char*)&s, sizeof(s));
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack" << dendl;
       in_seq_acked = s;
-      _try_send(bl);
+      r = _try_send(bl);
+    } else if (is_queued()) {
+      r = _try_send(bl);
+    }
+
+    if (r < 0) {
+      ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+      goto fail;
     }
   } else if (state != STATE_CONNECTING) {
     r = _try_send(bl);
