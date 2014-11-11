@@ -8,6 +8,7 @@ from textwrap import dedent
 from textwrap import fill
 
 import teuthology
+from teuthology.config import config
 from teuthology import misc
 from teuthology import ls
 from .job_status import get_status
@@ -21,8 +22,6 @@ def main(args):
     log = logging.getLogger(__name__)
     if args.verbose:
         teuthology.log.setLevel(logging.DEBUG)
-
-    misc.read_config(args)
 
     log_path = os.path.join(args.archive_dir, 'results.log')
     teuthology.setup_log_file(log_path)
@@ -55,8 +54,7 @@ def results(args):
         if args.email:
             email_results(
                 subject=subject,
-                from_=args.teuthology_config.get('results_sending_email',
-                                                 'teuthology'),
+                from_=config.results_sending_email or 'teuthology',
                 to=args.email,
                 body=body,
             )
@@ -68,7 +66,7 @@ def generate_coverage(args):
     coverage_config_keys = ('coverage_output_dir', 'coverage_html_dir',
                             'coverage_tools_dir')
     for key in coverage_config_keys:
-        if key not in args.teuthology_config:
+        if key not in config.to_dict():
             log.warn(
                 "'%s' not in teuthology config; skipping coverage report",
                 key)
@@ -79,13 +77,11 @@ def generate_coverage(args):
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
             '-v',
             '-o',
-            os.path.join(args.teuthology_config[
-                         'coverage_output_dir'], args.name),
+            os.path.join(config.coverage_output_dir, args.name),
             '--html-output',
-            os.path.join(args.teuthology_config[
-                         'coverage_html_dir'], args.name),
+            os.path.join(config.coverage_html_dir, args.name),
             '--cov-tools-dir',
-            args.teuthology_config['coverage_tools_dir'],
+            config.coverage_tools_dir,
             args.archive_dir,
         ],
     )
