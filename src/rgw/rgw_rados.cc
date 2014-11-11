@@ -5934,9 +5934,18 @@ int RGWRados::follow_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, rgw_obj& olh
   filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
 
   if (!pending_entries.empty()) {
-#warning FIXME: bucket_owner
-    string bucket_owner;
-    int ret = update_olh(obj_ctx, state, bucket_owner, olh_obj);
+    ldout(cct, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
+
+    /* we could save a few cpu cycles if we drilled through all the layers and passed the bucket
+     * info in, but this is supposed to be a rare call and it doesn't seem compelling enough
+     * for cluttering everything
+     */
+    RGWBucketInfo bucket_info;
+    int ret = get_bucket_instance_info(obj_ctx, olh_obj.bucket, bucket_info, NULL, NULL);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: get_bucket_instance_info() returned " << ret << " olh_obj.bucket=" << olh_obj.bucket << dendl;
+    }
+    ret = update_olh(obj_ctx, state, bucket_info.owner, olh_obj);
     if (ret < 0) {
       return ret;
     }
