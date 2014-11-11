@@ -1021,36 +1021,39 @@ int librados::IoCtx::create(const std::string& oid, bool exclusive, const std::s
   return io_ctx_impl->create(obj, exclusive, category);
 }
 
-int librados::IoCtx::write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
+int librados::IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
+			    uint64_t off, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->write(obj, bl, len, off);
+  return io_ctx_impl->write(obj, bl, len, off, iohint_flags);
 }
 
-int librados::IoCtx::append(const std::string& oid, bufferlist& bl, size_t len)
+int librados::IoCtx::append(const std::string& oid, bufferlist& bl,
+			    size_t len, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->append(obj, bl, len);
+  return io_ctx_impl->append(obj, bl, len, iohint_flags);
 }
 
-int librados::IoCtx::write_full(const std::string& oid, bufferlist& bl)
+int librados::IoCtx::write_full(const std::string& oid, bufferlist& bl, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->write_full(obj, bl);
+  return io_ctx_impl->write_full(obj, bl, iohint_flags);
 }
-
+//iohint_flags only for dest object
 int librados::IoCtx::clone_range(const std::string& dst_oid, uint64_t dst_off,
 				 const std::string& src_oid, uint64_t src_off,
-				 size_t len)
+				 size_t len, unsigned iohint_flags)
 {
   object_t src(src_oid), dst(dst_oid);
-  return io_ctx_impl->clone_range(dst, dst_off, src, src_off, len);
+  return io_ctx_impl->clone_range(dst, dst_off, src, src_off, len, iohint_flags);
 }
 
-int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
+int librados::IoCtx::read(const std::string& oid, bufferlist& bl, size_t len,
+			  uint64_t off, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->read(obj, bl, len, off);
+  return io_ctx_impl->read(obj, bl, len, off, iohint_flags);
 }
 
 int librados::IoCtx::remove(const std::string& oid)
@@ -1073,10 +1076,10 @@ int librados::IoCtx::mapext(const std::string& oid, uint64_t off, size_t len,
 }
 
 int librados::IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
-				 bufferlist& bl, size_t len, uint64_t off)
+				 bufferlist& bl, size_t len, uint64_t off, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->sparse_read(oid, m, bl, len, off);
+  return io_ctx_impl->sparse_read(oid, m, bl, len, off, iohint_flags);
 }
 
 int librados::IoCtx::getxattr(const std::string& oid, const char *name, bufferlist& bl)
@@ -1559,17 +1562,18 @@ uint64_t librados::IoCtx::get_last_version()
 }
 
 int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
-			      bufferlist *pbl, size_t len, uint64_t off)
+			      bufferlist *pbl, size_t len, uint64_t off,
+			      unsigned iohint_flags)
 {
   return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off,
-			       io_ctx_impl->snap_seq);
+			       io_ctx_impl->snap_seq, iohint_flags);
 }
 
 int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c,
 			      bufferlist *pbl, size_t len, uint64_t off,
-			      uint64_t snapid)
+			      uint64_t snapid, unsigned iohint_flags)
 {
-  return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off, snapid);
+  return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off, snapid, iohint_flags);
 }
 
 int librados::IoCtx::aio_exec(const std::string& oid,
@@ -1583,38 +1587,41 @@ int librados::IoCtx::aio_exec(const std::string& oid,
 
 int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
 				     std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
-				     size_t len, uint64_t off)
+				     size_t len, uint64_t off, unsigned iohint_flags)
 {
   return io_ctx_impl->aio_sparse_read(oid, c->pc,
 				      m, data_bl, len, off,
-				      io_ctx_impl->snap_seq);
+				      io_ctx_impl->snap_seq,
+				      iohint_flags);
 }
 
 int librados::IoCtx::aio_sparse_read(const std::string& oid, librados::AioCompletion *c,
 				     std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
-				     size_t len, uint64_t off, uint64_t snapid)
+				     size_t len, uint64_t off, uint64_t snapid,
+				     unsigned iohint_flags)
 {
   return io_ctx_impl->aio_sparse_read(oid, c->pc,
-				      m, data_bl, len, off, snapid);
+				      m, data_bl, len, off, snapid, iohint_flags);
 }
 
 int librados::IoCtx::aio_write(const std::string& oid, librados::AioCompletion *c,
-			       const bufferlist& bl, size_t len, uint64_t off)
+			       const bufferlist& bl, size_t len, uint64_t off,
+			       unsigned iohint_flags)
 {
-  return io_ctx_impl->aio_write(oid, c->pc, bl, len, off);
+  return io_ctx_impl->aio_write(oid, c->pc, bl, len, off, iohint_flags);
 }
 
 int librados::IoCtx::aio_append(const std::string& oid, librados::AioCompletion *c,
-				const bufferlist& bl, size_t len)
+				const bufferlist& bl, size_t len, unsigned iohint_flags)
 {
-  return io_ctx_impl->aio_append(oid, c->pc, bl, len);
+  return io_ctx_impl->aio_append(oid, c->pc, bl, len, iohint_flags);
 }
 
 int librados::IoCtx::aio_write_full(const std::string& oid, librados::AioCompletion *c,
-				    const bufferlist& bl)
+				    const bufferlist& bl, unsigned iohint_flags)
 {
   object_t obj(oid);
-  return io_ctx_impl->aio_write_full(obj, c->pc, bl);
+  return io_ctx_impl->aio_write_full(obj, c->pc, bl, iohint_flags);
 }
 
 int librados::IoCtx::aio_remove(const std::string& oid, librados::AioCompletion *c)
