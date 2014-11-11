@@ -86,8 +86,6 @@ class TestResultsEmail(object):
         self.archive.populate_archive(run_name, self.reference['jobs'])
         (subject, body) = results.build_email_body(
             run_name,
-            run_dir,
-            36000)
+            run_dir)
         assert subject == self.reference['subject']
-        print body
         assert body == self.reference['body']

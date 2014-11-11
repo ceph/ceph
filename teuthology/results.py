@@ -20,49 +20,49 @@ log = logging.getLogger(__name__)
 def main(args):
 
     log = logging.getLogger(__name__)
-    if args.verbose:
+    if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
-    log_path = os.path.join(args.archive_dir, 'results.log')
+    log_path = os.path.join(args['--archive-dir'], 'results.log')
     teuthology.setup_log_file(log_path)
 
     try:
-        results(args)
+        results(args['--archive-dir'], args['--name'], args['--email'],
+                args['--timeout'])
     except Exception:
         log.exception('error generating results')
         raise
 
 
-def results(args):
-    archive_base = os.path.split(args.archive_dir)[0]
+def results(archive_dir, name, email, timeout):
+    archive_base = os.path.split(archive_dir)[0]
     serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
-    log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
-    while serializer.running_jobs_for_run(args.name) and args.timeout > 0:
-        if time.time() - starttime > args.timeout:
+    log.info('Waiting up to %d seconds for tests to finish...', timeout)
+    while serializer.running_jobs_for_run(name) and timeout > 0:
+        if time.time() - starttime > timeout:
             log.warn('test(s) did not finish before timeout of %d seconds',
-                     args.timeout)
+                     timeout)
             break
         time.sleep(10)
     log.info('Tests finished! gathering results...')
 
-    (subject, body) = build_email_body(args.name, args.archive_dir,
-                                       args.timeout)
+    (subject, body) = build_email_body(name, archive_dir)
 
     try:
-        if args.email:
+        if email:
             email_results(
                 subject=subject,
                 from_=config.results_sending_email or 'teuthology',
-                to=args.email,
+                to=email,
                 body=body,
             )
     finally:
-        generate_coverage(args)
+        generate_coverage(archive_dir, name)
 
 
-def generate_coverage(args):
+def generate_coverage(archive_dir, name):
     coverage_config_keys = ('coverage_output_dir', 'coverage_html_dir',
                             'coverage_tools_dir')
     for key in coverage_config_keys:
@@ -77,12 +77,12 @@ def generate_coverage(args):
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
             '-v',
             '-o',
-            os.path.join(config.coverage_output_dir, args.name),
+            os.path.join(config.coverage_output_dir, name),
             '--html-output',
-            os.path.join(config.coverage_html_dir, args.name),
+            os.path.join(config.coverage_html_dir, name),
             '--cov-tools-dir',
             config.coverage_tools_dir,
-            args.archive_dir,
+            archive_dir,
         ],
     )
 
@@ -101,7 +101,7 @@ def email_results(subject, from_, to, body):
     smtp.quit()
 
 
-def build_email_body(name, archive_dir, timeout):
+def build_email_body(name, archive_dir):
     failed = {}
     hung = {}
     passed = {}

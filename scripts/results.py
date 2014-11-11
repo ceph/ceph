@@ -1,40 +1,21 @@
-import argparse
+"""
+usage: teuthology-results [-h] [-v] [--email EMAIL] [--timeout TIMEOUT] --archive-dir DIR --name NAME
 
+Email teuthology suite results
+
+optional arguments:
+  -h, --help         show this help message and exit
+  -v, --verbose      be more verbose
+  --email EMAIL      address to email test failures to
+  --timeout TIMEOUT  how many seconds to wait for all tests to finish (default
+                     no wait)
+  --archive-dir DIR  path under which results for the suite are stored
+  --name NAME        name of the suite
+"""
+import docopt
 import teuthology.results
 
 
 def main():
-    teuthology.results.main(parse_args())
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Email teuthology suite results')
-    parser.add_argument(
-        '--email',
-        help='address to email test failures to',
-    )
-    parser.add_argument(
-        '--timeout',
-        help='how many seconds to wait for all tests to finish (default no ' +
-        'wait)',
-        type=int,
-        default=0,
-    )
-    parser.add_argument(
-        '--archive-dir',
-        metavar='DIR',
-        help='path under which results for the suite are stored',
-        required=True,
-    )
-    parser.add_argument(
-        '--name',
-        help='name of the suite',
-        required=True,
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true', default=False,
-        help='be more verbose',
-    )
-    return parser.parse_args()
+    args = docopt.docopt(__doc__)
+    teuthology.results.main(args)
