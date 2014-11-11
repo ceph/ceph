@@ -668,6 +668,8 @@ struct dentry_key_t {
   dentry_key_t() : snapid(0), name(0) {}
   dentry_key_t(snapid_t s, const char *n) : snapid(s), name(n) {}
 
+  bool is_valid() { return name || snapid; }
+
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
   void encode(bufferlist& bl) const {
