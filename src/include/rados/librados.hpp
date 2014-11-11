@@ -309,19 +309,19 @@ namespace librados
 
     void create(bool exclusive);
     void create(bool exclusive, const std::string& category);
-    void write(uint64_t off, const bufferlist& bl);
-    void write_full(const bufferlist& bl);
-    void append(const bufferlist& bl);
+    void write(uint64_t off, const bufferlist& bl, unsigned iohint_flags=0);
+    void write_full(const bufferlist& bl, unsigned iohint_flags=0);
+    void append(const bufferlist& bl, unsigned iohint_flags=0);
     void remove();
     void truncate(uint64_t off);
-    void zero(uint64_t off, uint64_t len);
+    void zero(uint64_t off, uint64_t len, unsigned iohint_flags=0);
     void rmxattr(const char *name);
     void setxattr(const char *name, const bufferlist& bl);
     void tmap_update(const bufferlist& cmdbl);
     void tmap_put(const bufferlist& bl);
     void clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
-                     size_t len);
+                     size_t len, unsigned iohint_flags=0);
     void selfmanaged_snap_rollback(uint64_t snapid);
 
     /**
@@ -406,12 +406,13 @@ namespace librados
     void stat(uint64_t *psize, time_t *pmtime, int *prval);
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
-    void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    void read(size_t off, uint64_t len, bufferlist *pbl,
+	      int *prval, unsigned iohint_flags=0);
     /**
      * see aio_sparse_read()
      */
     void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
-                    bufferlist *data_bl, int *prval);
+                    bufferlist *data_bl, int *prval, unsigned iohint_flags=0);
     void tmap_get(bufferlist *pbl, int *prval);
 
     /**

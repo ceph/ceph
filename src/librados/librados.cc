@@ -183,18 +183,19 @@ void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *p
   o->stat(psize, pmtime, prval);
 }
 
-void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval)
+void librados::ObjectReadOperation::read(size_t off, uint64_t len, bufferlist *pbl, int *prval, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->read(off, len, pbl, prval, NULL);
+  o->read(off, len, pbl, prval, NULL, iohint_flags);
 }
 
 void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
 						std::map<uint64_t,uint64_t> *m,
-						bufferlist *data_bl, int *prval)
+						bufferlist *data_bl, int *prval,
+						unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->sparse_read(off, len, m, data_bl, prval);
+  o->sparse_read(off, len, m, data_bl, prval, iohint_flags);
 }
 
 void librados::ObjectReadOperation::tmap_get(bufferlist *pbl, int *prval)
@@ -320,25 +321,25 @@ void librados::ObjectWriteOperation::create(bool exclusive, const std::string& c
   o->create(exclusive, category);
 }
 
-void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
+void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
-  o->write(off, c);
+  o->write(off, c, iohint_flags);
 }
 
-void librados::ObjectWriteOperation::write_full(const bufferlist& bl)
+void librados::ObjectWriteOperation::write_full(const bufferlist& bl, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
-  o->write_full(c);
+  o->write_full(c, iohint_flags);
 }
 
-void librados::ObjectWriteOperation::append(const bufferlist& bl)
+void librados::ObjectWriteOperation::append(const bufferlist& bl, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   bufferlist c = bl;
-  o->append(c);
+  o->append(c, iohint_flags);
 }
 
 void librados::ObjectWriteOperation::remove()
@@ -353,10 +354,10 @@ void librados::ObjectWriteOperation::truncate(uint64_t off)
   o->truncate(off);
 }
 
-void librados::ObjectWriteOperation::zero(uint64_t off, uint64_t len)
+void librados::ObjectWriteOperation::zero(uint64_t off, uint64_t len, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->zero(off, len);
+  o->zero(off, len, iohint_flags);
 }
 
 void librados::ObjectWriteOperation::rmxattr(const char *name)
@@ -447,10 +448,10 @@ void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 
 void librados::ObjectWriteOperation::clone_range(uint64_t dst_off,
                      const std::string& src_oid, uint64_t src_off,
-                     size_t len)
+                     size_t len, unsigned iohint_flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->clone_range(src_oid, src_off, len, dst_off);
+  o->clone_range(src_oid, src_off, len, dst_off, iohint_flags);
 }
 
 void librados::ObjectWriteOperation::selfmanaged_snap_rollback(snap_t snapid)
