@@ -468,6 +468,9 @@ OPTION(osd_agent_min_evict_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_quantize_effort, OPT_FLOAT, .1)
 OPTION(osd_agent_delay_time, OPT_FLOAT, 5.0)
 
+// osd ignore history.last_epoch_started in find_best_info
+OPTION(osd_find_best_info_ignore_history_les, OPT_BOOL, false)
+
 // decay atime and hist histograms after how many objects go by
 OPTION(osd_agent_hist_halflife, OPT_INT, 1000)
 
