@@ -40,7 +40,8 @@ def results(archive_dir, name, email, timeout, dry_run):
     serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
-    log.info('Waiting up to %d seconds for tests to finish...', timeout)
+    if timeout:
+        log.info('Waiting up to %d seconds for tests to finish...', timeout)
     while serializer.running_jobs_for_run(name) and timeout > 0:
         if time.time() - starttime > timeout:
             log.warn('test(s) did not finish before timeout of %d seconds',
