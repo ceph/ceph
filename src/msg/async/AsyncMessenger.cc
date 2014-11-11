@@ -357,7 +357,9 @@ int AsyncMessenger::shutdown()
   // break ref cycles on the loopback connection
   processor.stop();
   local_connection->set_priv(NULL);
+  lock.Lock();
   stop_cond.Signal();
+  lock.Unlock();
   stopped = true;
   return 0;
 }

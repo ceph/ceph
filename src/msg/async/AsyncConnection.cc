@@ -723,7 +723,7 @@ void AsyncConnection::process()
         {
           ldout(async_msgr->cct,20) << __func__ << " got CLOSE" << dendl;
           _stop();
-          break;
+          return ;
         }
 
       case STATE_STANDBY:
@@ -1356,7 +1356,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   bufferlist reply_bl;
   uint64_t existing_seq = -1;
   bool is_reset_from_peer = false;
-  char reply_tag;
+  char reply_tag = 0;
 
   memset(&reply, 0, sizeof(reply));
   reply.protocol_version = async_msgr->get_proto_version(peer_type, false);
@@ -1816,9 +1816,10 @@ void AsyncConnection::was_session_reset()
   in_seq_acked = 0;
 }
 
-void AsyncConnection::_stop()
+void AsyncConnection::_stop(bool external)
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
+  center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
   center->dispatch_event_external(reset_handler);
   shutdown_socket();
   discard_out_queue();
@@ -1827,6 +1828,10 @@ void AsyncConnection::_stop()
     was_session_reset();
   open_write = false;
   state = STATE_CLOSED;
+  ::close(sd);
+  sd = -1;
+  async_msgr->unregister_conn(peer_addr, external);
+  put();
 }
 
 int AsyncConnection::_send(Message *m)
