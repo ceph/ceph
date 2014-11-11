@@ -827,6 +827,8 @@ struct RGWStorageStats
   uint64_t num_objects;
 
   RGWStorageStats() : category(RGW_OBJ_CATEGORY_NONE), num_kb(0), num_kb_rounded(0), num_objects(0) {}
+
+  void dump(Formatter *f) const;
 };
 
 struct req_state;
