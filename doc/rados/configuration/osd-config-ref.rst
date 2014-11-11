@@ -100,7 +100,7 @@ Ceph builds and mounts file systems which are used for Ceph OSDs.
 :Description: Options used when creating a new Ceph OSD of type {fs-type}.
 
 :Type: String
-:Default for xfs: ``-f``
+:Default for xfs: ``-f -i 2048``
 :Default for other file systems: {empty string}
 
 For example::
