@@ -23,18 +23,19 @@ def main(args):
     if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
-    log_path = os.path.join(args['--archive-dir'], 'results.log')
-    teuthology.setup_log_file(log_path)
+    if not args['--dry-run']:
+        log_path = os.path.join(args['--archive-dir'], 'results.log')
+        teuthology.setup_log_file(log_path)
 
     try:
         results(args['--archive-dir'], args['--name'], args['--email'],
-                args['--timeout'])
+                args['--timeout'], args['--dry-run'])
     except Exception:
         log.exception('error generating results')
         raise
 
 
-def results(archive_dir, name, email, timeout):
+def results(archive_dir, name, email, timeout, dry_run):
     archive_base = os.path.split(archive_dir)[0]
     serializer = ResultsSerializer(archive_base)
     starttime = time.time()
@@ -51,10 +52,15 @@ def results(archive_dir, name, email, timeout):
     (subject, body) = build_email_body(name, archive_dir)
 
     try:
-        if email:
+        if email and dry_run:
+            print "From: %s" % (config.results_sending_email or 'teuthology')
+            print "To: %s" % email
+            print "Subject: %s" % subject
+            print body
+        elif email:
             email_results(
                 subject=subject,
-                from_=config.results_sending_email or 'teuthology',
+                from_=(config.results_sending_email or 'teuthology'),
                 to=email,
                 body=body,
             )
