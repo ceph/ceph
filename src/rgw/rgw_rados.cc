@@ -4141,7 +4141,6 @@ int RGWRados::get_olh_target_state(RGWObjectCtx& obj_ctx, rgw_obj& obj, RGWObjSt
 }
 
 int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
-#warning FIXME: get rid objv_tracker for non system objects
 {
   bool need_follow_olh = follow_olh && !obj.have_instance();
 
