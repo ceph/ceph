@@ -213,7 +213,7 @@ int RGWGC::process(int index, int max_secs)
         remove_tags.push_back(info.tag);
 #define MAX_REMOVE_CHUNK 16
         if (remove_tags.size() > MAX_REMOVE_CHUNK) {
-          remove(index, remove_tags);
+          RGWGC::remove(index, remove_tags);
           remove_tags.clear();
         }
       }
@@ -222,7 +222,7 @@ int RGWGC::process(int index, int max_secs)
 
 done:
   if (!remove_tags.empty())
-    remove(index, remove_tags);
+    RGWGC::remove(index, remove_tags);
   l.unlock(&store->gc_pool_ctx, obj_names[index]);
   delete ctx;
   return 0;
