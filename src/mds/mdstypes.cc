@@ -436,9 +436,6 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
     *divergent = !other.older_is_consistent(*this);
     return -1;
   }
-  assert(0 == "can't have reached this point");
-  *divergent = true;
-  return 0;
 }
 
 bool inode_t::older_is_consistent(const inode_t &other) const
