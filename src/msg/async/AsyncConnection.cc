@@ -237,9 +237,11 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   int r = 0;
   uint64_t sended = 0;
   list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
-  while (outcoming_bl.length() > sended) {
+  uint64_t left_pbrs = outcoming_bl.buffers().size();
+  while (left_pbrs) {
     struct msghdr msg;
-    int size = MIN(outcoming_bl.buffers().size(), IOV_LEN);
+    uint64_t size = MIN(left_pbrs, IOV_LEN);
+    left_pbrs -= size;
     memset(&msg, 0, sizeof(msg));
     msg.msg_iovlen = 0;
     msg.msg_iov = msgvec;
