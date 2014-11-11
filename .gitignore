@@ -16,3 +16,4 @@
 docs/build
 
 .ropeproject
+.coverage
