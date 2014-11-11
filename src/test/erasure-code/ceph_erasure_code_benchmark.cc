@@ -193,7 +193,7 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 {
   int code = 0;
 
-  if (want_erasures <= 0) {
+  if (want_erasures == 0) {
     if (verbose)
       cout << "chunks ";
     set<int> want_to_read;
