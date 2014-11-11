@@ -251,8 +251,8 @@ public:
   void redo_full_sets();
   void register_nearfull_status(int osd, const osd_stat_t& s);
   void calc_stats();
-  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s);
+  void stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
+  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly=false);
   void stat_osd_add(const osd_stat_t &s);
   void stat_osd_sub(const osd_stat_t &s);
   
