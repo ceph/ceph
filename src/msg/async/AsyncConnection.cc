@@ -1041,14 +1041,22 @@ int AsyncConnection::_process_connection()
         newly_acked_seq = *((uint64_t*)state_buffer.c_str());
         ldout(async_msgr->cct, 2) << __func__ << " got newly_acked_seq " << newly_acked_seq
                             << " vs out_seq " << out_seq << dendl;
-        while (newly_acked_seq > out_seq) {
-          Message *m = _get_next_outgoing();
-          assert(m);
-          ldout(async_msgr->cct, 2) << __func__ << " discarding previously sent " << m->get_seq()
-                              << " " << *m << dendl;
-          assert(m->get_seq() <= newly_acked_seq);
-          m->put();
-          ++out_seq;
+        // out_seq maybe "zero": server side may have legacy connection with
+        // in_seq state, but client side(me) know little because of fresh
+        // connection?.
+        if (out_seq) {
+          while (newly_acked_seq > out_seq) {
+            Message *m = _get_next_outgoing();
+            assert(m);
+            ldout(async_msgr->cct, 2) << __func__ << " discarding previously sent " << m->get_seq()
+                                << " " << *m << dendl;
+            assert(m->get_seq() <= newly_acked_seq);
+            m->put();
+            ++out_seq;
+          }
+        } else {
+          assert(sent.empty());
+          assert(in_seq == 0);
         }
 
         bl.append((char*)&in_seq, sizeof(in_seq));
@@ -1354,9 +1362,9 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   int r;
   ceph_msg_connect_reply reply;
   bufferlist reply_bl;
-  uint64_t existing_seq = -1;
+  uint64_t existing_seq = 0;
   bool is_reset_from_peer = false;
-  char reply_tag;
+  char reply_tag = 0;
 
   memset(&reply, 0, sizeof(reply));
   reply.protocol_version = async_msgr->get_proto_version(peer_type, false);
