@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - '!= known digest'
+    - '!= known omap_digest'
+    - deep-scrub 0 missing, 1 inconsistent objects
+    - deep-scrub 1 errors
+    - repair 0 missing, 1 inconsistent objects
+    - repair 1 errors, 1 fixed
+tasks:
+- install:
+- ceph:
+- scrub_test:
