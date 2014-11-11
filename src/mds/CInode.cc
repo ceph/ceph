@@ -3541,7 +3541,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       try {
         bufferlist::iterator p = bl.begin();
         ::decode(results->backtrace.ondisk_value, p);
-      } catch (buffer::malformed_input) {
+      } catch (buffer::malformed_input&) {
         results->backtrace.passed = false;
         results->backtrace.error_str << "failed to decode on-disk backtrace!";
         return true;
