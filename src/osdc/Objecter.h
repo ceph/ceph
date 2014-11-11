@@ -117,16 +117,20 @@ struct ObjectOperation {
     out_rval[s] = NULL;
     return ops[s];
   }
-  void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl) {
+  void add_data(int op, uint64_t off, uint64_t len, bufferlist& bl, unsigned iohint_flags=0) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.op = op;
+    osd_op.op.iohint_flags = iohint_flags;
     osd_op.op.extent.offset = off;
     osd_op.op.extent.length = len;
     osd_op.indata.claim_append(bl);
   }
-  void add_clone_range(int op, uint64_t off, uint64_t len, const object_t& srcoid, uint64_t srcoff, snapid_t srcsnapid) {
+  //iohint_flags only for dest object
+  void add_clone_range(int op, uint64_t off, uint64_t len, const object_t& srcoid,
+			uint64_t srcoff, snapid_t srcsnapid, unsigned iohint_flags=0) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.op = op;
+    osd_op.op.iohint_flags = iohint_flags;
     osd_op.op.clonerange.offset = off;
     osd_op.op.clonerange.length = len;
     osd_op.op.clonerange.src_offset = srcoff;
@@ -283,9 +287,9 @@ struct ObjectOperation {
 
   // object data
   void read(uint64_t off, uint64_t len, bufferlist *pbl, int *prval,
-	    Context* ctx) {
+	    Context* ctx, unsigned iohint_flags=0) {
     bufferlist bl;
-    add_data(CEPH_OSD_OP_READ, off, len, bl);
+    add_data(CEPH_OSD_OP_READ, off, len, bl, iohint_flags);
     unsigned p = ops.size() - 1;
     out_bl[p] = pbl;
     out_rval[p] = prval;
@@ -315,9 +319,9 @@ struct ObjectOperation {
     }
   };
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t,uint64_t> *m,
-		   bufferlist *data_bl, int *prval) {
+		   bufferlist *data_bl, int *prval, unsigned iohint_flags=0) {
     bufferlist bl;
-    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl, iohint_flags);
     unsigned p = ops.size() - 1;
     C_ObjectOperation_sparse_read *h =
       new C_ObjectOperation_sparse_read(data_bl, m, prval);
@@ -327,24 +331,24 @@ struct ObjectOperation {
   }
   void write(uint64_t off, bufferlist& bl,
              uint64_t truncate_size,
-             uint32_t truncate_seq) {
-    add_data(CEPH_OSD_OP_WRITE, off, bl.length(), bl);
+             uint32_t truncate_seq, unsigned iohint_flags=0) {
+    add_data(CEPH_OSD_OP_WRITE, off, bl.length(), bl, iohint_flags);
     OSDOp& o = *ops.rbegin();
     o.op.extent.truncate_size = truncate_size;
     o.op.extent.truncate_seq = truncate_seq;
   }
-  void write(uint64_t off, bufferlist& bl) {
-    write(off, bl, 0, 0);
+  void write(uint64_t off, bufferlist& bl, unsigned iohint_flags=0) {
+    write(off, bl, 0, 0, iohint_flags);
   }
-  void write_full(bufferlist& bl) {
-    add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
+  void write_full(bufferlist& bl, unsigned iohint_flags=0) {
+    add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl, iohint_flags);
   }
-  void append(bufferlist& bl) {
-    add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
+  void append(bufferlist& bl, unsigned iohint_flags=0) {
+    add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl, iohint_flags);
   }
-  void zero(uint64_t off, uint64_t len) {
+  void zero(uint64_t off, uint64_t len, unsigned iohint_flags=0) {
     bufferlist bl;
-    add_data(CEPH_OSD_OP_ZERO, off, len, bl);
+    add_data(CEPH_OSD_OP_ZERO, off, len, bl, iohint_flags);
   }
   void truncate(uint64_t off) {
     bufferlist bl;
@@ -358,13 +362,15 @@ struct ObjectOperation {
     bufferlist bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
   }
-  void sparse_read(uint64_t off, uint64_t len) {
+  void sparse_read(uint64_t off, uint64_t len, unsigned iohint_flags=0) {
     bufferlist bl;
-    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
+    add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl, iohint_flags);
   }
-
-  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len, uint64_t dst_offset) {
-    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len, src_oid, src_offset, CEPH_NOSNAP);
+  //iohint_flags only for dest object
+  void clone_range(const object_t& src_oid, uint64_t src_offset, uint64_t len,
+		    uint64_t dst_offset, unsigned iohint_flags=0) {
+    add_clone_range(CEPH_OSD_OP_CLONERANGE, dst_offset, len,
+		      src_oid, src_offset, CEPH_NOSNAP, iohint_flags);
   }
 
   // object attrs
@@ -936,12 +942,14 @@ struct ObjectOperation {
     osd_op.op.snap.snapid = snapid;
   }
 
+  //iohint_flags only for dest flags
   void copy_from(object_t src, snapid_t snapid, object_locator_t src_oloc,
-		 version_t src_version, unsigned flags) {
+		 version_t src_version, unsigned flags, unsigned iohint_flags=0) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_FROM);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = src_version;
     osd_op.op.copy_from.flags = flags;
+    osd_op.op.iohint_flags = iohint_flags;
     ::encode(src, osd_op.indata);
     ::encode(src_oloc, osd_op.indata);
   }
