@@ -722,7 +722,8 @@ int CrushWrapper::get_item_weight(int id) const
 
 int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
 {
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
+
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
@@ -765,7 +766,7 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
   ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight << " in " << loc << dendl;
   int changed = 0;
 
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
