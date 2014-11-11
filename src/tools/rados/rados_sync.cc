@@ -504,6 +504,7 @@ void BackedUpObject::xattr_diff(const BackedUpObject *rhs,
   only_in_a.clear();
   only_in_b.clear();
   diff.clear();
+
   for (std::map < std::string, Xattr* >::const_iterator x = xattrs.begin();
 	 x != xattrs.end(); ++x)
   {
@@ -518,10 +519,11 @@ void BackedUpObject::xattr_diff(const BackedUpObject *rhs,
 	diff.push_back(x->first);
     }
   }
+
   for (std::map < std::string, Xattr* >::const_iterator r = rhs->xattrs.begin();
 	 r != rhs->xattrs.end(); ++r)
   {
-    std::map < std::string, Xattr* >::const_iterator x = rhs->xattrs.find(r->first);
+    std::map < std::string, Xattr* >::const_iterator x = xattrs.find(r->first);
     if (x == xattrs.end()) {
       only_in_b.push_back(r->first);
     }
