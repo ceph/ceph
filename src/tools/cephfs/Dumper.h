@@ -40,8 +40,8 @@ public:
 
   int init(int rank);
   int recover_journal(Journaler *journaler);
-  void dump(const char *dumpfile);
-  void undump(const char *dumpfile);
+  int dump(const char *dumpfile);
+  int undump(const char *dumpfile);
 };
 
 #endif /* JOURNAL_DUMPER_H_ */
