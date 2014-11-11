@@ -621,7 +621,8 @@ static void dump_swift_keys_info(Formatter *f, RGWUserInfo &info)
   f->close_section();
 }
 
-static void dump_user_info(Formatter *f, RGWUserInfo &info)
+static void dump_user_info(Formatter *f, RGWUserInfo &info,
+                           RGWStorageStats *stats = NULL)
 {
   f->open_object_section("user_info");
 
@@ -635,6 +636,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info)
   dump_access_keys_info(f, info);
   dump_swift_keys_info(f, info);
   info.caps.dump(f);
+  if (stats) {
+    encode_json("stats", *stats, f);
+  }
 
   f->close_section();
 }
@@ -2119,9 +2123,20 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   if (ret < 0)
     return ret;
 
+  RGWStorageStats stats;
+  RGWStorageStats *arg_stats = NULL;
+  if (op_state.fetch_stats) {
+    int ret = store->get_user_stats(info.user_id, stats);
+    if (ret < 0) {
+      return ret;
+    }
+
+    arg_stats = &stats;
+  }
+
   flusher.start(0);
 
-  dump_user_info(formatter, info);
+  dump_user_info(formatter, info, arg_stats);
   flusher.flush();
 
   return 0;
