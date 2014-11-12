@@ -462,9 +462,9 @@ int JournalTool::journal_export(std::string const &path, bool import)
       return r;
     }
     if (import) {
-      dumper.undump(path.c_str());
+      r = dumper.undump(path.c_str());
     } else {
-      dumper.dump(path.c_str());
+      r = dumper.dump(path.c_str());
     }
     dumper.shutdown();
   }
