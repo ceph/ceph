@@ -1,4 +1,4 @@
-v0.86
+v0.89
 -----
 
 * New ability to list all objects from all namespaces can fail or return
@@ -8,5 +8,5 @@ v0.86
   results.
 
 
-v0.87
+v0.90
 -----
