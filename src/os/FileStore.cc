@@ -1164,6 +1164,19 @@ int FileStore::write_version_stamp()
       bl.c_str(), bl.length());
 }
 
+int FileStore::upgrade()
+{
+  uint32_t version;
+  int r = version_stamp_is_valid(&version);
+  if (r < 0)
+    return r;
+  if (r == 1)
+    return 0;
+
+  derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
+  return -EINVAL;
+}
+
 int FileStore::read_op_seq(uint64_t *seq)
 {
   int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
@@ -1567,6 +1580,16 @@ int FileStore::mount()
   ondisk_finisher.start();
 
   timer.init();
+
+  // upgrade?
+  if (g_conf->filestore_update_to >= (int)get_target_version()) {
+    int err = upgrade();
+    if (err < 0) {
+      derr << "error converting store" << dendl;
+      umount();
+      return err;
+    }
+  }
 
   // all okay.
   return 0;
@@ -2452,19 +2475,26 @@ unsigned FileStore::_do_transaction(
 	coll_t ncid = i.decode_cid();
 	coll_t ocid = i.decode_cid();
 	ghobject_t oid = i.decode_oid();
+
+	// always followed by OP_COLL_REMOVE
+	int op = i.decode_op();
+	coll_t ocid2 = i.decode_cid();
+	ghobject_t oid2 = i.decode_oid();
+	assert(op == Transaction::OP_COLL_REMOVE);
+	assert(ocid2 == ocid);
+	assert(oid2 == oid);
+
         tracepoint(objectstore, coll_add_enter);
 	r = _collection_add(ncid, ocid, oid, spos);
         tracepoint(objectstore, coll_add_exit, r);
-      }
-      break;
-
-    case Transaction::OP_COLL_REMOVE:
-       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+	if (r == -ENOENT && i.tolerate_collection_add_enoent())
+	  r = 0;
+	spos.op++;
+	if (r < 0)
+	  break;
         tracepoint(objectstore, coll_remove_enter, osr_name);
-	if (_check_replay_guard(cid, oid, spos) > 0)
-	  r = _remove(cid, oid, spos);
+	if (_check_replay_guard(ocid, oid, spos) > 0)
+	  r = _remove(ocid, oid, spos);
         tracepoint(objectstore, coll_remove_exit, r);
        }
       break;
@@ -2530,9 +2560,7 @@ unsigned FileStore::_do_transaction(
       {
 	coll_t cid(i.decode_cid());
 	coll_t ncid(i.decode_cid());
-        tracepoint(objectstore, coll_rename_enter, osr_name);
-	r = _collection_rename(cid, ncid, spos);
-        tracepoint(objectstore, coll_rename_exit, r);
+	r = -EOPNOTSUPP;
       }
       break;
 
@@ -4290,56 +4318,6 @@ int FileStore::_collection_remove_recursive(const coll_t &cid,
     }
   }
   return _destroy_collection(cid);
-}
-
-int FileStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
-				  const SequencerPosition& spos)
-{
-  char new_coll[PATH_MAX], old_coll[PATH_MAX];
-  get_cdir(cid, old_coll, sizeof(old_coll));
-  get_cdir(ncid, new_coll, sizeof(new_coll));
-
-  if (_check_replay_guard(cid, spos) < 0) {
-    return 0;
-  }
-
-  if (_check_replay_guard(ncid, spos) < 0) {
-    return _collection_remove_recursive(cid, spos);
-  }
-
-  if (!collection_exists(cid)) {
-    if (replaying) {
-      // already happened
-      return 0;
-    } else {
-      return -ENOENT;
-    }
-  }
-  _set_global_replay_guard(cid, spos);
-
-  int ret = 0;
-  if (::rename(old_coll, new_coll)) {
-    if (replaying && !backend->can_checkpoint() &&
-	(errno == EEXIST || errno == ENOTEMPTY))
-      ret = _collection_remove_recursive(cid, spos);
-    else
-      ret = -errno;
-
-    dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
-	     << ": ret = " << ret << dendl;
-    return ret;
-  }
-
-  if (ret >= 0) {
-    int fd = ::open(new_coll, O_RDONLY);
-    assert(fd >= 0);
-    _set_replay_guard(fd, spos);
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-  }
-
-  dout(10) << "collection_rename '" << cid << "' to '" << ncid << "'"
-	   << ": ret = " << ret << dendl;
-  return ret;
 }
 
 // --------------------------
