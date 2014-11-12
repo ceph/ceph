@@ -2238,7 +2238,7 @@ reprotect_and_return_err:
       string oid = ictx->get_object_name(ono);
       Context *comp = new C_SimpleThrottle(&throttle);
       AioWrite *req = new AioWrite(ictx, oid, ono, 0, objectx, object_overlap,
-				   bl, snapc, CEPH_NOSNAP, comp);
+				   bl, snapc, CEPH_NOSNAP, comp, 0);
       r = req->send();
       if (r < 0) {
 	lderr(cct) << "failed to flatten object " << oid << dendl;
@@ -2400,7 +2400,7 @@ reprotect_and_return_err:
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
-		       void *arg)
+		       void *arg, unsigned iohint_flags)
   {
     utime_t start_time, elapsed;
 
@@ -2434,7 +2434,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, off, read_len, NULL, &bl, c);
+      r = aio_read(ictx, off, read_len, NULL, &bl, c, iohint_flags);
       if (r < 0) {
 	c->release();
 	delete ctx;
@@ -2653,14 +2653,15 @@ reprotect_and_return_err:
     return 0;
   }
 
-  ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
+  ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, unsigned iohint_flags)
   {
     vector<pair<uint64_t,uint64_t> > extents;
     extents.push_back(make_pair(ofs, len));
-    return read(ictx, extents, buf, NULL);
+    return read(ictx, extents, buf, NULL, iohint_flags);
   }
 
-  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+		char *buf, bufferlist *pbl, unsigned iohint_flags)
   {
     Mutex mylock("IoCtxImpl::write::mylock");
     Cond cond;
@@ -2669,7 +2670,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_read(ictx, image_extents, buf, pbl, c);
+    int r = aio_read(ictx, image_extents, buf, pbl, c, iohint_flags);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2684,7 +2685,7 @@ reprotect_and_return_err:
     return ret;
   }
 
-  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
+  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, unsigned iohint_flags)
   {
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
@@ -2704,7 +2705,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    r = aio_write(ictx, off, mylen, buf, c);
+    r = aio_write(ictx, off, mylen, buf, c, iohint_flags);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2945,7 +2946,7 @@ reprotect_and_return_err:
   }
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c)
+		AioCompletion *c, unsigned iohint_flags)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
@@ -3011,7 +3012,8 @@ reprotect_and_return_err:
 
 	AioWrite *req = new AioWrite(ictx, p->oid.name, p->objectno, p->offset,
 				     objectx, object_overlap,
-				     bl, snapc, snap_id, req_comp);
+				     bl, snapc, snap_id, req_comp,
+				     iohint_flags);
 	c->add_request();
 	r = req->send();
 	if (r < 0)
@@ -3094,7 +3096,7 @@ reprotect_and_return_err:
       } else {
 	req = new AioZero(ictx, p->oid.name, p->objectno, p->offset, p->length,
 			  objectx, object_overlap,
-			  snapc, snap_id, req_comp);
+			  snapc, snap_id, req_comp, 0);
       }
 
       r = req->send();
@@ -3127,11 +3129,11 @@ reprotect_and_return_err:
 
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	       char *buf, bufferlist *bl,
-	       AioCompletion *c)
+	       AioCompletion *c, unsigned iohint_flags)
   {
     vector<pair<uint64_t,uint64_t> > image_extents(1);
     image_extents[0] = make_pair(off, len);
-    return aio_read(ictx, image_extents, buf, bl, c);
+    return aio_read(ictx, image_extents, buf, bl, c, iohint_flags);
   }
 
   static void readahead(ImageCtx *ictx,
@@ -3194,7 +3196,7 @@ reprotect_and_return_err:
   }
 
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c)
+	       char *buf, bufferlist *pbl, AioCompletion *c, unsigned iohint_flags)
   {
     ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
@@ -3250,7 +3252,7 @@ reprotect_and_return_err:
 	AioRead *req = new AioRead(ictx, q->oid.name, 
 				   q->objectno, q->offset, q->length,
 				   q->buffer_extents,
-				   snap_id, true, req_comp);
+				   snap_id, true, req_comp, iohint_flags);
 	req_comp->set_req(req);
 	c->add_request();
 
