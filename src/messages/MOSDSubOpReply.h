@@ -30,7 +30,7 @@
  */
 
 class MOSDSubOpReply : public Message {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch;
@@ -55,6 +55,10 @@ public:
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    struct blkin_trace_info tinfo;
+    tinfo.trace_id = 0;
+    tinfo.span_id = 0;
+    tinfo.parent_span_id = 0;
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid.pgid, p);
@@ -84,8 +88,16 @@ public:
 	ghobject_t::NO_SHARD);
       pgid.shard = ghobject_t::NO_SHARD;
     }
+    if (header.version >= 3) {
+      ::decode(tinfo.trace_id, p);
+      ::decode(tinfo.span_id, p);
+      ::decode(tinfo.parent_span_id, p);
+    }
+    init_trace_info(&tinfo);
   }
   virtual void encode_payload(uint64_t features) {
+    ZTracer::ZTraceRef mt = get_master_trace();
+
     ::encode(map_epoch, payload);
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
@@ -102,6 +114,20 @@ public:
     ::encode(attrset, payload);
     ::encode(from, payload);
     ::encode(pgid.shard, payload);
+
+    if (mt) {
+      struct blkin_trace_info tinfo;
+      mt->get_trace_info(&tinfo); //master_trace_info
+      ::encode(tinfo.trace_id, payload);
+      ::encode(tinfo.span_id, payload);
+      ::encode(tinfo.parent_span_id, payload);
+    } else {
+      int64_t zero = 0;
+      ::encode(zero, payload);
+      ::encode(zero, payload);
+      ::encode(zero, payload);
+    }
+
   }
 
   epoch_t get_map_epoch() { return map_epoch; }
@@ -138,6 +164,15 @@ public:
     result(result_) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(req->get_tid());
+    struct blkin_trace_info tinfo;
+    ZTracer::ZTraceRef mt = req->get_master_trace();
+    if (!mt) {
+      return;
+    }
+    mt->get_trace_info(&tinfo);
+    if (!tinfo.parent_span_id) {
+	    trace_end_after_span = false;
+    }
   }
   MOSDSubOpReply() : Message(MSG_OSD_SUBOPREPLY) {}
 private:
@@ -158,6 +193,16 @@ public:
       out << " ack";
     out << ", result = " << result;
     out << ")";
+  }
+
+  bool create_message_endpoint()
+  {
+    message_endpoint = ZTracer::create_ZTraceEndpoint("0.0.0.0", 0, "MOSDSubOpReply");
+    if (!message_endpoint) {
+      return false;
+    }
+
+    return true;
   }
 
 };

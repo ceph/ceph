@@ -25,7 +25,7 @@
 
 class MOSDSubOp : public Message {
 
-  static const int HEAD_VERSION = 10;
+  static const int HEAD_VERSION = 11;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -102,6 +102,10 @@ public:
   virtual void decode_payload() {
     hobject_incorrect_pool = false;
     bufferlist::iterator p = payload.begin();
+    struct blkin_trace_info tinfo;
+    tinfo.trace_id = 0;
+    tinfo.span_id = 0;
+    tinfo.parent_span_id= 0;
     ::decode(map_epoch, p);
     ::decode(reqid, p);
     ::decode(pgid.pgid, p);
@@ -175,6 +179,13 @@ public:
     if (header.version >= 10) {
       ::decode(updated_hit_set_history, p);
     }
+
+    if (header.version >= 11) {
+      ::decode(tinfo.trace_id, p);
+      ::decode(tinfo.span_id, p);
+      ::decode(tinfo.parent_span_id, p);
+    }
+    init_trace_info(&tinfo);
   }
 
   virtual void encode_payload(uint64_t features) {
@@ -182,6 +193,7 @@ public:
     ::encode(reqid, payload);
     ::encode(pgid.pgid, payload);
     ::encode(poid, payload);
+    ZTracer::ZTraceRef mt = get_master_trace();
 
     __u32 num_ops = ops.size();
     ::encode(num_ops, payload);
@@ -224,6 +236,19 @@ public:
     ::encode(from, payload);
     ::encode(pgid.shard, payload);
     ::encode(updated_hit_set_history, payload);
+
+    if (mt) {
+      struct blkin_trace_info tinfo;
+      mt->get_trace_info(&tinfo);
+      ::encode(tinfo.trace_id, payload);
+      ::encode(tinfo.span_id, payload);
+      ::encode(tinfo.parent_span_id, payload);
+    } else {
+      int64_t zero = 0;
+      ::encode(zero, payload);
+      ::encode(zero, payload);
+      ::encode(zero, payload);
+    }
   }
 
   MOSDSubOp()
@@ -268,6 +293,16 @@ public:
     if (updated_hit_set_history)
       out << ", has_updated_hit_set_history";
     out << ")";
+  }
+
+  bool create_message_endpoint()
+  {
+    message_endpoint = ZTracer::create_ZTraceEndpoint("0.0.0.0", 0, "MOSDSubOp");
+    if (!message_endpoint) {
+      return false;
+    }
+
+    return true;
   }
 };
 

@@ -1081,6 +1081,7 @@ void ReplicatedPG::do_request(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
+  op->trace_pg("Starting request");
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
@@ -1190,6 +1191,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
  */
 void ReplicatedPG::do_op(OpRequestRef op)
 {
+  op->trace_pg("Do op");
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_header().type == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
@@ -1200,6 +1202,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
     return do_pg_op(op);
   }
 
+  op->trace_osd("Object", m->get_oid().name);
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
     dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
@@ -1278,6 +1281,7 @@ void ReplicatedPG::do_op(OpRequestRef op)
 	if (m->wants_ack()) {
 	  if (already_ack(oldv)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
+	    reply->init_trace_info(op->get_osd_trace());
 	    reply->add_flags(CEPH_OSD_FLAG_ACK);
 	    reply->set_reply_versions(oldv, entry->user_version);
 	    osd->send_message_osd_client(reply, m->get_connection());
@@ -1713,6 +1717,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   const hobject_t& soid = obc->obs.oi.soid;
   map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
 
+  op->trace_pg("Executing ctx");
+
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
   delete ctx->op_t;
@@ -1804,6 +1810,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
 			       successful_write);
+  ctx->reply->init_trace_info(op->get_osd_trace());
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
@@ -1944,6 +1951,8 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(have_same_or_newer_map(m->map_epoch));
   assert(m->get_header().type == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
+
+  op->trace_pg("Do sub op");
 
   OSDOp *first = NULL;
   if (m->ops.size() >= 1) {
@@ -2933,6 +2942,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
+  ostringstream oss;
 
   bool first_read = true;
 
@@ -3009,6 +3019,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // fall through
     case CEPH_OSD_OP_READ:
       ++ctx->num_read;
+      ctx->op->trace_osd("Type", "Read");
+      oss << op.extent.offset;
+      ctx->op->trace_osd("Offset", oss.str());
+      oss.str("");
+      oss.clear();
+      oss << op.extent.length;
+      ctx->op->trace_osd("Length", oss.str());
       {
 	__u32 seq = oi.truncate_seq;
 	uint64_t size = oi.size;
@@ -6583,12 +6600,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  repop->ctx->reply = NULL;
 	else {
 	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	  reply->init_trace_info(repop->ctx->op->get_osd_trace());
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
 	osd->send_message_osd_client(reply, m->get_connection());
+    m->trace("Replied commit");
 	repop->sent_disk = true;
 	repop->ctx->op->mark_commit_sent();
       }
@@ -6605,6 +6624,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	     ++i) {
 	  MOSDOp *m = (MOSDOp*)(*i)->get_req();
 	  MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	  reply->init_trace_info(repop->ctx->op->get_osd_trace());
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
@@ -6628,6 +6648,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
         assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
 	osd->send_message_osd_client(reply, m->get_connection());
 	repop->sent_ack = true;
+	m->trace("Replied ack");
       }
 
       // note the write is now readable (for rlatency calc).  note
@@ -6660,6 +6681,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       dout(0) << "   q front is " << *repop_queue.front() << dendl; 
       assert(repop_queue.front() == repop);
     }
+    repop->ctx->op->trace_pg("All done");
+    m->trace("Span ended");
     repop_queue.pop_front();
     remove_repop(repop);
   }
@@ -6668,6 +6691,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
 {
   OpContext *ctx = repop->ctx;
+  OpRequestRef op = ctx->op;
   const hobject_t& soid = ctx->obs->oi.soid;
   if (ctx->op &&
     ((static_cast<MOSDOp *>(
@@ -6678,6 +6702,8 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << dendl;
+
+  op->trace_pg("Issuing repop");
 
   repop->v = ctx->at_version;
   if (ctx->at_version > eversion_t()) {
@@ -6750,6 +6776,7 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
 {
+  op->op->trace_pg("Issuing replication");
   int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
   if (parent->get_actingbackfill_shards().size() > 1) {
@@ -6776,6 +6803,9 @@ void ReplicatedBackend::issue_op(
       false, acks_wanted,
       get_osdmap()->get_epoch(),
       tid, at_version);
+    if (op->op->get_req()) {
+        wr->init_trace_info(op->op->get_osd_trace());
+    }
 
     // ship resulting transaction, log entries, and pg_stats
     if (!parent->should_send_op(peer, soid)) {
@@ -7628,6 +7658,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 {
   rm->op->mark_event("sub_op_applied");
+  rm->op->trace_pg("Sub op applied");
   rm->applied = true;
 
   dout(10) << "sub_op_modify_applied on " << rm << " op "
@@ -7641,6 +7672,9 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
       m, parent->whoami_shard(),
       0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+    ack->init_trace_info(rm->op->get_osd_trace());
+    rm->op->get_req()->trace("Replied apply");
+    rm->op->get_req()->trace("Span ended");
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
@@ -7666,6 +7700,9 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
     0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
   commit->set_last_complete_ondisk(rm->last_complete);
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+  commit->init_trace_info(rm->op->get_osd_trace());
+  rm->op->get_req()->trace("Replied commit");
+  rm->op->get_req()->trace("Span ended");
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, commit, get_osdmap()->get_epoch());
   
@@ -8345,6 +8382,7 @@ struct C_OnPushCommit : public Context {
   OpRequestRef op;
   C_OnPushCommit(ReplicatedPG *pg, OpRequestRef op) : pg(pg), op(op) {}
   void finish(int) {
+    op->trace_pg("commited");
     op->mark_event("committed");
     log_subop_stats(pg->osd->logger, op, l_osd_push_inb, l_osd_sop_push_lat);
   }

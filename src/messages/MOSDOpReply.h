@@ -32,7 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 6;
+  static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -144,6 +144,15 @@ public:
       if (ignore_out_data)
 	ops[i].outdata.clear();
     }
+    struct blkin_trace_info tinfo;
+    ZTracer::ZTraceRef mt = req->get_master_trace();
+    if (!mt) {
+      return;
+    }
+    mt->get_trace_info(&tinfo);
+    if (!tinfo.parent_span_id) {
+	    trace_end_after_span = false;
+    }
   }
 private:
   ~MOSDOpReply() {}
@@ -151,6 +160,7 @@ private:
 public:
   virtual void encode_payload(uint64_t features) {
 
+    ZTracer::ZTraceRef mt = get_master_trace();
     OSDOp::merge_osd_op_vector_out_data(ops, data);
 
     if ((features & CEPH_FEATURE_PGID64) == 0) {
@@ -190,10 +200,28 @@ public:
       ::encode(replay_version, payload);
       ::encode(user_version, payload);
       ::encode(redirect, payload);
+
+      if (mt) {
+	struct blkin_trace_info tinfo;
+	mt->get_trace_info(&tinfo); //master_trace_info
+	::encode(tinfo.trace_id, payload);
+	::encode(tinfo.span_id, payload);
+	::encode(tinfo.parent_span_id, payload);
+      } else {
+	int64_t zero = 0;
+	::encode(zero, payload);
+	::encode(zero, payload);
+	::encode(zero, payload);
+      }
     }
+
   }
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    struct blkin_trace_info tinfo;
+    tinfo.trace_id = 0;
+    tinfo.span_id = 0;
+    tinfo.parent_span_id = 0;
     if (header.version < 2) {
       ceph_osd_reply_head head;
       ::decode(head, p);
@@ -245,6 +273,13 @@ public:
 
       if (header.version >= 6)
 	::decode(redirect, p);
+
+      if (header.version >= 7) {
+	::decode(tinfo.trace_id, p);
+	::decode(tinfo.span_id, p);
+	::decode(tinfo.parent_span_id, p);
+      }
+      init_trace_info(&tinfo);
     }
   }
 
@@ -269,6 +304,16 @@ public:
       out << " redirect: { " << redirect << " }";
     }
     out << ")";
+  }
+
+  bool create_message_endpoint()
+  {
+    message_endpoint = ZTracer::create_ZTraceEndpoint("0.0.0.0", 0, "MOSDOpReply");
+    if (!message_endpoint) {
+      return false;
+    }
+
+    return true;
   }
 
 };

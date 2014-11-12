@@ -215,6 +215,7 @@ public:
   } __attribute__((__packed__, aligned(4)));
 
 private:
+  TrackedOpEndpointRef journal_endpoint;
   string fn;
 
   char *zero_buf;
@@ -380,11 +381,15 @@ private:
     write_lock("FileJournal::write_lock", false, true, false, g_ceph_context),
     write_stop(false),
     write_thread(this),
-    write_finish_thread(this) { }
+    write_finish_thread(this)
+  {
+      journal_endpoint = ZTracer::create_ZTraceEndpoint("", 0, "Journal (" + fn + ")");
+  }
   ~FileJournal() {
     delete[] zero_buf;
   }
 
+  TrackedOpEndpointRef get_trace_endpoint() { return journal_endpoint; }
   int check();
   int create();
   int open(uint64_t fs_op_seq);

@@ -1650,6 +1650,9 @@ void Objecter::send_op(Op *op)
   m->ops = op->ops;
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
+  if (op->trace) {
+    m->init_trace_info(op->trace);
+  }
 
   if (op->replay_version != eversion_t())
     m->set_version(op->replay_version);  // we're replaying this op!
@@ -1724,6 +1727,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 7) << "handle_osd_op_reply " << tid
 	    << (m->is_ondisk() ? " ondisk":(m->is_onnvram() ? " onnvram":" ack"))
 	    << " ... stray" << dendl;
+    m->trace("Span ended");
     m->put();
     return;
   }
@@ -1735,6 +1739,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
   Op *op = ops[tid];
+
+  if (op->oncommit) {
+      m->trace("oncommit message");
+  }
+  if (op->onack) {
+      m->trace("onack message");
+  }
+  m->trace("Span ended");
 
   if (m->get_retry_attempt() >= 0) {
     if (m->get_retry_attempt() != (op->attempts - 1)) {
@@ -1794,6 +1806,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   assert(op->out_bl.size() == op->out_rval.size());
   assert(op->out_bl.size() == op->out_handler.size());
   vector<OSDOp>::iterator p = out_ops.begin();
+  if (op->trace) {
+      op->trace->event("in handle_osd_op_reply");
+  }
   for (unsigned i = 0;
        p != out_ops.end() && pb != op->out_bl.end();
        ++i, ++p, ++pb, ++pr, ++ph) {

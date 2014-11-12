@@ -21,6 +21,7 @@
 #include <signal.h>
 #include <ctype.h>
 #include <boost/scoped_ptr.hpp>
+#include <boost/lexical_cast.hpp>
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -963,6 +964,9 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                          cct->_conf->osd_op_log_threshold);
   op_tracker.set_history_size_and_duration(cct->_conf->osd_op_history_size,
                                            cct->_conf->osd_op_history_duration);
+
+  string s = "osd." + boost::lexical_cast<string>(whoami);
+  osd_endpoint = ZTracer::create_ZTraceEndpoint("", 0, s);
 }
 
 OSD::~OSD()
@@ -5023,6 +5027,8 @@ void OSD::_dispatch(Message *m)
   default:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest>(m);
+      op->create_osd_trace(osd_endpoint);
+      op->trace_osd("waiting of osdmap");
       op->mark_event("waiting_for_osdmap");
       // no map?  starting up?
       if (!osdmap) {
@@ -7386,6 +7392,8 @@ void OSD::handle_op(OpRequestRef op)
     return;
   }
 
+  op->trace_osd("Handling op");
+
   // we don't need encoded payload anymore
   m->clear_payload();
 
@@ -7513,7 +7521,10 @@ void OSD::handle_op(OpRequestRef op)
     return;
   }
 
+  op->create_pg_trace(pg->get_trace_endpoint());
+  op->trace_pg("Enqueuing op");
   enqueue_op(pg, op);
+  op->trace_pg("Enqueued op");
 }
 
 template<typename T, int MSGTYPE>
@@ -7521,6 +7532,8 @@ void OSD::handle_replica_op(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_header().type == MSGTYPE);
+
+  op->trace_osd("Handling replica op");
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   if (m->map_epoch < up_epoch) {
@@ -7553,7 +7566,9 @@ void OSD::handle_replica_op(OpRequestRef op)
   if (!pg) {
     return;
   }
+  op->create_pg_trace(pg->get_trace_endpoint());
   enqueue_op(pg, op);
+  op->trace_osd("Enqueued replica op");
 }
 
 bool OSD::op_is_discardable(MOSDOp *op)
@@ -7655,6 +7670,7 @@ void OSD::OpWQ::_process(PGRef pg, ThreadPool::TPHandle &handle)
   delete f;
   *_dout << dendl;
 
+  op->trace_pg("Dequeued op");
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }

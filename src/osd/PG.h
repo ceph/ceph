@@ -206,6 +206,7 @@ protected:
   OSDMapRef osdmap_ref;
   OSDMapRef last_persisted_osdmap_ref;
   PGPool pool;
+  TrackedOpEndpointRef pg_endpoint;
 
   void queue_op(OpRequestRef op);
   void take_op_map_waiters();
@@ -265,6 +266,7 @@ public:
     return _lock.is_locked();
   }
 
+  TrackedOpEndpointRef get_trace_endpoint() { return pg_endpoint; }
 #ifdef PG_DEBUG_REFS
   uint64_t get_with_id();
   void put_with_id(uint64_t);

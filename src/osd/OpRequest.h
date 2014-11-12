@@ -140,12 +140,14 @@ public:
     latest_flag_point = flag_started;
   }
   void mark_sub_op_sent(string s) {
+    trace_pg("Sub op sent | " + s);
     mark_event(s);
     current = s;
     hit_flag_points |= flag_sub_op_sent;
     latest_flag_point = flag_sub_op_sent;
   }
   void mark_commit_sent() {
+    trace_pg("Commit sent");
     mark_event("commit_sent");
     current = "commit sent";
     hit_flag_points |= flag_commit_sent;

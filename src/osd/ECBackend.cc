@@ -724,8 +724,10 @@ struct SubWriteCommitted : public Context {
     : pg(pg), msg(msg), tid(tid),
       version(version), last_complete(last_complete) {}
   void finish(int) {
-    if (msg)
+    if (msg) {
+      msg->trace_pg("sub op commited");
       msg->mark_event("sub_op_committed");
+    }
     pg->sub_write_committed(tid, version, last_complete);
   }
 };
@@ -766,8 +768,10 @@ struct SubWriteApplied : public Context {
     eversion_t version)
     : pg(pg), msg(msg), tid(tid), version(version) {}
   void finish(int) {
-    if (msg)
+    if (msg) {
+      msg->trace_pg("sub op applied");
       msg->mark_event("sub_op_applied");
+    }
     pg->sub_write_applied(tid, version);
   }
 };

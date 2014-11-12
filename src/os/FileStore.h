@@ -124,6 +124,7 @@ public:
   }
 
 private:
+  TrackedOpEndpointRef filestore_endpoint;
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   std::string current_fn;
@@ -353,6 +354,9 @@ public:
   int get_max_object_name_length();
   int mkfs();
   int mkjournal();
+  TrackedOpEndpointRef get_trace_endpoint() {
+    return filestore_endpoint;
+  };
 
   /**
    * set_allow_sharded_objects()

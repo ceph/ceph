@@ -148,6 +148,9 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  global_init_daemonize(g_ceph_context, 0);
+  ZTracer::ztrace_init();
+
   // whoami
   char *end;
   const char *id = g_conf->name.get_id().c_str();
@@ -433,8 +436,7 @@ int main(int argc, const char **argv)
 
   ms_objecter->bind(g_conf->public_addr);
 
-  // Set up crypto, daemonize, etc.
-  global_init_daemonize(g_ceph_context, 0);
+  // Set up crypto, etc.
   common_init_finish(g_ceph_context);
 
   if (g_conf->filestore_update_to >= (int)store->get_target_version()) {

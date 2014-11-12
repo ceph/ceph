@@ -32,7 +32,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -176,6 +176,7 @@ public:
 
   // marshalling
   virtual void encode_payload(uint64_t features) {
+    ZTracer::ZTraceRef mt = get_master_trace();
 
     OSDOp::merge_osd_op_vector_in_data(ops, data);
 
@@ -251,11 +252,28 @@ struct ceph_osd_request_head {
       ::encode(snaps, payload);
 
       ::encode(retry_attempt, payload);
+
+      if (mt) {
+	struct blkin_trace_info tinfo;
+	mt->get_trace_info(&tinfo); //master_trace_info
+	::encode(tinfo.trace_id, payload);
+	::encode(tinfo.span_id, payload);
+	::encode(tinfo.parent_span_id, payload);
+      } else {
+	int64_t zero = 0;
+	::encode(zero, payload);
+	::encode(zero, payload);
+	::encode(zero, payload);
+      }
     }
   }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
+    struct blkin_trace_info tinfo;
+    tinfo.trace_id = 0;
+    tinfo.span_id = 0;
+    tinfo.parent_span_id = 0;
 
     if (header.version < 2) {
       // old decode
@@ -332,7 +350,15 @@ struct ceph_osd_request_head {
 	::decode(retry_attempt, p);
       else
 	retry_attempt = -1;
+
+      if (header.version >= 5) {
+        ::decode(tinfo.trace_id, p);
+        ::decode(tinfo.span_id, p);
+        ::decode(tinfo.parent_span_id, p);
+      }
     }
+
+    init_trace_info(&tinfo);
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
   }
@@ -373,6 +399,29 @@ struct ceph_osd_request_head {
     out << " " << ceph_osd_flag_string(get_flags());
     out << " e" << osdmap_epoch;
     out << ")";
+  }
+
+  void trace_msg_info()
+  {
+    if (!master_trace) {
+      return;
+    }
+
+    ostringstream oss;
+    oss << get_reqid();
+
+    master_trace->keyval("Type", "MOSDOp");
+    master_trace->keyval("Reqid", oss.str());
+  }
+
+  bool create_message_endpoint()
+  {
+    message_endpoint = ZTracer::create_ZTraceEndpoint("0.0.0.0", 0, "MOSDOp");
+    if (!message_endpoint) {
+      return false;
+    }
+
+    return true;
   }
 };
 

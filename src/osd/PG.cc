@@ -199,6 +199,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
 #endif
+  ostringstream oss;
+  oss << "PG " << info.pgid;
+  pg_endpoint = ZTracer::create_ZTraceEndpoint("", 0, oss.str());
 }
 
 PG::~PG()
