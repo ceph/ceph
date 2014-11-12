@@ -29,7 +29,7 @@ namespace librbd {
     AioRequest(ImageCtx *ictx, const std::string &oid,
 	       uint64_t objectno, uint64_t off, uint64_t len,
 	       librados::snap_t snap_id, Context *completion,
-	       bool hide_enoent);
+	       bool hide_enoent, unsigned iohint_flags);
     virtual ~AioRequest();
 
     void complete(int r)
@@ -57,6 +57,7 @@ namespace librbd {
     AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
+    unsigned m_iohint_flags;
   };
 
   class AioRead : public AioRequest {
@@ -65,9 +66,9 @@ namespace librbd {
 	    uint64_t objectno, uint64_t offset, uint64_t len,
 	    vector<pair<uint64_t,uint64_t> >& be,
 	    librados::snap_t snap_id, bool sparse,
-	    Context *completion)
+	    Context *completion, unsigned iohint_flags)
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
-		   false),
+		   false, iohint_flags),
 	m_buffer_extents(be),
 	m_tried_parent(false), m_sparse(sparse) {
     }
@@ -97,7 +98,7 @@ namespace librbd {
 		  const ::SnapContext &snapc,
 		  librados::snap_t snap_id,
 		  Context *completion,
-		  bool hide_enoent);
+		  bool hide_enoent, unsigned iohint_flags);
     virtual ~AbstractWrite() {}
     virtual bool should_complete(int r);
     virtual int send();
@@ -152,12 +153,12 @@ namespace librbd {
 	     vector<pair<uint64_t,uint64_t> >& objectx, uint64_t object_overlap,
 	     const ceph::bufferlist &data, const ::SnapContext &snapc,
 	     librados::snap_t snap_id,
-	     Context *completion)
+	     Context *completion, unsigned iohint_flags)
       : AbstractWrite(ictx, oid,
 		      object_no, object_off, data.length(),
 		      objectx, object_overlap,
 		      snapc, snap_id,
-		      completion, false),
+		      completion, false, iohint_flags),
 	m_write_data(data) {
       guard_write();
       add_write_ops(m_write);
@@ -185,7 +186,7 @@ namespace librbd {
 		      object_no, 0, 0,
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
-		      true) {
+		      true, 0) {
       if (has_parent())
 	m_write.truncate(0);
       else
@@ -211,7 +212,7 @@ namespace librbd {
 		      object_no, object_off, 0,
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
-		      true) {
+		      true, 0) {
       guard_write();
       m_write.truncate(object_off);
     }
@@ -229,20 +230,20 @@ namespace librbd {
 	    uint64_t object_no, uint64_t object_off, uint64_t object_len,
 	    vector<pair<uint64_t,uint64_t> >& objectx, uint64_t object_overlap,
 	    const ::SnapContext &snapc, librados::snap_t snap_id,
-	    Context *completion)
+	    Context *completion, unsigned iohint_flags)
       : AbstractWrite(ictx, oid,
 		      object_no, object_off, object_len,
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
-		      true) {
+		      true, iohint_flags) {
       guard_write();
-      m_write.zero(object_off, object_len);
+      m_write.zero(object_off, object_len, iohint_flags);
     }
     virtual ~AioZero() {}
 
   protected:
     virtual void add_copyup_ops() {
-      m_copyup.zero(m_object_off, m_object_len);
+      m_copyup.zero(m_object_off, m_object_len, m_iohint_flags);
     }
   };
 
