@@ -509,15 +509,10 @@ int finish_remove_pgs(ObjectStore *store)
        it != ls.end();
        ++it) {
     spg_t pgid;
-    snapid_t snap;
 
     if (it->is_temp(pgid)) {
       cout << "finish_remove_pgs " << *it << " clearing temp" << std::endl;
       OSD::recursive_remove_collection(store, *it);
-      continue;
-    }
-
-    if (it->is_pg(pgid, snap)) {
       continue;
     }
 
@@ -1384,6 +1379,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   bufferlist one;
   one.append('1');
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
+  t->create_collection(coll);
   t->collection_setattr(coll, "remove", one);
   store->apply_transaction(*t);
   delete t;
