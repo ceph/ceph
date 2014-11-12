@@ -312,6 +312,8 @@ int rbd_break_lock(rbd_image_t image, const char *client, const char *cookie);
 typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len, char *buf);
+ssize_t rbd_read_with_iohint(rbd_image_t image, uint64_t ofs, size_t len,
+			      char *buf, unsigned iohint_flags);
 
 /* DEPRECATED; use rbd_read_iterate2 */
 int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
@@ -333,6 +335,9 @@ int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
  */
 int rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
 		      int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+int rbd_read_iterate2_with_iohint(rbd_image_t image, uint64_t ofs, uint64_t len,
+				  int (*cb)(uint64_t, size_t, const char *, void *),
+				  void *arg, unsigned iohint_flags);
 /**
  * get difference between two versions of an image
  *
@@ -357,9 +362,15 @@ int rbd_diff_iterate(rbd_image_t image,
 		     uint64_t ofs, uint64_t len,
 		     int (*cb)(uint64_t, size_t, int, void *), void *arg);
 ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len, const char *buf);
+ssize_t rbd_write_with_iohint(rbd_image_t image, uint64_t ofs, size_t len,
+			      const char *buf, unsigned iohint_flags);
 int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len, const char *buf, rbd_completion_t c);
+int rbd_aio_write_with_iohint(rbd_image_t image, uint64_t off, size_t len, const char *buf,
+			      rbd_completion_t c, unsigned iohint_flags);
 int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len, char *buf, rbd_completion_t c);
+int rbd_aio_read_with_iohint(rbd_image_t image, uint64_t off, size_t len, char *buf,
+			      rbd_completion_t c, unsigned iohint_flags);
 int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len, rbd_completion_t c);
 int rbd_aio_create_completion(void *cb_arg, rbd_callback_t complete_cb, rbd_completion_t *c);
 int rbd_aio_is_complete(rbd_completion_t c);
