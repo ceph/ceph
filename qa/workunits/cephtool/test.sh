@@ -157,7 +157,7 @@ function expect_config_value()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ./ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
+  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
   ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
