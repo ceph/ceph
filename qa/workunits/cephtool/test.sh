@@ -882,10 +882,14 @@ function test_mon_osd()
 
   ceph osd rm 0 2>&1 | grep 'EBUSY'
 
+  local old_osds=$(echo $(ceph osd ls))
   id=`ceph osd create`
   ceph osd lost $id --yes-i-really-mean-it
   expect_false ceph osd setmaxosd $id
-  ceph osd rm $id
+  local new_osds=$(echo $(ceph osd ls))
+  for id in $(echo $new_osds | sed -e "s/$old_osds//") ; do
+      ceph osd rm $id
+  done
 
   uuid=`uuidgen`
   id=`ceph osd create $uuid`
