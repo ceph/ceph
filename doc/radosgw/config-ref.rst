@@ -401,7 +401,7 @@ required settings:
 #. ``endpoints``: A list of all the endpoints in the region. For example, 
    you may use multiple domain names to refer to the same region. Remember to 
    escape the forward slashes (``\/``). You may also specify a 
-   port (``fgdn:port``) for each endpoint. Optional.
+   port (``fqdn:port``) for each endpoint. Optional.
 
 #. ``master_zone``: The master zone for the region. Optional. Uses the default
    zone if not specified. **note:** You can only have one master zone per 
