@@ -141,6 +141,9 @@ enum {
   l_osd_agent_flush,
   l_osd_agent_evict,
 
+  l_osd_object_ctx_cache_hit,
+  l_osd_object_ctx_cache_total,
+
   l_osd_last,
 };
 
