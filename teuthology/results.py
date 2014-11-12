@@ -8,6 +8,7 @@ from textwrap import dedent
 from textwrap import fill
 
 import teuthology
+from teuthology.config import config
 from teuthology import misc
 from teuthology import ls
 from .job_status import get_status
@@ -19,56 +20,60 @@ log = logging.getLogger(__name__)
 def main(args):
 
     log = logging.getLogger(__name__)
-    if args.verbose:
+    if args['--verbose']:
         teuthology.log.setLevel(logging.DEBUG)
 
-    misc.read_config(args)
-
-    log_path = os.path.join(args.archive_dir, 'results.log')
-    teuthology.setup_log_file(log_path)
+    if not args['--dry-run']:
+        log_path = os.path.join(args['--archive-dir'], 'results.log')
+        teuthology.setup_log_file(log_path)
 
     try:
-        results(args)
+        results(args['--archive-dir'], args['--name'], args['--email'],
+                args['--timeout'], args['--dry-run'])
     except Exception:
         log.exception('error generating results')
         raise
 
 
-def results(args):
-    archive_base = os.path.split(args.archive_dir)[0]
+def results(archive_dir, name, email, timeout, dry_run):
+    archive_base = os.path.split(archive_dir)[0]
     serializer = ResultsSerializer(archive_base)
     starttime = time.time()
 
-    log.info('Waiting up to %d seconds for tests to finish...', args.timeout)
-    while serializer.running_jobs_for_run(args.name) and args.timeout > 0:
-        if time.time() - starttime > args.timeout:
+    if timeout:
+        log.info('Waiting up to %d seconds for tests to finish...', timeout)
+    while serializer.running_jobs_for_run(name) and timeout > 0:
+        if time.time() - starttime > timeout:
             log.warn('test(s) did not finish before timeout of %d seconds',
-                     args.timeout)
+                     timeout)
             break
         time.sleep(10)
     log.info('Tests finished! gathering results...')
 
-    (subject, body) = build_email_body(args.name, args.archive_dir,
-                                       args.timeout)
+    (subject, body) = build_email_body(name, archive_dir)
 
     try:
-        if args.email:
+        if email and dry_run:
+            print "From: %s" % (config.results_sending_email or 'teuthology')
+            print "To: %s" % email
+            print "Subject: %s" % subject
+            print body
+        elif email:
             email_results(
                 subject=subject,
-                from_=args.teuthology_config.get('results_sending_email',
-                                                 'teuthology'),
-                to=args.email,
+                from_=(config.results_sending_email or 'teuthology'),
+                to=email,
                 body=body,
             )
     finally:
-        generate_coverage(args)
+        generate_coverage(archive_dir, name)
 
 
-def generate_coverage(args):
+def generate_coverage(archive_dir, name):
     coverage_config_keys = ('coverage_output_dir', 'coverage_html_dir',
                             'coverage_tools_dir')
     for key in coverage_config_keys:
-        if key not in args.teuthology_config:
+        if key not in config.to_dict():
             log.warn(
                 "'%s' not in teuthology config; skipping coverage report",
                 key)
@@ -79,14 +84,12 @@ def generate_coverage(args):
             os.path.join(os.path.dirname(sys.argv[0]), 'teuthology-coverage'),
             '-v',
             '-o',
-            os.path.join(args.teuthology_config[
-                         'coverage_output_dir'], args.name),
+            os.path.join(config.coverage_output_dir, name),
             '--html-output',
-            os.path.join(args.teuthology_config[
-                         'coverage_html_dir'], args.name),
+            os.path.join(config.coverage_html_dir, name),
             '--cov-tools-dir',
-            args.teuthology_config['coverage_tools_dir'],
-            args.archive_dir,
+            config.coverage_tools_dir,
+            archive_dir,
         ],
     )
 
@@ -105,7 +108,7 @@ def email_results(subject, from_, to, body):
     smtp.quit()
 
 
-def build_email_body(name, archive_dir, timeout):
+def build_email_body(name, archive_dir):
     failed = {}
     hung = {}
     passed = {}
