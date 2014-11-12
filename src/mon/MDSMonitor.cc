@@ -1508,7 +1508,6 @@ int MDSMonitor::filesystem_command(
     }
 
     if (poolid >= 0) {
-      cmd_getval(g_ceph_context, cmdmap, "poolid", poolid);
       r = pending_mdsmap.remove_data_pool(poolid);
       if (r == -ENOENT)
 	r = 0;
