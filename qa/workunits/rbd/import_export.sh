@@ -19,7 +19,9 @@ compare_files_and_ondisk_sizes () {
     cmp -l $1 $2 || return 1
     origsize=$(stat $1 --format %b)
     exportsize=$(stat $2 --format %b)
-    [ $origsize = $exportsize ]
+    difference=$(($exportsize - $origsize))
+    difference=${difference#-} # absolute value
+    test $difference -ge 0 -a $difference -lt 4096
 }
 
 # cannot import a dir
