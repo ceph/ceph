@@ -339,7 +339,7 @@ and  `Cephx Authentication`_ for details.
 OSDs
 ====
 
-Ceph production clusters typically deploy :term:`Ceph OSD Daemons` where one node
+Ceph production clusters typically deploy :term:Ceph OSD Daemons` where one node
 has one OSD daemon running a filestore on one storage drive. A typical
 deployment specifies a journal size. For example:
 
