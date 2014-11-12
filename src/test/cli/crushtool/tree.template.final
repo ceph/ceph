@@ -1,0 +1,70 @@
+# begin crush map
+
+# devices
+device 0 device0
+device 1 device1
+device 2 device2
+device 3 device3
+device 4 device4
+device 5 device5
+device 6 device6
+device 7 device7
+
+# types
+type 0 device
+type 1 host
+type 2 cluster
+
+# buckets
+host host0 {
+	id -2		# do not change unnecessarily
+	# weight 8.000
+	alg tree	# do not change pos for existing items unnecessarily
+	hash 0	# rjenkins1
+	item device0 weight 1.000 pos 0
+	item device1 weight 1.000 pos 1
+	item device2 weight 1.000 pos 2
+	item device3 weight 1.000 pos 3
+	item device4 weight 1.000 pos 4
+	item device5 weight 1.000 pos 5
+	item device6 weight 1.000 pos 6
+	item device7 weight 1.000 pos 7
+}
+cluster cluster0 {
+	id -1		# do not change unnecessarily
+	# weight 8.000
+	alg tree	# do not change pos for existing items unnecessarily
+	hash 0	# rjenkins1
+	item host0 weight 8.000 pos 0
+}
+
+# rules
+rule data {
+	ruleset 0
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+rule metadata {
+	ruleset 1
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+rule rbd {
+	ruleset 2
+	type replicated
+	min_size 1
+	max_size 10
+	step take cluster0
+	step chooseleaf firstn 0 type host
+	step emit
+}
+
+# end crush map
