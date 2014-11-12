@@ -611,8 +611,6 @@ class KeyValueStore : public ObjectStore,
                               BufferTransaction &t);
   int _collection_remove_recursive(const coll_t &cid,
                                    BufferTransaction &t);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid,
-                         BufferTransaction &t);
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);
