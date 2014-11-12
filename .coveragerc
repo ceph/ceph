@@ -1,2 +1,2 @@
 [run]
-omit = teuthology/test/*
+omit = */test/* 

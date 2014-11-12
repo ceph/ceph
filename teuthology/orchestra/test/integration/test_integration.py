@@ -1,11 +1,11 @@
-from .. import monkey
+from teuthology.orchestra import monkey
 monkey.patch_all()
 
 from cStringIO import StringIO
 
 import os
-from .. import connection, remote, run
-from .util import assert_raises
+from teuthology.orchestra import connection, remote, run
+from teuthology.orchestra.test.util import assert_raises
 from teuthology.exceptions import CommandCrashedError, ConnectionLostError
 
 from pytest import skip
