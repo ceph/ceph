@@ -263,6 +263,25 @@ Configuring Nova
 In order to boot all the virtual machines directly into Ceph, you must
 configure the ephemeral backend for Nova.
 
+It is recommended to enable the RBD cache in your Ceph configuration file
+(enabled by default since Giant). Moreover, enabling the admin socket
+brings a lot of benefits while troubleshoothing. Having one socket
+per virtual machine using a Ceph block device will help investigating performance and/or wrong behaviors.
+
+This socket can be accessed like this::
+
+    ceph daemon /var/run/ceph/ceph-client.cinder.19195.32310016.asok help
+
+Now on every compute nodes edit your Ceph configuration file::
+
+    [client]
+        rbd cache = true
+        rbd cache writethrough until flush = true
+        admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
+
+.. tip:: If your virtual machine is already running you can simply restart it to get the socket
+
+
 Havana and Icehouse
 ~~~~~~~~~~~~~~~~~~~
 
@@ -295,13 +314,13 @@ On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 To ensure a proper live-migration, use the following flags::
 
     libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST"
-    
-    
+
+
 Juno
 ~~~~
 
-In Juno, Ceph block device was moved under the ``[libvirt]`` section. 
-On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]`` 
+In Juno, Ceph block device was moved under the ``[libvirt]`` section.
+On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]``
 section and add::
 
     [libvirt]
