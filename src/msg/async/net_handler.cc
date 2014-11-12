@@ -44,6 +44,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
       lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: %s"
                  << strerror(errno) << dendl;
+      close(s);
       return -errno;
     }
   }
