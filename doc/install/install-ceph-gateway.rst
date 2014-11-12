@@ -203,7 +203,7 @@ RPM-based Packages
    Provide the fully qualified domain name of the server machine 
    (e.g., ``hostname -f``).:: 
 
-	ServerName {fgdn}
+	ServerName {fqdn}
 
 #. Ensure that the Rewrite module is enabled. :: 
 
