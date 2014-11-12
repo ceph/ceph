@@ -872,11 +872,13 @@ struct ObjectOperation {
     add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1, inbl); 
   }
 
-  void notify_ack(uint64_t notify_id, uint64_t ver, uint64_t cookie) {
+  void notify_ack(uint64_t notify_id, uint64_t cookie,
+		  bufferlist& reply_bl) {
     bufferlist bl;
     ::encode(notify_id, bl);
     ::encode(cookie, bl);
-    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0, bl);
+    ::encode(reply_bl, bl);
+    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, 0, 0, bl);
   }
 
   void list_watchers(list<obj_watch_t> *out,

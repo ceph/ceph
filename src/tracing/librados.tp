@@ -2190,6 +2190,32 @@ TRACEPOINT_EVENT(librados, rados_watch_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_watch2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        uint64_t*, phandle,
+        rados_watchcb2_t, callback,
+        void*, arg),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(rados_watchcb2_t, callback, callback)
+        ctf_integer_hex(void*, arg, arg)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch2_exit,
+    TP_ARGS(
+        int, retval,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_unwatch_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
@@ -2226,6 +2252,54 @@ TRACEPOINT_EVENT(librados, rados_notify_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_notify_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify2_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+        const char*, buf,
+        int, buf_len,
+	uint64_t, timeout_ms),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+        ctf_integer(uint64_t, timeout_ms, timeout_ms)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify2_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_ack_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        const char*, oid,
+	uint64_t, notify_id,
+	uint64_t, handle,
+        const char*, buf,
+        int, buf_len),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_string(oid, oid)
+        ctf_integer(uint64_t, notify_id, notify_id)
+        ctf_integer(uint64_t, handle, handle)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, buf_len)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_notify_ack_exit,
     TP_ARGS(
         int, retval),
     TP_FIELDS(

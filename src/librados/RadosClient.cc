@@ -712,6 +712,17 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       wc->notify_lock->Lock();
       *wc->notify_done = true;
       *wc->notify_rval = m->return_code;
+      if (wc->notify_reply_bl) {
+	wc->notify_reply_bl->claim(m->get_data());
+      }
+      if (wc->notify_reply_buf) {
+	*wc->notify_reply_buf = (char*)malloc(m->get_data().length());
+	memcpy(*wc->notify_reply_buf, m->get_data().c_str(),
+	       m->get_data().length());
+      }
+      if (wc->notify_reply_buf_len) {
+	*wc->notify_reply_buf_len = m->get_data().length();
+      }
       wc->notify_cond->Signal();
       wc->notify_lock->Unlock();
     } else {
@@ -720,13 +731,19 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       wc->get();
 
       // trigger the callback
+      assert(!!wc->watch_ctx ^ !!wc->watch_ctx2);  // only one is defined
       lock.Unlock();
-      wc->watch_ctx->notify(m->opcode, m->ver, m->bl);
+      if (wc->watch_ctx) {
+	wc->watch_ctx->notify(WATCH_NOTIFY, m->ver, m->bl);
+	// send ACK back to the OSD
+	bufferlist empty;
+	wc->io_ctx_impl->notify_ack(wc->oid, m->notify_id, m->cookie, empty);
+      } else if (wc->watch_ctx2) {
+	wc->watch_ctx2->handle_notify(m->notify_id, m->cookie,
+				      m->notifier_gid, m->bl);
+	// user needs to explicitly ack (and may have already!)
+      }
       lock.Lock();
-
-      // send ACK back to the OSD
-      wc->io_ctx_impl->_notify_ack(wc->oid, m->notify_id, m->ver, m->cookie);
-
       ldout(cct,10) << __func__ << " notify done" << dendl;
       wc->put();
     }

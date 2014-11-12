@@ -1803,6 +1803,25 @@ int rados_aio_cancel(rados_ioctx_t io, rados_completion_t completion);
 typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
 
 /**
+ * @typedef rados_watchcb2_t
+ *
+ * Callback activated when a notify is received on a watched
+ * object. Parameters are:
+ * - arg opaque user-defined value provided to rados_watch2()
+ * - notify_id an id for this notify event
+ * - handle the watcher handle we are notifying
+ * - notifier_id the unique client id for the notifier
+ * - data payload from the notifier
+ * - datalen length of payload buffer
+ */
+typedef void (*rados_watchcb2_t)(void *arg,
+				 uint64_t notify_id,
+				 uint64_t handle,
+				 uint64_t notifier_id,
+				 void *data,
+				 size_t data_len);
+
+/**
  * Register an interest in an object
  *
  * A watch operation registers the client as being interested in
@@ -1829,6 +1848,30 @@ typedef void (*rados_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
  */
 int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
                 rados_watchcb_t watchcb, void *arg);
+
+
+/**
+ * Register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after 30 seconds. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @note BUG: watch timeout should be configurable
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb2 what to do when a notify is received on this object
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
+		 rados_watchcb2_t watchcb, void *arg);
 
 /**
  * Unregister an interest in an object
@@ -1860,6 +1903,61 @@ int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle);
  * @returns 0 on success, negative error code on failure
  */
 int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len);
+
+/**
+ * Sychronously notify watchers of an object
+ *
+ * This blocks until all watchers of the object have received and
+ * reacted to the notify, or a timeout is reached.
+ *
+ * The reply buffer is optional.  If specified, the client will get
+ * back an encoded buffer that includes the ids of the clients that
+ * acknowledged the notify as well as their notify ack payloads (if
+ * any).  Clients that timed out are not included.  Even clients that
+ * do not include a notify ack payload are included in the list but
+ * have a 0-length payload associated with them.  The format:
+ *
+ *    le32 num_acks
+ *    {
+ *      le64 gid     global id for the client (for client.1234 that's 1234)
+ *      le32 buflen  length of reply message buffer
+ *      u8 * buflen  payload
+ *    } * num_acks
+ *
+ * Note: There may be multiple instances of the same gid if there are
+ * multiple watchers registered via the same client.
+ *
+ * Note: The buffer must be released with rados_buffer_free() when the
+ * user is done with it.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param buf data to send to watchers
+ * @param buf_len length of buf in bytes
+ * @param timeout_ms notify timeout (in ms)
+ * @param reply_buffer pointer to reply buffer pointer (free with rados_buffer_free)
+ * @param reply_buffer_len pointer to size of reply buffer
+ * @returns 0 on success, negative error code on failure
+ */
+int rados_notify2(rados_ioctx_t io, const char *o, const char *buf, int buf_len,
+		  uint64_t timeout_ms,
+		  char **reply_buffer, size_t *reply_buffer_len);
+
+/**
+ * Acknolwedge receipt of a notify
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param notify_id the notify_id we got on the watchcb2_t callback
+ * @param handle the watcher handle
+ * @param buf payload to return to notifier (optional)
+ * @param buf_len payload length
+ * @returns 0 on success
+ */
+int rados_notify_ack(rados_ioctx_t io, const char *o,
+		     uint64_t notify_id, uint64_t handle,
+		     const char *buf, int buf_len);
+
 
 /** @} Watch/Notify */
 

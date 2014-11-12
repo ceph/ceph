@@ -28,6 +28,7 @@ static ostream& _prefix(
 
 Notify::Notify(
   ConnectionRef client,
+  uint64_t client_gid,
   unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
@@ -35,7 +36,7 @@ Notify::Notify(
   uint64_t notify_id,
   uint64_t version,
   OSDService *osd)
-  : client(client),
+  : client(client), client_gid(client_gid),
     in_progress_watchers(num_watchers),
     complete(false),
     discarded(false),
@@ -51,6 +52,7 @@ Notify::Notify(
 
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
+  uint64_t client_gid,
   unsigned num_watchers,
   bufferlist &payload,
   uint32_t timeout,
@@ -60,7 +62,7 @@ NotifyRef Notify::makeNotifyRef(
   OSDService *osd) {
   NotifyRef ret(
     new Notify(
-      client, num_watchers,
+      client, client_gid, num_watchers,
       payload, timeout,
       cookie, notify_id,
       version, osd));
@@ -152,10 +154,23 @@ void Notify::start_watcher(WatchRef watch)
   watchers.insert(watch);
 }
 
-void Notify::complete_watcher(WatchRef watch)
+void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 {
   Mutex::Locker l(lock);
   dout(10) << "complete_watcher" << dendl;
+  if (is_discarded())
+    return;
+  assert(in_progress_watchers > 0);
+  watchers.erase(watch);
+  --in_progress_watchers;
+  notify_replies.insert(make_pair(watch->get_watcher_gid(), reply_bl));
+  maybe_complete_notify();
+}
+
+void Notify::complete_watcher_remove(WatchRef watch)
+{
+  Mutex::Locker l(lock);
+  dout(10) << __func__ << dendl;
   if (is_discarded())
     return;
   assert(in_progress_watchers > 0);
@@ -170,8 +185,12 @@ void Notify::maybe_complete_notify()
 	   << in_progress_watchers
 	   << " in progress watchers " << dendl;
   if (!in_progress_watchers) {
-    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
-					 WATCH_NOTIFY, payload));
+    bufferlist bl;
+    ::encode(notify_replies, bl);
+    bufferlist empty;
+    MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id, empty));
+    reply->notifier_gid = client_gid;
+    reply->set_data(bl);
     if (timed_out)
       reply->return_code = -ETIMEDOUT;
     osd->send_message_osd_client(reply, client.get());
@@ -383,7 +402,7 @@ void Watch::remove()
   for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
        i != in_progress_notifies.end();
        ++i) {
-    i->second->complete_watcher(self.lock());
+    i->second->complete_watcher_remove(self.lock());
   }
   discard_state();
 }
@@ -409,17 +428,17 @@ void Watch::send_notify(NotifyRef notif)
 {
   dout(10) << "send_notify" << dendl;
   MWatchNotify *notify_msg = new MWatchNotify(
-    cookie, notif->version, notif->notify_id,
-    WATCH_NOTIFY, notif->payload);
+    cookie, notif->version, notif->notify_id, notif->payload);
+  notify_msg->notifier_gid = notif->client_gid;
   osd->send_message_osd_client(notify_msg, conn.get());
 }
 
-void Watch::notify_ack(uint64_t notify_id)
+void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)
 {
   dout(10) << "notify_ack" << dendl;
   map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.find(notify_id);
   if (i != in_progress_notifies.end()) {
-    i->second->complete_watcher(self.lock());
+    i->second->complete_watcher(self.lock(), reply_bl);
     in_progress_notifies.erase(i);
   }
 }

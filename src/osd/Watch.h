@@ -55,6 +55,7 @@ class Notify {
   friend class Watch;
   WNotifyRef self;
   ConnectionRef client;
+  uint64_t client_gid;
   unsigned in_progress_watchers;
   bool complete;
   bool discarded;
@@ -71,6 +72,8 @@ class Notify {
   CancelableContext *cb;
   Mutex lock;
 
+  /// gid -> reply_bl for everyone who acked the notify
+  multimap<uint64_t,bufferlist> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
@@ -85,6 +88,7 @@ class Notify {
 
   Notify(
     ConnectionRef client,
+    uint64_t client_gid,
     unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,
@@ -112,6 +116,7 @@ public:
   }
   static NotifyRef makeNotifyRef(
     ConnectionRef client,
+    uint64_t client_gid,
     unsigned num_watchers,
     bufferlist &payload,
     uint32_t timeout,
@@ -130,6 +135,11 @@ public:
 
   /// Called once per NotifyAck
   void complete_watcher(
+    WatchRef watcher, ///< [in] watcher to complete
+    bufferlist& reply_bl ///< [in] reply buffer from the notified watcher
+    );
+  /// Called when a watcher unregisters or times out
+  void complete_watcher_remove(
     WatchRef watcher ///< [in] watcher to complete
     );
 
@@ -186,6 +196,10 @@ public:
   /// NOTE: must be called with pg lock held
   ~Watch();
 
+  uint64_t get_watcher_gid() const {
+    return entity.num();
+  }
+
   string gen_dbg_prefix();
   static WatchRef makeWatchRef(
     ReplicatedPG *pg, OSDService *osd,
@@ -239,7 +253,8 @@ public:
 
   /// Call when notify_ack received on notify_id
   void notify_ack(
-    uint64_t notify_id ///< [in] id of acked notify
+    uint64_t notify_id, ///< [in] id of acked notify
+    bufferlist& reply_bl ///< [in] notify reply buffer
     );
 };
 
