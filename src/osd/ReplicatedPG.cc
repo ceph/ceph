@@ -1232,6 +1232,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   pgbackend(
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
+  object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -9951,6 +9952,9 @@ void ReplicatedPG::on_pool_change()
   }
   hit_set_setup();
   agent_setup();
+  if (get_role() !=0) {
+    object_contexts.clear();
+  }
 }
 
 // clear state.  called on recovery completion AND cancellation.
