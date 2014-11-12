@@ -38,7 +38,9 @@ def main(args):
     kernel_flavor = args['--flavor']
     teuthology_branch = args['--teuthology-branch']
     machine_type = args['--machine-type']
-    if 'multi' in machine_type:
+    if not machine_type or machine_type == 'None':
+        schedule_fail("Must specify a machine_type")
+    elif 'multi' in machine_type:
         schedule_fail("'multi' is not a valid machine_type. " +
                       "Maybe you want 'plana,mira,burnupi' or similar")
     distro = args['--distro']
@@ -469,7 +471,7 @@ def schedule_suite(job_config,
                     all_filt_val = True
                     continue
             if all_filt_val:
-                continue        
+                continue
 
         raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 

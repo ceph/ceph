@@ -1,6 +1,7 @@
 import docopt
 
 import teuthology.suite
+from teuthology.config import config
 
 doc = """
 usage: teuthology-suite --help
@@ -37,7 +38,7 @@ Standard arguments:
                               The teuthology branch to run against.
                               [default: master]
   -m <type>, --machine-type <type>
-                              Machine type [default: plana,mira,burnupi]
+                              Machine type [default: {default_machine_type}]
   -d <distro>, --distro <distro>
                               Distribution to run against
                               [default: ubuntu]
@@ -71,7 +72,7 @@ Scheduler arguments:
   --filter-out KEYWORDS       Do not run jobs whose name contains any of
                               the keywords in the comma separated keyword
                               string specified.
-"""
+""".format(default_machine_type=config.default_machine_type)
 
 
 def main():
