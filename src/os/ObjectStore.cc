@@ -113,7 +113,6 @@ int ObjectStore::queue_transactions(
 			    onreadable_sync, op);
 }
 
-
 int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
 {
   vector<ghobject_t> go;

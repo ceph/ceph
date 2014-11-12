@@ -42,10 +42,6 @@ ceph_psim_SOURCES = tools/psim.cc
 ceph_psim_LDADD = $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_psim
 
-ceph_dupstore_SOURCES = tools/dupstore.cc
-ceph_dupstore_LDADD = $(LIBOS) $(CEPH_GLOBAL)
-bin_DEBUGPROGRAMS += ceph_dupstore
-
 ceph_radosacl_SOURCES = tools/radosacl.cc
 ceph_radosacl_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_radosacl

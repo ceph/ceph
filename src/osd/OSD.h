@@ -2323,8 +2323,6 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static int do_convertfs(ObjectStore *store);
-  static int convert_collection(ObjectStore *store, coll_t cid);
   static int mkfs(CephContext *cct, ObjectStore *store,
 		  const string& dev,
 		  uuid_d fsid, int whoami);

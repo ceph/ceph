@@ -294,7 +294,14 @@ int main(int argc, const char **argv)
 
 
   if (convertfilestore) {
-    int err = OSD::do_convertfs(store);
+    int err = store->mount();
+    if (err < 0) {
+      derr << TEXT_RED << " ** ERROR: error mounting store " << g_conf->osd_data
+	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
+      exit(1);
+    }
+    err = store->upgrade();
+    store->umount();
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
 	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
@@ -467,15 +474,6 @@ int main(int argc, const char **argv)
   // Set up crypto, daemonize, etc.
   global_init_daemonize(g_ceph_context, 0);
   common_init_finish(g_ceph_context);
-
-  if (g_conf->filestore_update_to >= (int)store->get_target_version()) {
-    int err = OSD::do_convertfs(store);
-    if (err < 0) {
-      derr << TEXT_RED << " ** ERROR: error converting store " << g_conf->osd_data
-	   << ": " << cpp_strerror(-err) << TEXT_NORMAL << dendl;
-      exit(1);
-    }
-  }
 
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
