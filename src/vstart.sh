@@ -369,7 +369,7 @@ $COSDDEBUG
 $COSDMEMSTORE
 $extra_conf
 [mon]
-        mon pg warn min per osd = 10
+        mon pg warn min per osd = 3
         mon osd allow primary affinity = true
 $DAEMONOPTS
 $CMONDEBUG
