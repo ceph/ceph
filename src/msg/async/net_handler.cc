@@ -110,8 +110,10 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
   if (nonblock) {
     ret = set_nonblock(s);
-    if (ret < 0)
+    if (ret < 0) {
+      close(s);
       return ret;
+    }
   }
   ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
   if (ret < 0) {
