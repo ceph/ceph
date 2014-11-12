@@ -126,6 +126,22 @@ public:
     }
   }
 
+  //clear all strong reference from the lru.
+  void clear() {
+    VPtr val; // release any ref we have after we drop the lock
+    while (size > 0) {
+      Mutex::Locker l(lock);
+      if (size == 0) //check size again with lock
+        break;
+
+      K key = lru.back().first;
+      if (weak_refs.count(key)) {
+	val = weak_refs[key].first.lock();
+      }
+      lru_remove(key);
+    }
+  }
+
   void clear(const K& key) {
     VPtr val; // release any ref we have after we drop the lock
     {
@@ -192,6 +208,48 @@ public:
     }
     return val;
   }
+  bool get_next(const K &key, pair<K, VPtr> *next) {
+    pair<K, VPtr> r;
+    {
+      Mutex::Locker l(lock);
+      VPtr next_val;
+      typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.upper_bound(key);
+
+      while (i != weak_refs.end() &&
+	     !(next_val = i->second.first.lock()))
+	++i;
+
+      if (i == weak_refs.end())
+	return false;
+
+      if (next)
+	r = make_pair(i->first, next_val);
+    }
+    if (next)
+      *next = r;
+    return true;
+  }
+  bool get_next(const K &key, pair<K, V> *next) {
+    pair<K, V> r;
+    {
+      Mutex::Locker l(lock);
+      VPtr next_val;
+      typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.upper_bound(key);
+
+      while (i != weak_refs.end() &&
+	     !(next_val = i->second.first.lock()))
+	++i;
+
+      if (i == weak_refs.end())
+	return false;
+
+      if (next)
+	r = make_pair(i->first, *next_val);
+    }
+    if (next)
+      *next = r;
+    return true;
+  }
 
   VPtr lookup(const K& key) {
     VPtr val;
@@ -217,6 +275,40 @@ public:
       --waiting;
     }
     return val;
+  }
+  VPtr lookup_or_create(const K &key) {
+    VPtr val;
+    list<VPtr> to_release;
+    {
+      Mutex::Locker l(lock);
+      bool retry = false;
+      do {
+	retry = false;
+	typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.find(key);
+	if (i != weak_refs.end()) {
+	  val = i->second.first.lock();
+	  if (val) {
+	    lru_add(key, val, &to_release);
+	    return val;
+	  } else {
+	    retry = true;
+	  }
+	}
+	if (retry)
+	  cond.Wait(lock);
+      } while (retry);
+
+      V *new_value = new V();
+      VPtr new_val(new_value, Cleanup(this, key));
+      weak_refs.insert(make_pair(key, make_pair(new_val, new_value)));
+      lru_add(key, new_val, &to_release);
+      return new_val;
+    }
+  }
+
+  bool empty() {
+    Mutex::Locker l(lock);
+    return contents.empty();
   }
 
   /***
