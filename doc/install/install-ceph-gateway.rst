@@ -203,7 +203,7 @@ RPM-based Packages
    Provide the fully qualified domain name of the server machine 
    (e.g., ``hostname -f``).:: 
 
-	ServerName {fgdn}
+	ServerName {fqdn}
 
 #. Ensure that the Rewrite module is enabled. :: 
 
@@ -273,7 +273,7 @@ To enable SSL for RPM-based systems, execute the following steps:
 
 #. Ensure the SSL module is enabled.
 
-#. Generate a certificate and copy it the appropriate locations. ::
+#. Generate a certificate and copy it to the appropriate locations. ::
 
 	openssl x509 -req -days 365 -in ca.csr -signkey ca.key -out ca.crt
 	cp ca.crt /etc/pki/tls/certs
