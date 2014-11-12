@@ -248,7 +248,12 @@ int main(int argc, const char **argv)
 
   // read commands
   if (list) {
-    keyring.print(cout);
+    try {
+      keyring.print(cout);
+    } catch (ceph::buffer::end_of_buffer &eob) {
+      cout << "Exception (end_of_buffer) in print(), exit." << std::endl;
+      exit(1);
+    }
   }
   if (print_key) {
     CryptoKey key;
