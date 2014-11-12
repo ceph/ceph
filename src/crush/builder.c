@@ -11,6 +11,8 @@
 #include "builder.h"
 #include "hash.h"
 
+#define dprintk(args...) /* printf(args) */
+
 #define BUG_ON(x) assert(!(x))
 
 struct crush_map *crush_create()
@@ -265,7 +267,7 @@ crush_make_list_bucket(int hash, int type, int size,
 
 		w += weights[i];
 		bucket->sum_weights[i] = w;
-		/*printf("pos %d item %d weight %d sum %d\n",
+		/*dprintk("pos %d item %d weight %d sum %d\n",
 		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}
 
@@ -306,6 +308,10 @@ static int parent(int n)
 
 static int calc_depth(int size)
 {
+	if (size == 0) {
+		return 0;
+	}
+
 	int depth = 1;
 	int t = size - 1;
 	while (t) {
@@ -334,6 +340,16 @@ crush_make_tree_bucket(int hash, int type, int size,
 	bucket->h.type = type;
 	bucket->h.size = size;
 
+	if (size == 0) {
+		bucket->h.items = NULL;
+		bucket->h.perm = NULL;
+		bucket->h.weight = 0;
+		bucket->node_weights = NULL;
+		bucket->num_nodes = 0;
+		/* printf("size 0 depth 0 nodes 0\n"); */
+		return bucket;
+	}
+
 	bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
                 goto err;
@@ -344,7 +360,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	/* calc tree depth */
 	depth = calc_depth(size);
 	bucket->num_nodes = 1 << depth;
-	printf("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
+	dprintk("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
 
         bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
         if (!bucket->node_weights)
@@ -356,7 +372,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		node = crush_calc_tree_node(i);
-		printf("item %d node %d weight %d\n", i, node, weights[i]);
+		dprintk("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
 
 		if (crush_addition_is_unsafe(bucket->h.weight, weights[i]))
@@ -370,7 +386,7 @@ crush_make_tree_bucket(int hash, int type, int size,
                                 goto err;
 
 			bucket->node_weights[node] += weights[i];
-			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+			dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
 	}
 	BUG_ON(bucket->node_weights[bucket->num_nodes/2] != bucket->h.weight);
@@ -433,7 +449,7 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
-		/*printf("item %d at %d weight %d straw %d (%lf)\n",
+		/*dprintk("item %d at %d weight %d straw %d (%lf)\n",
 		       items[reverse[i]],
 		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);*/
 		i++;
@@ -441,7 +457,7 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 		/* same weight as previous? */
 		if (weights[reverse[i]] == weights[reverse[i-1]]) {
-			/*printf("same as previous\n");*/
+			/*dprintk("same as previous\n");*/
 			continue;
 		}
 
@@ -454,7 +470,7 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 				break;
 		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
 		pbelow = wbelow / (wbelow + wnext);
-		/*printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
+		/*dprintk("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
 
 		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
 
@@ -650,20 +666,30 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	node = crush_calc_tree_node(newsize-1);
 	bucket->node_weights[node] = weight;
 
+	/* if the depth increase, we need to initialize the new root node's weight before add bucket item */
+	int root = bucket->num_nodes/2;
+	if (depth >= 2 && (node - 1) == root) {
+		/* if the new item is the first node in right sub tree, so
+		* the root node initial weight is left sub tree's weight
+		*/
+		bucket->node_weights[root] = bucket->node_weights[root/2];
+	}
+
 	for (j=1; j<depth; j++) {
 		node = parent(node);
 
-                if (!crush_addition_is_unsafe(bucket->node_weights[node], weight))
+                if (crush_addition_is_unsafe(bucket->node_weights[node], weight))
                         return -ERANGE;
 
 		bucket->node_weights[node] += weight;
-                printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+                dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 	}
 
 
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 	
+	bucket->h.items[newsize-1] = item;
         bucket->h.weight += weight;
         bucket->h.size++;
 
@@ -827,7 +853,7 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 		for (j = 1; j < depth; j++) {
 			node = parent(node);
 			bucket->node_weights[node] -= weight;
-			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+			dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
 		bucket->h.weight -= weight;
 		break;
