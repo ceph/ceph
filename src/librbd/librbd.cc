@@ -585,35 +585,35 @@ namespace librbd {
     return r;
   }
 
-  ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
+  ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
     bufferptr ptr(len);
     bl.push_back(ptr);
-    int r = librbd::read(ictx, ofs, len, bl.c_str());
+    int r = librbd::read(ictx, ofs, len, bl.c_str(), iohint_flags);
     tracepoint(librbd, read_exit, r);
     return r;
   }
 
   int64_t Image::read_iterate(uint64_t ofs, size_t len,
 			      int (*cb)(uint64_t, size_t, const char *, void *),
-			      void *arg)
+			      void *arg, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg, iohint_flags);
     tracepoint(librbd, read_iterate_exit, r);
     return r;
   }
 
   int Image::read_iterate2(uint64_t ofs, uint64_t len,
 			      int (*cb)(uint64_t, size_t, const char *, void *),
-			      void *arg)
+			      void *arg, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, read_iterate2_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
-    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg);
+    int64_t r = librbd::read_iterate(ictx, ofs, len, cb, arg, iohint_flags);
     if (r > 0)
       r = 0;
     tracepoint(librbd, read_iterate2_exit, r);
@@ -632,7 +632,7 @@ namespace librbd {
     return r;
   }
 
-  ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl)
+  ssize_t Image::write(uint64_t ofs, size_t len, bufferlist& bl, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len, bl.length() < len ? NULL : bl.c_str());
@@ -640,7 +640,7 @@ namespace librbd {
       tracepoint(librbd, write_exit, -EINVAL);
       return -EINVAL;
     }
-    int r = librbd::write(ictx, ofs, len, bl.c_str());
+    int r = librbd::write(ictx, ofs, len, bl.c_str(), iohint_flags);
     tracepoint(librbd, write_exit, r);
     return r;
   }
@@ -655,7 +655,7 @@ namespace librbd {
   }
 
   int Image::aio_write(uint64_t off, size_t len, bufferlist& bl,
-		       RBD::AioCompletion *c)
+		       RBD::AioCompletion *c, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_write_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.length() < len ? NULL : bl.c_str(), c->pc);
@@ -664,7 +664,7 @@ namespace librbd {
       return -EINVAL;
     }
     int r = librbd::aio_write(ictx, off, len, bl.c_str(),
-			     (librbd::AioCompletion *)c->pc);
+			     (librbd::AioCompletion *)c->pc, iohint_flags);
     tracepoint(librbd, aio_write_exit, r);
     return r;
   }
@@ -679,13 +679,13 @@ namespace librbd {
   }
 
   int Image::aio_read(uint64_t off, size_t len, bufferlist& bl,
-		      RBD::AioCompletion *c)
+		      RBD::AioCompletion *c, unsigned iohint_flags)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, aio_read_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, off, len, bl.c_str(), c->pc);
     ldout(ictx->cct, 10) << "Image::aio_read() buf=" << (void *)bl.c_str() << "~"
 			 << (void *)(bl.c_str() + len - 1) << dendl;
-    int r = librbd::aio_read(ictx, off, len, NULL, &bl, (librbd::AioCompletion *)c->pc);
+    int r = librbd::aio_read(ictx, off, len, NULL, &bl, (librbd::AioCompletion *)c->pc, iohint_flags);
     tracepoint(librbd, aio_read_exit, r);
     return r;
   }

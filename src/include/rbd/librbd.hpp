@@ -156,11 +156,13 @@ public:
   int snap_set(const char *snap_name);
 
   /* I/O */
-  ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
+  ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl, unsigned iohint_flags=0);
   int64_t read_iterate(uint64_t ofs, size_t len,
-		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+		       int (*cb)(uint64_t, size_t, const char *, void *),
+		       void *arg, unsigned iohint_flags=0);
   int read_iterate2(uint64_t ofs, uint64_t len,
-		    int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
+		    int (*cb)(uint64_t, size_t, const char *, void *),
+		    void *arg, unsigned iohint_flags=0);
   /**
    * get difference between two versions of an image
    *
@@ -183,10 +185,11 @@ public:
   int diff_iterate(const char *fromsnapname,
 		   uint64_t ofs, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg);
-  ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
+  ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl, unsigned iohint_flags=0);
   int discard(uint64_t ofs, uint64_t len);
 
-  int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl,
+		RBD::AioCompletion *c, unsigned iohint_flags=0);
 
   /**
    * read async from image
@@ -205,7 +208,8 @@ public:
    * @param bl bufferlist to read into
    * @param c aio completion to notify when read is complete
    */
-  int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl,
+		RBD::AioCompletion *c, unsigned iohint_flags=0);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();
