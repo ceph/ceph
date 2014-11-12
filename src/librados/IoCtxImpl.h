@@ -49,6 +49,7 @@ struct librados::IoCtxImpl {
 
   Mutex *lock;
   Objecter *objecter;
+  ZTracer::ZTraceEndpointRef ioctx_endp;
 
   IoCtxImpl();
   IoCtxImpl(RadosClient *c, Objecter *objecter, Mutex *client_lock,
@@ -172,11 +173,17 @@ struct librados::IoCtxImpl {
 	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid);
   int aio_read(object_t oid, AioCompletionImpl *c,
 	       char *buf, size_t len, uint64_t off, uint64_t snapid);
+  int aio_read_traced(object_t oid, AioCompletionImpl *c,
+	       char *buf, size_t len, uint64_t off, uint64_t snapid,
+	       struct blkin_trace_info *info);
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
 		      size_t len, uint64_t off, uint64_t snapid);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
 		const bufferlist& bl, size_t len, uint64_t off);
+  int aio_write_traced(const object_t &oid, AioCompletionImpl *c,
+		const bufferlist& bl, size_t len, uint64_t off,
+		struct blkin_trace_info *info);
   int aio_append(const object_t &oid, AioCompletionImpl *c,
 		 const bufferlist& bl, size_t len);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,

@@ -2900,6 +2900,18 @@ extern "C" int rados_aio_read(rados_ioctx_t io, const char *o,
 		       buf, len, off, ctx->snap_seq);
 }
 
+extern "C" int rados_aio_read_traced(rados_ioctx_t io, const char *o,
+				rados_completion_t completion,
+				char *buf, size_t len, uint64_t off,
+				struct blkin_trace_info *info)
+{
+	librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+	object_t oid(o);
+	return ctx->aio_read_traced(oid,
+			(librados::AioCompletionImpl*)completion, buf, len,
+			off, ctx->snap_seq, info);
+}
+
 extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
 				rados_completion_t completion,
 				const char *buf, size_t len, uint64_t off)
@@ -2910,6 +2922,20 @@ extern "C" int rados_aio_write(rados_ioctx_t io, const char *o,
   bl.append(buf, len);
   return ctx->aio_write(oid, (librados::AioCompletionImpl*)completion,
 			bl, len, off);
+}
+
+extern "C" int rados_aio_write_traced(rados_ioctx_t io, const char *o,
+		rados_completion_t completion,
+		const char *buf, size_t len, uint64_t off,
+		struct blkin_trace_info *info)
+{
+	librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+	object_t oid(o);
+	bufferlist bl;
+	bl.append(buf, len);
+	return ctx->aio_write_traced(oid,
+			(librados::AioCompletionImpl*)completion,bl, len, off,
+			info);
 }
 
 extern "C" int rados_aio_append(rados_ioctx_t io, const char *o,
