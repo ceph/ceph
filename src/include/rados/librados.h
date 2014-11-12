@@ -1128,6 +1128,12 @@ uint64_t rados_get_last_version(rados_ioctx_t io);
 int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, uint64_t off);
 
 /**
+ * The different with rados_write is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_write_with_iohint(rados_ioctx_t io, const char *oid, const char *buf,
+			    size_t len, uint64_t off, unsigned iohint_flags);
+/**
  * Write *len* bytes from *buf* into the *oid* object. The value of
  * *len* must be <= UINT_MAX/2.
  *
@@ -1141,6 +1147,14 @@ int rados_write(rados_ioctx_t io, const char *oid, const char *buf, size_t len, 
  * @returns 0 on success, negative error code on failure
  */
 int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
+
+/**
+ * The different with rados_write_full is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+
+int rados_write_full_with_iohint(rados_ioctx_t io, const char *oid, const char *buf,
+				  size_t len, unsigned iohint_flags);
 
 /**
  * Efficiently copy a portion of one object to another
@@ -1162,7 +1176,13 @@ int rados_write_full(rados_ioctx_t io, const char *oid, const char *buf, size_t 
  */
 int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
                       const char *src, uint64_t src_off, size_t len);
-
+/**
+ * The different with rados_clone_range is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_clone_range_with_iohint(rados_ioctx_t io, const char *dst, uint64_t dst_off,
+				  const char *src, uint64_t src_off, size_t len,
+				  unsigned iohint_flags);
 /**
  * Append *len* bytes from *buf* into the *oid* object. The value of
  * *len* must be <= UINT_MAX/2.
@@ -1174,6 +1194,13 @@ int rados_clone_range(rados_ioctx_t io, const char *dst, uint64_t dst_off,
  * @returns 0 on success, negative error code on failure
  */
 int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len);
+
+/**
+ * The different with rados_append is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_append_with_iohint(rados_ioctx_t io, const char *oid, const char *buf,
+			      size_t len, unsigned iohint_flags);
 
 /**
  * Read data from an object
@@ -1190,6 +1217,13 @@ int rados_append(rados_ioctx_t io, const char *oid, const char *buf, size_t len)
  * failure
  */
 int rados_read(rados_ioctx_t io, const char *oid, char *buf, size_t len, uint64_t off);
+
+/**
+ * The different with rados_read is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_read_with_iohint(rados_ioctx_t io, const char *oid, char *buf, size_t len,
+			    uint64_t off, unsigned iohint_flags);
 
 /**
  * Delete an object
@@ -1639,6 +1673,14 @@ int rados_aio_write(rados_ioctx_t io, const char *oid,
 		    const char *buf, size_t len, uint64_t off);
 
 /**
+ * The different with rados_aio_write is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_aio_write_with_iohint(rados_ioctx_t io, const char *oid,
+				rados_completion_t completion,
+				const char *buf, size_t len, uint64_t off,
+				unsigned iohint_flags);
+/**
  * Asychronously append data to an object
  *
  * Queues the append and returns.
@@ -1657,7 +1699,14 @@ int rados_aio_write(rados_ioctx_t io, const char *oid,
 int rados_aio_append(rados_ioctx_t io, const char *oid,
 		     rados_completion_t completion,
 		     const char *buf, size_t len);
-
+/**
+ * The different with rados_aio_append is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_aio_append_with_iohint(rados_ioctx_t io, const char *oid,
+				  rados_completion_t completion,
+				  const char *buf, size_t len,
+				  unsigned iohint_flags);
 /**
  * Asychronously write an entire object
  *
@@ -1679,6 +1728,14 @@ int rados_aio_append(rados_ioctx_t io, const char *oid,
 int rados_aio_write_full(rados_ioctx_t io, const char *oid,
 			 rados_completion_t completion,
 			 const char *buf, size_t len);
+/**
+ * The different with rados_aio_write_full is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_aio_write_full_with_iohint(rados_ioctx_t io, const char *oid,
+				      rados_completion_t completion,
+				      const char *buf, size_t len,
+				      unsigned iohint_flags);
 
 /**
  * Asychronously remove an object
@@ -1719,6 +1776,14 @@ int rados_aio_remove(rados_ioctx_t io, const char *oid,
 int rados_aio_read(rados_ioctx_t io, const char *oid,
 		   rados_completion_t completion,
 		   char *buf, size_t len, uint64_t off);
+/**
+ * The different with rados_aio_read is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+int rados_aio_read_with_iohint(rados_ioctx_t io, const char *oid,
+				rados_completion_t completion,
+				char *buf, size_t len, uint64_t off,
+				unsigned iohint_flags);
 
 /**
  * Block until all pending writes in an io context are safe
@@ -2009,6 +2074,14 @@ void rados_write_op_write(rados_write_op_t write_op,
                           const char *buffer,
                           size_t len,
                           uint64_t offset);
+/**
+ * The different with rados_write_op_write is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+void rados_write_op_write_with_iohint(rados_write_op_t write_op,
+				      const char *buffer,
+				      size_t len, uint64_t offset,
+				      unsigned iohint_flags);
 
 /**
  * Write whole object, atomically replacing it.
@@ -2021,6 +2094,14 @@ void rados_write_op_write_full(rados_write_op_t write_op,
                                size_t len);
 
 /**
+ * The different with rados_write_op_write_full is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+void rados_write_op_write_full_with_iohint(rados_write_op_t write_op,
+					    const char *buffer, size_t len,
+					    unsigned iohint_flags);
+
+/**
  * Append to end of object.
  * @param write_op operation to add this action to
  * @param buffer bytes to write
@@ -2029,6 +2110,13 @@ void rados_write_op_write_full(rados_write_op_t write_op,
 void rados_write_op_append(rados_write_op_t write_op,
                            const char *buffer,
                            size_t len);
+/**
+ * The different with rados_write_op_append is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+void rados_write_op_append_with_iohint(rados_write_op_t write_op,
+					const char *buffer, size_t len,
+					unsigned iohint_flags);
 /**
  * Remove object
  * @param write_op operation to add this action to
@@ -2051,6 +2139,13 @@ void rados_write_op_truncate(rados_write_op_t write_op, uint64_t offset);
 void rados_write_op_zero(rados_write_op_t write_op,
 			 uint64_t offset,
 			 uint64_t len);
+/**
+ * The different with rados_write_op_zero is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+void rados_write_op_zero_with_iohint(rados_write_op_t write_op,
+				      uint64_t offset, uint64_t len,
+				      unsigned iohint_flags);
 
 /**
  * Execute an OSD class method on an object
@@ -2252,6 +2347,15 @@ void rados_read_op_read(rados_read_op_t read_op,
 			char *buf,
 			size_t *bytes_read,
 			int *prval);
+
+/**
+ * The different with rados_read_op_read is add a param iohint_flags.
+ * For iohint_flags see CEPH_OSD_IOHINT_*
+ */
+void rados_read_op_read_with_iohint(rados_read_op_t read_op,
+				    uint64_t offset, size_t len,
+				    char *buf, size_t *bytes_read,
+				    int *prval, unsigned iohint_flags);
 
 /**
  * Execute an OSD class method on an object
