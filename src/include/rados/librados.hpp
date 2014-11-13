@@ -771,11 +771,11 @@ namespace librados
     const NObjectIterator& nobjects_end() const;
 
     // DEPRECATED
-    ObjectIterator objects_begin();
+    ObjectIterator objects_begin() __attribute__ ((deprecated));
     /// Start enumerating objects for a pool starting from a hash position
-    ObjectIterator objects_begin(uint32_t start_hash_position);
+    ObjectIterator objects_begin(uint32_t start_hash_position) __attribute__ ((deprecated));
     /// Iterator indicating the end of a pool
-    const ObjectIterator& objects_end() const;
+    const ObjectIterator& objects_end() const __attribute__ ((deprecated));
 
     /**
      * List available hit set objects
