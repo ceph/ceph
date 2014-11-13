@@ -111,6 +111,9 @@ public:
 
 // --
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(LibRadosWatchNotify, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
@@ -218,6 +221,8 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
   sem_destroy(&sem);
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
+
+#pragma GCC diagnostic pop
 
 
 // --

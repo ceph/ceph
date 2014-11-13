@@ -1949,8 +1949,9 @@ typedef void (*rados_watchfailcb_t)(void *arg,
  * @returns -ERANGE if the version of the object is greater than ver
  */
 CEPH_RADOS_API int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
-                               uint64_t *handle, rados_watchcb_t watchcb,
-                               void *arg);
+			       uint64_t *handle,
+			       rados_watchcb_t watchcb, void *arg)
+  __attribute__((deprecated));
 
 
 /**
@@ -2012,7 +2013,8 @@ CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o,
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
-                                const char *buf, int buf_len);
+				const char *buf, int buf_len)
+  __attribute__((deprecated));
 
 /**
  * Sychronously notify watchers of an object

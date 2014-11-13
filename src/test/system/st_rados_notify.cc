@@ -38,6 +38,9 @@ StRadosNotify::~StRadosNotify()
 {
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 int StRadosNotify::run()
 {
   rados_t cl;
@@ -72,3 +75,5 @@ int StRadosNotify::run()
 
   return 0;
 }
+
+#pragma GCC diagnostic pop

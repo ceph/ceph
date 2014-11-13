@@ -29,6 +29,9 @@ public:
     }
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void
 test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
 {
@@ -62,6 +65,8 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
 
   ioctx.close();
 }
+
+#pragma GCC diagnostic pop
 
 void
 test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
