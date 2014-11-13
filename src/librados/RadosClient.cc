@@ -805,6 +805,22 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
       lock.Lock();
       ldout(cct,10) << __func__ << " failed notify done" << dendl;
       wc->put();
+    } else if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
+      // we failed to ping or reconnect and our watch was canceled.
+      ldout(cct,10) << __func__ << " disconnect " << *m << dendl;
+      if (wc->watch_ctx2) {
+	wc->get();
+	// trigger the callback
+	lock.Unlock();
+	wc->watch_ctx2->handle_error(m->cookie, -ENOTCONN);
+	lock.Lock();
+	ldout(cct,10) << __func__ << " disconnect done" << dendl;
+	wc->put();
+      } else {
+	lderr(cct) << __func__ << " watch disconnect on "
+		   << wc->oid << " on old API user, silently ignoring"
+		   << dendl;
+      }
     } else {
       lderr(cct) << __func__ << " got unknown event " << m->opcode
 		 << " " << ceph_watch_event_name(m->opcode) << dendl;
