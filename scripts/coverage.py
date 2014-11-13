@@ -1,7 +1,5 @@
 """
-usage: teuthology-coverage [-h] -o LCOV_OUTPUT [--html-output HTML_OUTPUT]
-                           [--cov-tools-dir COV_TOOLS_DIR] [--skip-init] [-v]
-                           <test_dir>
+usage: teuthology-coverage [options] -o LCOV_OUTPUT <test_dir>
 
 Analyze the coverage of a suite of test runs, generating html output with
 lcov.
