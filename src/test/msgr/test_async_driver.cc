@@ -120,12 +120,14 @@ TEST_P(EventDriverTest, PipeTest) {
   ASSERT_EQ(fired_events[0].fd, fds[0]);
 
 
+  fired_events.clear();
   r = write(fds[1], &c, sizeof(c));
   ASSERT_EQ(r, 1);
   r = driver->event_wait(fired_events, &tv);
   ASSERT_EQ(r, 1);
   ASSERT_EQ(fired_events[0].fd, fds[0]);
 
+  fired_events.clear();
   driver->del_event(fds[0], EVENT_READABLE, EVENT_READABLE);
   r = write(fds[1], &c, sizeof(c));
   ASSERT_EQ(r, 1);
@@ -193,6 +195,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
   r = driver->event_wait(fired_events, &tv);
   ASSERT_EQ(r, 0);
 
+  fired_events.clear();
   pthread_t thread1;
   r = pthread_create(&thread1, NULL, echoclient, (void*)port);
   ASSERT_EQ(r, 0);
@@ -202,18 +205,21 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
   ASSERT_EQ(r, 1);
   ASSERT_EQ(fired_events[0].fd, listen_sd);
 
+  fired_events.clear();
   int client_sd = ::accept(listen_sd, NULL, NULL);
   ASSERT_TRUE(client_sd > 0);
   r = driver->add_event(client_sd, EVENT_NONE, EVENT_READABLE);
   ASSERT_EQ(r, 0);
 
   do {
+    fired_events.clear();
     tv.tv_sec = 5;
     tv.tv_usec = 0;
     r = driver->event_wait(fired_events, &tv);
     ASSERT_EQ(r, 1);
     ASSERT_EQ(fired_events[0].mask, EVENT_READABLE);
 
+    fired_events.clear();
     char data[100];
     r = ::read(client_sd, data, sizeof(data));
     if (r == 0)
@@ -226,7 +232,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     r = write(client_sd, data, strlen(data));
     ASSERT_EQ(r, strlen(data));
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
-                      EVENT_READABLE|EVENT_WRITABLE);
+                      EVENT_WRITABLE);
   } while (1);
 
   ::close(client_sd);

@@ -37,9 +37,10 @@ int SelectDriver::add_event(int fd, int cur_mask, int add_mask)
   ldout(cct, 10) << __func__ << " add event to fd=" << fd << " mask=" << add_mask
                  << dendl;
 
-  if (add_mask & EVENT_READABLE)
+  int mask = cur_mask | add_mask;
+  if (mask & EVENT_READABLE)
     FD_SET(fd, &rfds);
-  if (add_mask & EVENT_WRITABLE)
+  if (mask & EVENT_WRITABLE)
     FD_SET(fd, &wfds);
   if (fd > max_fd)
       max_fd = fd;
@@ -79,10 +80,12 @@ int SelectDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
           mask |= EVENT_READABLE;
       if (FD_ISSET(j, &_wfds))
           mask |= EVENT_WRITABLE;
-      fe.fd = j;
-      fe.mask = mask;
-      fired_events.push_back(fe);
-      numevents++;
+      if (mask) {
+        fe.fd = j;
+        fe.mask = mask;
+        fired_events.push_back(fe);
+        numevents++;
+      }
     }
   }
   return numevents;
