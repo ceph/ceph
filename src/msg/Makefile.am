@@ -45,8 +45,9 @@ noinst_HEADERS += \
 	msg/async/AsyncConnection.h \
 	msg/async/AsyncMessenger.h \
 	msg/async/Event.h \
-	msg/async/net_handler.h \
-	msg/async/EventEpoll.h
+	msg/async/EventEpoll.h \
+	msg/async/EventSelect.h \
+	msg/async/net_handler.h
 
 if LINUX
 libmsg_la_SOURCES += msg/async/EventEpoll.h
