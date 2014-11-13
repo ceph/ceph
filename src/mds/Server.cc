@@ -3860,7 +3860,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       pi->ctime = mdr->get_op_stamp();
     } else if (name.find("ceph.quota") == 0) {
       if (!cur->is_dir() || cur->is_root()) {
-        reply_request(mdr, -EINVAL);
+        respond_to_request(mdr, -EINVAL);
         return;
       }
 
@@ -3869,7 +3869,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       rest = name.substr(name.find("quota"));
       int r = parse_quota_vxattr(rest, value, &quota);
       if (r < 0) {
-        reply_request(mdr, r);
+        respond_to_request(mdr, r);
         return;
       }
 
