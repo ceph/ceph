@@ -5879,10 +5879,7 @@ void OSD::advance_map(ObjectStore::Transaction& t, C_Contexts *tfin)
   while (p != waiting_for_pg.end()) {
     spg_t pgid = p->first;
 
-    vector<int> acting;
-    int nrep = osdmap->pg_to_acting_osds(pgid.pgid, acting);
-    int role = osdmap->calc_pg_role(whoami, acting, nrep);
-    if (role >= 0) {
+    if (osdmap->osd_is_valid_op_target(pgid.pgid, whoami)) {
       ++p;  // still me
     } else {
       dout(10) << " discarding waiting ops for " << pgid << dendl;
@@ -7570,7 +7567,7 @@ void OSD::handle_op(OpRequestRef op)
   if (!pg) {
     dout(7) << "hit non-existent pg " << pgid << dendl;
 
-    if (osdmap->get_pg_acting_role(pgid.pgid, whoami) >= 0) {
+    if (osdmap->osd_is_valid_op_target(pgid.pgid, whoami)) {
       dout(7) << "we are valid target for op, waiting" << dendl;
       waiting_for_pg[pgid].push_back(op);
       op->mark_delayed("waiting for pg to exist locally");
@@ -7584,7 +7581,7 @@ void OSD::handle_op(OpRequestRef op)
     }
     OSDMapRef send_map = get_map(m->get_map_epoch());
 
-    if (send_map->get_pg_acting_role(pgid.pgid, whoami) >= 0) {
+    if (send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
       dout(7) << "dropping request; client will resend when they get new map" << dendl;
     } else if (!send_map->have_pg_pool(pgid.pool())) {
       dout(7) << "dropping request; pool did not exist" << dendl;
