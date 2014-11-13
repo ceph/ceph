@@ -1580,7 +1580,7 @@ void FileJournal::committed_thru(uint64_t seq)
     header.start_seq = seq + 1;
   }
 
-  if (discard) {
+  if (g_conf->journal_discard && discard) {
     dout(10) << __func__  << " will trim (" << old_start << ", " << header.start << ")" << dendl;
     if (old_start < header.start)
       do_discard(old_start, header.start - 1);
