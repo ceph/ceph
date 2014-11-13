@@ -647,6 +647,7 @@ librados::NObjectIterator::~NObjectIterator()
 librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
 {
   if (rhs.impl == NULL) {
+    delete impl;
     impl = NULL;
     return;
   }
@@ -656,6 +657,11 @@ librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
 
 librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::NObjectIterator &rhs)
 {
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
   if (impl == NULL)
     impl = new NObjectIteratorImpl();
   *impl = *(rhs.impl);
@@ -4507,6 +4513,7 @@ librados::ListObject::ListObject(librados::ListObjectImpl *i): impl(i)
 librados::ListObject::ListObject(const ListObject& rhs)
 {
   if (rhs.impl == NULL) {
+    delete impl;
     impl = NULL;
     return;
   }
@@ -4516,6 +4523,11 @@ librados::ListObject::ListObject(const ListObject& rhs)
 
 librados::ListObject& librados::ListObject::operator=(const ListObject& rhs)
 {
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
   if (impl == NULL)
     impl = new ListObjectImpl();
   *impl = *(rhs.impl);
