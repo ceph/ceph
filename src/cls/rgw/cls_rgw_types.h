@@ -265,12 +265,13 @@ struct rgw_bucket_dir_entry {
   uint64_t index_ver;
   string tag;
   uint16_t flags;
+  uint64_t versioned_epoch;
 
   rgw_bucket_dir_entry() :
-    exists(false), index_ver(0), flags(0) {}
+    exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(8, 3, bl);
     ::encode(key.name, bl);
     ::encode(ver.epoch, bl);
     ::encode(exists, bl);
@@ -282,6 +283,7 @@ struct rgw_bucket_dir_entry {
     ::encode(tag, bl);
     ::encode(key.instance, bl);
     ::encode(flags, bl);
+    ::encode(versioned_epoch, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -308,6 +310,9 @@ struct rgw_bucket_dir_entry {
     }
     if (struct_v >= 7) {
       ::decode(flags, bl);
+    }
+    if (struct_v >= 8) {
+      ::decode(versioned_epoch, bl);
     }
     DECODE_FINISH(bl);
   }
