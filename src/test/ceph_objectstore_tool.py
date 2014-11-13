@@ -109,7 +109,7 @@ def cat_file(level, filename):
 def vstart(new):
     print "vstarting....",
     OPT = new and "-n" or ""
-    call("OSD=4 ./vstart.sh -l {opt} -d > /dev/null 2>&1".format(opt=OPT), shell=True)
+    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
     print "DONE"
 
 
