@@ -101,7 +101,7 @@ protected:
     while (i < len) {
       ASSERT_EQ(0, rados_getxattrs_next(iter, (const char**) &key,
 					(const char**) &val, &val_len));
-      if (val_len == 0 && key == NULL && val == NULL)
+      if (key == NULL || (val_len == 0 && val == NULL))
 	break;
       EXPECT_EQ(std::string(keys[i]), std::string(key));
       EXPECT_EQ(0, memcmp(vals[i], val, val_len));
