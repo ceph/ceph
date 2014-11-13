@@ -173,29 +173,27 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 The major releases of Ceph include:
 
-- **Firefly:** Firefly is the most recent major release of Ceph. These packages
+- **Giant:** Giant is the most recent major release of Ceph. These packages
   are recommended for anyone deploying Ceph in a production environment. 
   Critical bug fixes are backported and point releases are made as necessary.
+
+- **Firefly:** Firefly is the sixth major release of Ceph. These packages
+  are recommended for anyone deploying Ceph in a production environment. 
+  Firefly is a long-term stable release, so critical bug fixes are backported
+  and point releases are made as necessary.
 
 - **Emperor:** Emperor is the fifth major release of Ceph. These packages
-  are recommended for anyone deploying Ceph in a production environment. 
-  Critical bug fixes are backported and point releases are made as necessary.
+  are are old and no longer supported, so we recommend that users upgrade to
+  Firefly immediately.
   
 - **Dumpling:** Dumpling is the fourth major release of Ceph. These packages
-  are recommended for anyone deploying Ceph in a production environment.
-  Critical bug fixes are backported as necessary.
+  are older and not recommended for new users, but critical bug fixes are
+  still backported as necessary. We encourage all Dumpling users to update to
+  Firefly as soon as they are able to do so.
 
-- **Cuttlefish:** Cuttlefish is the third major release of Ceph. These packages
-  are recommended for those who have already deployed bobtail in production and
-  are not yet ready to upgrade.
-
-- **Bobtail:** Bobtail is the second major release of Ceph. These packages are
-  recommended for those who have already deployed bobtail in production and
-  are not yet ready to upgrade.
-
-- **Argonaut:** Argonaut is the first major release of Ceph.  These packages
-  are recommended for those who have already deployed Argonaut in production
-  and are not yet ready to upgrade.
+- **Argonaut, Bobtail, Cuttlefish:** These are the first three releases of
+  Ceph. These packages are old and no longer supported, so we recommend that
+  users upgrade to a supported version.
 
 .. tip:: For European users, there is also a mirror in the Netherlands at:
    http://eu.ceph.com/ 
