@@ -8095,8 +8095,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
   // check send epoch
   if (!send_map) {
-
-    dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
+    dout(7) << "don't have sender's osdmap; assuming it was valid and that"
+	    << " client will resend" << dendl;
     return;
   }
   if (!send_map->have_pg_pool(pgid.pool())) {
@@ -8109,7 +8109,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 		      << " when pool " << m->get_pg().pool() << " did not exist"
 		      << "\n";
     return;
-  } else if (send_map->get_pg_acting_role(pgid.pgid, whoami) < 0) {
+  }
+  if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 		      << " pg " << m->get_pg()
@@ -8125,8 +8126,9 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
   // check against current map too
   if (!osdmap->have_pg_pool(pgid.pool()) ||
-      osdmap->get_pg_acting_role(pgid.pgid, whoami) < 0) {
-    dout(7) << "dropping; no longer have PG (or pool); client will retarget" << dendl;
+      !osdmap->osd_is_valid_op_target(pgid.pgid, whoami)) {
+    dout(7) << "dropping; no longer have PG (or pool); client will retarget"
+	    << dendl;
     return;
   }
 
