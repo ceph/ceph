@@ -373,7 +373,7 @@ def main(argv):
 
     logging.debug(db)
 
-    call("./stop.sh", stderr=nullfd)
+    call("./init-ceph -c {conf} stop osd mon".format(conf=CEPH_CONF), shell=True)
 
     if ERRORS:
         logging.critical("Unable to set up test")
@@ -779,7 +779,7 @@ def main(argv):
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
-    call("./stop.sh", stderr=nullfd)
+    call("./init-ceph -c {conf} stop osd mon".format(conf=CEPH_CONF), shell=True)
 
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
