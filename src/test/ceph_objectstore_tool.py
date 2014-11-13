@@ -169,7 +169,7 @@ def verify(DATADIR, POOL, NAME_PREFIX):
     return ERRORS
 
 
-def main():
+def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
@@ -178,13 +178,24 @@ def main():
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
     EC_NAME = "ECobject"
-    NUM_REP_OBJECTS = 800
-    NUM_EC_OBJECTS = 12
-    NUM_NSPACES = 4
-    # Larger data sets for first object per namespace
-    DATALINECOUNT = 50000
-    # Number of objects to do xattr/omap testing on
-    ATTR_OBJS = 10
+    if len(argv) > 0 and argv[0] == 'large':
+        PG_COUNT = 12
+        NUM_REP_OBJECTS = 800
+        NUM_EC_OBJECTS = 12
+        NUM_NSPACES = 4
+        # Larger data sets for first object per namespace
+        DATALINECOUNT = 50000
+        # Number of objects to do xattr/omap testing on
+        ATTR_OBJS = 10
+    else:
+        PG_COUNT = 4
+        NUM_REP_OBJECTS = 2
+        NUM_EC_OBJECTS = 2
+        NUM_NSPACES = 2
+        # Larger data sets for first object per namespace
+        DATALINECOUNT = 10
+        # Number of objects to do xattr/omap testing on
+        ATTR_OBJS = 2
     ERRORS = 0
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
@@ -195,7 +206,7 @@ def main():
     vstart(new=True)
     wait_for_health()
 
-    cmd = "./ceph osd pool create {pool} 12 12 replicated".format(pool=REP_POOL)
+    cmd = "./ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     REPID = get_pool_id(REP_POOL, nullfd)
@@ -208,7 +219,7 @@ def main():
     cmd = "./ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-    cmd = "./ceph osd pool create {pool} 12 12 erasure {prof}".format(pool=EC_POOL, prof=PROFNAME)
+    cmd = "./ceph osd pool create {pool} {pg} {pg} erasure {prof}".format(pool=EC_POOL, prof=PROFNAME, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     ECID = get_pool_id(EC_POOL, nullfd)
@@ -776,4 +787,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
