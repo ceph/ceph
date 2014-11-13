@@ -30,6 +30,11 @@ ceph_test_msgr_SOURCES = test/testmsgr.cc
 ceph_test_msgr_LDADD = $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
+ceph_test_async_driver_SOURCES = test/msgr/test_async_driver.cc
+ceph_test_async_driver_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_async_driver_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_async_driver
+
 ceph_streamtest_SOURCES = test/streamtest.cc
 ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_streamtest
