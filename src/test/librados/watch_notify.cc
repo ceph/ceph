@@ -219,6 +219,75 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
+
+// --
+
+TEST_F(LibRadosWatchNotify, Watch2Timeout) {
+  notify_io = ioctx;
+  notify_oid = "foo";
+  notify_cookies.clear();
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
+  uint64_t handle;
+  ASSERT_EQ(0,
+	    rados_watch2(ioctx, notify_oid, &handle,
+			 watch_notify2_test_cb,
+			 watch_notify2_test_failcb,
+			 watch_notify2_test_errcb, NULL));
+  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
+  int left = 180;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_TRUE(left > 0);
+  rados_conf_set(cluster, "objecter_inject_no_watch_ping", "false");
+  ASSERT_EQ(-ENOTCONN, notify_err);
+
+  // a subsequent notify should not reach us
+  char *reply_buf;
+  size_t reply_buf_len;
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 0,
+			     &reply_buf, &reply_buf_len));
+  {
+    bufferlist reply;
+    reply.append(reply_buf, reply_buf_len);
+    std::multimap<uint64_t, bufferlist> reply_map;
+    bufferlist::iterator reply_p = reply.begin();
+    ::decode(reply_map, reply_p);
+    ASSERT_EQ(0u, reply_map.size());
+  }
+  ASSERT_EQ(0u, notify_cookies.size());
+
+  // re-watch
+  rados_unwatch(ioctx, notify_oid, handle);
+  handle = 0;
+  ASSERT_EQ(0,
+	    rados_watch2(ioctx, notify_oid, &handle,
+			 watch_notify2_test_cb,
+			 watch_notify2_test_failcb,
+			 watch_notify2_test_errcb, NULL));
+  // and now a notify will work.
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 0,
+			     &reply_buf, &reply_buf_len));
+  {
+    bufferlist reply;
+    reply.append(reply_buf, reply_buf_len);
+    std::multimap<uint64_t, bufferlist> reply_map;
+    bufferlist::iterator reply_p = reply.begin();
+    ::decode(reply_map, reply_p);
+    ASSERT_EQ(1u, reply_map.size());
+    ASSERT_EQ(1, notify_cookies.count(handle));
+    ASSERT_EQ(5, reply_map.begin()->second.length());
+    ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  }
+  ASSERT_EQ(1u, notify_cookies.size());
+
+  rados_unwatch(ioctx, notify_oid, handle);
+}
+
 // --
 
 TEST_F(LibRadosWatchNotify, WatchNotify2) {
