@@ -218,7 +218,17 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   int wait = 10;
   while (!notify_failed && --wait)
     sleep(1);
-    ASSERT_TRUE(notify_failed);
+  ASSERT_TRUE(notify_failed);
+
+  // we should get the next notify, though!
+  notify_failed = false;
+  notify_sleep = 0;
+  notify_cookies.clear();
+  ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
+			     "notify", 6, 30000, // 30s
+			     &reply_buf, &reply_buf_len));
+  ASSERT_EQ(1u, notify_cookies.size());
+
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
