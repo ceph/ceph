@@ -14,6 +14,7 @@
 
 	mon pg warn min per osd = 2
 	mon pg warn max per osd = 10000
+	mon pg warn max object skew = 0
 
 	osd pool default size = 2
 
