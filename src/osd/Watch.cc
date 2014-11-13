@@ -471,6 +471,16 @@ void Watch::send_failed_notify(Notify *notif)
   conn->send_message(reply);
 }
 
+void Watch::send_disconnect()
+{
+  if (!conn)
+    return;
+  bufferlist empty;
+  MWatchNotify *reply(new MWatchNotify(cookie, 0, 0,
+				       CEPH_WATCH_EVENT_DISCONNECT, empty));
+  conn->send_message(reply);
+}
+
 void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)
 {
   dout(10) << "notify_ack" << dendl;
