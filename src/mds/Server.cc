@@ -972,7 +972,6 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
-  assert(mdr->reply_snapbl.length() == 0); // only used on mksnap
   req->get_connection()->send_message(reply);
 
   mdr->did_early_reply = true;
@@ -1060,7 +1059,6 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     // We can set the extra bl unconditionally: if it's already been sent in the
     // early_reply, set_extra_bl will have claimed it and reply_extra_bl is empty
     reply->set_extra_bl(mdr->reply_extra_bl);
-    reply->snapbl = mdr->reply_snapbl;
 
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     client_con->send_message(reply);
@@ -7531,7 +7529,6 @@ void Server::_mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info)
   // yay
   mdr->in[0] = diri;
   mdr->snapid = info.snapid;
-  mdr->reply_snapbl = diri->snaprealm->get_snap_trace();
   mdr->tracei = diri;
   respond_to_request(mdr, 0);
 }
