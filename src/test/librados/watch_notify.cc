@@ -337,12 +337,12 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
   uint64_t handle;
   WatchNotifyTestCtx2 ctx;
-  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
+  ASSERT_EQ(0, ioctx.watch(notify_oid, &handle, &ctx));
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
   ASSERT_EQ(watches.size(), 1u);
   bufferlist bl2, bl_reply;
-  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 0, &bl_reply));
+  ASSERT_EQ(0, ioctx.notify(notify_oid, bl2, 0, &bl_reply));
   bufferlist::iterator p = bl_reply.begin();
   std::multimap<uint64_t,bufferlist> reply_map;
   ::decode(reply_map, p);
@@ -448,14 +448,14 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
   uint64_t handle;
   WatchNotifyTestCtx2 ctx;
-  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
+  ASSERT_EQ(0, ioctx.watch(notify_oid, &handle, &ctx));
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
   ASSERT_EQ(watches.size(), 1u);
   ASSERT_EQ(0u, notify_cookies.size());
   bufferlist bl2, bl_reply;
-  ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */,
-				      &bl_reply));
+  ASSERT_EQ(-ETIMEDOUT, ioctx.notify(notify_oid, bl2, 1000 /* 1s */,
+				     &bl_reply));
   int wait = 10;
   while (!notify_failed && --wait)
     sleep(1);
