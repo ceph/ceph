@@ -269,7 +269,7 @@ def main(argv):
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
                 logging.critical("Replicated pool object creation failed with {ret}".format(ret=ret))
-                sys.exit(1)
+                return 1
 
             db[nspace][NAME] = {}
 
@@ -346,7 +346,7 @@ def main(argv):
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
                 logging.critical("Erasure coded pool creation failed with {ret}".format(ret=ret))
-                sys.exit(1)
+                return 1
 
             db[nspace][NAME] = {}
 
@@ -377,7 +377,7 @@ def main(argv):
 
     if ERRORS:
         logging.critical("Unable to set up test")
-        sys.exit(1)
+        return 1
 
     ALLREPPGS = get_pgs(OSDDIR, REPID)
     logging.debug(ALLREPPGS)
@@ -732,7 +732,7 @@ def main(argv):
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret:
                 logging.critical("INTERNAL ERROR")
-                sys.exit(1)
+                return 1
             tmpfd.close()
             obj_locs = get_lines(TMPFILE)
             if len(obj_locs) == 0:
@@ -787,10 +787,11 @@ def main(argv):
 
     if ERRORS == 0:
         print "TEST PASSED"
-        sys.exit(0)
+        return 0
     else:
         print "TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS)
-        sys.exit(1)
+        return 1
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    status = main(sys.argv[1:])
+    sys.exit(status)
