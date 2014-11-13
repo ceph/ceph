@@ -902,6 +902,8 @@ def unmount(
     """
     try:
         LOG.debug('Unmounting %s', path)
+        # Issue sync to avoid race condition 
+        command_check_call( [ 'sync' ] )
         command_check_call(
             [
                 '/bin/umount',
