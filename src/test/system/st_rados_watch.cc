@@ -47,6 +47,9 @@ StRadosWatch::
 {
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 int StRadosWatch::
 run()
 {
@@ -94,3 +97,5 @@ run()
 
   return r;
 }
+
+#pragma GCC diagnostic pop
