@@ -34,6 +34,9 @@ TEST_F(LibRadosList, ListObjects) {
   rados_objects_list_close(ctx);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(LibRadosListPP, ListObjectsPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -150,6 +153,8 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
   ASSERT_TRUE(myset.empty());
 }
 
+#pragma GCC diagnostic pop
+
 TEST_F(LibRadosList, ListObjectsNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -201,6 +206,9 @@ TEST_F(LibRadosList, ListObjectsNS) {
   rados_ioctx_set_namespace(ioctx, LIBRADOS_ALL_NSPACES);
   ASSERT_EQ(-EINVAL, rados_objects_list_open(ioctx, &ctx));
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
 static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx)
 {
@@ -465,6 +473,8 @@ TEST_F(LibRadosListECPP, ListObjectsEndIter) {
   ASSERT_TRUE(iter2 == iter_end2);
 }
 
+#pragma GCC diagnostic pop
+
 TEST_F(LibRadosListEC, ListObjectsNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -560,6 +570,9 @@ TEST_F(LibRadosListECPP, ListObjectsPPNS) {
   EXPECT_THROW(check_listpp(def, ioctx), std::runtime_error);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 TEST_F(LibRadosListECPP, ListObjectsManyPP) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -646,3 +659,5 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
     ++p;
   }
 }
+
+#pragma GCC diagnostic pop
