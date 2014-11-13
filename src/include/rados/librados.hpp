@@ -186,6 +186,11 @@ namespace librados
     /**
      * Callback activated when we encounter an error with the watch.
      *
+     * Errors we may see:
+     *   -ENOTCONN  : our watch was disconnected
+     *   -ETIMEDOUT : our watch is still valid, but we may have missed
+     *                a notify event.
+     *
      * @param cookie the watcher with the problem
      * @param err error
      */
