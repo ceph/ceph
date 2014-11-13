@@ -939,13 +939,13 @@ namespace librados
 		    bufferlist *pbl);
 
     // watch/notify
-    int watch2(const std::string& o, uint64_t *handle,
-	       librados::WatchCtx2 *ctx);
+    int watch(const std::string& o, uint64_t *handle,
+	      librados::WatchCtx2 *ctx);
     int unwatch(const std::string& o, uint64_t handle);
-    int notify2(const std::string& o,   ///< object
-		bufferlist& bl,         ///< optional broadcast payload
-		uint64_t timeout_ms,    ///< timeout (in ms)
-		bufferlist *pbl);       ///< reply buffer
+    int notify(const std::string& o,   ///< object
+	       bufferlist& bl,         ///< optional broadcast payload
+	       uint64_t timeout_ms,    ///< timeout (in ms)
+	       bufferlist *pbl);       ///< reply buffer
     int list_watchers(const std::string& o, std::list<obj_watch_t> *out_watchers);
     int list_snaps(const std::string& o, snap_set_t *out_snaps);
     void set_notify_timeout(uint32_t timeout);
