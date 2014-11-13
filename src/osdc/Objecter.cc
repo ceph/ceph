@@ -1399,21 +1399,21 @@ void Objecter::close_session(OSDSession *s)
   std::list<CommandOp*> homeless_commands;
   std::list<Op*> homeless_ops;
 
-  while(!s->linger_ops.empty()) {
+  while (!s->linger_ops.empty()) {
     std::map<uint64_t, LingerOp*>::iterator i = s->linger_ops.begin();
     ldout(cct, 10) << " linger_op " << i->first << dendl;
     homeless_lingers.push_back(i->second);
     _session_linger_op_remove(s, i->second);
   }
 
-  while(!s->ops.empty()) {
+  while (!s->ops.empty()) {
     std::map<ceph_tid_t, Op*>::iterator i = s->ops.begin();
     ldout(cct, 10) << " op " << i->first << dendl;
     homeless_ops.push_back(i->second);
     _session_op_remove(s, i->second);
   }
 
-  while(!s->command_ops.empty()) {
+  while (!s->command_ops.empty()) {
     std::map<ceph_tid_t, CommandOp*>::iterator i = s->command_ops.begin();
     ldout(cct, 10) << " command_op " << i->first << dendl;
     homeless_commands.push_back(i->second);
