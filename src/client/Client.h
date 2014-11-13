@@ -332,6 +332,8 @@ protected:
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
+  map<Inode*, Inode*>    root_parents;
+  Inode*                 root_ancestor;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // all inodes with caps sit on either cap_list or delayed_caps.
@@ -452,6 +454,13 @@ protected:
 
   int authenticate();
 
+  void put_qtree(Inode *in);
+  void invalidate_quota_tree(Inode *in);
+  Inode* get_quota_root(Inode *in);
+  bool is_quota_files_exceeded(Inode *in);
+  bool is_quota_bytes_exceeded(Inode *in, uint64_t new_bytes);
+  bool is_quota_bytes_approaching(Inode *in);
+
  public:
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -498,6 +507,7 @@ protected:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
 
+  void handle_quota(struct MClientQuota *m);
   void handle_snap(struct MClientSnap *m);
   void handle_caps(class MClientCaps *m);
   void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
@@ -660,6 +670,11 @@ private:
 	  bool readonly, hidden;
 	  bool (Client::*exists_cb)(Inode *in);
   };
+
+  bool _vxattrcb_quota_exists(Inode *in);
+  size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
 
   bool _vxattrcb_layout_exists(Inode *in);
   size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
