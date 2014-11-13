@@ -168,12 +168,16 @@ def verify(DATADIR, POOL, NAME_PREFIX):
             pass
     return ERRORS
 
+CEPH_DIR = "ceph_objectstore_tool_dir"
+CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
+
+def kill_daemons():
+    call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
-    CEPH_DIR = "ceph_objectstore_tool_dir"
     call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
     os.environ["CEPH_DIR"] = CEPH_DIR;
     OSDDIR = os.path.join(CEPH_DIR, "dev")
@@ -206,7 +210,6 @@ def main(argv):
     CFSD_PREFIX = "./ceph_objectstore_tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
     PROFNAME = "testecprofile"
 
-    CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
     os.environ['CEPH_CONF'] = CEPH_CONF
     vstart(new=True)
     wait_for_health()
@@ -373,7 +376,7 @@ def main(argv):
 
     logging.debug(db)
 
-    call("./init-ceph -c {conf} stop osd mon".format(conf=CEPH_CONF), shell=True)
+    kill_daemons()
 
     if ERRORS:
         logging.critical("Unable to set up test")
@@ -779,11 +782,8 @@ def main(argv):
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
-    call("./init-ceph -c {conf} stop osd mon".format(conf=CEPH_CONF), shell=True)
-
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
-    call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
 
     if ERRORS == 0:
         print "TEST PASSED"
@@ -793,5 +793,10 @@ def main(argv):
         return 1
 
 if __name__ == "__main__":
-    status = main(sys.argv[1:])
+    status = 1
+    try:
+        status = main(sys.argv[1:])
+    finally:
+        kill_daemons()
+        call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
     sys.exit(status)
