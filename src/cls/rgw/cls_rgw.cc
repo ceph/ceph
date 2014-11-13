@@ -983,16 +983,25 @@ static string escape_str(const string& s)
    return string(escaped);
 }
 
-/*
- * write object instance entry, and if needed also the list entry
- */
-static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
+static int write_obj_instance_entry(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
 {
   CLS_LOG(20, "write_entry() instance=%s idx=%s flags=%d", escape_str(instance_entry.key.instance).c_str(), instance_idx.c_str(), instance_entry.flags);
   /* write the instance entry */
   int ret = write_entry(hctx, instance_entry, instance_idx);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: write_entry() instance_key=%s ret=%d", escape_str(instance_idx).c_str(), ret);
+    return ret;
+  }
+  return 0;
+}
+
+/*
+ * write object instance entry, and if needed also the list entry
+ */
+static int write_obj_entries(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
+{
+  int ret = write_obj_instance_entry(hctx, instance_entry, instance_idx);
+  if (ret < 0) {
     return ret;
   }
   string instance_list_idx;
@@ -1225,12 +1234,25 @@ public:
   }
 };
 
+static int write_version_marker(cls_method_context_t hctx, cls_rgw_obj_key& key)
+{
+  struct rgw_bucket_dir_entry entry;
+  entry.key = key;
+  entry.flags = RGW_BUCKET_DIRENT_FLAG_VER_MARKER;
+  int ret = write_entry(hctx, entry, key.name);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: write_entry returned ret=%d", ret);
+    return ret;
+  }
+  return 0;
+}
+
 /*
  * plain entries are the ones who were created when bucket was not versioned,
  * if we override these objects, we need to convert these to versioned entries -- ones that have
  * both data entry, and listing key. Their version is going to be empty though
  */
-static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_obj_key& key, uint64_t epoch, bool demote_current)
+static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_obj_key& key, uint64_t epoch, bool demote_current, bool instance_only)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -1256,20 +1278,22 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
     string new_idx;
     encode_obj_versioned_data_key(key, &new_idx);
 
-    ret = write_obj_entries(hctx, entry, new_idx);
+    if (instance_only) {
+      ret = write_obj_instance_entry(hctx, entry, new_idx);
+    } else {
+      ret = write_obj_entries(hctx, entry, new_idx);
+    }
     if (ret < 0) {
       CLS_LOG(0, "ERROR: write_obj_entries new_idx=%s returned %d", new_idx.c_str(), ret);
       return ret;
     }
   }
 
-  entry.key = key;
-  entry.flags = RGW_BUCKET_DIRENT_FLAG_VER_MARKER;
-  ret = write_entry(hctx, entry, key.name);
+  ret = write_version_marker(hctx, key);
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: write_entry returned ret=%d", ret);
     return ret;
   }
+
   return 0;
 }
 
@@ -1373,8 +1397,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       }
     }
   } else {
+    bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, olh.get_epoch(), true);
+    ret = convert_plain_entry_to_versioned(hctx, key, olh.get_epoch(), true, instance_only);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
