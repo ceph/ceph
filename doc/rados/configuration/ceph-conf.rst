@@ -339,7 +339,7 @@ and  `Cephx Authentication`_ for details.
 OSDs
 ====
 
-Ceph production clusters typically deploy :term:Ceph OSD Daemons` where one node
+Ceph production clusters typically deploy :term:`Ceph OSD Daemons` where one node
 has one OSD daemon running a filestore on one storage drive. A typical
 deployment specifies a journal size. For example:
 
@@ -381,7 +381,7 @@ use with Ceph, and mount it to the directory you just created::
 	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
 We recommend using the ``xfs`` file system or the ``btrfs`` file system when 
-running :command:mkfs. 
+running :command:`mkfs`. 
 
 See the `OSD Config Reference`_ for additional configuration details.
 
