@@ -508,7 +508,7 @@ int test_ls_snaps(rbd_image_t image, int num_expected, ...)
   va_end(ap);
 
   for (i = 0; i < num_snaps; i++) {
-    EXPECT_EQ(NULL, snaps[i].name);
+    EXPECT_EQ((const char *)0, snaps[i].name);
   }
 
   return num_snaps;
