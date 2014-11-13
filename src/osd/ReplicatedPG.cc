@@ -7433,6 +7433,8 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     return;
   }
 
+  watch->send_disconnect();
+
   obc->watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
   obc->obs.oi.watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
   watch->remove();
