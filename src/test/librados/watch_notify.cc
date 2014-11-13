@@ -109,7 +109,7 @@ public:
   }
 };
 
-TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
+TEST_F(LibRadosWatchNotify, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -124,7 +124,7 @@ TEST_F(LibRadosWatchNotify, WatchNotifyTest) {
   sem_destroy(&sem);
 }
 
-TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
+TEST_F(LibRadosWatchNotify, WatchNotify2) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -155,7 +155,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
-TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
+TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
@@ -194,7 +194,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   rados_unwatch(ioctx, notify_oid, handle2);
 }
 
-TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
+TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_sleep = 3; // 3s
@@ -232,7 +232,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -253,7 +253,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTestPP) {
   sem_destroy(&sem);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
   notify_cookies.clear();
@@ -281,7 +281,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
   ioctx.unwatch(notify_oid, handle);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
   notify_sleep = 3;  // 3s
@@ -308,7 +308,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   ioctx.unwatch(notify_oid, handle);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
+TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
@@ -325,7 +325,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeoutTestPP) {
   ASSERT_EQ(0, ioctx.unwatch("foo", handle));
 }
 
-TEST_F(LibRadosWatchNotifyEC, WatchNotifyTest) {
+TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -340,7 +340,7 @@ TEST_F(LibRadosWatchNotifyEC, WatchNotifyTest) {
   sem_destroy(&sem);
 }
 
-TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTestPP) {
+TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -361,7 +361,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTestPP) {
   sem_destroy(&sem);
 }
 
-TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeoutTestPP) {
+TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   ioctx.set_notify_timeout(1);
   uint64_t handle;
