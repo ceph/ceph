@@ -35,6 +35,9 @@ public:
     }
 };
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 struct WatcherUnwatcher : public Thread {
   string pool;
   WatcherUnwatcher(string& _pool) : pool(_pool) {}
@@ -116,3 +119,5 @@ TEST_P(WatchStress, Stress1) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, ncluster));
   sem_destroy(&sem);
 }
+
+#pragma GCC diagnostic pop
