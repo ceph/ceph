@@ -64,7 +64,7 @@ enum TestOpType {
   TEST_OP_APPEND
 };
 
-class TestWatchContext : public librados::WatchCtx {
+class TestWatchContext : public librados::WatchCtx2 {
   TestWatchContext(const TestWatchContext&);
 public:
   Cond cond;
@@ -73,10 +73,21 @@ public:
   Mutex lock;
   TestWatchContext() : handle(0), waiting(false),
 		       lock("watch lock") {}
-  void notify(uint8_t opcode, uint64_t ver, bufferlist &bl) {
+  void handle_notify(uint64_t notify_id, uint64_t cookie,
+		     uint64_t notifier_id,
+		     bufferlist &bl) {
     Mutex::Locker l(lock);
     waiting = false;
     cond.SignalAll();
+  }
+  void handle_failed_notify(uint64_t notify_id, uint64_t cookie,
+			    uint64_t notifier_id) {
+    Mutex::Locker l(lock);
+    cout << "watch handle_failed_notify" << std::endl;
+  }
+  void handle_error(uint64_t cookie, int err) {
+    Mutex::Locker l(lock);
+    cout << "watch handle_error " << err << std::endl;
   }
   void start() {
     Mutex::Locker l(lock);
@@ -989,7 +1000,7 @@ public:
       std::cerr << num << ":  started" << std::endl;
       bufferlist bl;
       context->io_ctx.set_notify_timeout(600);
-      int r = context->io_ctx.notify(context->prefix+oid, 0, bl);
+      int r = context->io_ctx.notify(context->prefix+oid, bl, 0, NULL);
       if (r < 0) {
 	std::cerr << "r is " << r << std::endl;
 	assert(0);
@@ -1310,12 +1321,10 @@ public:
       }
 
       r = context->io_ctx.watch(context->prefix+oid,
-				0,
 				&ctx->get_handle(),
 				ctx);
     } else {
-      r = context->io_ctx.unwatch(context->prefix+oid,
-				  ctx->get_handle());
+      r = context->io_ctx.unwatch(ctx->get_handle());
       {
 	Mutex::Locker l(context->state_lock);
 	context->unwatch(oid);
