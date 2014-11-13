@@ -16,7 +16,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
 def wait_for_health():
     print "Wait for health_ok...",
-    while call("./ceph health 2> /dev/null | grep -v HEALTH_OK > /dev/null", shell=True) == 0:
+    while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
         time.sleep(5)
     print "DONE"
 
