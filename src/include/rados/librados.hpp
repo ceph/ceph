@@ -732,7 +732,7 @@ namespace librados
 
     int snap_rollback(const std::string& oid, const char *snapname);
     // Deprecated name kept for backward compatibility - same as snap_rollback()
-    int rollback(const std::string& oid, const char *snapname);
+    int rollback(const std::string& oid, const char *snapname) __attribute__ ((deprecated));
 
     int selfmanaged_snap_create(uint64_t *snapid);
 
