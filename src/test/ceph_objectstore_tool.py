@@ -173,7 +173,10 @@ def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
-    OSDDIR = "dev"
+    CEPH_DIR = "ceph_objectstore_tool_dir"
+    call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
+    os.environ["CEPH_DIR"] = CEPH_DIR;
+    OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
@@ -200,9 +203,11 @@ def main(argv):
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
+    CFSD_PREFIX = "./ceph_objectstore_tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
     PROFNAME = "testecprofile"
 
+    CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
+    os.environ['CEPH_CONF'] = CEPH_CONF
     vstart(new=True)
     wait_for_health()
 
@@ -416,11 +421,11 @@ def main(argv):
     ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
 
     # Don't specify a data-path
-    cmd = "./ceph_objectstore_tool --journal-path dev/{osd}.journal --type memstore --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph_objectstore_tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     # Don't specify a journal-path for filestore
-    cmd = "./ceph_objectstore_tool --type filestore --data-path dev/{osd} --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph_objectstore_tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     # Test --op list and generate json for all objects
@@ -778,6 +783,7 @@ def main(argv):
 
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
+    call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
 
     if ERRORS == 0:
         print "TEST PASSED"
