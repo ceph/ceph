@@ -956,6 +956,22 @@ namespace librados
 		    uint64_t handle,      ///< our watch handle
 		    bufferlist& bl);      ///< optional reply payload
 
+    /***
+     * check on watch validity
+     *
+     * Check if a watch is valid.  If so, return the number of
+     * milliseconds since we last confirmed its liveness.  If there is
+     * a known error, return it.
+     *
+     * If there is an error, the watch is no longer valid, and should
+     * be destroyed with unwatch().  The the user is still interested
+     * in the object, a new watch should be created with watch().
+     *
+     * @param handle watch handle
+     * @returns ms since last confirmed valid, or error
+     */
+    int watch_check(uint64_t handle);
+
     // old, deprecated versions
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,
 	      librados::WatchCtx *ctx) __attribute__ ((deprecated));

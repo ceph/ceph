@@ -554,6 +554,25 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent)
   info->watch_lock.Unlock();
 }
 
+int Objecter::linger_check(uint64_t linger_id)
+{
+  RWLock::WLocker wl(rwlock);
+  map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
+  if (iter == linger_ops.end()) {
+    ldout(cct, 10) << __func__ << " " << linger_id << " dne" << dendl;
+    return -EBADF;
+  }
+
+  LingerOp *info = iter->second;
+  utime_t age = ceph_clock_now(NULL) - info->watch_valid_thru;
+  ldout(cct, 10) << __func__ << " " << linger_id
+		 << " err " << info->last_error
+		 << " age " << age << dendl;
+  if (info->last_error)
+    return info->last_error;
+  return age.to_msec();
+}
+
 void Objecter::unregister_linger(uint64_t linger_id)
 {
   RWLock::WLocker wl(rwlock);
@@ -605,6 +624,7 @@ ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& 
   info->on_reg_ack = onack;
   info->on_reg_commit = oncommit;
   info->on_error = onerror;
+  info->watch_valid_thru = ceph_clock_now(NULL);
 
   RWLock::WLocker wl(rwlock);
   _linger_submit(info);

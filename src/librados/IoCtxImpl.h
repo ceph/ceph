@@ -199,6 +199,7 @@ struct librados::IoCtxImpl {
   void set_sync_op_version(version_t ver);
   int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
 	    librados::WatchCtx2 *ctx2);
+  int watch_check(uint64_t cookie);
   int unwatch(uint64_t cookie);
   int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
 	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
@@ -228,6 +229,7 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
   const object_t oid;      // the object
   uint64_t linger_id;      // we use this to unlinger when we are done
   uint64_t cookie;         // callback cookie
+  int err;
 
   // watcher.  only one of these will be defined.
   librados::WatchCtx *watch_ctx;
@@ -254,6 +256,7 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
       oid(_oc),
       linger_id(0),
       cookie(0),
+      err(0),
       watch_ctx(NULL),
       watch_ctx2(NULL),
       notify_lock(NULL),
