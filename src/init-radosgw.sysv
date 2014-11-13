@@ -87,8 +87,8 @@ case "$1" in
             if [ -n "$SYSTEMD_RUN" ]; then
                 $SYSTEMD_RUN -r bash -c "ulimit -n 32768; $RADOSGW -n $name"
             else
-                #start-stop-daemon --start -u $user -x $RADOSGW -- -n $name
-                daemon --user="$user" "ulimit -n 32768; $RADOSGW -n $name"
+		ulimit -n 32768
+                daemon --user="$user" "$RADOSGW -n $name"
             fi
             echo "Starting $name..."
         done
