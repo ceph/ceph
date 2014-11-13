@@ -80,7 +80,12 @@ public:
 
   const char *get_type_name() const { return "watch-notify"; }
   void print(ostream& out) const {
-    out << "watch-notify(c=" << cookie << " v=" << ver << " i=" << notify_id << " opcode=" << (int)opcode << " r = " << return_code << ")";
+    out << "watch-notify("
+	<< ceph_watch_event_name(opcode) << " (" << (int)opcode << ")"
+	<< " cookie " << cookie
+	<< " notify " << notify_id
+	<< " ret " << return_code
+	<< ")";
   }
 };
 
