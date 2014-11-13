@@ -109,6 +109,8 @@ public:
   }
 };
 
+// --
+
 TEST_F(LibRadosWatchNotify, WatchNotify) {
   ASSERT_EQ(0, sem_init(&sem, 0, 0));
   char buf[128];
@@ -123,6 +125,101 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
   rados_unwatch(ioctx, "foo", handle);
   sem_destroy(&sem);
 }
+
+TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
+  ASSERT_EQ(watches.size(), 1u);
+  bufferlist bl2;
+  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  ioctx.unwatch("foo", handle);
+  sem_destroy(&sem);
+}
+
+TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+  uint64_t handle;
+  ASSERT_EQ(0,
+      rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
+  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  rados_unwatch(ioctx, "foo", handle);
+  sem_destroy(&sem);
+}
+
+TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
+  ASSERT_EQ(watches.size(), 1u);
+  bufferlist bl2;
+  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
+  TestAlarm alarm;
+  sem_wait(&sem);
+  ioctx.unwatch("foo", handle);
+  sem_destroy(&sem);
+}
+
+// --
+
+TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  ioctx.set_notify_timeout(1);
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  sem_destroy(&sem);
+  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
+}
+
+TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
+  ASSERT_EQ(0, sem_init(&sem, 0, 0));
+  ioctx.set_notify_timeout(1);
+  uint64_t handle;
+  WatchNotifyTestCtx ctx;
+
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+
+  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
+  sem_destroy(&sem);
+  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
+}
+
+// --
 
 TEST_F(LibRadosWatchNotify, WatchNotify2) {
   notify_io = ioctx;
@@ -154,6 +251,36 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   rados_unwatch(ioctx, notify_oid, handle);
 }
+
+TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
+  notify_oid = "foo";
+  notify_ioctx = &ioctx;
+  notify_cookies.clear();
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
+  uint64_t handle;
+  WatchNotifyTestCtx2 ctx;
+  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
+  std::list<obj_watch_t> watches;
+  ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
+  ASSERT_EQ(watches.size(), 1u);
+  bufferlist bl2, bl_reply;
+  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 0, &bl_reply));
+  bufferlist::iterator p = bl_reply.begin();
+  std::multimap<uint64_t,bufferlist> reply_map;
+  ::decode(reply_map, p);
+  ASSERT_EQ(1u, notify_cookies.size());
+  ASSERT_EQ(1, notify_cookies.count(handle));
+  ASSERT_EQ(1u, reply_map.size());
+  ASSERT_EQ(5, reply_map.begin()->second.length());
+  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  ioctx.unwatch(notify_oid, handle);
+}
+
+// --
 
 TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   notify_io = ioctx;
@@ -194,6 +321,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   rados_unwatch(ioctx, notify_oid, handle2);
 }
 
+// --
+
 TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   notify_io = ioctx;
   notify_oid = "foo";
@@ -232,55 +361,6 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   rados_unwatch(ioctx, notify_oid, handle);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotify) {
-  ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-  uint64_t handle;
-  WatchNotifyTestCtx ctx;
-  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  std::list<obj_watch_t> watches;
-  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(watches.size(), 1u);
-  bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
-  TestAlarm alarm;
-  sem_wait(&sem);
-  ioctx.unwatch("foo", handle);
-  sem_destroy(&sem);
-}
-
-TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
-  notify_oid = "foo";
-  notify_ioctx = &ioctx;
-  notify_cookies.clear();
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write(notify_oid, bl1, sizeof(buf), 0));
-  uint64_t handle;
-  WatchNotifyTestCtx2 ctx;
-  ASSERT_EQ(0, ioctx.watch2(notify_oid, &handle, &ctx));
-  std::list<obj_watch_t> watches;
-  ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
-  ASSERT_EQ(watches.size(), 1u);
-  bufferlist bl2, bl_reply;
-  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 0, &bl_reply));
-  bufferlist::iterator p = bl_reply.begin();
-  std::multimap<uint64_t,bufferlist> reply_map;
-  ::decode(reply_map, p);
-  ASSERT_EQ(1u, notify_cookies.size());
-  ASSERT_EQ(1, notify_cookies.count(handle));
-  ASSERT_EQ(1u, reply_map.size());
-  ASSERT_EQ(5, reply_map.begin()->second.length());
-  ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
-  ioctx.unwatch(notify_oid, handle);
-}
-
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
@@ -300,7 +380,8 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   ASSERT_EQ(watches.size(), 1u);
   ASSERT_EQ(0u, notify_cookies.size());
   bufferlist bl2, bl_reply;
-  ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */, &bl_reply));
+  ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */,
+				      &bl_reply));
   int wait = 10;
   while (!notify_failed && --wait)
     sleep(1);
@@ -308,76 +389,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   ioctx.unwatch(notify_oid, handle);
 }
 
-TEST_P(LibRadosWatchNotifyPP, WatchNotifyTimeout) {
-  ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  ioctx.set_notify_timeout(1);
-  uint64_t handle;
-  WatchNotifyTestCtx ctx;
-
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-
-  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_destroy(&sem);
-  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
-}
-
-TEST_F(LibRadosWatchNotifyEC, WatchNotify) {
-  ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
-  uint64_t handle;
-  ASSERT_EQ(0,
-      rados_watch(ioctx, "foo", 0, &handle, watch_notify_test_cb, NULL));
-  ASSERT_EQ(0, rados_notify(ioctx, "foo", 0, NULL, 0));
-  TestAlarm alarm;
-  sem_wait(&sem);
-  rados_unwatch(ioctx, "foo", handle);
-  sem_destroy(&sem);
-}
-
-TEST_F(LibRadosWatchNotifyECPP, WatchNotify) {
-  ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-  uint64_t handle;
-  WatchNotifyTestCtx ctx;
-  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  std::list<obj_watch_t> watches;
-  ASSERT_EQ(0, ioctx.list_watchers("foo", &watches));
-  ASSERT_EQ(watches.size(), 1u);
-  bufferlist bl2;
-  ASSERT_EQ(0, ioctx.notify("foo", 0, bl2));
-  TestAlarm alarm;
-  sem_wait(&sem);
-  ioctx.unwatch("foo", handle);
-  sem_destroy(&sem);
-}
-
-TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
-  ASSERT_EQ(0, sem_init(&sem, 0, 0));
-  ioctx.set_notify_timeout(1);
-  uint64_t handle;
-  WatchNotifyTestCtx ctx;
-
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl1;
-  bl1.append(buf, sizeof(buf));
-  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
-
-  ASSERT_EQ(0, ioctx.watch("foo", 0, &handle, &ctx));
-  sem_destroy(&sem);
-  ASSERT_EQ(0, ioctx.unwatch("foo", handle));
-}
-
+// --
 
 INSTANTIATE_TEST_CASE_P(LibRadosWatchNotifyPPTests, LibRadosWatchNotifyPP,
 			::testing::Values("", "cache"));
