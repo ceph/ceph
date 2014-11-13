@@ -154,6 +154,8 @@ int FileJournal::_open_block_device()
   /* block devices have to write in blocks of CEPH_PAGE_SIZE */
   block_size = CEPH_PAGE_SIZE;
 
+  discard = block_device_support_discard(fn.c_str());
+  dout(10) << fn << " support discard: " << (int)discard << dendl;
   _check_disk_write_cache();
   return 0;
 }
@@ -1519,6 +1521,23 @@ void FileJournal::commit_start(uint64_t seq)
   }
 }
 
+/*
+ *send discard command to joural block deivce
+ */
+void FileJournal::do_discard(int64_t offset, int64_t end)
+{
+  dout(10) << __func__ << "trim(" << offset << ", " << end << dendl;
+
+  offset = ROUND_UP_TO(offset, block_size);
+  if (offset >= end)
+    return;
+  end = ROUND_UP_TO(end - block_size, block_size);
+  assert(end >= offset);
+  if (offset < end)
+    if (block_device_discard(fd, offset, end - offset) < 0)
+	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+}
+
 void FileJournal::committed_thru(uint64_t seq)
 {
   Mutex::Locker locker(write_lock);
@@ -1551,6 +1570,8 @@ void FileJournal::committed_thru(uint64_t seq)
   while (!journalq.empty() && journalq.front().first <= seq) {
     journalq.pop_front();
   }
+
+  int64_t old_start = header.start;
   if (!journalq.empty()) {
     header.start = journalq.front().second;
     header.start_seq = journalq.front().first;
@@ -1558,6 +1579,17 @@ void FileJournal::committed_thru(uint64_t seq)
     header.start = write_pos;
     header.start_seq = seq + 1;
   }
+
+  if (discard) {
+    dout(10) << __func__  << " will trim (" << old_start << ", " << header.start << ")" << dendl;
+    if (old_start < header.start)
+      do_discard(old_start, header.start - 1);
+    else {
+      do_discard(old_start, header.max_size - 1);
+      do_discard(get_top(), header.start - 1);
+    }
+  }
+
   must_write_header = true;
   print_header();
 
