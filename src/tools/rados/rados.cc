@@ -2379,11 +2379,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     string oid(nargs[1]);
     string msg(nargs[2]);
-    bufferlist bl;
+    bufferlist bl, replybl;
     ::encode(msg, bl);
-    ret = io_ctx.notify(oid, 0, bl);
+    ret = io_ctx.notify(oid, bl, 10000, &replybl);
     if (ret != 0)
       cerr << "error calling notify: " << ret << std::endl;
+    if (replybl.length())
+      replybl.hexdump(cout);
   } else if (strcmp(nargs[0], "set-alloc-hint") == 0) {
     if (!pool_name || nargs.size() < 4)
       usage_exit();
