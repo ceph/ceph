@@ -661,7 +661,8 @@ admin-tools: monmaptool osdmaptool crushtool ceph-authtool
 base: core-daemons admin-tools \
 	cephfs ceph-syn ceph-conf \
 	rados librados-config \
-	init-ceph ceph_mon_store_converter ceph-post-file
+	init-ceph ceph_mon_store_converter ceph-post-file \
+	ceph
 
 
 # version stuff
