@@ -777,6 +777,18 @@ public:
     return calc_pg_role(osd, group, nrep);
   }
 
+  bool osd_is_valid_op_target(pg_t pg, int osd) const {
+    int primary;
+    vector<int> group;
+    int nrep = pg_to_acting_osds(pg, &group, &primary);
+    if (osd == primary)
+      return true;
+    if (pg_is_ec(pg))
+      return false;
+
+    return calc_pg_role(osd, group, nrep) >= 0;
+  }
+
 
   /*
    * handy helpers to build simple maps...
