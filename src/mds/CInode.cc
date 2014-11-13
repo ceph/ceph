@@ -1398,6 +1398,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
       ::encode(inode.layout, bl);
+      ::encode(inode.quota, bl);
     }
     break;
   
@@ -1653,6 +1654,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::decode(inode.version, p);
       ::decode(inode.layout, p);
+      ::decode(inode.quota, p);
     }
     break;
 
@@ -2015,6 +2017,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  pi->rstat.version = v;
 	}
       }
+
+      mdcache->broadcast_quota_to_client(this);
     }
     break;
 
@@ -2979,6 +2983,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.rbytes = i->rstat.rbytes;
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
+  if (cap)
+    cap->client_rstat_version = i->rstat.version;
 
   // auth
   i = pauth ? pi:oi;
@@ -3127,6 +3133,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     ::encode(inline_version, bl);
     ::encode(inline_data, bl);
+  }
+  if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
+    i = ppolicy ? pi : oi;
+    ::encode(i->quota, bl);
   }
 
   return valid;
