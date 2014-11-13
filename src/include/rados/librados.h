@@ -1984,6 +1984,22 @@ CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handl
 				void *arg);
 
 /**
+ * Check on the status of a watch
+ *
+ * Return the number of milliseconds since the watch was last confirmed.
+ * Or, if there has been an error, return that.
+ *
+ * If there is an error, the watch is no longer valid, and should be
+ * destroyed with rados_unwatch2().  The the user is still interested
+ * in the object, a new watch should be created with rados_watch2().
+ *
+ * @param io the pool the object is in
+ * @param handle the watch handle
+ * @returns ms since last confirmed on success, negative error code on failure
+ */
+int rados_watch_check(rados_ioctx_t io, uint64_t handle);
+
+/**
  * Unregister an interest in an object
  *
  * Once this completes, no more notifies will be sent to us for this

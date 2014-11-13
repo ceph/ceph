@@ -1973,6 +1973,7 @@ public:
 		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
 		    Context *onack,
 		    version_t *objver);
+  int linger_check(uint64_t linger_id);
   void unregister_linger(uint64_t linger_id);
   void _unregister_linger(uint64_t linger_id);
 

@@ -677,6 +677,17 @@ int librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie,
   lock.Lock();
   return 0;
 }
+
+int librados::RadosClient::watch_check(uint64_t cookie)
+{
+  ldout(cct,10) << __func__ << " cookie " << cookie << dendl;
+  map<uint64_t, WatchNotifyInfo *>::iterator iter = watch_notify_info.find(cookie);
+  if (iter == watch_notify_info.end())
+    return -EBADF;
+  WatchNotifyInfo *ctx = iter->second;
+  if (ctx->err)
+    return ctx->err;
+  return objecter->linger_check(ctx->linger_id);
 }
 
 struct C_DoWatchNotify : public Context {
@@ -713,6 +724,7 @@ void librados::RadosClient::do_watch_error(uint64_t cookie, int err)
   if (iter != watch_notify_info.end()) {
     WatchNotifyInfo *wc = iter->second;
     assert(wc);
+    wc->err = err;
     if (wc->watch_ctx2) {
       wc->get();
       ldout(cct,10) << __func__ << " cookie " << cookie
@@ -813,6 +825,7 @@ void librados::RadosClient::do_watch_notify(MWatchNotify *m)
     } else if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
       // we failed to ping or reconnect and our watch was canceled.
       ldout(cct,10) << __func__ << " disconnect " << *m << dendl;
+      wc->err = -ENOTCONN;
       if (wc->watch_ctx2) {
 	wc->get();
 	// trigger the callback

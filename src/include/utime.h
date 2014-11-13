@@ -82,6 +82,9 @@ public:
   uint64_t to_nsec() const {
     return (uint64_t)tv.tv_nsec + (uint64_t)tv.tv_sec * 1000000000ull;
   }
+  uint64_t to_msec() const {
+    return (uint64_t)tv.tv_nsec / 1000000ull + (uint64_t)tv.tv_sec * 1000ull;
+  }
 
   void copy_to_timeval(struct timeval *v) const {
     v->tv_sec = tv.tv_sec;

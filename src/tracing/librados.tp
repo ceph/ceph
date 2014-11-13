@@ -2254,6 +2254,24 @@ TRACEPOINT_EVENT(librados, rados_unwatch2_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_watch_check_enter,
+    TP_ARGS(
+        rados_ioctx_t, ioctx,
+        uint64_t, handle),
+    TP_FIELDS(
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+        ctf_integer(uint64_t, handle, handle)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_check_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_notify_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
