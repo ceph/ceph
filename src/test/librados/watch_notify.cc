@@ -147,8 +147,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Test) {
   std::multimap<uint64_t, bufferlist> reply_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
-  ASSERT_EQ(1, reply_map.size());
-  ASSERT_EQ(1, notify_cookies.size());
+  ASSERT_EQ(1u, reply_map.size());
+  ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -184,9 +184,9 @@ TEST_F(LibRadosWatchNotify, WatchNotify2MultiTest) {
   std::multimap<uint64_t, bufferlist> reply_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
-  ASSERT_EQ(2, reply_map.size());
+  ASSERT_EQ(2u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
-  ASSERT_EQ(2, notify_cookies.size());
+  ASSERT_EQ(2u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle1));
   ASSERT_EQ(1, notify_cookies.count(handle2));
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -214,7 +214,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2TimeoutTest) {
   ASSERT_EQ(-ETIMEDOUT, rados_notify2(ioctx, notify_oid,
 				      "notify", 6, 1000, // 1s
 				      &reply_buf, &reply_buf_len));
-  ASSERT_EQ(1, notify_cookies.size());
+  ASSERT_EQ(1u, notify_cookies.size());
   int wait = 10;
   while (!notify_failed && --wait)
     sleep(1);
@@ -273,7 +273,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TestPP) {
   bufferlist::iterator p = bl_reply.begin();
   std::multimap<uint64_t,bufferlist> reply_map;
   ::decode(reply_map, p);
-  ASSERT_EQ(1, notify_cookies.size());
+  ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
@@ -298,7 +298,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2TimeoutTestPP) {
   std::list<obj_watch_t> watches;
   ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
   ASSERT_EQ(watches.size(), 1u);
-  ASSERT_EQ(0, notify_cookies.size());
+  ASSERT_EQ(0u, notify_cookies.size());
   bufferlist bl2, bl_reply;
   ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */, &bl_reply));
   int wait = 10;
