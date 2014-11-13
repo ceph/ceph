@@ -775,6 +775,10 @@ private:
     crush_bucket *parent_bucket = get_bucket(parent_id);
 
     if (!IS_ERR(parent_bucket)) {
+      // zero out the bucket weight
+      crush_bucket_adjust_item_weight(parent_bucket, item, 0);
+      adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
+
       // remove the bucket from the parent
       crush_bucket_remove_item(parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
