@@ -85,6 +85,7 @@ int FileJournal::_open(bool forwrite, bool create)
   if (ret) {
     ret = errno;
     derr << "FileJournal::_open: unable to fstat journal: " << cpp_strerror(ret) << dendl;
+    ret = -ret;
     goto out_fd;
   }
 
@@ -109,6 +110,7 @@ int FileJournal::_open(bool forwrite, bool create)
     if (ret < 0) {
       ret = errno;
       derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+      ret = -ret;
       goto out_fd;
     }
   }
