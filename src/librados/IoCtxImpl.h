@@ -227,7 +227,7 @@ namespace librados {
 struct WatchNotifyInfo : public RefCountedWaitObject {
   IoCtxImpl *io_ctx_impl;  // parent
   const object_t oid;      // the object
-  uint64_t linger_id;      // we use this to unlinger when we are done
+  class Objecter::LingerOp *linger_op;     // we use this to unlinger when we are done
   uint64_t cookie;         // callback cookie
   int err;
 
@@ -254,7 +254,7 @@ struct WatchNotifyInfo : public RefCountedWaitObject {
 		  const object_t& _oc)
     : io_ctx_impl(io_ctx_impl_),
       oid(_oc),
-      linger_id(0),
+      linger_op(NULL),
       cookie(0),
       err(0),
       watch_ctx(NULL),
