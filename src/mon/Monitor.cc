@@ -2869,7 +2869,6 @@ bool Monitor::_ms_dispatch(Message *m)
   ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
   MonCap caps;
-  EntityName entity_name;
   bool src_is_mon;
 
   // regardless of who we are or who the sender is, the message must
@@ -2937,7 +2936,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
   if (s) {
     if (s->auth_handler) {
-      entity_name = s->auth_handler->get_entity_name();
+      s->entity_name = s->auth_handler->get_entity_name();
     }
     dout(20) << " caps " << s->caps.get_str() << dendl;
   }
