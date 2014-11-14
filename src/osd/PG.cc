@@ -5534,6 +5534,7 @@ void PG::RecoveryState::Primary::exit()
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
+  pg->clear_primary_state();
 }
 
 /*---------Peering--------*/
