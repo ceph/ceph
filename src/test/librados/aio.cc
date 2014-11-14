@@ -175,6 +175,7 @@ TEST(LibRadosAio, TooBig) {
                                          my_completion, buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_aio_append(test_data.m_ioctx, "foo",
                                      my_completion, buf, UINT_MAX));
+  rados_aio_release(my_completion);
 }
 
 TEST(LibRadosAio, TooBigPP) {
