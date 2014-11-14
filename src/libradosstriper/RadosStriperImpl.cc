@@ -529,7 +529,7 @@ int libradosstriper::RadosStriperImpl::stat(const std::string& soid, uint64_t *p
   std::string err;
   // this intermediate string allows to add a null terminator before calling strtol
   std::string strsize(bl.c_str(), bl.length());
-  *psize = strict_strtol(strsize.c_str(), 10, &err);
+  *psize = strict_strtoll(strsize.c_str(), 10, &err);
   if (!err.empty()) {
     lderr(cct()) << XATTR_SIZE << " : " << err << dendl;
     return -EINVAL;
