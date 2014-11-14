@@ -470,6 +470,21 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
+  if (err_no == -ERR_PERMANENT_REDIRECT && !s->region_endpoint.empty()) {
+    string dest_uri = s->region_endpoint;
+    /*
+     * reqest_uri is always start with slash, so we need to remove
+     * the unnecessary slash at the end of dest_uri.
+     */
+    if (dest_uri[dest_uri.size() - 1] == '/') {
+      dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+    }
+    dest_uri += s->info.request_uri;
+    dest_uri += "?";
+    dest_uri += s->info.request_params;
+
+    dump_redirect(s, dest_uri);
+  }
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
