@@ -65,6 +65,8 @@ def main(args):
                                        teuthology_branch, kernel_branch,
                                        kernel_flavor, distro, machine_type,
                                        name)
+    if dry_run:
+        log.debug("Base job config:\n%s" % job_config)
 
     if suite_dir:
         suite_repo_path = suite_dir
@@ -165,7 +167,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         kernel_hash = None
     else:
         kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
-                               machine_type)
+                               machine_type, distro)
         if not kernel_hash:
             schedule_fail(message="Kernel branch '{branch}' not found".format(
                 branch=kernel_branch), name=name)
@@ -176,7 +178,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
         kernel_dict = dict()
 
     # Get the ceph hash
-    ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
+    ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type,
+                         distro)
     if not ceph_hash:
         exc = BranchNotFoundError(ceph_branch, 'ceph.git')
         schedule_fail(message=str(exc), name=name)
@@ -345,23 +348,33 @@ def get_distro_defaults(distro, machine_type):
     Given a distro (e.g. 'ubuntu') and machine type, return:
         (arch, release, pkg_type)
 
-    This is mainly used to default to:
+    This is used to default to:
         ('x86_64', 'precise', 'deb') when passed 'ubuntu' and 'plana'
-    And ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
-    And ('x86_64', 'centos6', 'rpm') when passed anything non-ubuntu
+    ('armv7l', 'saucy', 'deb') when passed 'ubuntu' and 'saya'
+    ('x86_64', 'wheezy', 'deb') when passed 'debian'
+    ('x86_64', 'fedora20', 'rpm') when passed 'fedora'
+    ('x86_64', 'centos6', 'rpm') when passed 'centos'
+    And ('x86_64', 'rhel7_0', 'rpm') when passed anything else
     """
+    arch = 'x86_64'
     if distro == 'ubuntu':
+        pkg_type = 'deb'
         if machine_type == 'saya':
-            arch = 'armv7l'
             release = 'saucy'
-            pkg_type = 'deb'
+            arch = 'armv7l'
         else:
-            arch = 'x86_64'
             release = 'precise'
-            pkg_type = 'deb'
-    else:
-        arch = 'x86_64'
+    elif distro == 'debian':
+        release = 'wheezy'
+        pkg_type = 'deb'
+    elif distro == 'centos':
         release = 'centos6'
+        pkg_type = 'rpm'
+    elif distro == 'fedora':
+        release = 'fedora20'
+        pkg_type = 'rpm'
+    else:
+        release = 'rhel7_0'
         pkg_type = 'rpm'
     log.debug(
         "Defaults for machine_type %s: arch=%s, release=%s, pkg_type=%s)",
@@ -390,7 +403,7 @@ def get_gitbuilder_url(project, distro, pkg_type, arch, kernel_flavor):
 
 
 def package_version_for_hash(hash, kernel_flavor='basic',
-                             distro='ubuntu', machine_type='plana'):
+                             distro='rhel', machine_type='plana'):
     """
     Does what it says on the tin. Uses gitbuilder repos.
 
@@ -400,6 +413,7 @@ def package_version_for_hash(hash, kernel_flavor='basic',
     base_url = get_gitbuilder_url('ceph', release, pkg_type, arch,
                                   kernel_flavor)
     url = os.path.join(base_url, 'sha1', hash, 'version')
+    log.debug("Looking for packages at {url}".format(url=url))
     resp = requests.get(url)
     if resp.ok:
         return resp.text.strip()
