@@ -63,7 +63,8 @@ def main(args):
 
     job_config = create_initial_config(suite, suite_branch, ceph_branch,
                                        teuthology_branch, kernel_branch,
-                                       kernel_flavor, distro, machine_type)
+                                       kernel_flavor, distro, machine_type,
+                                       name)
 
     if suite_dir:
         suite_repo_path = suite_dir
@@ -146,7 +147,8 @@ def fetch_repos(branch, test_name):
 
 
 def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
-                          kernel_branch, kernel_flavor, distro, machine_type):
+                          kernel_branch, kernel_flavor, distro, machine_type,
+                          name=None):
     """
     Put together the config file used as the basis for each job in the run.
     Grabs hashes for the latest ceph, kernel and teuthology versions in the
@@ -166,7 +168,7 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
                                machine_type)
         if not kernel_hash:
             schedule_fail(message="Kernel branch '{branch}' not found".format(
-                branch=kernel_branch))
+                branch=kernel_branch), name=name)
     if kernel_hash:
         log.info("kernel sha1: {hash}".format(hash=kernel_hash))
         kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
@@ -177,21 +179,21 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     ceph_hash = get_hash('ceph', ceph_branch, kernel_flavor, machine_type)
     if not ceph_hash:
         exc = BranchNotFoundError(ceph_branch, 'ceph.git')
-        schedule_fail(message=str(exc))
+        schedule_fail(message=str(exc), name=name)
     log.info("ceph sha1: {hash}".format(hash=ceph_hash))
 
     # Get the ceph package version
     ceph_version = package_version_for_hash(ceph_hash, kernel_flavor,
                                             distro, machine_type)
     if not ceph_version:
-        schedule_fail("Packages for ceph version '{ver}' not found".format(
-            ver=ceph_version))
+        schedule_fail("Packages for ceph hash '{ver}' not found".format(
+            ver=ceph_hash), name)
     log.info("ceph version: {ver}".format(ver=ceph_version))
 
     if teuthology_branch:
         if not get_branch_info('teuthology', teuthology_branch):
             exc = BranchNotFoundError(teuthology_branch, 'teuthology.git')
-            raise schedule_fail(message=str(exc))
+            raise schedule_fail(message=str(exc), name=name)
     else:
         # Decide what branch of teuthology to use
         if get_branch_info('teuthology', ceph_branch):
