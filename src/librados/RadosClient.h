@@ -109,11 +109,10 @@ public:
   int pool_delete_async(const char *name, PoolAsyncCompletionImpl *c);
 
   // watch/notify
-  uint64_t max_watch_notify_cookie;
   map<uint64_t, librados::WatchNotifyInfo *> watch_notify_info;
 
   void register_watch_notify_callback(librados::WatchNotifyInfo *wc,
-				      uint64_t *cookie);
+				      uint64_t cookie);
   int unregister_watch_notify_callback(uint64_t cookie, object_t *poid);
   int watch_check(uint64_t cookie);
   void handle_watch_notify(MWatchNotify *m);

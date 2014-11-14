@@ -1050,8 +1050,8 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   WatchNotifyInfo *wc = new WatchNotifyInfo(this, oid);
   wc->watch_ctx = ctx;
   wc->watch_ctx2 = ctx2;
-  wc->linger_op = objecter->linger_register(oid, oloc, 0);
-  client->register_watch_notify_callback(wc, cookie);
+  wc->linger_op = objecter->linger_register(oid, oloc, 0, cookie);
+  client->register_watch_notify_callback(wc, *cookie);
   prepare_assert_ops(&wr);
   wr.watch(*cookie, CEPH_OSD_WATCH_OP_WATCH);
   bufferlist bl;
@@ -1159,8 +1159,8 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 
   // Acquire cookie
   uint64_t cookie;
-  wc->linger_op = objecter->linger_register(oid, oloc, 0);
-  client->register_watch_notify_callback(wc, &cookie);
+  wc->linger_op = objecter->linger_register(oid, oloc, 0, &cookie);
+  client->register_watch_notify_callback(wc, cookie);
   uint32_t prot_ver = 1;
   uint32_t timeout = notify_timeout;
   if (timeout_ms)

@@ -78,8 +78,7 @@ librados::RadosClient::RadosClient(CephContext *cct_)
     timer(cct, lock),
     refcnt(1),
     log_last_version(0), log_cb(NULL), log_cb_arg(NULL),
-    finisher(cct),
-    max_watch_notify_cookie(0)
+    finisher(cct)
 {
 }
 
@@ -645,10 +644,10 @@ void librados::RadosClient::blacklist_self(bool set) {
 
 void librados::RadosClient::register_watch_notify_callback(
   WatchNotifyInfo *wc,
-  uint64_t *cookie)
+  uint64_t cookie)
 {
   assert(lock.is_locked_by_me());
-  wc->cookie = *cookie = ++max_watch_notify_cookie;
+  wc->cookie = cookie;
   ldout(cct,10) << __func__ << " cookie " << wc->cookie << dendl;
   watch_notify_info[wc->cookie] = wc;
 }

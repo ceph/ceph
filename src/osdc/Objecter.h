@@ -1965,7 +1965,7 @@ public:
 
   // caller owns a ref
   LingerOp *linger_register(const object_t& oid, const object_locator_t& oloc,
-			    int flags);
+			    int flags, uint64_t *pcookie);
   ceph_tid_t linger_watch(LingerOp *info,
 			  ObjectOperation& op,
 			  const SnapContext& snapc, utime_t mtime,

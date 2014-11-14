@@ -595,7 +595,8 @@ void Objecter::_linger_cancel(LingerOp *info)
 
 Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
 					      const object_locator_t& oloc,
-					      int flags)
+					      int flags,
+					      uint64_t *cookie)
 {
   LingerOp *info = new LingerOp;
   info->target.base_oid = oid;
@@ -609,6 +610,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
 
   // Acquire linger ID
   info->linger_id = ++max_linger_id;
+  *cookie = info->linger_id;
   ldout(cct, 10) << __func__ << " info " << info
 		 << " linger_id " << info->linger_id << dendl;
   linger_ops[info->linger_id] = info;
