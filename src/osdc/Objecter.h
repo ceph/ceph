@@ -1964,18 +1964,20 @@ public:
   }
 
   // caller owns a ref
-  LingerOp *linger_watch(const object_t& oid, const object_locator_t& oloc,
-			 ObjectOperation& op,
-			 const SnapContext& snapc, utime_t mtime,
-			 bufferlist& inbl, uint64_t cookie, int flags,
-			 Context *onack, Context *onfinish, Context *onerror,
-			 version_t *objver);
-  LingerOp *linger_notify(const object_t& oid, const object_locator_t& oloc,
+  LingerOp *linger_register(const object_t& oid, const object_locator_t& oloc,
+			    int flags);
+  ceph_tid_t linger_watch(LingerOp *info,
 			  ObjectOperation& op,
-			  snapid_t snap, bufferlist& inbl,
-			  bufferlist *poutbl, int flags,
-			  Context *onack,
+			  const SnapContext& snapc, utime_t mtime,
+			  bufferlist& inbl, uint64_t cookie,
+			  Context *onack, Context *onfinish, Context *onerror,
 			  version_t *objver);
+  ceph_tid_t linger_notify(LingerOp *info,
+			   ObjectOperation& op,
+			   snapid_t snap, bufferlist& inbl,
+			   bufferlist *poutbl,
+			   Context *onack,
+			   version_t *objver);
   int linger_check(LingerOp *info);
   void linger_cancel(LingerOp *info);  // releases a reference
   void _linger_cancel(LingerOp *info);

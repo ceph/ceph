@@ -1050,15 +1050,16 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   WatchNotifyInfo *wc = new WatchNotifyInfo(this, oid);
   wc->watch_ctx = ctx;
   wc->watch_ctx2 = ctx2;
+  wc->linger_op = objecter->linger_register(oid, oloc, 0);
   client->register_watch_notify_callback(wc, cookie);
   prepare_assert_ops(&wr);
   wr.watch(*cookie, CEPH_OSD_WATCH_OP_WATCH);
   bufferlist bl;
-  wc->linger_op = objecter->linger_watch(oid, oloc, wr,
-					 snapc, ceph_clock_now(NULL), bl,
-					 *cookie, 0,
-					 NULL, onfinish, &wc->on_error,
-					 &objver);
+  objecter->linger_watch(wc->linger_op, wr,
+			 snapc, ceph_clock_now(NULL), bl,
+			 *cookie,
+			 NULL, onfinish, &wc->on_error,
+			 &objver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1158,6 +1159,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 
   // Acquire cookie
   uint64_t cookie;
+  wc->linger_op = objecter->linger_register(oid, oloc, 0);
   client->register_watch_notify_callback(wc, &cookie);
   uint32_t prot_ver = 1;
   uint32_t timeout = notify_timeout;
@@ -1175,8 +1177,9 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   // Issue RADOS op
   C_SaferCond onack;
   version_t objver;
-  wc->linger_op = objecter->linger_notify(oid, oloc, rd, snap_seq, inbl, NULL, 0,
-					  &onack, &objver);
+  objecter->linger_notify(wc->linger_op,
+			  rd, snap_seq, inbl, NULL,
+			  &onack, &objver);
   lock->Unlock();
 
   ldout(client->cct, 10) << __func__ << " issued linger op " << wc->linger_op << dendl;
