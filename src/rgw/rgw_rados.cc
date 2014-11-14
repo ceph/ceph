@@ -5806,11 +5806,80 @@ int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
   return 0;
 }
 
+void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entries, 
+                                         map<string, bufferlist> *rm_pending_entries)
+{
+  map<string, bufferlist>::iterator iter = pending_entries.begin();
+
+  utime_t now = ceph_clock_now(cct);
+
+  while (iter != pending_entries.end()) {
+    bufferlist::iterator biter = iter->second.begin();
+    RGWOLHPendingInfo pending_info;
+    try {
+      ::decode(pending_info, biter);
+    } catch (buffer::error& err) {
+      /* skipping bad entry, we could remove it but it might hide a bug */
+      ldout(cct, 0) << "ERROR: failed to decode pending entry " << iter->first << dendl;
+      ++iter;
+      continue;
+    }
+
+    map<string, bufferlist>::iterator cur_iter = iter;
+    ++iter;
+    if (now - pending_info.time >= cct->_conf->rgw_olh_pending_timeout_sec) {
+      (*rm_pending_entries)[cur_iter->first] = cur_iter->second;
+      pending_entries.erase(cur_iter);
+    }
+  }
+}
+
+int RGWRados::remove_olh_pending_entries(RGWObjState& state, rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs)
+{
+  ObjectWriteOperation op;
+
+  bucket_index_guard_olh_op(state, op);
+
+  for (map<string, bufferlist>::iterator iter = pending_attrs.begin(); iter != pending_attrs.end(); ++iter) {
+    op.rmxattr(iter->first.c_str());
+  }
+
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(olh_obj, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  /* update olh object */
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r == -ENOENT || r == -ECANCELED) {
+    /* raced with some other change, shouldn't sweat about it */
+    r = 0;
+  }
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: could not apply olh update, r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWRados::follow_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
   filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
 
+  map<string, bufferlist> rm_pending_entries;
+  check_pending_olh_entries(pending_entries, &rm_pending_entries);
+
+  if (!rm_pending_entries.empty()) {
+    int ret = remove_olh_pending_entries(*state, olh_obj, rm_pending_entries);
+    if (ret < 0) {
+      ldout(cct, 20) << "ERROR: rm_pending_entries returned ret=" << ret << dendl;
+      return ret;
+    }
+  }
   if (!pending_entries.empty()) {
     ldout(cct, 20) << __func__ << "(): found pending entries, need to update_olh() on bucket=" << olh_obj.bucket << dendl;
 
