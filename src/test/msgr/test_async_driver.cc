@@ -197,7 +197,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
 
   fired_events.clear();
   pthread_t thread1;
-  r = pthread_create(&thread1, NULL, echoclient, (void*)port);
+  r = pthread_create(&thread1, NULL, echoclient, (void*)(intptr_t)port);
   ASSERT_EQ(r, 0);
   tv.tv_sec = 5;
   tv.tv_usec = 0;
