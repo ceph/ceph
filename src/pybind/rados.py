@@ -421,7 +421,7 @@ Rados object in state %s." % (self.state))
         ret = run_in_thread(self.librados.rados_connect, (self.cluster,),
                             timeout)
         if (ret != 0):
-            raise make_ex(ret, "error calling connect")
+            raise make_ex(ret, "error connecting to the cluster")
         self.state = "connected"
 
     def get_cluster_stats(self):
@@ -654,12 +654,12 @@ Rados object in state %s." % (self.state))
         """
         self.require_state("connected")
         if not isinstance(ioctx_name, str):
-            raise TypeError('ioctx_name must be a string')
+            raise TypeError('the name of the pool must be a string')
         ioctx = c_void_p()
         ret = run_in_thread(self.librados.rados_ioctx_create,
                             (self.cluster, c_char_p(ioctx_name), byref(ioctx)))
         if ret < 0:
-            raise make_ex(ret, "error opening ioctx '%s'" % ioctx_name)
+            raise make_ex(ret, "error opening pool '%s'" % ioctx_name)
         return Ioctx(ioctx_name, self.librados, ioctx)
 
     def mon_command(self, cmd, inbuf, timeout=0, target=None):
