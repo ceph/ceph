@@ -44,6 +44,7 @@
 
 #include "common/config.h"
 #include "common/perf_counters.h"
+#include "common/Finisher.h"
 #include "include/str_list.h"
 #include "common/errno.h"
 
