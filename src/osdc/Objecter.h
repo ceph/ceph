@@ -37,6 +37,7 @@ class Messenger;
 class OSDMap;
 class MonClient;
 class Message;
+class Finisher;
 
 class MPoolOpReply;
 
@@ -1001,6 +1002,7 @@ public:
 public:
   Messenger *messenger;
   MonClient *monc;
+  Finisher *finisher;
 private:
   OSDMap    *osdmap;
 public:
@@ -1729,10 +1731,11 @@ public:
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+	   Finisher *fin,
 	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct),
-    messenger(m), monc(mc),
+    messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap),
     cct(cct_),
     initialized(0),

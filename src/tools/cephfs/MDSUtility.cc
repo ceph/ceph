@@ -28,7 +28,7 @@ MDSUtility::MDSUtility() :
   monc = new MonClient(g_ceph_context);
   messenger = Messenger::create(g_ceph_context, entity_name_t::CLIENT(), "mds", getpid());
   mdsmap = new MDSMap();
-  objecter = new Objecter(g_ceph_context, messenger, monc, 0, 0);
+  objecter = new Objecter(g_ceph_context, messenger, monc, NULL, 0, 0);
 }
 
 

@@ -213,7 +213,7 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
-  objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, 0, 0)),
+  objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),

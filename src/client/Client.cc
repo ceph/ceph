@@ -201,7 +201,7 @@ Client::Client(Messenger *m, MonClient *mc)
 
   // osd interfaces
   mdsmap = new MDSMap;
-  objecter = new Objecter(cct, messenger, monclient,
+  objecter = new Objecter(cct, messenger, monclient, NULL,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
