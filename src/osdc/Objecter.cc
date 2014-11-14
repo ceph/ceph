@@ -554,18 +554,11 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent)
   info->watch_lock.Unlock();
 }
 
-int Objecter::linger_check(uint64_t linger_id)
+int Objecter::linger_check(LingerOp *info)
 {
   RWLock::WLocker wl(rwlock);
-  map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
-  if (iter == linger_ops.end()) {
-    ldout(cct, 10) << __func__ << " " << linger_id << " dne" << dendl;
-    return -EBADF;
-  }
-
-  LingerOp *info = iter->second;
   utime_t age = ceph_clock_now(NULL) - info->watch_valid_thru;
-  ldout(cct, 10) << __func__ << " " << linger_id
+  ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " err " << info->last_error
 		 << " age " << age << dendl;
   if (info->last_error)
@@ -573,26 +566,24 @@ int Objecter::linger_check(uint64_t linger_id)
   return age.to_msec();
 }
 
-void Objecter::unregister_linger(uint64_t linger_id)
+void Objecter::linger_cancel(LingerOp *info)
 {
   RWLock::WLocker wl(rwlock);
-  _unregister_linger(linger_id);
+  _linger_cancel(info);
+  info->put();
 }
 
-void Objecter::_unregister_linger(uint64_t linger_id)
+void Objecter::_linger_cancel(LingerOp *info)
 {
   assert(rwlock.is_wlocked());
-  ldout(cct, 20) << __func__ << " linger_id=" << linger_id << dendl;
-
-  map<uint64_t, LingerOp*>::iterator iter = linger_ops.find(linger_id);
-  if (iter != linger_ops.end()) {
-    LingerOp *info = iter->second;
+  ldout(cct, 20) << __func__ << " linger_id=" << info->linger_id << dendl;
+  if (!info->canceled) {
     OSDSession *s = info->session;
     s->lock.get_write();
     _session_linger_op_remove(s, info);
     s->lock.unlock();
 
-    linger_ops.erase(iter);
+    linger_ops.erase(info->linger_id);
     info->canceled = true;
     info->put();
 
@@ -600,13 +591,14 @@ void Objecter::_unregister_linger(uint64_t linger_id)
   }
 }
 
-ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& oloc,
-				   ObjectOperation& op,
-				   const SnapContext& snapc, utime_t mtime,
-				   bufferlist& inbl, uint64_t cookie, int flags,
-				   Context *onack, Context *oncommit,
-				   Context *onerror,
-				   version_t *objver)
+Objecter::LingerOp *Objecter::linger_watch(const object_t& oid,
+				 const object_locator_t& oloc,
+				 ObjectOperation& op,
+				 const SnapContext& snapc, utime_t mtime,
+				 bufferlist& inbl, uint64_t cookie, int flags,
+				 Context *onack, Context *oncommit,
+				 Context *onerror,
+				 version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->target.base_oid = oid;
@@ -629,14 +621,18 @@ ceph_tid_t Objecter::linger_mutate(const object_t& oid, const object_locator_t& 
   RWLock::WLocker wl(rwlock);
   _linger_submit(info);
   logger->inc(l_osdc_linger_active);
-  return info->linger_id;
+
+  info->get(); // for the caller
+  return info;
 }
 
-ceph_tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& oloc,
-			    ObjectOperation& op,
-			    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
-			    Context *onfinish,
-			    version_t *objver)
+Objecter::LingerOp *Objecter::linger_notify(const object_t& oid,
+					    const object_locator_t& oloc,
+					    ObjectOperation& op,
+					    snapid_t snap, bufferlist& inbl,
+					    bufferlist *poutbl, int flags,
+					    Context *onfinish,
+					    version_t *objver)
 {
   LingerOp *info = new LingerOp;
   info->target.base_oid = oid;
@@ -654,7 +650,8 @@ ceph_tid_t Objecter::linger_read(const object_t& oid, const object_locator_t& ol
   RWLock::WLocker wl(rwlock);
   _linger_submit(info);
   logger->inc(l_osdc_linger_active);
-  return info->linger_id;
+  info->get(); // for the caller
+  return info;
 }
 
 void Objecter::_linger_submit(LingerOp *info)
@@ -734,7 +731,7 @@ void Objecter::_scan_requests(OSDSession *s,
 {
   assert(rwlock.is_wlocked());
 
-  list<uint64_t> unregister_lingers;
+  list<LingerOp*> unregister_lingers;
 
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
 
@@ -761,8 +758,10 @@ void Objecter::_scan_requests(OSDSession *s,
     case RECALC_OP_TARGET_POOL_DNE:
       _check_linger_pool_dne(op, &unregister);
       if (unregister) {
-        ldout(cct, 10) << " need to unregister linger op " << op->linger_id << dendl;
-        unregister_lingers.push_back(op->linger_id);
+        ldout(cct, 10) << " need to unregister linger op "
+		       << op->linger_id << dendl;
+	op->get();
+        unregister_lingers.push_back(op);
       }
       break;
     }
@@ -824,8 +823,11 @@ void Objecter::_scan_requests(OSDSession *s,
 
   s->lock.unlock();
 
-  for (list<uint64_t>::iterator iter = unregister_lingers.begin(); iter != unregister_lingers.end(); ++iter) {
-    _unregister_linger(*iter);
+  for (list<LingerOp*>::iterator iter = unregister_lingers.begin();
+       iter != unregister_lingers.end();
+       ++iter) {
+    _linger_cancel(*iter);
+    (*iter)->put();
   }
 }
 
@@ -1207,7 +1209,7 @@ void Objecter::C_Linger_Map_Latest::finish(int r)
   objecter->_check_linger_pool_dne(op, &unregister);
 
   if (unregister) {
-    objecter->_unregister_linger(op->linger_id);
+    objecter->_linger_cancel(op);
   }
 
   op->put();

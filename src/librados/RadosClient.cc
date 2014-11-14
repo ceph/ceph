@@ -665,8 +665,10 @@ int librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie,
   WatchNotifyInfo *ctx = iter->second;
   if (poid)
     *poid = ctx->oid;
-  if (ctx->linger_id)
-    objecter->unregister_linger(ctx->linger_id);
+  if (ctx->linger_op) {
+    objecter->linger_cancel(ctx->linger_op);
+    ctx->linger_op = NULL;
+  }
 
   watch_notify_info.erase(iter);
   lock.Unlock();
@@ -687,7 +689,7 @@ int librados::RadosClient::watch_check(uint64_t cookie)
   WatchNotifyInfo *ctx = iter->second;
   if (ctx->err)
     return ctx->err;
-  return objecter->linger_check(ctx->linger_id);
+  return objecter->linger_check(ctx->linger_op);
 }
 
 struct C_DoWatchNotify : public Context {

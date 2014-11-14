@@ -1962,20 +1962,23 @@ public:
     }
     return op_submit(o, ctx_budget);
   }
-  ceph_tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
-			   ObjectOperation& op,
-			   const SnapContext& snapc, utime_t mtime,
-			   bufferlist& inbl, uint64_t cookie, int flags,
-			   Context *onack, Context *onfinish, Context *onerror,
-			   version_t *objver);
-  ceph_tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
-		    ObjectOperation& op,
-		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
-		    Context *onack,
-		    version_t *objver);
-  int linger_check(uint64_t linger_id);
-  void unregister_linger(uint64_t linger_id);
-  void _unregister_linger(uint64_t linger_id);
+
+  // caller owns a ref
+  LingerOp *linger_watch(const object_t& oid, const object_locator_t& oloc,
+			 ObjectOperation& op,
+			 const SnapContext& snapc, utime_t mtime,
+			 bufferlist& inbl, uint64_t cookie, int flags,
+			 Context *onack, Context *onfinish, Context *onerror,
+			 version_t *objver);
+  LingerOp *linger_notify(const object_t& oid, const object_locator_t& oloc,
+			  ObjectOperation& op,
+			  snapid_t snap, bufferlist& inbl,
+			  bufferlist *poutbl, int flags,
+			  Context *onack,
+			  version_t *objver);
+  int linger_check(LingerOp *info);
+  void linger_cancel(LingerOp *info);  // releases a reference
+  void _linger_cancel(LingerOp *info);
 
   /**
    * set up initial ops in the op vector, and allocate a final op slot.

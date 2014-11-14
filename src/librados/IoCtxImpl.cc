@@ -1054,11 +1054,11 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   prepare_assert_ops(&wr);
   wr.watch(*cookie, CEPH_OSD_WATCH_OP_WATCH);
   bufferlist bl;
-  wc->linger_id = objecter->linger_mutate(oid, oloc, wr,
-					  snapc, ceph_clock_now(NULL), bl,
-					  *cookie, 0,
-					  NULL, onfinish, &wc->on_error,
-					  &objver);
+  wc->linger_op = objecter->linger_watch(oid, oloc, wr,
+					 snapc, ceph_clock_now(NULL), bl,
+					 *cookie, 0,
+					 NULL, onfinish, &wc->on_error,
+					 &objver);
   lock->Unlock();
 
   mylock.Lock();
@@ -1175,22 +1175,22 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   // Issue RADOS op
   C_SaferCond onack;
   version_t objver;
-  wc->linger_id = objecter->linger_read(oid, oloc, rd, snap_seq, inbl, NULL, 0,
-					&onack, &objver);
+  wc->linger_op = objecter->linger_notify(oid, oloc, rd, snap_seq, inbl, NULL, 0,
+					  &onack, &objver);
   lock->Unlock();
 
-  ldout(client->cct, 10) << __func__ << " issued linger op " << wc->linger_id << dendl;
+  ldout(client->cct, 10) << __func__ << " issued linger op " << wc->linger_op << dendl;
   int r_issue = onack.wait();
-  ldout(client->cct, 10) << __func__ << " linger op " << wc->linger_id << " acked (" << r_issue << ")" << dendl;
+  ldout(client->cct, 10) << __func__ << " linger op " << wc->linger_op << " acked (" << r_issue << ")" << dendl;
 
   if (r_issue == 0) {
-  ldout(client->cct, 10) << __func__ << "waiting for watch_notify message for linger op " << wc->linger_id << dendl;
+  ldout(client->cct, 10) << __func__ << "waiting for watch_notify message for linger op " << wc->linger_op << dendl;
     mylock_all.Lock();
     while (!done_all)
       cond_all.Wait(mylock_all);
     mylock_all.Unlock();
   }
-  ldout(client->cct, 10) << __func__ << " completed notify (linger op " << wc->linger_id << "), unregistering" << dendl;
+  ldout(client->cct, 10) << __func__ << " completed notify (linger op " << wc->linger_op << "), unregistering" << dendl;
 
   lock->Lock();
   client->unregister_watch_notify_callback(cookie, NULL);   // destroys wc
