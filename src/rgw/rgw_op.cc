@@ -372,6 +372,10 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
     s->bucket_owner = s->bucket_acl->get_owner();
 
     string& region = s->bucket_info.region;
+    map<string, RGWRegion>::iterator dest_region = store->region_map.regions.find(region);
+    if (dest_region != store->region_map.regions.end()) {
+      s->region_endpoint = dest_region->second.endpoints.front();
+    }
     if (s->bucket_exists && !store->region.equals(region)) {
       ldout(s->cct, 0) << "NOTICE: request for data in a different region (" << region << " != " << store->region.name << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is

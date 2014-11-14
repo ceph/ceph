@@ -887,6 +887,7 @@ struct req_state {
    ACLOwner bucket_owner;
    ACLOwner owner;
 
+   string region_endpoint;
    string bucket_instance_id;
 
    RGWBucketInfo bucket_info;
