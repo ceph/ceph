@@ -230,7 +230,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
     ASSERT_EQ(r, 1);
     ASSERT_EQ(fired_events[0].mask, EVENT_WRITABLE);
     r = write(client_sd, data, strlen(data));
-    ASSERT_EQ(r, strlen(data));
+    ASSERT_EQ(r, (int)strlen(data));
     driver->del_event(client_sd, EVENT_READABLE|EVENT_WRITABLE,
                       EVENT_WRITABLE);
   } while (1);
