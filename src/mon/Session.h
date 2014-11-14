@@ -52,6 +52,7 @@ struct MonSession : public RefCountedObject {
   map<string, Subscription*> sub_map;
 
   AuthServiceHandler *auth_handler;
+  EntityName entity_name;
 
   ConnectionRef proxy_con;
   uint64_t proxy_tid;
