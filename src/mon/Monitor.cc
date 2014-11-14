@@ -2430,19 +2430,16 @@ void Monitor::handle_command(MMonCommand *m)
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
       << "from='" << session->inst << "' "
-      << "entity='" << session->auth_handler->get_entity_name()
-      << "' cmd=" << m->cmd << ":  access denied";
+      << "entity='" << session->entity_name << "' "
+      << "cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
     << "from='" << session->inst << "' "
-    << "entity='"
-    << (session->auth_handler ?
-        stringify(session->auth_handler->get_entity_name())
-        : "forwarded-request")
-    << "' cmd=" << m->cmd << ": dispatch";
+    << "entity='" << session->entity_name << "' "
+    << "cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
