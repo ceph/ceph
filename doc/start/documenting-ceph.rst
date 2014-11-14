@@ -40,18 +40,22 @@ Ceph documentation lives in the Ceph repository right alongside the Ceph source
 code under the ``ceph/doc`` directory. For details on github and Ceph,
 see :ref:`Get Involved`.
 
-The most common way to make contributions is to use the `Fork and Pull`_ 
+The most common way to make contributions is to use the `Fork and Pull`_
 approach. You must:
 
-#. Install git locally. For CentOS/RHEL, execute::
-
-	sudo yum install git
-
-   For Debian/Ubuntu, execute::
+#. Install git locally. For Debian/Ubuntu, execute::
 
 	sudo apt-get install git
 
-#. Ensure your ``.gitconfig`` file has your name and email address. :: 
+   For Fedora, execute::
+
+	sudo yum install git
+
+   For CentOS/RHEL, execute::
+
+	sudo yum install git
+
+#. Ensure your ``.gitconfig`` file has your name and email address. ::
 
 	[user]
 	   email = {your-email-address}
@@ -127,7 +131,7 @@ For example, if a documentation branch is a fix for issue #4000, the branch name
 should be ``wip-doc-4000`` by convention and the relevant tracker URL will be
 http://tracker.ceph.com/issues/4000.
 
-.. note:: Please don't commingle documentation contributions and source code
+.. note:: Please do not mingle documentation contributions and source code
    contributions in a single pull request. Editors review the documentation
    and engineers review source code changes. When you keep documentation 
    pull requests separate from source code pull requests, it simplifies the 
@@ -184,13 +188,23 @@ To build the documentation on Debian/Ubuntu, execute::
 
 	admin/build-doc
 
-To build the documentation on CentOS/RHEL, execute:: 
+To build the documentation on Fedora, execute::
 
-	admin/build-doc-rpm
+	admin/build-doc
 
-The build script will produce an output of errors and warnings. You MUST
-fix errors in documents you modified before committing a change, and you SHOULD
-fix warnings that are related to syntax you modified.
+To build the documentation on CentOS/RHEL, execute::
+
+	admin/build-doc
+
+Executing ``admin/build-doc`` will create a ``build-doc`` directory under ``ceph``.
+You may need to create a directory under ``ceph/build-doc`` for output of Javadoc
+files. ::
+
+	mkdir -p output/html/api/libcephfs-java/javadoc
+
+The build script ``build-doc`` will produce an output of errors and warnings.
+You MUST fix errors in documents you modified before committing a change, and you
+SHOULD fix warnings that are related to syntax you modified.
 
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
@@ -212,17 +226,19 @@ is a bit time consuming.
 
 Python Sphinx does have some dependencies that vary across distributions. The
 first time you build the documentation, the script will notify you if you do not
-have the dependencies installed. To run Sphinx, at least the following are
-required:
+have the dependencies installed. To run Sphinx and build documentation successfully,
+the following packages are required:
 
 .. raw:: html
 
 	<style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
-	<table cellpadding="10"><colgroup><col width="50%"><col width="50%"><col width="50%"></colgroup><tbody valign="top"><tr><td><h3>Debian/Ubuntu</h3>
+	<table cellpadding="10"><colgroup><col width="30%"><col width="30%"><col width="30%"></colgroup><tbody valign="top"><tr><td><h3>Debian/Ubuntu</h3>
 
+- gcc
 - python-dev
 - python-pip
 - python-virtualenv
+- python-sphinx
 - libxml2-dev
 - libxslt1-dev
 - doxygen
@@ -230,15 +246,39 @@ required:
 - ant
 - ditaa
 
-.. raw:: html 
+.. raw:: html
+
+	</td><td><h3>Fedora</h3>
+
+- gcc
+- python-devel
+- python-pip
+- python-virtualenv
+- python-docutils
+- python-jinja2
+- python-pygments
+- python-sphinx
+- libxml2-devel
+- libxslt1-devel
+- doxygen
+- graphviz
+- ant
+- ditaa
+
+.. raw:: html
 
 	</td><td><h3>CentOS/RHEL</h3>
 
-- python-devel 
-- python-pip 
-- python-virtualenv 
-- libxml2-devel 
-- libxslt1-devel 
+- gcc
+- python-devel
+- python-pip
+- python-virtualenv
+- python-docutils
+- python-jinja2
+- python-pygments
+- python-sphinx
+- libxml2-dev
+- libxslt1-dev
 - doxygen
 - graphviz
 - ant
@@ -248,35 +288,74 @@ required:
 	</td></tr></tbody></table>
 
 
-Install each dependency that isn't installed on your host. For Debian/Ubuntu 
+Install each dependency that isn't installed on your host. For Debian/Ubuntu
 distributions, execute the following::
 
-	sudo apt-get install python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+	sudo apt-get install gcc python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
+	sudo apt-get install python-sphinx
 
-For CentOS/RHEL distributions, execute the following:: 
+For Fedora distributions, execute the following::
 
-   sudo yum install python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
+   sudo yum install gcc python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
    sudo pip install html2text
+   sudo yum install python-jinja2 python-pygments python-docutils python-sphinx
+   sudo yum install jericho-html ditaa
 
-Ceph documentation makes extensive use ``ditaa``, which isn't presently built
-for CentOS/RHEL. You must install ``ditaa`` if you are making changes to
+For CentOS/RHEL distributions, it is recommended to have ``epel`` (Extra
+Packages for Enterprise Linux) repository as it provides some extra packages
+which are not available in the default repository. To install ``epel``, execute
+the following::
+
+	wget http://ftp.riken.jp/Linux/fedora/epel/7/x86_64/e/epel-release-7-2.noarch.rpm
+	sudo yum install epel-release-7-2.noarch.rpm
+
+For CentOS/RHEL distributions, execute the following::
+
+	sudo yum install gcc python-devel python-pip python-virtualenv libxml2-devel libxslt-devel doxygen graphviz ant
+	sudo pip install html2text
+
+For CentOS/RHEL distributions, the remaining python packages are not available in
+the default and ``epel`` repositories. So, use http://rpmfind.net/ to find the
+packages. Then, download them from a mirror and install them. For example::
+
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-jinja2-2.7.2-2.el7.noarch.rpm
+	sudo yum install python-jinja2-2.7.2-2.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-pygments-1.4-9.el7.noarch.rpm
+	sudo yum install python-pygments-1.4-9.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
+	sudo yum install python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/python-sphinx-1.1.3-8.el7.noarch.rpm
+	sudo yum install python-sphinx-1.1.3-8.el7.noarch.rpm
+
+Ceph documentation makes extensive use of `ditaa`_, which isn't presently built
+for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
 ``ditaa`` diagrams so that you can verify that they render properly before you
 commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
-packages for CentOS/RHEL distributions and install them manually. Use
-http://rpmfind.net/ to find compatible ``ditaa`` and ``jericho-html`` packages.
+packages for CentOS/RHEL distributions and install them manually. To run ``ditaa``
+on CentOS/RHEL7, following dependencies are required:
+
+- jericho-html
+- jai-imageio-core
+- batik
+
+Use http://rpmfind.net/ to find compatible ``ditaa`` and the dependencies.
 Then, download them from a mirror and install them. For example::
 
-	wget ftp://ftp.univie.ac.at/systems/linux/fedora/releases/20/Everything/i386/os/Packages/j/jericho-html-3.2-6.fc20.noarch.rpm
+	wget ftp://rpmfind.net/linux/fedora/linux/releases/20/Everything/x86_64/os/Packages/j/jericho-html-3.2-6.fc20.noarch.rpm
 	sudo yum install jericho-html-3.2-6.fc20.noarch.rpm
-	wget ftp://ftp.univie.ac.at/systems/linux/fedora/releases/20/Everything/i386/os/Packages/d/ditaa-0.9-10.r74.fc20.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
+	sudo yum install jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/batik-1.8-0.12.svn1230816.el7.noarch.rpm
+	sudo yum install batik-1.8-0.12.svn1230816.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/fedora/linux/releases/20/Everything/x86_64/os/Packages/d/ditaa-0.9-10.r74.fc20.noarch.rpm
 	sudo yum install ditaa-0.9-10.r74.fc20.noarch.rpm
 
+.. important:: Do not install the ``fc21`` rpm for ``ditaa`` as it uses a ``JRE``
+	newer than the default installed in CentOS/RHEL7 which causes a conflict, throws
+	an ``Exception`` and doesn't allow the application to run.
 
-You may also need to create a directory under ``ceph/build-doc`` for output of
-Javadoc files. ::
-
-	mkdir -p output/html/api/libcephfs-java/javadoc
-
+Once you have installed all these packages, build the documentation by following
+the steps given in ``Build the Source``.
 
 Commit the Change
 -----------------
@@ -341,11 +420,20 @@ For Debian/Ubuntu, execute::
 
 	sudo apt-get install gitk git-gui
 
-For CentOS/RHEL, execute::
-   
+For Fedora, execute::
+
 	sudo yum install gitk git-gui
 
-Then, execute:: 
+In CentOS/RHEL7, ``gitk`` and ``git-gui`` are not available in default or
+``epel`` repository. So, use http://rpmfind.net/ to find them. Then, download
+them from a mirror and install them. For example::
+
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/gitk-1.8.3.1-4.el7.noarch.rpm
+	sudo yum install gitk-1.8.3.1-4.el7.noarch.rpm
+	wget ftp://rpmfind.net/linux/centos/7.0.1406/os/x86_64/Packages/git-gui-1.8.3.1-4.el7.noarch.rpm
+	sudo yum install git-gui-1.8.3.1-4.el7.noarch.rpm
+
+Then, execute::
 
 	cd {git-ceph-repo-path}
 	gitk
@@ -512,6 +600,7 @@ improves the readability of the document in a command line interface.
 .. _resturcturedText: http://docutils.sourceforge.net/rst.html
 .. _Fork and Pull: https://help.github.com/articles/using-pull-requests
 .. _github: http://github.com
+.. _ditaa: http://ditaa.sourceforge.net/
 .. _Document Title: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#document-title-subtitle
 .. _Sections: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#sections
 .. _Cross referencing arbitrary locations: http://sphinx-doc.org/markup/inline.html#ref-role
