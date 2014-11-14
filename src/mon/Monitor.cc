@@ -2748,6 +2748,11 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 				     rr->con_features,
 				     rr->session->caps);
     forward->set_priority(req->get_priority());
+    if (session->auth_handler) {
+      forward->entity_name = session->entity_name;
+    } else if (req->get_source().is_mon()) {
+      forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
+    }
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
@@ -2781,6 +2786,9 @@ void Monitor::handle_forward(MForward *m)
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
+    s->entity_name = m->entity_name;
+    dout(10) << " entity name '" << s->entity_name << "' type "
+             << s->entity_name.get_type() << dendl;
     s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
