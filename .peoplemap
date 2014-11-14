@@ -16,6 +16,7 @@
 # git log --pretty='%aN <%aE>' $range | git -c mailmap.file=.peoplemap check-mailmap --stdin | sort | uniq | sed -e 's/\(.*\) \(<.*\)/\2 \1/' | uniq --skip-field=1 --all-repeated | sed -e 's/\(.*>\) \(.*\)/\2 \1/'
 #
 David Zafman <dzafman@redhat.com> David Zafman <david.zafman@inktank.com>
+Greg Farnum <gfarnum@redhat.com> Greg Farnum <greg@inktank.com>
 John Spray <jspray@redhat.com> John Spray <john.spray@inktank.com>
 Loic Dachary <ldachary@redhat.com> Loic Dachary <loic-201408@dachary.org>
 Loic Dachary <ldachary@redhat.com> Loic Dachary <loic@dachary.org>
