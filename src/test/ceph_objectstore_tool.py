@@ -112,9 +112,13 @@ def vstart(new):
     call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
     print "DONE"
 
-
-def test_failure(cmd, errmsg):
-    ttyfd = open("/dev/tty", "rw")
+def test_failure_tty(cmd, errmsg):
+    try:
+        ttyfd = open("/dev/tty", "rw")
+    except Exception, e:
+        logging.info(str(e))
+        logging.info("SKIP " + cmd)
+        return 0
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     tmpfd = open(TMPFILE, "w")
 
@@ -134,6 +138,19 @@ def test_failure(cmd, errmsg):
         logging.error("Bad message to stderr \"" + line + "\"")
         return 1
 
+def test_failure(cmd, errmsg):
+    logging.debug(cmd)
+    try:
+        out = check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        logging.error("Should have failed, but got exit 0")
+        return 1
+    except subprocess.CalledProcessError, e:
+        if errmsg in e.output:
+            logging.info("Correctly failed with message \"" + errmsg + "\"")
+            return 0
+        else:
+            logging.error("Bad message to stderr \"" + e.output + "\"")
+            return 1
 
 def get_nspace(num):
     if num == 0:
@@ -401,7 +418,7 @@ def main(argv):
     print "Test invalid parameters"
     # On export can't use stdout to a terminal
     cmd = (CFSD_PREFIX + "--op export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "stdout is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file option specified")
 
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
     foofd = open(OTHERFILE, "w")
@@ -417,7 +434,7 @@ def main(argv):
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "stdin is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file option specified")
 
     # Specify a bad --type
     cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
