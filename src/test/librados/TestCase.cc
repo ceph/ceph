@@ -91,7 +91,14 @@ void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
   for (ObjectIterator it = ioctx.objects_begin();
        it != ioctx.objects_end(); ++it) {
     ioctx.locator_set_key(it->second);
-    ASSERT_EQ(0, ioctx.remove(it->first));
+    ObjectWriteOperation op;
+    op.remove();
+    librados::AioCompletion *completion = s_cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(it->first, completion, &op,
+				   librados::OPERATION_IGNORE_CACHE));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 }
 
