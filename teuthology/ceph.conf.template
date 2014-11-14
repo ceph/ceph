@@ -11,6 +11,7 @@
         auth debug = true
 
 	ms die on old message = true
+	ms die on skipped message = true
 
 	mon pg warn min per osd = 2
 	mon pg warn max per osd = 10000
