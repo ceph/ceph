@@ -1728,6 +1728,8 @@ public:
   int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta);
   int unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj);
 
+  void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
+  int remove_olh_pending_entries(RGWObjState& state, rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
   int follow_olh(RGWObjectCtx& ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
 
