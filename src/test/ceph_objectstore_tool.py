@@ -469,6 +469,9 @@ def main(argv):
     for JSON in JSONOBJ:
         jsondict = json.loads(JSON)
         db[jsondict['namespace']][jsondict['oid']]['json'] = JSON
+        if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
+            logging.error("Malformed JSON {json}".format(json=JSON))
+            ERRORS += 1
 
     # Test get-bytes
     print "Test get-bytes and set-bytes"
