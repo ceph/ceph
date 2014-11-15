@@ -264,3 +264,5 @@ global %1_slver
 slversion ec_encode_data,	00,   02,  0133
 slversion gf_vect_mul,		00,   02,  0134
 slversion gf_vect_dot_prod,	00,   01,  0138
+; inform linker that this doesn't require executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits
