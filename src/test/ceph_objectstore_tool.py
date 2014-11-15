@@ -529,7 +529,16 @@ def main():
         for basename in db[nspace].keys():
             file = os.path.join(DATADIR, nspace + "-" + basename)
             JSON = db[nspace][basename]['json']
-            for pg in OBJREPPGS:
+            jsondict = json.loads(JSON)
+
+            for pg in ALLPGS:
+                # Make sure rep obj with rep pg or ec obj with ec pg
+                if ('shard_id' in jsondict) != (pg.find('s') > 0):
+                    continue
+                if 'shard_id' in jsondict:
+                    # Fix shard_id since we only have one json instance for each object
+                    jsondict['shard_id'] = int(string.split(pg, 's')[1])
+                    JSON = json.dumps(jsondict)
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
                     DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
@@ -549,11 +558,11 @@ def main():
                     keys = get_lines(ATTRFILE)
                     values = dict(db[nspace][basename]["xattr"])
                     for key in keys:
-                        if key == "_" or key == "snapset":
+                        if key == "_" or key == "snapset" or key == "hinfo_key":
                             continue
                         key = key.strip("_")
                         if key not in values:
-                            logging.error("The key {key} should be present".format(key=key))
+                            logging.error("Unexpected key {key} present".format(key=key))
                             ERRORS += 1
                             continue
                         exp = values.pop(key)
