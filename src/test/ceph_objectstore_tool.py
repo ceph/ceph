@@ -565,7 +565,39 @@ def main(argv):
         for basename in db[nspace].keys():
             file = os.path.join(DATADIR, nspace + "-" + basename)
             JSON = db[nspace][basename]['json']
-            for pg in OBJREPPGS:
+            jsondict = json.loads(JSON)
+
+            if 'shard_id' in jsondict:
+                logging.debug("ECobject " + JSON)
+                found = 0
+                for pg in OBJECPGS:
+                    OSDS = get_osds(pg, OSDDIR)
+                    # Fix shard_id since we only have one json instance for each object
+                    jsondict['shard_id'] = int(string.split(pg, 's')[1])
+                    JSON = json.dumps(jsondict)
+                    for osd in OSDS:
+                        cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-attr hinfo_key").format(osd=osd, pg=pg, json=JSON)
+                        logging.debug("TRY: " + cmd)
+                        try:
+                            out = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
+                            logging.debug("FOUND: {json} in {osd} has value '{val}'".format(osd=osd, json=JSON, val=out))
+                            found += 1
+                        except subprocess.CalledProcessError, e:
+                            if "No such file or directory" not in e.output and "No data available" not in e.output:
+                                raise
+                # Assuming k=2 m=1 for the default ec pool
+                if found != 3:
+                    logging.error("{json} hinfo_key found {found} times instead of 3".format(json=JSON, found=found))
+                    ERRORS += 1
+
+            for pg in ALLPGS:
+                # Make sure rep obj with rep pg or ec obj with ec pg
+                if ('shard_id' in jsondict) != (pg.find('s') > 0):
+                    continue
+                if 'shard_id' in jsondict:
+                    # Fix shard_id since we only have one json instance for each object
+                    jsondict['shard_id'] = int(string.split(pg, 's')[1])
+                    JSON = json.dumps(jsondict)
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
                     DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
@@ -585,11 +617,11 @@ def main(argv):
                     keys = get_lines(ATTRFILE)
                     values = dict(db[nspace][basename]["xattr"])
                     for key in keys:
-                        if key == "_" or key == "snapset":
+                        if key == "_" or key == "snapset" or key == "hinfo_key":
                             continue
                         key = key.strip("_")
                         if key not in values:
-                            logging.error("The key {key} should be present".format(key=key))
+                            logging.error("Unexpected key {key} present".format(key=key))
                             ERRORS += 1
                             continue
                         exp = values.pop(key)
