@@ -256,7 +256,7 @@ def main():
 
             db[nspace][NAME] = {}
 
-            if i < ATTR_OBJS:
+            if i < ATTR_OBJS + 1:
                 keys = range(i)
             else:
                 keys = range(0)
@@ -275,7 +275,7 @@ def main():
                 db[nspace][NAME]["xattr"][mykey] = myval
 
             # Create omap header in all objects but REPobject1
-            if i < ATTR_OBJS and i != 1:
+            if i < ATTR_OBJS + 1 and i != 1:
                 myhdr = "hdr{i}".format(i=i)
                 cmd = "./rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
                 logging.debug(cmd)
@@ -334,7 +334,7 @@ def main():
             db[nspace][NAME] = {}
 
             db[nspace][NAME]["xattr"] = {}
-            if i < ATTR_OBJS:
+            if i < ATTR_OBJS + 1:
                 keys = range(i)
             else:
                 keys = range(0)
