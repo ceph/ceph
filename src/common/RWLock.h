@@ -46,7 +46,9 @@ public:
     return (nwlock.read() > 0);
   }
   virtual ~RWLock() {
-    pthread_rwlock_unlock(&L);
+    // The following check is racy but we are about to destroy
+    // the object and we assume that there are no other users.
+    assert(!is_locked());
     pthread_rwlock_destroy(&L);
   }
 
