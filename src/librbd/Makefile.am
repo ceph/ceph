@@ -1,12 +1,20 @@
-librbd_la_SOURCES = \
-	librbd/librbd.cc \
+librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
 	librbd/AioRequest.cc \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
 	librbd/LibrbdWriteback.cc
+noinst_LTLIBRARIES += librbd_internal.la
+
+librbd_api_la_SOURCES = \
+	librbd/librbd.cc
+noinst_LTLIBRARIES += librbd_api.la
+
+librbd_la_SOURCES = \
+	librbd/librbd.cc
 librbd_la_LIBADD = \
+	librbd_internal.la \
 	$(LIBRADOS) $(LIBCOMMON) $(LIBOSDC) \
 	librados_internal.la \
 	libcls_rbd_client.la \
