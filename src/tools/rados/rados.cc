@@ -502,8 +502,7 @@ public:
 	 << " from " << notifier_id
 	 << std::endl;
     bl.hexdump(cout);
-    bufferlist empty;
-    ioctx.notify_ack(name, notify_id, cookie, empty);
+    ioctx.notify_ack(name, notify_id, cookie, bl);
   }
   void handle_failed_notify(uint64_t notify_id,
 			    uint64_t cookie,
@@ -2384,8 +2383,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = io_ctx.notify(oid, bl, 10000, &replybl);
     if (ret != 0)
       cerr << "error calling notify: " << ret << std::endl;
-    if (replybl.length())
-      replybl.hexdump(cout);
+    if (replybl.length()) {
+      multimap<uint64_t,bufferlist> rm;
+      bufferlist::iterator p = replybl.begin();
+      ::decode(rm, p);
+      for (multimap<uint64_t,bufferlist>::iterator p = rm.begin(); p != rm.end();
+	   ++p) {
+	cout << "client." << p->first
+	     << " : " << p->second.length() << " bytes" << std::endl;
+	if (p->second.length())
+	  p->second.hexdump(cout);
+      }
+    }
   } else if (strcmp(nargs[0], "set-alloc-hint") == 0) {
     if (!pool_name || nargs.size() < 4)
       usage_exit();
