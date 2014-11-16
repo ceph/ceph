@@ -301,6 +301,7 @@ public:
   }
   hobject_t    log_oid;
   hobject_t    biginfo_oid;
+  hobject_t    info_oid;
 
   class MissingLoc {
     map<hobject_t, pg_missing_t::item> needs_recovery_map;

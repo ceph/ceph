@@ -181,7 +181,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), pg_log(cct), log_oid(loid), biginfo_oid(ioid),
+  coll(p), pg_log(cct), log_oid(loid), biginfo_oid(ioid), info_oid(ioid),
   missing_loc(this),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
@@ -2605,7 +2605,6 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     __u8 info_struct_v, bool dirty_big_info, bool force_ver)
 {
   // pg state
-
   if (info_struct_v > cur_struct_v)
     return -EINVAL;
 
@@ -2646,7 +2645,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   unstable_stats.clear();
 
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-     past_intervals, snap_collections, osd->infos_oid,
+     past_intervals, snap_collections, info_oid,
      info_struct_v, dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
@@ -2679,7 +2678,8 @@ epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid
     set<string> keys;
     keys.insert(get_epoch_key(pgid));
     map<string,bufferlist> values;
-    store->omap_get_values(META_COLL, infos_oid, keys, &values);
+    hobject_t oid =  OSD::make_pg_info_oid(pgid);
+    store->omap_get_values(META_COLL, oid, keys, &values);
     assert(values.size() == 1);
     tmpbl = values[ek];
     bufferlist::iterator p = tmpbl.begin();
@@ -2857,7 +2857,8 @@ int PG::read_info(
       keys.insert(k);
       keys.insert(bk);
       map<string,bufferlist> values;
-      store->omap_get_values(META_COLL, infos_oid, keys, &values);
+      hobject_t oid = OSD::make_pg_info_oid(info.pgid);
+      store->omap_get_values(META_COLL, oid, keys, &values);
       assert(values.size() == 2);
       lbl = values[k];
       p = lbl.begin();
@@ -2913,7 +2914,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 
   // log any weirdness
   log_weirdness();
-}
+} 
 
 void PG::log_weirdness()
 {
