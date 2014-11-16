@@ -603,7 +603,7 @@ protected:
    *   - are on the peer
    *   - are included in the peer stats
    *
-   * objects between last_backfill and backfill_pos
+   * objects \in (last_backfill, last_backfill_started]
    *   - are on the peer or are in backfills_in_flight
    *   - are not included in pg stats (yet)
    *   - have their stats in pending_backfill_updates on the primary
@@ -614,7 +614,7 @@ protected:
   void dump_recovery_info(Formatter *f) const {
     f->dump_int("backfill_target", get_backfill_target());
     f->dump_int("waiting_on_backfill", waiting_on_backfill);
-    f->dump_stream("backfill_pos") << backfill_pos;
+    f->dump_stream("last_backfill_started") << last_backfill_started;
     {
       f->open_object_section("backfill_info");
       backfill_info.dump(f);
@@ -687,8 +687,8 @@ protected:
     }
   }
 
-  /// leading edge of backfill
-  hobject_t backfill_pos;
+  /// last backfill operation started
+  hobject_t last_backfill_started;
 
   // Reverse mapping from osd peer to objects beging pulled from that peer
   map<int, set<hobject_t> > pull_from_peer;
@@ -776,8 +776,14 @@ protected:
    * @bi [out] resulting map of objects to eversion_t's
    */
   void scan_range(
-    hobject_t begin, int min, int max, BackfillInterval *bi,
+    int min, int max, BackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  /// Update a hash range to reflect changes since the last scan
+  void update_range(
+    BackfillInterval *bi,        ///< [in,out] interval to update
+    ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
   void prep_backfill_object_push(
@@ -1048,8 +1054,6 @@ public:
   bool is_missing_object(const hobject_t& oid);
   void wait_for_missing_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
-  void wait_for_backfill_pos(OpRequestRef op);
-  void release_waiting_for_backfill_pos();
 
   bool is_degraded_object(const hobject_t& oid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
