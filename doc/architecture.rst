@@ -963,7 +963,7 @@ on **OSD 3**.
 But accidents happen. If **OSD 1** goes down while ``D2v2`` is still in flight,
 the object's version 2 is partially written: **OSD 3** has one chunk but that is
 not enough to recover. It lost two chunks: ``D1v2`` and ``D2v2`` and the
-erasure coding parameters ``K = 2 + M = 1`` require that at least two chunks are
+erasure coding parameters ``K = 2``, ``M = 1`` require that at least two chunks are
 available to rebuild the third. **OSD 4** becomes the new primary and finds that
 the ``last_complete`` log entry (i.e., all objects before this entry were known
 to be available on all OSDs in the previous acting set ) is ``1,1`` and that
