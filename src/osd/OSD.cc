@@ -2791,6 +2791,7 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store, bl);
+    pg->touch_pg_info_oid(store, bl);
 
     if (pg->must_upgrade()) {
       if (!has_upgraded) {

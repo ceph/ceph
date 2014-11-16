@@ -280,7 +280,7 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
-  static const __u8 cur_struct_v = 7;
+  static const __u8 cur_struct_v = 8;
   bool must_upgrade() {
     return info_struct_v < 7;
   }
@@ -2125,6 +2125,7 @@ public:
     hobject_t &biginfo_oid, hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
+  void touch_pg_info_oid(ObjectStore *store, bufferlist &bl);
   static epoch_t peek_map_epoch(ObjectStore *store, coll_t coll,
                                hobject_t &infos_oid, bufferlist *bl);
   void update_snap_map(
