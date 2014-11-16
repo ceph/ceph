@@ -980,7 +980,7 @@ will be the head of the new authoritative log.
           |           |    OSD 2    |
           |           |         log |
           |           |  +----+     |
-          +---------->+  |D1v2| 1,2 |
+          +---------->+  |D2v1| 1,1 |
           |           |  +----+     |
           |           |             |
           |           +-------------+
