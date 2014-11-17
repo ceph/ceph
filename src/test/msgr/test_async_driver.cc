@@ -170,7 +170,7 @@ TEST_P(EventDriverTest, NetworkSocketTest) {
   r = set_nonblock(listen_sd);
   ASSERT_EQ(r, 0);
   struct sockaddr_in sa;
-  int port = 0;
+  long port = 0;
   for (port = 38788; port < 40000; port++) {
     memset(&sa,0,sizeof(sa));
     sa.sin_family = AF_INET;
