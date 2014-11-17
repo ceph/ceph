@@ -6286,11 +6286,8 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   }
 
   bool whiteout = false;
-  if (r == -ENOENT &&
-      soid.snap == CEPH_NOSNAP &&
-      (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
-       pool.info.cache_mode == pg_pool_t::CACHEMODE_READFORWARD ||
-       pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
+  if (r == -ENOENT) {
+    assert(soid.snap == CEPH_NOSNAP); // snap case is above
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
   }
