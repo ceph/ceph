@@ -27,6 +27,3 @@ class TestCoverage(object):
             "html/output/dir",
             False
         )
-
-    def test_analyze(self):
-        pass
