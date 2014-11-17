@@ -1,7 +1,0 @@
-tasks:
-- workunit:
-    branch: giant
-    clients:
-      client.0:
-        - cls/test_cls_rbd.sh
-- print: "**** done cls/test_cls_rbd.sh 5-workload"

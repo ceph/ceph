@@ -1,7 +1,0 @@
-tasks:
-- install:
-    branch: giant
-- print: "**** done install giant"
-- ceph:
-    fs: xfs
-- print: "**** done ceph"
