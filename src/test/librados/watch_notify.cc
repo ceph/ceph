@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 #include "include/encoding.h"
 #include <set>
+#include <map>
 
 using namespace librados;
 
@@ -267,8 +268,8 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   {
     bufferlist reply;
     reply.append(reply_buf, reply_buf_len);
-    std::multimap<uint64_t, bufferlist> reply_map;
-    std::multiset<uint64_t> missed_map;
+    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+    std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
     ::decode(reply_map, reply_p);
     ::decode(missed_map, reply_p);
@@ -296,8 +297,8 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   {
     bufferlist reply;
     reply.append(reply_buf, reply_buf_len);
-    std::multimap<uint64_t, bufferlist> reply_map;
-    std::multiset<uint64_t> missed_map;
+    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+    std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
     ::decode(reply_map, reply_p);
     ::decode(missed_map, reply_p);
@@ -336,8 +337,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
 			     &reply_buf, &reply_buf_len));
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
-  std::multimap<uint64_t, bufferlist> reply_map;
-  std::multiset<uint64_t> missed_map;
+  std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+  std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
   ::decode(missed_map, reply_p);
@@ -380,8 +381,8 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   bufferlist bl2, bl_reply;
   ASSERT_EQ(0, ioctx.notify(notify_oid, bl2, 0, &bl_reply));
   bufferlist::iterator p = bl_reply.begin();
-  std::multimap<uint64_t,bufferlist> reply_map;
-  std::multiset<uint64_t> missed_map;
+  std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
+  std::set<std::pair<uint64_t,uint64_t> > missed_map;
   ::decode(reply_map, p);
   ::decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
@@ -424,8 +425,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
 			     &reply_buf, &reply_buf_len));
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
-  std::multimap<uint64_t, bufferlist> reply_map;
-  std::multiset<uint64_t> missed_map;
+  std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+  std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
   ::decode(missed_map, reply_p);
@@ -474,8 +475,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   {
     bufferlist reply;
     reply.append(reply_buf, reply_buf_len);
-    std::multimap<uint64_t, bufferlist> reply_map;
-    std::multiset<uint64_t> missed_map;
+    std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
+    std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
     ::decode(reply_map, reply_p);
     ::decode(missed_map, reply_p);

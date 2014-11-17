@@ -2061,12 +2061,14 @@ CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
  *    le32 num_acks
  *    {
  *      le64 gid     global id for the client (for client.1234 that's 1234)
+ *      le64 cookie  cookie for the client
  *      le32 buflen  length of reply message buffer
  *      u8 * buflen  payload
  *    } * num_acks
  *    le32 num_timeouts
  *    {
  *      le64 gid     global id for the client
+ *      le64 cookie  cookie for the client
  *    } * num_timeouts
  *
  * Note: There may be multiple instances of the same gid if there are
