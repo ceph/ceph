@@ -509,12 +509,11 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
   ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << r
 		 << " (last_error " << info->last_error << ")" << dendl;
   if (r < 0) {
-    info->watch_lock.Lock();
+    info->watch_lock.get_write();
     info->last_error = r;
-    info->watch_cond.Signal();
     if (info->watch_context)
       finisher->queue(new C_DoWatchError(info, r));
-    info->watch_lock.Unlock();
+    info->watch_lock.put_write();
   }
 }
 
@@ -566,7 +565,7 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
 		 << " sent " << sent << " gen " << register_gen << " = " << r
 		 << " (last_error " << info->last_error
 		 << " register_gen " << info->register_gen << ")" << dendl;
-  info->watch_lock.Lock();
+  info->watch_lock.get_write();
   if (info->register_gen == register_gen) {
     if (r == 0) {
       info->watch_valid_thru = sent;
@@ -575,17 +574,15 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
       if (info->watch_context)
 	finisher->queue(new C_DoWatchError(info, r));
     }
-    info->watch_cond.SignalAll();
   } else {
     ldout(cct, 20) << " ignoring old gen" << dendl;
   }
-  info->watch_lock.Unlock();
+  info->watch_lock.put_write();
 }
 
 int Objecter::linger_check(LingerOp *info)
 {
-  RWLock::WLocker wl(rwlock);
-  Mutex::Locker l(info->watch_lock);
+  RWLock::RLocker l(info->watch_lock);
 
   utime_t stamp = info->watch_valid_thru;
   if (!info->watch_pending_async.empty())
