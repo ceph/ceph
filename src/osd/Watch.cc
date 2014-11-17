@@ -158,7 +158,9 @@ void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
     return;
   assert(watchers.count(watch));
   watchers.erase(watch);
-  notify_replies.insert(make_pair(watch->get_watcher_gid(), reply_bl));
+  notify_replies.insert(make_pair(make_pair(watch->get_watcher_gid(),
+					    watch->get_cookie()),
+				  reply_bl));
   maybe_complete_notify();
 }
 
@@ -182,10 +184,11 @@ void Notify::maybe_complete_notify()
     // prepare reply
     bufferlist bl;
     ::encode(notify_replies, bl);
-    list<uint64_t> missed;
+    list<pair<uint64_t,uint64_t> > missed;
     for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
       (*p)->send_failed_notify(this);
-      missed.push_back((*p)->get_entity().num());
+      missed.push_back(make_pair((*p)->get_watcher_gid(),
+				 (*p)->get_cookie()));
     }
     ::encode(missed, bl);
 

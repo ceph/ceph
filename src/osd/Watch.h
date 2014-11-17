@@ -71,8 +71,8 @@ class Notify {
   CancelableContext *cb;
   Mutex lock;
 
-  /// gid -> reply_bl for everyone who acked the notify
-  multimap<uint64_t,bufferlist> notify_replies;
+  /// (gid,cookie) -> reply_bl for everyone who acked the notify
+  multimap<pair<uint64_t,uint64_t>,bufferlist> notify_replies;
 
   /// true if this notify is being discarded
   bool is_discarded() {
