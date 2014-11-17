@@ -636,7 +636,7 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
 				  ObjectOperation& op,
 				  const SnapContext& snapc, utime_t mtime,
 				  bufferlist& inbl,
-				  Context *onack, Context *oncommit,
+				  Context *oncommit,
 				  version_t *objver)
 {
   info->is_watch = true;
@@ -647,7 +647,7 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
   info->inbl = inbl;
   info->poutbl = NULL;
   info->pobjver = objver;
-  info->on_reg_ack = onack;
+  info->on_reg_ack = NULL;
   info->on_reg_commit = oncommit;
 
   RWLock::WLocker wl(rwlock);
