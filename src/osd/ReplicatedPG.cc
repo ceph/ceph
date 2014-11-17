@@ -6296,17 +6296,18 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   }
 
   if (r < 0 && !whiteout) {
-    if (op) {
-      // we need to get rid of the op in the blocked queue
-      map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
-	waiting_for_blocked_object.find(soid);
-      assert(blocked_iter != waiting_for_blocked_object.end());
-      assert(blocked_iter->second.begin()->get() == op.get());
-      blocked_iter->second.pop_front();
-      if (blocked_iter->second.empty()) {
-	waiting_for_blocked_object.erase(blocked_iter);
+    derr << __func__ << " unexpected promote error " << cpp_strerror(r) << dendl;
+    // pass error to everyone blocked on this object
+    // FIXME: this is pretty sloppy, but at this point we got
+    // something unexpected and don't have many other options.
+    map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
+      waiting_for_blocked_object.find(soid);
+    if (blocked_iter != waiting_for_blocked_object.end()) {
+      while (!blocked_iter->second.empty()) {
+	osd->reply_op_error(blocked_iter->second.front(), r);
+	blocked_iter->second.pop_front();
       }
-      osd->reply_op_error(op, r);
+      waiting_for_blocked_object.erase(blocked_iter);
     }
     return;
   }
