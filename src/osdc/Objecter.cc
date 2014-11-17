@@ -561,11 +561,11 @@ void Objecter::_send_linger_ping(LingerOp *info)
 void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
 			    uint32_t register_gen)
 {
+  RWLock::WLocker l(info->watch_lock);
   ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " sent " << sent << " gen " << register_gen << " = " << r
 		 << " (last_error " << info->last_error
 		 << " register_gen " << info->register_gen << ")" << dendl;
-  info->watch_lock.get_write();
   if (info->register_gen == register_gen) {
     if (r == 0) {
       info->watch_valid_thru = sent;
@@ -577,7 +577,6 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
   } else {
     ldout(cct, 20) << " ignoring old gen" << dendl;
   }
-  info->watch_lock.put_write();
 }
 
 int Objecter::linger_check(LingerOp *info)
@@ -751,6 +750,10 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     ldout(cct, 7) << __func__ << " cookie " << m->cookie << " dne" << dendl;
     return;
   }
+  if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
+    RWLock::WLocker l(info->watch_lock);
+    info->last_error = -ENOTCONN;
+  }
   finisher->queue(new C_DoWatchNotify(this, info, m));
 }
 
@@ -780,28 +783,21 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 
   assert(info->is_watch);
   assert(info->watch_context);
+  rwlock.put_read();
 
   switch (m->opcode) {
   case CEPH_WATCH_EVENT_NOTIFY:
-    rwlock.put_read();
     info->watch_context->handle_notify(m->notify_id, m->cookie,
 				       m->notifier_gid, m->bl);
     break;
 
   case CEPH_WATCH_EVENT_FAILED_NOTIFY:
-    rwlock.put_read();
     info->watch_context->handle_failed_notify(m->notify_id, m->cookie,
 					      m->notifier_gid);
     break;
 
   case CEPH_WATCH_EVENT_DISCONNECT:
-    info->last_error = -ENOTCONN;
-    rwlock.put_read();
     info->watch_context->handle_error(m->cookie, -ENOTCONN);
-    break;
-
-  default:
-    rwlock.put_read();
     break;
   }
 
