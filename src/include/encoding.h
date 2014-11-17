@@ -448,6 +448,28 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
   }
 }
 
+// multiset
+template<class T>
+inline void encode(const std::multiset<T>& s, bufferlist& bl)
+{
+  __u32 n = (__u32)(s.size());
+  encode(n, bl);
+  for (typename std::multiset<T>::const_iterator p = s.begin(); p != s.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode(std::multiset<T>& s, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  s.clear();
+  while (n--) {
+    T v;
+    decode(v, p);
+    s.insert(v);
+  }
+}
+
 // vector (pointers)
 /*template<class T>
 inline void encode(const std::vector<T*>& v, bufferlist& bl)
