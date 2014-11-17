@@ -29,6 +29,7 @@ import stat
 import sys
 import tempfile
 import uuid
+import time
 
 """
 Prepare:
@@ -900,17 +901,25 @@ def unmount(
     """
     Unmount and removes the given mount point.
     """
-    try:
-        LOG.debug('Unmounting %s', path)
-        command_check_call(
-            [
-                '/bin/umount',
-                '--',
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        raise UnmountError(e)
+    retries = 0
+    while True:
+        try:
+            LOG.debug('Unmounting %s', path)
+            command_check_call(
+                [
+                    '/bin/umount',
+                    '--',
+                    path,
+                    ],
+                )
+            break
+        except subprocess.CalledProcessError as e:
+            # on failure, retry 3 times with incremental backoff
+            if retries == 3:
+                raise UnmountError(e)
+            else:
+                time.sleep(0.5 + retries * 1.0)
+                retries += 1
 
     os.rmdir(path)
 
