@@ -1477,8 +1477,7 @@ public:
     bool is_watch;
     utime_t watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
-    Mutex watch_lock;
-    Cond watch_cond;
+    RWLock watch_lock;
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
@@ -1502,11 +1501,11 @@ public:
     epoch_t map_dne_bound;
 
     void queued_async() {
-      Mutex::Locker l(watch_lock);
+      RWLock::WLocker l(watch_lock);
       watch_pending_async.push_back(ceph_clock_now(NULL));
     }
     void finished_async() {
-      Mutex::Locker l(watch_lock);
+      RWLock::WLocker l(watch_lock);
       assert(!watch_pending_async.empty());
       watch_pending_async.pop_front();
     }
