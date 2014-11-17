@@ -281,7 +281,7 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
-HOSTNAME=`hostname`
+HOSTNAME=`hostname -s`
 if [ -n "$ip" ]; then
     IP="$ip"
 else

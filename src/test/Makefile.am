@@ -237,6 +237,7 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 ## Unit tests
 
 check_SCRIPTS += \
+	test/ceph_objectstore_tool.py \
 	test/cephtool-test-osd.sh \
 	test/cephtool-test-mon.sh \
 	test/cephtool-test-mds.sh \
