@@ -566,7 +566,6 @@ public:
    */
   bool is_readable(version_t ver = 0) {
     if (ver > get_last_committed() ||
-	is_proposing() ||
 	!paxos->is_readable(0) ||
 	get_last_committed() == 0)
       return false;
