@@ -1480,6 +1480,10 @@ public:
     Mutex watch_lock;
     Cond watch_cond;
 
+    // queue of pending async operations, with the timestamp of
+    // when they were queued.
+    list<utime_t> watch_pending_async;
+
     uint32_t register_gen;
     bool registered;
     bool canceled;
@@ -1496,6 +1500,16 @@ public:
     ceph_tid_t register_tid;
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
+
+    void queued_async() {
+      Mutex::Locker l(watch_lock);
+      watch_pending_async.push_back(ceph_clock_now(NULL));
+    }
+    void finished_async() {
+      Mutex::Locker l(watch_lock);
+      assert(!watch_pending_async.empty());
+      watch_pending_async.pop_front();
+    }
 
     LingerOp() : linger_id(0),
 		 target(object_t(), object_locator_t(), 0),
