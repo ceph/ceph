@@ -403,6 +403,22 @@ def task(ctx, config):
                             if exp != val:
                                 log.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
                                 ERRORS += 1
+                        if "hinfo_key" in keys:
+                            cmd_prefix = prefix.format(id=osdid)
+                            cmd = """
+                            expected=$({prefix} --pgid {pg} '{json}' get-attr {key} | base64)
+                            echo placeholder | {prefix} --pgid {pg} '{json}' set-attr {key} -
+                            test $({prefix} --pgid {pg} '{json}' get-attr {key}) = placeholder
+                            echo $expected | base64 --decode | {prefix} --pgid {pg} '{json}' set-attr {key} -
+                            test $({prefix} --pgid {pg} '{json}' get-attr {key} | base64) = $expected
+                            """.format(prefix=cmd_prefix, pg=pg, json=JSON, key="hinfo_key")
+                            log.debug(cmd)
+                            proc = remote.run(args=['bash', '-e', '-x', '-c', cmd], check_status=False, stdout=StringIO(), stderr=StringIO())
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.error("failed with " + str(proc.exitstatus))
+                                log.error(proc.stdout.getvalue() + " " + proc.stderr.getvalue())
+                                ERRORS += 1
 
                         if len(values) != 0:
                             log.error("Not all keys found, remaining keys:")
