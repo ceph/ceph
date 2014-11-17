@@ -2064,12 +2064,20 @@ CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
  *      le32 buflen  length of reply message buffer
  *      u8 * buflen  payload
  *    } * num_acks
+ *    le32 num_timeouts
+ *    {
+ *      le64 gid     global id for the client
+ *    } * num_timeouts
  *
  * Note: There may be multiple instances of the same gid if there are
  * multiple watchers registered via the same client.
  *
  * Note: The buffer must be released with rados_buffer_free() when the
  * user is done with it.
+ *
+ * Note: Since the result buffer includes clients that time out, it
+ * will be set even when rados_notify() returns an error code (like
+ * -ETIMEDOUT).
  *
  * @param io the pool the object is in
  * @param o the name of the object

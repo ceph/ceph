@@ -8,6 +8,7 @@
 #include <semaphore.h>
 #include "gtest/gtest.h"
 #include "include/encoding.h"
+#include <set>
 
 using namespace librados;
 
@@ -258,7 +259,7 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
 
   // a subsequent notify should not reach us
-  char *reply_buf;
+  char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
 			     "notify", 6, 0,
@@ -267,12 +268,16 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
     bufferlist reply;
     reply.append(reply_buf, reply_buf_len);
     std::multimap<uint64_t, bufferlist> reply_map;
+    std::multiset<uint64_t> missed_map;
     bufferlist::iterator reply_p = reply.begin();
     ::decode(reply_map, reply_p);
+    ::decode(missed_map, reply_p);
     ASSERT_EQ(0u, reply_map.size());
+    ASSERT_EQ(0u, missed_map.size());
   }
   ASSERT_EQ(0u, notify_cookies.size());
   ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  rados_buffer_free(reply_buf);
 
   // re-watch
   rados_unwatch2(ioctx, handle);
@@ -292,9 +297,12 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
     bufferlist reply;
     reply.append(reply_buf, reply_buf_len);
     std::multimap<uint64_t, bufferlist> reply_map;
+    std::multiset<uint64_t> missed_map;
     bufferlist::iterator reply_p = reply.begin();
     ::decode(reply_map, reply_p);
+    ::decode(missed_map, reply_p);
     ASSERT_EQ(1u, reply_map.size());
+    ASSERT_EQ(0, missed_map.size());
     ASSERT_EQ(1, notify_cookies.count(handle));
     ASSERT_EQ(5, reply_map.begin()->second.length());
     ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
@@ -321,7 +329,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
 		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   ASSERT_TRUE(rados_watch_check(ioctx, handle) > 0);
-  char *reply_buf;
+  char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
 			     "notify", 6, 0,
@@ -329,14 +337,27 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
   std::multimap<uint64_t, bufferlist> reply_map;
+  std::multiset<uint64_t> missed_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
+  ::decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
+  ASSERT_EQ(0, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_TRUE(rados_watch_check(ioctx, handle) > 0);
+  rados_buffer_free(reply_buf);
+
+  // try it on a non-existent object ... our buffer pointers
+  // should get zeroed.
+  ASSERT_EQ(-ENOENT, rados_notify2(ioctx, "doesnotexist",
+				   "notify", 6, 0,
+				   &reply_buf, &reply_buf_len));
+  ASSERT_EQ(NULL, reply_buf);
+  ASSERT_EQ(0, reply_buf_len);
+
   rados_unwatch2(ioctx, handle);
 }
 
@@ -360,12 +381,15 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   ASSERT_EQ(0, ioctx.notify(notify_oid, bl2, 0, &bl_reply));
   bufferlist::iterator p = bl_reply.begin();
   std::multimap<uint64_t,bufferlist> reply_map;
+  std::multiset<uint64_t> missed_map;
   ::decode(reply_map, p);
+  ::decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+  ASSERT_EQ(0, missed_map.size());
   ASSERT_TRUE(ioctx.watch_check(handle) > 0);
   ioctx.unwatch(handle);
 }
@@ -393,7 +417,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   ASSERT_TRUE(rados_watch_check(ioctx, handle1) > 0);
   ASSERT_TRUE(rados_watch_check(ioctx, handle2) > 0);
   ASSERT_NE(handle1, handle2);
-  char *reply_buf;
+  char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
 			     "notify", 6, 0,
@@ -401,16 +425,20 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
   std::multimap<uint64_t, bufferlist> reply_map;
+  std::multiset<uint64_t> missed_map;
   bufferlist::iterator reply_p = reply.begin();
   ::decode(reply_map, reply_p);
+  ::decode(missed_map, reply_p);
   ASSERT_EQ(2u, reply_map.size());
   ASSERT_EQ(5, reply_map.begin()->second.length());
+  ASSERT_EQ(0, missed_map.size());
   ASSERT_EQ(2u, notify_cookies.size());
   ASSERT_EQ(1, notify_cookies.count(handle1));
   ASSERT_EQ(1, notify_cookies.count(handle2));
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_TRUE(rados_watch_check(ioctx, handle1) > 0);
   ASSERT_TRUE(rados_watch_check(ioctx, handle2) > 0);
+  rados_buffer_free(reply_buf);
   rados_unwatch2(ioctx, handle1);
   rados_unwatch2(ioctx, handle2);
 }
@@ -433,7 +461,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
 		   watch_notify2_test_failcb,
 		   watch_notify2_test_errcb, NULL));
   ASSERT_TRUE(rados_watch_check(ioctx, handle) > 0);
-  char *reply_buf;
+  char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(-ETIMEDOUT, rados_notify2(ioctx, notify_oid,
 				      "notify", 6, 1000, // 1s
@@ -443,6 +471,18 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   while (!notify_failed && --wait)
     sleep(1);
   ASSERT_TRUE(notify_failed);
+  {
+    bufferlist reply;
+    reply.append(reply_buf, reply_buf_len);
+    std::multimap<uint64_t, bufferlist> reply_map;
+    std::multiset<uint64_t> missed_map;
+    bufferlist::iterator reply_p = reply.begin();
+    ::decode(reply_map, reply_p);
+    ::decode(missed_map, reply_p);
+    ASSERT_EQ(0, reply_map.size());
+    ASSERT_EQ(1, missed_map.size());
+  }
+  rados_buffer_free(reply_buf);
 
   // we should get the next notify, though!
   notify_failed = false;
