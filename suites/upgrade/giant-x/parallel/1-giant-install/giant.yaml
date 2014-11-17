@@ -1,0 +1,11 @@
+tasks:
+- install:
+    branch: giant
+- print: "**** done installing giant"
+- ceph:
+    fs: xfs
+- print: "**** done ceph"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done parallel"
