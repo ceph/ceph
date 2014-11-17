@@ -199,6 +199,10 @@ public:
     return last_ping;
   }
 
+  bool is_connected() {
+    return conn.get() != NULL;
+  }
+
   /// send a failed notify message
   void send_failed_notify(Notify *notif);
 

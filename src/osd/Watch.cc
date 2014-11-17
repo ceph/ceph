@@ -315,8 +315,13 @@ Context *Watch::get_delayed_cb()
 void Watch::register_cb()
 {
   Mutex::Locker l(osd->watch_lock);
-  dout(15) << "registering callback, timeout: " << timeout << dendl;
-  assert(cb == NULL);
+  if (cb) {
+    dout(15) << "re-registering callback, timeout: " << timeout << dendl;
+    cb->cancel();
+    osd->watch_timer.cancel_event(cb);
+  } else {
+    dout(15) << "registering callback, timeout: " << timeout << dendl;
+  }
   cb = new HandleWatchTimeout(self.lock());
   osd->watch_timer.add_event_after(
     timeout,
@@ -340,13 +345,17 @@ void Watch::unregister_cb()
 void Watch::got_ping(utime_t t)
 {
   last_ping = t;
-  assert(conn);
-  unregister_cb();
-  register_cb();
+  if (conn) {
+    register_cb();
+  }
 }
 
 void Watch::connect(ConnectionRef con, bool _will_ping)
 {
+  if (conn == con) {
+    dout(10) << "connecting - already connected" << dendl;
+    return;
+  }
   dout(10) << "connecting" << dendl;
   conn = con;
   will_ping = _will_ping;
