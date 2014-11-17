@@ -179,8 +179,16 @@ void Notify::maybe_complete_notify()
 	   << watchers.size()
 	   << " in progress watchers " << dendl;
   if (watchers.empty() || timed_out) {
+    // prepare reply
     bufferlist bl;
     ::encode(notify_replies, bl);
+    list<uint64_t> missed;
+    for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
+      (*p)->send_failed_notify(this);
+      missed.push_back((*p)->get_entity().num());
+    }
+    ::encode(missed, bl);
+
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
 					 CEPH_WATCH_EVENT_NOTIFY_COMPLETE, empty));
@@ -191,9 +199,6 @@ void Notify::maybe_complete_notify()
     client->send_message(reply);
     unregister_cb();
 
-    for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
-      (*p)->send_failed_notify(this);
-    }
     complete = true;
   }
 }
