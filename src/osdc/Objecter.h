@@ -1997,7 +1997,7 @@ public:
 			  ObjectOperation& op,
 			  const SnapContext& snapc, utime_t mtime,
 			  bufferlist& inbl,
-			  Context *onack, Context *onfinish,
+			  Context *onfinish,
 			  version_t *objver);
   ceph_tid_t linger_notify(LingerOp *info,
 			   ObjectOperation& op,

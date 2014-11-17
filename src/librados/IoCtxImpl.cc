@@ -1104,7 +1104,7 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
 			 snapc, ceph_clock_now(NULL), bl,
-			 NULL, &onfinish,
+			 &onfinish,
 			 &objver);
   lock->Unlock();
 
