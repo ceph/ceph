@@ -1905,20 +1905,17 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
 }
 
 class PromoteCallback: public ReplicatedPG::CopyCallback {
-  OpRequestRef op;
   ObjectContextRef obc;
   ReplicatedPG *pg;
 public:
-  PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
-		  ReplicatedPG *pg_)
-    : op(op_),
-      obc(obc_),
+  PromoteCallback(ObjectContextRef obc_, ReplicatedPG *pg_)
+    : obc(obc_),
       pg(pg_) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, op, results_data, obc);
+    pg->finish_promote(r, results_data, obc);
   }
 };
 
@@ -1933,7 +1930,7 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
-  PromoteCallback *cb = new PromoteCallback(op, obc, this);
+  PromoteCallback *cb = new PromoteCallback(obc, this);
   object_locator_t my_oloc = oloc;
   my_oloc.pool = pool.info.tier_of;
   start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0,
@@ -6399,8 +6396,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   osd->logger->inc(l_osd_copyfrom);
 }
 
-void ReplicatedPG::finish_promote(int r, OpRequestRef op,
-				  CopyResults *results, ObjectContextRef obc)
+void ReplicatedPG::finish_promote(int r, CopyResults *results,
+				  ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
   dout(10) << __func__ << " " << soid << " r=" << r
