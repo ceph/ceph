@@ -2389,10 +2389,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ::decode(rm, p);
       for (multimap<uint64_t,bufferlist>::iterator p = rm.begin(); p != rm.end();
 	   ++p) {
-	cout << "client." << p->first
+	cout << "reply client." << p->first
 	     << " : " << p->second.length() << " bytes" << std::endl;
 	if (p->second.length())
 	  p->second.hexdump(cout);
+      }
+      if (!p.end()) {
+	list<uint64_t> missed;
+	::decode(missed, p);
+	for (list<uint64_t>::iterator p = missed.begin(); p != missed.end(); ++p) {
+	  cout << "timeout client." << *p << std::endl;
+	}
       }
     }
   } else if (strcmp(nargs[0], "set-alloc-hint") == 0) {

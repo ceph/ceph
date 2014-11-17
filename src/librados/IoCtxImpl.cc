@@ -1237,21 +1237,29 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
 			   << linger_op << dendl;
     notify_private.wait();
 
-    // pass result back to user
-    if (notify_private.result >= 0) {
-      if (preply_buf) {
-	*preply_buf = (char*)malloc(notify_private.reply_bl.length());
-	memcpy(*preply_buf, notify_private.reply_bl.c_str(),
-	       notify_private.reply_bl.length());
-      }
-      if (preply_buf_len)
-	*preply_buf_len = notify_private.reply_bl.length();
-      if (preply_bl)
-	preply_bl->claim(notify_private.reply_bl);
+    ldout(client->cct, 10) << __func__ << " completed notify (linger op "
+			   << linger_op << "), r = " << notify_private.result
+			   << dendl;
+  } else {
+    ldout(client->cct, 10) << __func__ << " failed to initiate notify, r = "
+			   << r_issue << dendl;
+  }
+
+  // pass result back to user
+  // NOTE: we do this regardless of what error code we return
+  if (preply_buf) {
+    if (notify_private.reply_bl.length()) {
+      *preply_buf = (char*)malloc(notify_private.reply_bl.length());
+      memcpy(*preply_buf, notify_private.reply_bl.c_str(),
+	     notify_private.reply_bl.length());
+    } else {
+      *preply_buf = NULL;
     }
   }
-  ldout(client->cct, 10) << __func__ << " completed notify (linger op "
-			 << linger_op << "), unregistering" << dendl;
+  if (preply_buf_len)
+    *preply_buf_len = notify_private.reply_bl.length();
+  if (preply_bl)
+    preply_bl->claim(notify_private.reply_bl);
 
   lock->Lock();
   objecter->linger_cancel(linger_op);
