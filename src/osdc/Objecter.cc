@@ -418,19 +418,21 @@ void Objecter::_send_linger(LingerOp *info)
 
   vector<OSDOp> opv;
   Context *onack = NULL;
-  if (info->registered) {
+  Context *oncommit = NULL;
+  if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
-    onack = new C_Linger_Reconnect(this, info);
     opv.push_back(OSDOp());
     opv.back().op.op = CEPH_OSD_OP_WATCH;
     opv.back().op.watch.cookie = info->linger_id;
     opv.back().op.watch.op = CEPH_OSD_WATCH_OP_RECONNECT;
+    oncommit = new C_Linger_Reconnect(this, info);
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
-    onack = new C_Linger_Register(this, info);
     opv = info->ops;
+    if (info->on_reg_ack)
+      onack = new C_Linger_Register(this, info);
+    oncommit = new C_Linger_Commit(this, info);
   }
-  Context *oncommit = new C_Linger_Commit(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
 		 onack, oncommit,
