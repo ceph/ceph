@@ -4328,7 +4328,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  map<pair<uint64_t,entity_name_t>,WatchRef>::iterator p =
 	    obc->watchers.find(make_pair(cookie, entity));
-	  if (p == obc->watchers.end()) {
+	  if (p == obc->watchers.end() ||
+	      !p->second->is_connected()) {
+	    // client needs to reconnect
 	    result = -ETIMEDOUT;
 	    break;
 	  }
