@@ -2384,22 +2384,24 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret != 0)
       cerr << "error calling notify: " << ret << std::endl;
     if (replybl.length()) {
-      multimap<uint64_t,bufferlist> rm;
+      map<pair<uint64_t,uint64_t>,bufferlist> rm;
+      set<pair<uint64_t,uint64_t> > missed;
       bufferlist::iterator p = replybl.begin();
       ::decode(rm, p);
-      for (multimap<uint64_t,bufferlist>::iterator p = rm.begin(); p != rm.end();
+      ::decode(missed, p);
+      for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();
+	   p != rm.end();
 	   ++p) {
-	cout << "reply client." << p->first
+	cout << "reply client." << p->first.first
+	     << " cookie " << p->first.second
 	     << " : " << p->second.length() << " bytes" << std::endl;
 	if (p->second.length())
 	  p->second.hexdump(cout);
       }
-      if (!p.end()) {
-	list<uint64_t> missed;
-	::decode(missed, p);
-	for (list<uint64_t>::iterator p = missed.begin(); p != missed.end(); ++p) {
-	  cout << "timeout client." << *p << std::endl;
-	}
+      for (multiset<pair<uint64_t,uint64_t> >::iterator p = missed.begin();
+	   p != missed.end(); ++p) {
+	cout << "timeout client." << p->first
+	     << " cookie " << p->second << std::endl;
       }
     }
   } else if (strcmp(nargs[0], "set-alloc-hint") == 0) {

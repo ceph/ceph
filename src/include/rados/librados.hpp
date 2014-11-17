@@ -942,6 +942,27 @@ namespace librados
     int watch(const std::string& o, uint64_t *handle,
 	      librados::WatchCtx2 *ctx);
     int unwatch(uint64_t handle);
+    /**
+     * Send a notify event ot watchers
+     *
+     * Upon completion the pbl bufferlist reply payload will be
+     * encoded like so:
+     *
+     *    le32 num_acks
+     *    {
+     *      le64 gid     global id for the client (for client.1234 that's 1234)
+     *      le64 cookie  cookie for the client
+     *      le32 buflen  length of reply message buffer
+     *      u8 * buflen  payload
+     *    } * num_acks
+     *    le32 num_timeouts
+     *    {
+     *      le64 gid     global id for the client
+     *      le64 cookie  cookie for the client
+     *    } * num_timeouts
+     *
+     *
+     */
     int notify(const std::string& o,   ///< object
 	       bufferlist& bl,         ///< optional broadcast payload
 	       uint64_t timeout_ms,    ///< timeout (in ms)
