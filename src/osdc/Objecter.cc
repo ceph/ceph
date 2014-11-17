@@ -425,6 +425,7 @@ void Objecter::_send_linger(LingerOp *info)
     opv.back().op.op = CEPH_OSD_OP_WATCH;
     opv.back().op.watch.cookie = info->linger_id;
     opv.back().op.watch.op = CEPH_OSD_WATCH_OP_RECONNECT;
+    opv.back().op.watch.gen = ++info->register_gen;
     oncommit = new C_Linger_Reconnect(this, info);
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
@@ -537,6 +538,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   opv[0].op.op = CEPH_OSD_OP_WATCH;
   opv[0].op.watch.cookie = info->linger_id;
   opv[0].op.watch.op = CEPH_OSD_WATCH_OP_PING;
+  opv[0].op.watch.gen = info->register_gen;
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
@@ -554,20 +556,26 @@ void Objecter::_send_linger_ping(LingerOp *info)
   logger->inc(l_osdc_linger_ping);
 }
 
-void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent)
+void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
+			    uint32_t register_gen)
 {
   ldout(cct, 10) << __func__ << " " << info->linger_id
-		 << " sent " << sent << " = " << r
-		 << " (last_error " << info->last_error << ")" << dendl;
+		 << " sent " << sent << " gen " << register_gen << " = " << r
+		 << " (last_error " << info->last_error
+		 << " register_gen " << info->register_gen << ")" << dendl;
   info->watch_lock.Lock();
-  if (r == 0) {
-    info->watch_valid_thru = sent;
-  } else if (r < 0) {
-    info->last_error = r;
-    if (info->watch_context)
-      finisher->queue(new C_DoWatchError(info, r));
+  if (info->register_gen == register_gen) {
+    if (r == 0) {
+      info->watch_valid_thru = sent;
+    } else if (r < 0) {
+      info->last_error = r;
+      if (info->watch_context)
+	finisher->queue(new C_DoWatchError(info, r));
+    }
+    info->watch_cond.SignalAll();
+  } else {
+    ldout(cct, 20) << " ignoring old gen" << dendl;
   }
-  info->watch_cond.SignalAll();
   info->watch_lock.Unlock();
 }
 

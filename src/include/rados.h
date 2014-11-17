@@ -494,6 +494,7 @@ struct ceph_osd_op {
 			__le64 cookie;
 			__le64 ver;     /* no longer used */
 			__u8 op;	/* CEPH_OSD_WATCH_OP_* */
+			__u32 gen;      /* registration generation */
 		} __attribute__ ((packed)) watch;
 		struct {
 			__le64 cookie;
