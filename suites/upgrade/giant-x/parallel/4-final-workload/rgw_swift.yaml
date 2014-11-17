@@ -1,7 +1,0 @@
-tasks:
-  - rgw: [client.1]
-  - print: "**** done rgw 4-final-workload"
-  - swift:
-      client.1:
-        rgw_server: client.1
-  - print: "**** done swift 4-final-workload"
