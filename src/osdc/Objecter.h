@@ -1480,6 +1480,7 @@ public:
     Mutex watch_lock;
     Cond watch_cond;
 
+    uint32_t register_gen;
     bool registered;
     bool canceled;
     Context *on_reg_ack, *on_reg_commit;
@@ -1503,6 +1504,7 @@ public:
 		 is_watch(false),
 		 last_error(0),
 		 watch_lock("Objecter::LingerOp::watch_lock"),
+		 register_gen(0),
 		 registered(false),
 		 canceled(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
@@ -1567,14 +1569,16 @@ public:
     Objecter *objecter;
     LingerOp *info;
     utime_t sent;
-    C_Linger_Ping(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+    uint32_t register_gen;
+    C_Linger_Ping(Objecter *o, LingerOp *l)
+      : objecter(o), info(l), register_gen(info->register_gen) {
       info->get();
     }
     ~C_Linger_Ping() {
       info->put();
     }
     void finish(int r) {
-      objecter->_linger_ping(info, r, sent);
+      objecter->_linger_ping(info, r, sent, register_gen);
     }
   };
 
@@ -1688,7 +1692,7 @@ public:
   void _linger_commit(LingerOp *info, int r);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
-  void _linger_ping(LingerOp *info, int r, utime_t sent);
+  void _linger_ping(LingerOp *info, int r, utime_t sent, uint32_t register_gen);
 
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
