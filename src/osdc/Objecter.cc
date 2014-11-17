@@ -353,6 +353,7 @@ void Objecter::shutdown()
       _session_linger_op_remove(homeless_session, lop);
     }
     linger_ops.erase(lop->linger_id);
+    linger_ops_set.erase(lop);
     lop->put();
   }
 
@@ -423,7 +424,7 @@ void Objecter::_send_linger(LingerOp *info)
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
     opv.push_back(OSDOp());
     opv.back().op.op = CEPH_OSD_OP_WATCH;
-    opv.back().op.watch.cookie = info->linger_id;
+    opv.back().op.watch.cookie = info->get_cookie();
     opv.back().op.watch.op = CEPH_OSD_WATCH_OP_RECONNECT;
     opv.back().op.watch.gen = ++info->register_gen;
     oncommit = new C_Linger_Reconnect(this, info);
@@ -536,7 +537,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
 
   vector<OSDOp> opv(1);
   opv[0].op.op = CEPH_OSD_OP_WATCH;
-  opv[0].op.watch.cookie = info->linger_id;
+  opv[0].op.watch.cookie = info->get_cookie();
   opv[0].op.watch.op = CEPH_OSD_WATCH_OP_PING;
   opv[0].op.watch.gen = info->register_gen;
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
@@ -609,6 +610,9 @@ void Objecter::_linger_cancel(LingerOp *info)
     s->lock.unlock();
 
     linger_ops.erase(info->linger_id);
+    linger_ops_set.erase(info);
+    assert(linger_ops.size() == linger_ops_set.size());
+
     info->canceled = true;
     info->put();
 
@@ -635,8 +639,12 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   // Acquire linger ID
   info->linger_id = ++max_linger_id;
   ldout(cct, 10) << __func__ << " info " << info
-		 << " linger_id " << info->linger_id << dendl;
+		 << " linger_id " << info->linger_id
+		 << " cookie " << info->get_cookie()
+		 << dendl;
   linger_ops[info->linger_id] = info;
+  linger_ops_set.insert(info);
+  assert(linger_ops.size() == linger_ops_set.size());
 
   info->get(); // for the caller
   return info;
@@ -732,13 +740,11 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     return;
   }
 
-  map<uint64_t,LingerOp*>::iterator p = linger_ops.find(m->cookie);
-  if (p == linger_ops.end()) {
+  LingerOp *info = reinterpret_cast<LingerOp*>(m->cookie);
+  if (linger_ops_set.count(info) == 0) {
     ldout(cct, 7) << __func__ << " cookie " << m->cookie << " dne" << dendl;
     return;
   }
-
-  LingerOp *info = p->second;
   finisher->queue(new C_DoWatchNotify(this, info, m));
 }
 

@@ -1519,6 +1519,11 @@ public:
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
     LingerOp(const LingerOp& o);
+
+    uint64_t get_cookie() {
+      return reinterpret_cast<uint64_t>(this);
+    }
+
   private:
     ~LingerOp() {}
   };
@@ -1630,6 +1635,8 @@ public:
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
+  // we use this just to confirm a cookie is valid before dereferencing the ptr
+  set<LingerOp*>            linger_ops_set;
 
   map<ceph_tid_t,PoolStatOp*>    poolstat_ops;
   map<ceph_tid_t,StatfsOp*>      statfs_ops;
