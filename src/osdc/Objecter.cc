@@ -495,9 +495,11 @@ struct C_DoWatchError : public Context {
   int err;
   C_DoWatchError(Objecter::LingerOp *i, int r) : info(i), err(r) {
     info->get();
+    info->queued_async();
   }
   void finish(int r) {
     info->watch_context->handle_error(info->linger_id, err);
+    info->finished_async();
     info->put();
   }
 };
@@ -583,7 +585,13 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
 int Objecter::linger_check(LingerOp *info)
 {
   RWLock::WLocker wl(rwlock);
-  utime_t age = ceph_clock_now(NULL) - info->watch_valid_thru;
+  Mutex::Locker l(info->watch_lock);
+
+  utime_t stamp = info->watch_valid_thru;
+  if (!info->watch_pending_async.empty())
+    stamp = MIN(info->watch_valid_thru, info->watch_pending_async.front());
+  utime_t age = ceph_clock_now(NULL) - stamp;
+
   ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " err " << info->last_error
 		 << " age " << age << dendl;
@@ -726,6 +734,7 @@ struct C_DoWatchNotify : public Context {
   C_DoWatchNotify(Objecter *o, Objecter::LingerOp *i, MWatchNotify *m)
     : objecter(o), info(i), msg(m) {
     info->get();
+    info->queued_async();
     msg->get();
   }
   void finish(int r) {
@@ -800,6 +809,7 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
   }
 
  out:
+  info->finished_async();
   info->put();
   m->put();
 }
