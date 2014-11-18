@@ -162,7 +162,7 @@ namespace librbd {
     AioWrite *req = new AioWrite(m_ictx, oid.name,
 				 object_no, off, objectx, object_overlap,
 				 bl, snapc, snap_id,
-				 req_comp);
+				 req_comp, 0);
     req->send();
     return ++m_tid;
   }

@@ -437,7 +437,7 @@ int librados::IoCtxImpl::create(const object_t& oid, bool exclusive,
 }
 
 int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
-			       size_t len, uint64_t off)
+			       size_t len, uint64_t off, unsigned iohint_flags)
 {
   if (len > UINT_MAX/2)
     return -E2BIG;
@@ -445,11 +445,11 @@ int librados::IoCtxImpl::write(const object_t& oid, bufferlist& bl,
   prepare_assert_ops(&op);
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
-  op.write(off, mybl);
+  op.write(off, mybl, iohint_flags);
   return operate(oid, &op, NULL);
 }
 
-int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
+int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len, unsigned iohint_flags)
 {
   if (len > UINT_MAX/2)
     return -E2BIG;
@@ -457,15 +457,15 @@ int librados::IoCtxImpl::append(const object_t& oid, bufferlist& bl, size_t len)
   prepare_assert_ops(&op);
   bufferlist mybl;
   mybl.substr_of(bl, 0, len);
-  op.append(mybl);
+  op.append(mybl, iohint_flags);
   return operate(oid, &op, NULL);
 }
 
-int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl)
+int librados::IoCtxImpl::write_full(const object_t& oid, bufferlist& bl, unsigned iohint_flags)
 {
   ::ObjectOperation op;
   prepare_assert_ops(&op);
-  op.write_full(bl);
+  op.write_full(bl, iohint_flags);
   return operate(oid, &op, NULL);
 }
 
@@ -473,11 +473,11 @@ int librados::IoCtxImpl::clone_range(const object_t& dst_oid,
 				     uint64_t dst_offset,
 				     const object_t& src_oid,
 				     uint64_t src_offset,
-				     uint64_t len)
+				     uint64_t len, unsigned iohint_flags)
 {
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
-  wr.clone_range(src_oid, src_offset, len, dst_offset);
+  wr.clone_range(src_oid, src_offset, len, dst_offset, iohint_flags);
   return operate(dst_oid, &wr, NULL);
 }
 
@@ -601,7 +601,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, unsigned iohint_flags)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -614,13 +614,13 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->tid = objecter->read(oid, oloc,
 		 off, len, snapid, pbl, 0,
-		 onack, &c->objver);
+		 onack, &c->objver, NULL, iohint_flags);
   return 0;
 }
 
 int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
-				  uint64_t snapid)
+				  uint64_t snapid, unsigned iohint_flags)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -635,7 +635,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 
   c->tid = objecter->read(oid, oloc,
 		 off, len, snapid, &c->bl, 0,
-		 onack, &c->objver);
+		 onack, &c->objver, NULL, iohint_flags);
 
   return 0;
 }
@@ -655,7 +655,8 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 AioCompletionImpl *c,
 					 std::map<uint64_t,uint64_t> *m,
 					 bufferlist *data_bl, size_t len,
-					 uint64_t off, uint64_t snapid)
+					 uint64_t off, uint64_t snapid,
+					 unsigned iohint_flags)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
@@ -666,7 +667,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
   c->is_read = true;
   c->io = this;
 
-  onack->m_ops.sparse_read(off, len, m, data_bl, NULL);
+  onack->m_ops.sparse_read(off, len, m, data_bl, NULL, iohint_flags);
 
   c->tid = objecter->read(oid, oloc,
 		 onack->m_ops, snap_seq, NULL, 0,
@@ -676,7 +677,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 
 int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
-				   uint64_t off)
+				   uint64_t off, unsigned iohint_flags)
 {
   utime_t ut = ceph_clock_now(client->cct);
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
@@ -695,13 +696,13 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 
   c->tid = objecter->write(oid, oloc,
 		  off, len, snapc, bl, ut, 0,
-		  onack, onsafe, &c->objver);
+		  onack, onsafe, &c->objver, NULL, iohint_flags);
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
-				    const bufferlist& bl, size_t len)
+				    const bufferlist& bl, size_t len, unsigned iohint_flags)
 {
   utime_t ut = ceph_clock_now(client->cct);
 
@@ -719,14 +720,14 @@ int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
 
   c->tid = objecter->append(oid, oloc,
 		   len, snapc, bl, ut, 0,
-		   onack, onsafe, &c->objver);
+		   onack, onsafe, &c->objver, NULL, iohint_flags);
 
   return 0;
 }
 
 int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 					AioCompletionImpl *c,
-					const bufferlist& bl)
+					const bufferlist& bl, unsigned iohint_flags)
 {
   utime_t ut = ceph_clock_now(client->cct);
 
@@ -744,7 +745,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 
   c->tid = objecter->write_full(oid, oloc,
 		       snapc, bl, ut, 0,
-		       onack, onsafe, &c->objver);
+		       onack, onsafe, &c->objver, NULL, iohint_flags);
 
   return 0;
 }
@@ -895,14 +896,14 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 }
 
 int librados::IoCtxImpl::read(const object_t& oid,
-			      bufferlist& bl, size_t len, uint64_t off)
+			      bufferlist& bl, size_t len, uint64_t off, unsigned iohint_flags)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.read(off, len, &bl, NULL, NULL);
+  rd.read(off, len, &bl, NULL, NULL, iohint_flags);
   int r = operate_read(oid, &rd, &bl);
   if (r < 0)
     return r;
@@ -949,14 +950,14 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
 int librados::IoCtxImpl::sparse_read(const object_t& oid,
 				     std::map<uint64_t,uint64_t>& m,
 				     bufferlist& data_bl, size_t len,
-				     uint64_t off)
+				     uint64_t off, unsigned iohint_flags)
 {
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.sparse_read(off, len, &m, &data_bl, NULL);
+  rd.sparse_read(off, len, &m, &data_bl, NULL, iohint_flags);
 
   int r = operate_read(oid, &rd, NULL);
   if (r < 0)

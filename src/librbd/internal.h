@@ -172,23 +172,23 @@ namespace librbd {
 
   int64_t read_iterate(ImageCtx *ictx, uint64_t off, uint64_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *),
-		       void *arg);
+		       void *arg, unsigned iohint_flags=0);
   int diff_iterate(ImageCtx *ictx, const char *fromsnapname,
 		   uint64_t off, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *),
 		   void *arg);
-  ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf);
+  ssize_t read(ImageCtx *ictx, uint64_t off, size_t len, char *buf, unsigned iohint_flags=0);
   ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl);
-  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf);
+	       char *buf, bufferlist *pbl, unsigned iohint_flags=0);
+  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, unsigned iohint_flags=0);
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c);
+		AioCompletion *c, unsigned iohint_flags=0);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
-	       char *buf, bufferlist *pbl, AioCompletion *c);
+	       char *buf, bufferlist *pbl, AioCompletion *c, unsigned iohint_flags=0);
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c);
+	       char *buf, bufferlist *pbl, AioCompletion *c, unsigned iohint_flags=0);
   int aio_flush(ImageCtx *ictx, AioCompletion *c);
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
@@ -200,7 +200,7 @@ namespace librbd {
 			     const std::map<uint64_t, uint64_t> &data_map,
 			     uint64_t buf_ofs,
 			     size_t buf_len,
-			     char *dest_buf);
+			     char *dest_buf, unsigned iohint_flags=0);
 
   AioCompletion *aio_create_completion();
   AioCompletion *aio_create_completion(void *cb_arg, callback_t cb_complete);

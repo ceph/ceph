@@ -116,16 +116,18 @@ struct librados::IoCtxImpl {
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
   int create(const object_t& oid, bool exclusive);
   int create(const object_t& oid, bool exclusive, const std::string& category);
-  int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
-  int append(const object_t& oid, bufferlist& bl, size_t len);
-  int write_full(const object_t& oid, bufferlist& bl);
+  int write(const object_t& oid, bufferlist& bl, size_t len,
+	    uint64_t off, unsigned iohint_flags=0);
+  int append(const object_t& oid, bufferlist& bl, size_t len, unsigned iohint_flags=0);
+  int write_full(const object_t& oid, bufferlist& bl, unsigned iohint_flags=0);
   int clone_range(const object_t& dst_oid, uint64_t dst_offset,
-                  const object_t& src_oid, uint64_t src_offset, uint64_t len);
-  int read(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
+                  const object_t& src_oid, uint64_t src_offset, uint64_t len,
+		  unsigned iohint_flags=0);
+  int read(const object_t& oid, bufferlist& bl, size_t len, uint64_t off, unsigned iohint_flags=0);
   int mapext(const object_t& oid, uint64_t off, size_t len,
 	     std::map<uint64_t,uint64_t>& m);
   int sparse_read(const object_t& oid, std::map<uint64_t,uint64_t>& m,
-		  bufferlist& bl, size_t len, uint64_t off);
+		  bufferlist& bl, size_t len, uint64_t off, unsigned iohint_flags=0);
   int remove(const object_t& oid);
   int stat(const object_t& oid, uint64_t *psize, time_t *pmtime);
   int trunc(const object_t& oid, uint64_t size);
@@ -171,18 +173,18 @@ struct librados::IoCtxImpl {
   };
 
   int aio_read(const object_t oid, AioCompletionImpl *c,
-	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid);
+	       bufferlist *pbl, size_t len, uint64_t off, uint64_t snapid, unsigned iohint_flags=0);
   int aio_read(object_t oid, AioCompletionImpl *c,
-	       char *buf, size_t len, uint64_t off, uint64_t snapid);
+	       char *buf, size_t len, uint64_t off, uint64_t snapid, unsigned iohint_flags=0);
   int aio_sparse_read(const object_t oid, AioCompletionImpl *c,
 		      std::map<uint64_t,uint64_t> *m, bufferlist *data_bl,
-		      size_t len, uint64_t off, uint64_t snapid);
+		      size_t len, uint64_t off, uint64_t snapid, unsigned iohint_flags=0);
   int aio_write(const object_t &oid, AioCompletionImpl *c,
-		const bufferlist& bl, size_t len, uint64_t off);
+		const bufferlist& bl, size_t len, uint64_t off, unsigned iohint_flags=0);
   int aio_append(const object_t &oid, AioCompletionImpl *c,
-		 const bufferlist& bl, size_t len);
+		 const bufferlist& bl, size_t len, unsigned iohint_flags=0);
   int aio_write_full(const object_t &oid, AioCompletionImpl *c,
-		     const bufferlist& bl);
+		     const bufferlist& bl, unsigned iohint_flags=0);
   int aio_remove(const object_t &oid, AioCompletionImpl *c);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
 	       const char *method, bufferlist& inbl, bufferlist *outbl);

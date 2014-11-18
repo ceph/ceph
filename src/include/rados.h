@@ -446,6 +446,14 @@ enum {
 	CEPH_OSD_TMAP2OMAP_NULLOK = 1,
 };
 
+enum {
+	CEPH_OSD_IOHINT_NORMAL = 0x00000001,
+	CEPH_OSD_IOHINT_SEQUENTIAL = 0x00000002,
+	CEPH_OSD_IOHINT_RANDOM = 0x00000004,
+	CEPH_OSD_IOHINT_WILLNEED = 0x00000008,
+	CEPH_OSD_IOHINT_DONTNEED = 0x00000010,
+};
+
 /*
  * an individual object operation.  each may be accompanied by some data
  * payload
@@ -453,6 +461,7 @@ enum {
 struct ceph_osd_op {
 	__le16 op;           /* CEPH_OSD_OP_* */
 	__le32 flags;        /* CEPH_OSD_FLAG_* */
+	__le32 iohint_flags; /* CEPH_OSD_IOHINT_* */
 	union {
 		struct {
 			__le64 offset, length;
