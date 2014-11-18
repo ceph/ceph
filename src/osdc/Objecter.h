@@ -987,6 +987,18 @@ struct ObjectOperation {
     // sure older osds don't trip over an unsupported opcode.
     set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
   }
+
+  void dup(vector<OSDOp>& sops) {
+    ops = sops;
+    out_bl.resize(sops.size());
+    out_handler.resize(sops.size());
+    out_rval.resize(sops.size());
+    for (uint32_t i = 0; i < sops.size(); i++) {
+      out_bl[i] = &sops[i].outdata;
+      out_handler[i] = NULL;
+      out_rval[i] = &sops[i].rval;
+    }
+  }
 };
 
 
@@ -1147,8 +1159,10 @@ public:
     /// the very first OP of the series and released upon receiving the last OP reply.
     bool ctx_budgeted;
 
+    int *data_offset;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
-       int f, Context *ac, Context *co, version_t *ov) :
+       int f, Context *ac, Context *co, version_t *ov, int *offset = NULL) :
       session(NULL), incarnation(0),
       target(o, ol, f),
       con(NULL),
@@ -1161,7 +1175,8 @@ public:
       map_dne_bound(0),
       budgeted(false),
       should_resend(true),
-      ctx_budgeted(false) {
+      ctx_budgeted(false),
+      data_offset(offset) {
       ops.swap(op);
       
       /* initialize out_* to match op vector */
@@ -1878,8 +1893,8 @@ public:
   Op *prepare_read_op(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
-	     Context *onack, version_t *objver = NULL) {
-    Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onack, NULL, objver);
+	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+    Op *o = new Op(oid, oloc, op.ops, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onack, NULL, objver, data_offset);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
@@ -1891,8 +1906,8 @@ public:
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
 	     ObjectOperation& op,
 	     snapid_t snapid, bufferlist *pbl, int flags,
-	     Context *onack, version_t *objver = NULL) {
-    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver);
+	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver, data_offset);
     return op_submit(o);
   }
   ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,
@@ -2063,7 +2078,7 @@ public:
     return read(oid, oloc, 0, 0, snap, pbl, flags | global_op_flags.read() | CEPH_OSD_FLAG_READ, onfinish, objver);
   }
 
-     
+
   // writes
   ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
 		vector<OSDOp>& ops, utime_t mtime,
