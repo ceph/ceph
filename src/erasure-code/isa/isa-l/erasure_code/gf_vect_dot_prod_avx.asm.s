@@ -198,5 +198,3 @@ global %1_slver
 slversion gf_vect_dot_prod_avx, 02,  03,  0061
 ; inform linker that this doesn't require executable stack
 section .note.GNU-stack noalloc noexec nowrite progbits
-; inform linker that this doesn't require executable stack
-section .note.GNU-stack noalloc noexec nowrite progbits
