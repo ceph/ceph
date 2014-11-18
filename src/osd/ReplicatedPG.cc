@@ -1904,6 +1904,101 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
   return;
 }
 
+struct C_ProxyRead : public Context {
+  ReplicatedPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  ReplicatedPG::ProxyReadOpRef prdop;
+  C_ProxyRead(ReplicatedPG *p, hobject_t o, epoch_t lpr,
+	     const ReplicatedPG::ProxyReadOpRef& prd)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0), prdop(prd)
+  {}
+  void finish(int r) {
+    pg->lock();
+    if (last_peering_reset == pg->get_last_peering_reset()) {
+      pg->finish_proxy_read(oid, tid, r);
+    }
+    pg->unlock();
+  }
+};
+
+void ReplicatedPG::do_proxy_read(OpRequestRef op)
+{
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  object_locator_t oloc(m->get_object_locator());
+  oloc.pool = pool.info.tier_of;
+
+  hobject_t soid(m->get_oid(),
+		 m->get_object_locator().key,
+		 m->get_snapid(),
+		 m->get_pg().ps(),
+		 m->get_object_locator().get_pool(),
+		 m->get_object_locator().nspace);
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  dout(10) << __func__ << " Start proxy read for " << *m << dendl;
+
+  ProxyReadOpRef prdop(new ProxyReadOp(op, soid, m->ops));
+
+  ObjectOperation obj_op;
+  obj_op.dup(prdop->ops);
+
+  C_ProxyRead *fin = new C_ProxyRead(this, soid, get_last_peering_reset(), prdop);
+  ceph_tid_t tid = osd->objecter->read(soid.oid, oloc, obj_op,
+				  m->get_snapid(), NULL,
+				  flags, fin,
+				  &prdop->user_version, &prdop->data_offset);
+  fin->tid = tid;
+  prdop->objecter_tid = tid;
+  proxyread_ops[tid] = prdop;
+  in_progress_proxy_reads[soid].push_back(op);
+}
+
+void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
+
+  map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.find(tid);
+  if (p == proxyread_ops.end()) {
+    dout(10) << __func__ << " no proxyread_op found" << dendl;
+    return;
+  }
+  ProxyReadOpRef prdop = p->second;
+  if (tid != prdop->objecter_tid) {
+    dout(10) << __func__ << " tid " << tid << " != prdop " << prdop
+	     << " tid " << prdop->objecter_tid << dendl;
+    return;
+  }
+  if (oid != prdop->soid) {
+    dout(10) << __func__ << " oid " << oid << " != prdop " << prdop
+	     << " soid " << prdop->soid << dendl;
+    return;
+  }
+  proxyread_ops.erase(tid);
+
+  map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_reads.find(oid);
+  if (q == in_progress_proxy_reads.end()) {
+    dout(10) << __func__ << " no in_progress_proxy_reads found" << dendl;
+    return;
+  }
+  assert(q->second.size());
+  OpRequestRef op = q->second.front();
+  assert(op == prdop->op);
+  q->second.pop_front();
+  if (q->second.size() == 0) {
+    in_progress_proxy_reads.erase(oid);
+  }
+
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  OpContext *ctx = new OpContext(op, m->get_reqid(), prdop->ops, this);
+  ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
+  ctx->user_at_version = prdop->user_version;
+  ctx->data_off = prdop->data_offset;
+  complete_read_ctx(r, ctx);
+}
+
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   ObjectContextRef obc;
   ReplicatedPG *pg;
@@ -5792,7 +5887,11 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
     publish_stats_to_osd();
 
     // on read, return the current object version
-    reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
+    if (ctx->obs) {
+      reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
+    } else {
+      reply->set_reply_versions(eversion_t(), ctx->user_at_version);
+    }
   } else if (result == -ENOENT) {
     // on ENOENT, set a floor for what the next user version will be.
     reply->set_enoent_reply_versions(info.last_update, info.last_user_version);
