@@ -99,10 +99,10 @@ static void set_op_flags(::ObjectOperation *o, int flags)
   o->set_last_op_flags(rados_flags);
 }
 
-void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
+void librados::ObjectOperation::set_op_flags(int flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  ::set_op_flags(o, (int)flags);
+  ::set_op_flags(o, flags);
 }
 
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
