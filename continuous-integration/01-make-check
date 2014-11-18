@@ -1,0 +1,25 @@
+#!/bin/bash -ex
+
+function error_report() {
+    find . -name '*.trs' | xargs grep -l FAIL | while read file ; do
+        log=$(dirname $file)/$(basename $file .trs).log
+        echo FAIL: $log
+        cat $log
+    done >> output
+    pastebinit -b http://paste.ubuntu.com/ output
+}
+
+trap "error_report" EXIT
+
+./autogen.sh >& output
+./configure --disable-static --with-radosgw --with-debug CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" >& output
+make -j8 >& output
+make -j8 check >& output
+make clean >& output
+
+trap "" EXIT
+
+echo "make check"
+url=$(git remote -v | head -1 | cut -f2 | cut -f1 -d' ')
+hash=$(git show-ref --hash refs/heads/master)
+echo $url/commit/$hash

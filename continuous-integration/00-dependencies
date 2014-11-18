@@ -1,0 +1,13 @@
+#!/bin/bash
+
+case $(lsb_release -si) in
+    Centos)
+        sudo yum install -y wget 
+        wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-2.noarch.rpm
+        sudo rpm -ivh epel-release-7-2.noarch.rpm
+        sudo yum install -y $(cat ../deps.rpm.txt)
+        ;;
+    Ubuntu)
+        sudo apt-get install -y $(cat ../deps.deb.txt)
+        ;;
+esac
