@@ -1062,16 +1062,6 @@ struct WatchInfo : public Objecter::WatchContext {
       ioctx->notify_ack(oid, notify_id, cookie, empty);
     }
   }
-  void handle_failed_notify(uint64_t notify_id,
-			    uint64_t cookie,
-			    uint64_t notifier_id) {
-    ldout(ioctx->client->cct, 10) << __func__ << " " << notify_id
-				  << " cookie " << cookie
-				  << " notifier_id " << notifier_id
-				  << dendl;
-    if (ctx2)
-      ctx2->handle_failed_notify(notify_id, cookie, notifier_id);
-  }
   void handle_error(uint64_t cookie, int err) {
     ldout(ioctx->client->cct, 10) << __func__ << " cookie " << cookie
 				  << " err " << err
