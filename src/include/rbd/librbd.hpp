@@ -47,14 +47,14 @@ namespace librbd {
 
   typedef rbd_image_info_t image_info_t;
 
-  class ProgressContext
+  class CEPH_RBD_API ProgressContext
   {
   public:
     virtual ~ProgressContext();
     virtual int update_progress(uint64_t offset, uint64_t total) = 0;
   };
 
-class RBD
+class CEPH_RBD_API RBD
 {
 public:
   RBD();
@@ -102,7 +102,7 @@ private:
   const RBD& operator=(const RBD& rhs);
 };
 
-class Image
+class CEPH_RBD_API Image
 {
 public:
   Image();
