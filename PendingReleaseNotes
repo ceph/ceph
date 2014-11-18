@@ -28,3 +28,13 @@ v0.90
 
 * The 'rados create <objectname> [category]' optional category argument is no
   longer supported or recognized.
+
+* There is a new version of the librados watch/notify API with vastly
+  improved semantics.  Any applications using this interface are
+  encouraged to migrate to the new API.  The old API calls are marked
+  as deprecated and will eventually be removed.
+
+* The librados rados_unwatch() call used to be safe to call on an
+  invalid handle.  The new version has undefined behavior when passed
+  a bogus value (for example, when rados_watch() returns an error and
+  handle is not defined).
