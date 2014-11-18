@@ -1864,6 +1864,26 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     do_cache_redirect(op, obc);
     return true;
 
+  case pg_pool_t::CACHEMODE_READPROXY:
+    // Do writeback to the cache tier for writes
+    if (op->may_write() || write_ordered) {
+      if (agent_state &&
+	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	dout(20) << __func__ << " cache pool full, waiting" << dendl;
+	waiting_for_cache_not_full.push_back(op);
+	return true;
+      }
+      if (can_skip_promote(op, obc)) {
+	return false;
+      }
+      promote_object(obc, missing_oid, oloc, op);
+      return true;
+    }
+
+    // If it is a read, we can read, we need to proxy it
+    do_proxy_read(op);
+    return true;
+
   default:
     assert(0 == "unrecognized cache_mode");
   }
