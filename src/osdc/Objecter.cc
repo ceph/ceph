@@ -791,11 +791,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 				       m->notifier_gid, m->bl);
     break;
 
-  case CEPH_WATCH_EVENT_FAILED_NOTIFY:
-    info->watch_context->handle_failed_notify(m->notify_id, m->cookie,
-					      m->notifier_gid);
-    break;
-
   case CEPH_WATCH_EVENT_DISCONNECT:
     info->watch_context->handle_error(m->cookie, -ENOTCONN);
     break;

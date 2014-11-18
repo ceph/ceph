@@ -186,7 +186,6 @@ void Notify::maybe_complete_notify()
     ::encode(notify_replies, bl);
     list<pair<uint64_t,uint64_t> > missed;
     for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
-      (*p)->send_failed_notify(this);
       missed.push_back(make_pair((*p)->get_watcher_gid(),
 				 (*p)->get_cookie()));
     }
@@ -475,17 +474,6 @@ void Watch::send_notify(NotifyRef notif)
     CEPH_WATCH_EVENT_NOTIFY, notif->payload);
   notify_msg->notifier_gid = notif->client_gid;
   conn->send_message(notify_msg);
-}
-
-void Watch::send_failed_notify(Notify *notif)
-{
-  if (!conn)
-    return;
-  bufferlist empty;
-  MWatchNotify *reply(new MWatchNotify(cookie, notif->version, notif->notify_id,
-				       CEPH_WATCH_EVENT_FAILED_NOTIFY, empty));
-  reply->notifier_gid = notif->client_gid;
-  conn->send_message(reply);
 }
 
 void Watch::send_disconnect()
