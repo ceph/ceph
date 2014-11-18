@@ -762,6 +762,21 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
+int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
+{
+  bufferlist bl;
+  bool found = store->read(
+      META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  if (!found) {
+    cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
+    return ENOENT;
+  }
+  osdmap.decode(bl);
+  if (debug)
+    cerr << osdmap << std::endl;
+  return 0;
+}
+
 //Write super_header with its fixed 16 byte length
 void write_super()
 {
