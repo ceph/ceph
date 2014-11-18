@@ -203,9 +203,6 @@ public:
     return conn.get() != NULL;
   }
 
-  /// send a failed notify message
-  void send_failed_notify(Notify *notif);
-
   /// send a disconnect notice to the client
   void send_disconnect();
 

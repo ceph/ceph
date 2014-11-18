@@ -80,11 +80,6 @@ public:
     waiting = false;
     cond.SignalAll();
   }
-  void handle_failed_notify(uint64_t notify_id, uint64_t cookie,
-			    uint64_t notifier_id) {
-    Mutex::Locker l(lock);
-    cout << "watch handle_failed_notify" << std::endl;
-  }
   void handle_error(uint64_t cookie, int err) {
     Mutex::Locker l(lock);
     cout << "watch handle_error " << err << std::endl;
