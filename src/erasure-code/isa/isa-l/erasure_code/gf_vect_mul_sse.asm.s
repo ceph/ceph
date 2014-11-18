@@ -176,3 +176,5 @@ global %1_slver
 %endmacro
 ;;;       func        core, ver, snum
 slversion gf_vect_mul_sse, 00,   02,  0034
+; inform linker that this doesn't require executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits

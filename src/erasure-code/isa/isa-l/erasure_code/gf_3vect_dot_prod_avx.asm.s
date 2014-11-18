@@ -255,4 +255,6 @@ global %1_slver
 	db 0x%3, 0x%2
 %endmacro
 ;;;       func                  core, ver, snum
+; inform linker that this doesn't require executable stack
+section .note.GNU-stack noalloc noexec nowrite progbits
 slversion gf_3vect_dot_prod_avx, 02,  03,  0192
