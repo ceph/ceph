@@ -651,7 +651,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  cout << "Read " << obj << std::endl;
+  cerr << "Read " << obj << std::endl;
 
   total = st.st_size;
   if (debug)
@@ -794,7 +794,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cout << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -2488,8 +2488,8 @@ int main(int argc, char **argv)
 
     if (op == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
-      if (ret == 0 && file_fd != STDOUT_FILENO)
-        cout << "Export successful" << std::endl;
+      if (ret == 0)
+        cerr << "Export successful" << std::endl;
     } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
