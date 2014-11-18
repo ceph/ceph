@@ -280,6 +280,8 @@ void PG::proc_master_log(
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
+  info.last_epoch_started = oinfo.last_epoch_started;
+  info.history.merge(oinfo.history);
 
   peer_missing[from].swap(omissing);
 }
