@@ -520,7 +520,7 @@ int NameVal::parse()
   return ret; 
 }
 
-int XMLArgs::parse()
+int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
@@ -592,7 +592,7 @@ int XMLArgs::parse()
   return 0;
 }
 
-string& XMLArgs::get(const string& name, bool *exists)
+string& RGWHTTPArgs::get(const string& name, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
@@ -604,14 +604,14 @@ string& XMLArgs::get(const string& name, bool *exists)
   return empty_str;
 }
 
-string& XMLArgs::get(const char *name, bool *exists)
+string& RGWHTTPArgs::get(const char *name, bool *exists)
 {
   string s(name);
   return get(s, exists);
 }
 
 
-int XMLArgs::get_bool(const string& name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
@@ -634,7 +634,7 @@ int XMLArgs::get_bool(const string& name, bool *val, bool *exists)
   return 0;
 }
 
-int XMLArgs::get_bool(const char *name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
 {
   string s(name);
   return get_bool(s, val, exists);
