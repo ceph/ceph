@@ -4860,10 +4860,15 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   r = state.io_ctx.operate(oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
-  if (merge_bl)
-    bl.append(read_bl);
+  if (r < 0) {
+    return r;
+  }
 
-  return 0;
+  if (merge_bl) {
+    bl.append(read_bl);
+  }
+
+  return bl.length();
 }
 
 int RGWRados::SystemObject::Read::GetObjState::get_ioctx(RGWRados *store, rgw_obj& obj, librados::IoCtx **ioctx)
