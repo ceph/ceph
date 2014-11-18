@@ -313,7 +313,7 @@ void ReplicatedPG::on_global_recover(
   assert(i != recovering.end());
   if (backfills_in_flight.count(soid)) {
     list<OpRequestRef> requeue_list;
-    i->second->drop_backfill_read(&requeue_list);
+    i->second->drop_recovery_read(&requeue_list);
     requeue_ops(requeue_list);
     backfills_in_flight.erase(soid);
   }
@@ -10386,7 +10386,7 @@ void ReplicatedPG::_clear_recovery_state()
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
-    recovering[*i]->drop_backfill_read(&blocked_ops);
+    recovering[*i]->drop_recovery_read(&blocked_ops);
     requeue_ops(blocked_ops);
     backfills_in_flight.erase(i++);
   }
@@ -11183,7 +11183,7 @@ int ReplicatedPG::recover_backfill(
       if (!need_ver_targs.empty() || !missing_targs.empty()) {
 	ObjectContextRef obc = get_object_context(backfill_info.begin, false);
 	assert(obc);
-	if (obc->get_backfill_read()) {
+	if (obc->get_recovery_read()) {
 	  if (!need_ver_targs.empty()) {
 	    dout(20) << " BACKFILL replacing " << check
 		   << " with ver " << obj_v
