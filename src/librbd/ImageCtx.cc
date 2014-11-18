@@ -7,6 +7,8 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
+#include "cls/lock/cls_lock_client.h"
+
 #include "librbd/internal.h"
 
 #include "librbd/ImageCtx.h"
@@ -685,6 +687,77 @@ namespace librbd {
     }
   }
 
+  int ImageCtx::lock_object_map()
+  {
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+      return 0;
+    }
+
+    int r;
+    bool broke_lock = false;
+    while (true) {
+      ldout(cct, 10) << "locking object map" << dendl;
+      r = rados::cls::lock::lock(&md_ctx, object_map_name(id), RBD_LOCK_NAME,
+                                 LOCK_EXCLUSIVE, "", "", "", utime_t(), 0);
+      if (r == 0) {
+        break;
+      } else if (broke_lock || r != -EBUSY) {
+        lderr(cct) << "failed to lock object map: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      typedef std::map<rados::cls::lock::locker_id_t,
+                       rados::cls::lock::locker_info_t> lockers_t;
+      lockers_t lockers;
+      ClsLockType lock_type;
+      std::string lock_tag;
+      int r = rados::cls::lock::get_lock_info(&md_ctx, object_map_name(id),
+                                              RBD_LOCK_NAME, &lockers,
+                                              &lock_type, &lock_tag);
+      if (r == -ENOENT) {
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "failed to list object map locks: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+
+      ldout(cct, 10) << "breaking current object map lock" << dendl;
+      for (lockers_t::iterator it = lockers.begin();
+           it != lockers.end(); ++it) {
+        const rados::cls::lock::locker_id_t &locker = it->first;
+        r = rados::cls::lock::break_lock(&md_ctx, object_map_name(id),
+                                         RBD_LOCK_NAME, locker.cookie,
+                                         locker.locker);
+        if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "failed to break object map lock: " << cpp_strerror(r)
+                     << dendl;
+          return r;
+        }
+      }
+
+
+
+      broke_lock = true;
+    }
+    return 0;
+  }
+
+  int ImageCtx::unlock_object_map()
+  {
+    if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+      return 0;
+    }
+
+    int r = rados::cls::lock::unlock(&md_ctx, object_map_name(id),
+                                     RBD_LOCK_NAME, "");
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to release object map lock: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  }
+
   bool ImageCtx::object_may_exist(uint64_t object_no) const
   {
     // Fall back to default logic if object map is disabled or invalid
@@ -740,9 +813,13 @@ namespace librbd {
     uint64_t num_objs = Striper::get_num_objects(layout, get_current_size());
     ldout(cct, 20) << "resizing object map: " << num_objs << dendl;
     librados::ObjectWriteOperation op;
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
     cls_client::object_map_resize(&op, num_objs, default_object_state);
     int r = data_ctx.operate(object_map_name(id), &op);
-    if (r < 0) {
+    if (r == -EBUSY) {
+      lderr(cct) << "object map lock not owned by client" << dendl;
+      return r;
+    } else if (r < 0) {
       lderr(cct) << "error resizing object map: size=" << num_objs << ", "
                  << "state=" << default_object_state << ", "
                  << "error=" << cpp_strerror(r) << dendl;
@@ -800,10 +877,14 @@ namespace librbd {
 		   << static_cast<uint32_t>(new_state) << dendl;
 
     librados::ObjectWriteOperation op;
+    rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
     cls_client::object_map_update(&op, start_object_no, end_object_no,
                                   new_state, current_state);
     int r = data_ctx.operate(object_map_name(id), &op);
-    if (r < 0) {
+    if (r == -EBUSY) {
+      lderr(cct) << "object map lock not owned by client" << dendl;
+      return r;
+    } else if (r < 0) {
       lderr(cct) << "object map update failed: " << cpp_strerror(r) << dendl;
       invalidate_object_map();
     } else {
@@ -814,7 +895,7 @@ namespace librbd {
         }
       }
     }
-    return r;
+    return 0;
   }
 
   void ImageCtx::invalidate_object_map()
