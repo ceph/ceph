@@ -55,6 +55,7 @@ enum {
 
 //#define INTERNAL_TEST
 //#define INTERNAL_TEST2
+//#define INTERNAL_TEST3
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
@@ -1384,8 +1385,17 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
 
   if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
-    cerr << "Export has incompatible features set "
-      << pgb.superblock.compat_features << std::endl;
+    CompatSet unsupported = sb.compat_features.unsupported(pgb.superblock.compat_features);
+
+    cerr << "Export has incompatible features set " << unsupported << std::endl;
+
+    // If shards setting the issue, then inform user what they can do about it.
+    if (unsupported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << std::endl;
+      cerr << "OSD requires sharding to be enabled" << std::endl;
+      cerr << std::endl;
+      cerr << "If you wish to import, first do 'ceph_objectstore_tool...--op set-allow-sharded-objects'" << std::endl;
+    }
     return 1;
   }
 
@@ -1836,7 +1846,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import, list-lost, fix-lost")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1942,7 +1952,7 @@ int main(int argc, char **argv)
     usage(desc);
   }
   if (op != "import" && op != "list-lost" && op != "fix-lost"
-      && op != "list-pgs" && !vm.count("pgid")) {
+      && op != "list-pgs"  && op != "set-allow-sharded-objects" && !vm.count("pgid")) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
   }
@@ -2125,6 +2135,79 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "set-allow-sharded-objects") {
+    // This could only happen if we backport changes to an older release
+    if (!supported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << "Can't enable sharded objects in this release" << std::endl;
+      ret = 1;
+      goto out;
+    }
+    if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) &&
+        fs_sharded_objects) {
+      cerr << "Sharded objects already fully enabled" << std::endl;
+      ret = 0;
+      goto out;
+    }
+    OSDMap curmap;
+    ret = get_osdmap(fs, superblock.current_epoch, curmap);
+    if (ret) {
+        cerr << "Can't find local OSDMap" << std::endl;
+        goto out;
+    }
+
+    // Based on OSDMonitor::check_cluster_features()
+    // XXX: The up state of osds in the last map isn't
+    // as important from a non-running osd.  I'm using
+    // get_all_osds() instead.  An osd which was never
+    // upgraded and never removed would be flagged here.
+    stringstream unsupported_ss;
+    int unsupported_count = 0;
+    uint64_t features = CEPH_FEATURE_OSD_ERASURE_CODES;
+    set<int32_t> all_osds;
+    curmap.get_all_osds(all_osds);
+    for (set<int32_t>::iterator it = all_osds.begin();
+         it != all_osds.end(); ++it) {
+        const osd_xinfo_t &xi = curmap.get_xinfo(*it);
+#ifdef INTERNAL_TEST3
+        // Force one of the OSDs to not have support for erasure codes
+        if (unsupported_count == 0)
+            ((osd_xinfo_t &)xi).features &= ~features;
+#endif
+        if ((xi.features & features) != features) {
+            if (unsupported_count > 0)
+                unsupported_ss << ", ";
+            unsupported_ss << "osd." << *it;
+            unsupported_count ++;
+        }
+    }
+
+    if (unsupported_count > 0) {
+        cerr << "ERASURE_CODES feature unsupported by: "
+           << unsupported_ss.str() << std::endl;
+        ret = 1;
+        goto out;
+    }
+
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    ::encode(superblock, bl);
+    t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+    r = fs->apply_transaction(t);
+    if (r < 0) {
+      cerr << "Error writing OSD superblock: " << cpp_strerror(r) << std::endl;
+      ret = 1;
+      goto out;
+    }
+
+    fs->set_allow_sharded_objects();
+
+    cout << "Enabled on-disk sharded objects" << std::endl;
+
+    ret = 0;
+    goto out;
+  }
+
   // If there was a crash as an OSD was transitioning to sharded objects
   // and hadn't completed a set_allow_sharded_objects().
   // This utility does not want to attempt to finish that transition.
@@ -2135,6 +2218,8 @@ int main(int argc, char **argv)
       cerr << "FileStore sharded but OSD not set, Corruption?" << std::endl;
     else
       cerr << "Found incomplete transition to sharded objects" << std::endl;
+    cerr << std::endl;
+    cerr << "Use --op set-allow-sharded-objects to repair" << std::endl;
     ret = EINVAL;
     goto out;
   }
