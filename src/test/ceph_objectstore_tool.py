@@ -417,7 +417,11 @@ def main(argv):
     print "Test invalid parameters"
     # On export can't use stdout to a terminal
     cmd = (CFSD_PREFIX + "--op export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
+
+    # On export can't use stdout to a terminal
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
 
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
     foofd = open(OTHERFILE, "w")
@@ -433,7 +437,11 @@ def main(argv):
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
+
+    # On import can't use stdin from a terminal
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
 
     # Specify a bad --type
     cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
@@ -708,7 +716,12 @@ def main(argv):
         for osd in get_osds(pg, OSDDIR):
             mydir = os.path.join(TESTDIR, osd)
             fname = os.path.join(mydir, pg)
-            cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+            if pg == ALLREPPGS[0]:
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} > {file}").format(osd=osd, pg=pg, file=fname)
+            elif pg == ALLREPPGS[1]:
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file - > {file}").format(osd=osd, pg=pg, file=fname)
+            else:
+              cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             if ret != 0:
@@ -735,9 +748,15 @@ def main(argv):
         print "Test pg import"
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
-            for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
+            PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
+            for pg in PGS:
                 file = os.path.join(dir, pg)
-                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
+                if pg == PGS[0]:
+                    cmd = ("cat {file} |".format(file=file) + CFSD_PREFIX + "--op import").format(osd=osd)
+                elif pg == PGS[1]:
+                    cmd = (CFSD_PREFIX + "--op import --file - < {file}").format(osd=osd, file=file)
+                else:
+                    cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
