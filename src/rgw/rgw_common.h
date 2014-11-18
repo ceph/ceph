@@ -217,7 +217,7 @@ struct rgw_err {
   std::string message;
 };
 
-/* Helper class used for XMLArgs parsing */
+/* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
    string str;
@@ -233,7 +233,7 @@ class NameVal
 };
 
 /** Stores the XML arguments associated with the HTTP request in req_state*/
-class XMLArgs
+class RGWHTTPArgs
 {
   string str, empty_str;
   map<string, string> val_map;
@@ -242,7 +242,7 @@ class XMLArgs
 
   bool has_resp_modifier;
  public:
-  XMLArgs() : has_resp_modifier(false) {}
+  RGWHTTPArgs() : has_resp_modifier(false) {}
   /** Set the arguments; as received */
   void set(string s) {
     has_resp_modifier = false;
@@ -258,7 +258,7 @@ class XMLArgs
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
 
-  /** see if a parameter is contained in this XMLArgs */
+  /** see if a parameter is contained in this RGWHTTPArgs */
   bool exists(const char *name) {
     map<string, string>::iterator iter = val_map.find(name);
     return (iter != val_map.end());
@@ -854,7 +854,7 @@ class RGWClientIO;
 
 struct req_info {
   RGWEnv *env;
-  XMLArgs args;
+  RGWHTTPArgs args;
   map<string, string> x_meta_map;
 
   const char *host;

@@ -596,7 +596,7 @@ public:
     last_ofs = 0;
   }
 
-  static bool parse_copy_location(const char *src, string& bucket_name, rgw_obj_key& object);
+  static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
     RGWOp::init(store, s, h);
