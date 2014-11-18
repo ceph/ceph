@@ -626,7 +626,9 @@ class Placeholder(object):
 
 def substitute_placeholders(input_dict, values_dict):
     """
-    Replace any Placeholder instances with values named in values_dict.
+    Replace any Placeholder instances with values named in values_dict. In the
+    case of None values, the key is omitted from the result.
+
     Searches through nested dicts.
 
     :param input_dict:  A dict which may contain one or more Placeholder
@@ -639,10 +641,13 @@ def substitute_placeholders(input_dict, values_dict):
     input_dict = copy.deepcopy(input_dict)
 
     def _substitute(input_dict, values_dict):
-        for (key, value) in input_dict.iteritems():
+        for key, value in input_dict.items():
             if isinstance(value, dict):
                 _substitute(value, values_dict)
             elif isinstance(value, Placeholder):
+                if values_dict[value.name] is None:
+                    del input_dict[key]
+                    continue
                 # If there is a Placeholder without a corresponding entry in
                 # values_dict, we will hit a KeyError - we want this.
                 input_dict[key] = values_dict[value.name]
