@@ -974,7 +974,7 @@ namespace librados
     /// acknowledge a notify we received.
     void notify_ack(const std::string& o, ///< watched object
 		    uint64_t notify_id,   ///< notify id
-		    uint64_t handle,      ///< our watch handle
+		    uint64_t cookie,      ///< our watch handle
 		    bufferlist& bl);      ///< optional reply payload
 
     /***
@@ -988,17 +988,17 @@ namespace librados
      * be destroyed with unwatch().  The the user is still interested
      * in the object, a new watch should be created with watch().
      *
-     * @param handle watch handle
+     * @param cookie watch handle
      * @returns ms since last confirmed valid, or error
      */
-    int watch_check(uint64_t handle);
+    int watch_check(uint64_t cookie);
 
     // old, deprecated versions
-    int watch(const std::string& o, uint64_t ver, uint64_t *handle,
+    int watch(const std::string& o, uint64_t ver, uint64_t *cookie,
 	      librados::WatchCtx *ctx) __attribute__ ((deprecated));
     int notify(const std::string& o, uint64_t ver, bufferlist& bl)
       __attribute__ ((deprecated));
-    int unwatch(const std::string& o, uint64_t handle)
+    int unwatch(const std::string& o, uint64_t cookie)
       __attribute__ ((deprecated));
 
     /**
