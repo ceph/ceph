@@ -3134,6 +3134,19 @@ reprotect_and_return_err:
     return aio_read(ictx, image_extents, buf, bl, c);
   }
 
+  struct C_RBD_Readahead : public Context {
+    ImageCtx *ictx;
+    object_t oid;
+    uint64_t offset;
+    uint64_t length;
+    C_RBD_Readahead(ImageCtx *ictx, object_t oid, uint64_t offset, uint64_t length)
+      : ictx(ictx), oid(oid), offset(offset), length(length) { }
+    void finish(int r) {
+      ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": " << offset << "+" << length << dendl;
+      ictx->readahead.dec_pending();
+    }
+  };
+
   static void readahead(ImageCtx *ictx,
 			const vector<pair<uint64_t,uint64_t> >& image_extents,
 			const md_config_t *conf)
@@ -3167,19 +3180,6 @@ reprotect_and_return_err:
       for (map<object_t,vector<ObjectExtent> >::iterator p = readahead_object_extents.begin(); p != readahead_object_extents.end(); ++p) {
 	for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	  ldout(ictx->cct, 20) << "(readahead) oid " << q->oid << " " << q->offset << "~" << q->length << dendl;
-
-	  struct C_RBD_Readahead : public Context {
-	    ImageCtx *ictx;
-	    object_t oid;
-	    uint64_t offset;
-	    uint64_t length;
-	    C_RBD_Readahead(ImageCtx *ictx, object_t oid, uint64_t offset, uint64_t length)
-	      : ictx(ictx), oid(oid), offset(offset), length(length) { }
-	    void finish(int r) {
-	      ldout(ictx->cct, 20) << "C_RBD_Readahead on " << oid << ": " << offset << "+" << length << dendl;
-	      ictx->readahead.dec_pending();
-	    }
-	  };
 
 	  Context *req_comp = new C_RBD_Readahead(ictx, q->oid, q->offset, q->length);
 	  ictx->readahead.inc_pending();
