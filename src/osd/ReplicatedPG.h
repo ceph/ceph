@@ -197,6 +197,21 @@ public:
   friend class CopyFromCallback;
   friend class PromoteCallback;
 
+  struct ProxyReadOp {
+    OpRequestRef op;
+    hobject_t soid;
+    ceph_tid_t objecter_tid;
+    vector<OSDOp> &ops;
+    version_t user_version;
+    int data_offset;
+
+    ProxyReadOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
+      : op(_op), soid(oid),
+        objecter_tid(0), ops(_ops),
+	user_version(0), data_offset(0) { }
+  };
+  typedef boost::shared_ptr<ProxyReadOp> ProxyReadOpRef;
+
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
     OpRequestRef op;            ///< initiating op
@@ -558,6 +573,22 @@ public:
 	snapset = &_ssc->snapset;
       }
     }
+    OpContext(OpRequestRef _op, osd_reqid_t _reqid,
+              vector<OSDOp>& _ops, ReplicatedPG *_pg) :
+      op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
+      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      bytes_written(0), bytes_read(0), user_at_version(0),
+      current_osd_subop_num(0),
+      op_t(NULL),
+      data_off(0), reply(NULL), pg(_pg),
+      num_read(0),
+      num_write(0),
+      copy_cb(NULL),
+      async_read_result(0),
+      inflightreads(0),
+      lock_to_release(NONE),
+      on_finish(NULL),
+      release_snapset_obc(false) { }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
@@ -1266,6 +1297,15 @@ protected:
 
   bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
+
+  // -- proxyread --
+  map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
+  map<hobject_t, list<OpRequestRef> > in_progress_proxy_reads;
+
+  void do_proxy_read(OpRequestRef op);
+  void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
+
+  friend struct C_ProxyRead;
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
