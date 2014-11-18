@@ -1110,7 +1110,7 @@ class TestOSD(TestArgparse):
                                                         'toomany']))
 
     def test_tier_cache_mode(self):
-        for mode in ('none', 'writeback', 'forward', 'readonly', 'readforward'):
+        for mode in ('none', 'writeback', 'forward', 'readonly', 'readforward', 'readproxy'):
             self.assert_valid_command(['osd', 'tier', 'cache-mode',
                                        'poolname', mode])
         assert_equal({}, validate_command(sigdict, ['osd', 'tier',
