@@ -42,6 +42,7 @@ cls_method_handle_t h_unlock_op;
 cls_method_handle_t h_break_lock;
 cls_method_handle_t h_get_info;
 cls_method_handle_t h_list_locks;
+cls_method_handle_t h_assert_locked;
 
 #define LOCK_PREFIX    "lock."
 
@@ -438,6 +439,78 @@ static int list_locks(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return 0;
 }
 
+/**
+ * Assert that the object is currently locked
+ *
+ * Input:
+ * @param cls_lock_assert_op request input
+ *
+ * Output:
+ * @param none
+ *
+ * @return 0 on success, -errno on failure.
+ */
+int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "assert_locked");
+
+  cls_lock_assert_op op;
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(op, iter);
+  } catch (const buffer::error& err) {
+    return -EINVAL;
+  }
+
+  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+    return -EINVAL;
+  }
+
+  if (op.name.empty()) {
+    return -EINVAL;
+  }
+
+  // see if there's already a locker
+  lock_info_t linfo;
+  int r = read_lock(hctx, op.name, &linfo);
+  if (r < 0) {
+    CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (linfo.lockers.empty()) {
+    CLS_LOG(20, "object not locked");
+    return -EBUSY;
+  }
+
+  if (linfo.lock_type != op.type) {
+    CLS_LOG(20, "lock type mismatch: current=%s, assert=%s",
+            cls_lock_type_str(linfo.lock_type), cls_lock_type_str(op.type));
+    return -EBUSY;
+  }
+
+  if (linfo.tag != op.tag) {
+    CLS_LOG(20, "lock tag mismatch: current=%s, assert=%s", linfo.tag.c_str(),
+            op.tag.c_str());
+    return -EBUSY;
+  }
+
+  entity_inst_t inst;
+  r = cls_get_request_origin(hctx, &inst);
+  assert(r == 0);
+
+  locker_id_t id;
+  id.cookie = op.cookie;
+  id.locker = inst.name;
+
+  map<locker_id_t, locker_info_t>::iterator iter = linfo.lockers.find(id);
+  if (iter == linfo.lockers.end()) {
+    CLS_LOG(20, "not locked by assert client");
+    return -EBUSY;
+  }
+  return 0;
+}
+
 void __cls_init()
 {
   CLS_LOG(20, "Loaded lock class!");
@@ -458,6 +531,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "list_locks",
                           CLS_METHOD_RD,
                           list_locks, &h_list_locks);
+  cls_register_cxx_method(h_class, "assert_locked",
+                          CLS_METHOD_RD,
+                          assert_locked, &h_assert_locked);
 
   return;
 }
