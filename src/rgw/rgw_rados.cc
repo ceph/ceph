@@ -2827,16 +2827,17 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
 {
   rgw_bucket bucket;
   rgw_rados_ref ref;
-  rgw_obj& obj = target->get_obj();
   RGWRados *store = target->get_store();
-  int r = store->get_obj_ref(obj, &ref, &bucket);
-  if (r < 0)
-    return r;
 
   ObjectWriteOperation op;
 
   RGWObjState *state;
-  r = target->get_state(&state, false);
+  int r = target->get_state(&state, false);
+  if (r < 0)
+    return r;
+
+  rgw_obj& obj = state->obj;
+  r = store->get_obj_ref(obj, &ref, &bucket);
   if (r < 0)
     return r;
 
@@ -2912,7 +2913,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   index_tag = state->write_tag;
 
   RGWRados::Bucket bop(store, bucket);
-  RGWRados::Bucket::UpdateIndex index_op(&bop, target->get_obj(), state);
+  RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
   r = index_op.prepare(CLS_RGW_OP_ADD);
   if (r < 0)
@@ -4245,18 +4246,8 @@ int RGWRados::get_obj_state(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState **stat
 
 int RGWRados::Object::Read::get_attr(const char *name, bufferlist& dest)
 {
-  RGWRados *store = source->get_store();
-  rgw_obj& obj = source->get_obj();
-
-  rgw_rados_ref ref;
-  rgw_bucket bucket;
-  int r = store->get_obj_ref(obj, &ref, &bucket, true);
-  if (r < 0) {
-    return r;
-  }
-
   RGWObjState *state;
-  r = source->get_state(&state, true);
+  int r = source->get_state(&state, true);
   if (r < 0)
     return r;
   if (!state->exists)
