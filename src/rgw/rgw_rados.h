@@ -1411,6 +1411,7 @@ public:
 
       struct GetObjState {
         librados::IoCtx io_ctx;
+        rgw_obj obj;
       } state;
       
       struct ConditionParams {
