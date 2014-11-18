@@ -648,7 +648,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  cout << "Read " << obj << std::endl;
+  cerr << "Read " << obj << std::endl;
 
   total = st.st_size;
   if (debug)
@@ -791,7 +791,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cout << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -1939,9 +1939,9 @@ int main(int argc, char **argv)
 
   file_fd = fd_none;
   if (op == "export") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (outistty) {
-        cerr << "stdout is a tty and no --file option specified" << std::endl;
+        cerr << "stdout is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDOUT_FILENO;
@@ -1949,9 +1949,9 @@ int main(int argc, char **argv)
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
   } else if (op == "import") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
-        cerr << "stdin is a tty and no --file option specified" << std::endl;
+        cerr << "stdin is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDIN_FILENO;
@@ -2490,8 +2490,8 @@ int main(int argc, char **argv)
 
     if (op == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
-      if (ret == 0 && file_fd != STDOUT_FILENO)
-        cout << "Export successful" << std::endl;
+      if (ret == 0)
+        cerr << "Export successful" << std::endl;
     } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);
