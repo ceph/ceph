@@ -69,43 +69,66 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   /* bind to port */
   int rc = -1;
-  if (listen_addr.get_port()) {
-    // specific port
+  int r = -1;
 
-    // reuse addr+port when possible
-    int on = 1;
-    rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    if (rc < 0) {
-      lderr(msgr->cct) << "accepter.bind unable to setsockopt: "
-			 << cpp_strerror(errno) << dendl;
-      return -errno;
+  for (int i = 0; i < conf->ms_bind_retry_count; i++) {
+
+    if (i > 0) {
+        lderr(msgr->cct) << "accepter.bind was unable to bind. Trying again in " << conf->ms_bind_retry_delay << " seconds " << dendl;
+        sleep(conf->ms_bind_retry_delay);
     }
 
-    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
-    if (rc < 0) {
-      lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-		       << ": " << cpp_strerror(errno) << dendl;
-      return -errno;
+    if (listen_addr.get_port()) {
+        // specific port
+
+        // reuse addr+port when possible
+        int on = 1;
+        rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+        if (rc < 0) {
+            lderr(msgr->cct) << "accepter.bind unable to setsockopt: "
+                             << cpp_strerror(errno) << dendl;
+            r = -errno;
+            continue;
+        }
+
+        rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
+        if (rc < 0) {
+            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
+                             << ": " << cpp_strerror(errno) << dendl;
+            r = -errno;
+            continue;
+        }
+    } else {
+        // try a range of ports
+        for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
+            if (avoid_ports.count(port))
+                continue;
+
+            listen_addr.set_port(port);
+            rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
+            if (rc == 0)
+                break;
+        }
+        if (rc < 0) {
+            lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
+                             << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
+                             << "-" << msgr->cct->_conf->ms_bind_port_max
+                             << ": " << cpp_strerror(errno)
+                             << dendl;
+            r = -errno;
+            continue;
+        }
+        ldout(msgr->cct,10) << "accepter.bind bound on random port " << listen_addr << dendl;
     }
-  } else {
-    // try a range of ports
-    for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
-      if (avoid_ports.count(port))
-	continue;
-      listen_addr.set_port(port);
-      rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
-      if (rc == 0)
-	break;
-    }
-    if (rc < 0) {
-      lderr(msgr->cct) << "accepter.bind unable to bind to " << listen_addr.ss_addr()
-		       << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
-		       << "-" << msgr->cct->_conf->ms_bind_port_max
-		       << ": " << cpp_strerror(errno)
-		       << dendl;
-      return -errno;
-    }
-    ldout(msgr->cct,10) << "accepter.bind bound on random port " << listen_addr << dendl;
+
+    if (rc == 0)
+        break;
+  }
+
+  // It seems that binding completely failed, return with that exit status
+  if (rc < 0) {
+      lderr(msgr->cct) << "accepter.bind was unable to bind after " << conf->ms_bind_retry_count << " attempts: " << cpp_strerror(errno) << dendl;
+      return r;
   }
 
   // what port did we get?
