@@ -144,10 +144,12 @@ void ReplicatedPG::OpContext::finish_read(ReplicatedPG *pg)
   assert(inflightreads > 0);
   --inflightreads;
   if (async_reads_complete()) {
+    pg->lock();
     assert(pg->in_progress_async_reads.size());
     assert(pg->in_progress_async_reads.front().second == this);
     pg->in_progress_async_reads.pop_front();
     pg->complete_read_ctx(async_read_result, this);
+    pg->unlock();
   }
 }
 
