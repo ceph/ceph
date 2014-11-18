@@ -128,6 +128,11 @@ TEST_F(LibRadosWatchNotify, WatchNotify) {
   TestAlarm alarm;
   sem_wait(&sem);
   rados_unwatch(ioctx, "foo", handle);
+
+  // when dne ...
+  ASSERT_EQ(-ENOENT,
+      rados_watch(ioctx, "dne", 0, &handle, watch_notify_test_cb, NULL));
+
   sem_destroy(&sem);
 }
 
