@@ -182,15 +182,41 @@ Configuring Glance
 ------------------
 
 Glance can use multiple back ends to store images. To use Ceph block devices by
-default, edit ``/etc/glance/glance-api.conf`` and add::
+default, configure Glance like the following.
 
-    default_store=rbd
-    rbd_store_user=glance
-    rbd_store_pool=images
+Prior to Juno
+~~~~~~~~~~~~~~
 
-If you want to enable copy-on-write cloning of images, also add::
+Edit ``/etc/glance/glance-api.conf`` and add under the ``[DEFAULT]`` section::
 
-    show_image_direct_url=True
+    default_store = rbd
+    rbd_store_user = glance
+    rbd_store_pool = images
+    rbd_store_chunk_size = 8
+
+
+Juno
+~~~~
+
+Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
+
+    [glance_store]
+    stores = rbd
+    rbd_store_pool = images
+    rbd_store_user = glance
+    rbd_store_ceph_conf = /etc/ceph/ceph.conf
+    rbd_store_chunk_size = 8
+
+
+For more information about the configuration options available in Glance please see: http://docs.openstack.org/trunk/config-reference/content/section_glance-api.conf.html.
+
+
+Any OpenStack version
+~~~~~~~~~~~~~~~~~~~~~
+
+If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
+
+    show_image_direct_url = True
 
 Note that this exposes the back end location via Glance's API, so the endpoint
 with this option enabled should not be publicly accessible.
@@ -201,6 +227,7 @@ assuming your configuration file has ``flavor = keystone+cachemanagement``::
     [paste_deploy]
     flavor = keystone
 
+
 Configuring Cinder
 ------------------
 
@@ -208,23 +235,23 @@ OpenStack requires a driver to interact with Ceph block devices. You must also
 specify the pool name for the block device. On your OpenStack node, edit
 ``/etc/cinder/cinder.conf`` by adding::
 
-    volume_driver=cinder.volume.drivers.rbd.RBDDriver
-    rbd_pool=volumes
-    rbd_ceph_conf=/etc/ceph/ceph.conf
-    rbd_flatten_volume_from_snapshot=false
-    rbd_max_clone_depth=5
-    rbd_store_chunk_size=4
-    rados_connect_timeout=-1
-    glance_api_version=2
+    volume_driver = cinder.volume.drivers.rbd.RBDDriver
+    rbd_pool = volumes
+    rbd_ceph_conf = /etc/ceph/ceph.conf
+    rbd_flatten_volume_from_snapshot = false
+    rbd_max_clone_depth = 5
+    rbd_store_chunk_size = 4
+    rados_connect_timeout = -1
+    glance_api_version = 2
 
 If you're using `cephx authentication`_, also configure the user and uuid of
 the secret you added to ``libvirt`` as documented earlier::
 
-    rbd_user=cinder
-    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+    rbd_user = cinder
+    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
 Note that if you are configuring multiple cinder back ends,
-``glance_api_version=2`` must be in the ``[DEFAULT]`` section.
+``glance_api_version = 2`` must be in the ``[DEFAULT]`` section.
 
 
 Configuring Cinder Backup
@@ -233,14 +260,14 @@ Configuring Cinder Backup
 OpenStack Cinder Backup requires a specific daemon so don't forget to install it.
 On your Cinder Backup node, edit ``/etc/cinder/cinder.conf`` and add::
 
-    backup_driver=cinder.backup.drivers.ceph
-    backup_ceph_conf=/etc/ceph/ceph.conf
-    backup_ceph_user=cinder-backup
-    backup_ceph_chunk_size=134217728
-    backup_ceph_pool=backups
-    backup_ceph_stripe_unit=0
-    backup_ceph_stripe_count=0
-    restore_discard_excess_bytes=true
+    backup_driver = cinder.backup.drivers.ceph
+    backup_ceph_conf = /etc/ceph/ceph.conf
+    backup_ceph_user = cinder-backup
+    backup_ceph_chunk_size = 134217728
+    backup_ceph_pool = backups
+    backup_ceph_stripe_unit = 0
+    backup_ceph_stripe_count = 0
+    restore_discard_excess_bytes = true
 
 
 Configuring Nova to attach Ceph RBD block device
@@ -251,8 +278,8 @@ from volume), you must tell Nova (and libvirt) which user and UUID to refer to
 when attaching the device. libvirt will refer to this user when connecting and
 authenticating with the Ceph cluster. ::
 
-    rbd_user=cinder
-    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+    rbd_user = cinder
+    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
 These two flags are also used by the Nova ephemeral backend.
 
@@ -293,11 +320,11 @@ order to take advantage of the copy-on-write clone functionality.
 
 On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 
-    libvirt_images_type=rbd
-    libvirt_images_rbd_pool=vms
-    libvirt_images_rbd_ceph_conf=/etc/ceph/ceph.conf
-    rbd_user=cinder
-    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+    libvirt_images_type = rbd
+    libvirt_images_rbd_pool = vms
+    libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
+    rbd_user = cinder
+    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
 It is also a good practice to disable file injection. While booting an
 instance, Nova usually attempts to open the rootfs of the virtual machine.
@@ -307,9 +334,9 @@ filesystem. However, it is better to rely on the metadata service and
 
 On every Compute node, edit ``/etc/nova/nova.conf`` and add::
 
-    libvirt_inject_password=false
-    libvirt_inject_key=false
-    libvirt_inject_partition=-2
+    libvirt_inject_password = false
+    libvirt_inject_key = false
+    libvirt_inject_partition = -2
 
 To ensure a proper live-migration, use the following flags::
 
@@ -324,11 +351,11 @@ On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]``
 section and add::
 
     [libvirt]
-    images_type=rbd
-    images_rbd_pool=vms
-    images_rbd_ceph_conf=/etc/ceph/ceph.conf
-    rbd_user=cinder
-    rbd_secret_uuid=457eb676-33da-42ec-9a8c-9293d545c337
+    images_type = rbd
+    images_rbd_pool = vms
+    images_rbd_ceph_conf = /etc/ceph/ceph.conf
+    rbd_user = cinder
+    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
 
 
 It is also a good practice to disable file injection. While booting an
@@ -340,9 +367,9 @@ filesystem. However, it is better to rely on the metadata service and
 On every Compute node, edit ``/etc/nova/nova.conf`` and add the following
 under the ``[libvirt]`` section::
 
-    inject_password=false
-    inject_key=false
-    inject_partition=-2
+    inject_password = false
+    inject_key = false
+    inject_partition = -2
 
 To ensure a proper live-migration, use the following flags::
 
