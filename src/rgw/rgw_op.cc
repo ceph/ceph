@@ -2123,29 +2123,48 @@ void RGWDeleteObj::execute()
   }
 }
 
-bool RGWCopyObj::parse_copy_location(const char *src, string& bucket_name, rgw_obj_key& object)
+
+bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name, rgw_obj_key& key)
 {
-  string url_src(src);
+  string name_str;
+  string params_str;
+
+  int pos = url_src.find('?');
+  if (pos < 0) {
+    name_str = url_src;
+  } else {
+    name_str = url_src.substr(0, pos);
+    params_str = url_src.substr(pos + 1);
+  }
+
+
   string dec_src;
 
-  url_decode(url_src, dec_src);
-  src = dec_src.c_str();
+  url_decode(name_str, dec_src);
+  const char *src = dec_src.c_str();
 
   if (*src == '/') ++src;
 
   string str(src);
 
-  int pos = str.find("/");
+  pos = str.find("/");
   if (pos <= 0)
     return false;
 
   bucket_name = str.substr(0, pos);
-  string key = str.substr(pos + 1);
+  key.name = str.substr(pos + 1);
 
-  if (key.empty())
+  if (key.name.empty()) {
     return false;
+  }
 
-  object = rgw_obj_key(key);
+  if (!params_str.empty()) {
+    RGWHTTPArgs args;
+    args.set(params_str);
+    args.parse();
+
+    key.instance = args.get("versionId", NULL);
+  }
 
   return true;
 }
