@@ -266,6 +266,12 @@ void ReplicatedPG::on_local_recover(
     assert(obc);
     obc->obs.exists = true;
     obc->ondisk_write_lock();
+
+    bool got = obc->get_recovery_read();
+    assert(got);
+
+    assert(recovering.count(obc->obs.oi.soid));
+    recovering[obc->obs.oi.soid] = obc;
     obc->obs.oi = recovery_info.oi;  // may have been updated above
 
 
@@ -311,12 +317,17 @@ void ReplicatedPG::on_global_recover(
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
   map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
-  if (backfills_in_flight.count(soid)) {
-    list<OpRequestRef> requeue_list;
-    i->second->drop_recovery_read(&requeue_list);
-    requeue_ops(requeue_list);
+
+  // recover missing won't have had an obc, but it gets filled in
+  // during on_local_recover
+  assert(i->second);
+  list<OpRequestRef> requeue_list;
+  i->second->drop_recovery_read(&requeue_list);
+  requeue_ops(requeue_list);
+
+  if (backfills_in_flight.count(soid))
     backfills_in_flight.erase(soid);
-  }
+
   recovering.erase(i);
   finish_recovery_op(soid);
   if (waiting_for_degraded_object.count(soid)) {
@@ -10382,17 +10393,24 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   last_backfill_started = hobject_t();
-  list<OpRequestRef> blocked_ops;
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
-    recovering[*i]->drop_recovery_read(&blocked_ops);
-    requeue_ops(blocked_ops);
     backfills_in_flight.erase(i++);
+  }
+
+  list<OpRequestRef> blocked_ops;
+  for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
+       i != recovering.end();
+       recovering.erase(i++)) {
+    if (i->second) {
+      i->second->drop_recovery_read(&blocked_ops);
+      requeue_ops(blocked_ops);
+    }
   }
   assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
-  recovering.clear();
+  assert(recovering.empty());
   pgbackend->clear_recovery_state();
 }
 
@@ -10814,6 +10832,15 @@ int ReplicatedPG::prep_object_replica_pushes(
 			<< ", will try copies on " << missing_loc.get_locations(soid)
 			<< "\n";
     return 0;
+  }
+
+  if (!obc->get_recovery_read()) {
+    dout(20) << "recovery delayed on " << soid
+	     << "; could not get rw_manager lock" << dendl;
+    return 0;
+  } else {
+    dout(20) << "recovery got recovery read lock on " << soid
+	     << dendl;
   }
 
   start_recovery_op(soid);
