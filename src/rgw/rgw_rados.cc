@@ -4540,7 +4540,6 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
 int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 {
   RGWRados *store = source->get_store();
-  rgw_obj& obj = source->get_obj();
   CephContext *cct = store->ctx();
 
   bufferlist etag;
@@ -4551,18 +4550,20 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
   map<string, bufferlist>::iterator iter;
 
-  int r = store->get_obj_ioctx(obj, &state.io_ctx);
-  if (r < 0) {
-    return r;
-  }
-
   RGWObjState *astate;
-  r = source->get_state(&astate, true);
+  int r = source->get_state(&astate, true);
   if (r < 0)
     return r;
 
   if (!astate->exists) {
     return -ENOENT;
+  }
+
+  state.obj = astate->obj;
+
+  r = store->get_obj_ioctx(state.obj, &state.io_ctx);
+  if (r < 0) {
+    return r;
   }
 
   if (params.attrs) {
@@ -4770,12 +4771,11 @@ int RGWRados::Bucket::UpdateIndex::cancel()
 int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
 {
   RGWRados *store = source->get_store();
-  rgw_obj& obj = source->get_obj();
   CephContext *cct = store->ctx();
 
   rgw_bucket bucket;
   std::string oid, key;
-  rgw_obj read_obj = obj;
+  rgw_obj read_obj = state.obj;
   uint64_t read_ofs = ofs;
   uint64_t len, read_len;
   bool reading_from_head = true;
@@ -4787,7 +4787,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   uint64_t max_chunk_size;
 
 
-  get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
+  get_obj_bucket_and_oid_loc(state.obj, bucket, oid, key);
 
   RGWObjState *astate;
   int r = source->get_state(&astate, true);
@@ -4807,7 +4807,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
     read_obj = iter.get_location();
     len = min(len, iter.get_stripe_size() - (ofs - stripe_ofs));
     read_ofs = iter.location_ofs() + (ofs - stripe_ofs);
-    reading_from_head = (read_obj == obj);
+    reading_from_head = (read_obj == state.obj);
 
     if (!reading_from_head) {
       get_obj_bucket_and_oid_loc(read_obj, bucket, oid, key);
@@ -5307,7 +5307,6 @@ done_err:
 int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 {
   RGWRados *store = source->get_store();
-  rgw_obj& obj = source->get_obj();
   CephContext *cct = store->ctx();
 
   struct get_obj_data *data = new get_obj_data(cct);
@@ -5319,7 +5318,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   data->io_ctx.dup(state.io_ctx);
   data->client_cb = cb;
 
-  int r = store->iterate_obj(obj_ctx, obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
+  int r = store->iterate_obj(obj_ctx, state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
   if (r < 0) {
     data->cancel_all_io();
     goto done;
