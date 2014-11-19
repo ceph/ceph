@@ -83,7 +83,7 @@ public:
   void check_recovery_sources(const OSDMapRef osdmap);
 
   void on_change();
-  void clear_state();
+  void clear_recovery_state();
 
   void on_flushed();
 
