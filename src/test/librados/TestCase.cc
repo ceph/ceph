@@ -327,7 +327,14 @@ void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
   for (NObjectIterator it = ioctx.nobjects_begin();
        it != ioctx.nobjects_end(); ++it) {
     ioctx.locator_set_key(it->get_locator());
-    ASSERT_EQ(0, ioctx.remove(it->get_oid()));
+    ObjectWriteOperation op;
+    op.remove();
+    librados::AioCompletion *completion = s_cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
+				   librados::OPERATION_IGNORE_CACHE));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
   }
 }
 
