@@ -3918,6 +3918,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    } else {
 	      t->remove(soid);
 	    }
+            ctx->initial_new_snapset();
 	  }
 	  ctx->mod_desc.create();
 	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
@@ -4818,7 +4819,6 @@ int ReplicatedPG::_verify_no_head_clones(const hobject_t& soid,
 
 inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
 {
-  SnapSet& snapset = ctx->new_snapset;
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
@@ -4872,15 +4872,17 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     dout(20) << __func__ << " deleting whiteout on " << soid << dendl;
     ctx->delta_stats.num_whiteouts--;
   }
-  if (soid.is_head())
-    snapset.head_exists = false;
+  if (soid.is_head()) {
+    ctx->initial_new_snapset();
+    ctx->new_snapset.head_exists = false;
+  }
   obs.exists = false;
   return 0;
 }
 
 int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 {
-  SnapSet& snapset = ctx->new_snapset;
+  const SnapSet* snapset = ctx->get_new_snapset();
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
@@ -4955,16 +4957,17 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	  t->remove(soid);
 	}
       }
+      ctx->initial_new_snapset();
       ctx->mod_desc.create();
       t->clone(rollback_to_sobject, soid);
-      snapset.head_exists = true;
+      ctx->new_snapset.head_exists = true;
 
-      map<snapid_t, interval_set<uint64_t> >::iterator iter =
-	snapset.clone_overlap.lower_bound(snapid);
+      map<snapid_t, interval_set<uint64_t> >::const_iterator iter =
+	snapset->clone_overlap.lower_bound(snapid);
       interval_set<uint64_t> overlaps = iter->second;
-      assert(iter != snapset.clone_overlap.end());
+      assert(iter != snapset->clone_overlap.end());
       for ( ;
-	    iter != snapset.clone_overlap.end();
+	    iter != snapset->clone_overlap.end();
 	    ++iter)
 	overlaps.intersection_of(iter->second);
 
@@ -4984,7 +4987,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
       obs.oi.size = rollback_to->obs.oi.size;
-      snapset.head_exists = true;
+      ctx->new_snapset.head_exists = true;
     }
   }
   return ret;
@@ -5014,7 +5017,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // clone?
   assert(soid.snap == CEPH_NOSNAP);
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
-	   << "  snapc=" << snapc << dendl;
+           << "  snapc=" << snapc << dendl;
   
   bool was_dirty = ctx->obc->obs.oi.is_dirty();
   if (ctx->new_obs.exists) {
@@ -5053,9 +5056,11 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   // use newer snapc?
-  if (ctx->new_snapset.seq > snapc.seq) {
-    snapc.seq = ctx->new_snapset.seq;
-    snapc.snaps = ctx->new_snapset.snaps;
+  const SnapSet* new_snapset = ctx->get_new_snapset();
+  // use newer snapc?
+  if (new_snapset->seq > snapc.seq) {
+    snapc.seq = new_snapset->seq;
+    snapc.snaps = new_snapset->snaps;
     dout(10) << " using newer snapc " << snapc << dendl;
   }
 
@@ -5065,8 +5070,9 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_evict &&
-      snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
+      snapc.snaps[0] > new_snapset->seq) {  // existing object is old
     // clone
+    ctx->initial_new_snapset();
     hobject_t coid = soid;
     coid.snap = snapc.seq;
     
@@ -5138,17 +5144,23 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   // update most recent clone_overlap and usage stats
-  if (ctx->new_snapset.clones.size() > 0) {
+  new_snapset = ctx->get_new_snapset();
+  if (new_snapset->clones.size() > 0) {
     /* we need to check whether the most recent clone exists, if it's been evicted,
      * it's not included in the stats */
     hobject_t last_clone_oid = soid;
-    last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
+    last_clone_oid.snap = new_snapset->clone_overlap.rbegin()->first;
     if (is_present_clone(last_clone_oid)) {
-      interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
+      interval_set<uint64_t> newest_overlap = new_snapset->clone_overlap.rbegin()->second;
+      const interval_set<uint64_t>& old_overlap = new_snapset->clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
       add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
       newest_overlap.subtract(ctx->modified_ranges);
+      if (!(ctx->modified_ranges.empty()) && old_overlap != newest_overlap) {
+        ctx->initial_new_snapset();
+        ctx->new_snapset.clone_overlap.rbegin()->second.swap(newest_overlap);
+      }
     }
   }
   
@@ -5158,9 +5170,14 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   ctx->op_t = t;
 
   // update snapset with latest snap context
-  ctx->new_snapset.seq = snapc.seq;
-  ctx->new_snapset.snaps = snapc.snaps;
-  ctx->new_snapset.head_exists = ctx->new_obs.exists;
+  new_snapset = ctx->get_new_snapset();
+  if (new_snapset->seq != snapc.seq || new_snapset->snaps != snapc.snaps ||
+       new_snapset->head_exists != ctx->new_obs.exists) {
+    ctx->initial_new_snapset();
+    ctx->new_snapset.seq = snapc.seq;
+    ctx->new_snapset.snaps = snapc.snaps;
+    ctx->new_snapset.head_exists = ctx->new_obs.exists;
+  }
   dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
 }
 
@@ -5361,9 +5378,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   // snapset
   bufferlist bss;
 
+  const SnapSet* new_snapset = ctx->get_new_snapset();
   if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
-    ::encode(ctx->new_snapset, bss);
-    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+    ::encode(*new_snapset, bss);
+    assert(ctx->new_obs.exists == new_snapset->head_exists);
 
     if (ctx->new_obs.exists) {
       if (!ctx->obs->exists) {
@@ -5390,12 +5408,12 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  ctx->snapset_obc->obs.exists = false;
 	}
       }
-    } else if (ctx->new_snapset.clones.size() &&
+    } else if (new_snapset->clones.size() &&
 	       !ctx->cache_evict) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
-      dout(10) << " final snapset " << ctx->new_snapset
+      dout(10) << " final snapset " << *new_snapset
 	       << " in " << snapoid << dendl;
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
@@ -5422,7 +5440,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ::encode(ctx->snapset_obc->obs.oi, bv);
       ctx->op_t->touch(snapoid);
       setattr_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t, OI_ATTR, bv);
-      setattr_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t, SS_ATTR, bss);
+      setattr_maybe_cache(ctx->snapset_obc, ctx, ctx->op_t, SS_ATTR, bss, !ctx->modify_snapset);
       if (pool.info.require_rollback()) {
 	map<string, boost::optional<bufferlist> > to_set;
 	to_set[SS_ATTR];
@@ -5467,9 +5485,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, OI_ATTR, bv);
 
     if (soid.snap == CEPH_NOSNAP) {
-      dout(10) << " final snapset " << ctx->new_snapset
+      dout(10) << " final snapset " << *new_snapset
 	       << " in " << soid << dendl;
-      setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
+      setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss, !ctx->modify_snapset);
 
       if (pool.info.require_rollback()) {
 	set<string> changing;
@@ -5522,7 +5540,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = SnapSet();
   } else {
     ctx->obc->ssc->exists = true;
-    ctx->obc->ssc->snapset = ctx->new_snapset;
+    ctx->obc->ssc->snapset = *new_snapset;
   }
 
   info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
@@ -6042,6 +6060,7 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     }
     ctx->mod_desc.mark_unrollbackable();
   }
+  ctx->initial_new_snapset();
 
   if (!obs.exists) {
     ctx->delta_stats.num_objects++;
@@ -6119,6 +6138,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     RepGather *repop = simple_repop_create(obc);
     OpContext *tctx = repop->ctx;
     tctx->at_version = get_next_version();
+    tctx->initial_new_snapset();
     filter_snapc(tctx->new_snapset.snaps);
     vector<snapid_t> new_clones(tctx->new_snapset.clones.size());
     for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
@@ -6233,6 +6253,7 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     }
   }
 
+  tctx->initial_new_snapset();
   if (results->mirror_snapset) {
     assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     tctx->new_snapset.from_snap_set(results->snapset);
@@ -11168,6 +11189,7 @@ void ReplicatedPG::hit_set_persist()
   obc->obs.exists = true;
 
   ctx->new_obs = obc->obs;
+  ctx->initial_new_snapset();
   ctx->new_snapset.head_exists = true;
 
   ctx->delta_stats.num_objects++;
@@ -12435,12 +12457,15 @@ void ReplicatedPG::setattr_maybe_cache(
   OpContext *op,
   PGBackend::PGTransaction *t,
   const string &key,
-  bufferlist &val)
+  bufferlist &val,
+  bool only_pending)
 {
   if (pool.info.require_rollback()) {
     op->pending_attrs[obc][key] = val;
   }
-  t->setattr(obc->obs.oi.soid, key, val);
+  if (!only_pending) {
+    t->setattr(obc->obs.oi.soid, key, val);
+  }
 }
 
 void ReplicatedPG::rmattr_maybe_cache(
