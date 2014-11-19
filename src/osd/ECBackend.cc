@@ -805,7 +805,6 @@ void ECBackend::handle_sub_write(
 {
   if (msg)
     msg->mark_started();
-  assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
