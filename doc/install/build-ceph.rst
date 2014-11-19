@@ -41,17 +41,13 @@ started quickly. Ceph build scripts depend on the following:
 On Ubuntu, execute ``sudo apt-get install`` for each dependency that isn't 
 installed on your host. ::
 
-	sudo apt-get install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config
+	sudo apt-get install autoconf automake autotools-dev libbz2-dev debhelper default-jdk git javahelper junit4 libaio-dev libatomic-ops-dev libbabeltrace-ctf-dev libbabeltrace-dev libblkid-dev libboost-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libcurl4-gnutls-dev libedit-dev libexpat1-dev libfcgi-dev libfuse-dev libgoogle-perftools-dev libkeyutils-dev libleveldb-dev libnss3-dev libsnappy-dev liblttng-ust-dev libtool libudev-dev libxml2-dev pkg-config python python-argparse python-nose uuid-dev uuid-runtime xfslibs-dev yasm
 
-On Debian/Squeeze, execute ``aptitude install`` for each dependency that isn't 
+On Debian, execute ``aptitude install`` for each dependency that isn't 
 installed on your host. ::
 
-	aptitude install autotools-dev autoconf automake cdbs gcc g++ git libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev libfuse-dev linux-kernel-headers libcrypto++-dev libcrypto++ libexpat1-dev pkg-config libcurl4-gnutls-dev
+	aptitude install autoconf automake autotools-dev libbz2-dev debhelper default-jdk git javahelper junit4 libaio-dev libatomic-ops-dev libbabeltrace-ctf-dev libbabeltrace-dev libblkid-dev libboost-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libcurl4-gnutls-dev libedit-dev libexpat1-dev libfcgi-dev libfuse-dev libgoogle-perftools-dev libkeyutils-dev libleveldb-dev libnss3-dev libsnappy-dev liblttng-ust-dev libtool libudev-dev libxml2-dev pkg-config python python-argparse python-nose uuid-dev uuid-runtime xfslibs-dev yasm
 	
-On Debian/Wheezy, you may also need:: 
-
-	libkeyutils-dev libaio-dev libboost-thread-dev
-
 .. note:: Some distributions that support Google's memory profiler tool may use
    a different package name (e.g., ``libgoogle-perftools4``).
 

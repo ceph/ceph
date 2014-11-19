@@ -253,6 +253,11 @@ check_SCRIPTS += \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh
 
+if ENABLE_DOCKER
+check_SCRIPTS += \
+	test/ceph-disk-root.sh
+endif
+
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
 	$(srcdir)/test/osd/osd-test-helpers.sh \
