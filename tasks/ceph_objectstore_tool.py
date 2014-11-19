@@ -144,7 +144,8 @@ def task(ctx, config):
     The config should be as follows::
 
         ceph_objectstore_tool:
-          objects: <number of objects>
+          objects: 20 # <number of objects>
+          pgnum: 12
     """
 
     if config is None:
@@ -200,11 +201,14 @@ def task(ctx, config):
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
 
+    PGNUM = config.get('pgnum', 12)
+    log.info("pgnum: {num}".format(num=PGNUM))
+
     ERRORS = 0
 
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
-    create_replicated_pool(cli_remote, REP_POOL, 12)
+    create_replicated_pool(cli_remote, REP_POOL, PGNUM)
     ERRORS += test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME)
 
     if ERRORS == 0:
