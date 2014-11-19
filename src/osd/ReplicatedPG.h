@@ -368,6 +368,26 @@ public:
   const pg_pool_t &get_pool() const {
     return pool.info;
   }
+  map<pg_shard_t, const pg_missing_t *> get_all_missing() const {
+    map<pg_shard_t, const pg_missing_t *> all_missing;
+    all_missing[pg_whoami] = &(pg_log.get_missing());
+    for (map<pg_shard_t, pg_missing_t>::const_iterator i = peer_missing.begin();
+	 i != peer_missing.end();
+	 ++i) {
+      all_missing[i->first] = &(i->second);
+    }
+    return all_missing;
+  }
+  const map<pg_shard_t, const pg_info_t *> get_all_info() const {
+    map<pg_shard_t, const pg_info_t *> all_info;
+    all_info[pg_whoami] = &info;
+    for (map<pg_shard_t, pg_info_t>::const_iterator i = peer_info.begin();
+	 i != peer_info.end();
+	 ++i) {
+      all_info[i->first] = &(i->second);
+    }
+    return all_info;
+  }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {

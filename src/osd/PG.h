@@ -395,6 +395,44 @@ public:
       assert(needs_recovery(hoid));
       needs_recovery_map[hoid].need = need;
     }
+    void rebuild_object_location(
+      const hobject_t &hoid,
+      const set<pg_shard_t> &actingbackfill,
+      const map<pg_shard_t, const pg_missing_t *> &all_missing,
+      const map<pg_shard_t, const pg_info_t *> &all_info) {
+      needs_recovery_map.erase(hoid);
+      missing_loc.erase(hoid);
+      eversion_t need;
+      for (set<pg_shard_t>::const_iterator peer = actingbackfill.begin();
+	   peer != actingbackfill.end();
+	   ++peer) {
+	map<pg_shard_t, const pg_missing_t *>::const_iterator pm =
+	  all_missing.find(*peer);
+	assert(pm != all_missing.end());
+	if (pm->second->is_missing(hoid)) {
+	  need = pm->second->missing.find(hoid)->second.need;
+	  break;
+	}
+      }
+      if (need == eversion_t())
+	return;
+
+      set<pg_shard_t> have;
+      for (map<pg_shard_t, const pg_missing_t *>::const_iterator pm =
+	     all_missing.begin();
+	   pm != all_missing.end();
+	   ++pm) {
+	map<pg_shard_t, const pg_info_t *>::const_iterator pi =
+	  all_info.find(pm->first);
+	assert(pi != all_info.end());
+	if (pi->second->last_update >= need &&
+	    !pm->second->is_missing(hoid)) {
+	  have.insert(pm->first);
+	}
+      }
+      missing_loc[hoid].swap(have);
+      add_missing(hoid, need, eversion_t());
+    }
 
     /// Adds info about a possible recovery source
     bool add_source_info(
