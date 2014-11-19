@@ -1610,6 +1610,18 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return 1;
   }
 
+  // Don't import if pool no longer exists
+  OSDMap curmap;
+  ret = get_osdmap(store, sb.current_epoch, curmap);
+  if (ret) {
+    cerr << "Can't find local OSDMap" << std::endl;
+    return ret;
+  }
+  if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
+    cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
+    return 1;
+  }
+
   log_oid = OSD::make_pg_log_oid(pgid);
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
