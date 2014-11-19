@@ -27,12 +27,7 @@ FSPATH = "/var/lib/ceph/osd/ceph-{id}"
 JPATH = "/var/lib/ceph/osd/ceph-{id}/journal"
 
 
-def get_pool_id(ctx, name):
-    return ctx.manager.raw_cluster_cmd('osd', 'pool', 'stats', name).split()[3]
-
-
 def cod_setup_local_data(log, ctx, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT):
-
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
         NAME = BASE_NAME + "{num}".format(num=i)
@@ -234,7 +229,8 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME):
     NUM_OBJECTS = config.get('objects', 10)
     log.info("objects: {num}".format(num=NUM_OBJECTS))
 
-    REPID = get_pool_id(ctx, REP_POOL)
+    pool_dump = manager.get_pool_dump(REP_POOL)
+    REPID = pool_dump['pool']
 
     log.debug("repid={num}".format(num=REPID))
 
