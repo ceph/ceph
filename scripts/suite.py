@@ -41,7 +41,6 @@ Standard arguments:
                               Machine type [default: {default_machine_type}]
   -d <distro>, --distro <distro>
                               Distribution to run against
-                              [default: ubuntu]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
   --suite-dir <suite_dir>     Use this alternative directory as-is when
