@@ -211,7 +211,7 @@ void rgw_cls_read_olh_log_ret::generate_test_instances(list<rgw_cls_read_olh_log
   list<rgw_bucket_olh_log_entry *> l;
   rgw_bucket_olh_log_entry::generate_test_instances(l);
   list<rgw_bucket_olh_log_entry *>::iterator iter = l.begin();
-  r->log[1] = *(*iter);
+  r->log[1].push_back(*(*iter));
 
   o.push_back(r);
 

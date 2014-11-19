@@ -234,7 +234,7 @@ WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
 
 struct rgw_cls_read_olh_log_ret
 {
-  map<uint64_t, struct rgw_bucket_olh_log_entry> log;
+  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
 
   rgw_cls_read_olh_log_ret() : is_truncated(false) {}
