@@ -1304,6 +1304,7 @@ protected:
 
   void do_proxy_read(OpRequestRef op);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
+  void kick_proxy_read_blocked(hobject_t& soid);
 
   friend struct C_ProxyRead;
 

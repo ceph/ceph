@@ -1558,8 +1558,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   // io blocked on obc?
   if (obc->is_blocked() &&
       (m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) {
-    wait_for_blocked_object(obc->obs.oi.soid, op);
-    return;
+    map<hobject_t,list<OpRequestRef> >::iterator iter =
+      waiting_for_blocked_object.find(obc->obs.oi.soid);
+    // Allow read when there is no op blocking
+    if (write_ordered || (iter->second.size() != 0)) {
+      wait_for_blocked_object(obc->obs.oi.soid, op);
+      return;
+    }
   }
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
@@ -2013,6 +2018,18 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   ctx->user_at_version = prdop->user_version;
   ctx->data_off = prdop->data_offset;
   complete_read_ctx(r, ctx);
+}
+
+void ReplicatedPG::kick_proxy_read_blocked(hobject_t& soid)
+{
+  map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.find(soid);
+  if (p == in_progress_proxy_reads.end())
+    return;
+
+  list<OpRequestRef>& ls = p->second;
+  dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
+  requeue_ops(ls);
+  in_progress_proxy_reads.erase(p);
 }
 
 class PromoteCallback: public ReplicatedPG::CopyCallback {
@@ -6198,6 +6215,7 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
+  kick_proxy_read_blocked(cobc->obs.oi.soid);
   kick_object_context_blocked(cobc);
 }
 
