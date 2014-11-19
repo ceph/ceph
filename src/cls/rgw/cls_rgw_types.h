@@ -416,7 +416,7 @@ struct rgw_bucket_olh_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
   uint64_t epoch;
-  map<uint64_t, struct rgw_bucket_olh_log_entry> pending_log;
+  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > pending_log;
   string tag;
   bool exists;
 

@@ -47,7 +47,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, const string& op_tag);
 int cls_rgw_get_olh_log(librados::IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
-                        map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated);
+                        map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
 void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag);
 
 int cls_rgw_bucket_check_index_op(librados::IoCtx& io_ctx, string& oid,
