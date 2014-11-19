@@ -520,6 +520,10 @@ class CephManager:
     Ceph manager object.
     Contains several local functions that form a bulk of this module.
     """
+
+    REPLICATED_POOL = 1
+    ERASURE_CODED_POOL = 3
+
     def __init__(self, controller, ctx=None, config=None, logger=None):
         self.lock = threading.RLock()
         self.ctx = ctx
