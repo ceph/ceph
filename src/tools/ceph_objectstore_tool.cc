@@ -376,6 +376,8 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
     for (vector<ghobject_t>::iterator obj = list.begin();
 	 obj != list.end();
 	 ++obj) {
+      if (obj->is_pgmeta())
+	continue;
       bufferlist attr;
       r = store->getattr(coll, *obj, OI_ATTR, attr);
       if (r < 0) {
@@ -919,6 +921,9 @@ int export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (i->is_pgmeta()) {
+	continue;
+      }
       r = export_file(store, coll, *i);
       if (r < 0)
         return r;
