@@ -1065,6 +1065,14 @@ class CephManager:
 
         return None
 
+    def get_osd_dump_json(self):
+        """
+        osd dump --format=json converted to a python object
+        :returns: the python object
+        """
+        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_osd_dump(self):
         """
         Dump osds
