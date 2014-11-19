@@ -416,11 +416,13 @@ public:
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
+    bool should_send_backfill = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
-    if (!should_send)
+    if (!should_send_backfill)
       assert(is_backfill_targets(peer));
-    return should_send;
+
+    assert(peer_missing.count(peer));
+    return should_send_backfill && !peer_missing[peer].is_missing(hoid);
   }
   
   void update_peer_last_complete_ondisk(
