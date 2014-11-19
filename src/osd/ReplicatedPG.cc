@@ -776,8 +776,8 @@ bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
   if (pg_log.get_missing().missing.empty())
     return false;
   for (vector<OSDOp>::iterator p = op->ops.begin(); p != op->ops.end(); ++p) {
-    // TODO: Need CEPH_OSD_OP_PGLS_FILTER and CEPH_OSD_OP_PGNLS_FILTER, See bug #9439
-    if (p->op.op == CEPH_OSD_OP_PGLS || p->op.op == CEPH_OSD_OP_PGNLS) {
+    if (p->op.op == CEPH_OSD_OP_PGLS || p->op.op == CEPH_OSD_OP_PGNLS ||
+	p->op.op == CEPH_OSD_OP_PGLS_FILTER || p->op.op == CEPH_OSD_OP_PGNLS_FILTER) {
       if (op->get_snapid() != CEPH_NOSNAP) {
 	return true;
       }
