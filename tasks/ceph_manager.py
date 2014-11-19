@@ -738,10 +738,9 @@ class CephManager:
         """
         list all pool names
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        self.log(j['pools'])
-        return [str(i['pool_name']) for i in j['pools']]
+        osd_dump = self.get_osd_dump_json()
+        self.log(osd_dump['pools'])
+        return [str(i['pool_name']) for i in osd_dump['pools']]
 
     def clear_pools(self):
         """
@@ -1108,9 +1107,7 @@ class CephManager:
         Dump osds
         :returns: all osds
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        return j['osds']
+        return self.get_osd_dump_json()['osds']
 
     def get_stuck_pgs(self, type_, threshold):
         """
