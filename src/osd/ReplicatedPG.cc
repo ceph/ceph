@@ -7531,6 +7531,40 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->reqid,
     repop->ctx->op);
   repop->ctx->op_t = NULL;
+
+  if (is_degraded_object(soid)) {
+    dout(10) << __func__ << ": " << soid
+	     << " degraded, maintaining missing sets"
+	     << dendl;
+    assert(!is_missing_object(soid));
+    for (vector<pg_log_entry_t>::iterator j = repop->ctx->log.begin();
+	 j != repop->ctx->log.end();
+	 ++j) {
+      for (set<pg_shard_t>::const_iterator peer = actingbackfill.begin();
+	   peer != actingbackfill.end();
+	   ++peer) {
+	if (*peer == pg_whoami) {
+	  assert(!is_missing_object(j->soid));
+	  continue;
+	}
+	map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.find(*peer);
+	assert(pm != peer_missing.end());
+	if (!pm->second.is_missing(soid)) {
+	  assert(!pm->second.is_missing(j->soid));
+	  continue;
+	}
+	dout(10) << __func__ << ": " << soid << " missing on "
+		 << *peer << ", adding event " << *j << " to missing"
+		 << dendl;
+	pm->second.add_next_event(*j);
+      }
+      missing_loc.rebuild_object_location(
+	j->soid,
+	actingbackfill,
+	get_all_missing(),
+	get_all_info());
+    }
+  }
 }
 
 template<typename T, int MSGTYPE>
