@@ -10393,7 +10393,7 @@ void ReplicatedPG::_clear_recovery_state()
   assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
   recovering.clear();
-  pgbackend->clear_state();
+  pgbackend->clear_recovery_state();
 }
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)

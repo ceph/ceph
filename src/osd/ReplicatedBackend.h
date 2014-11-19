@@ -70,7 +70,7 @@ public:
     );
 
   void on_change();
-  void clear_state();
+  void clear_recovery_state();
   void on_flushed();
 
   class RPCRecPred : public IsRecoverablePredicate {

@@ -314,7 +314,7 @@
     * won't be called after on_change()
     */
    virtual void on_change() = 0;
-   virtual void clear_state() = 0;
+   virtual void clear_recovery_state() = 0;
 
    virtual void on_flushed() = 0;
 
