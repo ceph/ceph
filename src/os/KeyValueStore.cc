@@ -2286,25 +2286,11 @@ int KeyValueStore::collection_getattrs(coll_t cid,
   dout(10) << __func__ << " " << cid.to_str() << dendl;
 
   map<string, bufferlist> out;
-  set<string> keys;
-  StripObjectMap::StripObjectHeaderRef header;
 
-  for (map<string, bufferptr>::iterator it = aset.begin();
-       it != aset.end(); ++it) {
-      keys.insert(it->first);
-  }
-
-  int r = backend->lookup_strip_header(get_coll_for_coll(),
-                                       make_ghobject_for_coll(cid), &header);
-  if (r < 0) {
-    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
-    return r;
-  }
-
-  r = backend->get_values_with_header(header, COLLECTION_ATTR, keys, &out);
+  int r = backend->get(get_coll_for_coll(), make_ghobject_for_coll(cid),
+                       COLLECTION_ATTR, &out);
   if (r < 0) {
     dout(10) << __func__ << " could not get keys" << dendl;
-    r = -EINVAL;
     goto out;
   }
 
