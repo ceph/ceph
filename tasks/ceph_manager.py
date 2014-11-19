@@ -727,12 +727,7 @@ class CephManager:
         """
         get number for pool (e.g., data -> 2)
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        for i in j['pools']:
-            if i['pool_name'] == pool:
-                return int(i['pool'])
-        assert False
+        return int(self.get_pool_dump(pool)['pool'])
 
     def list_pools(self):
         """
