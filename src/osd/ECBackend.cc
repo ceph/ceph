@@ -1540,6 +1540,13 @@ void ECBackend::start_write(Op *op) {
       trans.find(i->shard);
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
+    if (should_send) {
+      dout(10) << __func__ << ": sending transaction for object "
+	       << op->hoid << " to shard " << *i << dendl;
+    } else {
+      dout(10) << __func__ << ": NOT sending transaction for object "
+	       << op->hoid << " to shard " << *i << dendl;
+    }
     pg_stat_t stats =
       should_send ?
       get_info().stats :
