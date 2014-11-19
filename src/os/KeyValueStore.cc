@@ -2268,8 +2268,8 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
     r = -EINVAL;
   }
 
-  assert(out.size());
-  bl.swap(out.begin()->second);
+  if (out.size())
+    bl.swap(out.begin()->second);
 
   dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
            << bl.length() << " = " << r << dendl;
