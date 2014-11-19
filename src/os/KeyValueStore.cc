@@ -2268,12 +2268,16 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
     r = -EINVAL;
   }
 
-  if (out.size())
+  if (out.size()) {
     bl.swap(out.begin()->second);
+    r = bl.length();
+  } else {
+    r = -ENODATA;
+  }
 
   dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
            << bl.length() << " = " << r << dendl;
-  return bl.length();
+  return r;
 }
 
 int KeyValueStore::collection_getattrs(coll_t cid,
