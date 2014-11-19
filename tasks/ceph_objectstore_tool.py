@@ -31,32 +31,32 @@ def get_pool_id(ctx, name):
     return ctx.manager.raw_cluster_cmd('osd', 'pool', 'stats', name).split()[3]
 
 
-def cod_setup_local_data(log, ctx, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT):
+def cod_setup_local_data(log, ctx, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT):
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
+        NAME = BASE_NAME + "{num}".format(num=i)
         LOCALNAME=os.path.join(DATADIR, NAME)
 
         dataline = range(DATALINECOUNT)
         fd = open(LOCALNAME, "w")
-        data = "This is the replicated data for " + NAME + "\n"
+        data = "This is the data for " + NAME + "\n"
         for _ in dataline:
             fd.write(data)
         fd.close()
 
 
-def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT):
+def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT):
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
+        NAME = BASE_NAME + "{num}".format(num=i)
         DDNAME = os.path.join(DATADIR, NAME)
 
         remote.run(args=['rm', '-f', DDNAME ])
 
         dataline = range(DATALINECOUNT)
-        data = "This is the replicated data for " + NAME + "\n"
+        data = "This is the data for " + NAME + "\n"
         DATA = ""
         for _ in dataline:
             DATA += data
@@ -64,18 +64,18 @@ def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATA
 
 
 # def rados(ctx, remote, cmd, wait=True, check_status=False):
-def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, REP_POOL, db):
+def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT, POOL, db):
     ERRORS = 0
-    log.info("Creating {objs} objects in replicated pool".format(objs=NUM_OBJECTS))
+    log.info("Creating {objs} objects in pool".format(objs=NUM_OBJECTS))
     nullfd = open(os.devnull, "w")
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
+        NAME = BASE_NAME + "{num}".format(num=i)
         DDNAME = os.path.join(DATADIR, NAME)
 
-        proc = rados(ctx, remote, ['-p', REP_POOL, 'put', NAME, DDNAME], wait=False)
-        # proc = remote.run(args=['rados', '-p', REP_POOL, 'put', NAME, DDNAME])
+        proc = rados(ctx, remote, ['-p', POOL, 'put', NAME, DDNAME], wait=False)
+        # proc = remote.run(args=['rados', '-p', POOL, 'put', NAME, DDNAME])
         ret = proc.wait()
         if ret != 0:
             log.critical("Rados put failed with status {ret}".format(ret=r[0].exitstatus))
@@ -90,7 +90,7 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, R
                 continue
             mykey = "key{i}-{k}".format(i=i, k=k)
             myval = "val{i}-{k}".format(i=i, k=k)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setxattr', NAME, mykey, myval])
+            proc = remote.run(args=['rados', '-p', POOL, 'setxattr', NAME, mykey, myval])
             ret = proc.wait()
             if ret != 0:
                 log.error("setxattr failed with {ret}".format(ret=ret))
@@ -100,7 +100,7 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, R
         # Create omap header in all objects but REPobject1
         if i != 1:
             myhdr = "hdr{i}".format(i=i)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setomapheader', NAME, myhdr])
+            proc = remote.run(args=['rados', '-p', POOL, 'setomapheader', NAME, myhdr])
             ret = proc.wait()
             if ret != 0:
                 log.critical("setomapheader failed with {ret}".format(ret=ret))
@@ -113,7 +113,7 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, R
                 continue
             mykey = "okey{i}-{k}".format(i=i, k=k)
             myval = "oval{i}-{k}".format(i=i, k=k)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setomapval', NAME, mykey, myval])
+            proc = remote.run(args=['rados', '-p', POOL, 'setomapval', NAME, mykey, myval])
             ret = proc.wait()
             if ret != 0:
                 log.critical("setomapval failed with {ret}".format(ret=ret))
@@ -151,26 +151,22 @@ def task(ctx, config):
         config = {}
     assert isinstance(config, dict), \
         'ceph_objectstore_tool task only accepts a dict for configuration'
-    TEUTHDIR = teuthology.get_testdir(ctx)
+    #TEUTHDIR = teuthology.get_testdir(ctx)
 
     # clients = config['clients']
     # assert len(clients) > 0,
     #    'ceph_objectstore_tool task needs at least 1 client'
 
-    REP_POOL = "rep_pool"
-    REP_NAME = "REPobject"
     # EC_POOL = "ec_pool"
     # EC_NAME = "ECobject"
-    NUM_OBJECTS = config.get('objects', 10)
-    ERRORS = 0
-    DATADIR = os.path.join(TEUTHDIR, "data")
+    #ERRORS = 0
+    #DATADIR = os.path.join(TEUTHDIR, "data")
     # Put a test dir below the data dir
     # TESTDIR = os.path.join(DATADIR, "test")
-    DATALINECOUNT = 10000
+    #DATALINECOUNT = 10000
     # PROFNAME = "testecprofile"
 
     log.info('Beginning ceph_objectstore_tool...')
-    log.info("objects: {num}".format(num=NUM_OBJECTS))
 
     log.debug(config)
     log.debug(ctx)
@@ -197,18 +193,46 @@ def task(ctx, config):
         )
     ctx.manager = manager
 
-    # ctx.manager.raw_cluster_cmd('osd', 'pool', 'create', REP_POOL, '12', '12', 'replicated')
-    create_replicated_pool(cli_remote, REP_POOL, 12)
-    REPID = get_pool_id(ctx, REP_POOL)
-
-    log.debug("repid={num}".format(num=REPID))
-
     while len(manager.get_osd_status()['up']) != len(manager.get_osd_status()['raw']):
         time.sleep(10)
     while len(manager.get_osd_status()['in']) != len(manager.get_osd_status()['up']):
         time.sleep(10)
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
+
+    ERRORS = 0
+
+    REP_POOL = "rep_pool"
+    REP_NAME = "REPobject"
+    create_replicated_pool(cli_remote, REP_POOL, 12)
+    ERRORS += test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME)
+
+    if ERRORS == 0:
+        log.info("TEST PASSED")
+    else:
+        log.error("TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS))
+
+    try:
+        yield
+    finally:
+        log.info('Ending ceph_objectstore_tool')
+
+
+def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME):
+    manager = ctx.manager
+
+    osds = ctx.cluster.only(teuthology.is_type('osd'))
+
+    TEUTHDIR = teuthology.get_testdir(ctx)
+    DATADIR = os.path.join(TEUTHDIR, "data")
+    DATALINECOUNT = 10000
+    ERRORS = 0
+    NUM_OBJECTS = config.get('objects', 10)
+    log.info("objects: {num}".format(num=NUM_OBJECTS))
+
+    REPID = get_pool_id(ctx, REP_POOL)
+
+    log.debug("repid={num}".format(num=REPID))
 
     db = {}
 
@@ -559,12 +583,4 @@ def task(ctx, config):
                 log.error("Data comparison failed for {obj}".format(obj=NAME))
                 ERRORS += 1
 
-    if ERRORS == 0:
-        log.info("TEST PASSED")
-    else:
-        log.error("TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS))
-
-    try:
-        yield
-    finally:
-        log.info('Ending ceph_objectstore_tool')
+    return ERRORS
