@@ -674,7 +674,7 @@ class CephManager:
 
     def get_pgid(self, pool, pgnum):
         """
-        :param pool: pool number
+        :param pool: pool name
         :param pgnum: pg number
         :returns: a string representing this pg.
         """
