@@ -415,7 +415,7 @@ int MemStore::collection_getattr(coll_t cid, const char *name,
   RWLock::RLocker lc(c->lock);
 
   if (!c->xattr.count(name))
-    return -ENOENT;
+    return -ENODATA;
   bufferlist bl;
   bl.append(c->xattr[name]);
   size_t l = MIN(size, bl.length());
@@ -432,7 +432,7 @@ int MemStore::collection_getattr(coll_t cid, const char *name, bufferlist& bl)
   RWLock::RLocker l(c->lock);
 
   if (!c->xattr.count(name))
-    return -ENOENT;
+    return -ENODATA;
   bl.clear();
   bl.append(c->xattr[name]);
   return bl.length();
