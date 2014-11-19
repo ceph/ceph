@@ -1934,7 +1934,7 @@ reprotect_and_return_err:
     cp->prog_ctx.update_progress(offset, cp->src_size);
     int ret = 0;
     if (buf) {
-      ret = write(cp->destictx, offset, len, buf);
+      ret = write(cp->destictx, offset, len, buf, 0);
     }
     return ret;
   }
@@ -2012,7 +2012,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_CopyWrite(m_throttle, m_bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp);
+      r = aio_write(m_dest, m_offset, m_bl->length(), m_bl->c_str(), comp, 0);
       if (r < 0) {
 	ctx->complete(r);
 	comp->release();
@@ -2055,7 +2055,7 @@ reprotect_and_return_err:
       bufferlist *bl = new bufferlist();
       Context *ctx = new C_CopyRead(&throttle, dest, offset, bl);
       AioCompletion *comp = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(src, offset, len, NULL, bl, comp);
+      r = aio_read(src, offset, len, NULL, bl, comp, 0);
       if (r < 0) {
 	ctx->complete(r);
 	comp->release();
@@ -2434,7 +2434,7 @@ reprotect_and_return_err:
 
       Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
       AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-      r = aio_read(ictx, off, read_len, NULL, &bl, c);
+      r = aio_read(ictx, off, read_len, NULL, &bl, c, 0);
       if (r < 0) {
 	c->release();
 	delete ctx;
@@ -2653,14 +2653,15 @@ reprotect_and_return_err:
     return 0;
   }
 
-  ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf)
+  ssize_t read(ImageCtx *ictx, uint64_t ofs, size_t len, char *buf, int op_flags)
   {
     vector<pair<uint64_t,uint64_t> > extents;
     extents.push_back(make_pair(ofs, len));
-    return read(ictx, extents, buf, NULL);
+    return read(ictx, extents, buf, NULL, op_flags);
   }
 
-  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents, char *buf, bufferlist *pbl)
+  ssize_t read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
+		char *buf, bufferlist *pbl, int op_flags)
   {
     Mutex mylock("IoCtxImpl::write::mylock");
     Cond cond;
@@ -2669,7 +2670,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    int r = aio_read(ictx, image_extents, buf, pbl, c);
+    int r = aio_read(ictx, image_extents, buf, pbl, c, op_flags);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2684,7 +2685,7 @@ reprotect_and_return_err:
     return ret;
   }
 
-  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf)
+  ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, int op_flags)
   {
     utime_t start_time, elapsed;
     ldout(ictx->cct, 20) << "write " << ictx << " off = " << off << " len = "
@@ -2704,7 +2705,7 @@ reprotect_and_return_err:
 
     Context *ctx = new C_SafeCond(&mylock, &cond, &done, &ret);
     AioCompletion *c = aio_create_completion_internal(ctx, rbd_ctx_cb);
-    r = aio_write(ictx, off, mylen, buf, c);
+    r = aio_write(ictx, off, mylen, buf, c, op_flags);
     if (r < 0) {
       c->release();
       delete ctx;
@@ -2945,7 +2946,7 @@ reprotect_and_return_err:
   }
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
-		AioCompletion *c)
+		AioCompletion *c, int op_flags)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "aio_write " << ictx << " off = " << off << " len = "
@@ -3127,11 +3128,11 @@ reprotect_and_return_err:
 
   int aio_read(ImageCtx *ictx, uint64_t off, size_t len,
 	       char *buf, bufferlist *bl,
-	       AioCompletion *c)
+	       AioCompletion *c, int op_flags)
   {
     vector<pair<uint64_t,uint64_t> > image_extents(1);
     image_extents[0] = make_pair(off, len);
-    return aio_read(ictx, image_extents, buf, bl, c);
+    return aio_read(ictx, image_extents, buf, bl, c, op_flags);
   }
 
   struct C_RBD_Readahead : public Context {
@@ -3194,7 +3195,7 @@ reprotect_and_return_err:
   }
 
   int aio_read(ImageCtx *ictx, const vector<pair<uint64_t,uint64_t> >& image_extents,
-	       char *buf, bufferlist *pbl, AioCompletion *c)
+	       char *buf, bufferlist *pbl, AioCompletion *c, int op_flags)
   {
     ldout(ictx->cct, 20) << "aio_read " << ictx << " completion " << c << " " << image_extents << dendl;
 
