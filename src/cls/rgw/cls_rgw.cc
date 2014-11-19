@@ -967,12 +967,14 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, struct r
 static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
                            cls_rgw_obj_key& key, bool delete_marker)
 {
-  rgw_bucket_olh_log_entry& log_entry = olh_data_entry.pending_log[olh_data_entry.epoch];
+  vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
+  rgw_bucket_olh_log_entry log_entry;
   log_entry.epoch = olh_data_entry.epoch;
   log_entry.op = op;
   log_entry.op_tag = op_tag;
   log_entry.key = key;
   log_entry.delete_marker = delete_marker;
+  log.push_back(log_entry);
 }
 
 static string escape_str(const string& s)
@@ -1558,13 +1560,13 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   rgw_cls_read_olh_log_ret op_ret;
 
 #define MAX_OLH_LOG_ENTRIES 1000
-  map<uint64_t, rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log = olh_data_entry.pending_log;
 
   if (log.begin()->first > op.ver_marker && log.size() <= MAX_OLH_LOG_ENTRIES) {
     op_ret.log = log;
     op_ret.is_truncated = false;
   } else {
-    map<uint64_t, rgw_bucket_olh_log_entry>::iterator iter = log.upper_bound(op.ver_marker);
+    map<uint64_t, vector<rgw_bucket_olh_log_entry> >::iterator iter = log.upper_bound(op.ver_marker);
 
     for (int i = 0; i < MAX_OLH_LOG_ENTRIES && iter != log.end(); ++i, ++iter) {
       op_ret.log[iter->first] = iter->second;
@@ -1610,10 +1612,10 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   }
 
   /* remove all versions up to and including ver from the pending map */
-  map<uint64_t, rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log;
-  map<uint64_t, rgw_bucket_olh_log_entry>::iterator liter = log.begin();
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log = olh_data_entry.pending_log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> >::iterator liter = log.begin();
   while (liter != log.end() && liter->first <= op.ver) {
-    map<uint64_t, rgw_bucket_olh_log_entry>::iterator rm_iter = liter;
+    map<uint64_t, vector<rgw_bucket_olh_log_entry> >::iterator rm_iter = liter;
     ++liter;
     log.erase(rm_iter);
   }

@@ -1972,7 +1972,7 @@ next:
   }
 
   if (opt_cmd == OPT_OLH_READLOG) {
-    map<uint64_t, rgw_bucket_olh_log_entry> log;
+    map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
     bool is_truncated;
 
     RGWObjectCtx rctx(store);
