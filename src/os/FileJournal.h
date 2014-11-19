@@ -224,7 +224,8 @@ private:
   bool directio, aio, force_aio;
   bool must_write_header;
   off64_t write_pos;      // byte where the next entry to be written will go
-  off64_t read_pos;       // 
+  off64_t read_pos;       //
+  bool discard;	  //for block journal whether support discard
 
 #ifdef HAVE_LIBAIO
   /// state associated with an in-flight aio request
@@ -326,6 +327,8 @@ private:
     off64_t *out_pos  ///< [out] next position to read, will be wrapped
     );
 
+  void do_discard(int64_t offset, int64_t end);
+
   class Writer : public Thread {
     FileJournal *journal;
   public:
@@ -365,6 +368,7 @@ private:
     directio(dio), aio(ai), force_aio(faio),
     must_write_header(false),
     write_pos(0), read_pos(0),
+    discard(false),
 #ifdef HAVE_LIBAIO
     aio_lock("FileJournal::aio_lock"),
     aio_ctx(0),
