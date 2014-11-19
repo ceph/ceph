@@ -428,10 +428,9 @@ def unlock_one(ctx, name, user=None):
     response = requests.put(uri, json.dumps(request))
     success = response.ok
     if success:
-        log.debug('unlocked %s', name)
+        log.info('unlocked %s', name)
         if not provision.destroy_if_vm(ctx, name):
             log.error('downburst destroy failed for %s', name)
-            log.info('%s is not locked' % name)
     else:
         try:
             reason = response.json().get('message')
