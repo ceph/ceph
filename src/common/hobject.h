@@ -67,8 +67,7 @@ public:
   }
 
   static hobject_t make_temp(const string &name) {
-    hobject_t ret(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
-    return ret;
+    return hobject_t(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
   }
   bool is_temp() const {
     return pool == POOL_IS_TEMP;
@@ -264,6 +263,15 @@ public:
   ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
 
   ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+
+  static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
+    hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
+    return ghobject_t(h, NO_GEN, shard);
+  }
+  bool is_pgmeta() const {
+    // make sure we are distinct from hobject_t(), which has pool -1
+    return hobj.pool >= 0 && hobj.oid.name.empty();
+  }
 
   bool match(uint32_t bits, uint32_t match) const {
     return hobj.match_hash(hobj.hash, bits, match);
