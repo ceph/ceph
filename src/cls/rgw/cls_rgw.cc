@@ -965,11 +965,11 @@ static int read_olh(cls_method_context_t hctx,cls_rgw_obj_key& obj_key, struct r
 }
 
 static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp op, const string& op_tag,
-                           cls_rgw_obj_key& key, bool delete_marker)
+                           cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch)
 {
   vector<rgw_bucket_olh_log_entry>& log = olh_data_entry.pending_log[olh_data_entry.epoch];
   rgw_bucket_olh_log_entry log_entry;
-  log_entry.epoch = olh_data_entry.epoch;
+  log_entry.epoch = epoch;
   log_entry.op = op;
   log_entry.op_tag = op_tag;
   log_entry.key = key;
@@ -1106,7 +1106,7 @@ public:
     return 0;
   }
 
-  int set_current(uint64_t epoch) {
+  int write(uint64_t epoch, bool current) {
     if (instance_entry.versioned_epoch > 0) {
       CLS_LOG(20, "%s(): instance_entry.versioned_epoch=%d epoch=%d", __func__, (int)instance_entry.versioned_epoch, (int)epoch);
       /* this instance has a previous list entry, remove that entry */
@@ -1116,8 +1116,13 @@ public:
       }
     }
 
+    uint64_t flags = RGW_BUCKET_DIRENT_FLAG_VER;
+    if (current) {
+      flags |= RGW_BUCKET_DIRENT_FLAG_CURRENT;
+    }
+
     instance_entry.versioned_epoch = epoch;
-    return write_entries(RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT, 0);
+    return write_entries(flags, 0);
   }
 
   int demote_current() {
@@ -1186,13 +1191,29 @@ public:
       return ret;
     }
 
-    inc_epoch();
     initialized = true;
     return 0;
   }
 
-  void inc_epoch() {
-    olh_data_entry.epoch++;
+  bool apply_epoch(uint64_t candidate_epoch) {
+    if (candidate_epoch < olh_data_entry.epoch) {
+      return false;
+    }
+
+    olh_data_entry.epoch = candidate_epoch;
+    return true;
+  }
+
+  bool start_modify(uint64_t candidate_epoch) {
+    if (candidate_epoch) {
+      if (candidate_epoch < olh_data_entry.epoch) {
+        return false; /* olh cannot be modified, old epoch */
+      }
+      olh_data_entry.epoch = candidate_epoch;
+    } else {
+      olh_data_entry.epoch++;
+    }
+    return true;
   }
 
   uint64_t get_epoch() {
@@ -1219,9 +1240,11 @@ public:
     return 0;
   }
 
-  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker) {
-    inc_epoch();
-    update_olh_log(olh_data_entry, op, op_tag, key, delete_marker);
+  void update_log(OLHLogOp op, const string& op_tag, cls_rgw_obj_key& key, bool delete_marker, uint64_t epoch = 0) {
+    if (epoch == 0) {
+      epoch = olh_data_entry.epoch;
+    }
+    update_olh_log(olh_data_entry, op, op_tag, key, delete_marker, epoch);
   }
 
   bool exists() { return olh_data_entry.exists; }
@@ -1379,6 +1402,17 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     return ret;
   }
 
+  if (!olh.start_modify(op.olh_epoch)) {
+    ret = obj.write(op.olh_epoch, false);
+    if (ret < 0) {
+      return ret;
+    }
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    }
+    return 0;
+  }
+
   if (olh_found) {
     const string& olh_tag = olh.get_tag();
     if (op.olh_tag != olh_tag) {
@@ -1406,7 +1440,6 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
-    olh.inc_epoch();
     olh.set_tag(op.olh_tag);
   }
 
@@ -1427,7 +1460,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   }
 
   /* write the instance and list entries */
-  ret = obj.set_current(olh.get_epoch());
+  ret = obj.write(olh.get_epoch(), true);
   if (ret < 0) {
     return ret;
   }
@@ -1473,6 +1506,19 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
+  if (!olh.start_modify(op.olh_epoch)) {
+    ret = obj.unlink_list_entry();
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (!obj.is_delete_marker()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
+    }
+
+    return 0;
+  }
+
   rgw_bucket_olh_entry& olh_entry = olh.get_entry();
   cls_rgw_obj_key& olh_key = olh_entry.key;
   CLS_LOG(20, "%s(): updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
@@ -1490,9 +1536,9 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
     if (found) {
       BIVerObjEntry next(hctx, next_key);
-      ret = next.set_current(olh.get_epoch());
+      ret = next.write(olh.get_epoch(), true);
       if (ret < 0) {
-        CLS_LOG(0, "ERROR: next.set_current() returned ret=%d", ret);
+        CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
         return ret;
       }
 
