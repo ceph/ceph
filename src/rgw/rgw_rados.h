@@ -1714,10 +1714,10 @@ public:
                             const string& op_tag, struct rgw_bucket_dir_entry_meta *meta);
   int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag);
   int bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
-                                map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
+                                map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(RGWObjState& obj_state, rgw_obj& obj_instance, uint64_t ver);
   int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const string& bucket_owner, rgw_obj& obj,
-                    bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+                    bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
   int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta);

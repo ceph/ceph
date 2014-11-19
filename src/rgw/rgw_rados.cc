@@ -5469,7 +5469,7 @@ int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& 
 }
 
 int RGWRados::bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
-                                        map<uint64_t, rgw_bucket_olh_log_entry> *log,
+                                        map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log,
                                         bool *is_truncated)
 {
   rgw_rados_ref ref;
@@ -5533,7 +5533,7 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
 }
 
 int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const string& bucket_owner, rgw_obj& obj,
-                            bufferlist& olh_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+                            bufferlist& olh_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                             uint64_t *plast_ver)
 {
   if (log.empty()) {
@@ -5545,7 +5545,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const str
   uint64_t last_ver = log.rbegin()->first;
   *plast_ver = last_ver;
 
-  map<uint64_t, rgw_bucket_olh_log_entry>::iterator iter = log.begin();
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> >::iterator iter = log.begin();
 
   op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
   op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
@@ -5556,32 +5556,35 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const str
   list<cls_rgw_obj_key> remove_instances;
 
   for (iter = log.begin(); iter != log.end(); ++iter) {
-    rgw_bucket_olh_log_entry& entry = iter->second;
-    ldout(cct, 20) << "olh_log_entry: op=" << (int)entry.op
-                   << " key=" << entry.key.name << "[" << entry.key.instance << "] "
-                   << (entry.delete_marker ? "(delete)" : "") << dendl;
-    switch (entry.op) {
-    case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
-      remove_instances.push_back(entry.key);
-      break;
-    case CLS_RGW_OLH_OP_LINK_OLH:
-      need_to_link = true;
-      key = entry.key;
-      delete_marker = entry.delete_marker;
-      break;
-    case CLS_RGW_OLH_OP_UNLINK_OLH:
-      /* treat this as linking into a delete marker */
-      need_to_link = true;
-      key = entry.key;
-      delete_marker = true;
-      break;
-    default:
-      ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
-      return -EIO;
+    vector<rgw_bucket_olh_log_entry>::iterator viter = iter->second.begin();
+    for (; viter != iter->second.end(); ++viter) {
+      rgw_bucket_olh_log_entry& entry = *viter;
+      ldout(cct, 20) << "olh_log_entry: op=" << (int)entry.op
+                     << " key=" << entry.key.name << "[" << entry.key.instance << "] "
+                     << (entry.delete_marker ? "(delete)" : "") << dendl;
+      switch (entry.op) {
+      case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
+        remove_instances.push_back(entry.key);
+        break;
+      case CLS_RGW_OLH_OP_LINK_OLH:
+        need_to_link = true;
+        key = entry.key;
+        delete_marker = entry.delete_marker;
+        break;
+      case CLS_RGW_OLH_OP_UNLINK_OLH:
+        /* treat this as linking into a delete marker */
+        need_to_link = true;
+        key = entry.key;
+        delete_marker = true;
+        break;
+      default:
+        ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
+        return -EIO;
+      }
+      string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
+      attr_name.append(entry.op_tag);
+      op.rmxattr(attr_name.c_str());
     }
-    string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
-    attr_name.append(entry.op_tag);
-    op.rmxattr(attr_name.c_str());
   }
 
   rgw_rados_ref ref;
@@ -5634,7 +5637,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, const str
  */
 int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj)
 {
-  map<uint64_t, rgw_bucket_olh_log_entry> log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
   uint64_t ver_marker = 0;
 

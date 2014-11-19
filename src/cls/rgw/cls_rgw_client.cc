@@ -205,7 +205,7 @@ int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
 
 int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
-                        map<uint64_t, struct rgw_bucket_olh_log_entry> *log, bool *is_truncated)
+                        map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > *log, bool *is_truncated)
 {
   bufferlist in, out;
   struct rgw_cls_read_olh_log_op call;
