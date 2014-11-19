@@ -310,74 +310,77 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME):
     log.info(pgswithobjects)
     log.info(objsinpg)
 
-    # Test get-bytes
-    log.info("Test get-bytes and set-bytes")
-    for basename in db.keys():
-        file = os.path.join(DATADIR, basename)
-        GETNAME = os.path.join(DATADIR, "get")
-        SETNAME = os.path.join(DATADIR, "set")
+    if pool_dump["type"] == ceph_manager.CephManager.REPLICATED_POOL:
+        # Test get-bytes
+        log.info("Test get-bytes and set-bytes")
+        for basename in db.keys():
+            file = os.path.join(DATADIR, basename)
+            GETNAME = os.path.join(DATADIR, "get")
+            SETNAME = os.path.join(DATADIR, "set")
 
-        for remote in osds.remotes.iterkeys():
-            for role in osds.remotes[remote]:
-                if string.find(role, "osd.") != 0:
-                    continue
-                osdid = int(role.split('.')[1])
+            for remote in osds.remotes.iterkeys():
+                for role in osds.remotes[remote]:
+                    if string.find(role, "osd.") != 0:
+                        continue
+                    osdid = int(role.split('.')[1])
+                    if not pgs.has_key(osdid):
+                        continue
 
-                for pg, JSON in db[basename]["pg2json"].iteritems():
-                    if pg in pgs[osdid]:
-                        cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                        cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                        cmd += "get-bytes {fname}".format(fname=GETNAME).split()
-                        proc = remote.run(args=cmd, check_status=False)
-                        if proc.exitstatus != 0:
+                    for pg, JSON in db[basename]["pg2json"].iteritems():
+                        if pg in pgs[osdid]:
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "get-bytes {fname}".format(fname=GETNAME).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            if proc.exitstatus != 0:
+                                remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
+                                log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
+                                ERRORS += 1
+                                continue
+                            cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
+                            proc = remote.run(args=cmd.split())
+                            if proc.exitstatus != 0:
+                                log.error("Data from get-bytes differ")
+                                # log.debug("Got:")
+                                # cat_file(logging.DEBUG, GETNAME)
+                                # log.debug("Expected:")
+                                # cat_file(logging.DEBUG, file)
+                                ERRORS += 1
                             remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
-                            log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
-                            ERRORS += 1
-                            continue
-                        cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
-                        proc = remote.run(args=cmd.split())
-                        if proc.exitstatus != 0:
-                            log.error("Data from get-bytes differ")
-                            # log.debug("Got:")
-                            # cat_file(logging.DEBUG, GETNAME)
-                            # log.debug("Expected:")
-                            # cat_file(logging.DEBUG, file)
-                            ERRORS += 1
-                        remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
 
-                        data = "put-bytes going into {file}\n".format(file=file)
-                        teuthology.write_file(remote, SETNAME, data)
-                        cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                        cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                        cmd += "set-bytes {fname}".format(fname=SETNAME).split()
-                        proc = remote.run(args=cmd, check_status=False)
-                        proc.wait()
-                        if proc.exitstatus != 0:
-                            log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
-                            ERRORS += 1
-
-                        cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                        cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                        cmd += "get-bytes -".split()
-                        proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
-                        proc.wait()
-                        if proc.exitstatus != 0:
-                            log.error("get-bytes after set-bytes ret={ret}".format(ret=proc.exitstatus))
-                            ERRORS += 1
-                        else:
-                            if data != proc.stdout.getvalue():
-                                log.error("Data inconsistent after set-bytes, got:")
-                                log.error(proc.stdout.getvalue())
+                            data = "put-bytes going into {file}\n".format(file=file)
+                            teuthology.write_file(remote, SETNAME, data)
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "set-bytes {fname}".format(fname=SETNAME).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
                                 ERRORS += 1
 
-                        cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                        cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                        cmd += "set-bytes {fname}".format(fname=file).split()
-                        proc = remote.run(args=cmd, check_status=False)
-                        proc.wait()
-                        if proc.exitstatus != 0:
-                            log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
-                            ERRORS += 1
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "get-bytes -".split()
+                            proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.error("get-bytes after set-bytes ret={ret}".format(ret=proc.exitstatus))
+                                ERRORS += 1
+                            else:
+                                if data != proc.stdout.getvalue():
+                                    log.error("Data inconsistent after set-bytes, got:")
+                                    log.error(proc.stdout.getvalue())
+                                    ERRORS += 1
+
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "set-bytes {fname}".format(fname=file).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
+                                ERRORS += 1
 
     log.info("Test list-attrs get-attr")
     for basename in db.keys():
