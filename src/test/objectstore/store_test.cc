@@ -1091,7 +1091,7 @@ TEST_P(StoreTest, CollectionAttrTest) {
 
     r = store->collection_getattrs(cid, aset);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(aset.size(), 1u);
+    ASSERT_EQ(aset.size(), 0u);
   }
 
   {
@@ -1112,7 +1112,7 @@ TEST_P(StoreTest, CollectionAttrTest) {
     r = store->collection_getattrs(cid, aset);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(aset.size(), 1u);
-    ASSERT_EQ(aset[zero_length].length(), 0);
+    ASSERT_EQ(aset[zero_length].length(), 0u);
   }
 
   {
@@ -1129,7 +1129,7 @@ TEST_P(StoreTest, CollectionAttrTest) {
     bl.clear();
 
     r = store->collection_getattr(cid, normal, bl);
-    ASSERT_EQ(r, sizeof(data));
+    ASSERT_EQ(r, (int)sizeof(data));
     ASSERT_EQ(bl.length(), sizeof(data));
     bl.clear();
 
