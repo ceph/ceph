@@ -1173,6 +1173,23 @@ TEST_P(StoreTest, ScrubTest) {
     }
     created.insert(hoid);
   }
+
+  // Add same hobject_t but different generation or shard_id
+  {
+    ghobject_t hoid1(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""));
+    ghobject_t hoid2(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)1, (shard_id_t)0);
+    ghobject_t hoid3(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)2, (shard_id_t)0);
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid1);
+    t.touch(cid, hoid2);
+    t.touch(cid, hoid3);
+    r = store->apply_transaction(t);
+    created.insert(hoid1);
+    created.insert(hoid2);
+    created.insert(hoid3);
+    ASSERT_EQ(r, 0);
+  }
+
   vector<ghobject_t> objects;
   r = store->collection_list(cid, objects);
   ASSERT_EQ(r, 0);
@@ -1825,6 +1842,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
+  g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
