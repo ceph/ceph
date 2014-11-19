@@ -31,6 +31,7 @@
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_keyvaluestore
+
 const string GenericObjectMap::GLOBAL_STATE_KEY = "HEADER";
 
 const string GenericObjectMap::USER_PREFIX = "_SEQ_";
@@ -43,6 +44,7 @@ const string GenericObjectMap::PARENT_KEY = "_PARENT_HEADER_";
 // so use "!" to separated
 const string GenericObjectMap::GHOBJECT_KEY_SEP_S = "!";
 const char GenericObjectMap::GHOBJECT_KEY_SEP_C = '!';
+const char GenericObjectMap::GHOBJECT_KEY_ENDING = 0xFF;
 
 // ============== GenericObjectMap Key Function =================
 
@@ -147,7 +149,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
 
     t = buf;
     end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.generation);
+    t += snprintf(t, end - t, "%016llx", (long long unsigned)oid.generation);
     full_name += string(buf);
 
     full_name.append(GHOBJECT_KEY_SEP_S);
@@ -157,6 +159,8 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
     t += snprintf(t, end - t, "%x", (int)oid.shard_id);
     full_name += string(buf);
   }
+
+  full_name.append(1, GHOBJECT_KEY_ENDING);
 
   return full_name;
 }
