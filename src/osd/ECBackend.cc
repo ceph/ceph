@@ -1156,10 +1156,10 @@ void ECBackend::on_change()
   }
   in_progress_client_reads.clear();
   shard_to_read_map.clear();
-  clear_state();
+  clear_recovery_state();
 }
 
-void ECBackend::clear_state()
+void ECBackend::clear_recovery_state()
 {
   recovery_ops.clear();
 }

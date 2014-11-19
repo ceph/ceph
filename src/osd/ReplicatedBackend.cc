@@ -199,7 +199,7 @@ bool ReplicatedBackend::handle_message(
   return false;
 }
 
-void ReplicatedBackend::clear_state()
+void ReplicatedBackend::clear_recovery_state()
 {
   // clear pushing/pulling maps
   pushing.clear();
@@ -218,7 +218,7 @@ void ReplicatedBackend::on_change()
     if (i->second.on_applied)
       delete i->second.on_applied;
   }
-  clear_state();
+  clear_recovery_state();
 }
 
 void ReplicatedBackend::on_flushed()
