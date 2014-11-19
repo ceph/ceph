@@ -766,6 +766,16 @@ class CephManager:
                         command=args))
                 time.sleep(5)
 
+    def get_pool_dump(self, pool):
+        """
+        get the osd dump part of a pool 
+        """
+        osd_dump = self.get_osd_dump_json()
+        for i in osd_dump['pools']:
+            if i['pool_name'] == pool:
+                return i
+        assert False
+
     def set_config(self, osdnum, **argdict):
         """
         :param osdnum: osd number
