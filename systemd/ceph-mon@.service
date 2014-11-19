@@ -13,6 +13,7 @@ Wants=network-online.target
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
 Environment=CLUSTER=ceph
+ExecStartPre=/usr/bin/bash -c ulimit -n 32768
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i
 
 [Install]
