@@ -218,6 +218,8 @@ def task(ctx, config):
     else:
         log.error("TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS))
 
+    assert ERRORS == 0
+
     try:
         yield
     finally:
