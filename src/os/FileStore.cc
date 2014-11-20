@@ -5081,8 +5081,6 @@ int FileStore::_split_collection(coll_t cid,
     int dstcmp = _check_replay_guard(dest, spos);
     if (dstcmp < 0)
       return 0;
-    if (dstcmp > 0 && !collection_empty(dest))
-      return -ENOTEMPTY;
 
     int srccmp = _check_replay_guard(cid, spos);
     if (srccmp < 0)
