@@ -1257,7 +1257,7 @@ class CephManager:
 
     def wait_for_clean(self, timeout=None):
         """
-        Returns trues when all pgs are clean.
+        Returns true when all pgs are clean.
         """
         self.log("waiting for clean")
         start = time.time()
@@ -1382,13 +1382,13 @@ class CephManager:
 
     def is_active(self):
         """
-        Wrapper to check if active
+        Wrapper to check if all pgs are active
         """
         return self.get_num_active() == self.get_num_pgs()
 
     def wait_till_active(self, timeout=None):
         """
-        Wait until osds are active.
+        Wait until all pgs are active.
         """
         self.log("waiting till active")
         start = time.time()
