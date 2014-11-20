@@ -123,6 +123,12 @@ inline ostream& operator<<(ostream& out, const list<A>& ilist) {
   return out;
 }
 
+template<class A, class B, class C>
+inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
+  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
+  return out;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, const set<A>& iset) {
   for (typename set<A>::const_iterator it = iset.begin();
