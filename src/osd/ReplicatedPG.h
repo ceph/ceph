@@ -1326,14 +1326,16 @@ public:
     spg_t child,
     int split_bits,
     int seed,
+    const pg_pool_t *pool,
     ObjectStore::Transaction *t) {
     coll_t target = coll_t(child);
-    t->create_collection(target);
+    PG::_create(*t, child);
     t->split_collection(
       coll,
       split_bits,
       seed,
       target);
+    PG::_init(*t, child, pool);
     pgbackend->split_colls(child, split_bits, seed, t);
   }
 private:

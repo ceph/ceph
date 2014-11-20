@@ -1202,6 +1202,7 @@ public:
     spg_t child,
     int split_bits,
     int seed,
+    const pg_pool_t *pool,
     ObjectStore::Transaction *t) = 0;
   virtual bool _report_snap_collection_errors(
     const hobject_t &hoid,
@@ -2086,6 +2087,10 @@ public:
 
   // pg on-disk state
   void do_pending_flush();
+
+  static void _create(ObjectStore::Transaction& t, spg_t pgid);
+  static void _init(ObjectStore::Transaction& t,
+		    spg_t pgid, const pg_pool_t *pool);
 
 private:
   void write_info(ObjectStore::Transaction& t);

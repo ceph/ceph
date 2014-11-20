@@ -3071,19 +3071,8 @@ void OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-      coll_t cid(pgid);
-
-      // ok, create the pg locally using provided Info and History
-      rctx.transaction->create_collection(cid);
-
-      // Give a hint to the PG collection
-      bufferlist hint;
-      uint32_t pg_num = pp->get_pg_num();
-      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
-      ::encode(pg_num, hint);
-      ::encode(expected_num_objects_pg, hint);
-      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
-      rctx.transaction->collection_hint(cid, hint_type, hint);
+      PG::_create(*rctx.transaction, pgid);
+      PG::_init(*rctx.transaction, pgid, pp);
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
@@ -6807,6 +6796,7 @@ void OSD::split_pgs(
       *i,
       split_bits,
       i->ps(),
+      &child->pool.info,
       rctx->transaction);
     parent->split_into(
       i->pgid,
@@ -6966,19 +6956,10 @@ void OSD::handle_pg_create(OpRequestRef op)
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      PG::_create(*rctx.transaction, pgid);
+      PG::_init(*rctx.transaction, pgid, pp);
+
       pg_interval_map_t pi;
-      coll_t cid(pgid);
-      rctx.transaction->create_collection(cid);
-
-      // Give a hint to the PG collection
-      bufferlist hint;
-      uint32_t pg_num = pp->get_pg_num();
-      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
-      ::encode(pg_num, hint);
-      ::encode(expected_num_objects_pg, hint);
-      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
-      rctx.transaction->collection_hint(cid, hint_type, hint);
-
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, whoami,

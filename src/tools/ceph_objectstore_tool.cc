@@ -1583,8 +1583,12 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   bufferlist one;
   one.append('1');
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  t->create_collection(coll);
+  PG::_create(*t, pgid);
+  PG::_init(*t, pgid, NULL);
+
+  // mark this coll for removal until we're done
   t->collection_setattr(coll, "remove", one);
+
   store->apply_transaction(*t);
   delete t;
 
