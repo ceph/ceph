@@ -2639,6 +2639,28 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
   return 0;
 }
 
+void PG::_create(ObjectStore::Transaction& t, spg_t pgid)
+{
+  coll_t coll(pgid);
+  t.create_collection(coll);
+}
+
+void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
+{
+  coll_t coll(pgid);
+
+  if (pool) {
+    // Give a hint to the PG collection
+    bufferlist hint;
+    uint32_t pg_num = pool->get_pg_num();
+    uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
+    ::encode(pg_num, hint);
+    ::encode(expected_num_objects_pg, hint);
+    uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+    t.collection_hint(coll, hint_type, hint);
+  }
+}
+
 void PG::write_info(ObjectStore::Transaction& t)
 {
   info.stats.stats.add(unstable_stats);
