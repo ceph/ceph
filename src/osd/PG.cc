@@ -2919,7 +2919,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
 
   ostringstream oss;
   if (pg_log.read_log(
-      store, coll, log_oid, info,
+      store, coll, META_COLL, log_oid, info,
       oss)) {
     /* We don't want to leave the old format around in case the next log
      * write happens to be an append_log()

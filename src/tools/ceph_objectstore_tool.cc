@@ -603,7 +603,7 @@ int get_log(ObjectStore *fs, coll_t coll, spg_t pgid, const pg_info_t &info,
   map<eversion_t, hobject_t> divergent_priors;
   try {
     ostringstream oss;
-    PGLog::read_log(fs, coll, log_oid, info, divergent_priors, log, missing, oss);
+    PGLog::read_log(fs, coll, META_COLL, log_oid, info, divergent_priors, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }

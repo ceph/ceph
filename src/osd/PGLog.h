@@ -560,16 +560,18 @@ public:
     set<string> *log_keys_debug
     );
 
-  bool read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
+  bool read_log(ObjectStore *store, coll_t pg_coll,
+		coll_t log_coll, ghobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
     return read_log(
-      store, coll, log_oid, info, divergent_priors,
+      store, pg_coll, log_coll, log_oid, info, divergent_priors,
       log, missing, oss,
       (pg_log_debug ? &log_keys_debug : 0));
   }
 
   /// return true if the log should be rewritten
-  static bool read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
+  static bool read_log(ObjectStore *store, coll_t pg_coll,
+    coll_t log_coll, ghobject_t log_oid,
     const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
     IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss,

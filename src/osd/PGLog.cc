@@ -805,7 +805,8 @@ void PGLog::_write_log(
   t.omap_setkeys(META_COLL, log_oid, keys);
 }
 
-bool PGLog::read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
+bool PGLog::read_log(ObjectStore *store, coll_t pg_coll,
+  coll_t log_coll, ghobject_t log_oid,
   const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
   IndexedLog &log,
   pg_missing_t &missing,
@@ -817,10 +818,10 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
 
   // legacy?
   struct stat st;
-  int r = store->stat(META_COLL, log_oid, &st);
+  int r = store->stat(log_coll, log_oid, &st);
   assert(r == 0);
   if (st.st_size > 0) {
-    read_log_old(store, coll, log_oid, info, divergent_priors, log, missing, oss, log_keys_debug);
+    read_log_old(store, pg_coll, log_oid, info, divergent_priors, log, missing, oss, log_keys_debug);
     rewrite_log = true;
   } else {
     log.tail = info.log_tail;
@@ -829,7 +830,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
     log.can_rollback_to = info.last_update;
     log.rollback_info_trimmed_to = eversion_t();
 
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(META_COLL, log_oid);
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
       bufferlist::iterator bp = bl.begin();
@@ -881,7 +882,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
       
       bufferlist bv;
       int r = store->getattr(
-	coll,
+	pg_coll,
 	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
 	OI_ATTR,
 	bv);
@@ -906,7 +907,7 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
       did.insert(i->second);
       bufferlist bv;
       int r = store->getattr(
-	coll, 
+	pg_coll,
 	ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
 	OI_ATTR,
 	bv);
