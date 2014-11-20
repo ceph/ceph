@@ -146,17 +146,9 @@ void PGLog::clear() {
 
 void PGLog::clear_info_log(
   spg_t pgid,
-  const hobject_t &infos_oid,
-  const hobject_t &log_oid,
   ObjectStore::Transaction *t) {
-
-  set<string> keys_to_remove;
-  keys_to_remove.insert(PG::get_epoch_key(pgid));
-  keys_to_remove.insert(PG::get_biginfo_key(pgid));
-  keys_to_remove.insert(PG::get_info_key(pgid));
-
-  t->remove(META_COLL, log_oid);
-  t->omap_rmkeys(META_COLL, infos_oid, keys_to_remove);
+  coll_t coll(pgid);
+  t->remove(coll, pgid.make_pgmeta_oid());
 }
 
 void PGLog::trim(
@@ -690,7 +682,7 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
 }
 
 void PGLog::write_log(
-  ObjectStore::Transaction& t, const ghobject_t &log_oid)
+  ObjectStore::Transaction& t, const coll_t& coll, const ghobject_t &log_oid)
 {
   if (is_dirty()) {
     dout(10) << "write_log with: "
@@ -701,7 +693,7 @@ void PGLog::write_log(
 	     << ", trimmed: " << trimmed
 	     << dendl;
     _write_log(
-      t, log, log_oid, divergent_priors,
+      t, log, coll, log_oid, divergent_priors,
       dirty_to,
       dirty_from,
       writeout_from,
@@ -716,10 +708,11 @@ void PGLog::write_log(
 }
 
 void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
-    const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors)
+    const coll_t& coll, const ghobject_t &log_oid,
+    map<eversion_t, hobject_t> &divergent_priors)
 {
   _write_log(
-    t, log, log_oid,
+    t, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
     set<eversion_t>(),
     true, true, 0);
@@ -727,7 +720,8 @@ void PGLog::write_log(ObjectStore::Transaction& t, pg_log_t &log,
 
 void PGLog::_write_log(
   ObjectStore::Transaction& t, pg_log_t &log,
-  const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+  const coll_t& coll, const ghobject_t &log_oid,
+  map<eversion_t, hobject_t> &divergent_priors,
   eversion_t dirty_to,
   eversion_t dirty_from,
   eversion_t writeout_from,
@@ -750,17 +744,17 @@ void PGLog::_write_log(
 
 //dout(10) << "write_log, clearing up to " << dirty_to << dendl;
   if (touch_log)
-    t.touch(coll_t(), log_oid);
+    t.touch(coll, log_oid);
   if (dirty_to != eversion_t()) {
     t.omap_rmkeyrange(
-      coll_t(), log_oid,
+      coll, log_oid,
       eversion_t().get_key_name(), dirty_to.get_key_name());
     clear_up_to(log_keys_debug, dirty_to.get_key_name());
   }
   if (dirty_to != eversion_t::max() && dirty_from != eversion_t::max()) {
     //   dout(10) << "write_log, clearing from " << dirty_from << dendl;
     t.omap_rmkeyrange(
-      coll_t(), log_oid,
+      coll, log_oid,
       dirty_from.get_key_name(), eversion_t::max().get_key_name());
     clear_after(log_keys_debug, dirty_from.get_key_name());
   }
@@ -801,8 +795,8 @@ void PGLog::_write_log(
   ::encode(log.rollback_info_trimmed_to, keys["rollback_info_trimmed_to"]);
 
   if (!to_remove.empty())
-    t.omap_rmkeys(META_COLL, log_oid, to_remove);
-  t.omap_setkeys(META_COLL, log_oid, keys);
+    t.omap_rmkeys(coll, log_oid, to_remove);
+  t.omap_setkeys(coll, log_oid, keys);
 }
 
 bool PGLog::read_log(ObjectStore *store, coll_t pg_coll,
@@ -832,6 +826,9 @@ bool PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
     if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
+      // non-log pgmeta_oid keys are prefixed with _; skip those
+      if (p->key()[0] == '_')
+	continue;
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
       bufferlist::iterator bp = bl.begin();
       if (p->key() == "divergent_priors") {
