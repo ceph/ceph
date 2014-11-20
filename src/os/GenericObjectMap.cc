@@ -224,7 +224,10 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     return false;
 
   current = ++end;
-  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
+  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C && *end != GHOBJECT_KEY_ENDING; ++end) ;
+  if (*end == long_name.end())
+    return false;
+
   string snap_str(current, end);
   if (snap_str == "head")
     snap = CEPH_NOSNAP;
@@ -235,18 +238,18 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
 
   // Optional generation/shard_id
   string genstring, shardstring;
-  if (end != long_name.end()) {
+  if (*end != GHOBJECT_KEY_ENDING) {
     current = ++end;
     for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (end == long_name.end())
+    if (end != GHOBJECT_KEY_SEP_C)
       return false;
     genstring = string(current, end);
 
     generation = (gen_t)strtoull(genstring.c_str(), NULL, 16);
 
     current = ++end;
-    for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (end != long_name.end())
+    for ( ; end != long_name.end() && *end != GHOBJECT_KEY_ENDING; ++end) ;
+    if (end == long_name.end())
       return false;
     shardstring = string(current, end);
 
