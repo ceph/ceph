@@ -299,6 +299,7 @@ public:
   static string get_epoch_key(spg_t pgid) {
     return stringify(pgid) + "_epoch";
   }
+  ghobject_t    pgmeta_oid;
   hobject_t    log_oid;
   hobject_t    biginfo_oid;
 
