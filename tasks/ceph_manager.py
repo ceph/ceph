@@ -521,6 +521,10 @@ class CephManager:
     Ceph manager object.
     Contains several local functions that form a bulk of this module.
     """
+
+    REPLICATED_POOL = 1
+    ERASURE_CODED_POOL = 3
+
     def __init__(self, controller, ctx=None, config=None, logger=None):
         self.lock = threading.RLock()
         self.ctx = ctx
@@ -689,7 +693,7 @@ class CephManager:
 
     def get_pgid(self, pool, pgnum):
         """
-        :param pool: pool number
+        :param pool: pool name
         :param pgnum: pg number
         :returns: a string representing this pg.
         """
@@ -727,21 +731,15 @@ class CephManager:
         """
         get number for pool (e.g., data -> 2)
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        for i in j['pools']:
-            if i['pool_name'] == pool:
-                return int(i['pool'])
-        assert False
+        return int(self.get_pool_dump(pool)['pool'])
 
     def list_pools(self):
         """
         list all pool names
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        self.log(j['pools'])
-        return [str(i['pool_name']) for i in j['pools']]
+        osd_dump = self.get_osd_dump_json()
+        self.log(osd_dump['pools'])
+        return [str(i['pool_name']) for i in osd_dump['pools']]
 
     def clear_pools(self):
         """
@@ -781,6 +779,16 @@ class CephManager:
                         id=service_id,
                         command=args))
                 time.sleep(5)
+
+    def get_pool_dump(self, pool):
+        """
+        get the osd dump part of a pool 
+        """
+        osd_dump = self.get_osd_dump_json()
+        for i in osd_dump['pools']:
+            if i['pool_name'] == pool:
+                return i
+        assert False
 
     def set_config(self, osdnum, **argdict):
         """
@@ -1085,14 +1093,20 @@ class CephManager:
 
         return None
 
+    def get_osd_dump_json(self):
+        """
+        osd dump --format=json converted to a python object
+        :returns: the python object
+        """
+        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_osd_dump(self):
         """
         Dump osds
         :returns: all osds
         """
-        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
-        j = json.loads('\n'.join(out.split('\n')[1:]))
-        return j['osds']
+        return self.get_osd_dump_json()['osds']
 
     def get_stuck_pgs(self, type_, threshold):
         """
