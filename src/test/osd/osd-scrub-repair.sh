@@ -41,6 +41,34 @@ function run() {
     teardown $dir || return 1
 }
 
+function wait_for_repair() {
+    local dir=$1
+    local primary=$2
+    local pg=$3
+    local -i tries=0
+    while [ $tries -lt 100 ] ; do
+        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$primary.asok log flush || return 1
+        if grep --quiet "$pg repair ok" $dir/osd-$primary.log ; then
+            return 0
+        fi
+        let tries++
+        sleep 1
+    done
+    grep --quiet "$pg repair ok" $dir/osd-$primary.log || return 1
+}
+
+function TEST_log_repair() {
+    local dir=$1
+    local poolname=rbd
+    local pg=$(get_pg $poolname SOMETHING)
+    local -a osds=($(get_osds $poolname SOMETHING))
+    local primary=${osds[$first]}
+
+    ./ceph pg repair $pg
+    wait_for_repair $dir $primary $pg 
+    grep --quiet "$pg repair starts" $dir/osd-$primary.log || return 1
+}
+
 # 
 # 1) add an object 
 # 2) remove the corresponding file from the primary OSD
