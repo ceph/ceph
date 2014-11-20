@@ -287,6 +287,7 @@ inline void decode(T &o, bufferlist& bl)
 #include <vector>
 #include <string>
 #include <boost/optional.hpp>
+#include <boost/tuple/tuple.hpp>
 
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
@@ -316,6 +317,22 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
     p = t;
     decode(p.get(), bp);
   }
+}
+
+//triple tuple
+template<class A, class B, class C>
+inline void encode(const boost::tuple<A, B, C> &t, bufferlist& bl)
+{
+  encode(boost::get<0>(t), bl);
+  encode(boost::get<1>(t), bl);
+  encode(boost::get<2>(t), bl);
+}
+template<class A, class B, class C>
+inline void decode(boost::tuple<A, B, C> &t, bufferlist::iterator &bp)
+{
+  decode(boost::get<0>(t), bp);
+  decode(boost::get<1>(t), bp);
+  decode(boost::get<2>(t), bp);
 }
 
 // pair
