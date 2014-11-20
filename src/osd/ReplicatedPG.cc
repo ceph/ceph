@@ -4037,7 +4037,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
 	}
-	write_update_size_and_usage(ctx->delta_stats, oi, ssc->snapset, ctx->modified_ranges,
+	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
@@ -4272,7 +4272,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		      op.clonerange.length, op.clonerange.offset);
 		      
 
-	write_update_size_and_usage(ctx->delta_stats, oi, ssc->snapset, ctx->modified_ranges,
+	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.clonerange.offset, op.clonerange.length, false);
       }
       break;
@@ -5314,8 +5314,8 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 
 
 void ReplicatedPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, object_info_t& oi,
-					       SnapSet& ss, interval_set<uint64_t>& modified,
-					       uint64_t offset, uint64_t length, bool count_bytes)
+					       interval_set<uint64_t>& modified, uint64_t offset,
+					       uint64_t length, bool count_bytes)
 {
   interval_set<uint64_t> ch;
   if (length)
