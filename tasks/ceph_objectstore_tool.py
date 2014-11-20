@@ -2,7 +2,6 @@
 ceph_objectstore_tool - Simple test of ceph_objectstore_tool utility
 """
 from cStringIO import StringIO
-from subprocess import call
 import contextlib
 import logging
 import ceph_manager
@@ -14,7 +13,7 @@ from teuthology.orchestra import run
 import sys
 import tempfile
 import json
-from util.rados import (rados, create_replicated_pool)
+from util.rados import (rados, create_replicated_pool, create_ec_pool)
 # from util.rados import (rados, create_ec_pool,
 #                               create_replicated_pool,
 #                               create_cache_pool)
@@ -27,58 +26,51 @@ FSPATH = "/var/lib/ceph/osd/ceph-{id}"
 JPATH = "/var/lib/ceph/osd/ceph-{id}/journal"
 
 
-def get_pool_id(ctx, name):
-    return ctx.manager.raw_cluster_cmd('osd', 'pool', 'stats', name).split()[3]
-
-
-def cod_setup_local_data(log, ctx, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT):
-
+def cod_setup_local_data(log, ctx, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT):
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
-        LOCALNAME=os.path.join(DATADIR, NAME)
+        NAME = BASE_NAME + "{num}".format(num=i)
+        LOCALNAME = os.path.join(DATADIR, NAME)
 
         dataline = range(DATALINECOUNT)
         fd = open(LOCALNAME, "w")
-        data = "This is the replicated data for " + NAME + "\n"
+        data = "This is the data for " + NAME + "\n"
         for _ in dataline:
             fd.write(data)
         fd.close()
 
 
-def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT):
+def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT):
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
+        NAME = BASE_NAME + "{num}".format(num=i)
         DDNAME = os.path.join(DATADIR, NAME)
 
         remote.run(args=['rm', '-f', DDNAME ])
 
         dataline = range(DATALINECOUNT)
-        data = "This is the replicated data for " + NAME + "\n"
+        data = "This is the data for " + NAME + "\n"
         DATA = ""
         for _ in dataline:
             DATA += data
         teuthology.write_file(remote, DDNAME, DATA)
 
 
-# def rados(ctx, remote, cmd, wait=True, check_status=False):
-def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, REP_POOL, db):
+def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT, POOL, db, ec):
     ERRORS = 0
-    log.info("Creating {objs} objects in replicated pool".format(objs=NUM_OBJECTS))
-    nullfd = open(os.devnull, "w")
+    log.info("Creating {objs} objects in pool".format(objs=NUM_OBJECTS))
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
-        NAME = REP_NAME + "{num}".format(num=i)
+        NAME = BASE_NAME + "{num}".format(num=i)
         DDNAME = os.path.join(DATADIR, NAME)
 
-        proc = rados(ctx, remote, ['-p', REP_POOL, 'put', NAME, DDNAME], wait=False)
-        # proc = remote.run(args=['rados', '-p', REP_POOL, 'put', NAME, DDNAME])
+        proc = rados(ctx, remote, ['-p', POOL, 'put', NAME, DDNAME], wait=False)
+        # proc = remote.run(args=['rados', '-p', POOL, 'put', NAME, DDNAME])
         ret = proc.wait()
         if ret != 0:
-            log.critical("Rados put failed with status {ret}".format(ret=r[0].exitstatus))
+            log.critical("Rados put failed with status {ret}".format(ret=proc.exitstatus))
             sys.exit(1)
 
         db[NAME] = {}
@@ -90,17 +82,21 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, R
                 continue
             mykey = "key{i}-{k}".format(i=i, k=k)
             myval = "val{i}-{k}".format(i=i, k=k)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setxattr', NAME, mykey, myval])
+            proc = remote.run(args=['rados', '-p', POOL, 'setxattr', NAME, mykey, myval])
             ret = proc.wait()
             if ret != 0:
                 log.error("setxattr failed with {ret}".format(ret=ret))
                 ERRORS += 1
             db[NAME]["xattr"][mykey] = myval
 
+        # Erasure coded pools don't support omap
+        if ec:
+            continue
+
         # Create omap header in all objects but REPobject1
         if i != 1:
             myhdr = "hdr{i}".format(i=i)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setomapheader', NAME, myhdr])
+            proc = remote.run(args=['rados', '-p', POOL, 'setomapheader', NAME, myhdr])
             ret = proc.wait()
             if ret != 0:
                 log.critical("setomapheader failed with {ret}".format(ret=ret))
@@ -113,13 +109,12 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, R
                 continue
             mykey = "okey{i}-{k}".format(i=i, k=k)
             myval = "oval{i}-{k}".format(i=i, k=k)
-            proc = remote.run(args=['rados', '-p', REP_POOL, 'setomapval', NAME, mykey, myval])
+            proc = remote.run(args=['rados', '-p', POOL, 'setomapval', NAME, mykey, myval])
             ret = proc.wait()
             if ret != 0:
                 log.critical("setomapval failed with {ret}".format(ret=ret))
             db[NAME]["omap"][mykey] = myval
 
-    nullfd.close()
     return ERRORS
 
 
@@ -144,33 +139,16 @@ def task(ctx, config):
     The config should be as follows::
 
         ceph_objectstore_tool:
-          objects: <number of objects>
+          objects: 20 # <number of objects>
+          pgnum: 12
     """
 
     if config is None:
         config = {}
     assert isinstance(config, dict), \
         'ceph_objectstore_tool task only accepts a dict for configuration'
-    TEUTHDIR = teuthology.get_testdir(ctx)
-
-    # clients = config['clients']
-    # assert len(clients) > 0,
-    #    'ceph_objectstore_tool task needs at least 1 client'
-
-    REP_POOL = "rep_pool"
-    REP_NAME = "REPobject"
-    # EC_POOL = "ec_pool"
-    # EC_NAME = "ECobject"
-    NUM_OBJECTS = config.get('objects', 10)
-    ERRORS = 0
-    DATADIR = os.path.join(TEUTHDIR, "data")
-    # Put a test dir below the data dir
-    # TESTDIR = os.path.join(DATADIR, "test")
-    DATALINECOUNT = 10000
-    # PROFNAME = "testecprofile"
 
     log.info('Beginning ceph_objectstore_tool...')
-    log.info("objects: {num}".format(num=NUM_OBJECTS))
 
     log.debug(config)
     log.debug(ctx)
@@ -197,18 +175,57 @@ def task(ctx, config):
         )
     ctx.manager = manager
 
-    # ctx.manager.raw_cluster_cmd('osd', 'pool', 'create', REP_POOL, '12', '12', 'replicated')
-    create_replicated_pool(cli_remote, REP_POOL, 12)
-    REPID = get_pool_id(ctx, REP_POOL)
-
-    log.debug("repid={num}".format(num=REPID))
-
     while len(manager.get_osd_status()['up']) != len(manager.get_osd_status()['raw']):
         time.sleep(10)
     while len(manager.get_osd_status()['in']) != len(manager.get_osd_status()['up']):
         time.sleep(10)
     manager.raw_cluster_cmd('osd', 'set', 'noout')
     manager.raw_cluster_cmd('osd', 'set', 'nodown')
+
+    PGNUM = config.get('pgnum', 12)
+    log.info("pgnum: {num}".format(num=PGNUM))
+
+    ERRORS = 0
+
+    REP_POOL = "rep_pool"
+    REP_NAME = "REPobject"
+    create_replicated_pool(cli_remote, REP_POOL, PGNUM)
+    ERRORS += test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME)
+
+    EC_POOL = "ec_pool"
+    EC_NAME = "ECobject"
+    create_ec_pool(cli_remote, EC_POOL, 'default', PGNUM)
+    ERRORS += test_objectstore(ctx, config, cli_remote, EC_POOL, EC_NAME, ec=True)
+
+    if ERRORS == 0:
+        log.info("TEST PASSED")
+    else:
+        log.error("TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS))
+
+    assert ERRORS == 0
+
+    try:
+        yield
+    finally:
+        log.info('Ending ceph_objectstore_tool')
+
+
+def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
+    manager = ctx.manager
+
+    osds = ctx.cluster.only(teuthology.is_type('osd'))
+
+    TEUTHDIR = teuthology.get_testdir(ctx)
+    DATADIR = os.path.join(TEUTHDIR, "data")
+    DATALINECOUNT = 10000
+    ERRORS = 0
+    NUM_OBJECTS = config.get('objects', 10)
+    log.info("objects: {num}".format(num=NUM_OBJECTS))
+
+    pool_dump = manager.get_pool_dump(REP_POOL)
+    REPID = pool_dump['pool']
+
+    log.debug("repid={num}".format(num=REPID))
 
     db = {}
 
@@ -222,19 +239,22 @@ def task(ctx, config):
     for remote in allremote:
         cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT)
 
-    ERRORS += cod_setup(log, ctx, cli_remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, REP_POOL, db)
+    ERRORS += cod_setup(log, ctx, cli_remote, NUM_OBJECTS, DATADIR, REP_NAME, DATALINECOUNT, REP_POOL, db, ec)
 
     pgs = {}
-    jsontext = manager.raw_cluster_cmd('pg', 'dump_json')
-    pgdump = json.loads(jsontext)
-    PGS = [str(p["pgid"]) for p in pgdump["pg_stats"] if p["pgid"].find(str(REPID) + ".") == 0]
-    for stats in pgdump["pg_stats"]:
-        if stats["pgid"] in PGS:
+    for stats in manager.get_pg_stats():
+        if stats["pgid"].find(str(REPID) + ".") != 0:
+            continue
+        if pool_dump["type"] == ceph_manager.CephManager.REPLICATED_POOL:
             for osd in stats["acting"]:
-                if not pgs.has_key(osd):
-                    pgs[osd] = []
-                pgs[osd].append(stats["pgid"])
-
+                pgs.setdefault(osd, []).append(stats["pgid"])
+        elif pool_dump["type"] == ceph_manager.CephManager.ERASURE_CODED_POOL:
+            shard = 0
+            for osd in stats["acting"]:
+                pgs.setdefault(osd, []).append("{pgid}s{shard}".format(pgid=stats["pgid"], shard=shard))
+                shard += 1
+        else:
+            raise Exception("{pool} has an unexpected type {type}".format(pool=REP_POOL, type=pool_dump["type"]))
 
     log.info(pgs)
     log.info(db)
@@ -256,6 +276,8 @@ def task(ctx, config):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
+            if osdid not in pgs:
+                continue
             log.info("process osd.{id} on {remote}".format(id=osdid, remote=remote))
             for pg in pgs[osdid]:
                 cmd = (prefix + "--op list --pgid {pg}").format(id=osdid, pg=pg)
@@ -280,87 +302,87 @@ def task(ctx, config):
                             objjson = pglines.pop()
                             name = json.loads(objjson)['oid']
                             objsinpg[pg].append(name)
-                            db[name]["pgid"] = pg
-                            db[name]["json"] = objjson
+                            db[name].setdefault("pg2json", {})[pg] = objjson
 
     log.info(db)
     log.info(pgswithobjects)
     log.info(objsinpg)
 
-    # Test get-bytes
-    log.info("Test get-bytes and set-bytes")
-    for basename in db.keys():
-        file = os.path.join(DATADIR, basename)
-        JSON = db[basename]["json"]
-        GETNAME = os.path.join(DATADIR, "get")
-        SETNAME = os.path.join(DATADIR, "set")
+    if pool_dump["type"] == ceph_manager.CephManager.REPLICATED_POOL:
+        # Test get-bytes
+        log.info("Test get-bytes and set-bytes")
+        for basename in db.keys():
+            file = os.path.join(DATADIR, basename)
+            GETNAME = os.path.join(DATADIR, "get")
+            SETNAME = os.path.join(DATADIR, "set")
 
-        for remote in osds.remotes.iterkeys():
-            for role in osds.remotes[remote]:
-                if string.find(role, "osd.") != 0:
-                    continue
-                osdid = int(role.split('.')[1])
-
-                pg = db[basename]['pgid']
-                if pg in pgs[osdid]:
-                    cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                    cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                    cmd += "get-bytes {fname}".format(fname=GETNAME).split()
-                    proc = remote.run(args=cmd, check_status=False)
-                    if proc.exitstatus != 0:
-                        remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
-                        log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
-                        ERRORS += 1
+            for remote in osds.remotes.iterkeys():
+                for role in osds.remotes[remote]:
+                    if string.find(role, "osd.") != 0:
                         continue
-                    cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
-                    proc = remote.run(args=cmd.split())
-                    if proc.exitstatus != 0:
-                        log.error("Data from get-bytes differ")
-                        # log.debug("Got:")
-                        # cat_file(logging.DEBUG, GETNAME)
-                        # log.debug("Expected:")
-                        # cat_file(logging.DEBUG, file)
-                        ERRORS += 1
-                    remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
+                    osdid = int(role.split('.')[1])
+                    if osdid not in pgs:
+                        continue
 
-                    data = "put-bytes going into {file}\n".format(file=file)
-                    teuthology.write_file(remote, SETNAME, data)
-                    cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                    cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                    cmd += "set-bytes {fname}".format(fname=SETNAME).split()
-                    proc = remote.run(args=cmd, check_status=False)
-                    proc.wait()
-                    if proc.exitstatus != 0:
-                        log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
-                        ERRORS += 1
+                    for pg, JSON in db[basename]["pg2json"].iteritems():
+                        if pg in pgs[osdid]:
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "get-bytes {fname}".format(fname=GETNAME).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            if proc.exitstatus != 0:
+                                remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
+                                log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
+                                ERRORS += 1
+                                continue
+                            cmd = "diff -q {file} {getfile}".format(file=file, getfile=GETNAME)
+                            proc = remote.run(args=cmd.split())
+                            if proc.exitstatus != 0:
+                                log.error("Data from get-bytes differ")
+                                # log.debug("Got:")
+                                # cat_file(logging.DEBUG, GETNAME)
+                                # log.debug("Expected:")
+                                # cat_file(logging.DEBUG, file)
+                                ERRORS += 1
+                            remote.run(args="rm -f {getfile}".format(getfile=GETNAME).split())
 
-                    cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                    cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                    cmd += "get-bytes -".split()
-                    proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
-                    proc.wait()
-                    if proc.exitstatus != 0:
-                        log.error("get-bytes after set-bytes ret={ret}".format(ret=proc.exitstatus))
-                        ERRORS += 1
-                    else:
-                        if data != proc.stdout.getvalue():
-                            log.error("Data inconsistent after set-bytes, got:")
-                            log.error(proc.stdout.getvalue())
-                            ERRORS += 1
+                            data = "put-bytes going into {file}\n".format(file=file)
+                            teuthology.write_file(remote, SETNAME, data)
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "set-bytes {fname}".format(fname=SETNAME).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
+                                ERRORS += 1
 
-                    cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                    cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                    cmd += "set-bytes {fname}".format(fname=file).split()
-                    proc = remote.run(args=cmd, check_status=False)
-                    proc.wait()
-                    if proc.exitstatus != 0:
-                        log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
-                        ERRORS += 1
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "get-bytes -".split()
+                            proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.error("get-bytes after set-bytes ret={ret}".format(ret=proc.exitstatus))
+                                ERRORS += 1
+                            else:
+                                if data != proc.stdout.getvalue():
+                                    log.error("Data inconsistent after set-bytes, got:")
+                                    log.error(proc.stdout.getvalue())
+                                    ERRORS += 1
+
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "set-bytes {fname}".format(fname=file).split()
+                            proc = remote.run(args=cmd, check_status=False)
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.info("set-bytes failed for object {obj} in pg {pg} osd.{id} ret={ret}".format(obj=basename, pg=pg, id=osdid, ret=proc.exitstatus))
+                                ERRORS += 1
 
     log.info("Test list-attrs get-attr")
     for basename in db.keys():
         file = os.path.join(DATADIR, basename)
-        JSON = db[basename]["json"]
         GETNAME = os.path.join(DATADIR, "get")
         SETNAME = os.path.join(DATADIR, "set")
 
@@ -369,46 +391,65 @@ def task(ctx, config):
                 if string.find(role, "osd.") != 0:
                     continue
                 osdid = int(role.split('.')[1])
+                if osdid not in pgs:
+                    continue
 
-                pg = db[basename]['pgid']
-                if pg in pgs[osdid]:
-                    cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
-                    cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                    cmd += ["list-attrs"]
-                    proc = remote.run(args=cmd, check_status=False, stdout=StringIO(), stderr=StringIO())
-                    proc.wait()
-                    if proc.exitstatus != 0:
-                        log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
-                        ERRORS += 1
-                        continue
-                    keys = proc.stdout.getvalue().split()
-                    values = dict(db[basename]["xattr"])
-
-                    for key in keys:
-                        if key == "_" or key == "snapset":
-                            continue
-                        key = key.strip("_")
-                        if key not in values:
-                            log.error("The key {key} should be present".format(key=key))
-                            ERRORS += 1
-                            continue
-                        exp = values.pop(key)
+                for pg, JSON in db[basename]["pg2json"].iteritems():
+                    if pg in pgs[osdid]:
                         cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
                         cmd.append(run.Raw("'{json}'".format(json=JSON)))
-                        cmd += "get-attr {key}".format(key="_" + key).split()
-                        proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
+                        cmd += ["list-attrs"]
+                        proc = remote.run(args=cmd, check_status=False, stdout=StringIO(), stderr=StringIO())
                         proc.wait()
                         if proc.exitstatus != 0:
-                            log.error("get-attr failed with {ret}".format(ret=proc.exitstatus))
+                            log.error("Bad exit status {ret}".format(ret=proc.exitstatus))
                             ERRORS += 1
                             continue
-                        val = proc.stdout.getvalue()
-                        if exp != val:
-                            log.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
-                            ERRORS += 1
-                    if len(values) != 0:
-                        log.error("Not all keys found, remaining keys:")
-                        log.error(values)
+                        keys = proc.stdout.getvalue().split()
+                        values = dict(db[basename]["xattr"])
+
+                        for key in keys:
+                            if key == "_" or key == "snapset" or key == "hinfo_key":
+                                continue
+                            key = key.strip("_")
+                            if key not in values:
+                                log.error("The key {key} should be present".format(key=key))
+                                ERRORS += 1
+                                continue
+                            exp = values.pop(key)
+                            cmd = (prefix + "--pgid {pg}").format(id=osdid, pg=pg).split()
+                            cmd.append(run.Raw("'{json}'".format(json=JSON)))
+                            cmd += "get-attr {key}".format(key="_" + key).split()
+                            proc = remote.run(args=cmd, check_status=False, stdout=StringIO())
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.error("get-attr failed with {ret}".format(ret=proc.exitstatus))
+                                ERRORS += 1
+                                continue
+                            val = proc.stdout.getvalue()
+                            if exp != val:
+                                log.error("For key {key} got value {got} instead of {expected}".format(key=key, got=val, expected=exp))
+                                ERRORS += 1
+                        if "hinfo_key" in keys:
+                            cmd_prefix = prefix.format(id=osdid)
+                            cmd = """
+                            expected=$({prefix} --pgid {pg} '{json}' get-attr {key} | base64)
+                            echo placeholder | {prefix} --pgid {pg} '{json}' set-attr {key} -
+                            test $({prefix} --pgid {pg} '{json}' get-attr {key}) = placeholder
+                            echo $expected | base64 --decode | {prefix} --pgid {pg} '{json}' set-attr {key} -
+                            test $({prefix} --pgid {pg} '{json}' get-attr {key} | base64) = $expected
+                            """.format(prefix=cmd_prefix, pg=pg, json=JSON, key="hinfo_key")
+                            log.debug(cmd)
+                            proc = remote.run(args=['bash', '-e', '-x', '-c', cmd], check_status=False, stdout=StringIO(), stderr=StringIO())
+                            proc.wait()
+                            if proc.exitstatus != 0:
+                                log.error("failed with " + str(proc.exitstatus))
+                                log.error(proc.stdout.getvalue() + " " + proc.stderr.getvalue())
+                                ERRORS += 1
+
+                        if len(values) != 0:
+                            log.error("Not all keys found, remaining keys:")
+                            log.error(values)
 
     log.info("Test pg info")
     for remote in osds.remotes.iterkeys():
@@ -416,6 +457,8 @@ def task(ctx, config):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
+            if osdid not in pgs:
+                continue
 
             for pg in pgs[osdid]:
                 cmd = (prefix + "--op info --pgid {pg}").format(id=osdid, pg=pg).split()
@@ -436,6 +479,8 @@ def task(ctx, config):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
+            if osdid not in pgs:
+                continue
 
             for pg in pgs[osdid]:
                 cmd = (prefix + "--op log --pgid {pg}").format(id=osdid, pg=pg).split()
@@ -460,6 +505,8 @@ def task(ctx, config):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
+            if osdid not in pgs:
+                continue
 
             for pg in pgs[osdid]:
                 fpath = os.path.join(DATADIR, "osd{id}.{pg}".format(id=osdid, pg=pg))
@@ -480,6 +527,8 @@ def task(ctx, config):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
+            if osdid not in pgs:
+                continue
 
             for pg in pgs[osdid]:
                 cmd = (prefix + "--op remove --pgid {pg}").format(pg=pg, id=osdid)
@@ -500,6 +549,8 @@ def task(ctx, config):
                 if string.find(role, "osd.") != 0:
                     continue
                 osdid = int(role.split('.')[1])
+                if osdid not in pgs:
+                    continue
 
                 for pg in pgs[osdid]:
                     fpath = os.path.join(DATADIR, "osd{id}.{pg}".format(id=osdid, pg=pg))
@@ -534,9 +585,9 @@ def task(ctx, config):
 
             ret = proc.wait()
             if ret != 0:
-               log.errors("After import, rados get failed with {ret}".format(ret=r[0].exitstatus))
-               ERRORS += 1
-               continue
+                log.error("After import, rados get failed with {ret}".format(ret=proc.exitstatus))
+                ERRORS += 1
+                continue
 
             cmd = "diff -q {gettest} {ref}".format(gettest=TESTNAME, ref=REFNAME)
             proc = cli_remote.run(args=cmd, check_status=False)
@@ -545,12 +596,4 @@ def task(ctx, config):
                 log.error("Data comparison failed for {obj}".format(obj=NAME))
                 ERRORS += 1
 
-    if ERRORS == 0:
-        log.info("TEST PASSED")
-    else:
-        log.error("TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS))
-
-    try:
-        yield
-    finally:
-        log.info('Ending ceph_objectstore_tool')
+    return ERRORS
