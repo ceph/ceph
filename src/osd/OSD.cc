@@ -2784,7 +2784,7 @@ void OSD::load_pgs()
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
-    epoch_t map_epoch = PG::peek_map_epoch(store, coll_t(pgid), service.infos_oid, &bl);
+    epoch_t map_epoch = PG::peek_map_epoch(store, pgid, service.infos_oid, &bl);
 
     PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
     // there can be no waiters here, so we don't call wake_pg_waiters
@@ -4147,11 +4147,7 @@ void OSD::RemoveWQ::_process(
     return;
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  PGLog::clear_info_log(
-    pg->info.pgid,
-    OSD::make_infos_oid(),
-    pg->log_oid,
-    t);
+  PGLog::clear_info_log(pg->info.pgid, t);
 
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();

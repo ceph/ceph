@@ -358,8 +358,6 @@ public:
 
   static void clear_info_log(
     spg_t pgid,
-    const hobject_t &infos_oid,
-    const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
   void trim(
@@ -543,14 +541,17 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const ghobject_t &log_oid);
+  void write_log(ObjectStore::Transaction& t, const coll_t& coll,
+		 const ghobject_t &log_oid);
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
+    const coll_t& coll,
     const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
 
   static void _write_log(
     ObjectStore::Transaction& t, pg_log_t &log,
-    const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+    const coll_t& coll, const ghobject_t &log_oid,
+    map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
