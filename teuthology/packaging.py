@@ -1,7 +1,7 @@
 from cStringIO import StringIO
 from .orchestra import run
 import logging
-import teuthology.misc as teuthology
+from teuthology import misc
 import textwrap
 
 log = logging.getLogger(__name__)
@@ -105,7 +105,7 @@ def install_repo(remote, reposerver, pkgdir, username=None, password=None):
         contents = contents.format(username=username, password=password,
                                    reposerver=reposerver, pkgdir=pkgdir,
                                    codename=relmap['version'],)
-        teuthology.sudo_write_file(remote,
+        misc.sudo_write_file(remote,
                                    '/etc/apt/sources.list.d/inktank.list',
                                    contents)
         remote.run(args=['sudo',
@@ -131,7 +131,7 @@ def install_repo(remote, reposerver, pkgdir, username=None, password=None):
                                    pkgdir=pkgdir,
                                    release=relmap['release'],
                                    version=relmap['version'])
-        teuthology.sudo_write_file(remote,
+        misc.sudo_write_file(remote,
                                    '/etc/yum.repos.d/inktank.repo',
                                    contents)
         return remote.run(args=['sudo', 'yum', 'makecache'])
@@ -144,14 +144,14 @@ def remove_repo(remote):
     log.info('Removing repo on %s', remote)
     flavor = _get_relmap(remote)['flavor']
     if flavor == 'deb':
-        teuthology.delete_file(remote, '/etc/apt/sources.list.d/inktank.list',
+        misc.delete_file(remote, '/etc/apt/sources.list.d/inktank.list',
                                sudo=True, force=True)
         result = remote.run(args=['sudo', 'apt-get', 'update', '-y'],
                             stdout=StringIO())
         return result
 
     elif flavor == 'rpm':
-        teuthology.delete_file(remote, '/etc/yum.repos.d/inktank.repo',
+        misc.delete_file(remote, '/etc/yum.repos.d/inktank.repo',
                                sudo=True, force=True)
         return remote.run(args=['sudo', 'yum', 'makecache'])
 
