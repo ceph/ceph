@@ -280,13 +280,14 @@ public:
   // pg state
   pg_info_t        info;
   __u8 info_struct_v;
-  static const __u8 cur_struct_v = 7;
+  static const __u8 cur_struct_v = 8;
   bool must_upgrade() {
-    return info_struct_v < 7;
+    return info_struct_v < 8;
   }
   void upgrade(
     ObjectStore *store,
     const interval_set<snapid_t> &snapcolls);
+  void _upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls);
 
   const coll_t coll;
   PGLog  pg_log;
@@ -300,7 +301,6 @@ public:
     return stringify(pgid) + "_epoch";
   }
   ghobject_t    pgmeta_oid;
-  hobject_t    log_oid;
 
   class MissingLoc {
     map<hobject_t, pg_missing_t::item> needs_recovery_map;
@@ -2100,8 +2100,8 @@ public:
     pg_info_t &info, coll_t coll,
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
-    hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
+    ghobject_t &pgmeta_oid,
+    bool dirty_big_info);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {
@@ -2124,13 +2124,14 @@ public:
 
   std::string get_corrupt_pg_log_name() const;
   static int read_info(
-    ObjectStore *store, const coll_t &coll,
+    ObjectStore *store, spg_t pgid, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-    hobject_t &biginfo_oid, hobject_t &infos_oid,
+    hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
-  static epoch_t peek_map_epoch(ObjectStore *store, coll_t coll,
-                               hobject_t &infos_oid, bufferlist *bl);
+  static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid,
+				hobject_t &legacy_infos_oid,
+				bufferlist *bl);
   void update_snap_map(
     vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);

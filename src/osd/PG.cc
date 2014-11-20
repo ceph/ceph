@@ -54,6 +54,14 @@
 
 static coll_t META_COLL("meta");
 
+// prefix pgmeta_oid keys with _ so that PGLog::read_log() can
+// easily skip them
+const string infover_key("_infover");
+const string info_key("_info");
+const string biginfo_key("_biginfo");
+const string epoch_key("_epoch");
+
+
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
@@ -182,7 +190,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   info_struct_v(0),
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
-  log_oid(OSD::make_pg_log_oid(p)),
   missing_loc(this),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
@@ -2463,6 +2470,42 @@ void PG::init(
 
 void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
+  assert(info_struct_v <= 8);
+  ObjectStore::Transaction t;
+
+  if (info_struct_v < 7) {
+    _upgrade_v7(store, snapcolls);
+  }
+
+  // 7 -> 8
+  pg_log.mark_log_for_rewrite();
+  hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+  t.remove(META_COLL, log_oid);
+  t.remove(META_COLL, biginfo_oid);
+  t.collection_rmattr(coll, "info");
+
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> v;
+  __u8 ver = cur_struct_v;
+  ::encode(ver, v[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, v);
+
+  dirty_info = true;
+  dirty_big_info = true;
+  write_if_dirty(t);
+
+  int r = store->apply_transaction(t);
+  if (r != 0) {
+    derr << __func__ << ": apply_transaction returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  assert(r == 0);
+}
+
+void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+{
   unsigned removed = 0;
   for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
        i != snapcolls.end();
@@ -2583,58 +2626,36 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
     }
     objects.clear();
   }
-  ObjectStore::Transaction t;
   snap_collections.clear();
-  dirty_info = true;
-  write_if_dirty(t);
-  int r = store->apply_transaction(t);
-  if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
-  }
-  assert(r == 0);
 }
 
 int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
-    pg_info_t &info, coll_t coll,
-    map<epoch_t,pg_interval_t> &past_intervals,
-    interval_set<snapid_t> &snap_collections,
-    hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
+		    pg_info_t &info, coll_t coll,
+		    map<epoch_t,pg_interval_t> &past_intervals,
+		    interval_set<snapid_t> &snap_collections,
+		    ghobject_t &pgmeta_oid,
+		    bool dirty_big_info)
 {
   // pg state
-
-  if (info_struct_v > cur_struct_v)
-    return -EINVAL;
-
-  // Only need to write struct_v to attr when upgrading
-  if (force_ver || info_struct_v < cur_struct_v) {
-    bufferlist attrbl;
-    info_struct_v = cur_struct_v;
-    ::encode(info_struct_v, attrbl);
-    t.collection_setattr(coll, "info", attrbl);
-    dirty_big_info = true;
-  }
+  map<string,bufferlist> v;
 
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  map<string,bufferlist> v;
-  ::encode(epoch, v[get_epoch_key(info.pgid)]);
+  ::encode(epoch, v[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[get_info_key(info.pgid)]);
+  ::encode(info, v[info_key]);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
-    bufferlist& bigbl = v[get_biginfo_key(info.pgid)];
+    bufferlist& bigbl = v[biginfo_key];
     ::encode(past_intervals, bigbl);
     ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(META_COLL, infos_oid, v);
+  t.omap_setkeys(coll, pgmeta_oid, v);
 
   return 0;
 }
@@ -2659,6 +2680,13 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
     uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
     t.collection_hint(coll, hint_type, hint);
   }
+
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> values;
+  __u8 struct_v = cur_struct_v;
+  ::encode(struct_v, values[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
 void PG::write_info(ObjectStore::Transaction& t)
@@ -2667,8 +2695,8 @@ void PG::write_info(ObjectStore::Transaction& t)
   unstable_stats.clear();
 
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-     past_intervals, snap_collections, osd->infos_oid,
-     info_struct_v, dirty_big_info);
+			past_intervals, snap_collections, pgmeta_oid,
+			dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
 
@@ -2676,35 +2704,67 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid, bufferlist *bl)
+epoch_t PG::peek_map_epoch(ObjectStore *store,
+			   spg_t pgid,
+			   hobject_t &legacy_infos_oid,
+			   bufferlist *bl)
 {
-  assert(bl);
-  spg_t pgid;
-  snapid_t snap;
-  bool ok = coll.is_pg(pgid, snap);
-  assert(ok);
-  int r = store->collection_getattr(coll, "info", *bl);
-  assert(r > 0);
-  bufferlist::iterator bp = bl->begin();
-  __u8 struct_v = 0;
-  ::decode(struct_v, bp);
-  if (struct_v < 5)
-    return 0;
+  coll_t coll(pgid);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
-  if (struct_v < 6) {
+
+  assert(bl);
+  {
+    // validate collection name
+    spg_t pgid_temp;
+    snapid_t snap;
+    bool ok = coll.is_pg(pgid_temp, snap);
+    assert(ok);
+  }
+
+  // try for v8
+  set<string> keys;
+  keys.insert(infover_key);
+  keys.insert(epoch_key);
+  map<string,bufferlist> values;
+  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  if (r == 0) {
+    assert(values.size() == 2);
+
+    // sanity check version
+    bufferlist::iterator bp = values[infover_key].begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    assert(struct_v >= 8);
+
+    // get epoch
+    bp = values[epoch_key].begin();
     ::decode(cur_epoch, bp);
-  } else {
+  } else if (r == -ENOENT) {
+    // legacy: try v7 or older
+    r = store->collection_getattr(coll, "info", *bl);
+    assert(r > 0);
+    bufferlist::iterator bp = bl->begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    if (struct_v < 5)
+      return 0;
+    if (struct_v < 6) {
+      ::decode(cur_epoch, bp);
+      return cur_epoch;
+    }
+
     // get epoch out of leveldb
-    bufferlist tmpbl;
     string ek = get_epoch_key(pgid);
-    set<string> keys;
-    keys.insert(get_epoch_key(pgid));
-    map<string,bufferlist> values;
-    store->omap_get_values(META_COLL, infos_oid, keys, &values);
+    keys.clear();
+    values.clear();
+    keys.insert(ek);
+    store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
     assert(values.size() == 1);
-    tmpbl = values[ek];
-    bufferlist::iterator p = tmpbl.begin();
+    bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
+  } else {
+    assert(0 == "unable to open pg metadata");
   }
   return cur_epoch;
 }
@@ -2713,7 +2773,7 @@ void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
   if (dirty_big_info || dirty_info)
     write_info(t);
-  pg_log.write_log(t, log_oid);
+  pg_log.write_log(t, coll, pgmeta_oid);
 }
 
 void PG::trim_peers()
@@ -2806,7 +2866,7 @@ void PG::append_log(
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(META_COLL, log_oid, keys);
+  t.omap_setkeys(coll, pgmeta_oid, keys);
 
   pg_log.trim(&handler, trim_to, info);
 
@@ -2844,11 +2904,37 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(
-  ObjectStore *store, const coll_t &coll, bufferlist &bl,
+  ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  hobject_t &biginfo_oid, hobject_t &infos_oid,
+  hobject_t &infos_oid,
   interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
 {
+  // try for v8 or later
+  set<string> keys;
+  keys.insert(infover_key);
+  keys.insert(info_key);
+  keys.insert(biginfo_key);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  map<string,bufferlist> values;
+  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  if (r == 0) {
+    assert(values.size() == 3);
+
+    bufferlist::iterator p = values[infover_key].begin();
+    ::decode(struct_v, p);
+    assert(struct_v >= 8);
+
+    p = values[info_key].begin();
+    ::decode(info, p);
+
+    p = values[biginfo_key].begin();
+    ::decode(past_intervals, p);
+    ::decode(snap_collections, p);
+    ::decode(info.purged_snaps, p);
+    return 0;
+  }
+
+  // legacy (ver < 8)
   bufferlist::iterator p = bl.begin();
   bufferlist lbl;
 
@@ -2865,6 +2951,7 @@ int PG::read_info(
     ::decode(struct_v, p);
   } else {
     if (struct_v < 6) {
+      hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pgid));
       int r = store->read(META_COLL, biginfo_oid, 0, 0, lbl);
       if (r < 0)
         return r;
@@ -2911,23 +2998,23 @@ int PG::read_info(
 
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
-  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
-
-  int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
-    osd->infos_oid, snap_collections, info_struct_v);
+  int r = read_info(store, pg_id, coll, bl, info, past_intervals,
+		    osd->infos_oid, snap_collections, info_struct_v);
   assert(r >= 0);
 
   ostringstream oss;
-  if (pg_log.read_log(
-      store, coll, META_COLL, log_oid, info,
-      oss)) {
+  if (pg_log.read_log(store,
+		      coll,
+		      info_struct_v < 8 ? META_COLL : coll,
+		      info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
+		      info, oss)) {
     /* We don't want to leave the old format around in case the next log
      * write happens to be an append_log()
      */
     pg_log.mark_log_for_rewrite();
     ObjectStore::Transaction t;
-    t.remove(coll_t(), log_oid); // remove old version
-    pg_log.write_log(t, log_oid);
+    t.remove(META_COLL, log_oid); // remove old version
+    pg_log.write_log(t, coll, pgmeta_oid);
     int r = osd->store->apply_transaction(t);
     assert(!r);
   }
