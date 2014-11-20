@@ -2791,6 +2791,7 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store, bl);
+    pg->touch_pg_info_oid(store, bl);
 
     if (pg->must_upgrade()) {
       if (!has_upgraded) {
@@ -3084,6 +3085,9 @@ void OSD::handle_pg_peering_evt(
       ::encode(expected_num_objects_pg, hint);
       uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
       rctx.transaction->collection_hint(cid, hint_type, hint);
+      hobject_t oid = make_pg_info_oid(pgid);
+      rctx.transaction->touch(coll_t(), oid);
+
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
@@ -4158,7 +4162,7 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PGLog::clear_info_log(
     pg->info.pgid,
-    OSD::make_infos_oid(),
+    OSD::make_pg_info_oid(pg->info.pgid),
     pg->log_oid,
     t);
 
@@ -6945,6 +6949,8 @@ void OSD::handle_pg_create(OpRequestRef op)
       ::encode(expected_num_objects_pg, hint);
       uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
       rctx.transaction->collection_hint(cid, hint_type, hint);
+      hobject_t oid = make_pg_info_oid(pgid);
+      rctx.transaction->touch(coll_t(), oid);
 
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,

@@ -602,12 +602,12 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   //Empty for this
   interval_set<snapid_t> snap_collections; // obsolete
   coll_t coll(info.pgid);
-
+  hobject_t pginfo_oid = OSD::make_pg_info_oid(info.pgid);
   int ret = PG::_write_info(t, epoch,
     info, coll,
     past_intervals,
     snap_collections,
-    infos_oid,
+    pginfo_oid,
     struct_ver,
     true, true);
   if (ret < 0) ret = -ret;
