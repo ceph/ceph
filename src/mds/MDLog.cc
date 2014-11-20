@@ -101,9 +101,9 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
 void MDLog::write_head(MDSInternalContextBase *c) 
 {
-  MDSIOContext *fin = NULL;
+  C_OnFinisher *fin = NULL;
   if (c != NULL) {
-    fin = new C_IO_Wrapper(mds, c);
+    fin = new C_OnFinisher(new C_IO_Wrapper(mds, c), &(mds->finisher));
   }
   journaler->write_head(fin);
 }
