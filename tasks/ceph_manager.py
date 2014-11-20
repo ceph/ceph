@@ -2,6 +2,7 @@
 ceph manager -- Thrasher and CephManager objects
 """
 from cStringIO import StringIO
+import contextlib
 import random
 import time
 import gevent
@@ -936,6 +937,12 @@ class CephManager:
                 pg_num,
                 erasure_code_profile_name=erasure_code_profile_name)
         return name
+
+    @contextlib.contextmanager
+    def pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
+        self.create_pool(pool_name, pg_num, erasure_code_profile_name)
+        yield
+        self.remove_pool(pool_name)
 
     def create_pool(self, pool_name, pg_num=16, erasure_code_profile_name=None):
         """
