@@ -3837,6 +3837,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.start = hobject_t();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
 
+	{
+	  bool repair = state_test(PG_STATE_REPAIR);
+	  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+	  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+	  stringstream oss;
+	  oss << info.pgid.pgid << " " << mode << " starts" << std::endl;
+	  osd->clog->info(oss);
+	}
         break;
 
       case PG::Scrubber::NEW_CHUNK:
