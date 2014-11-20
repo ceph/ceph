@@ -160,8 +160,7 @@ void PGPool::update(OSDMapRef map)
 }
 
 PG::PG(OSDService *o, OSDMapRef curmap,
-       const PGPool &_pool, spg_t p, const hobject_t& loid,
-       const hobject_t& ioid) :
+       const PGPool &_pool, spg_t p) :
   osd(o),
   cct(o->cct),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
@@ -183,7 +182,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   info_struct_v(0),
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
-  log_oid(loid), biginfo_oid(ioid),
+  log_oid(OSD::make_pg_log_oid(p)),
   missing_loc(this),
   recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
@@ -2890,6 +2889,8 @@ int PG::read_info(
 
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
+  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+
   int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
     osd->infos_oid, snap_collections, info_struct_v);
   assert(r >= 0);

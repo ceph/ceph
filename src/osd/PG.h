@@ -301,7 +301,6 @@ public:
   }
   ghobject_t    pgmeta_oid;
   hobject_t    log_oid;
-  hobject_t    biginfo_oid;
 
   class MissingLoc {
     map<hobject_t, pg_missing_t::item> needs_recovery_map;
@@ -1988,7 +1987,7 @@ public:
 
  public:
   PG(OSDService *o, OSDMapRef curmap,
-     const PGPool &pool, spg_t p, const hobject_t& loid, const hobject_t& ioid);
+     const PGPool &pool, spg_t p);
   virtual ~PG();
 
  private:
