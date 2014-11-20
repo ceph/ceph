@@ -57,11 +57,9 @@ def cod_setup_remote_data(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DAT
         teuthology.write_file(remote, DDNAME, DATA)
 
 
-# def rados(ctx, remote, cmd, wait=True, check_status=False):
 def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT, POOL, db, ec):
     ERRORS = 0
     log.info("Creating {objs} objects in pool".format(objs=NUM_OBJECTS))
-    nullfd = open(os.devnull, "w")
 
     objects = range(1, NUM_OBJECTS + 1)
     for i in objects:
@@ -117,7 +115,6 @@ def cod_setup(log, ctx, remote, NUM_OBJECTS, DATADIR, BASE_NAME, DATALINECOUNT, 
                 log.critical("setomapval failed with {ret}".format(ret=ret))
             db[NAME]["omap"][mykey] = myval
 
-    nullfd.close()
     return ERRORS
 
 
@@ -588,7 +585,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
             ret = proc.wait()
             if ret != 0:
-                log.errors("After import, rados get failed with {ret}".format(ret=proc.exitstatus))
+                log.error("After import, rados get failed with {ret}".format(ret=proc.exitstatus))
                 ERRORS += 1
                 continue
 
