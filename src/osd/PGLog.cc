@@ -796,6 +796,7 @@ void PGLog::_write_log(
     ::encode(divergent_priors, keys["divergent_priors"]);
   }
   ::encode(log.can_rollback_to, keys["can_rollback_to"]);
+  ::encode(log.rollback_info_trimmed_to, keys["rollback_info_trimmed_to"]);
 
   t.omap_rmkeys(coll_t::META_COLL, log_oid, to_remove);
   t.omap_setkeys(coll_t::META_COLL, log_oid, keys);
@@ -820,8 +821,11 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
     rewrite_log = true;
   } else {
     log.tail = info.log_tail;
+
     // will get overridden below if it had been recorded
     log.can_rollback_to = info.last_update;
+    log.rollback_info_trimmed_to = eversion_t();
+
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll_t::META_COLL, log_oid);
     if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
       bufferlist bl = p->value();//Copy bufferlist before creating iterator
@@ -833,6 +837,10 @@ bool PGLog::read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
 	bufferlist bl = p->value();
 	bufferlist::iterator bp = bl.begin();
 	::decode(log.can_rollback_to, bp);
+      } else if (p->key() == "rollback_info_trimmed_to") {
+	bufferlist bl = p->value();
+	bufferlist::iterator bp = bl.begin();
+	::decode(log.rollback_info_trimmed_to, bp);
       } else {
 	pg_log_entry_t e;
 	e.decode_with_checksum(bp);
