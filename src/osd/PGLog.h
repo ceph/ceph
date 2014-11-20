@@ -543,14 +543,14 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
+  void write_log(ObjectStore::Transaction& t, const ghobject_t &log_oid);
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
-    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
+    const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
 
   static void _write_log(
     ObjectStore::Transaction& t, pg_log_t &log,
-    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+    const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
@@ -560,7 +560,7 @@ public:
     set<string> *log_keys_debug
     );
 
-  bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  bool read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
     return read_log(
       store, coll, log_oid, info, divergent_priors,
@@ -569,7 +569,7 @@ public:
   }
 
   /// return true if the log should be rewritten
-  static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  static bool read_log(ObjectStore *store, coll_t coll, ghobject_t log_oid,
     const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
     IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss,
@@ -577,7 +577,7 @@ public:
     );
 
 protected:
-  static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  static void read_log_old(ObjectStore *store, coll_t coll, ghobject_t log_oid,
 			   const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
 			   IndexedLog &log,
 			   pg_missing_t &missing, ostringstream &oss,
