@@ -539,15 +539,18 @@ public:
     bool release_snapset_obc;
 
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
-	      ObjectState *_obs, SnapSetContext *_ssc,
+	      ObjectContextRef& obc,
 	      ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
-      new_obs(_obs->oi, _obs->exists),
+      op(_op), reqid(_reqid), ops(_ops),
+      obs(&obc->obs),
+      snapset(0),
+      new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
+      obc(obc),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
@@ -557,9 +560,9 @@ public:
       lock_to_release(NONE),
       on_finish(NULL),
       release_snapset_obc(false) {
-      if (_ssc) {
-	new_snapset = _ssc->snapset;
-	snapset = &_ssc->snapset;
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
       }
     }
     void reset_obs(ObjectContextRef obc) {
