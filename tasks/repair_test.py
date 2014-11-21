@@ -65,6 +65,7 @@ def omaperr(ctx, osd, pool, obj):
     return ctx.manager.osd_admin_socket(osd, ['setomapval', pool, obj,
                                               'badkey', 'badval'])
 
+
 def repair_test_1(ctx, corrupter, chooser, scrub_type):
     """
     Creates an object in the pool, corrupts it,
@@ -190,6 +191,61 @@ def repair_test_2(ctx, config, chooser):
         log.info("done")
 
 
+def hinfoerr(ctx, victim, pool, obj):
+    """
+    cause an error in the hinfo_key
+    """
+    log.info("remove the hinfo_key")
+    ctx.manager.objectstore_tool(pool,
+                                 options='',
+                                 args='rm-attr hinfo_key',
+                                 object_name=obj,
+                                 osd=victim)
+
+
+def repair_test_erasure_code(ctx, corrupter, victim, scrub_type):
+    """
+    Creates an object in the pool, corrupts it,
+    scrubs it, and verifies that the pool is inconsistent.  It then repairs
+    the pool, rescrubs it, and verifies that the pool is consistent
+
+    :param corrupter: error generating function.
+    :param chooser: osd type chooser (primary or replica)
+    :param scrub_type: regular scrub or deep-scrub
+    """
+    pool = "repair_pool_3"
+    ctx.manager.wait_for_clean()
+    with ctx.manager.pool(pool_name=pool, pg_num=1,
+                          erasure_code_profile_name='default'):
+
+        log.info("starting repair test for erasure code")
+
+        # create object
+        log.info("doing put")
+        ctx.manager.do_put(pool, 'repair_test_obj', '/etc/hosts')
+
+        # corrupt object
+        log.info("corrupting object")
+        corrupter(ctx, victim, pool, 'repair_test_obj')
+
+        # verify inconsistent
+        log.info("scrubbing")
+        ctx.manager.do_pg_scrub(pool, 0, scrub_type)
+
+        assert ctx.manager.pg_inconsistent(pool, 0)
+
+        # repair
+        log.info("repairing")
+        ctx.manager.do_pg_scrub(pool, 0, "repair")
+
+        log.info("re-scrubbing")
+        ctx.manager.do_pg_scrub(pool, 0, scrub_type)
+
+        # verify consistent
+        assert not ctx.manager.pg_inconsistent(pool, 0)
+        log.info("done")
+
+
 def task(ctx, config):
     """
     Test [deep] repair in several situations:
@@ -250,3 +306,5 @@ def task(ctx, config):
     repair_test_1(ctx, trunc, choose_replica, "scrub")
     repair_test_2(ctx, config, choose_primary)
     repair_test_2(ctx, config, choose_replica)
+
+    repair_test_erasure_code(ctx, hinfoerr, 'primary', "deep-scrub")
