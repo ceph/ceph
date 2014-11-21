@@ -29,9 +29,11 @@ bool block_device_support_discard(const char *devname)
 {
   bool can_trim = false;
   char *p = strstr((char *)devname, "sd");
-  char name[32] = {0};
+  char name[32];
 
-  strcpy(name, p);
+  strncpy(name, p, sizeof(name) - 1);
+  name[sizeof(name) - 1] = '\0';
+
   for (unsigned int i = 0; i < strlen(name); i++) {
     if(isdigit(name[i])) {
       name[i] = 0;
