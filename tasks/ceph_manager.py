@@ -1235,6 +1235,32 @@ class CephManager:
 
         return None
 
+    def get_object_pg_with_shard(self, pool, name, osdid):
+        """
+        """
+        pool_dump = self.get_pool_dump(pool)
+        object_map = self.get_object_map(pool, name)
+        if pool_dump["type"] == CephManager.ERASURE_CODED_POOL:
+            shard = object_map['acting'].index(osdid)
+            return "{pgid}s{shard}".format(pgid=object_map['pgid'],
+                                           shard=shard)
+        else:
+            return object_map['pgid']
+
+    def get_object_primary(self, pool, name):
+        """
+        """
+        object_map = self.get_object_map(pool, name)
+        return object_map['acting_primary']
+
+    def get_object_map(self, pool, name):
+        """
+        osd map --format=json converted to a python object
+        :returns: the python object
+        """
+        out = self.raw_cluster_cmd('--format=json', 'osd', 'map', pool, name)
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_osd_dump_json(self):
         """
         osd dump --format=json converted to a python object
