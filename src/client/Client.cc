@@ -10202,16 +10202,18 @@ Inode *Client::get_quota_root(Inode *in)
     if (!cur->qtree)
       cur->qtree = new QuotaTree(cur);
 
-    ldout(cct, 20) << "link quota tree " << cur->ino 
+    cur->qtree->set_parent(parent);
+    if (parent->in()->quota.is_enable())
+      ancestor = parent;
+    cur->qtree->set_ancestor(ancestor);
+
+    ldout(cct, 20) << "link quota tree " << cur->ino
                    << " to parent (" << parent->in()->ino << ")"
                    << " ancestor (" << ancestor->in()->ino << ")" << dendl;
 
-    cur->qtree->set_ancestor(ancestor);
+    parent = cur->qtree;
     if (cur->quota.is_enable())
       ancestor = cur->qtree;
-
-    cur->qtree->set_parent(parent);
-    parent = cur->qtree;
   }
 
   return ancestor->in();
