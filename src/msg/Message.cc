@@ -64,7 +64,9 @@ using namespace std;
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
+#include "messages/MOSDClientSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDClientSubOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 
@@ -416,8 +418,14 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case MSG_OSD_SUBOP:
     m = new MOSDSubOp();
     break;
+  case MSG_OSD_CLIENT_SUBOP:
+    m = new MOSDClientSubOp();
+    break;
   case MSG_OSD_SUBOPREPLY:
     m = new MOSDSubOpReply();
+    break;
+  case MSG_OSD_CLIENT_SUBOPREPLY:
+    m = new MOSDClientSubOpReply();
     break;
 
   case CEPH_MSG_OSD_MAP:

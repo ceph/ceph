@@ -39,7 +39,9 @@
 #include "messages/MOSDECSubOpReadReply.h"
 
 #include "messages/MOSDSubOp.h"
+#include "messages/MOSDClientSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDClientSubOpReply.h"
 #include "common/BackTrace.h"
 
 #ifdef WITH_LTTNG
@@ -4989,6 +4991,8 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_op(op);
   case MSG_OSD_SUBOP:
     return can_discard_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
+  case MSG_OSD_CLIENT_SUBOP:
+    return can_discard_replica_op<MOSDClientSubOp, MSG_OSD_CLIENT_SUBOP>(op);
   case MSG_OSD_PG_PUSH:
     return can_discard_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op);
   case MSG_OSD_PG_PULL:
@@ -4997,6 +5001,8 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
   case MSG_OSD_SUBOPREPLY:
     return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
+  case MSG_OSD_CLIENT_SUBOPREPLY:
+    return can_discard_replica_op<MOSDClientSubOpReply, MSG_OSD_CLIENT_SUBOPREPLY>(op);
 
   case MSG_OSD_EC_WRITE:
     return can_discard_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
@@ -5028,10 +5034,20 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
       cur_epoch,
       static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
 
+  case MSG_OSD_CLIENT_SUBOP:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDClientSubOp*>(op->get_req())->map_epoch);
+
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_CLIENT_SUBOPREPLY:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDClientSubOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
