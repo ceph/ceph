@@ -413,6 +413,9 @@ protected:
 
   MD5 *user_manifest_parts_hash;
 
+  uint64_t olh_epoch;
+  string version_id;
+
 public:
   RGWPutObj() {
     ret = 0;
@@ -425,6 +428,7 @@ public:
     obj_manifest = NULL;
     mtime = 0;
     user_manifest_parts_hash = NULL;
+    olh_epoch = 0;
   }
 
   virtual void init(RGWRados *store, struct req_state *s, RGWHandler *h) {
@@ -590,6 +594,9 @@ protected:
 
   off_t last_ofs;
 
+  string version_id;
+  uint64_t olh_epoch;
+
 
   int init_common();
 
@@ -610,6 +617,7 @@ public:
     mtime = 0;
     replace_attrs = false;
     last_ofs = 0;
+    olh_epoch = 0;
   }
 
   static bool parse_copy_location(const string& src, string& bucket_name, rgw_obj_key& object);
