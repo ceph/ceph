@@ -10,6 +10,7 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
+
 def choose_primary(ctx, pool, num):
     """
     Return primary to test on.
@@ -17,12 +18,14 @@ def choose_primary(ctx, pool, num):
     log.info("Choosing primary")
     return ctx.manager.get_pg_primary(pool, num)
 
+
 def choose_replica(ctx, pool, num):
     """
     Return replica to test on.
     """
     log.info("Choosing replica")
     return ctx.manager.get_pg_replica(pool, num)
+
 
 def trunc(ctx, osd, pool, obj):
     """
@@ -33,14 +36,16 @@ def trunc(ctx, osd, pool, obj):
         osd,
         ['truncobj', pool, obj, '1'])
 
+
 def dataerr(ctx, osd, pool, obj):
     """
-    cause an error in the data 
+    cause an error in the data
     """
     log.info("injecting data err on object")
     return ctx.manager.osd_admin_socket(
         osd,
         ['injectdataerr', pool, obj])
+
 
 def mdataerr(ctx, osd, pool, obj):
     """
@@ -51,12 +56,14 @@ def mdataerr(ctx, osd, pool, obj):
         osd,
         ['injectmdataerr', pool, obj])
 
+
 def omaperr(ctx, osd, pool, obj):
     """
     Cause an omap error.
     """
     log.info("injecting omap err on object")
-    return ctx.manager.osd_admin_socket(osd, ['setomapval', pool, obj, 'badkey', 'badval']);
+    return ctx.manager.osd_admin_socket(osd, ['setomapval', pool, obj,
+                                              'badkey', 'badval'])
 
 def repair_test_1(ctx, corrupter, chooser, scrub_type):
     """
@@ -101,13 +108,14 @@ def repair_test_1(ctx, corrupter, chooser, scrub_type):
         assert not ctx.manager.pg_inconsistent(pool, 0)
         log.info("done")
 
+
 def repair_test_2(ctx, config, chooser):
     """
     First creates a set of objects and
     sets the omap value.  It then corrupts an object, does both a scrub
     and a deep-scrub, and then corrupts more objects.  After that, it
     repairs the pool and makes sure that the pool is consistent some
-    time after a deep-scrub. 
+    time after a deep-scrub.
 
     :param chooser: primary or replica selection routine.
     """
@@ -122,12 +130,14 @@ def repair_test_2(ctx, config, chooser):
         # create object
         log.info("doing put and setomapval")
         ctx.manager.do_put(pool, 'file1', '/etc/hosts')
-        ctx.manager.do_rados(mon, ['-p', pool, 'setomapval', 'file1', 'key', 'val'])
+        ctx.manager.do_rados(mon, ['-p', pool, 'setomapval', 'file1',
+                                   'key', 'val'])
         ctx.manager.do_put(pool, 'file2', '/etc/hosts')
         ctx.manager.do_put(pool, 'file3', '/etc/hosts')
         ctx.manager.do_put(pool, 'file4', '/etc/hosts')
         ctx.manager.do_put(pool, 'file5', '/etc/hosts')
-        ctx.manager.do_rados(mon, ['-p', pool, 'setomapval', 'file5', 'key', 'val'])
+        ctx.manager.do_rados(mon, ['-p', pool, 'setomapval', 'file5',
+                                   'key', 'val'])
         ctx.manager.do_put(pool, 'file6', '/etc/hosts')
 
         # corrupt object
@@ -196,7 +206,20 @@ def task(ctx, config):
     - chef:
     - install:
     - ceph:
-        log-whitelist: ['candidate had a read error', 'deep-scrub 0 missing, 1 inconsistent objects', 'deep-scrub 0 missing, 4 inconsistent objects', 'deep-scrub 1 errors', 'deep-scrub 4 errors', '!= known omap_digest', 'repair 0 missing, 1 inconsistent objects', 'repair 0 missing, 4 inconsistent objects', 'repair 1 errors, 1 fixed', 'repair 4 errors, 4 fixed', 'scrub 0 missing, 1 inconsistent', 'scrub 1 errors', 'size 1 != known size']
+        log-whitelist:
+          - 'candidate had a read error'
+          - 'deep-scrub 0 missing, 1 inconsistent objects'
+          - 'deep-scrub 0 missing, 4 inconsistent objects'
+          - 'deep-scrub 1 errors'
+          - 'deep-scrub 4 errors'
+          - '!= known omap_digest'
+          - 'repair 0 missing, 1 inconsistent objects'
+          - 'repair 0 missing, 4 inconsistent objects'
+          - 'repair 1 errors, 1 fixed'
+          - 'repair 4 errors, 4 fixed'
+          - 'scrub 0 missing, 1 inconsistent'
+          - 'scrub 1 errors'
+          - 'size 1 != known size'
         conf:
           osd:
             filestore debug inject read err: true
