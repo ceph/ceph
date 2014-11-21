@@ -1497,8 +1497,8 @@ public:
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
 
-    void queued_async() {
-      RWLock::WLocker l(watch_lock);
+    void _queued_async() {
+      assert(watch_lock.is_locked());
       watch_pending_async.push_back(ceph_clock_now(NULL));
     }
     void finished_async() {
