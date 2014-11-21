@@ -65,6 +65,8 @@
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "messages/MOSDRepOp.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDBoot.h"
@@ -5535,8 +5537,13 @@ epoch_t op_required_epoch(OpRequestRef op)
   }
   case MSG_OSD_SUBOP:
     return replica_op_required_epoch<MOSDSubOp, MSG_OSD_SUBOP>(op);
+  case MSG_OSD_REPOP:
+    return replica_op_required_epoch<MOSDRepOp, MSG_OSD_REPOP>(op);
   case MSG_OSD_SUBOPREPLY:
     return replica_op_required_epoch<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(
+      op);
+  case MSG_OSD_REPOPREPLY:
+    return replica_op_required_epoch<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(
       op);
   case MSG_OSD_PG_PUSH:
     return replica_op_required_epoch<MOSDPGPush, MSG_OSD_PG_PUSH>(
@@ -5638,8 +5645,14 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
   case MSG_OSD_SUBOP:
     handle_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op, osdmap);
     break;
+  case MSG_OSD_REPOP:
+    handle_replica_op<MOSDRepOp, MSG_OSD_REPOP>(op, osdmap);
+    break;
   case MSG_OSD_SUBOPREPLY:
     handle_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op, osdmap);
+    break;
+  case MSG_OSD_REPOPREPLY:
+    handle_replica_op<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op, osdmap);
     break;
   case MSG_OSD_PG_PUSH:
     handle_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op, osdmap);
