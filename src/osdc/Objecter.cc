@@ -495,7 +495,7 @@ struct C_DoWatchError : public Context {
   int err;
   C_DoWatchError(Objecter::LingerOp *i, int r) : info(i), err(r) {
     info->get();
-    info->queued_async();
+    info->_queued_async();
   }
   void finish(int r) {
     info->watch_context->handle_error(info->linger_id, err);
@@ -730,7 +730,7 @@ struct C_DoWatchNotify : public Context {
   C_DoWatchNotify(Objecter *o, Objecter::LingerOp *i, MWatchNotify *m)
     : objecter(o), info(i), msg(m) {
     info->get();
-    info->queued_async();
+    info->_queued_async();
     msg->get();
   }
   void finish(int r) {
@@ -750,8 +750,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     ldout(cct, 7) << __func__ << " cookie " << m->cookie << " dne" << dendl;
     return;
   }
+  RWLock::WLocker wl(info->watch_lock);
   if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
-    RWLock::WLocker l(info->watch_lock);
     info->last_error = -ENOTCONN;
   }
   finisher->queue(new C_DoWatchNotify(this, info, m));
