@@ -274,6 +274,7 @@ class GenericObjectMap {
 
   static const string GHOBJECT_KEY_SEP_S;
   static const char GHOBJECT_KEY_SEP_C;
+  static const char GHOBJECT_KEY_ENDING;
 
 private:
   /// Implicit lock on Header->seq
