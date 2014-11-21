@@ -4092,6 +4092,8 @@ bool remove_dir(
     for (vector<ghobject_t>::iterator i = olist.begin();
 	 i != olist.end();
 	 ++i, ++num) {
+      if (i->is_pgmeta())
+	continue;
       OSDriver::OSTransaction _t(osdriver->get_transaction(t));
       int r = mapper->remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
