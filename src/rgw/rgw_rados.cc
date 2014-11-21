@@ -82,6 +82,14 @@ static RGWObjCategory main_category = RGW_OBJ_CATEGORY_MAIN;
 
 #define dout_subsys ceph_subsys_rgw
 
+struct bucket_info_entry {
+  RGWBucketInfo info;
+  time_t mtime;
+  map<string, bufferlist> attrs;
+};
+
+static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
+
 void RGWDefaultRegionInfo::dump(Formatter *f) const {
   encode_json("default_region", default_region, f);
 }
@@ -1223,6 +1231,13 @@ public:
   void handle_error(uint64_t cookie, int err) {
     lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
+    rados->set_cache_enabled(false);
+    rados->finalize_watch();
+    int ret = rados->init_watch();
+    if (ret < 0) {
+      ldout(rados->ctx(), 0) << "ERROR: init_watch() returned ret=" << ret << ", cache is disabled" << dendl;
+      return;
+    }
   }
 };
 
@@ -1460,6 +1475,8 @@ int RGWRados::init_complete()
   }
   ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
+  binfo_cache.init(this);
+
   return ret;
 }
 
@@ -1628,6 +1645,8 @@ int RGWRados::init_watch()
   }
 
   watch_initialized = true;
+
+  set_cache_enabled(true);
 
   return 0;
 }
@@ -6759,14 +6778,6 @@ int RGWRados::convert_old_bucket_info(RGWObjectCtx& obj_ctx, string& bucket_name
 
   return 0;
 }
-
-struct bucket_info_entry {
-  RGWBucketInfo info;
-  time_t mtime;
-  map<string, bufferlist> attrs;
-};
-
-static RGWChainedCacheImpl<bucket_info_entry> binfo_cache;
 
 int RGWRados::get_bucket_info(RGWObjectCtx& obj_ctx, const string& bucket_name, RGWBucketInfo& info,
                               time_t *pmtime, map<string, bufferlist> *pattrs)

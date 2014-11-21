@@ -146,10 +146,16 @@ class ObjectCache {
   RWLock lock;
   CephContext *cct;
 
+  list<RGWChainedCache *> chained_cache;
+
+  bool enabled;
+
   void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
+
+  void do_invalidate_all();
 public:
-  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL) { }
+  ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
   int get(std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
   void put(std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info);
   void remove(std::string& name);
@@ -158,6 +164,11 @@ public:
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
   }
   bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry);
+
+  void set_enabled(bool status);
+
+  void chain_cache(RGWChainedCache *cache);
+  void invalidate_all();
 };
 
 template <class T>
@@ -205,8 +216,16 @@ class RGWCache  : public T
 	       uint64_t cookie,
 	       uint64_t notifier_id,
 	       bufferlist& bl);
+
+  void set_cache_enabled(bool state) {
+    cache.set_enabled(state);
+  }
 public:
   RGWCache() {}
+
+  void register_chained_cache(RGWChainedCache *cc) {
+    cache.chain_cache(cc);
+  }
 
   int set_attr(void *ctx, rgw_obj& obj, const char *name, bufferlist& bl, RGWObjVersionTracker *objv_tracker);
   int set_attrs(void *ctx, rgw_obj& obj, 
