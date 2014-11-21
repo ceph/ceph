@@ -1130,6 +1130,7 @@ public:
   virtual ~RGWChainedCache() {}
   virtual void chain_cb(const string& key, void *data) = 0;
   virtual void invalidate(const string& key) = 0;
+  virtual void invalidate_all() = 0;
 
   struct Entry {
     RGWChainedCache *cache;
@@ -1823,6 +1824,7 @@ public:
                              bufferlist& bl, off_t ofs, off_t end,
                              rgw_cache_entry_info *cache_info);
 
+  virtual void register_chained_cache(RGWChainedCache *cache) {}
   virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(RGWObjectCtx& ctx, rgw_obj& obj,
@@ -1895,6 +1897,8 @@ public:
 		       uint64_t notifier_id,
 		       bufferlist& bl) { return 0; }
   void pick_control_oid(const string& key, string& notify_oid);
+
+  virtual void set_cache_enabled(bool state) {}
 
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
@@ -2129,6 +2133,10 @@ class RGWChainedCacheImpl : public RGWChainedCache {
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
+  void init(RGWRados *store) {
+    store->register_chained_cache(this);
+  }
+
   bool find(const string& key, T *entry) {
     RWLock::RLocker rl(lock);
     typename map<string, T>::iterator iter = entries.find(key);
@@ -2156,6 +2164,11 @@ public:
   void invalidate(const string& key) {
     RWLock::WLocker wl(lock);
     entries.erase(key);
+  }
+
+  void invalidate_all() {
+    RWLock::WLocker wl(lock);
+    entries.clear();
   }
 };
 

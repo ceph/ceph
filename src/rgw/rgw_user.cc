@@ -2514,8 +2514,10 @@ public:
   }
 };
 
-void rgw_user_init(RGWMetadataManager *mm)
+void rgw_user_init(RGWRados *store)
 {
+  uinfo_cache.init(store);
+
   user_meta_handler = new RGWUserMetadataHandler;
-  mm->register_handler(user_meta_handler);
+  store->meta_mgr->register_handler(user_meta_handler);
 }
