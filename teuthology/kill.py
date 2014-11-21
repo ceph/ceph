@@ -152,6 +152,12 @@ def kill_processes(run_name, pids=None):
     else:
         to_kill = find_pids(run_name)
 
+    # Remove processes that don't match run-name from the set
+    to_check = set(to_kill)
+    for pid in to_check:
+        if not process_matches_run(pid, run_name):
+            to_kill.remove(pid)
+
     if len(to_kill) == 0:
         log.info("No teuthology processes running")
     else:
