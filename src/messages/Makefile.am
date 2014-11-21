@@ -104,6 +104,8 @@ noinst_HEADERS += \
 	messages/MOSDScrub.h \
 	messages/MOSDSubOp.h \
 	messages/MOSDSubOpReply.h \
+	messages/MOSDRepOp.h \
+	messages/MOSDRepOpReply.h \
 	messages/MPGStats.h \
 	messages/MPGStatsAck.h \
 	messages/MPing.h \
