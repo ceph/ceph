@@ -175,7 +175,7 @@ class Thrasher:
                     self.ceph_manager.ctx.ceph.conf['osd']):
                 prefix = ("sudo ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore "
+                          "--type keyvaluestore-dev "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log".
                           format(fpath=FSPATH, jpath=JPATH))
@@ -246,10 +246,7 @@ class Thrasher:
             cmd = (prefix + "--op import --file {file}")
             cmd = cmd.format(id=imp_osd, file=exp_path)
             imp_remote.run(args=cmd)
-            if proc.exitstatus == 10:
-                self.log("Pool went away before processing "
-                         "an import...ignored");
-            elif proc.exitstatus:
+            if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "import failure with status {ret}".
                                 format(ret=proc.exitstatus))
