@@ -427,9 +427,15 @@ bool Watch::is_discarded()
   return discarded;
 }
 
-void Watch::remove()
+void Watch::remove(bool send_disconnect)
 {
   dout(10) << "remove" << dendl;
+  if (send_disconnect && conn) {
+    bufferlist empty;
+    MWatchNotify *reply(new MWatchNotify(cookie, 0, 0,
+					 CEPH_WATCH_EVENT_DISCONNECT, empty));
+    conn->send_message(reply);
+  }
   for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
        i != in_progress_notifies.end();
        ++i) {
@@ -474,16 +480,6 @@ void Watch::send_notify(NotifyRef notif)
     CEPH_WATCH_EVENT_NOTIFY, notif->payload);
   notify_msg->notifier_gid = notif->client_gid;
   conn->send_message(notify_msg);
-}
-
-void Watch::send_disconnect()
-{
-  if (!conn)
-    return;
-  bufferlist empty;
-  MWatchNotify *reply(new MWatchNotify(cookie, 0, 0,
-				       CEPH_WATCH_EVENT_DISCONNECT, empty));
-  conn->send_message(reply);
 }
 
 void Watch::notify_ack(uint64_t notify_id, bufferlist& reply_bl)

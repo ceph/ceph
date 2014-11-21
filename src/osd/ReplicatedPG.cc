@@ -2084,12 +2084,17 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // read or error?
   if (ctx->op_t->empty() || result < 0) {
+    // finish side-effects
+    if (result == 0)
+      do_osd_op_effects(ctx, m->get_connection());
+
     if (ctx->pending_async_reads.empty()) {
       complete_read_ctx(result, ctx);
     } else {
       in_progress_async_reads.push_back(make_pair(op, ctx));
       ctx->start_async_reads(this);
     }
+
     return;
   }
 
@@ -4342,7 +4347,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		     << entity << dendl;
             oi.watchers.erase(oi_iter);
 	    t->nop();  // update oi on disk
-	    ctx->watch_disconnects.push_back(w);
+	    ctx->watch_disconnects.push_back(
+	      OpContext::watch_disconnect_t(cookie, entity, false));
 	  } else {
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
@@ -5365,16 +5371,34 @@ void ReplicatedPG::add_interval_usage(interval_set<uint64_t>& s, object_stat_sum
   }
 }
 
-void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
+void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
 {
-  ConnectionRef conn(ctx->op->get_req()->get_connection());
+  entity_name_t entity = ctx->reqid.name;
+  dout(15) << "do_osd_op_effects " << entity << " con " << conn.get() << dendl;
+
+  // disconnects first
+  for (list<OpContext::watch_disconnect_t>::iterator i =
+	 ctx->watch_disconnects.begin();
+       i != ctx->watch_disconnects.end();
+       ++i) {
+    pair<uint64_t, entity_name_t> watcher(i->cookie, i->name);
+    if (ctx->obc->watchers.count(watcher)) {
+      WatchRef watch = ctx->obc->watchers[watcher];
+      dout(10) << "do_osd_op_effects disconnect watcher " << watcher << dendl;
+      ctx->obc->watchers.erase(watcher);
+      watch->remove(i->send_disconnect);
+    } else {
+      dout(10) << "do_osd_op_effects disconnect failed to find watcher "
+	       << watcher << dendl;
+    }
+  }
+
+  if (!conn)
+    return;
   boost::intrusive_ptr<OSD::Session> session((OSD::Session *)conn->get_priv());
   if (!session.get())
     return;
   session->put();  // get_priv() takes a ref, and so does the intrusive_ptr
-  entity_name_t entity = ctx->reqid.name;
-
-  dout(15) << "do_osd_op_effects on session " << session.get() << dendl;
 
   for (list<pair<watch_info_t,bool> >::iterator i = ctx->watch_connects.begin();
        i != ctx->watch_connects.end();
@@ -5401,28 +5425,11 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx)
     watch->connect(conn, i->second);
   }
 
-  for (list<watch_info_t>::iterator i = ctx->watch_disconnects.begin();
-       i != ctx->watch_disconnects.end();
-       ++i) {
-    pair<uint64_t, entity_name_t> watcher(i->cookie, entity);
-    dout(15) << "do_osd_op_effects applying watch disconnect on session "
-	     << session.get() << " and watcher " << watcher << dendl;
-    if (ctx->obc->watchers.count(watcher)) {
-      WatchRef watch = ctx->obc->watchers[watcher];
-      dout(10) << "do_osd_op_effects applying disconnect found watcher "
-	       << watcher << dendl;
-      ctx->obc->watchers.erase(watcher);
-      watch->remove();
-    } else {
-      dout(10) << "do_osd_op_effects failed to find watcher "
-	       << watcher << dendl;
-    }
-  }
-
   for (list<notify_info_t>::iterator p = ctx->notifies.begin();
        p != ctx->notifies.end();
        ++p) {
     dout(10) << "do_osd_op_effects, notify " << *p << dendl;
+    ConnectionRef conn(ctx->op->get_req()->get_connection());
     NotifyRef notif(
       Notify::makeNotifyRef(
 	conn,
@@ -5493,10 +5500,6 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   int result = do_osd_ops(ctx, ctx->ops);
   if (result < 0)
     return result;
-
-  // finish side-effects
-  if (result == 0)
-    do_osd_op_effects(ctx);
 
   // read-op?  done?
   if (ctx->op_t->empty() && !ctx->modify) {
@@ -7084,6 +7087,11 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->all_applied && repop->all_committed) {
     repop->rep_done = true;
 
+    do_osd_op_effects(
+      repop->ctx,
+      repop->ctx->op ? repop->ctx->op->get_req()->get_connection() :
+      ConnectionRef());
+
     calc_min_last_complete_ondisk();
 
     // kick snap_trimmer if necessary
@@ -7430,12 +7438,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     return;
   }
 
-  watch->send_disconnect();
-
-  obc->watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
-  obc->obs.oi.watchers.erase(make_pair(watch->get_cookie(), watch->get_entity()));
-  watch->remove();
-
   vector<OSDOp> ops;
   ceph_tid_t rep_tid = osd->get_tid();
   osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
@@ -7444,22 +7446,30 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   ctx->mtime = ceph_clock_now(cct);
   ctx->at_version = get_next_version();
 
+  object_info_t& oi = ctx->new_obs.oi;
+  oi.watchers.erase(make_pair(watch->get_cookie(),
+			      watch->get_entity()));
+
+  watch_info_t w(watch->get_cookie(),
+		 cct->_conf->osd_client_watch_timeout,  // fixme someday
+		 watch->get_peer_addr());
+  ctx->watch_disconnects.push_back(
+    OpContext::watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true));
+
+
   entity_inst_t nobody;
-
   RepGather *repop = new_repop(ctx, obc, rep_tid);
-
   PGBackend::PGTransaction *t = ctx->op_t;
-
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				    ctx->at_version,
-				    obc->obs.oi.version,
+				    oi.version,
 				    0,
 				    osd_reqid_t(), ctx->mtime));
 
-  obc->obs.oi.prior_version = repop->obc->obs.oi.version;
-  obc->obs.oi.version = ctx->at_version;
+  oi.prior_version = repop->obc->obs.oi.version;
+  oi.version = ctx->at_version;
   bufferlist bl;
-  ::encode(obc->obs.oi, bl);
+  ::encode(oi, bl);
   setattr_maybe_cache(obc, repop->ctx, t, OI_ATTR, bl);
 
   if (pool.info.require_rollback()) {
