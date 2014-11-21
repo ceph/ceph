@@ -1594,6 +1594,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
 
   if (!multipart) {
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
+    ((RGWPutObjProcessor_Atomic *)processor)->set_olh_epoch(olh_epoch);
   } else {
     processor = new RGWPutObjProcessor_Multipart(obj_ctx, bucket_owner, part_size, s);
   }
@@ -1683,6 +1684,30 @@ static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data
   return 0;
 }
 
+static int get_system_versioning_params(req_state *s, uint64_t *olh_epoch, string *version_id)
+{
+  if (!s->system_request) {
+    return 0;
+  }
+
+  if (olh_epoch) {
+    string epoch_str = s->info.args.get(RGW_SYS_PARAM_PREFIX "versioned-epoch");
+    if (!epoch_str.empty()) {
+      string err;
+      *olh_epoch = strict_strtol(epoch_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 0) << "failed to parse versioned-epoch param" << dendl;
+        return -EINVAL;
+      }
+    }
+  }
+
+  if (version_id) {
+    *version_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "version-id");
+  }
+
+  return 0;
+}
 
 void RGWPutObj::execute()
 {
@@ -1710,6 +1735,11 @@ void RGWPutObj::execute()
   ret = get_params();
   if (ret < 0)
     goto done;
+
+  ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (ret < 0) {
+    goto done;
+  }
 
   if (supplied_md5_b64) {
     need_calc_md5 = true;
@@ -2142,6 +2172,10 @@ void RGWDeleteObj::execute()
     RGWRados::Object del_target(store, *obj_ctx, obj);
     RGWRados::Object::Delete del_op(&del_target);
 
+    ret = get_system_versioning_params(s, &del_op.params.olh_epoch, &del_op.params.marker_version_id);
+    if (ret < 0) {
+      return;
+    }
     del_op.params.bucket_owner = s->bucket_owner.get_id();
     del_op.params.versioning_status = s->bucket_info.versioning_status();
     del_op.params.obj_owner = s->owner;
@@ -2207,6 +2241,10 @@ int RGWCopyObj::verify_permission()
   if (ret < 0)
     return ret;
 
+  ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (ret < 0) {
+    return ret;
+  }
   map<string, bufferlist> src_attrs;
 
   RGWObjectCtx& obj_ctx = *(RGWObjectCtx *)s->obj_ctx;
@@ -2873,10 +2911,17 @@ void RGWCompleteMultipart::execute()
   rgw_obj target_obj;
   RGWMPObj mp;
   RGWObjManifest manifest;
+  uint64_t olh_epoch = 0;
+  string version_id;
 
   ret = get_params();
   if (ret < 0)
     return;
+
+  ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  if (ret < 0) {
+    return;
+  }
 
   if (!data) {
     ret = -EINVAL;
@@ -3022,7 +3067,7 @@ void RGWCompleteMultipart::execute()
     return;
 
   if (versioned_object) {
-    ret = store->set_olh(obj_ctx, s->bucket_owner.get_id(), target_obj, false, NULL);
+    ret = store->set_olh(obj_ctx, s->bucket_owner.get_id(), target_obj, false, NULL, olh_epoch);
     if (ret < 0) {
       return;
     }

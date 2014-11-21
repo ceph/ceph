@@ -1473,8 +1473,10 @@ public:
         string bucket_owner;
         int versioning_status;
         ACLOwner obj_owner; /* needed for creation of deletion marker */
+        uint64_t olh_epoch;
+        string marker_version_id;
 
-        DeleteParams() : versioning_status(0) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0) {}
       } params;
 
       struct DeleteResult {
@@ -1711,8 +1713,9 @@ public:
   int olh_init_modification(RGWObjState& state, rgw_obj& olh_obj, string *op_tag);
   int olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, string *op_tag);
   int bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instance, bool delete_marker,
-                            const string& op_tag, struct rgw_bucket_dir_entry_meta *meta);
-  int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag);
+                            const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch);
+  int bucket_index_unlink_instance(rgw_obj& obj_instance, const string& op_tag, uint64_t olh_epoch);
   int bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(RGWObjState& obj_state, rgw_obj& obj_instance, uint64_t ver);
@@ -1720,8 +1723,10 @@ public:
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver);
   int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
-  int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta);
-  int unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj);
+  int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+              uint64_t olh_epoch);
+  int unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj,
+                          uint64_t olh_epoch);
 
   void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(RGWObjState& state, rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs);
@@ -2050,6 +2055,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   uint64_t max_chunk_size;
 
   bool versioned_object;
+  uint64_t olh_epoch;
 
 protected:
   rgw_bucket bucket;
@@ -2084,6 +2090,7 @@ public:
                                 extra_data_len(0),
                                 max_chunk_size(0),
                                 versioned_object(versioned),
+                                olh_epoch(0),
                                 bucket(_b),
                                 obj_str(_o),
                                 unique_tag(_t) {}
@@ -2094,6 +2101,10 @@ public:
   }
   virtual int handle_data(bufferlist& bl, off_t ofs, void **phandle, bool *again);
   bufferlist& get_extra_data() { return extra_data_bl; }
+
+  void set_olh_epoch(uint64_t epoch) {
+    olh_epoch = epoch;
+  }
 };
 
 #endif
