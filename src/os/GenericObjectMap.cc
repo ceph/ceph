@@ -225,7 +225,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
 
   current = ++end;
   for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C && *end != GHOBJECT_KEY_ENDING; ++end) ;
-  if (*end == long_name.end())
+  if (end == long_name.end())
     return false;
 
   string snap_str(current, end);
@@ -241,7 +241,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   if (*end != GHOBJECT_KEY_ENDING) {
     current = ++end;
     for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (end != GHOBJECT_KEY_SEP_C)
+    if (*end != GHOBJECT_KEY_SEP_C)
       return false;
     genstring = string(current, end);
 
