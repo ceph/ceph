@@ -15,7 +15,9 @@
 #include "ReplicatedBackend.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
+#include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
@@ -163,6 +165,11 @@ bool ReplicatedBackend::handle_message(
     break;
   }
 
+  case MSG_OSD_REPOP: {
+    sub_op_modify(op);
+    return true;
+  }
+
   case MSG_OSD_SUBOPREPLY: {
     MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
     if (r->ops.size() >= 1) {
@@ -173,11 +180,17 @@ bool ReplicatedBackend::handle_message(
 	sub_op_push_reply(op);
 	return true;
       }
-    } else {
-      sub_op_modify_reply(op);
+    }
+    else {
+      sub_op_modify_reply<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
       return true;
     }
     break;
+  }
+
+  case MSG_OSD_REPOPREPLY: {
+    sub_op_modify_reply<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
+    return true;
   }
 
   default:
@@ -626,10 +639,12 @@ void ReplicatedBackend::op_commit(
   }
 }
 
+template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
-  assert(r->get_type() == MSG_OSD_SUBOPREPLY);
+  T *r = static_cast<T *>(op->get_req());
+  assert(r->get_header().type == MSGTYPE);
+  assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
 
   op->mark_started();
 

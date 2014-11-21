@@ -355,6 +355,22 @@ public:
     );
 
 private:
+  template<typename T, int MSGTYPE>
+  Message * generate_subop(
+    const hobject_t &soid,
+    const eversion_t &at_version,
+    ceph_tid_t tid,
+    osd_reqid_t reqid,
+    eversion_t pg_trim_to,
+    eversion_t pg_trim_rollback_to,
+    hobject_t new_temp_oid,
+    hobject_t discard_temp_oid,
+    vector<pg_log_entry_t> &log_entries,
+    boost::optional<pg_hit_set_history_t> &hset_history,
+    InProgressOp *op,
+    ObjectStore::Transaction *op_t,
+    pg_shard_t peer,
+    const pg_info_t &pinfo);
   void issue_op(
     const hobject_t &soid,
     const eversion_t &at_version,
@@ -370,8 +386,11 @@ private:
     ObjectStore::Transaction *op_t);
   void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
+  template<typename T, int MSGTYPE>
   void sub_op_modify_reply(OpRequestRef op);
   void sub_op_modify(OpRequestRef op);
+  template<typename T, int MSGTYPE>
+  void sub_op_modify_impl(OpRequestRef op);
 
   struct RepModify {
     OpRequestRef op;

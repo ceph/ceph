@@ -114,6 +114,10 @@
 #define MSG_OSD_EC_READ        110
 #define MSG_OSD_EC_READ_REPLY  111
 
+#define MSG_OSD_REPOP         112
+#define MSG_OSD_REPOPREPLY    113
+
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor
