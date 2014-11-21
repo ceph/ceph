@@ -3,125 +3,64 @@ Test pool repairing after objects are damaged.
 """
 import logging
 import time
+import contextlib
 
 import ceph_manager
 from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def setup(ctx, config):
+def choose_primary(ctx, pool, num):
     """
-    Create the repair test pool.
+    Return primary to test on.
     """
-    ctx.manager.wait_for_clean()
-    ctx.manager.create_pool("repair_test_pool", 1)
-    return "repair_test_pool"
+    log.info("Choosing primary")
+    return ctx.manager.get_pg_primary(pool, num)
 
-def teardown(ctx, config, pool):
+def choose_replica(ctx, pool, num):
     """
-    Remove the repair test pool.
+    Return replica to test on.
     """
-    ctx.manager.remove_pool(pool)
-    ctx.manager.wait_for_clean()
+    log.info("Choosing replica")
+    return ctx.manager.get_pg_replica(pool, num)
 
-def run_test(ctx, config, test):
+def trunc(ctx, osd, pool, obj):
     """
-    Setup a test pool, run the test, and clean up afterwards.
-   
-    :param test: function passed in, called to run the test.
+    truncate an object
     """
-    s = setup(ctx, config)
-    test(ctx, config, s)
-    teardown(ctx, config, s)
+    log.info("truncating object")
+    return ctx.manager.osd_admin_socket(
+        osd,
+        ['truncobj', pool, obj, '1'])
 
-def choose_primary(ctx):
+def dataerr(ctx, osd, pool, obj):
     """
-    Select a primary for the next test.  This routine is typically passed to
-    as a 'chooser function'
+    cause an error in the data 
     """
-    def ret(pool, num):
-        """
-        Return primary to test on.
-        """
-        log.info("Choosing primary")
-        return ctx.manager.get_pg_primary(pool, num)
-    return ret
+    log.info("injecting data err on object")
+    return ctx.manager.osd_admin_socket(
+        osd,
+        ['injectdataerr', pool, obj])
 
-def choose_replica(ctx):
+def mdataerr(ctx, osd, pool, obj):
     """
-    Select a replica for the next test.  This routine is typically passed to
-    as a 'chooser function'
+    cause an error in the mdata
     """
-    def ret(pool, num):
-        """
-        Return replica to test on.
-        """
-        log.info("Choosing replica")
-        return ctx.manager.get_pg_replica(pool, num)
-    return ret
+    log.info("injecting mdata err on object")
+    return ctx.manager.osd_admin_socket(
+        osd,
+        ['injectmdataerr', pool, obj])
 
-def trunc(ctx):
+def omaperr(ctx, osd, pool, obj):
     """
-    Truncate an object in the pool. This function is typically passed as a
-    'corrupter function'
+    Cause an omap error.
     """
-    def ret(osd, pool, obj):
-        """
-        truncate an object
-        """
-        log.info("truncating object")
-        return ctx.manager.osd_admin_socket(
-            osd,
-            ['truncobj', pool, obj, '1'])
-    return ret
+    log.info("injecting omap err on object")
+    return ctx.manager.osd_admin_socket(osd, ['setomapval', pool, obj, 'badkey', 'badval']);
 
-def dataerr(ctx):
+def repair_test_1(ctx, corrupter, chooser, scrub_type):
     """
-    Generate an error on an object in the pool. This function is typically
-    passed as a 'corrupter function'
-    """
-    def ret(osd, pool, obj):
-        """
-        cause an error in the data 
-        """
-        log.info("injecting data err on object")
-        return ctx.manager.osd_admin_socket(
-            osd,
-            ['injectdataerr', pool, obj])
-    return ret
-
-def mdataerr(ctx):
-    """
-    Generate an mdata error on an object in the pool. This function is
-    typically passed as a 'corrupter function'
-    """
-    def ret(osd, pool, obj):
-        """
-        cause an error in the mdata
-        """
-        log.info("injecting mdata err on object")
-        return ctx.manager.osd_admin_socket(
-            osd,
-            ['injectmdataerr', pool, obj])
-    return ret
-
-def omaperr(ctx):
-    """
-    Cause data corruption by injecting omap errors into a pool.
-    """
-    def ret(osd, pool, obj):
-        """
-        Cause an omap error.
-        """
-        log.info("injecting omap err on object")
-        return ctx.manager.osd_admin_socket(osd, ['setomapval', pool, obj, 'badkey', 'badval']);
-    return ret
-
-def gen_repair_test_1(corrupter, chooser, scrub_type):
-    """
-    Repair test.  Wrapper for the internal ret function.
-
-    The internal ret function creates an object in the pool, corrupts it,
+    Creates an object in the pool, corrupts it,
     scrubs it, and verifies that the pool is inconsistent.  It then repairs
     the pool, rescrubs it, and verifies that the pool is consistent
 
@@ -130,12 +69,12 @@ def gen_repair_test_1(corrupter, chooser, scrub_type):
     :param chooser: osd type chooser (primary or replica)
     :param scrub_type: regular scrub or deep-scrub
     """
-    def ret(ctx, config, pool):
-        """
-        :param pool: repair test pool
-        """
+    pool = "repair_pool_1"
+    ctx.manager.wait_for_clean()
+    with ctx.manager.pool(pool, 1):
+
         log.info("starting repair test type 1")
-        victim_osd = chooser(pool, 0)
+        victim_osd = chooser(ctx, pool, 0)
 
         # create object
         log.info("doing put")
@@ -143,7 +82,7 @@ def gen_repair_test_1(corrupter, chooser, scrub_type):
 
         # corrupt object
         log.info("corrupting object")
-        corrupter(victim_osd, pool, 'repair_test_obj')
+        corrupter(ctx, victim_osd, pool, 'repair_test_obj')
 
         # verify inconsistent
         log.info("scrubbing")
@@ -161,13 +100,10 @@ def gen_repair_test_1(corrupter, chooser, scrub_type):
         # verify consistent
         assert not ctx.manager.pg_inconsistent(pool, 0)
         log.info("done")
-    return ret
 
-def gen_repair_test_2(chooser):
+def repair_test_2(ctx, config, chooser):
     """
-    Repair test.  Wrapper for the internal ret function.
-
-    The internal ret function first creates a set of objects and
+    First creates a set of objects and
     sets the omap value.  It then corrupts an object, does both a scrub
     and a deep-scrub, and then corrupts more objects.  After that, it
     repairs the pool and makes sure that the pool is consistent some
@@ -175,12 +111,11 @@ def gen_repair_test_2(chooser):
 
     :param chooser: primary or replica selection routine.
     """
-    def ret(ctx, config, pool):
-        """
-        :param pool: repair test pool. 
-        """
+    pool = "repair_pool_2"
+    ctx.manager.wait_for_clean()
+    with ctx.manager.pool(pool, 1):
         log.info("starting repair test type 2")
-        victim_osd = chooser(pool, 0)
+        victim_osd = chooser(ctx, pool, 0)
         first_mon = teuthology.get_first_mon(ctx, config)
         (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
@@ -197,7 +132,7 @@ def gen_repair_test_2(chooser):
 
         # corrupt object
         log.info("corrupting object")
-        omaperr(ctx)(victim_osd, pool, 'file1')
+        omaperr(ctx, victim_osd, pool, 'file1')
 
         # verify inconsistent
         log.info("scrubbing")
@@ -213,10 +148,10 @@ def gen_repair_test_2(chooser):
 
         # Additional corruptions including 2 types for file1
         log.info("corrupting more objects")
-        dataerr(ctx)(victim_osd, pool, 'file1')
-        mdataerr(ctx)(victim_osd, pool, 'file2')
-        trunc(ctx)(victim_osd, pool, 'file3')
-        omaperr(ctx)(victim_osd, pool, 'file6')
+        dataerr(ctx, victim_osd, pool, 'file1')
+        mdataerr(ctx, victim_osd, pool, 'file2')
+        trunc(ctx, victim_osd, pool, 'file3')
+        omaperr(ctx, victim_osd, pool, 'file6')
 
         # see still inconsistent
         log.info("scrubbing")
@@ -243,7 +178,7 @@ def gen_repair_test_2(chooser):
         assert not ctx.manager.pg_inconsistent(pool, 0)
 
         log.info("done")
-    return ret
+
 
 def task(ctx, config):
     """
@@ -282,22 +217,13 @@ def task(ctx, config):
             logger=log.getChild('ceph_manager')
             )
 
-    num_osds = teuthology.num_instances_of_type(ctx.cluster, 'osd')
-    log.info('num_osds is %s' % num_osds)
+    ctx.manager.wait_for_all_up()
 
-    while len(ctx.manager.get_osd_status()['up']) < num_osds:
-        time.sleep(10)
-
-    tests = [
-        gen_repair_test_1(mdataerr(ctx), choose_primary(ctx), "scrub"),
-        gen_repair_test_1(mdataerr(ctx), choose_replica(ctx), "scrub"),
-        gen_repair_test_1(dataerr(ctx), choose_primary(ctx), "deep-scrub"),
-        gen_repair_test_1(dataerr(ctx), choose_replica(ctx), "deep-scrub"),
-        gen_repair_test_1(trunc(ctx), choose_primary(ctx), "scrub"),
-        gen_repair_test_1(trunc(ctx), choose_replica(ctx), "scrub"),
-        gen_repair_test_2(choose_primary(ctx)),
-        gen_repair_test_2(choose_replica(ctx))
-        ]
-
-    for test in tests:
-        run_test(ctx, config, test)
+    repair_test_1(ctx, mdataerr, choose_primary, "scrub")
+    repair_test_1(ctx, mdataerr, choose_replica, "scrub")
+    repair_test_1(ctx, dataerr, choose_primary, "deep-scrub")
+    repair_test_1(ctx, dataerr, choose_replica, "deep-scrub")
+    repair_test_1(ctx, trunc, choose_primary, "scrub")
+    repair_test_1(ctx, trunc, choose_replica, "scrub")
+    repair_test_2(ctx, config, choose_primary)
+    repair_test_2(ctx, config, choose_replica)
