@@ -2032,6 +2032,37 @@ void ReplicatedPG::kick_proxy_read_blocked(hobject_t& soid)
   in_progress_proxy_reads.erase(p);
 }
 
+void ReplicatedPG::cancel_proxy_read(ProxyReadOpRef prdop)
+{
+  dout(10) << __func__ << " " << prdop->soid << dendl;
+
+  // cancel objecter op, if we can
+  if (prdop->objecter_tid) {
+    osd->objecter->op_cancel(prdop->objecter_tid, -ECANCELED);
+    proxyread_ops.erase(prdop->objecter_tid);
+    prdop->objecter_tid = 0;
+  }
+}
+
+void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
+{
+  dout(10) << __func__ << dendl;
+  map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.begin();
+  while (p != proxyread_ops.end()) {
+    cancel_proxy_read((p++)->second);
+  }
+
+  if (requeue) {
+    for (map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.begin();
+	p != in_progress_proxy_reads.end(); p++) {
+      list<OpRequestRef>& ls = p->second;
+      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size() << " requests" << dendl;
+      requeue_ops(ls);
+      in_progress_proxy_reads.erase(p);
+    }
+  }
+}
+
 class PromoteCallback: public ReplicatedPG::CopyCallback {
   ObjectContextRef obc;
   ReplicatedPG *pg;
@@ -6215,7 +6246,16 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
+
+  // cancel and requeue proxy reads on this object
   kick_proxy_read_blocked(cobc->obs.oi.soid);
+  for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
+      it != proxyread_ops.end(); it++) {
+    if (it->second->soid == cobc->obs.oi.soid) {
+      cancel_proxy_read(it->second);
+    }
+  }
+
   kick_object_context_blocked(cobc);
 }
 
@@ -9871,6 +9911,7 @@ void ReplicatedPG::on_shutdown()
   unreg_next_scrub();
   cancel_copy_ops(false);
   cancel_flush_ops(false);
+  cancel_proxy_read_ops(false);
   apply_and_flush_repops(false);
 
   pgbackend->on_change();
@@ -9961,6 +10002,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   cancel_copy_ops(is_primary());
   cancel_flush_ops(is_primary());
+  cancel_proxy_read_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
