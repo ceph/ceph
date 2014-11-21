@@ -442,7 +442,14 @@ public:
 
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
-    list<watch_info_t> watch_disconnects;
+    struct watch_disconnect_t {
+      uint64_t cookie;
+      entity_name_t name;
+      bool send_disconnect;
+      watch_disconnect_t(uint64_t c, entity_name_t n, bool sd)
+	: cookie(c), name(n), send_disconnect(sd) {}
+    };
+    list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
     list<notify_info_t> notifies;
     struct NotifyAck {
       boost::optional<uint64_t> watch_cookie;
@@ -1304,7 +1311,7 @@ public:
   int do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op);
   int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
 
-  void do_osd_op_effects(OpContext *ctx);
+  void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;

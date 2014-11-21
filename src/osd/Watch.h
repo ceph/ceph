@@ -203,9 +203,6 @@ public:
     return conn.get() != NULL;
   }
 
-  /// send a disconnect notice to the client
-  void send_disconnect();
-
   /// NOTE: must be called with pg lock held
   ~Watch();
 
@@ -253,7 +250,7 @@ public:
   bool is_discarded();
 
   /// Called on unwatch
-  void remove();
+  void remove(bool send_disconnect);
 
   /// Adds notif as in-progress notify
   void start_notify(
