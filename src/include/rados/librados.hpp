@@ -941,7 +941,7 @@ namespace librados
     // watch/notify
     int watch(const std::string& o, uint64_t *handle,
 	      librados::WatchCtx2 *ctx);
-    int unwatch(const std::string& o, uint64_t handle);
+    int unwatch(uint64_t handle);
     int notify(const std::string& o,   ///< object
 	       bufferlist& bl,         ///< optional broadcast payload
 	       uint64_t timeout_ms,    ///< timeout (in ms)
@@ -960,6 +960,8 @@ namespace librados
     int watch(const std::string& o, uint64_t ver, uint64_t *handle,
 	      librados::WatchCtx *ctx) __attribute__ ((deprecated));
     int notify(const std::string& o, uint64_t ver, bufferlist& bl)
+      __attribute__ ((deprecated));
+    int unwatch(const std::string& o, uint64_t handle)
       __attribute__ ((deprecated));
 
     /**

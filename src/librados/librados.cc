@@ -1675,9 +1675,13 @@ int librados::IoCtx::watch(const string& oid, uint64_t *cookie,
 
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
-  uint64_t cookie = handle;
   object_t obj(oid);
-  return io_ctx_impl->unwatch(obj, cookie);
+  return io_ctx_impl->unwatch(handle);
+}
+
+int librados::IoCtx::unwatch(uint64_t handle)
+{
+  return io_ctx_impl->unwatch(handle);
 }
 
 int librados::IoCtx::notify(const string& oid, uint64_t ver, bufferlist& bl)
@@ -3822,9 +3826,18 @@ extern "C" int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
   tracepoint(librados, rados_unwatch_enter, io, o, handle);
   uint64_t cookie = handle;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  int retval = ctx->unwatch(oid, cookie);
+  int retval = ctx->unwatch(cookie);
   tracepoint(librados, rados_unwatch_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_unwatch2(rados_ioctx_t io, uint64_t handle)
+{
+  tracepoint(librados, rados_unwatch2_enter, io, handle);
+  uint64_t cookie = handle;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int retval = ctx->unwatch(cookie);
+  tracepoint(librados, rados_unwatch2_exit, retval);
   return retval;
 }
 
