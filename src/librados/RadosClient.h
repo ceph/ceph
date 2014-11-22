@@ -114,7 +114,7 @@ public:
 
   void register_watch_notify_callback(librados::WatchNotifyInfo *wc,
 				      uint64_t *cookie);
-  void unregister_watch_notify_callback(uint64_t cookie);
+  int unregister_watch_notify_callback(uint64_t cookie, object_t *poid);
   void handle_watch_notify(MWatchNotify *m);
   void do_watch_notify(MWatchNotify *m);
   void do_watch_error(uint64_t cookie, int err);
