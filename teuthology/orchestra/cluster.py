@@ -79,7 +79,7 @@ class Cluster(object):
             else:
                 if perms is not None:
                     raise ValueError("To specify perms, sudo must be True")
-                teuthology.misc.write_file(remote, file_name, content, perms)
+                teuthology.misc.write_file(remote, file_name, content)
 
     def only(self, *roles):
         """
