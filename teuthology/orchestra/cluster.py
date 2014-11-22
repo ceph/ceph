@@ -63,7 +63,7 @@ class Cluster(object):
         remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
         return [remote.run(**kwargs) for remote in remotes]
 
-    def write_file(self, file_name, content, sudo=False, perms=None):
+    def write_file(self, file_name, content, sudo=False, perms=None, owner=None):
         """
         Write text to a file on each node.
 
@@ -75,10 +75,10 @@ class Cluster(object):
         remotes = sorted(self.remotes.iterkeys(), key=lambda rem: rem.name)
         for remote in remotes:
             if sudo:
-                teuthology.misc.sudo_write_file(remote, file_name, content, perms)
+                teuthology.misc.sudo_write_file(remote, file_name, content, perms=perms, owner=owner)
             else:
-                if perms is not None:
-                    raise ValueError("To specify perms, sudo must be True")
+                if perms is not None or owner is not None:
+                    raise ValueError("To specify perms or owner, sudo must be True")
                 teuthology.misc.write_file(remote, file_name, content)
 
     def only(self, *roles):
