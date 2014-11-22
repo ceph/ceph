@@ -46,6 +46,8 @@ int KqueueDriver::init(int nevent)
 
 int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
 {
+  ldout(cct, 20) << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask
+                 << "add_mask" << add_mask << dendl;
   struct kevent ke;
   int filter = 0;
   filter |= add_mask & EVENT_READABLE ? EVFILT_READ : 0;
@@ -60,13 +62,13 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
     }
   }
 
-  ldout(cct, 10) << __func__ << " add event to fd=" << fd << " mask=" << filter
-                 << dendl;
   return 0;
 }
 
 void KqueueDriver::del_event(int fd, int cur_mask, int delmask)
 {
+  ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur mask=" << cur_mask
+                 << " delmask=" << delmask << dendl;
   struct kevent ee;
   struct kevent ke;
   int filter = 0;
@@ -80,8 +82,6 @@ void KqueueDriver::del_event(int fd, int cur_mask, int delmask)
                  << " failed." << cpp_strerror(errno) << dendl;
     }
   }
-  ldout(cct, 10) << __func__ << " del event fd=" << fd << " cur mask=" << filter
-                 << dendl;
 }
 
 int KqueueDriver::resize_events(int newsize)
