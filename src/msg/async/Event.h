@@ -40,6 +40,7 @@
 #include "include/Context.h"
 #include "include/unordered_map.h"
 #include "common/WorkQueue.h"
+#include "net_handler.h"
 
 #define EVENT_NONE 0
 #define EVENT_READABLE 1
@@ -110,6 +111,7 @@ class EventCenter {
   time_t last_time; // last time process time event
   int notify_receive_fd;
   int notify_send_fd;
+  NetHandler net;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -124,7 +126,7 @@ class EventCenter {
     cct(c), nevent(0),
     lock("AsyncMessenger::lock"),
     driver(NULL), time_event_next_id(0),
-    notify_receive_fd(-1), notify_send_fd(-1) {
+    notify_receive_fd(-1), notify_send_fd(-1), net(c) {
     last_time = time(NULL);
   }
   ~EventCenter();

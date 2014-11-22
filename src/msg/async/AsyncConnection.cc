@@ -237,9 +237,11 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   int r = 0;
   uint64_t sended = 0;
   list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
-  while (outcoming_bl.length() > sended) {
+  uint64_t left_pbrs = outcoming_bl.buffers().size();
+  while (left_pbrs) {
     struct msghdr msg;
-    int size = MIN(outcoming_bl.buffers().size(), IOV_LEN);
+    uint64_t size = MIN(left_pbrs, IOV_LEN);
+    left_pbrs -= size;
     memset(&msg, 0, sizeof(msg));
     msg.msg_iovlen = 0;
     msg.msg_iov = msgvec;
@@ -723,7 +725,7 @@ void AsyncConnection::process()
         {
           ldout(async_msgr->cct,20) << __func__ << " got CLOSE" << dendl;
           _stop();
-          break;
+          return ;
         }
 
       case STATE_STANDBY:
@@ -1356,7 +1358,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   bufferlist reply_bl;
   uint64_t existing_seq = -1;
   bool is_reset_from_peer = false;
-  char reply_tag;
+  char reply_tag = 0;
 
   memset(&reply, 0, sizeof(reply));
   reply.protocol_version = async_msgr->get_proto_version(peer_type, false);
@@ -1816,9 +1818,10 @@ void AsyncConnection::was_session_reset()
   in_seq_acked = 0;
 }
 
-void AsyncConnection::_stop()
+void AsyncConnection::_stop(bool external)
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
+  center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
   center->dispatch_event_external(reset_handler);
   shutdown_socket();
   discard_out_queue();
@@ -1827,6 +1830,10 @@ void AsyncConnection::_stop()
     was_session_reset();
   open_write = false;
   state = STATE_CLOSED;
+  ::close(sd);
+  sd = -1;
+  async_msgr->unregister_conn(peer_addr, external);
+  put();
 }
 
 int AsyncConnection::_send(Message *m)
@@ -1993,7 +2000,7 @@ void AsyncConnection::handle_write()
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   bufferlist bl;
-  int r;
+  int r = 0;
   if (state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE) {
     if (keepalive) {
       _send_keepalive_or_ack();
@@ -2022,7 +2029,14 @@ void AsyncConnection::handle_write()
       bl.append((char*)&s, sizeof(s));
       ldout(async_msgr->cct, 10) << __func__ << " try send msg ack" << dendl;
       in_seq_acked = s;
-      _try_send(bl);
+      r = _try_send(bl);
+    } else if (is_queued()) {
+      r = _try_send(bl);
+    }
+
+    if (r < 0) {
+      ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+      goto fail;
     }
   } else if (state != STATE_CONNECTING) {
     r = _try_send(bl);

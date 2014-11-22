@@ -52,7 +52,7 @@ class AsyncConnection : public Connection {
   int read_until(uint64_t needed, bufferptr &p);
   int _process_connection();
   void _connect();
-  void _stop();
+  void _stop(bool external=false);
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
   int handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
@@ -109,7 +109,7 @@ class AsyncConnection : public Connection {
 
   bool is_connected() {
     // FIXME?
-    return true;
+    return state != STATE_CLOSED;
   }
 
   // Only call when AsyncConnection first construct
@@ -124,9 +124,10 @@ class AsyncConnection : public Connection {
   int send_message(Message *m);
 
   void send_keepalive();
+  // Don't call it from AsyncConnection
   void mark_down() {
     Mutex::Locker l(lock);
-    _stop();
+    _stop(true);
   }
   void mark_disposable() {
     Mutex::Locker l(lock);

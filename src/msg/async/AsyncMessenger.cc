@@ -349,7 +349,7 @@ void AsyncMessenger::ready()
 
 int AsyncMessenger::shutdown()
 {
-  ldout(cct,10) << __func__ << "shutdown " << get_myaddr() << dendl;
+  ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
   for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
     (*it)->stop();
   mark_down_all();
@@ -357,7 +357,9 @@ int AsyncMessenger::shutdown()
   // break ref cycles on the loopback connection
   processor.stop();
   local_connection->set_priv(NULL);
+  lock.Lock();
   stop_cond.Signal();
+  lock.Unlock();
   stopped = true;
   return 0;
 }
@@ -441,10 +443,10 @@ void AsyncMessenger::wait()
   did_bind = false;
   ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
-  // close all pipes
+  // close all connections
   lock.Lock();
   {
-    ldout(cct, 10) << __func__ << ": closing pipes" << dendl;
+    ldout(cct, 10) << __func__ << ": closing connections" << dendl;
 
     while (!conns.empty()) {
       AsyncConnectionRef p = conns.begin()->second;
@@ -572,7 +574,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
     return;
   }
 
-  // remote, no existing pipe.
+  // remote, no existing connection.
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
     ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addr
@@ -580,7 +582,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
                    << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
   } else {
-    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
+    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
   }
 }
 
@@ -641,7 +643,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
     p->get();
     ms_deliver_handle_reset(p.get());
   } else {
-    ldout(cct, 1) << __func__ << " " << addr << " -- pipe dne" << dendl;
+    ldout(cct, 1) << __func__ << " " << addr << " -- connection dne" << dendl;
   }
   lock.Unlock();
 }

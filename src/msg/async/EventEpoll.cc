@@ -46,6 +46,8 @@ int EpollDriver::init(int nevent)
 
 int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
 {
+  ldout(cct, 20) << __func__ << " add event fd=" << fd << " cur_mask=" << cur_mask
+                 << " add_mask=" << add_mask << dendl;
   struct epoll_event ee;
   /* If the fd was already monitored for some event, we need a MOD
    * operation. Otherwise we need an ADD operation. */
@@ -66,13 +68,13 @@ int EpollDriver::add_event(int fd, int cur_mask, int add_mask)
     return -errno;
   }
 
-  ldout(cct, 10) << __func__ << " add event to fd=" << fd << " mask=" << add_mask
-                 << dendl;
   return 0;
 }
 
 void EpollDriver::del_event(int fd, int cur_mask, int delmask)
 {
+  ldout(cct, 20) << __func__ << " del event fd=" << fd << " cur_mask=" << cur_mask
+                 << " delmask=" << delmask << dendl;
   struct epoll_event ee;
   int mask = cur_mask & (~delmask);
 
@@ -94,8 +96,6 @@ void EpollDriver::del_event(int fd, int cur_mask, int delmask)
                  << " failed." << cpp_strerror(errno) << dendl;
     }
   }
-  ldout(cct, 10) << __func__ << " del event fd=" << fd << " cur mask=" << mask
-                 << dendl;
 }
 
 int EpollDriver::resize_events(int newsize)
