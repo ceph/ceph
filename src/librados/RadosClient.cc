@@ -653,25 +653,30 @@ void librados::RadosClient::register_watch_notify_callback(
   watch_notify_info[wc->cookie] = wc;
 }
 
-void librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie)
+int librados::RadosClient::unregister_watch_notify_callback(uint64_t cookie,
+							    object_t *poid)
 {
   ldout(cct,10) << __func__ << " cookie " << cookie << dendl;
   assert(lock.is_locked_by_me());
-  map<uint64_t, WatchNotifyInfo *>::iterator iter =
-    watch_notify_info.find(cookie);
-  if (iter != watch_notify_info.end()) {
-    WatchNotifyInfo *ctx = iter->second;
-    if (ctx->linger_id)
-      objecter->unregister_linger(ctx->linger_id);
+  map<uint64_t, WatchNotifyInfo *>::iterator iter = watch_notify_info.find(cookie);
+  if (iter == watch_notify_info.end())
+    return -EBADF;
 
-    watch_notify_info.erase(iter);
-    lock.Unlock();
-    ldout(cct, 10) << __func__ << " dropping reference, waiting ctx="
-		   << (void *)ctx << dendl;
-    ctx->put_wait();
-    ldout(cct, 10) << __func__ << " done ctx=" << (void *)ctx << dendl;
-    lock.Lock();
-  }
+  WatchNotifyInfo *ctx = iter->second;
+  if (poid)
+    *poid = ctx->oid;
+  if (ctx->linger_id)
+    objecter->unregister_linger(ctx->linger_id);
+
+  watch_notify_info.erase(iter);
+  lock.Unlock();
+  ldout(cct, 10) << __func__ << " dropping reference, waiting ctx="
+		 << (void *)ctx << dendl;
+  ctx->put_wait();
+  ldout(cct, 10) << __func__ << " done ctx=" << (void *)ctx << dendl;
+  lock.Lock();
+  return 0;
+}
 }
 
 struct C_DoWatchNotify : public Context {

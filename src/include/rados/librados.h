@@ -1977,11 +1977,11 @@ CEPH_RADOS_API int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
  * @param arg opaque value to pass to the callback
  * @returns 0 on success, negative error code on failure
  */
-int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
-		 rados_watchcb2_t watchcb,
-		 rados_watchfailcb_t watchfailcb,
-		 rados_watcherrcb_t watcherrcb,
-		 void *arg);
+CEPH_RADOS_API int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
+				rados_watchcb2_t watchcb,
+				rados_watchfailcb_t watchfailcb,
+				rados_watcherrcb_t watcherrcb,
+				void *arg);
 
 /**
  * Unregister an interest in an object
@@ -1990,12 +1990,24 @@ int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
  * watch. This should be called to clean up unneeded watchers.
  *
  * @param io the pool the object is in
- * @param o the name of the watched object
+ * @param o the name of the watched object (ignored)
  * @param handle which watch to unregister
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o,
-                                 uint64_t handle);
+CEPH_RADOS_API int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
+  __attribute__((deprecated));
+
+/**
+ * Unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param handle which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_unwatch2(rados_ioctx_t io, uint64_t handle);
 
 /**
  * Sychronously notify watchers of an object
