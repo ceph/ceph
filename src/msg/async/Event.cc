@@ -38,6 +38,8 @@ class C_handle_notify : public EventCallback {
  public:
   C_handle_notify() {}
   void do_request(int fd_or_id) {
+    char c[100];
+    assert(read(fd_or_id, c, 100));
   }
 };
 
@@ -74,6 +76,11 @@ int EventCenter::init(int n)
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
+  r = net.set_nonblock(notify_receive_fd);
+  if (r < 0) {
+    return -1;
+  }
+
   file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
