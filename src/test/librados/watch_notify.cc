@@ -216,10 +216,36 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
 
 // --
 
+TEST_F(LibRadosWatchNotify, Watch2Delete) {
+  notify_io = ioctx;
+  notify_oid = "foo";
+  notify_err = 0;
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
+  uint64_t handle;
+  ASSERT_EQ(0,
+	    rados_watch2(ioctx, notify_oid, &handle,
+			 watch_notify2_test_cb,
+			 watch_notify2_test_errcb, NULL));
+  ASSERT_EQ(0, rados_remove(ioctx, notify_oid));
+  int left = 180;
+  std::cout << "waiting up to " << left << " for disconnect notification ..."
+	    << std::endl;
+  while (notify_err == 0 && --left) {
+    sleep(1);
+  }
+  ASSERT_TRUE(left > 0);
+  ASSERT_EQ(-ENOTCONN, notify_err);
+  ASSERT_EQ(-ENOTCONN, rados_watch_check(ioctx, handle));
+  rados_unwatch2(ioctx, handle);
+}
+
 TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   notify_io = ioctx;
   notify_oid = "foo";
   notify_cookies.clear();
+  notify_err = 0;
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, notify_oid, buf, sizeof(buf), 0));
