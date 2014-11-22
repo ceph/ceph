@@ -4243,12 +4243,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
-      if (ctx->obc->obs.oi.watchers.size()) {
-	// Cannot delete an object with watchers
-	result = -EBUSY;
-      } else {
-	result = _delete_oid(ctx, ctx->ignore_cache);
-      }
+      result = _delete_oid(ctx, ctx->ignore_cache);
       break;
 
     case CEPH_OSD_OP_CLONERANGE:
@@ -5035,6 +5030,17 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
     ctx->delta_stats.num_bytes -= oi.size;
   }
   oi.size = 0;
+
+  // disconnect all watchers
+  for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
+	 oi.watchers.begin();
+       p != oi.watchers.end();
+       ++p) {
+    dout(20) << __func__ << " will disconnect watcher " << p->first << dendl;
+    ctx->watch_disconnects.push_back(
+      OpContext::watch_disconnect_t(p->first.first, p->first.second, true));
+  }
+  oi.watchers.clear();
 
   // cache: cache: set whiteout on delete?
   if (pool.info.cache_mode != pg_pool_t::CACHEMODE_NONE && !no_whiteout) {
