@@ -235,8 +235,8 @@ bool CrushWrapper::_search_item_exists(int item) const
     if (!crush->buckets[i])
       continue;
     crush_bucket *b = crush->buckets[i];
-    for (unsigned i=0; i<b->size; ++i) {
-      if (b->items[i] == item)
+    for (unsigned j=0; j<b->size; ++j) {
+      if (b->items[j] == item)
 	return true;
     }
   }
