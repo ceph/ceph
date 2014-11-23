@@ -23,7 +23,6 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/RefCountedObj.h"
 #include "common/PrioritizedQueue.h"
 
 class CephContext;
