@@ -435,6 +435,11 @@ struct spg_t {
   bool is_no_shard() const {
     return shard == shard_id_t::NO_SHARD;
   }
+
+  ghobject_t make_pgmeta_oid() const {
+    return ghobject_t::make_pgmeta(pgid.pool(), pgid.ps(), shard);
+  }
+
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(pgid, bl);
