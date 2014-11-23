@@ -3003,21 +3003,11 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
   assert(r >= 0);
 
   ostringstream oss;
-  if (pg_log.read_log(store,
-		      coll,
-		      info_struct_v < 8 ? META_COLL : coll,
-		      info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
-		      info, oss)) {
-    /* We don't want to leave the old format around in case the next log
-     * write happens to be an append_log()
-     */
-    pg_log.mark_log_for_rewrite();
-    ObjectStore::Transaction t;
-    t.remove(META_COLL, log_oid); // remove old version
-    pg_log.write_log(t, coll, pgmeta_oid);
-    int r = osd->store->apply_transaction(t);
-    assert(!r);
-  }
+  pg_log.read_log(store,
+		  coll,
+		  info_struct_v < 8 ? META_COLL : coll,
+		  info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
+		  info, oss);
   if (oss.str().length())
     osd->clog->error() << oss;
 

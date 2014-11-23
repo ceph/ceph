@@ -799,33 +799,31 @@ void PGLog::_write_log(
   t.omap_setkeys(coll, log_oid, keys);
 }
 
-bool PGLog::read_log(ObjectStore *store, coll_t pg_coll,
-  coll_t log_coll, ghobject_t log_oid,
-  const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
-  IndexedLog &log,
-  pg_missing_t &missing,
-  ostringstream &oss,
-  set<string> *log_keys_debug)
+void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
+		     coll_t log_coll,
+		    ghobject_t log_oid,
+		    const pg_info_t &info,
+		    map<eversion_t, hobject_t> &divergent_priors,
+		    IndexedLog &log,
+		    pg_missing_t &missing,
+		    ostringstream &oss,
+		    set<string> *log_keys_debug)
 {
-  dout(10) << "read_log" << dendl;
-  bool rewrite_log = false;
+  dout(20) << "read_log coll " << pg_coll << " log_oid " << log_oid << dendl;
 
   // legacy?
   struct stat st;
   int r = store->stat(log_coll, log_oid, &st);
   assert(r == 0);
-  if (st.st_size > 0) {
-    read_log_old(store, pg_coll, log_oid, info, divergent_priors, log, missing, oss, log_keys_debug);
-    rewrite_log = true;
-  } else {
-    log.tail = info.log_tail;
+  assert(st.st_size == 0);
 
-    // will get overridden below if it had been recorded
-    log.can_rollback_to = info.last_update;
-    log.rollback_info_trimmed_to = eversion_t();
-
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
-    if (p) for (p->seek_to_first(); p->valid() ; p->next()) {
+  log.tail = info.log_tail;
+  // will get overridden below if it had been recorded
+  log.can_rollback_to = info.last_update;
+  log.rollback_info_trimmed_to = eversion_t();
+  ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
+  if (p) {
+    for (p->seek_to_first(); p->valid() ; p->next()) {
       // non-log pgmeta_oid keys are prefixed with _; skip those
       if (p->key()[0] == '_')
 	continue;
@@ -929,134 +927,5 @@ bool PGLog::read_log(ObjectStore *store, coll_t pg_coll,
     }
   }
   dout(10) << "read_log done" << dendl;
-  return rewrite_log;
 }
 
-void PGLog::read_log_old(ObjectStore *store, coll_t coll, ghobject_t log_oid,
-			 const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
-			 IndexedLog &log,
-			 pg_missing_t &missing, ostringstream &oss,
-			 set<string> *log_keys_debug)
-{
-  // load bounds, based on old OndiskLog encoding.
-  uint64_t ondisklog_tail = 0;
-  uint64_t ondisklog_head = 0;
-  bool ondisklog_has_checksums;
-
-  bufferlist blb;
-  store->collection_getattr(coll, "ondisklog", blb);
-  {
-    bufferlist::iterator bl = blb.begin();
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-    ondisklog_has_checksums = (struct_v >= 2);
-    ::decode(ondisklog_tail, bl);
-    ::decode(ondisklog_head, bl);
-    if (struct_v >= 4) {
-      uint64_t ondisklog_zero_to;
-      ::decode(ondisklog_zero_to, bl);
-    }
-    if (struct_v >= 5)
-      ::decode(divergent_priors, bl);
-    DECODE_FINISH(bl);
-  }
-  uint64_t ondisklog_length = ondisklog_head - ondisklog_tail;
-  dout(10) << "read_log " << ondisklog_tail << "~" << ondisklog_length << dendl;
- 
-  log.tail = info.log_tail;
-
-  if (ondisklog_head > 0) {
-    // read
-    bufferlist bl;
-    store->read(META_COLL, log_oid, ondisklog_tail, ondisklog_length, bl);
-    if (bl.length() < ondisklog_length) {
-      std::ostringstream oss;
-      oss << "read_log got " << bl.length() << " bytes, expected "
-	  << ondisklog_head << "-" << ondisklog_tail << "="
-	  << ondisklog_length;
-      throw read_log_error(oss.str().c_str());
-    }
-    
-    pg_log_entry_t e;
-    bufferlist::iterator p = bl.begin();
-    assert(log.empty());
-    eversion_t last;
-    bool reorder = false;
-
-    while (!p.end()) {
-      uint64_t pos = ondisklog_tail + p.get_off();
-      if (ondisklog_has_checksums) {
-	bufferlist ebl;
-	::decode(ebl, p);
-	__u32 crc;
-	::decode(crc, p);
-	
-	__u32 got = ebl.crc32c(0);
-	if (crc == got) {
-	  bufferlist::iterator q = ebl.begin();
-	  ::decode(e, q);
-	} else {
-	  std::ostringstream oss;
-	  oss << "read_log " << pos << " bad crc got " << got << " expected" << crc;
-	  throw read_log_error(oss.str().c_str());
-	}
-      } else {
-	::decode(e, p);
-      }
-      dout(20) << "read_log " << pos << " " << e << dendl;
-
-      // [repair] in order?
-      if (e.version < last) {
-	dout(0) << "read_log " << pos << " out of order entry " << e << " follows " << last << dendl;
-	oss << info.pgid << " log has out of order entry "
-	      << e << " following " << last << "\n";
-	reorder = true;
-      }
-
-      if (e.version <= log.tail) {
-	dout(20) << "read_log  ignoring entry at " << pos << " below log.tail" << dendl;
-	continue;
-      }
-      if (last.version == e.version.version) {
-	dout(0) << "read_log  got dup " << e.version << " (last was " << last << ", dropping that one)" << dendl;
-	log.log.pop_back();
-	oss << info.pgid << " read_log got dup "
-	      << e.version << " after " << last << "\n";
-      }
-
-      assert(!e.invalid_hash);
-
-      if (e.invalid_pool) {
-	e.soid.pool = info.pgid.pool();
-      }
-
-      e.offset = pos;
-      uint64_t endpos = ondisklog_tail + p.get_off();
-      log.log.push_back(e);
-      if (log_keys_debug)
-	log_keys_debug->insert(e.get_key_name());
-      last = e.version;
-
-      // [repair] at end of log?
-      if (!p.end() && e.version == info.last_update) {
-	oss << info.pgid << " log has extra data at "
-	   << endpos << "~" << (ondisklog_head-endpos) << " after "
-	   << info.last_update << "\n";
-
-	dout(0) << "read_log " << endpos << " *** extra gunk at end of log, "
-	        << "adjusting ondisklog_head" << dendl;
-	ondisklog_head = endpos;
-	break;
-      }
-    }
-  
-    if (reorder) {
-      dout(0) << "read_log reordering log" << dendl;
-      map<eversion_t, pg_log_entry_t> m;
-      for (list<pg_log_entry_t>::iterator p = log.log.begin(); p != log.log.end(); ++p)
-	m[p->version] = *p;
-      log.log.clear();
-      for (map<eversion_t, pg_log_entry_t>::iterator p = m.begin(); p != m.end(); ++p)
-	log.log.push_back(p->second);
-    }
-  }
-}
