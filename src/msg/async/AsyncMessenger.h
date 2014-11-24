@@ -398,16 +398,10 @@ public:
 
   /**
    * Unregister connection from `conns`
-   * `external` is used to indicate whether need to lock AsyncMessenger::lock,
-   * it may call. If external is false, it means that AsyncConnection take the
-   * initiative to unregister
    */
-  void unregister_conn(const entity_addr_t &addr, bool external) {
-    if (!external)
-      lock.Lock();
+  void unregister_conn(const entity_addr_t &addr) {
+    Mutex::Locker l(lock);
     conns.erase(addr);
-    if (!external)
-      lock.Unlock();
   }
   /**
    * @} // AsyncMessenger Internals
