@@ -37,8 +37,6 @@
 	osd open classes on start = true
         osd debug pg log writeout = true
 
-	filestore fiemap = true
-
 
 [mon]
 	debug ms = 1
