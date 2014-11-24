@@ -34,11 +34,12 @@ class TestYamlConfig(object):
         assert conf_obj.to_str() == in_str
 
     def test_update(self):
-        conf_obj = self.test_class()
+        conf_obj = self.test_class(dict())
         conf_obj.foo = 'foo'
         conf_obj.bar = 'bar'
         conf_obj.update(dict(bar='baz'))
-        assert conf_obj.to_dict() == dict(foo='foo', bar='baz')
+        assert conf_obj.foo == 'foo'
+        assert conf_obj.bar == 'baz'
 
     def test_delattr(self):
         conf_obj = self.test_class()
@@ -68,19 +69,6 @@ class TestTeuthologyConfig(TestYamlConfig):
         conf_obj = self.test_class()
         conf_obj.something = 'something else'
         assert conf_obj.something == 'something else'
-
-    def test_update(self):
-        """
-        This is slightly different thank TestYamlConfig.update() in that it
-        only tests what was updated - since to_dict() yields all values,
-        including defaults.
-        """
-        conf_obj = self.test_class()
-        conf_obj.foo = 'foo'
-        conf_obj.bar = 'bar'
-        conf_obj.update(dict(bar='baz'))
-        assert conf_obj.foo == 'foo'
-        assert conf_obj.bar == 'baz'
 
 
 class TestJobConfig(TestYamlConfig):
@@ -118,16 +106,3 @@ class TestFakeNamespace(TestYamlConfig):
         assert conf_obj.teuthology_config.archive_base
         assert not conf_obj.teuthology_config.automated_scheduling
         assert conf_obj.teuthology_config.ceph_git_base_url == 'https://github.com/ceph/'
-
-    def test_update(self):
-        """
-        This is slightly different thank TestYamlConfig.update() in that it
-        only tests what was updated - since to_dict() yields all values,
-        including defaults.
-        """
-        conf_obj = self.test_class(dict())
-        conf_obj.foo = 'foo'
-        conf_obj.bar = 'bar'
-        conf_obj.update(dict(bar='baz'))
-        assert conf_obj.foo == 'foo'
-        assert conf_obj.bar == 'baz'

@@ -19,6 +19,7 @@ import yaml
 import json
 import re
 import tempfile
+import pprint
 
 from teuthology import safepath
 from teuthology.exceptions import (CommandCrashedError, CommandFailedError,
@@ -105,6 +106,24 @@ class MergeConfig(argparse.Action):
             deep_merge(config_dict, new)
 
 
+def merge_configs(config_paths):
+    """ Takes one or many paths to yaml config files and merges them
+        together, returning the result.
+    """
+    conf_dict = dict()
+    for conf_path in config_paths:
+        with file(conf_path) as partial_file:
+            partial_dict = yaml.safe_load(partial_file)
+        try:
+            conf_dict = deep_merge(conf_dict, partial_dict)
+        except Exception:
+            # TODO: Should this log as well?
+            pprint.pprint("failed to merge {0} into {1}".format(conf_dict, partial_dict))
+            raise
+
+    return conf_dict
+
+
 def get_testdir(ctx):
     """
     :returns: A test directory
@@ -183,7 +202,7 @@ def get_ceph_binary_url(package=None,
         arch=arch,
         format=format,
         dist=dist
-        )
+    )
 
     if sha1 is not None:
         assert branch is None, "cannot set both sha1 and branch"
@@ -258,7 +277,7 @@ def get_mons(roles, ips):
             addr = '{ip}:{port}'.format(
                 ip=ips[idx],
                 port=mon_ports[ips[idx]],
-                )
+            )
             mon_id += 1
             mons[role] = addr
     assert mons
@@ -275,18 +294,18 @@ def generate_caps(type_):
         osd=dict(
             mon='allow *',
             osd='allow *',
-            ),
+        ),
         mds=dict(
             mon='allow *',
             osd='allow *',
             mds='allow',
-            ),
+        ),
         client=dict(
             mon='allow rw',
             osd='allow rwx',
             mds='allow',
-            ),
-        )
+        ),
+    )
     for subsystem, capability in defaults[type_].items():
         yield '--cap'
         yield subsystem
@@ -315,7 +334,7 @@ def skeleton_config(ctx, roles, ips):
             if role.startswith('mds.'):
                 conf.setdefault(role, {})
                 if role.find('-s-') != -1:
-                    standby_mds = role[role.find('-s-')+3:]
+                    standby_mds = role[role.find('-s-') + 3:]
                     conf[role]['mds standby for name'] = standby_mds
     return conf
 
@@ -430,18 +449,18 @@ def create_simple_monmap(ctx, remote, conf):
         'monmaptool',
         '--create',
         '--clobber',
-        ]
+    ]
     for (name, addr) in addresses:
         args.extend(('--add', name, addr))
     args.extend([
         '--print',
         '{tdir}/monmap'.format(tdir=testdir),
-        ])
+    ])
 
     r = remote.run(
         args=args,
         stdout=StringIO()
-        )
+    )
     monmap_output = r.stdout.getvalue()
     fsid = re.search("generated fsid (.+)$",
                      monmap_output, re.MULTILINE).group(1)
@@ -462,9 +481,9 @@ def write_file(remote, path, data):
             '-c',
             'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
             path,
-            ],
+        ],
         stdin=data,
-        )
+    )
 
 
 def sudo_write_file(remote, path, data, perms=None, owner=None):
@@ -492,9 +511,9 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
             '-c',
             'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
             path,
-            ] + owner_args + permargs,
+        ] + owner_args + permargs,
         stdin=data,
-        )
+    )
 
 
 def copy_file(from_remote, from_path, to_remote, to_path=None):
@@ -524,11 +543,11 @@ def move_file(remote, from_path, to_path, sudo=False):
         '-c',
         '\"%a\"',
         to_path
-        ])
+    ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
-        )
+    )
     perms = proc.stdout.getvalue().rstrip().strip('\"')
 
     args = []
@@ -539,11 +558,11 @@ def move_file(remote, from_path, to_path, sudo=False):
         '--',
         from_path,
         to_path,
-        ])
+    ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
-        )
+    )
 
     # reset the file back to the original permissions
     args = []
@@ -553,11 +572,11 @@ def move_file(remote, from_path, to_path, sudo=False):
         'chmod',
         perms,
         to_path,
-        ])
+    ])
     proc = remote.run(
         args=args,
         stdout=StringIO(),
-        )
+    )
 
 
 def delete_file(remote, path, sudo=False, force=False):
@@ -577,7 +596,7 @@ def delete_file(remote, path, sudo=False, force=False):
     remote.run(
         args=args,
         stdout=StringIO(),
-        )
+    )
 
 
 def remove_lines_from_file(remote, path, line_is_valid_test,
@@ -662,7 +681,7 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
     remote.run(
         args=args,
         stdout=StringIO(),
-        )
+    )
     # now write out the data if any was passed in
     if "" != data:
         append_lines_to_file(remote, path, data, sudo)
@@ -742,9 +761,9 @@ def get_wwn_id_map(remote, devs):
                 'ls',
                 '-l',
                 '/dev/disk/by-id/wwn-*',
-                ],
+            ],
             stdout=StringIO(),
-            )
+        )
         stdout = r.stdout.getvalue()
     except Exception:
         log.error('Failed to get wwn devices! Using /dev/sd* devices...')
@@ -785,7 +804,7 @@ def get_scratch_devices(remote):
         r = remote.run(
             args=['ls', run.Raw('/dev/[sv]d?')],
             stdout=StringIO()
-            )
+        )
         devs = r.stdout.getvalue().strip().split('\n')
 
     # Remove root device (vm guests) from the disk list
@@ -836,10 +855,10 @@ def wait_until_healthy(ctx, remote):
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'ceph',
                     'health',
-                    ],
+                ],
                 stdout=StringIO(),
                 logger=log.getChild('health'),
-                )
+            )
             out = r.stdout.getvalue()
             log.debug('Ceph health: %s', out.rstrip('\n'))
             if out.split(None, 1)[0] == 'HEALTH_OK':
@@ -859,10 +878,10 @@ def wait_until_osds_up(ctx, cluster, remote):
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'ceph',
                 'osd', 'dump', '--format=json'
-                ],
+            ],
             stdout=StringIO(),
             logger=log.getChild('health'),
-            )
+        )
         out = r.stdout.getvalue()
         j = json.loads('\n'.join(out.split('\n')[1:]))
         up = len(j['osds'])
@@ -1060,18 +1079,18 @@ def get_valgrind_args(testdir, name, preamble, v):
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
-            ]
+        ]
     else:
         extra_args = [
             'valgrind',
             '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
             '--time-stamp=yes',
-            ]
+        ]
     args = [
         'cd', testdir,
         run.Raw('&&'),
-        ] + preamble + extra_args + v
+    ] + preamble + extra_args + v
     log.debug('running %s under valgrind with args %s', name, args)
     return args
 

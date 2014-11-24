@@ -1,4 +1,6 @@
 import argparse
+
+from mock import patch
 from ..orchestra import cluster
 from .. import misc
 from ..config import config
@@ -16,8 +18,8 @@ def test_get_clients_simple():
     ctx.cluster = cluster.Cluster(
         remotes=[
             (remote, ['client.0', 'client.1'])
-            ],
-        )
+        ],
+    )
     g = misc.get_clients(ctx=ctx, roles=['client.1'])
     got = next(g)
     assert len(got) == 2
@@ -90,3 +92,59 @@ class TestHostnames(object):
         host = 'ubuntu@box1.example.com'
         result = misc.decanonicalize_hostname(host)
         assert result == 'box1'
+
+
+class TestMergeConfigs(object):
+    """ Tests merge_config and deep_merge in teuthology.misc """
+
+    @patch("yaml.safe_load")
+    @patch("__builtin__.file")
+    def test_merge_configs(self, m_file, m_safe_load):
+        """ Only tests with one yaml file being passed, mainly just to test
+            the loop logic.  The actual merge will be tested in subsequent
+            tests.
+        """
+        expected = {"a": "b", "b": "c"}
+        m_safe_load.return_value = expected
+        result = misc.merge_configs(["path/to/config1"])
+        assert result == expected
+        m_file.assert_called_once_with("path/to/config1")
+
+    def test_merge_configs_empty(self):
+        assert misc.merge_configs([]) == {}
+
+    def test_deep_merge(self):
+        a = {"a": "b"}
+        b = {"b": "c"}
+        result = misc.deep_merge(a, b)
+        assert result == {"a": "b", "b": "c"}
+
+    def test_overwrite_deep_merge(self):
+        a = {"a": "b"}
+        b = {"a": "overwritten", "b": "c"}
+        result = misc.deep_merge(a, b)
+        assert result == {"a": "overwritten", "b": "c"}
+
+    def test_list_deep_merge(self):
+        a = [1, 2]
+        b = [3, 4]
+        result = misc.deep_merge(a, b)
+        assert result == [1, 2, 3, 4]
+
+    def test_missing_list_deep_merge(self):
+        a = [1, 2]
+        b = "not a list"
+        with pytest.raises(AssertionError):
+            misc.deep_merge(a, b)
+
+    def test_missing_a_deep_merge(self):
+        result = misc.deep_merge(None, [1, 2])
+        assert result == [1, 2]
+
+    def test_missing_b_deep_merge(self):
+        result = misc.deep_merge([1, 2], None)
+        assert result == [1, 2]
+
+    def test_invalid_b_deep_merge(self):
+        with pytest.raises(AssertionError):
+            misc.deep_merge({"a": "b"}, "invalid")
