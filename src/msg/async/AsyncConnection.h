@@ -246,6 +246,10 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
+  EventCallbackRef connect_handler;
+  EventCallbackRef fast_connect_handler;
+  EventCallbackRef accept_handler;
+  EventCallbackRef fast_accept_handler;
   EventCallbackRef stop_handler;
   EventCallbackRef signal_handler;
   bool keepalive;
