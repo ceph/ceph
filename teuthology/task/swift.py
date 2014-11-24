@@ -87,6 +87,7 @@ def create_users(ctx, config):
                     '--secret', testswift_conf['func_test']['password{s}'.format(s=suffix)],
                     '--email', testswift_conf['func_test']['email{s}'.format(s=suffix)],
                     '--key-type', 'swift',
+                    '--access', 'full',
                 ],
             )
     try:
