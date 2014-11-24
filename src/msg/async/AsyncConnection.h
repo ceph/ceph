@@ -124,11 +124,27 @@ class AsyncConnection : public Connection {
   int send_message(Message *m);
 
   void send_keepalive();
-  // Don't call it from AsyncConnection
+  // mark_down need to ensure all events completely finished. So we introduce
+  // a separator impl:
+  //
+  // Thread A             Event loop N          Event loop N+1
+  // mark_down()
+  // dispatch
+  // wait
+  //  \                   C_handle_stop
+  //  \                   stop()
+  //  \                   _stop()
+  //  \                   dispatch
+  //  \                                         C_handle_signal
+  //  \                                         wakeup_stop()
+  //  \                                         signal
+  // finished
+  //
+  // Note: Don't call it from AsyncConnection
   void mark_down() {
     Mutex::Locker l(stop_lock);
-    center.dispatch_event_external(stop_event);
-    mark_down_cond.Wait(stop_lock);
+    center->dispatch_event_external(stop_handler);
+    stop_cond.Wait(stop_lock);
   }
   void mark_disposable() {
     Mutex::Locker l(lock);
@@ -230,6 +246,8 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
+  EventCallbackRef stop_handler;
+  EventCallbackRef signal_handler;
   bool keepalive;
   struct iovec msgvec[IOV_LEN];
   Mutex stop_lock; // used to protect `mark_down_cond`
@@ -271,6 +289,10 @@ class AsyncConnection : public Connection {
   void stop() {
     Mutex::Locker l(lock);
     _stop();
+  }
+  void wakeup_stop() {
+    Mutex::Locker l(stop_lock);
+    stop_cond.Signal();
   }
 }; /* AsyncConnection */
 
