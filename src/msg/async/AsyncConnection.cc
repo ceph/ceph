@@ -97,6 +97,28 @@ class C_handle_dispatch : public EventCallback {
   }
 };
 
+class C_handle_connect : public EventCallback {
+  AsyncMessenger *msgr;
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_connect(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  void do_request(int id) {
+    msgr->ms_deliver_handle_connect(conn.get());
+  }
+};
+
+class C_handle_accept : public EventCallback {
+  AsyncMessenger *msgr;
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  void do_request(int id) {
+    msgr->ms_deliver_handle_accept(conn.get());
+  }
+};
+
 class C_handle_stop : public EventCallback {
   AsyncConnectionRef conn;
 
@@ -156,6 +178,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
   stop_handler.reset(new C_handle_stop(this));
   signal_handler.reset(new C_handle_signal(this));
+  connect_handler.reset(new C_handle_connect(async_msgr, this));
+  accept_handler.reset(new C_handle_connect(async_msgr, this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
@@ -1118,7 +1142,7 @@ int AsyncConnection::_process_connection()
           session_security.reset();
         }
 
-        async_msgr->ms_deliver_handle_connect(this);
+        center->dispatch_event_external(connect_handler);
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // message may in queue between last _try_send and connection ready
@@ -1555,10 +1579,10 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   }
   if (existing->policy.lossy) {
     // disconnect from the Connection
-    async_msgr->ms_deliver_handle_reset(existing.get());
+    center->dispatch_event_external(EventCallbackRef(new C_handle_reset(async_msgr, existing)));
   } else {
     // queue a reset on the new connection, which we're dumping for the old
-    async_msgr->ms_deliver_handle_reset(this);
+    center->dispatch_event_external(reset_handler);
 
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -1606,7 +1630,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                                session_key, get_features()));
 
   // notify
-  async_msgr->ms_deliver_handle_accept(this);
+  center->dispatch_event_external(accept_handler);
   async_msgr->ms_deliver_handle_fast_accept(this);
 
   // ok!
