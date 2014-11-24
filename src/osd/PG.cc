@@ -2706,7 +2706,7 @@ void PG::write_info(ObjectStore::Transaction& t)
 
 epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   spg_t pgid,
-			   hobject_t &legacy_infos_oid,
+			   hobject_t legacy_infos_oid,
 			   bufferlist *bl)
 {
   coll_t coll(pgid);
@@ -2998,8 +2998,9 @@ int PG::read_info(
 
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
+  hobject_t legacy_infos_oid(OSD::make_infos_oid());
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
-		    osd->infos_oid, snap_collections, info_struct_v);
+		    legacy_infos_oid, snap_collections, info_struct_v);
   assert(r >= 0);
 
   ostringstream oss;
