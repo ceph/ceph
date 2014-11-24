@@ -1875,7 +1875,8 @@ void MDCache::broadcast_quota_to_client(CInode *in)
       continue;
 
     Capability *cap = it->second;
-    if (cap->client_rstat_version >= i->rstat.version)
+    if (cap->last_rbytes == i->rstat.rbytes &&
+        cap->last_rsize == i->rstat.rsize())
       continue;
 
     if (i->quota.max_files > 0) {
@@ -1899,7 +1900,6 @@ void MDCache::broadcast_quota_to_client(CInode *in)
     continue;
 
 update:
-    cap->client_rstat_version = i->rstat.version;
     cap->last_rsize = i->rstat.rsize();
     cap->last_rbytes = i->rstat.rbytes;
 
