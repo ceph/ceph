@@ -737,12 +737,7 @@ public:
           // if client drops we may not have a session to draw information from.
           if (s) {
             ss << "from='" << s->inst << "' "
-              << "entity='";
-            if (s->auth_handler)
-              ss << s->auth_handler->get_entity_name();
-            else
-              ss << "forwarded-request";
-            ss << "' ";
+              << "entity='" << s->entity_name << "' ";
           } else {
             ss << "session dropped for command ";
           }
