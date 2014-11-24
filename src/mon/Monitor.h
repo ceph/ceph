@@ -550,7 +550,12 @@ public:
     return quorum_features;
   }
   uint64_t get_required_features() const {
-    return quorum_features;
+    // be conservative: exclude features known to have no impact
+    // on the mons.  start with just the recent ones.
+    return quorum_features & ~(CEPH_FEATURE_OSD_SET_ALLOC_HINT |
+			       CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 |
+			       CEPH_FEATURE_OSD_POOLRESEND |
+			       CEPH_FEATURE_MSGR_KEEPALIVE2);
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
