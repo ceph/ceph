@@ -1,15 +1,20 @@
 # jerasure plugin
 noinst_HEADERS += \
+  erasure-code/jerasure/gf-complete/include/gf_complete.h \
+  erasure-code/jerasure/gf-complete/include/gf_general.h \
+  erasure-code/jerasure/gf-complete/include/gf_int.h \
+  erasure-code/jerasure/gf-complete/include/gf_method.h \
+  erasure-code/jerasure/gf-complete/include/gf_rand.h \
+  erasure-code/jerasure/gf-complete/include/gf_w16.h \
+  erasure-code/jerasure/gf-complete/include/gf_w32.h \
+  erasure-code/jerasure/gf-complete/include/gf_w4.h \
+  erasure-code/jerasure/gf-complete/include/gf_w64.h \
+  erasure-code/jerasure/gf-complete/include/gf_w8.h \
   erasure-code/jerasure/jerasure/include/cauchy.h \
   erasure-code/jerasure/jerasure/include/galois.h \
   erasure-code/jerasure/jerasure/include/jerasure.h \
   erasure-code/jerasure/jerasure/include/liberation.h \
   erasure-code/jerasure/jerasure/include/reed_sol.h \
-  erasure-code/jerasure/gf-complete/include/gf_int.h \
-  erasure-code/jerasure/gf-complete/include/gf_complete.h \
-  erasure-code/jerasure/gf-complete/include/gf_rand.h \
-  erasure-code/jerasure/gf-complete/include/gf_method.h \
-  erasure-code/jerasure/gf-complete/include/gf_general.h \
   erasure-code/jerasure/ErasureCodeJerasure.h
 
 jerasure_sources = \
