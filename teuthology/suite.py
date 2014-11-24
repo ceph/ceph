@@ -453,15 +453,16 @@ def schedule_suite(job_config,
     returns number of jobs scheduled
     """
     suite_name = job_config.suite
-    count = 0
     log.debug('Suite %s in %s' % (suite_name, path))
     configs = [(combine_path(suite_name, item[0]), item[1]) for item in
                build_matrix(path)]
     log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
         suite_name, path, len(configs)))
 
+    package_versions = dict()
+    jobs_to_schedule = []
     for description, fragment_paths in configs:
-        if limit > 0 and count >= limit:
+        if limit > 0 and len(jobs_to_schedule) >= limit:
             log.info(
                 'Stopped after {limit} jobs due to --limit={limit}'.format(
                     limit=limit))
@@ -492,7 +493,7 @@ def schedule_suite(job_config,
         raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 
         parsed_yaml = yaml.load(raw_yaml)
-        os_type = parsed_yaml.get('os_type')
+        os_type = parsed_yaml.get('os_type') or job_config.os_type
         exclude_arch = parsed_yaml.get('exclude_arch')
         exclude_os_type = parsed_yaml.get('exclude_os_type')
 
@@ -505,9 +506,22 @@ def schedule_suite(job_config,
                      exclude_os_type, description)
             continue
 
-        log.info(
-            'Scheduling %s', description
-        )
+        # Make sure packages actually exist for this distro. Cache results so
+        # we don't hammer the gitbuilder mirror unnecessarily hard.
+        sha1 = job_config.sha1
+        package_versions_for_hash = package_versions.get(sha1, dict())
+        if str(os_type) not in package_versions_for_hash:
+            package_version = package_version_for_hash(sha1,
+                                                       distro=str(os_type))
+            package_versions_for_hash[str(os_type)] = package_version
+            package_versions[sha1] = package_versions_for_hash
+        else:
+            package_version = package_versions_for_hash[str(os_type)]
+
+        if not package_version:
+            name = parsed_yaml.get('name')
+            schedule_fail("Packages for ceph hash '{ver}' not found".format(
+                ver=sha1), name)
 
         arg = copy.deepcopy(base_args)
         arg.extend([
@@ -516,6 +530,14 @@ def schedule_suite(job_config,
         ])
         arg.extend(base_yamls)
         arg.extend(fragment_paths)
+
+        jobs_to_schedule.append((parsed_yaml, arg))
+
+    for job_tuple in jobs_to_schedule:
+        arg = job_tuple[1]
+        log.info(
+            'Scheduling %s', description
+        )
 
         if dry_run:
             # Quote any individual args so that individual commands can be
@@ -531,7 +553,8 @@ def schedule_suite(job_config,
             subprocess.check_call(
                 args=arg,
             )
-        count += 1
+
+    count = len(jobs_to_schedule)
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
     log.info('Suite %s in %s -- %d jobs were filtered out.' %
              (suite_name, path, len(configs) - count))
@@ -675,6 +698,7 @@ def substitute_placeholders(input_dict, values_dict):
 # Template for the config that becomes the base for each generated job config
 dict_templ = {
     'branch': Placeholder('ceph_branch'),
+    'sha1': Placeholder('ceph_hash'),
     'teuthology_branch': Placeholder('teuthology_branch'),
     'machine_type': Placeholder('machine_type'),
     'nuke-on-error': True,
