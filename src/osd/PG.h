@@ -281,8 +281,14 @@ public:
   pg_info_t        info;
   __u8 info_struct_v;
   static const __u8 cur_struct_v = 8;
+  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
+  // (first appeared in cuttlefish).
+  static const __u8 compat_struct_v = 7;
   bool must_upgrade() {
-    return info_struct_v < 8;
+    return info_struct_v < cur_struct_v;
+  }
+  bool can_upgrade() {
+    return info_struct_v >= compat_struct_v;
   }
   void upgrade(
     ObjectStore *store,

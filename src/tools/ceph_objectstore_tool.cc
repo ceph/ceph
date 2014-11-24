@@ -2795,6 +2795,11 @@ int main(int argc, char **argv)
       ret = 1;
       goto out;
     }
+    if (struct_ver < PG::compat_struct_v) {
+      cerr << "PG is too old to upgrade, use older Ceph version" << std::endl;
+      ret = 1;
+      goto out;
+    }
     if (debug)
       cerr << "struct_v " << (int)struct_ver << std::endl;
 
