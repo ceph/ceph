@@ -1257,10 +1257,10 @@ class RGWRados
   int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       const string& obj_key, string *bucket_obj);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-      vector<string>& bucket_objs);
+      vector<string>& bucket_objs, int shard_id = -1);
   template<typename T>
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-      map<string, T>& bucket_objs);
+      map<string, T>& bucket_objs, int shard_id = -1);
   void build_bucket_index_marker(const string& shard_name, const string& shard_marker,
       string *marker);
 
@@ -1874,8 +1874,8 @@ public:
 
     return cls_obj_complete_cancel(bucket, tag, oid.object, oid.get_hash_object());
   }
-  int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
-  int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
+  int list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
+  int trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, string& end_marker);
 
   int cls_obj_usage_log_add(const string& oid, rgw_usage_log_info& info);
   int cls_obj_usage_log_read(string& oid, string& user, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -1960,8 +1960,8 @@ public:
    * num_shards [in] - number of bucket index object shards.
    * bucket_objs [out] - filled by this method, a list of bucket index objects.
    */
-  void get_bucket_index_objects(const string& bucket_oid_base, const uint32_t num_shards,
-      vector<string>& bucket_objs);
+  void get_bucket_index_objects(const string& bucket_oid_base, uint32_t num_shards,
+      vector<string>& bucket_objs, int shard_id = -1);
 
   /**
    * Get the bucket index object with the given base bucket index object and object key,

@@ -3808,7 +3808,7 @@ int RGWRados::open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx& index_
 }
 
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-    vector<string>& bucket_objs) {
+    vector<string>& bucket_objs, int shard_id) {
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket, index_ctx, bucket_oid_base);
   if (ret < 0)
@@ -3820,16 +3820,16 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
   if (ret < 0)
     return ret;
 
-  get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs);
+  get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs, shard_id);
   return 0;
 }
 
 template<typename T>
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-    map<string, T>& bucket_objs)
+    map<string, T>& bucket_objs, int shard_id)
 {
   vector<string> oids;
-  int ret = open_bucket_index(bucket, index_ctx, oids);
+  int ret = open_bucket_index(bucket, index_ctx, oids, shard_id);
   if (ret < 0)
     return ret;
 
@@ -6101,7 +6101,7 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
   return oids.size();
 }
 
-int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max,
+int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, uint32_t max,
                                   std::list<rgw_bi_log_entry>& result, bool *truncated)
 {
   ldout(cct, 20) << __func__ << bucket << " marker " << marker << " max " << max << dendl;
@@ -6109,12 +6109,12 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t m
 
   librados::IoCtx index_ctx;
   map<string, cls_rgw_bi_log_list_ret> bi_log_lists;
-  int r = open_bucket_index(bucket, index_ctx, bi_log_lists);
+  int r = open_bucket_index(bucket, index_ctx, bi_log_lists, shard_id);
   if (r < 0)
     return r;
 
   BucketIndexShardsManager marker_mgr;
-  bool has_shards = (bi_log_lists.size() > 1);
+  bool has_shards = (bi_log_lists.size() > 1 || shard_id >= 0);
   // If there are multiple shards for the bucket index object, the marker
   // should have the pattern '{shard_oid_1}#{shard_marker_1},{shard_oid_2}#
   // {shard_marker_2}...', if there is no sharding, the bi_log_list should
@@ -6183,15 +6183,15 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t m
   return 0;
 }
 
-int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, string& start_marker, string& end_marker)
+int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& start_marker, string& end_marker)
 {
   librados::IoCtx index_ctx;
   vector<string> bucket_objs;
-  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs, shard_id);
   if (r < 0)
     return r;
 
-  bool has_shards = bucket_objs.size() > 1;
+  bool has_shards = bucket_objs.size() > 1 || shard_id >= 0;
   BucketIndexShardsManager start_marker_mgr;
   r = start_marker_mgr.from_string(start_marker, has_shards, bucket_objs.front());
   if (r < 0)
@@ -6950,14 +6950,22 @@ int RGWRados::remove_temp_objects(string date, string time)
 }
 
 void RGWRados::get_bucket_index_objects(const string& bucket_oid_base,
-    const uint32_t num_shards, vector<string>& bucket_objects)
+    uint32_t num_shards, vector<string>& bucket_objects, int shard_id)
 {
   if (!num_shards) {
     bucket_objects.push_back(bucket_oid_base);
   } else {
     char buf[bucket_oid_base.size() + 32];
-    for (uint32_t i = 0; i < num_shards; ++i) {
-      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
+    if (shard_id < 0) {
+      for (uint32_t i = 0; i < num_shards; ++i) {
+        snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), i);
+        bucket_objects.push_back(string(buf));
+      }
+    } else {
+      if ((uint32_t)shard_id > num_shards) {
+        return;
+      }
+      snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
       bucket_objects.push_back(string(buf));
     }
   }
