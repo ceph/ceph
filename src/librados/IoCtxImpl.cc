@@ -1040,7 +1040,12 @@ struct WatchInfo : public Objecter::WatchContext {
 
   WatchInfo(librados::IoCtxImpl *io, object_t o,
 	    librados::WatchCtx *c, librados::WatchCtx2 *c2)
-    : ioctx(io), oid(o), ctx(c), ctx2(c2) {}
+    : ioctx(io), oid(o), ctx(c), ctx2(c2) {
+    ioctx->get();
+  }
+  ~WatchInfo() {
+    ioctx->put();
+  }
 
   void handle_notify(uint64_t notify_id,
 		     uint64_t cookie,
