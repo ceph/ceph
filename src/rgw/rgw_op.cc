@@ -373,7 +373,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     string& region = s->bucket_info.region;
     map<string, RGWRegion>::iterator dest_region = store->region_map.regions.find(region);
-    if (dest_region != store->region_map.regions.end()) {
+    if (dest_region != store->region_map.regions.end() && !dest_region->second.endpoints.empty()) {
       s->region_endpoint = dest_region->second.endpoints.front();
     }
     if (s->bucket_exists && !store->region.equals(region)) {
