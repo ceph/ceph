@@ -84,9 +84,7 @@ libec_test_jerasure_neon_la_CFLAGS = ${AM_CFLAGS}
 libec_test_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
 libec_test_jerasure_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_test_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
-if HAVE_NEON
 erasure_codelib_LTLIBRARIES += libec_test_jerasure_neon.la
-endif
 
 libec_test_jerasure_sse4_la_SOURCES = test/erasure-code/TestJerasurePluginSSE4.cc
 test/erasure-code/TestJerasurePluginSSE4.cc: ./ceph_ver.h
@@ -94,9 +92,7 @@ libec_test_jerasure_sse4_la_CFLAGS = ${AM_CFLAGS}
 libec_test_jerasure_sse4_la_CXXFLAGS= ${AM_CXXFLAGS}
 libec_test_jerasure_sse4_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_test_jerasure_sse4_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
-if HAVE_SSE4_PCLMUL
 erasure_codelib_LTLIBRARIES += libec_test_jerasure_sse4.la
-endif
 
 libec_test_jerasure_sse3_la_SOURCES = test/erasure-code/TestJerasurePluginSSE3.cc
 test/erasure-code/TestJerasurePluginSSE3.cc: ./ceph_ver.h
@@ -104,9 +100,7 @@ libec_test_jerasure_sse3_la_CFLAGS = ${AM_CFLAGS}
 libec_test_jerasure_sse3_la_CXXFLAGS= ${AM_CXXFLAGS}
 libec_test_jerasure_sse3_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_test_jerasure_sse3_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
-if HAVE_SSSE3
 erasure_codelib_LTLIBRARIES += libec_test_jerasure_sse3.la
-endif
 
 libec_test_jerasure_generic_la_SOURCES = test/erasure-code/TestJerasurePluginGeneric.cc
 test/erasure-code/TestJerasurePluginGeneric.cc: ./ceph_ver.h
