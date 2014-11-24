@@ -184,7 +184,6 @@ OSDService::OSDService(OSD *osd) :
   whoami(osd->whoami), store(osd->store),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
-  infos_oid(OSD::make_infos_oid()),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -1817,16 +1816,6 @@ int OSD::init()
       goto out;
   }
 
-  // make sure info object exists
-  if (!store->exists(META_COLL, service.infos_oid)) {
-    dout(10) << "init creating/touching infos object" << dendl;
-    ObjectStore::Transaction t;
-    t.touch(META_COLL, service.infos_oid);
-    r = store->apply_transaction(t);
-    if (r < 0)
-      goto out;
-  }
-
   // make sure snap mapper object exists
   if (!store->exists(META_COLL, OSD::make_snapmapper_oid())) {
     dout(10) << "init creating/touching snapmapper object" << dendl;
@@ -2784,7 +2773,8 @@ void OSD::load_pgs()
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
-    epoch_t map_epoch = PG::peek_map_epoch(store, pgid, service.infos_oid, &bl);
+    epoch_t map_epoch = PG::peek_map_epoch(store, pgid, OSD::make_infos_oid(),
+					   &bl);
 
     PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
     // there can be no waiters here, so we don't call wake_pg_waiters
@@ -2856,6 +2846,19 @@ void OSD::load_pgs()
   {
     RWLock::RLocker l(pg_map_lock);
     dout(0) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
+  }
+
+  // clean up old infos object?
+  if (has_upgraded && store->exists(META_COLL, OSD::make_infos_oid())) {
+    dout(1) << __func__ << " removing legacy infos object" << dendl;
+    ObjectStore::Transaction t;
+    t.remove(META_COLL, OSD::make_infos_oid());
+    int r = store->apply_transaction(t);
+    if (r != 0) {
+      derr << __func__ << ": apply_transaction returned "
+	   << cpp_strerror(r) << dendl;
+      assert(0);
+    }
   }
   
   build_past_intervals_parallel();
