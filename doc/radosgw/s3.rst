@@ -46,7 +46,7 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket ACLs (Get, Put)**      | Supported       | Different set of canned ACLs           |
 +---------------------------------+-----------------+----------------------------------------+
-| **Bucket Location**             | Not Supported   |                                        |
+| **Bucket Location**             | Supported       |                                        |
 +---------------------------------+-----------------+----------------------------------------+
 | **Bucket Notification**         | Not Supported   |                                        |
 +---------------------------------+-----------------+----------------------------------------+
