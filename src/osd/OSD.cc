@@ -2793,6 +2793,11 @@ void OSD::load_pgs()
     pg->read_state(store, bl);
 
     if (pg->must_upgrade()) {
+      if (!pg->can_upgrade()) {
+	derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
+	     << " an older version first." << dendl;
+	assert(0 == "PG too old to upgrade");
+      }
       if (!has_upgraded) {
 	derr << "PGs are upgrading" << dendl;
 	has_upgraded = true;
