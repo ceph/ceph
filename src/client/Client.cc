@@ -9029,7 +9029,11 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       todir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
-  if (get_quota_root(fromdir) != get_quota_root(todir)) {
+  if (cct->_conf->client_quota &&
+      fromdir != todir &&
+      (fromdir->quota.is_enable() ||
+       todir->quota.is_enable() ||
+       get_quota_root(fromdir) != get_quota_root(todir))) {
     return -EXDEV;
   }
 
