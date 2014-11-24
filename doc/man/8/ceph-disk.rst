@@ -16,7 +16,8 @@ Description
 ===========
 
 **ceph-disk** is a utility that can prepare and activate a disk, partition or
-directory as a ceph OSD. It is run directly or triggered by **ceph-deploy**.
+directory as a ceph OSD. It is run directly or triggered by **ceph-deploy**
+or udev.
 
 It actually automates the multiple steps involved in manual creation and start
 of an OSD into 2 steps of preparing and activating the OSD by using the
