@@ -1245,10 +1245,18 @@ void ECBackend::submit_transaction(
   for (set<hobject_t>::iterator i = need_hinfos.begin();
        i != need_hinfos.end();
        ++i) {
+    ECUtil::HashInfoRef ref = get_hash_info(*i);
+    if (!ref) {
+      derr << __func__ << ": get_hash_info(" << *i << ")"
+	   << " returned a null pointer and there is no "
+	   << " way to recover from such an error in this "
+	   << " context" << dendl;
+      assert(0);
+    }
     op->unstable_hash_infos.insert(
       make_pair(
 	*i,
-	get_hash_info(*i)));
+	ref));
   }
 
   for (vector<pg_log_entry_t>::iterator i = op->log_entries.begin();
@@ -1458,7 +1466,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	::decode(hinfo, bp);
 	assert(hinfo.get_total_chunk_size() == (uint64_t)st.st_size);
       } else {
-	assert(0 == "missing hash attr");
+	return ECUtil::HashInfoRef();
       }
     }
     ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
@@ -1756,31 +1764,37 @@ void ECBackend::be_deep_scrub(
       break;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid);
   if (r == -EIO) {
     dout(0) << "_scan_list  " << poid << " got "
 	    << r << " on read, read_error" << dendl;
     o.read_error = true;
   }
 
-  if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
-    dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid);
+  if (!hinfo) {
+    dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
-  }
+    o.digest_present = false;
+  } else {
+    if (hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
+      dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
+      o.read_error = true;
+    }
 
-  if (hinfo->get_total_chunk_size() != pos) {
-    dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
-    o.read_error = true;
-  }
+    if (hinfo->get_total_chunk_size() != pos) {
+      dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
+      o.read_error = true;
+    }
 
-  /* We checked above that we match our own stored hash.  We cannot
-   * send a hash of the actual object, so instead we simply send
-   * our locally stored hash of shard 0 on the assumption that if
-   * we match our chunk hash and our recollection of the hash for
-   * chunk 0 matches that of our peers, there is likely no corruption.
-   */
-  o.digest = hinfo->get_chunk_hash(0);
-  o.digest_present = true;
+    /* We checked above that we match our own stored hash.  We cannot
+     * send a hash of the actual object, so instead we simply send
+     * our locally stored hash of shard 0 on the assumption that if
+     * we match our chunk hash and our recollection of the hash for
+     * chunk 0 matches that of our peers, there is likely no corruption.
+     */
+    o.digest = hinfo->get_chunk_hash(0);
+    o.digest_present = true;
+  }
 
   o.omap_digest = 0;
   o.omap_digest_present = true;
