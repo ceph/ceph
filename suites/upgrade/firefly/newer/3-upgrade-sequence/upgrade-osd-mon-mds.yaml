@@ -23,13 +23,19 @@ upgrade-sequence:
    - ceph.restart: [osd.5]
    - sleep:
        duration: 60
-   - ceph.restart: [mon.a]
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: false
    - sleep:
        duration: 60
-   - ceph.restart: [mon.b]
+   - ceph.restart:
+       daemons: [mon.b]
+       wait-for-healthy: false
    - sleep:
        duration: 60
-   - ceph.restart: [mon.c]
+   - ceph.restart:
+       daemons: [mon.c]
+       wait-for-healthy: false
    - sleep:
        duration: 60
    - ceph.restart: [mds.a]
