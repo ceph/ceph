@@ -107,6 +107,16 @@ class C_handle_stop : public EventCallback {
   }
 };
 
+class C_handle_signal : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_signal(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->wakeup_stop();
+  }
+};
+
 
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
@@ -136,6 +146,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false), keepalive(false),
+    stop_lock("AsyncConnection::stop_lock"),
     got_bad_auth(false), authorizer(NULL),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
@@ -144,6 +155,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
   stop_handler.reset(new C_handle_stop(this));
+  signal_handler.reset(new C_handle_signal(this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
@@ -1762,11 +1774,13 @@ void AsyncConnection::fault()
 {
   if (state == STATE_CLOSED) {
     ldout(async_msgr->cct, 10) << __func__ << " state is already STATE_CLOSED" << dendl;
+    center->dispatch_event_external(reset_handler);
     return ;
   }
 
   if (policy.lossy && state != STATE_CONNECTING) {
     ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
+    center->dispatch_event_external(reset_handler);
     _stop();
     return ;
   }
@@ -1833,9 +1847,6 @@ void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-  if (policy.lossy)
-    was_session_reset();
-  center->dispatch_event_external(reset_handler);
   shutdown_socket();
   discard_out_queue();
   outcoming_bl.clear();
@@ -1844,10 +1855,9 @@ void AsyncConnection::_stop()
   ::close(sd);
   sd = -1;
   async_msgr->unregister_conn(peer_addr);
-  {
-    Mutex::Locker l(stop_lock);
-    stop_cond.Signal();
-  }
+  // Here we need to dispatch "signal" event, because we want to ensure signal
+  // it after all events called by this "_stop" has be done.
+  center->dispatch_event_external(signal_handler);
   put();
 }
 
