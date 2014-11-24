@@ -29,7 +29,7 @@ else
 fi
 
 if test -d ".git" ; then
-  if ! git submodule update --init; then
+  if ! git submodule sync || ! git submodule update --init; then
     echo "Error: could not initialize submodule projects"
     echo "  Network connectivity might be required."
     exit 1
