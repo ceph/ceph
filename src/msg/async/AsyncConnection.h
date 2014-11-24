@@ -52,7 +52,7 @@ class AsyncConnection : public Connection {
   int read_until(uint64_t needed, bufferptr &p);
   int _process_connection();
   void _connect();
-  void _stop(bool external=false);
+  void _stop();
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
   int handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
@@ -126,8 +126,9 @@ class AsyncConnection : public Connection {
   void send_keepalive();
   // Don't call it from AsyncConnection
   void mark_down() {
-    Mutex::Locker l(lock);
-    _stop(true);
+    Mutex::Locker l(stop_lock);
+    center.dispatch_event_external(stop_event);
+    mark_down_cond.Wait(stop_lock);
   }
   void mark_disposable() {
     Mutex::Locker l(lock);
@@ -231,6 +232,8 @@ class AsyncConnection : public Connection {
   EventCallbackRef remote_reset_handler;
   bool keepalive;
   struct iovec msgvec[IOV_LEN];
+  Mutex stop_lock; // used to protect `mark_down_cond`
+  Cond stop_cond;
 
   // Tis section are temp variables used by state transition
 
@@ -264,6 +267,11 @@ class AsyncConnection : public Connection {
   // used by eventcallback
   void handle_write();
   void process();
+  // Helper: only called by C_handle_stop
+  void stop() {
+    Mutex::Locker l(lock);
+    _stop();
+  }
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;

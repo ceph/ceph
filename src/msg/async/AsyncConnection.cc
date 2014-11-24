@@ -97,6 +97,16 @@ class C_handle_dispatch : public EventCallback {
   }
 };
 
+class C_handle_stop : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_stop(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->stop();
+  }
+};
+
 
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
@@ -133,6 +143,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   write_handler.reset(new C_handle_write(this));
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
+  stop_handler.reset(new C_handle_stop(this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
@@ -1818,7 +1829,7 @@ void AsyncConnection::was_session_reset()
   in_seq_acked = 0;
 }
 
-void AsyncConnection::_stop(bool external)
+void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
@@ -1832,7 +1843,11 @@ void AsyncConnection::_stop(bool external)
   state = STATE_CLOSED;
   ::close(sd);
   sd = -1;
-  async_msgr->unregister_conn(peer_addr, external);
+  async_msgr->unregister_conn(peer_addr);
+  {
+    Mutex::Locker l(stop_lock);
+    stop_cond.Signal();
+  }
   put();
 }
 
