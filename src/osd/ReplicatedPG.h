@@ -439,6 +439,7 @@ public:
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
     bool cache_evict;     ///< true if this is a cache eviction
+    bool modify_snapset;
 
     // side effects
     list<watch_info_t> watch_connects;
@@ -540,7 +541,7 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
-      modify(false), user_modify(false), undirty(false), cache_evict(false),
+      modify(false), user_modify(false), undirty(false), cache_evict(false), modify_snapset(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
@@ -554,16 +555,28 @@ public:
       on_finish(NULL),
       release_snapset_obc(false) {
       if (_ssc) {
-	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
       }
     }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
-	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
       }
+    }
+    void initial_new_snapset()
+    {
+      if (!modify_snapset && snapset)
+        new_snapset = *snapset;
+      modify_snapset = true;
+    }
+    const SnapSet* get_new_snapset()
+    {
+      const SnapSet* ss = &new_snapset;
+      if (!modify_snapset && snapset) {
+        ss = snapset;
+      }
+      return ss;
     }
     ~OpContext() {
       assert(!op_t);
@@ -1419,7 +1432,8 @@ public:
     OpContext *op,
     PGBackend::PGTransaction *t,
     const string &key,
-    bufferlist &val);
+    bufferlist &val,
+    bool only_pending = false);
   void rmattr_maybe_cache(
     ObjectContextRef obc,
     OpContext *op,

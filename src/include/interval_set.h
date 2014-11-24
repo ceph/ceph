@@ -227,6 +227,10 @@ class interval_set {
     return _size == other._size && m == other.m;
   }
 
+  bool operator!=(const interval_set& other) const {
+    return !(*this == other);
+  }
+
   int size() const {
     return _size;
   }
