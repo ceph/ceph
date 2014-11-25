@@ -3328,7 +3328,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
 	  int r = pgbackend->objects_read_sync(
-	    soid, op.extent.offset, op.extent.length, &osd_op.outdata);
+	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
 	  if (r >= 0)
 	    op.extent.length = r;
 	  else {
@@ -3403,8 +3403,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      last < miter->first) {
 	    bufferlist t;
 	    uint64_t len = miter->first - last;
-	    r = pgbackend->objects_read_sync(
-	      soid, last, len, &t);
+	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
 	    if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -3412,8 +3411,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 
           bufferlist tmpbl;
-	  r = pgbackend->objects_read_sync(
-	    soid, miter->first, miter->second, &tmpbl);
+	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
           if (r < 0)
             break;
 
@@ -3431,8 +3429,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (last < end) {
 	    bufferlist t;
 	    uint64_t len = end - last;
-	    r = pgbackend->objects_read_sync(
-	      soid, last, len, &t);
+	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
 	    if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -5846,7 +5843,7 @@ int ReplicatedPG::fill_in_copy_get(
 	cb->len = result;
       } else {
 	result = pgbackend->objects_read_sync(
-	  oi.soid, cursor.data_offset, left, &bl);
+	  oi.soid, cursor.data_offset, left, osd_op.op.flags, &bl);
 	if (result < 0)
 	  return result;
       }
