@@ -1,0 +1,196 @@
+.\" Man page generated from reStructuredText.
+.
+.TH "CEPH-DISK" "8" "November 25, 2014" "dev" "Ceph"
+.SH NAME
+ceph-disk \- Ceph disk preparation and activation utility for OSD
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.nf
+\fBceph\-disk\fP \fBprepare\fP [\-\-cluster \fIclustername\fP] [\-\-cluster\-uuid \fIuuid\fP]
+[\-\-fs\-type \fIxfs|ext4|btrfs\fP] [\fIdata\-path\fP] [\fIjournal\-path\fP]
+.fi
+.sp
+.nf
+\fBceph\-disk\fP \fBactivate\fP [\fIdata\-path\fP] [\-\-activate\-key \fIpath\fP]
+.fi
+.sp
+.SH DESCRIPTION
+.sp
+\fBceph\-disk\fP is a utility that can prepare and activate a disk, partition or
+directory as a ceph OSD. It is run directly or triggered by \fBceph\-deploy\fP
+or udev.
+.sp
+It actually automates the multiple steps involved in manual creation and start
+of an OSD into 2 steps of preparing and activating the OSD by using the
+subcommands \fBprepare\fP and \fBactivate\fP\&.
+.SH SUBCOMMANDS
+.sp
+\fBprepare\fP: Prepare a directory, disk or drive for a ceph OSD. It creates a GPT
+partition, marks the partition with ceph type uuid, creates a file system, marks
+the file system as ready for ceph consumption, uses entire partition and adds a
+new partition to the journal disk. It is run directly or triggered by
+\fBceph\-deploy\fP\&.
+.sp
+Usage: ceph\-disk prepare \-\-cluster [cluster\-name] \-\-cluster\-uuid [uuid] \-\-fs\-type
+[ext4|xfs|btrfs] [data\-path] [journal\-path]
+.sp
+\fBactivate\fP: Activate the ceph OSD. It mounts the volume in a temporary location,
+allocates an OSD id (if needed), remounts in the correct location /var/lib/ceph/
+osd/$cluster\-$id and starts ceph\-osd. It is triggered by udev when it sees the OSD
+GPT partition type or on ceph service start with \(aqceph disk activate\-all\(aq. It is
+also run directly or triggered by \fBceph\-deploy\fP\&.
+.sp
+Usage: ceph\-disk activate [data\-path]
+.sp
+An additional option [\-\-activate\-key PATH] has to be used with this subcommand
+when a copy of /var/lib/ceph/bootstrap\-osd/{cluster}.keyring isn\(aqt present in the
+OSD node.
+.sp
+Usage: ceph\-disk activate [data\-path] [\-\-activate\-key PATH]
+.sp
+\fBactivate\-journal\fP: Activate an OSD via it\(aqs journal device. udev triggers
+\(aqceph\-disk activate\-journal <dev>\(aq based on the partition type.
+.sp
+Usage: ceph\-disk activate\-journal [DEV]
+.sp
+Here, [DEV] is the path to journal block device.
+.sp
+Others options can also be used with this subcommand like \-\-activate\-key and
+\-\-mark\-init.
+.sp
+Usage: ceph\-disk activate\-journal [\-\-activate\-key PATH] [\-\-mark\-init INITSYSTEM]
+[DEV]
+.sp
+\fBactivate\-all\fP: Activate all tagged OSD partitions. activate\-all relies on
+/dev/disk/by\-parttype\-uuid/$typeuuid.$uuid to find all partitions. Special udev
+rules is installed to create these links. It is triggered on ceph service start
+up or run directly.
+.sp
+Usage: ceph\-disk activate\-all
+.sp
+\fBlist\fP: List disk partitions and ceph OSDs. It is run directly or triggered
+by \fBceph\-deploy\fP\&.
+.sp
+Usage: ceph\-disk list
+.sp
+\fBsuppress\-activate\fP: Suppress activate on a device (prefix).
+.sp
+Usage: ceph\-disk suppress\-activate [PATH]
+.sp
+Here, [PATH] is path to block device or directory.
+.sp
+\fBunsuppress\-activate\fP: Stop suppressing activate on a device (prefix).
+.sp
+Usage: ceph\-disk unsuppress\-activate [PATH]
+.sp
+Here, [PATH] is path to block device or directory.
+.sp
+\fBzap\fP: Zap/erase/destroy a device\(aqs partition table and contents. It is
+also run directly or triggered by \fBceph\-deploy\fP\&.
+.sp
+Usage: ceph\-disk zap [DEV]
+.sp
+Here, [DEV] is path to block device.
+.SH OPTIONS
+.INDENT 0.0
+.TP
+.B \-\-prepend\-to\-path PATH
+Prepend PATH to $PATH for backward compatibility (default /usr/bin)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-statedir PATH
+Directory in which ceph configuration is preserved (default /usr/lib/ceph)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-sysconfdir PATH
+Directory in which ceph configuration files are found (default /etc/ceph)
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-cluster
+Provide name of the ceph cluster in which the OSD is being prepared.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-cluster\-uuid
+Provide uuid of the ceph cluster in which the OSD is being prepared.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-fs\-type
+Provide the filesytem type for the OSD. e.g. \(aqxfs/ext4/btrfs\(aq.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-activate\-key
+Use when a copy of /var/lib/ceph/bootstrap\-osd/{cluster}.keyring isn\(aqt
+present in the OSD node. Suffix the option by the path to the keyring.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-mark\-init
+Provide init system to manage the OSD directory.
+.UNINDENT
+.SH AVAILABILITY
+.sp
+\fBceph\-disk\fP is a part of the Ceph distributed storage system. Please refer to
+the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
+.SH COPYRIGHT
+2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
+.\" Generated by docutils manpage writer.
+.
