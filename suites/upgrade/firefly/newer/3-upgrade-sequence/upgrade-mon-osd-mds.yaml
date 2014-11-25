@@ -5,19 +5,13 @@ upgrade-sequence:
          branch: firefly
       mon.b:
          branch: firefly
-   - ceph.restart:
-       daemons: [mon.a]
-       wait-for-healthy: false
+   - ceph.restart: [mon.a]
    - sleep:
        duration: 60
-   - ceph.restart:
-       daemons: [mon.b]
-       wait-for-healthy: false
+   - ceph.restart: [mon.b]
    - sleep:
        duration: 60
-   - ceph.restart:
-       daemons: [mon.c]
-       wait-for-healthy: false
+   - ceph.restart: [mon.c]
    - sleep:
        duration: 60
    - ceph.restart: [osd.0]
