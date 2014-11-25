@@ -8009,7 +8009,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
       }
       rm->opt.set_pool_override(get_info().pgid.pool());
     }
-    rm->opt.set_replica();
+    rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
     bool update_snaps = false;
     if (!rm->opt.empty()) {
