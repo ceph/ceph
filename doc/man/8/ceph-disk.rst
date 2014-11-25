@@ -35,10 +35,6 @@ new partition to the journal disk. It is run directly or triggered by
 Usage: ceph-disk prepare --cluster [cluster-name] --cluster-uuid [uuid] --fs-type
 [ext4|xfs|btrfs] [data-path] [journal-path]
 
-ceph-deploy osd prepare [node-name]:[directory-path]
-
-ceph-deploy osd prepare [node-name]:[data-disk]:[journal-disk]
-
 **activate**: Activate the ceph OSD. It mounts the volume in a temporary location,
 allocates an OSD id (if needed), remounts in the correct location /var/lib/ceph/
 osd/$cluster-$id and starts ceph-osd. It is triggered by udev when it sees the OSD
@@ -52,10 +48,6 @@ when a copy of /var/lib/ceph/bootstrap-osd/{cluster}.keyring isn't present in th
 OSD node.
 
 Usage: ceph-disk activate [data-path] [--activate-key PATH]
-
-ceph-deploy osd activate [node-name]:[directory-path]
-
-ceph-deploy osd activate [node-name]:[data-disk-partition]:[journal-disk-partition]
 
 **activate-journal**: Activate an OSD via it's journal device. udev triggers
 'ceph-disk activate-journal <dev>' based on the partition type.
@@ -82,8 +74,6 @@ by **ceph-deploy**.
 
 Usage: ceph-disk list
 
-ceph-deploy disk list [node-name]
-
 **suppress-activate**: Suppress activate on a device (prefix).
 
 Usage: ceph-disk suppress-activate [PATH]
@@ -102,8 +92,6 @@ also run directly or triggered by **ceph-deploy**.
 Usage: ceph-disk zap [DEV]
 
 Here, [DEV] is path to block device.
-
-ceph-deploy disk zap [NODE-NAME]:[DISK-NAME]
 
 Options
 =======
