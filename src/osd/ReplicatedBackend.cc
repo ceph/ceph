@@ -321,7 +321,8 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
-    bufferlist &bl
+    bufferlist &bl,
+    uint32_t fadvise_flags
     ) {
     written += len;
     t->write(get_coll_ct(hoid), hoid, off, len, bl);
