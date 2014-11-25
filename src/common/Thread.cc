@@ -66,7 +66,7 @@ const pthread_t &Thread::get_thread_id()
   return thread_id;
 }
 
-bool Thread::is_started()
+bool Thread::is_started() const
 {
   return thread_id != 0;
 }
