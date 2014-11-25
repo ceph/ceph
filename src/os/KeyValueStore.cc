@@ -1702,7 +1702,8 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeaderRef header,
 
 
 int KeyValueStore::read(coll_t cid, const ghobject_t& oid, uint64_t offset,
-                        size_t len, bufferlist& bl, bool allow_eio)
+                        size_t len, bufferlist& bl, uint32_t op_flags,
+			bool allow_eio)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
            << len << dendl;

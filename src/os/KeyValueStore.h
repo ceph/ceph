@@ -548,7 +548,7 @@ class KeyValueStore : public ObjectStore,
   int stat(coll_t cid, const ghobject_t& oid, struct stat *st,
            bool allow_eio = false);
   int read(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
-           bufferlist& bl, bool allow_eio = false);
+           bufferlist& bl, uint32_t op_flags = 0, bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
              bufferlist& bl);
 
