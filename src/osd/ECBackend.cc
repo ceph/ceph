@@ -1570,6 +1570,7 @@ int ECBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
   return -EOPNOTSUPP;
