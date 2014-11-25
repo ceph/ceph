@@ -3183,6 +3183,7 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     extent->fe_logical = srcoff;
   }
 
+  int64_t written = 0;
   uint64_t i = 0;
 
   while (i < fiemap->fm_mapped_extents) {
@@ -3256,18 +3257,23 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
         op += (r-op);
       }
       if (r < 0)
-        break;
+        goto out;
       pos += r;
     }
+    written += end;
     i++;
     extent++;
   }
 
-  if (r >= 0 && m_filestore_sloppy_crc) {
-    int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
-    assert(rc >= 0);
+  if (r >= 0) {
+    r = written;
+    if (m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
+      assert(rc >= 0);
+    }
   }
 
+ out:
   dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
@@ -3353,6 +3359,7 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
 
   int r;
   FDRef o, n;
+  struct stat st;
   r = lfn_open(cid, oldoid, false, &o);
   if (r < 0) {
     goto out2;
@@ -3362,10 +3369,30 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
     goto out;
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
+  if (r < 0) {
+    r = -errno;
+    goto out3;
+  }
+
+  r = ::fstat(**n, &st);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << ": fstat error at " << **n << " "<< cpp_strerror(r) << dendl;
+    goto out3;
+  }
+  if (st.st_size < (int)(dstoff + len)) {
+    r = ::ftruncate(**n, dstoff + len);
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << ": ftruncate error at " << dstoff + len << ", " << cpp_strerror(r) << dendl;
+      goto out3;
+    }
+  }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
 
+ out3:
   lfn_close(n);
  out:
   lfn_close(o);
