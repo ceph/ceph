@@ -6,6 +6,7 @@ Content Index
 
    README.rst
    INSTALL.rst
+   LAB_SETUP.rst
    ChangeLog.rst
 
 Indices and tables

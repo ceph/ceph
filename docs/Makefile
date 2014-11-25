@@ -8,7 +8,7 @@ PAPER         =
 SOURCEDIR     = source
 BUILDDIR      = build
 
-SOURCEFILES   = README.rst INSTALL.rst ChangeLog.rst
+SOURCEFILES   = README.rst INSTALL.rst LAB_SETUP.rst ChangeLog.rst
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
