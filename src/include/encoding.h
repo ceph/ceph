@@ -295,7 +295,6 @@ inline void decode(T &o, bufferlist& bl)
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
-#include "triple.h"
 
 // boost optional
 template<typename T>
@@ -354,23 +353,6 @@ inline void decode(std::pair<A,B> &pa, bufferlist::iterator &p)
   decode(pa.first, p);
   decode(pa.second, p);
 }
-
-// triple
-template<class A, class B, class C>
-inline void encode(const triple<A,B,C> &t, bufferlist &bl)
-{
-  encode(t.first, bl);
-  encode(t.second, bl);
-  encode(t.third, bl);
-}
-template<class A, class B, class C>
-inline void decode(triple<A,B,C> &t, bufferlist::iterator &p)
-{
-  decode(t.first, p);
-  decode(t.second, p);
-  decode(t.third, p);
-}
-
 
 // list
 template<class T>
