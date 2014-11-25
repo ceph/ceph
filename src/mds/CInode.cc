@@ -3626,6 +3626,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 {
   class ValidationContinuation : public MDSContinuation {
   public:
+    MDRequestRef mdr;
     CInode *in;
     CInode::validated_data *results;
     bufferlist bl;
@@ -3640,8 +3641,9 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     ValidationContinuation(CInode *i,
                            CInode::validated_data *data_r,
-                           MDRequestRef &mdr) :
-                             MDSContinuation(mdr, i->mdcache->mds->server),
+                           MDRequestRef &_mdr) :
+                             MDSContinuation(i->mdcache->mds->server),
+                             mdr(_mdr),
                              in(i),
                              results(data_r),
                              shadow_in(NULL) {
@@ -3825,6 +3827,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // Hurray! We made it through!
       results->passed_validation = true;
       return true;
+    }
+
+    void _done() {
+      server->respond_to_request(mdr, get_rval());
     }
   };
 
