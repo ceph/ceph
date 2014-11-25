@@ -3323,7 +3323,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else if (pool.info.require_rollback()) {
 	  ctx->pending_async_reads.push_back(
 	    make_pair(
-	      make_pair(op.extent.offset, op.extent.length),
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
 	      make_pair(&osd_op.outdata, new FillInExtent(&op.extent.length))));
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
@@ -5837,7 +5837,7 @@ int ReplicatedPG::fill_in_copy_get(
 	async_read_started = true;
 	ctx->pending_async_reads.push_back(
 	  make_pair(
-	    make_pair(cursor.data_offset, left),
+	    boost::make_tuple(cursor.data_offset, left, 0),
 	    make_pair(&bl, cb)));
 	result = MIN(oi.size - cursor.data_offset, (uint64_t)left);
 	cb->len = result;

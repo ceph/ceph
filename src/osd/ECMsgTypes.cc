@@ -187,20 +187,21 @@ void ECSubRead::dump(Formatter *f) const
   f->dump_stream("from") << from;
   f->dump_unsigned("tid", tid);
   f->open_array_section("objects");
-  for (map<hobject_t, list<pair<uint64_t, uint64_t> > >::const_iterator i =
+  for (map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> > >::const_iterator i =
 	 to_read.begin();
        i != to_read.end();
        ++i) {
     f->open_object_section("object");
     f->dump_stream("oid") << i->first;
     f->open_array_section("extents");
-    for (list<pair<uint64_t, uint64_t> >::const_iterator j =
+    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator j =
 	   i->second.begin();
 	 j != i->second.end();
 	 ++j) {
       f->open_object_section("extent");
-      f->dump_unsigned("off", j->first);
-      f->dump_unsigned("len", j->second);
+      f->dump_unsigned("off", j->get<0>());
+      f->dump_unsigned("len", j->get<1>());
+      f->dump_unsigned("flags", j->get<2>());
       f->close_section();
     }
     f->close_section();
@@ -226,16 +227,16 @@ void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
   o.push_back(new ECSubRead());
   o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 1;
-  o.back()->to_read[hoid1].push_back(make_pair(100, 200));
-  o.back()->to_read[hoid1].push_back(make_pair(400, 600));
-  o.back()->to_read[hoid2].push_back(make_pair(400, 600));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
   o.back()->attrs_to_read.insert(hoid1);
   o.push_back(new ECSubRead());
   o.back()->from = pg_shard_t(2, shard_id_t(255));
   o.back()->tid = 300;
-  o.back()->to_read[hoid1].push_back(make_pair(300, 200));
-  o.back()->to_read[hoid2].push_back(make_pair(400, 600));
-  o.back()->to_read[hoid2].push_back(make_pair(2000, 600));
+  o.back()->to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
+  o.back()->to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
   o.back()->attrs_to_read.insert(hoid2);
 }
 
