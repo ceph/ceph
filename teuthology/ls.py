@@ -21,30 +21,7 @@ def ls(archive_dir, verbose):
                     summary.update(new)
         except IOError as e:
             if e.errno == errno.ENOENT:
-                print '%s      ' % j,
-
-                # pid
-                try:
-                    pidfile = os.path.join(job_dir, 'pid')
-                    found = False
-                    if os.path.isfile(pidfile):
-                        pid = open(pidfile, 'r').read()
-                        if os.path.isdir("/proc/%s" % pid):
-                            cmdline = open('/proc/%s/cmdline' % pid,
-                                           'r').read()
-                            if cmdline.find(archive_dir) >= 0:
-                                print '(pid %s)' % pid,
-                                found = True
-                    if not found:
-                        print '(no process or summary.yaml)',
-                    # tail
-                    tail = os.popen(
-                        'tail -1 %s/%s/teuthology.log' % (archive_dir, j)
-                    ).read().rstrip()
-                    print tail,
-                except IOError as e:
-                    continue
-                print ''
+                print_debug_info(j, job_dir, archive_dir)
                 continue
             else:
                 raise
@@ -71,3 +48,29 @@ def get_jobs(archive_dir):
 
     jobs = [job for job in dir_contents if is_job_dir(archive_dir, job)]
     return sorted(jobs)
+
+
+def print_debug_info(job, job_dir, archive_dir):
+    print '%s      ' % job,
+
+    try:
+        pidfile = os.path.join(job_dir, 'pid')
+        found = False
+        if os.path.isfile(pidfile):
+            pid = open(pidfile, 'r').read()
+            if os.path.isdir("/proc/%s" % pid):
+                cmdline = open('/proc/%s/cmdline' % pid,
+                               'r').read()
+                if cmdline.find(archive_dir) >= 0:
+                    print '(pid %s)' % pid,
+                    found = True
+        if not found:
+            print '(no process or summary.yaml)',
+        # tail
+        tail = os.popen(
+            'tail -1 %s/%s/teuthology.log' % (archive_dir, job)
+        ).read().rstrip()
+        print tail,
+    except IOError:
+        pass
+    print ''
