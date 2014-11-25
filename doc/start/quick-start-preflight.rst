@@ -92,7 +92,6 @@ The admin node must be have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
-
 Install NTP
 -----------
 
@@ -189,7 +188,7 @@ SSH keys on the admin node and distribute the public key to each Ceph node.
 	ssh-copy-id {username}@node2
 	ssh-copy-id {username}@node3
 
-#. (Recommended) Modify the ``~/.ssh/config`` file of your ``ceph-deploy`` 
+#. (Recommended) Modify the ``/etc/ssh/ssh_config`` file of your ``ceph-deploy``
    admin node so that ``ceph-deploy`` can log in to Ceph nodes as the user you 
    created without requiring you to specify ``--username {username}`` each 
    time you execute ``ceph-deploy``. This has the added benefit of streamlining
