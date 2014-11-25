@@ -1316,6 +1316,7 @@ public:
    * @param offset location offset of first byte to be read
    * @param len number of bytes to be read
    * @param bl output bufferlist
+   * @param op_flags is CEPH_OSD_OP_FLAG_*
    * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
@@ -1325,6 +1326,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags = 0,
     bool allow_eio = false) = 0;
 
   /**
