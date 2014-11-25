@@ -409,6 +409,8 @@ for name in $what; do
 	    get_conf post_stop "" "post stop command"
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name ceph-$type $pid_file
+	    [ -n "$pidfile" ] && rm -f $pidfile
+	    [ -n "$asok" ] && rm -f $asok
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    if [ $dofsumount -eq 1 ] && [ -n "$fs_devs" ]; then
