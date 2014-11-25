@@ -22,7 +22,7 @@ static unsigned long get_auxval(unsigned long type)
 	if (f) {
 		ElfW(auxv_t) entry;
 		while ((read = fread(&entry, sizeof(entry), 1, f)) > 0) {
-			if (read != sizeof(entry))
+			if (read != 1)
 				break;
 			if (entry.a_type == type) {
 				result = entry.a_un.a_val;
