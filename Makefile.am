@@ -1,6 +1,6 @@
 AUTOMAKE_OPTIONS = gnu
 ACLOCAL_AMFLAGS = -I m4
-EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec
+EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec install-deps.sh
 # the "." here makes sure check-local builds gtest before it is used
 SUBDIRS = . src man
 
@@ -54,11 +54,7 @@ clean-local:
 # autoconf to be happy.  These commands should be run manually to
 # bootstrap.
 install-deps:
-	if test -x /usr/bin/apt-get; then \
-	  sudo apt-get -y --no-install-recommends install `cat deps.deb.txt`; \
-	else \
-	  sudo yum -y install `cat deps.rpm.txt`; \
-	fi
+	./install-deps.sh
 
 dist-hook:
 #	Generates the full list of contributors
