@@ -225,9 +225,10 @@ int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
-  return store->read(coll, hoid, off, len, *bl);
+  return store->read(coll, hoid, off, len, *bl, op_flags);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
