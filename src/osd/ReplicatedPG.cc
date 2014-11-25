@@ -4037,9 +4037,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
@@ -4072,7 +4072,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	  ctx->mod_desc.create();
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	  if (obs.exists) {
 	    map<string, bufferlist> to_set = ctx->obc->attr_cache;
 	    map<string, boost::optional<bufferlist> > &overlay =
@@ -4094,7 +4094,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (obs.exists) {
 	    t->truncate(soid, 0);
 	  }
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
@@ -6126,7 +6126,8 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
       cop->data.length(),
-      cop->data);
+      cop->data,
+      0);
     cop->data.clear();
   }
   if (!pool.info.require_rollback()) {
@@ -11322,7 +11323,7 @@ void ReplicatedPG::hit_set_persist()
   bufferlist boi(sizeof(ctx->new_obs.oi));
   ::encode(ctx->new_obs.oi, boi);
 
-  ctx->op_t->append(oid, 0, bl.length(), bl);
+  ctx->op_t->append(oid, 0, bl.length(), bl, 0);
   setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, OI_ATTR, boi);
   setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
   ctx->log.push_back(
