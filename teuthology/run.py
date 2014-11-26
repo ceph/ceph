@@ -14,7 +14,7 @@ from .nuke import nuke
 from .run_tasks import run_tasks
 from .repo_utils import fetch_qa_suite
 from .results import email_results
-from .config import JobConfig, FakeNamespace
+from .config import FakeNamespace
 
 log = logging.getLogger(__name__)
 
@@ -100,9 +100,10 @@ def fetch_tasks_if_needed(job_config):
 
 
 def setup_config(config_paths):
-    """ Takes a list of config yaml files and combines them
-        into a single dictionary. Processes / validates the dictionary and then
-        returns a JobConfig instance.
+    """
+    Takes a list of config yaml files and combines them
+    into a single dictionary. Processes / validates the dictionary and then
+    returns a JobConfig instance.
     """
     config = merge_configs(config_paths)
 
@@ -121,12 +122,13 @@ def setup_config(config_paths):
             '%d targets are needed for all roles but found %d listed.' % (
                 roles, targets)
 
-    return JobConfig.from_dict(config)
+    return config
 
 
 def get_machine_type(machine_type, config):
-    """ If no machine_type is given, find the appropriate machine_type
-        from the given config.
+    """
+    If no machine_type is given, find the appropriate machine_type
+    from the given config.
     """
     if machine_type is None:
         fallback_default = config.get('machine_type', 'plana')
@@ -146,9 +148,10 @@ def get_summary(owner, description):
 
 
 def validate_tasks(config):
-    """ Ensures that config tasks do not include 'kernal'.
+    """
+    Ensures that config tasks do not include 'kernel'.
 
-        If there is not tasks, return an empty list.
+    If there is not tasks, return an empty list.
     """
     if 'tasks' not in config:
         log.warning('No tasks specified. Continuing anyway...')
@@ -159,6 +162,8 @@ def validate_tasks(config):
         msg = ('kernel installation shouldn be a base-level item, not part ' +
                'of the tasks list')
         assert 'kernel' not in task, msg
+
+    return config["tasks"]
 
 
 def get_initial_tasks(lock, config, machine_type):
@@ -237,47 +242,47 @@ def report_outcome(config, archive, summary, fake_ctx):
         sys.exit(1)
 
 
-def main(ctx):
-    set_up_logging(ctx["--verbose"], ctx["--archive"])
+def main(args):
+    set_up_logging(args["--verbose"], args["--archive"])
 
-    if ctx["--owner"] is None:
-        ctx["--owner"] = get_user()
+    if args["--owner"] is None:
+        args["--owner"] = get_user()
 
-    ctx["<config>"] = setup_config(ctx["<config>"])
+    args["<config>"] = setup_config(args["<config>"])
 
-    write_initial_metadata(ctx["--archive"], ctx["<config>"], ctx["--name"], ctx["--description"], ctx["--owner"])
-    report.try_push_job_info(ctx["<config>"], dict(status='running'))
+    write_initial_metadata(args["--archive"], args["<config>"], args["--name"], args["--description"], args["--owner"])
+    report.try_push_job_info(args["<config>"], dict(status='running'))
 
-    machine_type = get_machine_type(ctx["--machine-type"])
+    machine_type = get_machine_type(args["--machine-type"], args["<config>"])
 
-    if ctx["--block"]:
-        assert ctx["--lock"], \
+    if args["--block"]:
+        assert args["--lock"], \
             'the --block option is only supported with the --lock option'
 
-    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(
-        ctx["<config>"], default_flow_style=False).splitlines()))
+    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(args["<config>"], default_flow_style=False).splitlines()))
 
-    ctx["summary"] = get_summary(ctx["--owner"], ctx["--description"])
+    args["summary"] = get_summary(args["--owner"], args["--description"])
 
-    ctx["<config>"]["tasks"] = validate_tasks(ctx["<config>"])
+    args["<config>"]["tasks"] = validate_tasks(args["<config>"])
 
-    init_tasks = get_initial_tasks(ctx["--lock"], ctx["<config>"], machine_type)
+    init_tasks = get_initial_tasks(args["--lock"], args["<config>"], machine_type)
 
-    ctx["<config>"]['tasks'].insert(0, init_tasks)
+    # prepend init_tasks to the front of the task list
+    args["<config>"]['tasks'][:0] = init_tasks
 
-    if ctx["--suite-path"] is not None:
-        ctx["<config>"]['suite_path'] = ctx["--suite-path"]
+    if args["--suite-path"] is not None:
+        args["<config>"]['suite_path'] = args["--suite-path"]
 
     # fetches the tasks and returns a new suite_path if needed
-    ctx["<config>"]["suite_path"] = fetch_tasks_if_needed(ctx["<config>"])
+    args["<config>"]["suite_path"] = fetch_tasks_if_needed(args["<config>"])
 
     # create a FakeNamespace instance that mimics the old argparse way of doing things
     # we do this so we can pass it to run_tasks without porting those tasks to the
     # new way of doing things right now
-    fake_ctx = FakeNamespace(ctx)
+    fake_ctx = FakeNamespace(args)
 
     try:
-        run_tasks(tasks=ctx["<config>"]['tasks'], ctx=fake_ctx)
+        run_tasks(tasks=args["<config>"]['tasks'], ctx=fake_ctx)
     finally:
         # print to stdout the results and possibly send an email on any errors
-        report_outcome(ctx["<config>"], ctx["--archive"], ctx["summary"], fake_ctx)
+        report_outcome(args["<config>"], args["--archive"], args["summary"], fake_ctx)

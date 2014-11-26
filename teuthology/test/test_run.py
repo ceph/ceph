@@ -25,7 +25,7 @@ class TestRun(object):
         m_merge_configs.return_value = config
         result = run.setup_config(["some/config.yaml"])
         assert m_merge_configs.called
-        assert result.job_id == "1"
+        assert result["job_id"] == "1"
         assert result["foo"] == "bar"
 
     @patch("teuthology.run.merge_configs")
@@ -33,8 +33,8 @@ class TestRun(object):
         config = {"targets": range(4), "roles": range(2)}
         m_merge_configs.return_value = config
         result = run.setup_config(["some/config.yaml"])
-        assert result.targets
-        assert result.roles
+        assert result["targets"] == [0, 1, 2, 3]
+        assert result["roles"] == [0, 1]
 
     @patch("teuthology.run.merge_configs")
     def test_setup_config_targets_invalid(self, m_merge_configs):
@@ -79,6 +79,11 @@ class TestRun(object):
     def test_validate_task_no_tasks(self):
         result = run.validate_tasks({})
         assert result == []
+
+    def test_validate_tasks_valid(self):
+        expected = {"foo": "bar"}
+        result = run.validate_tasks({"tasks": expected})
+        assert result == expected
 
     def test_get_initial_tasks_invalid(self):
         with pytest.raises(AssertionError):

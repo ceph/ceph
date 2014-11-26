@@ -112,6 +112,9 @@ def merge_configs(config_paths):
     """
     conf_dict = dict()
     for conf_path in config_paths:
+        if not os.path.exists(conf_path):
+            log.debug("The config path {0} does not exist, skipping.".format(conf_path))
+            continue
         with file(conf_path) as partial_file:
             partial_dict = yaml.safe_load(partial_file)
         try:

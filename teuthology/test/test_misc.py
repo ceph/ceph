@@ -97,14 +97,16 @@ class TestHostnames(object):
 class TestMergeConfigs(object):
     """ Tests merge_config and deep_merge in teuthology.misc """
 
+    @patch("os.path.exists")
     @patch("yaml.safe_load")
     @patch("__builtin__.file")
-    def test_merge_configs(self, m_file, m_safe_load):
+    def test_merge_configs(self, m_file, m_safe_load, m_exists):
         """ Only tests with one yaml file being passed, mainly just to test
             the loop logic.  The actual merge will be tested in subsequent
             tests.
         """
         expected = {"a": "b", "b": "c"}
+        m_exists.return_value = True
         m_safe_load.return_value = expected
         result = misc.merge_configs(["path/to/config1"])
         assert result == expected

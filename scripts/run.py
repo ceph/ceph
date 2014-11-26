@@ -1,7 +1,7 @@
 """
 usage: teuthology --help
        teuthology --version
-       teuthology [options] <config>...
+       teuthology [options] [--] <config>...
 
 Run ceph integration tests
 

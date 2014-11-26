@@ -1,6 +1,7 @@
 import os
 import yaml
 import logging
+import collections
 
 
 def init_logging():
@@ -10,7 +11,7 @@ def init_logging():
 log = init_logging()
 
 
-class YamlConfig(object):
+class YamlConfig(collections.MutableMapping):
     """
     A configuration object populated by parsing a yaml file, with optional
     default values.
@@ -79,14 +80,33 @@ class YamlConfig(object):
         """
         return str(self)
 
+    def get(self, key, default=None):
+        """
+        A function that acts like dict.get().  Will first check self._conf, then
+        _defaults for the given key.
+
+        :param key: The key to fetch
+        :returns:   The value for the given key, or the default kwarg if not found
+        """
+        result = self.__getattr__(key)
+        if not result:
+            return default
+        return result
+
     def __str__(self):
         return yaml.safe_dump(self._conf, default_flow_style=False).strip()
 
+    def __repr__(self):
+        return self.__str__()
+
     def __getitem__(self, name):
-        return self._conf.__getitem__(name)
+        return self.__getattr__(name)
 
     def __getattr__(self, name):
         return self._conf.get(name, self._defaults.get(name))
+
+    def __contains__(self, name):
+        return self._conf.__contains__(name)
 
     def __setattr__(self, name, value):
         if name.endswith('_conf') or name in ('yaml_path'):
@@ -96,6 +116,18 @@ class YamlConfig(object):
 
     def __delattr__(self, name):
         del self._conf[name]
+
+    def __len__(self):
+        return self._conf.__len__()
+
+    def __iter__(self):
+        return self._conf.__iter__()
+
+    def __setitem__(self, name, value):
+        self._conf.__setitem__(name, value)
+
+    def __delitem__(self, name):
+        self._conf.__delitem__(name)
 
 
 class TeuthologyConfig(YamlConfig):
@@ -128,12 +160,13 @@ class JobConfig(YamlConfig):
 
 
 class FakeNamespace(YamlConfig):
-    """ This class is meant to behave like a argparse Namespace with an attached
-        teuthology config at the teuthology_config property.  It mimics the old
-        way of doing things with argparse and teuthology.misc.read_config.
+    """
+    This class is meant to behave like a argparse Namespace with an attached
+    teuthology config at the teuthology_config property.  It mimics the old
+    way of doing things with argparse and teuthology.misc.read_config.
 
-        We'll use this as a stop-gap as we refactor commands but allow the tasks
-        to still be passed a single namespace object for the time being.
+    We'll use this as a stop-gap as we refactor commands but allow the tasks
+    to still be passed a single namespace object for the time being.
     """
     def __init__(self, config_dict=None, yaml_path=None):
         if not yaml_path:
@@ -146,8 +179,9 @@ class FakeNamespace(YamlConfig):
         self._conf = self._clean_config(config_dict)
 
     def _clean_config(self, config_dict):
-        """ Makes sure that the keys of config_dict are able to be used.  For example
-            the "--" prefix of a docopt dict isn't valid and won't populate correctly.
+        """
+        Makes sure that the keys of config_dict are able to be used.  For example
+        the "--" prefix of a docopt dict isn't valid and won't populate correctly.
         """
         result = dict()
         for key, value in config_dict.iteritems():

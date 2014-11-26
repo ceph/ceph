@@ -18,6 +18,14 @@ class TestYamlConfig(object):
         conf_obj = self.test_class.from_dict(in_dict)
         assert conf_obj.foo == 'bar'
 
+    def test_contains(self):
+        in_dict = dict(foo='bar')
+        conf_obj = self.test_class.from_dict(in_dict)
+        conf_obj.bar = "foo"
+        assert "bar" in conf_obj
+        assert "foo" in conf_obj
+        assert "baz" not in conf_obj
+
     def test_to_dict(self):
         in_dict = dict(foo='bar')
         conf_obj = self.test_class.from_dict(in_dict)
@@ -47,6 +55,24 @@ class TestYamlConfig(object):
         assert conf_obj.foo == 'bar'
         del conf_obj.foo
         assert conf_obj.foo is None
+
+    def test_get(self):
+        conf_obj = self.test_class()
+        conf_obj.foo = "bar"
+        assert conf_obj.get("foo") == "bar"
+        assert conf_obj.get("not_there", "default") == "default"
+
+    def test_assignment(self):
+        conf_obj = self.test_class()
+        conf_obj["foo"] = "bar"
+        assert conf_obj["foo"] == "bar"
+        assert conf_obj.foo == "bar"
+
+    def test_used_with_update(self):
+        d = dict()
+        conf_obj = self.test_class.from_dict({"foo": "bar"})
+        d.update(conf_obj)
+        assert d["foo"] == "bar"
 
 
 class TestTeuthologyConfig(TestYamlConfig):
@@ -101,8 +127,10 @@ class TestFakeNamespace(TestYamlConfig):
             and that defaults are properly used. However, we won't check all
             the defaults.
         """
-        conf_obj = self.test_class(dict())
-        assert conf_obj.teuthology_config
+        conf_obj = self.test_class(dict(foo="bar"))
+        assert conf_obj["foo"] == "bar"
+        assert conf_obj.foo == "bar"
         assert conf_obj.teuthology_config.archive_base
         assert not conf_obj.teuthology_config.automated_scheduling
         assert conf_obj.teuthology_config.ceph_git_base_url == 'https://github.com/ceph/'
+        assert conf_obj.teuthology_config["ceph_git_base_url"] == 'https://github.com/ceph/'
