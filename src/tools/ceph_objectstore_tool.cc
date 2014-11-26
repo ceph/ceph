@@ -450,6 +450,57 @@ int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool d
   store->sync_and_flush();
   return r;
 }
+
+struct pgid_object_list {
+  list<pair<coll_t, ghobject_t> > _objects;
+
+  void insert(coll_t coll, ghobject_t &ghobj) {
+    _objects.push_back(make_pair(coll, ghobj));
+  }
+
+  void dump(Formatter *f) const {
+    f->open_array_section("pgid_objects");
+    for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
+	 i != _objects.end();
+	 i++) {
+      f->open_array_section("pgid_object");
+      i->first.dump(f);
+      f->open_object_section("ghobject");
+      i->second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+  }
+};
+
+struct lookup_ghobject : public action_on_object_t {
+  pgid_object_list _objects;
+  const string _name;
+
+  lookup_ghobject(const string& name) : _name(name) { }
+
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (_name.length() == 0 || ghobj.hobj.oid.name == _name)
+      _objects.insert(coll, ghobj);
+    return 0;
+  }
+
+  int size() const {
+    return _objects._objects.size();
+  }
+
+  pair<coll_t, ghobject_t> pop() {
+     pair<coll_t, ghobject_t> front = _objects._objects.front();
+     _objects._objects.pop_front();
+     return front;
+  }
+
+  void dump(Formatter *f) const {
+    _objects.dump(f);
+  }
+};
+
 hobject_t infos_oid = OSD::make_infos_oid();
 hobject_t biginfo_oid, log_oid;
 
@@ -1942,8 +1993,6 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "Positional syntax:" << std::endl;
     cerr << std::endl;
-    cerr << "(requires --data-path, --journal-path (for filestore type) and --pgid to be specified)" << std::endl;
-    cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
@@ -1955,12 +2004,20 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
+    cerr << "<object> can be a JSON object description as displayed" << std::endl;
+    cerr << "by --op list, with a mandatory --pgid option." << std::endl;
+    cerr << "<object> can be an object name which will be looked up in all" << std::endl;
+    cerr << "the OSD's PGs." << std::endl;
+    cerr << std::endl;
+    cerr << "The optional [file] argument will read stdin or write stdout" << std::endl;
+    cerr << "if not specified or if '-' specified." << std::endl;
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type;
+  spg_t pgid;
   ghobject_t ghobj;
 
   po::options_description desc("Allowed options");
@@ -2077,24 +2134,6 @@ int main(int argc, char **argv)
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
   }
-  if (op != "import" && op != "list-lost" && op != "fix-lost"
-      && op != "list-pgs"  && op != "set-allow-sharded-objects" && !vm.count("pgid")) {
-    cerr << "Must provide pgid" << std::endl;
-    usage(desc);
-  }
-
-  if (vm.count("object")) {
-    json_spirit::Value v;
-    try {
-      if (!json_spirit::read(object, v))
-        throw std::runtime_error("bad json");
-      ghobj.decode(v);
-    } catch (std::runtime_error& e) {
-      cerr << "error parsing offset: " << e.what() << std::endl;
-      exit(1);
-    }
-  }
-
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
@@ -2132,11 +2171,6 @@ int main(int argc, char **argv)
 
   if (dpath.length() == 0) {
     cerr << "Invalid params" << std::endl;
-    return 1;
-  }
-
-  if (op == "import" && pgidstr.length()) {
-    cerr << "--pgid option invalid with import" << std::endl;
     return 1;
   }
 
@@ -2198,12 +2232,6 @@ int main(int argc, char **argv)
     }
   }
 
-  spg_t pgid;
-  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
-    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    return 1;
-  }
-
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
@@ -2261,6 +2289,52 @@ int main(int argc, char **argv)
       << superblock.compat_features << std::endl;
     ret = EINVAL;
     goto out;
+  }
+
+  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
+    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
+    return 1;
+  }
+
+  if (op == "import" && pgidstr.length()) {
+    cerr << "--pgid option invalid with import" << std::endl;
+    return 1;
+  }
+
+  if (vm.count("object")) {
+    json_spirit::Value v;
+    try {
+      if (!json_spirit::read(object, v)) {
+	lookup_ghobject lookup(object);
+	if (action_on_all_objects(fs, lookup, debug)) {
+	  throw std::runtime_error(object + " is neither valid json nor an object name");
+	} else {
+	  if (lookup.size() != 1) {
+	    stringstream ss;
+	    ss << "expected a single object named " << object
+	       << " but got " << lookup.size() << " instead"
+	       << std::endl;
+	    throw std::runtime_error(ss.str());
+	  }
+	  pair<coll_t, ghobject_t> found = lookup.pop();
+	  pgidstr = found.first.to_str();
+	  pgid.parse(pgidstr.c_str());
+	  ghobj = found.second;
+	}
+      } else {
+	ghobj.decode(v);
+      }
+    } catch (std::runtime_error& e) {
+      cerr << e.what() << std::endl;
+      exit(1);
+    }
+  }
+
+  if (op != "import" && op != "list-lost" && op != "fix-lost"
+      && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
+      (pgidstr.length() == 0)) {
+    cerr << "Must provide pgid" << std::endl;
+    usage(desc);
   }
 
   if (op == "set-allow-sharded-objects") {
