@@ -4,7 +4,7 @@ overrides:
       global:
         osd heartbeat grace: 100
         # this line to address issue #10178
-        mon lease = 15
+        mon lease: 15
   rgw:
     default_idle_timeout: 1200
   s3tests:
