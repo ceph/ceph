@@ -305,7 +305,7 @@ OPTION(journaler_allow_split_entries, OPT_BOOL, true)
 OPTION(journaler_write_head_interval, OPT_INT, 15)
 OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT, 5)     // * journal object size
-OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add'l latency we artificially incur
+OPTION(journaler_batch_interval, OPT_DOUBLE, .001)   // seconds.. max add latency we artificially incur
 OPTION(journaler_batch_max, OPT_U64, 0)  // max bytes we'll delay flushing; disable, for now....
 OPTION(mds_data, OPT_STR, "/var/lib/ceph/mds/$cluster-$id")
 OPTION(mds_max_file_size, OPT_U64, 1ULL << 40)
@@ -494,7 +494,7 @@ OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
 OPTION(osd_op_pq_min_cost, OPT_U64, 65536)
 OPTION(osd_disk_threads, OPT_INT, 1)
-OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be besteffort best effort idle
+OPTION(osd_disk_thread_ioprio_class, OPT_STR, "") // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT, -1) // 0-7
 OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
@@ -526,7 +526,7 @@ OPTION(osd_heartbeat_min_peers, OPT_INT, 10)     // minimum number of peers
 // max number of parallel snap trims/pg
 OPTION(osd_pg_max_concurrent_snap_trims, OPT_U64, 2)
 
-// minimum number of peers tha tmust be reachable to mark ourselves
+// minimum number of peers that must be reachable to mark ourselves
 // back up after being wrongly marked down.
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT, .33)
 
@@ -588,7 +588,7 @@ OPTION(osd_debug_verify_stray_on_activate, OPT_BOOL, false)
 OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL, false)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
-OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops 
+OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32, 20)    // Max number of completed ops to track
 OPTION(osd_op_history_duration, OPT_U32, 600) // Oldest completed op to track
 OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transactions that batch smaller items
@@ -697,7 +697,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
-OPTION(filestore_omap_header_cache_size, OPT_INT, 1024) 
+OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)
 
 // Use omap for xattrs for attrs over
 // filestore_max_inline_xattr_size or
@@ -910,8 +910,8 @@ OPTION(rgw_copy_obj_progress_every_bytes, OPT_INT, 1024 * 1024) // min bytes bet
 OPTION(rgw_data_log_window, OPT_INT, 30) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT, 1000) // number of in-memory entries to hold for data changes log
 OPTION(rgw_data_log_num_shards, OPT_INT, 128) // number of objects to keep data changes log on
-OPTION(rgw_data_log_obj_prefix, OPT_STR, "data_log") // 
-OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") // 
+OPTION(rgw_data_log_obj_prefix, OPT_STR, "data_log") //
+OPTION(rgw_replica_log_obj_prefix, OPT_STR, "replica_log") //
 
 OPTION(rgw_bucket_quota_ttl, OPT_INT, 600) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE, 0.95) // threshold from which we don't rely on cached info for quota decisions
@@ -924,7 +924,7 @@ OPTION(rgw_frontends, OPT_STR, "fastcgi, civetweb port=7480") // rgw front ends
 OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT, 180) // time period for accumulating modified buckets before syncing stats
 OPTION(rgw_user_quota_sync_interval, OPT_INT, 3600 * 24) // time period for accumulating modified buckets before syncing entire user stats
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL, false) // whether stats for idle users be fully synced
-OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats syc for non-idle users
+OPTION(rgw_user_quota_sync_wait_time, OPT_INT, 3600 * 24) // min time between two full stats sync for non-idle users
 
 OPTION(rgw_multipart_min_part_size, OPT_INT, 5 * 1024 * 1024) // min size for each part (except for last one) in multipart upload
 
