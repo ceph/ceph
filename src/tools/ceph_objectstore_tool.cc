@@ -307,7 +307,8 @@ struct omap_section {
 };
 
 struct metadata_section {
-  __u8 struct_ver;
+  // struct_ver is the on-disk version of original pg
+  __u8 struct_ver;  // for reference
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
@@ -770,7 +771,7 @@ int footer::get_footer()
 }
 
 int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
+    map<epoch_t,pg_interval_t> &past_intervals)
 {
   //Empty for this
   interval_set<snapid_t> snap_collections; // obsolete
@@ -788,9 +789,9 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 }
 
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    pg_log_t &log, __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
+    pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals)
 {
-  int ret = write_info(t, epoch, info, struct_ver, past_intervals);
+  int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
   map<eversion_t, hobject_t> divergent_priors;
@@ -1385,7 +1386,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   cout << std::endl;
 #endif
 
-  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
+  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
   if (ret) return ret;
 
   store->apply_transaction(*t);
@@ -2837,7 +2838,7 @@ int main(int argc, char **argv)
       cout << "Remove past-intervals " << past_intervals << std::endl;
 
       past_intervals.clear();
-      ret = write_info(*t, map_epoch, info, struct_ver, past_intervals);
+      ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
         fs->apply_transaction(*t);
