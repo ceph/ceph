@@ -2000,7 +2000,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
-    cerr << "by --op list, with a mandatory --pgid option." << std::endl;
+    cerr << "by --op list." << std::endl;
     cerr << "<object> can be an object name which will be looked up in all" << std::endl;
     cerr << "the OSD's PGs." << std::endl;
     cerr << std::endl;
@@ -2317,7 +2317,31 @@ int main(int argc, char **argv)
 	  ghobj = found.second;
 	}
       } else {
-	ghobj.decode(v);
+	stringstream ss;
+	if (v.type() != json_spirit::array_type) {
+	  ss << "object '" << object
+	     << "' must be a JSON array but is of type "
+	     << v.type() << " instead" << std::endl;
+	  throw std::runtime_error(ss.str());
+	}
+	json_spirit::Array array = v.get_array();
+	vector<json_spirit::Value>::iterator i = array.begin();
+	string object_pgidstr = i->get_str();
+	spg_t object_pgid;
+	object_pgid.parse(object_pgidstr.c_str());
+	if (pgidstr.length() > 0) {
+	  if (object_pgid != pgid) {
+	    ss << "object '" << object
+	       << "' has a pgid different from the --pgid="
+	       << pgidstr << " option" << std::endl;
+	    throw std::runtime_error(ss.str());
+	  }
+	} else {
+	  pgidstr = object_pgidstr;
+	  pgid = object_pgid;
+	}
+	i++;
+	ghobj.decode(*i);
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
