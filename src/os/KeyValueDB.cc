@@ -14,8 +14,8 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
     return new LevelDBStore(cct, dir);
   }
 #ifdef HAVE_KINETIC
-  if (kv_type == KV_TYPE_KINETIC) {
-    store = new KineticStore(g_ceph_context);
+  if (type == "kinetic") {
+    return new KineticStore(cct);
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
@@ -32,8 +32,8 @@ int KeyValueDB::test_init(const string& type, const string& dir)
     return LevelDBStore::_test_init(dir);
   }
 #ifdef HAVE_KINETIC
-  if (kv_type == KV_TYPE_KINETIC) {
-    return 0;
+  if (type == "kinetic") {
+    return KineticStore::_test_init(g_ceph_context);
   }
 #endif
 #ifdef HAVE_LIBROCKSDB
