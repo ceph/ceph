@@ -25,6 +25,26 @@ int KineticStore::init()
   return 0;
 }
 
+int KineticStore::_test_init(CephContext *c)
+{
+  kinetic::KineticConnectionFactory conn_factory =
+    kinetic::NewKineticConnectionFactory();
+
+  kinetic::ConnectionOptions options;
+  options.host = cct->_conf->kinetic_host;
+  options.port = cct->_conf->kinetic_port;
+  options.user_id = cct->_conf->kinetic_user_id;
+  options.hmac_key = cct->_conf->kinetic_hmac_key;
+  options.use_ssl = cct->_conf->kinetic_use_ssl;
+
+  kinetic::Status status = conn_factory.NewThreadsafeBlockingConnection(options, kinetic_conn, 10);
+  kinetic_conn.reset();
+  if (!status.ok())
+    derr << __func__ << "Unable to connect to kinetic store " << options.host
+         << ":" << options.port << " : " << status.ToString() << dendl;
+  return status.ok() ? 0 : -EIO;
+}
+
 int KineticStore::do_open(ostream &out, bool create_if_missing)
 {
   kinetic::KineticConnectionFactory conn_factory =
