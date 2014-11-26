@@ -48,6 +48,7 @@ public:
   KineticStore(CephContext *c);
   ~KineticStore();
 
+  static int _test_init(CephContext *c);
   int init();
 
   /// Opens underlying db
