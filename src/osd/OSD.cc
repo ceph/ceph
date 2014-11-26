@@ -2680,14 +2680,12 @@ PG *OSD::get_pg_or_queue_for_pg(const spg_t& pgid, OpRequestRef& op)
 
 bool OSD::_have_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   return pg_map.count(pgid);
 }
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
@@ -2699,7 +2697,6 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
 
 PG *OSD::_lookup_pg(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   RWLock::RLocker l(pg_map_lock);
   if (!pg_map.count(pgid))
     return NULL;
@@ -2709,7 +2706,6 @@ PG *OSD::_lookup_pg(spg_t pgid)
 
 PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
 {
-  assert(osd_lock.is_locked());
   assert(pg_map.count(pgid));
   PG *pg = pg_map[pgid];
   pg->lock();
