@@ -1810,13 +1810,13 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "Positional syntax:" << std::endl;
     cerr << std::endl;
-    cerr << "(requires --data, --journal (for filestore type) and --pgid to be specified)" << std::endl;
+    cerr << "(requires --data-path, --journal-path (for filestore type) and --pgid to be specified)" << std::endl;
     cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-(attr|omap) <key> [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-omaphdr) [file]" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get-omaphdr)" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> get-omaphdr" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> set-omaphdr [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> list-attrs" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
@@ -1841,7 +1841,7 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, list-lost, fix-lost")
+     "PG id, mandatory except for import, list-lost, fix-lost, list-pgs, set-allow-sharded-objects")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
@@ -1853,8 +1853,8 @@ int main(int argc, char **argv)
 
   po::options_description positional("Positional options");
   positional.add_options()
-    ("object", po::value<string>(&object), "ghobject in json")
-    ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove]")
+    ("object", po::value<string>(&object), "object name or ghobject in json")
+    ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
     ("test-align", po::value<uint64_t>(&testalign)->default_value(0), "hidden align option for testing")
