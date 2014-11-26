@@ -1781,8 +1781,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
-	dout(20) << __func__ << " cache pool full, redirecting read" << dendl;
-	do_cache_redirect(op, obc);
+	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
+	do_proxy_read(op);
 	return true;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
