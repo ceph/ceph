@@ -14,6 +14,7 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/scoped_ptr.hpp>
 
 #include <stdlib.h>
 
@@ -347,6 +348,108 @@ struct metadata_section {
   }
 };
 
+struct action_on_object_t {
+  virtual ~action_on_object_t() {}
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) = 0;
+};
+
+int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
+{
+  unsigned LIST_AT_A_TIME = 100;
+  int r;
+  ghobject_t next;
+  while (!next.is_max()) {
+    vector<ghobject_t> list;
+    r = store->collection_list_partial(
+				       coll,
+				       next,
+				       LIST_AT_A_TIME,
+				       LIST_AT_A_TIME,
+				       CEPH_NOSNAP,
+				       &list,
+				       &next);
+    if (r < 0) {
+      cerr << "Error listing collection: " << coll << ", "
+	   << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    for (vector<ghobject_t>::iterator obj = list.begin();
+	 obj != list.end();
+	 ++obj) {
+      bufferlist attr;
+      r = store->getattr(coll, *obj, OI_ATTR, attr);
+      if (r < 0) {
+	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+      object_info_t oi;
+      bufferlist::iterator bp = attr.begin();
+      try {
+	::decode(oi, bp);
+      } catch (...) {
+	r = -EINVAL;
+	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+      r = action.call(store, coll, *obj, oi);
+      if (r < 0)
+	return r;
+    }
+  }
+  return 0;
+}
+
+int action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
+{
+  int r = _action_on_all_objects_in_pg(store, coll, action, debug);
+  store->sync_and_flush();
+  return r;
+}
+
+int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
+{
+  unsigned scanned = 0;
+  int r = 0;
+  vector<coll_t> colls_to_check;
+  vector<coll_t> candidates;
+  r = store->list_collections(candidates);
+  if (r < 0) {
+    cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  for (vector<coll_t>::iterator i = candidates.begin();
+       i != candidates.end();
+       ++i) {
+    spg_t pgid;
+    snapid_t snap;
+    if (i->is_pg(pgid, snap)) {
+      colls_to_check.push_back(*i);
+    }
+  }
+
+  if (debug)
+    cerr << colls_to_check.size() << " pgs to scan" << std::endl;
+  for (vector<coll_t>::iterator i = colls_to_check.begin();
+       i != colls_to_check.end();
+       ++i, ++scanned) {
+    if (debug)
+      cerr << "Scanning " << *i << ", " << scanned << "/"
+	   << colls_to_check.size() << " completed" << std::endl;
+    r = _action_on_all_objects_in_pg(store, *i, action, debug);
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
+{
+  int r = _action_on_all_objects(store, action, debug);
+  store->sync_and_flush();
+  return r;
+}
 hobject_t infos_oid = OSD::make_infos_oid();
 hobject_t biginfo_oid, log_oid;
 
@@ -1803,6 +1906,35 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
+struct do_list_lost : public action_on_object_t {
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (oi.is_lost())
+      cout << coll << "/" << ghobj << " is lost" << std::endl;
+    return 0;
+  }
+};
+
+struct do_fix_lost : public action_on_object_t {
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (oi.is_lost()) {
+      cout << coll << "/" << ghobj << " is lost, fixing" << std::endl;
+      oi.clear_flag(object_info_t::FLAG_LOST);
+      bufferlist bl;
+      ::encode(oi, bl);
+      ObjectStore::Transaction t;
+      t.setattr(coll, ghobj, OI_ATTR, bl);
+      int r = store->apply_transaction(t);
+      if (r < 0) {
+	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
+	     << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+    }
+    return 0;
+  }
+};
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -2255,101 +2387,17 @@ int main(int argc, char **argv)
   }
 
   if (op == "list-lost" || op == "fix-lost") {
-    unsigned LIST_AT_A_TIME = 100;
-    unsigned scanned = 0;
-    int r = 0;
-    vector<coll_t> colls_to_check;
-    if (pgidstr.length()) {
-      colls_to_check.push_back(coll_t(pgid));
-    } else {
-      vector<coll_t> candidates;
-      r = fs->list_collections(candidates);
-      if (r < 0) {
-        cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
-        goto UMOUNT;
-      }
-      for (vector<coll_t>::iterator i = candidates.begin();
-           i != candidates.end();
-           ++i) {
-        spg_t pgid;
-        snapid_t snap;
-        if (i->is_pg(pgid, snap)) {
-          colls_to_check.push_back(*i);
-        }
-      }
-    }
-
-    cout << colls_to_check.size() << " pgs to scan" << std::endl;
-    for (vector<coll_t>::iterator i = colls_to_check.begin();
-         i != colls_to_check.end();
-         ++i, ++scanned) {
-      cout << "Scanning " << *i << ", " << scanned << "/"
-           << colls_to_check.size() << " completed" << std::endl;
-      ghobject_t next;
-      while (!next.is_max()) {
-        vector<ghobject_t> list;
-        r = fs->collection_list_partial(
-          *i,
-          next,
-          LIST_AT_A_TIME,
-          LIST_AT_A_TIME,
-          CEPH_NOSNAP,
-          &list,
-          &next);
-        if (r < 0) {
-          cerr << "Error listing collection: " << *i << ", "
-               << cpp_strerror(r) << std::endl;
-          goto UMOUNT;
-        }
-        for (vector<ghobject_t>::iterator obj = list.begin();
-             obj != list.end();
-             ++obj) {
-          bufferlist attr;
-          r = fs->getattr(*i, *obj, OI_ATTR, attr);
-          if (r < 0) {
-            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
-                 << cpp_strerror(r) << std::endl;
-            goto UMOUNT;
-          }
-          object_info_t oi;
-          bufferlist::iterator bp = attr.begin();
-          try {
-            ::decode(oi, bp);
-          } catch (...) {
-            r = -EINVAL;
-            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
-                 << cpp_strerror(r) << std::endl;
-            goto UMOUNT;
-          }
-          if (oi.is_lost()) {
-            if (op == "list-lost") {
-              cout << *i << "/" << *obj << " is lost" << std::endl;
-            }
-            if (op == "fix-lost") {
-              cout << *i << "/" << *obj << " is lost, fixing" << std::endl;
-              oi.clear_flag(object_info_t::FLAG_LOST);
-              bufferlist bl2;
-              ::encode(oi, bl2);
-              ObjectStore::Transaction t;
-              t.setattr(*i, *obj, OI_ATTR, bl2);
-              r = fs->apply_transaction(t);
-              if (r < 0) {
-                cerr << "Error getting fixing attr on : " << make_pair(*i, *obj)
-                     << ", "
-                     << cpp_strerror(r) << std::endl;
-                goto UMOUNT;
-              }
-            }
-          }
-        }
-      }
-    }
-    cout << "Completed" << std::endl;
-
-   UMOUNT:
-    fs->sync_and_flush();
-    ret = r;
+    boost::scoped_ptr<action_on_object_t> action;
+    if (op == "list-lost")
+      action.reset(new do_list_lost());
+    if (op == "fix-lost")
+      action.reset(new do_fix_lost());
+    if (pgidstr.length())
+      ret = action_on_all_objects_in_pg(fs, coll_t(pgid), *action, debug);
+    else
+      ret = action_on_all_objects(fs, *action, debug);
     goto out;
+  }
   }
 
   r = fs->list_collections(ls);
