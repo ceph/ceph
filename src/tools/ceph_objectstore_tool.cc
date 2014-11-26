@@ -2814,6 +2814,14 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
+      if (struct_ver != PG::cur_struct_v) {
+        cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
+          << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+          << std::endl;
+        ret = 1;
+        goto out;
+      }
+
       cout << "Remove past-intervals " << past_intervals << std::endl;
 
       past_intervals.clear();
