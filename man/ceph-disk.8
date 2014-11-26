@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-DISK" "8" "November 25, 2014" "dev" "Ceph"
+.TH "CEPH-DISK" "8" "November 26, 2014" "dev" "Ceph"
 .SH NAME
 ceph-disk \- Ceph disk preparation and activation utility for OSD
 .
@@ -67,6 +67,14 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 \fBceph\-disk\fP \fBactivate\fP [\fIdata\-path\fP] [\-\-activate\-key \fIpath\fP]
 .fi
 .sp
+.nf
+\fBceph\-disk\fP \fBactivate\-all\fP
+.fi
+.sp
+.nf
+\fBceph\-disk\fP \fBlist\fP
+.fi
+.sp
 .SH DESCRIPTION
 .sp
 \fBceph\-disk\fP is a utility that can prepare and activate a disk, partition or
@@ -87,19 +95,27 @@ new partition to the journal disk. It is run directly or triggered by
 Usage: ceph\-disk prepare \-\-cluster [cluster\-name] \-\-cluster\-uuid [uuid] \-\-fs\-type
 [ext4|xfs|btrfs] [data\-path] [journal\-path]
 .sp
-\fBactivate\fP: Activate the ceph OSD. It mounts the volume in a temporary location,
-allocates an OSD id (if needed), remounts in the correct location /var/lib/ceph/
-osd/$cluster\-$id and starts ceph\-osd. It is triggered by udev when it sees the OSD
-GPT partition type or on ceph service start with \(aqceph disk activate\-all\(aq. It is
-also run directly or triggered by \fBceph\-deploy\fP\&.
+Other options like \-\-osd\-uuid, \-\-journal\-uuid, \-\-zap\-disk, \-\-data\-dir, \-\-data\-dev,
+\-\-journal\-file, \-\-journal\-dev, \-\-dmcrypt and \-\-dmcrypt\-key\-dir can also be used
+with the subcommand.
 .sp
-Usage: ceph\-disk activate [data\-path]
+\fBactivate\fP: Activate the ceph OSD. It mounts the volume in a temporary
+location, allocates an OSD id (if needed), remounts in the correct location
+/var/lib/ceph/osd/$cluster\-$id and starts ceph\-osd. It is triggered by udev
+when it sees the OSD GPT partition type or on ceph service start with
+\(aqceph disk activate\-all\(aq. It is also run directly or triggered by \fBceph\-deploy\fP\&.
+.sp
+Usage: ceph\-disk activate [PATH]
+.sp
+Here, [PATH] is path to block device or directory.
 .sp
 An additional option [\-\-activate\-key PATH] has to be used with this subcommand
 when a copy of /var/lib/ceph/bootstrap\-osd/{cluster}.keyring isn\(aqt present in the
 OSD node.
 .sp
-Usage: ceph\-disk activate [data\-path] [\-\-activate\-key PATH]
+Usage: ceph\-disk activate [PATH] [\-\-activate\-key PATH]
+.sp
+Another option \-\-mark\-init can also be used with this subcommand.
 .sp
 \fBactivate\-journal\fP: Activate an OSD via it\(aqs journal device. udev triggers
 \(aqceph\-disk activate\-journal <dev>\(aq based on the partition type.
@@ -116,10 +132,15 @@ Usage: ceph\-disk activate\-journal [\-\-activate\-key PATH] [\-\-mark\-init INI
 .sp
 \fBactivate\-all\fP: Activate all tagged OSD partitions. activate\-all relies on
 /dev/disk/by\-parttype\-uuid/$typeuuid.$uuid to find all partitions. Special udev
-rules is installed to create these links. It is triggered on ceph service start
-up or run directly.
+rules are installed to create these links. It is triggered on ceph service start
+or run directly.
 .sp
 Usage: ceph\-disk activate\-all
+.sp
+Others options can also be used with this subcommand like \-\-activate\-key and
+\-\-mark\-init.
+.sp
+Usage: ceph\-disk activate\-all [\-\-activate\-key PATH] [\-\-mark\-init INITSYSTEM]
 .sp
 \fBlist\fP: List disk partitions and ceph OSDs. It is run directly or triggered
 by \fBceph\-deploy\fP\&.
@@ -127,6 +148,11 @@ by \fBceph\-deploy\fP\&.
 Usage: ceph\-disk list
 .sp
 \fBsuppress\-activate\fP: Suppress activate on a device (prefix).
+Mark devices that you want to suppress activate with a file like
+/var/lib/ceph/tmp/suppress\-activate.sdb where the last bit is
+the sanitized device name (/dev/X without the /dev/ prefix). A
+function is_suppressed() checks for and  matches a prefix (/dev/).
+It means suppressing sdb will stop activate on sdb1, sdb2, etc.
 .sp
 Usage: ceph\-disk suppress\-activate [PATH]
 .sp
@@ -138,8 +164,13 @@ Usage: ceph\-disk unsuppress\-activate [PATH]
 .sp
 Here, [PATH] is path to block device or directory.
 .sp
-\fBzap\fP: Zap/erase/destroy a device\(aqs partition table and contents. It is
-also run directly or triggered by \fBceph\-deploy\fP\&.
+\fBzap\fP: Zap/erase/destroy a device\(aqs partition table and contents.
+It actually uses \(aqsgdisk\(aq and it\(aqs option \(aq\-\-zap\-all\(aq to destroy both
+GPT and MBR data structures so that the disk becomes suitable for
+repartitioning. \(aqsgdisk\(aq then uses \(aq\-\-mbrtogpt\(aq to convert the MBR or
+BSD disklabel disk to a GPT disk. The \fBprepare\fP subcommand can now be
+executed which will create a new GPT partition. It is also run directly
+or triggered by \fBceph\-deploy\fP\&.
 .sp
 Usage: ceph\-disk zap [DEV]
 .sp
@@ -148,17 +179,17 @@ Here, [DEV] is path to block device.
 .INDENT 0.0
 .TP
 .B \-\-prepend\-to\-path PATH
-Prepend PATH to $PATH for backward compatibility (default /usr/bin)
+Prepend PATH to $PATH for backward compatibility (default /usr/bin).
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-statedir PATH
-Directory in which ceph configuration is preserved (default /usr/lib/ceph)
+Directory in which ceph configuration is preserved (default /usr/lib/ceph).
 .UNINDENT
 .INDENT 0.0
 .TP
 .B \-\-sysconfdir PATH
-Directory in which ceph configuration files are found (default /etc/ceph)
+Directory in which ceph configuration files are found (default /etc/ceph).
 .UNINDENT
 .INDENT 0.0
 .TP
@@ -174,6 +205,51 @@ Provide uuid of the ceph cluster in which the OSD is being prepared.
 .TP
 .B \-\-fs\-type
 Provide the filesytem type for the OSD. e.g. \(aqxfs/ext4/btrfs\(aq.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-osd\-uuid
+Unique OSD uuid to assign to the disk.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-journal\-uuid
+Unique uuid to assign to the journal.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-zap\-disk
+Destroy the partition table and content of a disk.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-data\-dir
+Verify that [data\-path] is of a directory.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-data\-dev
+Verify that [data\-path] is of a block device.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-journal\-file
+Verify that journal is a file.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-journal\-dev
+Verify that journal is a block device.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-dmcrypt
+Encrypt [data\-path] and/or journal devices with dm\-crypt.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-dmcrypt\-key\-dir
+Directory where dm\-crypt keys are stored.
 .UNINDENT
 .INDENT 0.0
 .TP
