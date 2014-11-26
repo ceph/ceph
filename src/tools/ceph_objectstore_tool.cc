@@ -1614,25 +1614,22 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   return 0;
 }
 
-int do_list(ObjectStore *store, coll_t coll, Formatter *formatter)
+int do_list(ObjectStore *store, string pgidstr, string object, Formatter *formatter, bool debug)
 {
-  ghobject_t next;
-  while (!next.is_max()) {
-    vector<ghobject_t> objects;
-    int r = store->collection_list_partial(coll, next, 200, 300, 0,
-      &objects, &next);
-    if (r < 0)
-      return r;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end(); ++i) {
-
-      formatter->open_object_section("list");
-      i->dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
-    }
+  int r;
+  lookup_ghobject lookup(object);
+  if (pgidstr.length() > 0) {
+    spg_t pgid;
+    pgid.parse(pgidstr.c_str());
+    r = action_on_all_objects_in_pg(store, coll_t(pgid), lookup, debug);
+  } else {
+    r = action_on_all_objects(store, lookup, debug);
   }
+  if (r)
+    return r;
+  lookup.dump(formatter);
+  formatter->flush(cout);
+  cout << std::endl;
   return 0;
 }
 
@@ -2120,7 +2117,7 @@ int main(int argc, char **argv)
     cerr << "Must provide --journal-path" << std::endl;
     usage(desc);
   }
-  if (vm.count("object") && !vm.count("objcmd")) {
+  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
   }
@@ -2128,7 +2125,7 @@ int main(int argc, char **argv)
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
   }
-  if (vm.count("op") && vm.count("object")) {
+  if (op != "list" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
   }
@@ -2299,7 +2296,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (vm.count("object")) {
+  if (op != "list" && vm.count("object")) {
     json_spirit::Value v;
     try {
       if (!json_spirit::read(object, v)) {
@@ -2328,7 +2325,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (op != "import" && op != "list-lost" && op != "fix-lost"
+  if (op != "list" && op != "import" && op != "list-lost" && op != "fix-lost"
       && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
       (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
@@ -2470,6 +2467,15 @@ int main(int argc, char **argv)
       ret = action_on_all_objects(fs, *action, debug);
     goto out;
   }
+
+  if (op == "list") {
+    Formatter *formatter = new JSONFormatter(false);
+    r = do_list(fs, pgidstr, object, formatter, debug);
+    if (r) {
+      cerr << "do_list failed with " << r << std::endl;
+      ret = 1;
+    }
+    goto out;
   }
 
   r = fs->list_collections(ls);
@@ -2680,16 +2686,6 @@ int main(int argc, char **argv)
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
       usage(desc);
-    }
-
-    if (op == "list") {
-      Formatter *formatter = new JSONFormatter(false);
-      r = do_list(fs, coll, formatter);
-      if (r) {
-        cerr << "do_list failed with " << r << std::endl;
-        ret = 1;
-      }
-      goto out;
     }
 
     Formatter *formatter = new JSONFormatter(true);
