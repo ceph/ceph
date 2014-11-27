@@ -538,7 +538,20 @@ public:
 
     /// How big is the encoded Transaction buffer?
     uint64_t get_encoded_bytes() {
-      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
+      if (use_tbl)
+        return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
+      else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+        //TODO: maybe we need better way to get encoded bytes;
+        bufferlist bl;
+        ::encode(coll_index, bl);
+        ::encode(object_index, bl);
+
+        return data_bl.length() +
+          op_bl.length() +
+          bl.length() +
+          sizeof(data);
+      }
     }
 
     uint64_t get_num_bytes() {
@@ -551,17 +564,21 @@ public:
     /// offset within the encoded buffer to the start of the largest data buffer that's encoded
     uint32_t get_data_offset() {
       if (data.largest_data_off_in_tbl) {
-	return data.largest_data_off_in_tbl +
-	  sizeof(__u8) +       // encode struct_v
-	  sizeof(__u8) +       // encode compat_v
-	  sizeof(__u32) +      // encode len
-	  sizeof(uint64_t) +   //ops
-	  sizeof(uint64_t) +   //old pad_unused_bytes
-	  sizeof(uint32_t) +   //largest_data_len
-	  sizeof(uint32_t) +   //largest_data_off
-	  sizeof(uint32_t) +   //largest_data_off_in_tbl
-	  sizeof(uint32_t) +   //fadvise_flags
-	  sizeof(__u32);       // tbl length
+        if (use_tbl) {
+          return data.largest_data_off_in_tbl +
+            sizeof(__u8) +      // encode struct_v
+            sizeof(__u8) +      // encode compat_v
+            sizeof(__u32) +     // encode len
+            sizeof(uint64_t) +  // ops
+            sizeof(uint64_t) +  // pad_unused_bytes(unused)
+            sizeof(uint32_t) +  // largest_data_len
+            sizeof(uint32_t) +  // largest_data_off
+            sizeof(uint32_t) +  // largest_data_off_in_tbl
+	    sizeof(uint32_t) +   //fadvise_flags
+            sizeof(__u32);      // tbl length
+        } else {
+          return data.largest_data_off_in_tbl;
+        }
       }
       return 0;  // none
     }
@@ -1354,17 +1371,43 @@ public:
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(8, 5, bl);
-      data.encode(bl);
-      ::encode(tbl, bl);
-      ENCODE_FINISH(bl);
+      if (use_tbl) {
+        uint64_t ops = data.ops;
+        uint64_t pad_unused_bytes = 0;
+        uint32_t largest_data_len = data.largest_data_len;
+        uint32_t largest_data_off = data.largest_data_off;
+        uint32_t largest_data_off_in_tbl = data.largest_data_off_in_tbl;
+        bool tolerate_collection_add_enoent = false;
+        ENCODE_START(7, 5, bl);
+        ::encode(ops, bl);
+        ::encode(pad_unused_bytes, bl);
+        ::encode(largest_data_len, bl);
+        ::encode(largest_data_off, bl);
+        ::encode(largest_data_off_in_tbl, bl);
+        ::encode(tbl, bl);
+        ::encode(tolerate_collection_add_enoent, bl);
+        ENCODE_FINISH(bl);
+      } else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+        ENCODE_START(8, 5, bl);
+        ::encode(data_bl, bl);
+        ::encode(op_bl, bl);
+        ::encode(coll_index, bl);
+        ::encode(object_index, bl);
+        data.encode(bl);
+        ENCODE_FINISH(bl);
+      }
     }
     void decode(bufferlist::iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
       DECODE_OLDEST(2);
       if (struct_v == 8) {
+        ::decode(data_bl, bl);
+        ::decode(op_bl, bl);
+        ::decode(coll_index, bl);
+        ::decode(object_index, bl);
         data.decode(bl);
-        ::decode(tbl, bl);
+        use_tbl = false;
       } else {
         decode7_5(bl, struct_v);
         use_tbl = true;
