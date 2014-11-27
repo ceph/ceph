@@ -27,3 +27,4 @@ python-nose
 snappy-devel
 systemd-devel
 xfsprogs-devel
+yasm
