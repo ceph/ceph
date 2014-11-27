@@ -359,6 +359,7 @@ public:
   __u32 hash_dentry_name(const std::string &dn);
   frag_t pick_dirfrag(const std::string &dn);
   bool has_dirfrags() { return !dirfrags.empty(); }
+  bool has_dirfrag(frag_t fg) { return dirfrags.count(fg); }
   CDir* get_dirfrag(frag_t fg) {
     if (dirfrags.count(fg)) {
       //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME

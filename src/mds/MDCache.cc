@@ -10462,6 +10462,10 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
       dout(7) << "can_fragment: not auth on " << *dir << dendl;
       return false;
     }
+    if (dir->is_bad()) {
+      dout(7) << "can_fragment: bad dirfrag " << *dir << dendl;
+      return false;
+    }
     if (dir->is_frozen() ||
 	dir->is_freezing()) {
       dout(7) << "can_fragment: can't merge, freezing|frozen.  wait for other exports to finish first." << dendl;
