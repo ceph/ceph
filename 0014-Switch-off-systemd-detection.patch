@@ -10,7 +10,7 @@ Currently systemd on ceph breaks shutting down ceph.
  1 file changed, 2 insertions(+)
 
 diff --git a/src/init-ceph.in b/src/init-ceph.in
-index 0ed77ab..80476ce 100644
+index 7276830..54342e2 100644
 --- a/src/init-ceph.in
 +++ b/src/init-ceph.in
 @@ -48,6 +48,8 @@ EXIT_STATUS=0

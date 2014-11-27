@@ -6,25 +6,12 @@ Merge distro patches to git.
 
 This was 0001-fix-runlevels-for-start-scripts.patch
 
-(cherry picked from commit a3ca39c182bb3ee0d175cdb92d10a86d2ce268ec)
+(cherry picked from commit a3ca39c182bb3ee0d175cdb92d10a86d2ce268ec,
+amended according to https://build.opensuse.org/request/show/244935)
 ---
- src/init-ceph.in | 2 +-
  src/init-radosgw | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/src/init-ceph.in b/src/init-ceph.in
-index b00f36b..84ba532 100644
---- a/src/init-ceph.in
-+++ b/src/init-ceph.in
-@@ -4,7 +4,7 @@
- 
- ### BEGIN INIT INFO
- # Provides:          ceph
--# Default-Start:     3 4 5
-+# Default-Start:     3 5
- # Default-Stop:      0 1 6
- # Required-Start:    $remote_fs $named $network $time
- # Required-Stop:     $remote_fs $named $network $time
 diff --git a/src/init-radosgw b/src/init-radosgw
 index 26ebff7..ecc8314 100644
 --- a/src/init-radosgw

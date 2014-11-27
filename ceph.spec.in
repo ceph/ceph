@@ -417,10 +417,10 @@ install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
+
 # udev rules
-install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
-#install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
-install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
@@ -567,10 +567,10 @@ fi
 %{_libdir}/rados-classes/libcls_user.so*
 
 %{_libdir}/ceph
-%dir /lib/udev
-%dir /lib/udev/rules.d
-/lib/udev/rules.d/50-rbd.rules
-/lib/udev/rules.d/95-ceph-osd.rules
+%dir /usr/lib/udev
+%dir /usr/lib/udev/rules.d
+/usr/lib/udev/rules.d/50-rbd.rules
+/usr/lib/udev/rules.d/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin

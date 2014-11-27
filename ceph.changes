@@ -1,4 +1,26 @@
 -------------------------------------------------------------------
+Thu Nov 27 11:33:16 UTC 2014 - danny.al-gaaf@bisect.de
+
+- remove invalid patches:
+  * 0003-mkcephfs-add-xfs-support.patch: this patch is no longer
+    valid, replaced upstream by df550c9cc
+  * 0006-Drop-ceph-keys-into-install.patch: breaks ceph key
+    handling and adds second install-data-local to makefile
+- remove no longer needed patches:
+  * 0007-add-syncfs-support-v3.patch: already upsteam integrated
+    and handled differently
+- fixup strange and confusing init-ceph patch series:
+  * remove 0018-MultiPatch-taken-from-trunk.patch: sets only back
+    to git firefly branch/source, not needed
+  * remove 0004-init-ceph-add-xfs-support.patch: not needed
+  * 0001-Rcfiles-remove-from-runlevel-2.patch: remove init-ceph
+  * 0005-Fix-runlevels-for-start-scripts.patch: remove init-ceph
+- fix spec file:
+  - move udev rules to correct dir to fix
+    suse-filelist-forbidden-move-to-usr
+- re-ran update_git, so patches are renumbered
+
+-------------------------------------------------------------------
 Mon Nov  3 09:34:10 UTC 2014 - tbehrens@suse.com
 
 - Update to 0.80.7:

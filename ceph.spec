@@ -99,28 +99,23 @@ BuildRequires:  systemd
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
 Patch0001:      0001-Rcfiles-remove-from-runlevel-2.patch
 Patch0002:      0002-init-radosgw-adjust-for-opensuse.patch
-Patch0003:      0003-mkcephfs-add-xfs-support.patch
-Patch0004:      0004-init-ceph-add-xfs-support.patch
-Patch0005:      0005-Fix-runlevels-for-start-scripts.patch
-Patch0006:      0006-Drop-ceph-keys-into-install.patch
-Patch0007:      0007-add-syncfs-support-v3.patch
-Patch0008:      0008-Fixup-radosgw-daemon-init.patch
-Patch0009:      0009-ceph_argparse_flag-has-no-regular-3.patch
-Patch0010:      0010-Variable-length-array-of-std-string.patch
-Patch0011:      0011-warning-Fix-deprecation-warning-fro.patch
-Patch0012:      0012-Hack-fix-crashing-tcmalloc-on-sle11.patch
-Patch0013:      0013-osd-OSD.cc-parse-lsb-release-data-v.patch
-Patch0014:      0014-osdmaptool-test-map-pgs.t-fix-escap.patch
-Patch0015:      0015-Convert-remaining-init-script-actio.patch
-Patch0016:      0016-Fix-bnc-890345-wrong-service-name-f.patch
-Patch0017:      0017-Fix-disk-zap-sgdisk-invocation.patch
-Patch0018:      0018-MultiPatch-taken-from-trunk.patch
-Patch0019:      0019-Switch-off-systemd-detection.patch
-Patch0020:      0020-init-add-systemd-service-files.patch
-Patch0021:      0021-Added-a-systemd-target-for-ceph.patch
-Patch0022:      0022-rcceph-wrapper-for-ceph-systemd.patch
-Patch0023:      0023-systemd-support-in-ceph-disk-activa.patch
-Patch0024:      0024-udev-rules-now-explicitly-specify-i.patch
+Patch0003:      0003-Fix-runlevels-for-start-scripts.patch
+Patch0004:      0004-Fixup-radosgw-daemon-init.patch
+Patch0005:      0005-ceph_argparse_flag-has-no-regular-3.patch
+Patch0006:      0006-Variable-length-array-of-std-string.patch
+Patch0007:      0007-warning-Fix-deprecation-warning-fro.patch
+Patch0008:      0008-Hack-fix-crashing-tcmalloc-on-sle11.patch
+Patch0009:      0009-osd-OSD.cc-parse-lsb-release-data-v.patch
+Patch0010:      0010-osdmaptool-test-map-pgs.t-fix-escap.patch
+Patch0011:      0011-Convert-remaining-init-script-actio.patch
+Patch0012:      0012-Fix-bnc-890345-wrong-service-name-f.patch
+Patch0013:      0013-Fix-disk-zap-sgdisk-invocation.patch
+Patch0014:      0014-Switch-off-systemd-detection.patch
+Patch0015:      0015-init-add-systemd-service-files.patch
+Patch0016:      0016-Added-a-systemd-target-for-ceph.patch
+Patch0017:      0017-rcceph-wrapper-for-ceph-systemd.patch
+Patch0018:      0018-systemd-support-in-ceph-disk-activa.patch
+Patch0019:      0019-udev-rules-now-explicitly-specify-i.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -362,11 +357,6 @@ This package contains Ceph benchmarks and test tools.
 %patch0017 -p1
 %patch0018 -p1
 %patch0019 -p1
-%patch0020 -p1
-%patch0021 -p1
-%patch0022 -p1
-%patch0023 -p1
-%patch0024 -p1
 
 %build
 
@@ -463,10 +453,10 @@ install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
+
 # udev rules
-install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
-#install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
-install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
@@ -613,10 +603,10 @@ fi
 %{_libdir}/rados-classes/libcls_user.so*
 
 %{_libdir}/ceph
-%dir /lib/udev
-%dir /lib/udev/rules.d
-/lib/udev/rules.d/50-rbd.rules
-/lib/udev/rules.d/95-ceph-osd.rules
+%dir /usr/lib/udev
+%dir /usr/lib/udev/rules.d
+/usr/lib/udev/rules.d/50-rbd.rules
+/usr/lib/udev/rules.d/95-ceph-osd.rules
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
