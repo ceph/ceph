@@ -784,7 +784,8 @@ void AsyncConnection::process()
 
       case STATE_CLOSED:
         {
-          center->delete_file_event(sd, EVENT_READABLE);
+          if (sd > 0)
+            center->delete_file_event(sd, EVENT_READABLE);
           ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
           break;
         }
