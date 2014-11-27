@@ -457,9 +457,66 @@ def main(argv):
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     # Test --op list and generate json for all objects
-    print "Test --op list by generating json for all objects"
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
+
+    print "Test --op list variants"
+    OSDS = get_osds(ALLPGS[0], OSDDIR)
+    osd = OSDS[0]
+
+    # retrieve all objects from all PGs
+    cmd = (CFSD_PREFIX + "--op list").format(osd=osd)
+    logging.debug(cmd);
+    tmpfd = open(TMPFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(TMPFILE)
+    JSONOBJ = sorted(set(lines))
+    (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
+
+    # retrieve all objects in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pgid)
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) = json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg}".format(pg=pgid))
+        ERRORS += 1
+
+    # retrieve all objects with a given name in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object}").format(osd=osd, pg=pgid, object=jsondict['oid'])
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) in json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg} {object}".format(pg=pgid, object=jsondict['oid']))
+        ERRORS += 1
+
+    print "Test --op list by generating json for all objects"
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
@@ -475,11 +532,11 @@ def main(argv):
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
-        jsondict = json.loads(JSON)
-        db[jsondict['namespace']][jsondict['oid']]['json'] = JSON
-        if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
-            logging.error("Malformed JSON {json}".format(json=JSON))
-            ERRORS += 1
+        for (pgid, jsondict) in json.loads(JSON):
+            db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
+            if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
+                logging.error("Malformed JSON {json}".format(json=JSON))
+                ERRORS += 1
 
     # Test get-bytes
     print "Test get-bytes and set-bytes"
