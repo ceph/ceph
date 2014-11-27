@@ -47,6 +47,7 @@ librgw_la_SOURCES =  \
 	rgw/rgw_quota.cc \
 	rgw/rgw_dencoder.cc \
 	rgw/rgw_object_expirer_core.cc
+	rgw/rgw_website.cc
 librgw_la_CXXFLAGS = -Woverloaded-virtual ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += librgw.la
 
