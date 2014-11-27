@@ -409,6 +409,7 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 
 # systemd
+%if 0%{?suse_version} >= 1310
 mkdir -p $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
@@ -417,6 +418,7 @@ install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
+%endif
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
@@ -537,11 +539,12 @@ fi
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
-%{_sbindir}/rcceph
+
 
 
 # systemd
-
+%if 0%{?suse_version} >= 1310
+%{_sbindir}/rcceph
 %dir /usr/lib/ceph
 /usr/lib/ceph/ceph-osd-prestart.sh
 %dir /usr/libexec
@@ -551,7 +554,7 @@ fi
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mds@.service
 %{_unitdir}/ceph.target
-
+%endif
 
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_kvs.so*
