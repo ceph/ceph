@@ -24,6 +24,7 @@ nss-devel
 python-argparse
 python-flask
 python-nose
+python-virtualenv
 snappy-devel
 systemd-devel
 xfsprogs-devel
