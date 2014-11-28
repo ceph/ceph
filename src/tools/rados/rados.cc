@@ -19,6 +19,7 @@
 #include "rados_sync.h"
 using namespace librados;
 
+#include "librados/RadosWhereis.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -85,6 +86,7 @@ void usage(ostream& out)
 "   mksnap <snap-name>               create snap <snap-name>\n"
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
+"   whereis [--dns] <obj-name>       where is an object stored in a pool (optionally do reverse dns)\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
 "   bench <seconds> write|seq|rand [-t concurrent_operations] [--no-cleanup] [--run-name run_name]\n"
@@ -1228,6 +1230,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   bool show_time = false;
   bool wildcard = false;
+  bool reverse_dns = false;
 
   const char* run_name = NULL;
   const char* prefix = NULL;
@@ -1375,6 +1378,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       formatter = new XMLFormatter(pretty_format);
     else if (strcmp(format, "json") == 0)
       formatter = new JSONFormatter(pretty_format);
+    else if (strcmp(format, "table") == 0)
+      formatter = new TableFormatter();
+    else if (strcmp(format, "table-kv") == 0)
+      formatter = new TableFormatter(true);
     else {
       cerr << "unrecognized format: " << format << std::endl;
       return -EINVAL;
@@ -1385,6 +1392,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     nspace = i->second;
   }
 
+  i = opts.find("dns");
+  if (i != opts.end()) {
+    reverse_dns = true;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -2099,7 +2110,33 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       goto out;
     }
   }
+  else if (strcmp(nargs[0], "whereis") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    vector<const char *>::iterator iter = nargs.begin();
+    ++iter;
+    for (; iter != nargs.end(); ++iter) {
+      const string & oid = *iter;
 
+      std::vector<librados::whereis_t> locations;
+      int retc;
+      if ((retc = librados::Rados::whereis(io_ctx, oid, locations))) {
+        cerr << "failed to locate " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
+        goto out;
+      } else {
+	if (!formatter) {
+	  formatter = new TableFormatter();
+	}
+	
+	std::vector<librados::whereis_t>::iterator it;
+
+	for (it=locations.begin(); it!=locations.end(); ++it) {
+	  librados::RadosWhereis::dump(*it, reverse_dns, formatter);
+	}
+	formatter->flush(cout);
+      }
+    }
+  }
   else if (strcmp(nargs[0], "tmap") == 0) {
     if (nargs.size() < 3)
       usage_exit();
@@ -2716,6 +2753,8 @@ int main(int argc, const char **argv)
       opts["show-time"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
       opts["no-cleanup"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--dns", (char*)NULL)) {
+      opts["dns"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
       opts["run-name"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
