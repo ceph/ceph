@@ -650,6 +650,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   delay -= reconnect_start;
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
+  bool deny = false;
   if (!mds->is_reconnect()) {
     // XXX maybe in the future we can do better than this?
     dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
@@ -657,16 +658,20 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")\n";
-    m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
-    m->put();
-    return;
-  }
-
-  if (session->is_closed()) {
+    deny = true;
+  } else if (session->is_closed()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
     mds->clog->info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
 	<< ") from " << m->get_source_inst() << " (session is closed)\n";
+    deny = true;
+  } else if (mdcache->is_readonly()) {
+    dout(1) << " read-only FS, ignoring reconnect, sending close" << dendl;
+    mds->clog->info() << "denied reconnect attempt (mds is read-only)\n";
+    deny = true;
+  }
+
+  if (deny) {
     m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
     m->put();
     return;
