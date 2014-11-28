@@ -39,7 +39,7 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config get><key>" + value + "</key></config get>", s);
+    EXPECT_EQ("<config_get><key>" + value + "</key></config_get>", s);
   }
 
   {
