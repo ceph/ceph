@@ -18,7 +18,7 @@
 #include <errno.h>
 #include "arch/probe.h"
 #include "arch/intel.h"
-#include "arch/neon.h"
+#include "arch/arm.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
