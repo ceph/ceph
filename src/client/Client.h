@@ -433,7 +433,10 @@ protected:
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
-  
+
+  // force read-only
+  void force_session_readonly(MetaSession *s);
+
   // trace generation
   ofstream traceout;
 
