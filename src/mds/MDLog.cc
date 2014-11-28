@@ -489,6 +489,11 @@ void MDLog::trim(int m)
   if (m >= 0)
     max_events = m;
 
+  if (mds->mdcache->is_readonly()) {
+    dout(10) << "trim, ignoring read-only FS" <<  dendl;
+    return;
+  }
+
   submit_mutex.Lock();
 
   // trim!
@@ -638,6 +643,11 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
 
 void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 {
+  if (mds->mdcache->is_readonly()) {
+    dout(10) << "_maybe_expired, ignoring read-only FS" <<  dendl;
+    return;
+  }
+
   dout(10) << "_maybe_expired segment " << ls->seq << "/" << ls->offset
 	   << ", " << ls->num_events << " events" << dendl;
   try_expire(ls, op_prio);
