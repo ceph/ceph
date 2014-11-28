@@ -1296,6 +1296,11 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
       respond_to_request(mdr, -EROFS);
       return;
     }
+    if (mdr->has_more() && mdr->more()->slave_error) {
+      dout(10) << " got error from slaves" << dendl;
+      respond_to_request(mdr, mdr->more()->slave_error);
+      return;
+    }
   }
   
   switch (req->get_op()) {
@@ -1725,21 +1730,29 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   // build list of objects
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
-  bool fail = false, wouldblock = false;
+  bool fail = false, wouldblock = false, readonly = false;
 
-  for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
-       p != mdr->slave_request->get_authpins().end();
-       ++p) {
-    MDSCacheObject *object = mdcache->get_object(*p);
-    if (!object) {
-      dout(10) << " don't have " << *p << dendl;
-      fail = true;
-      break;
+  if (mdcache->is_readonly()) {
+    dout(10) << " read-only FS" << dendl;
+    readonly = true;
+    fail = true;
+  }
+
+  if (!fail) {
+    for (vector<MDSCacheObjectInfo>::iterator p = mdr->slave_request->get_authpins().begin();
+	p != mdr->slave_request->get_authpins().end();
+	++p) {
+      MDSCacheObject *object = mdcache->get_object(*p);
+      if (!object) {
+	dout(10) << " don't have " << *p << dendl;
+	fail = true;
+	break;
+      }
+
+      objects.push_back(object);
+      if (*p == mdr->slave_request->get_authpin_freeze())
+	auth_pin_freeze = static_cast<CInode*>(object);
     }
-
-    objects.push_back(object);
-    if (*p == mdr->slave_request->get_authpin_freeze())
-      auth_pin_freeze = static_cast<CInode*>(object);
   }
   
   // can we auth pin them?
@@ -1839,6 +1852,8 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 
   if (wouldblock)
     reply->mark_error_wouldblock();
+  if (readonly)
+    reply->mark_error_rofs();
 
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
@@ -1881,8 +1896,13 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, MMDSSlaveRequest *ack)
     }
   }
 
-  if (ack->is_error_wouldblock())
+  if (ack->is_error_rofs()) {
+    mdr->more()->slave_error = -EROFS;
     mdr->aborted = true;
+  } else if (ack->is_error_wouldblock()) {
+    mdr->more()->slave_error = -EWOULDBLOCK;
+    mdr->aborted = true;
+  }
   
   // note slave
   mdr->more()->slaves.insert(from);
