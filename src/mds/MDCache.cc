@@ -11274,6 +11274,27 @@ void MDCache::rollback_uncommitted_fragments()
   }
 }
 
+void MDCache::force_readonly()
+{
+  if (is_readonly())
+    return;
+
+  dout(1) << "force file system read-only" << dendl;
+  mds->clog->warn() << "force file system read-only\n";
+
+  set_readonly();
+
+  // revoke write caps
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->is_head())
+      mds->locker->eval(in, CEPH_CAP_LOCKS);
+  }
+
+  mds->mdlog->flush();
+}
 
 
 // ==============================================================

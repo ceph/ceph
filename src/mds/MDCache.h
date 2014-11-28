@@ -107,7 +107,7 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
   bool is_readonly() { return readonly; }
-
+  void force_readonly();
 
   DecayRate decayrate;
 
