@@ -1558,13 +1558,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   // io blocked on obc?
   if (obc->is_blocked() &&
       (m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) {
-    map<hobject_t,list<OpRequestRef> >::iterator iter =
-      waiting_for_blocked_object.find(obc->obs.oi.soid);
-    // Allow read when there is no op blocking
-    if (write_ordered || (iter->second.size() != 0)) {
-      wait_for_blocked_object(obc->obs.oi.soid, op);
-      return;
-    }
+    wait_for_blocked_object(obc->obs.oi.soid, op);
+    return;
   }
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
@@ -1751,9 +1746,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	     << dendl;
 
   if (obc.get() && obc->is_blocked()) {
-    // we're already doing something with this object
-    dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
-    return false;
+    map<hobject_t,list<OpRequestRef> >::iterator iter =
+      waiting_for_blocked_object.find(obc->obs.oi.soid);
+    // Allow read when there is no op blocking
+    if (write_ordered || (iter->second.size() != 0)) {
+      // we're already doing something with this object
+      dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
+      return false;
+    }
   }
 
   if (r == -ENOENT && missing_oid == hobject_t()) {
