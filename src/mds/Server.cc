@@ -1289,6 +1289,14 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
   // we shouldn't be waiting on anyone.
   assert(mdr->more()->waiting_on_slave.empty());
+
+  if (req->get_op() & CEPH_MDS_OP_WRITE) {
+    if (mdcache->is_readonly()) {
+      dout(10) << " read-only FS" << dendl;
+      respond_to_request(mdr, -EROFS);
+      return;
+    }
+  }
   
   switch (req->get_op()) {
   case CEPH_MDS_OP_LOOKUPHASH:
@@ -2575,6 +2583,11 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (cmode < 0) {
     respond_to_request(mdr, -EINVAL);
     return;
+  }
+
+  if ((cmode & CEPH_FILE_MODE_WR) && mdcache->is_readonly()) {
+    dout(7) << "read-only FS" << dendl;
+    respond_to_request(mdr, -EROFS);
   }
   
   set<SimpleLock*> rdlocks, wrlocks, xlocks;

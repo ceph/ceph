@@ -172,6 +172,7 @@ MDCache::MDCache(MDS *m) :
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
+  readonly = false;
 
   stray_index = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
