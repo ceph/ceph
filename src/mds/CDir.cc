@@ -1427,10 +1427,14 @@ class C_IO_Dir_OMAP_Fetched : public CDirIOContext {
  public:
   bufferlist hdrbl;
   map<string, bufferlist> omap;
-  int ret1, ret2;
+  bufferlist btbl;
+  int ret1, ret2, ret3;
 
   C_IO_Dir_OMAP_Fetched(CDir *d, const string& w) : CDirIOContext(d), want_dn(w) { }
   void finish(int r) {
+    // check the correctness of backtrace
+    if (r >= 0 && ret3 != -ECANCELED)
+      dir->inode->verify_diri_backtrace(btbl, ret3);
     if (r >= 0) r = ret1;
     if (r >= 0) r = ret2;
     dir->_omap_fetched(hdrbl, omap, want_dn, r);
@@ -1445,6 +1449,14 @@ void CDir::_omap_fetch(const string& want_dn)
   ObjectOperation rd;
   rd.omap_get_header(&fin->hdrbl, &fin->ret1);
   rd.omap_get_vals("", "", (uint64_t)-1, &fin->omap, &fin->ret2);
+  // check the correctness of backtrace
+  if (g_conf->mds_verify_backtrace > 0 && frag == frag_t()) {
+    rd.getxattr("parent", &fin->btbl, &fin->ret3);
+    rd.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+  } else {
+    fin->ret3 = -ECANCELED;
+  }
+
   cache->mds->objecter->read(oid, oloc, rd, CEPH_NOSNAP, NULL, 0,
 			     new C_OnFinisher(fin, &cache->mds->finisher));
 }
