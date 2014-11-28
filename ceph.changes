@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Fri Nov 28 12:57:09 UTC 2014 - osynge@suse.com
+
+- Enable building on SLE11.
+  * Have removed systemd scripts for SL11 builds. AS we only need
+    clients for SLE11 update.
+  * For SLE11 builds of this package sysV update scripts untested.
+
+-------------------------------------------------------------------
 Thu Nov 27 11:33:16 UTC 2014 - danny.al-gaaf@bisect.de
 
 - remove invalid patches:
