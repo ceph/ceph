@@ -21,6 +21,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/config.h"
 
 #include "gtest/gtest.h"
 
@@ -1202,6 +1203,9 @@ TEST(LibRBD, TestClone2)
 
 TEST(LibRBD, TestCOR)
 {
+  g_conf->set_val("rbd_clone_copy_on_read", "true");
+  ASSERT_TRUE(g_conf->rbd_clone_copy_on_read);
+
   rados_t cluster;
   rados_ioctx_t ioctx;
   string pool_name = get_temp_pool_name();
@@ -1215,6 +1219,10 @@ TEST(LibRBD, TestCOR)
   const int object_size = 1<<12;
   const int object_num = image_size / object_size;
   map<uint64_t, uint64_t> write_tracker;
+  set<string> obj_checker;
+  rbd_image_info_t p_info, c_info;
+  rados_list_ctx_t list_ctx;
+  const char *entry;
 
   // make a parent to clone from
   ASSERT_EQ(0, create_image_full(ioctx, "parent", image_size, &order, false, features));
@@ -1261,6 +1269,18 @@ TEST(LibRBD, TestCOR)
     read_test_data(parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE);
   }
 
+  // find out what objects the parent image has generated
+  ASSERT_EQ(0, rbd_stat(parent, &p_info, sizeof(p_info)));
+  ASSERT_EQ(0, rados_objects_list_open(ioctx, &list_ctx));
+  while (rados_objects_list_next(list_ctx, &entry, NULL) != -ENOENT) {
+    if (strstr(entry, p_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
+      obj_checker.insert(block_name_suffix);
+    }
+  }
+  rados_objects_list_close(list_ctx);
+  ASSERT_EQ(obj_checker.size(), write_tracker.size());
+
   // create a snapshot, reopen as the parent we're interested in and protect it
   ASSERT_EQ(0, rbd_snap_create(parent, "parent_snap"));
   ASSERT_EQ(0, rbd_close(parent));
@@ -1295,16 +1315,23 @@ TEST(LibRBD, TestCOR)
     read_test_data(child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE);
   }
 
-  // close child to finish all copy-on-read
+  // close child to flush all copy-on-read
   ASSERT_EQ(0, rbd_close(child));
 
-  printf("reread from \"child\", this time should read from child image\n");
+  printf("check whether child image has the same set of objects as parent\n");
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
-  for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-       itr != write_tracker.end(); ++itr) {
-    printf("\tread object-%-4ld\t", itr->first);
-    read_test_data(child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE);
+  ASSERT_EQ(0, rbd_stat(child, &c_info, sizeof(c_info)));
+  ASSERT_EQ(0, rados_objects_list_open(ioctx, &list_ctx));
+  while (rados_objects_list_next(list_ctx, &entry, NULL) != -ENOENT) {
+    if (strstr(entry, c_info.block_name_prefix)) {
+      const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
+      set<string>::iterator it = obj_checker.find(block_name_suffix);
+      ASSERT_TRUE(it != obj_checker.end());
+      obj_checker.erase(it);
+    }
   }
+  rados_objects_list_close(list_ctx);
+  ASSERT_TRUE(obj_checker.empty());
   ASSERT_EQ(0, rbd_close(child));
 
   rados_ioctx_destroy(ioctx);

@@ -25,13 +25,17 @@ namespace librbd {
     m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
-			 librados::snap_t snap_id,
+			 const ::SnapContext &snapc, librados::snap_t snap_id,
 			 Context *completion,
 			 bool hide_enoent) :
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
     m_completion(completion), m_parent_completion(NULL),
-    m_hide_enoent(hide_enoent) {}
+    m_hide_enoent(hide_enoent) {
+    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
+         it != snapc.snaps.end(); ++it)
+      m_snaps.push_back(it->val);
+  }
 
   AioRequest::~AioRequest() {
     if (m_parent_completion) {
@@ -89,7 +93,8 @@ namespace librbd {
 
   bool AioRead::should_complete(int r)
   {
-    bool cor = (m_ictx->cct->_conf->rbd_clone_copy_on_read) && (!m_ictx->read_only);
+    bool cor = (m_ictx->cct->_conf->rbd_clone_copy_on_read) &&
+               (!m_ictx->read_only) && (m_snap_id == CEPH_NOSNAP);
     ldout(m_ictx->cct, 20) << "AioRead::should_complete " << this
                            << " " << m_oid << " " << m_object_off
                            << "~" << m_object_len << " r = " << r
@@ -110,23 +115,23 @@ namespace librbd {
         // copyup_queue (valid means the bufferlist has been fulfilled and
         // librados::AioCompletion field is assigned). If found, extracts
         // requesting bits from that queued object.
-        if (cor) {
-          m_ictx->copyup_queue_lock.Lock();
-          map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
-            m_ictx->copyup_queue.find(m_object_no);
-          if (itr != m_ictx->copyup_queue.end() && (itr->second).second != NULL) {
-            ceph::bufferlist *entire_object = (itr->second).first;
-            assert(entire_object);
-            m_read_data.substr_of(*entire_object, m_object_off, m_object_len);
-            m_ictx->copyup_queue_lock.Unlock();
-            ldout(m_ictx->cct, 20) << "AioRead::should_complete "<< this
-                                   << " extracts " << m_oid << " " << m_object_off
-                                   << "~" << m_object_len << "from copyup_queue"
-                                   << dendl;
-            break;
-          }
-          m_ictx->copyup_queue_lock.Unlock();
-        }
+//      if (cor) {
+//        m_ictx->copyup_queue_lock.Lock();
+//        map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
+//          m_ictx->copyup_queue.find(m_object_no);
+//        if (itr != m_ictx->copyup_queue.end() && (itr->second).second != NULL) {
+//          ceph::bufferlist *entire_object = (itr->second).first;
+//          assert(entire_object);
+//          m_read_data.substr_of(*entire_object, m_object_off, m_object_len);
+//          m_ictx->copyup_queue_lock.Unlock();
+//          ldout(m_ictx->cct, 20) << "AioRead::should_complete "<< this
+//                                 << " extracts " << m_oid << " " << m_object_off
+//                                 << "~" << m_object_len << "from copyup_queue"
+//                                 << dendl;
+//          break;
+//        }
+//        m_ictx->copyup_queue_lock.Unlock();
+//      }
 
         RWLock::RLocker l(m_ictx->snap_lock);
         RWLock::RLocker l2(m_ictx->parent_lock);
@@ -145,28 +150,51 @@ namespace librbd {
         uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
         if (object_overlap) {
           m_tried_parent = true;
-          m_ictx->copyup_queue_lock.Lock();
-          map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr =
-            m_ictx->copyup_queue.find(m_object_no);
-          bool new_copyup  = (itr == m_ictx->copyup_queue.end());
-          m_ictx->copyup_queue_lock.Unlock();
-          if (cor && new_copyup) {
-            // depends on copy-on-read option, either read the whole object or partial
-            vector<pair<uint64_t,uint64_t> > extend_image_extents;
-            //extend range to entire object
-            Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
-                                    0, m_ictx->layout.fl_object_size,
-                                    extend_image_extents);
-            //read_from_parent(extend_image_extents);
-            m_entire_object = m_ictx->alloc_copyup_queue_slot(m_object_no);
-            assert(m_entire_object);
-            read_from_parent_cor(extend_image_extents);
-            m_state = LIBRBD_AIO_READ_COPYUP;
+          if (cor) {
+            m_ictx->copyup_queue_lock.Lock();
+            map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator it =
+              m_ictx->copyup_queue.find(m_object_no);
+
+            if (it != m_ictx->copyup_queue.end() && (it->second).second != NULL) {
+              // Check whether there is a valid writing-backing object in
+              // copyup_queue (valid means the bufferlist has been fulfilled and
+              // librados::AioCompletion field is assigned). If found, extracts
+              // requesting bits from that queued object.
+              ceph::bufferlist *entire_object = (it->second).first;
+              assert(entire_object);
+              m_read_data.substr_of(*entire_object, m_object_off, m_object_len);
+              ldout(m_ictx->cct, 20) << "AioRead::should_complete "<< this
+                                    << " extracts " << m_oid << " " << m_object_off
+                                    << "~" << m_object_len << "from copyup_queue"
+                                    << dendl;
+              m_ictx->copyup_queue_lock.Unlock();
+              finished = true;
+            } else if (it == m_ictx->copyup_queue.end()) {
+              // depends on copy-on-read option, either read the whole object or partial
+              vector<pair<uint64_t,uint64_t> > extend_image_extents;
+              //extend range to entire object
+              Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no,
+                                      0, m_ictx->layout.fl_object_size,
+                                      extend_image_extents);
+              m_entire_object = m_ictx->alloc_copyup_queue_slot(m_object_no);
+              m_ictx->copyup_queue_lock.Unlock();
+              assert(m_entire_object);
+              read_from_parent_cor(extend_image_extents);
+              m_state = LIBRBD_AIO_READ_COPYUP;
+              finished = false;
+            } else {
+              // forward to read_from_parent if there is already an effort for
+              // reading entire object
+              m_ictx->copyup_queue_lock.Unlock();
+              read_from_parent(image_extents);
+              m_state = LIBRBD_AIO_READ_GUARD;
+              finished = false;
+            }
           } else {
             read_from_parent(image_extents);
             m_state = LIBRBD_AIO_READ_GUARD;
+            finished = false;
           }
-          finished = false;
         }
       }
       break;
@@ -239,8 +267,11 @@ namespace librbd {
     librados::ObjectWriteOperation copyup_cor;
     copyup_cor.exec("rbd", "copyup", *m_entire_object);
 
+    cb_args_t *cb_args = new cb_args_t();
+    cb_args->ictx = m_ictx;
+    cb_args->object_no = m_object_no;
     librados::AioCompletion *copyup_completion =
-      librados::Rados::aio_create_completion(m_ictx, NULL, rbd_copyup_cb);
+      librados::Rados::aio_create_completion(cb_args, NULL, rbd_copyup_cb);
     m_ictx->kickoff_copyup(m_object_no, copyup_completion);
     m_ictx->md_ctx.aio_operate(m_oid, copyup_completion, &copyup_cor,
                                snapc.seq.val, snaps);
@@ -259,18 +290,12 @@ namespace librbd {
 			       const ::SnapContext &snapc, librados::snap_t snap_id,
 			       Context *completion,
 			       bool hide_enoent)
-    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion,
-		 hide_enoent),
+    : AioRequest(ictx, oid, object_no, object_off, len, snapc, snap_id, 
+                 completion, hide_enoent),
       m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
   {
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
-
-    // TODO: find a way to make this less stupid
-    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
-	 it != snapc.snaps.end(); ++it) {
-      m_snaps.push_back(it->val);
-    }
   }
 
   void AbstractWrite::guard_write()
