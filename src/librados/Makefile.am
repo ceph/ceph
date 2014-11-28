@@ -2,6 +2,7 @@ librados_internal_la_SOURCES = \
 	librados/RadosClient.cc \
 	librados/IoCtxImpl.cc \
 	librados/RadosXattrIter.cc \
+	librados/RadosWhereis.cc \
 	librados/snap_set_diff.cc
 noinst_LTLIBRARIES += librados_internal.la
 
@@ -34,4 +35,5 @@ noinst_HEADERS += \
 	librados/PoolAsyncCompletionImpl.h \
 	librados/RadosClient.h \
 	librados/RadosXattrIter.h \
-	librados/ListObjectImpl.h
+	librados/ListObjectImpl.h \
+	librados/RadosWhereis.h
