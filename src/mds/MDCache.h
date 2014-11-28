@@ -90,6 +90,9 @@ class MDCache {
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
 
+  bool readonly;
+  void set_readonly() { readonly = true; }
+
   CInode *strays[NUM_STRAY];         // my stray dir
   int stray_index;
 
@@ -103,6 +106,8 @@ public:
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;
   }
+  bool is_readonly() { return readonly; }
+
 
   DecayRate decayrate;
 
