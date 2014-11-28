@@ -76,21 +76,26 @@ class Worker : public Thread {
 
 
 class WorkerPool {
-  WorkerPool() {}
+  WorkerPool(CephContext *c):
+    cct(c), seq(0), started(false), ref(0) {}
   WorkerPool(const WorkerPool &);
   WorkerPool& operator=(const WorkerPool &);
-  static uint64_t seq;
-  static bool started;
-  static vector<Worker*> workers;
-  static WorkerPool *pool;
+  CephContext *cct;
+  uint64_t seq;
+  // Used to indicate whether thread started
+  bool started;
+  // Used to control whether need to destroy thread
+  static map<CephContext*, vector<Worker*> > workers;
+  static map<CephContext*, WorkerPool*> pools;
   static Mutex lock;
 
  public:
+  int ref;
   static WorkerPool *init(CephContext *cct);
-  static void start();
-  static Worker *get_worker() {
-    assert(pool);
-    return workers[(seq++)%workers.size()];
+  void deinit();
+  void start();
+  Worker *get_worker() {
+    return workers[cct][(seq++)%workers.size()];
   }
 };
 
