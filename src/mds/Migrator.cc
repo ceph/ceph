@@ -728,6 +728,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (mds->mdcache->is_readonly()) {
+    dout(7) << "read-only FS, no exports for now" << dendl;
+    return;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
@@ -2137,7 +2141,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   dout(7) << " all ready, noting auth and freezing import region" << dendl;
 
   bool success = true;
-  if (dir->get_inode()->filelock.can_wrlock(-1) &&
+  if (!mds->mdcache->is_readonly() &&
+      dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
     it->second.mut = MutationRef(new MutationImpl);
     // force some locks.  hacky.

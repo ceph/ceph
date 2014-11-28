@@ -10443,6 +10443,10 @@ public:
 
 bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
 {
+  if (is_readonly()) {
+    dout(7) << "can_fragment: read-only FS, no fragmenting for now" << dendl;
+    return false;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "can_fragment: cluster degraded, no fragmenting for now" << dendl;
     return false;
