@@ -310,24 +310,32 @@ void *Worker::entry()
 
 /*******************
  * WorkerPool
+ *
+ * Because CephContext is used by Worker and WorkPool should rely to the
+ * lifecycle of CephContext. One client may use multi CephContext, if one
+ * destroyed, we can't let worker associated to this CephContext alive.
+ * So each WorkerPool is associated to one CephContext.
+ *
+ * Note: it may better that CephCOntext implement observer mode?
  */
-
-uint64_t WorkerPool::seq = 0;
-bool WorkerPool::started = false;
-WorkerPool* WorkerPool::pool = NULL;
-vector<Worker*> WorkerPool::workers;
+map<CephContext*, WorkerPool*> WorkerPool::pools;
+map<CephContext*, vector<Worker*> > WorkerPool::workers;
 Mutex WorkerPool::lock("WorkerPool::lock");
 
 WorkerPool *WorkerPool::init(CephContext *cct) {
   Mutex::Locker l(lock);
-  if (!pool) {
-    pool = new WorkerPool();
+  if (!pools.count(cct)) {
+    assert(!workers.count(cct));
     for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
       Worker *w = new Worker(cct);
-      workers.push_back(w);
+      workers[cct].push_back(w);
     }
+    pools[cct] = new WorkerPool(cct);
   }
-  return pool;
+
+  WorkerPool *p = pools[cct];
+  p->ref++;
+  return p;
 }
 
 void WorkerPool::start()
@@ -335,9 +343,26 @@ void WorkerPool::start()
   Mutex::Locker l(lock);
   if (!started) {
     for (uint64_t i = 0; i < workers.size(); ++i) {
-      workers[i]->create();
+      workers[cct][i]->create();
     }
     started = true;
+  }
+}
+
+void WorkerPool::deinit()
+{
+  Mutex::Locker l(lock);
+  ref--;
+  if (!ref && started) {
+    for (uint64_t i = 0; i < workers.size(); ++i) {
+      workers[cct][i]->stop();
+      workers[cct][i]->join();
+      delete workers[cct][i];
+    }
+    workers.erase(cct);
+    pools.erase(cct);
+    started = false;
+    delete this;
   }
 }
 
@@ -367,6 +392,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 AsyncMessenger::~AsyncMessenger()
 {
   assert(!did_bind); // either we didn't bind or we shut down the Processor
+  pool->deinit();
 }
 
 void AsyncMessenger::ready()
