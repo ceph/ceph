@@ -11284,6 +11284,8 @@ void MDCache::force_readonly()
 
   set_readonly();
 
+  mds->server->force_clients_readonly();
+
   // revoke write caps
   for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
        p != inode_map.end();
