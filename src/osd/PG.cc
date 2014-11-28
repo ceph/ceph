@@ -4162,7 +4162,7 @@ void PG::scrub_process_inconsistent()
 
     ss << info.pgid << " " << mode << " "
        << scrubber.missing.size() << " missing, "
-       << scrubber.inconsistent.size() << " inconsistent objects\n";
+       << scrubber.inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     osd->clog->error(ss);
     if (repair) {
