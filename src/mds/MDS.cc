@@ -299,6 +299,10 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     command_flush_path(f, path);
   } else if (command == "flush journal") {
     command_flush_journal(f);
+  } else if (command == "force_readonly") {
+    mds_lock.Lock();
+    mdcache->force_readonly();
+    mds_lock.Unlock();
   }
   f->flush(ss);
   delete f;
@@ -477,6 +481,11 @@ void MDS::set_up_admin_socket()
 				     "flush journal",
 				     asok_hook,
 				     "Flush the journal to the backing store");
+  assert(0 == r);
+  r = admin_socket->register_command("force_readonly",
+				     "force_readonly",
+				     asok_hook,
+				     "Force MDS to read-only mode");
   assert(0 == r);
 }
 
