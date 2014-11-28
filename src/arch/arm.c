@@ -41,7 +41,7 @@ static unsigned long get_hwcap(void)
 
 #endif // __linux__
 
-int ceph_arch_neon_probe(void)
+int ceph_arch_arm_probe(void)
 {
 #if __arm__ && __linux__
 	ceph_arch_neon = (get_hwcap() & HWCAP_NEON) == HWCAP_NEON;
