@@ -1800,6 +1800,11 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // Always proxy
     do_proxy_read(op);
 
+    // Avoid duplicate promotion
+    if (obc.get() && obc->is_blocked()) {
+      return true;
+    }
+
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
