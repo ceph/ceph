@@ -344,6 +344,8 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     mds->sessionmap.touch_session(session);
     assert(session->connection != NULL);
     session->connection->send_message(new MClientSession(CEPH_SESSION_OPEN));
+    if (mdcache->is_readonly())
+      session->connection->send_message(new MClientSession(CEPH_SESSION_FORCE_RO));
   } else if (session->is_closing() ||
 	     session->is_killing()) {
     // kill any lingering capabilities, leases, requests
@@ -448,11 +450,9 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	dout(10) << "force_open_sessions opened " << session->info.inst << dendl;
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
-	Message *m = new MClientSession(CEPH_SESSION_OPEN);
-	if (session->connection)
-	  session->connection->send_message(m);
-	else
-	  session->preopen_out_queue.push_back(m);
+	mds->send_message_client(new MClientSession(CEPH_SESSION_OPEN), session);
+	if (mdcache->is_readonly())
+	  mds->send_message_client(new MClientSession(CEPH_SESSION_FORCE_RO), session);
       }
     } else {
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
@@ -841,6 +841,21 @@ void Server::recall_client_state(float ratio)
   }
 }
 
+void Server::force_clients_readonly()
+{
+  dout(10) << "force_clients_readonly" << dendl;
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (set<Session*>::const_iterator p = sessions.begin();
+      p != sessions.end();
+      ++p) {
+    Session *session = *p;
+    if (!session->info.inst.name.is_client() ||
+	!(session->is_open() || session->is_stale()))
+      continue;
+    mds->send_message_client(new MClientSession(CEPH_SESSION_FORCE_RO), session);
+  }
+}
 
 /*******
  * some generic stuff for finishing off requests
