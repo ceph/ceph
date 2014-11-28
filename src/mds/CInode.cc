@@ -2500,6 +2500,8 @@ void CInode::decode_snap(bufferlist::iterator& p)
 
 client_t CInode::calc_ideal_loner()
 {
+  if (mdcache->is_readonly())
+    return -1;
   if (!mds_caps_wanted.empty())
     return -1;
   
