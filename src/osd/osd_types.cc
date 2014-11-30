@@ -820,7 +820,7 @@ int pg_pool_t::calc_bits_of(int t)
   int b = 0;
   while (t > 0) {
     t = t >> 1;
-    b++;
+    ++b;
   }
   return b;
 }
