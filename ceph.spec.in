@@ -47,6 +47,7 @@ BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-nose
 BuildRequires:	python-argparse
+BuildRequires:	python-virtualenv
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
 BuildRequires:	libxml2-devel
@@ -55,6 +56,7 @@ BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	xfsprogs-devel
+BuildRequires:	xmlstarlet
 BuildRequires:	yasm
 %if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 BuildRequires:	snappy-devel
