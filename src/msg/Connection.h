@@ -94,7 +94,7 @@ public:
 
   virtual bool is_connected() = 0;
 
-  Messenger *get_messenger() {
+  Messenger *get_messenger() const {
     return msgr;
   }
 
@@ -145,15 +145,15 @@ public:
   virtual void mark_disposable() = 0;
 
 
-  int get_peer_type() { return peer_type; }
+  int get_peer_type() const { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
 
-  bool peer_is_mon() { return peer_type == CEPH_ENTITY_TYPE_MON; }
-  bool peer_is_mds() { return peer_type == CEPH_ENTITY_TYPE_MDS; }
-  bool peer_is_osd() { return peer_type == CEPH_ENTITY_TYPE_OSD; }
-  bool peer_is_client() { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
+  bool peer_is_mon() const { return peer_type == CEPH_ENTITY_TYPE_MON; }
+  bool peer_is_mds() const { return peer_type == CEPH_ENTITY_TYPE_MDS; }
+  bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
+  bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
 
-  const entity_addr_t& get_peer_addr() { return peer_addr; }
+  const entity_addr_t& get_peer_addr() const { return peer_addr; }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
 
   uint64_t get_features() const { return features; }
@@ -161,7 +161,7 @@ public:
   void set_features(uint64_t f) { features = f; }
   void set_feature(uint64_t f) { features |= f; }
 
-  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
+  void post_rx_buffer(ceph_tid_t tid, const bufferlist& bl) {
     Mutex::Locker l(lock);
     ++rx_buffers_version;
     rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);

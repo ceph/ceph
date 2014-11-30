@@ -46,7 +46,7 @@ private:
   PerfCounters *logger;
 
   // don't allow copying.
-  void operator=(Mutex &M);
+  void operator=(const Mutex &M);
   Mutex(const Mutex &M);
 
   void _register() {
