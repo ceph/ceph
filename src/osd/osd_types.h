@@ -271,17 +271,15 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
-    m_seed = seed;
-    m_pool = pool;
-    m_preferred = pref;
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) :
+    m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  pg_t(const ceph_pg& cpg) :
+    m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
+
+  pg_t(const old_pg_t& opg) {
+    *this = opg.v;
   }
 
-  pg_t(const ceph_pg& cpg) {
-    m_pool = cpg.pool;
-    m_seed = cpg.ps;
-    m_preferred = (__s16)cpg.preferred;
-  }
   old_pg_t get_old_pg() const {
     old_pg_t o;
     assert(m_pool < 0xffffffffull);
@@ -289,9 +287,6 @@ struct pg_t {
     o.v.ps = m_seed;
     o.v.preferred = (__s16)m_preferred;
     return o;
-  }
-  pg_t(const old_pg_t& opg) {
-    *this = opg.v;
   }
 
   ps_t ps() const {
