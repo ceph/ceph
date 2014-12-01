@@ -1,7 +1,8 @@
 [Unit]
 Description=Ceph metadata server daemon
-After=network-online.target
-Wants=network-online.target
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=ceph.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
@@ -9,4 +10,4 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mds -f --cluster ${CLUSTER} --id %i
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ceph.target
