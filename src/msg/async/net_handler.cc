@@ -44,6 +44,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
       lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: %s"
                  << strerror(errno) << dendl;
+      close(s);
       return -errno;
     }
   }
@@ -110,8 +111,10 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
 
   if (nonblock) {
     ret = set_nonblock(s);
-    if (ret < 0)
+    if (ret < 0) {
+      close(s);
       return ret;
+    }
   }
   ret = ::connect(s, (sockaddr*)&addr.addr, addr.addr_size());
   if (ret < 0) {

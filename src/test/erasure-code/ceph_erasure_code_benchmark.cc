@@ -193,7 +193,7 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 {
   int code = 0;
 
-  if (want_erasures <= 0) {
+  if (want_erasures == 0) {
     if (verbose)
       cout << "chunks ";
     set<int> want_to_read;
@@ -218,7 +218,7 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
       return code;
     for (set<int>::iterator chunk = want_to_read.begin();
 	 chunk != want_to_read.end();
-	 chunk++) {
+	 ++chunk) {
       if (all_chunks.find(*chunk)->second.length() != decoded[*chunk].length()) {
 	cerr << "chunk " << *chunk << " length=" << all_chunks.find(*chunk)->second.length()
 	     << " decoded with length=" << decoded[*chunk].length() << endl;
