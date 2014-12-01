@@ -2251,8 +2251,25 @@ void MDS::respawn()
   suicide();
 }
 
+void MDS::handle_write_error(int err)
+{
+  if (err == -EBLACKLISTED) {
+    derr << "we have been blacklisted (fenced), respawning..." << dendl;
+    respawn();
+    return;
+  }
 
-
+  if (g_conf->mds_action_on_write_error >= 2) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", suicide..." << dendl;
+    suicide();
+  } else if (g_conf->mds_action_on_write_error == 1) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", force readonly..." << dendl;
+    mdcache->force_readonly();
+  } else {
+    // ignore;
+    derr << "unhandled write error " << cpp_strerror(err) << ", ignore..." << dendl;
+  }
+}
 
 bool MDS::ms_dispatch(Message *m)
 {

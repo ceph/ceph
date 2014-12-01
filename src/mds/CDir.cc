@@ -1789,8 +1789,7 @@ class C_IO_Dir_Committed : public CDirIOContext {
 public:
   C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) {
-    assert(r == 0);
-    dir->_committed(version);
+    dir->_committed(r, version);
   }
 };
 
@@ -1994,8 +1993,16 @@ void CDir::_commit(version_t want, int op_prio)
  *
  * @param v version i just committed
  */
-void CDir::_committed(version_t v)
+void CDir::_committed(int r, version_t v)
 {
+  if (r < 0) {
+    dout(1) << "commit error " << r << " v " << v << dendl;
+    cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+			      << " errno " << r << "\n";
+    cache->mds->handle_write_error(r);
+    return;
+  }
+
   dout(10) << "_committed v " << v << " on " << *this << dendl;
   assert(is_auth());
 

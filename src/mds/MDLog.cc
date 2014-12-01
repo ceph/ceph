@@ -84,7 +84,8 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
   void finish(int r) {
     MDS *mds = get_mds();
-
+    // assume journal is reliable, so don't choose action based on
+    // g_conf->mds_action_on_write_error.
     if (r == -EBLACKLISTED) {
       derr << "we have been blacklisted (fenced), respawning..." << dendl;
       mds->respawn();
@@ -566,6 +567,19 @@ void MDLog::trim(int m)
   _trim_expired_segments();
 }
 
+class C_MaybeExpiredSegment : public MDSInternalContext {
+  MDLog *mdlog;
+  LogSegment *ls;
+  int op_prio;
+  public:
+  C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
+    MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
+  void finish(int res) {
+    if (res < 0)
+      mdlog->mds->handle_write_error(res);
+    mdlog->_maybe_expired(ls, op_prio);
+  }
+};
 
 /**
  * Like ::trim, but instead of trimming to max_segments, trim all but the latest
