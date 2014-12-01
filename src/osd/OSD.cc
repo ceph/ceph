@@ -3095,7 +3095,7 @@ void OSD::handle_pg_peering_evt(
 	*rctx.transaction);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, pg, osdmap);
+      dispatch_context(rctx, pg, osdmap, NULL, false);
 
       dout(10) << *pg << " is new" << dendl;
 
@@ -3131,7 +3131,7 @@ void OSD::handle_pg_peering_evt(
 	*rctx.transaction);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, pg, osdmap);
+      dispatch_context(rctx, pg, osdmap, NULL, false);
 
       dout(10) << *pg << " is new (resurrected)" << dendl;
 
@@ -3169,7 +3169,7 @@ void OSD::handle_pg_peering_evt(
 	);
       parent->handle_create(&rctx);
       parent->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, parent, osdmap);
+      dispatch_context(rctx, parent, osdmap, NULL, false);
 
       dout(10) << *parent << " is new" << dendl;
 
