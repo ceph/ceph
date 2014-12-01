@@ -1499,8 +1499,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   if (prefix == "pg stat") {
     if (f) {
-      f->open_object_section("pg_map");
-      pg_map.dump(f.get());
+      f->open_object_section("pg_summary");
+      pg_map.print_oneline_summary(f.get(), NULL);
       f->close_section();
       f->flush(ds);
     } else {
