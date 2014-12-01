@@ -7035,7 +7035,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 }
 
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
-                           ThreadPool::TPHandle *handle)
+                           ThreadPool::TPHandle *handle, bool throttle)
 {
   if (service.get_osdmap()->is_up(whoami) &&
       is_active()) {
@@ -7057,7 +7057,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     int tr = store->queue_transaction(
       pg->osr.get(),
       ctx.transaction, ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
-      handle);
+      handle, throttle);
     assert(tr == 0);
   }
 }

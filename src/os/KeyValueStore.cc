@@ -983,7 +983,8 @@ int KeyValueStore::umount()
 
 int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
                                       TrackedOpRef osd_op,
-                                      ThreadPool::TPHandle *handle)
+                                      ThreadPool::TPHandle *handle,
+                                      bool throttle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1006,7 +1007,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
     dout(5) << "queue_transactions new " << *osr << "/" << osr->parent << dendl;
   }
 
-  Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op);
+  Op *o = build_op(tls, ondisk, onreadable, onreadable_sync, osd_op, throttle);
   op_queue_reserve_throttle(o, handle);
   dout(5) << "queue_transactions (trailing journal) " << " " << tls <<dendl;
   queue_op(osr, o);
@@ -1019,7 +1020,7 @@ int KeyValueStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 
 KeyValueStore::Op *KeyValueStore::build_op(list<Transaction*>& tls,
         Context *ondisk, Context *onreadable, Context *onreadable_sync,
-        TrackedOpRef osd_op)
+        TrackedOpRef osd_op, bool throttle)
 {
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -1038,6 +1039,7 @@ KeyValueStore::Op *KeyValueStore::build_op(list<Transaction*>& tls,
   o->ops = ops;
   o->bytes = bytes;
   o->osd_op = osd_op;
+  o->throttle = throttle;
   return o;
 }
 
@@ -1060,6 +1062,10 @@ void KeyValueStore::queue_op(OpSequencer *osr, Op *o)
 
 void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
+  if (!o->throttle) {
+    dout(20) << "op_queue_reserve_throttle no need to reserve throttle for op " << o << dendl;
+    return;
+  }
   uint64_t max_ops = m_keyvaluestore_queue_max_ops;
   uint64_t max_bytes = m_keyvaluestore_queue_max_bytes;
 
@@ -1094,6 +1100,10 @@ void KeyValueStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handl
 
 void KeyValueStore::op_queue_release_throttle(Op *o)
 {
+  if (!o->throttle) {
+    dout(20) << "op_queue_release_throttle no need to release throttle for op " << o << dendl;
+    return;
+  }
   {
     Mutex::Locker l(op_throttle_lock);
     op_queue_len--;

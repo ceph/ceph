@@ -1139,39 +1139,43 @@ public:
   unsigned apply_transactions(Sequencer *osr, list<Transaction*>& tls, Context *ondisk=0);
 
   int queue_transaction_and_cleanup(Sequencer *osr, Transaction* t,
-				    ThreadPool::TPHandle *handle = NULL) {
+				    ThreadPool::TPHandle *handle = NULL,
+                                    bool throttle = true) {
     list<Transaction *> tls;
     tls.push_back(t);
     return queue_transactions(osr, tls, new C_DeleteTransaction(t),
-	                      NULL, NULL, TrackedOpRef(), handle);
+	                      NULL, NULL, TrackedOpRef(), handle, throttle);
   }
 
   int queue_transaction(Sequencer *osr, Transaction *t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef(),
-				ThreadPool::TPHandle *handle = NULL) {
+				ThreadPool::TPHandle *handle = NULL,
+                                bool throttle = true) {
     list<Transaction*> tls;
     tls.push_back(t);
     return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
-	                      op, handle);
+	                      op, handle, throttle);
   }
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL) {
+			 ThreadPool::TPHandle *handle = NULL,
+                         bool throttle = true) {
     assert(!tls.empty());
     tls.back()->register_on_applied(onreadable);
     tls.back()->register_on_commit(ondisk);
     tls.back()->register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    return queue_transactions(osr, tls, op, handle, throttle);
   }
 
   virtual int queue_transactions(
     Sequencer *osr, list<Transaction*>& tls,
     TrackedOpRef op = TrackedOpRef(),
-    ThreadPool::TPHandle *handle = NULL) = 0;
+    ThreadPool::TPHandle *handle = NULL,
+    bool throttle = true) = 0;
 
 
   int queue_transactions(
@@ -1181,7 +1185,8 @@ public:
     Context *oncommit,
     Context *onreadable_sync,
     Context *oncomplete,
-    TrackedOpRef op);
+    TrackedOpRef op = TrackedOpRef(),
+    bool throttle = true);
 
   int queue_transaction(
     Sequencer *osr,
@@ -1190,11 +1195,12 @@ public:
     Context *oncommit,
     Context *onreadable_sync,
     Context *oncomplete,
-    TrackedOpRef op) {
+    TrackedOpRef op,
+    bool throttle = true) {
     list<Transaction*> tls;
     tls.push_back(t);
     return queue_transactions(
-      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
+      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op, throttle);
   }
 
  public:
