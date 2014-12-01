@@ -7902,7 +7902,8 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
   if (ssc)
     register_snapset_context(ssc);
   dout(10) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
-  populate_obc_watchers(obc);
+  if (is_active())
+    populate_obc_watchers(obc);
   return obc;
 }
 
@@ -7970,7 +7971,8 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       soid, true,
       soid.has_snapset() ? attrs : 0);
 
-    populate_obc_watchers(obc);
+    if (is_active())
+      populate_obc_watchers(obc);
 
     if (pool.info.require_rollback()) {
       if (attrs) {
