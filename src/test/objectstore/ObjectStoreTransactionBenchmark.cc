@@ -87,25 +87,25 @@ class Transaction {
     uint64_t start_time = Cycles::rdtsc();
     ObjectStore::Transaction::iterator i = t.begin();
     while (i.have_op()) {
-      int op = i.decode_op();
+    ObjectStore::Transaction::Op *op = i.decode_op();
 
-      switch (op) {
+      switch (op->op) {
       case ObjectStore::Transaction::OP_WRITE:
         {
-          coll_t cid = i.decode_cid();
-          ghobject_t oid = i.decode_oid();
-          i.decode_length();
-          i.decode_length();
-          i.get_fadvise_flags();
+          coll_t cid = i.get_cid(op->cid);
+          ghobject_t oid = i.get_oid(op->oid);
+          uint64_t off = op->off;
+          uint64_t len = op->len;
+          uint32_t fadvise_flags = i.get_fadvise_flags();
           bufferlist bl;
           i.decode_bl(bl);
         }
         break;
       case ObjectStore::Transaction::OP_SETATTR:
         {
-          coll_t cid = i.decode_cid();
-          ghobject_t oid = i.decode_oid();
-          string name = i.decode_attrname();
+          coll_t cid = i.get_cid(op->cid);
+          ghobject_t oid = i.get_oid(op->oid);
+          string name = i.decode_string();
           bufferlist bl;
           i.decode_bl(bl);
           map<string, bufferptr> to_set;
@@ -114,16 +114,16 @@ class Transaction {
         break;
       case ObjectStore::Transaction::OP_OMAP_SETKEYS:
         {
-          coll_t cid(i.decode_cid());
-          ghobject_t oid = i.decode_oid();
-          map<string, bufferlist> aset;
+          coll_t cid = i.get_cid(op->cid);
+          ghobject_t oid = i.get_oid(op->oid);
+          map<string, bufferptr> aset;
           i.decode_attrset(aset);
         }
         break;
       case ObjectStore::Transaction::OP_OMAP_RMKEYS:
         {
-          coll_t cid(i.decode_cid());
-          ghobject_t oid = i.decode_oid();
+          coll_t cid = i.get_cid(op->cid);
+          ghobject_t oid = i.get_oid(op->oid);
           set<string> keys;
           i.decode_keyset(keys);
         }
