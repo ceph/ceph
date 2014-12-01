@@ -10,3 +10,17 @@ v0.89
 
 v0.90
 -----
+
+* Previously, the formatted output of 'ceph pg stat -f ...' was a full
+  pg dump that included all metadata about all PGs in the system.  It
+  is now a concise summary of high-level PG stats, just like the
+  unformatted 'ceph pg stat' command.
+
+
+
+
+* All JSON dumps of floating point values were incorrecting surrounding the
+  value with quotes.  These quotes have been removed.  Any consumer of structured
+  JSON output that was consuming the floating point values was previously having
+  to interpret the quoted string and will most likely need to be fixed to take
+  the unquoted number.

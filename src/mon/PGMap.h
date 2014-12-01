@@ -315,7 +315,7 @@ public:
                                    uint64_t poolid) const;
 
   void print_summary(Formatter *f, ostream *out) const;
-  void print_oneline_summary(ostream *out) const;
+  void print_oneline_summary(Formatter *f, ostream *out) const;
 
   epoch_t get_min_last_epoch_clean() const {
     if (!min_last_epoch_clean)
@@ -329,7 +329,7 @@ WRITE_CLASS_ENCODER_FEATURES(PGMap::Incremental)
 WRITE_CLASS_ENCODER_FEATURES(PGMap)
 
 inline ostream& operator<<(ostream& out, const PGMap& m) {
-  m.print_oneline_summary(&out);
+  m.print_oneline_summary(NULL, &out);
   return out;
 }
 

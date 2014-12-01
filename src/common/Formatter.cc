@@ -252,9 +252,10 @@ void JSONFormatter::dump_int(const char *name, int64_t s)
 
 void JSONFormatter::dump_float(const char *name, double d)
 {
+  print_name(name);
   char foo[30];
   snprintf(foo, sizeof(foo), "%lf", d);
-  dump_string(name, foo);
+  m_ss << foo;
 }
 
 void JSONFormatter::dump_string(const char *name, std::string s)
