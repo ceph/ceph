@@ -116,6 +116,8 @@ Patch0016:      0016-Added-a-systemd-target-for-ceph.patch
 Patch0017:      0017-rcceph-wrapper-for-ceph-systemd.patch
 Patch0018:      0018-systemd-support-in-ceph-disk-activa.patch
 Patch0019:      0019-udev-rules-now-explicitly-specify-i.patch
+Patch0020:      0020-Always-provide-summary-for-non-heal.patch
+Patch0021:      0021-Fix-spec-violating-extraneous-unloc.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -357,6 +359,8 @@ This package contains Ceph benchmarks and test tools.
 %patch0017 -p1
 %patch0018 -p1
 %patch0019 -p1
+%patch0020 -p1
+%patch0021 -p1
 
 %build
 

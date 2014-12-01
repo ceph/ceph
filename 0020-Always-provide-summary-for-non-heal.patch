@@ -1,0 +1,94 @@
+From: Thorsten Behrens <tbehrens@suse.com>
+Date: Mon, 1 Dec 2014 14:27:36 +0100
+Subject: [PATCH] Always provide summary for non-healthy cluster.
+
+This fixes bnc#902744, wherein calamari does not provide
+popup drill-down for warnings or errors, should the summary
+be missing.
+
+Signed-off-by: Thorsten Behrens <tbehrens@suse.com>
+---
+ src/mon/Monitor.cc | 49 +++++++++++++++++++++++++------------------------
+ 1 file changed, 25 insertions(+), 24 deletions(-)
+
+diff --git a/src/mon/Monitor.cc b/src/mon/Monitor.cc
+index fd3a358..e6ee86d 100644
+--- a/src/mon/Monitor.cc
++++ b/src/mon/Monitor.cc
+@@ -1906,30 +1906,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+ 
+   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
+ 
+-  if (f)
+-    f->open_array_section("summary");
+-  stringstream ss;
+-  health_status_t overall = HEALTH_OK;
+-  if (!summary.empty()) {
+-    ss << ' ';
+-    while (!summary.empty()) {
+-      if (overall > summary.front().first)
+-	overall = summary.front().first;
+-      ss << summary.front().second;
+-      if (f) {
+-        f->open_object_section("item");
+-        f->dump_stream("severity") <<  summary.front().first;
+-        f->dump_string("summary", summary.front().second);
+-        f->close_section();
+-      }
+-      summary.pop_front();
+-      if (!summary.empty())
+-	ss << "; ";
+-    }
+-  }
+-  if (f)
+-    f->close_section();
+-
+   if (f) {
+     f->open_object_section("timechecks");
+     f->dump_int("epoch", get_epoch());
+@@ -1938,6 +1914,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+       << ((timecheck_round%2) ? "on-going" : "finished");
+   }
+ 
++  stringstream ss;
++  health_status_t overall = HEALTH_OK;
+   if (!timecheck_skews.empty()) {
+     list<string> warns;
+     if (f)
+@@ -1984,6 +1962,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+         if (!warns.empty())
+           ss << ",";
+       }
++      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
+     }
+     if (f)
+       f->close_section();
+@@ -1991,6 +1970,28 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+   if (f)
+     f->close_section();
+ 
++  if (f)
++    f->open_array_section("summary");
++  if (!summary.empty()) {
++    ss << ' ';
++    while (!summary.empty()) {
++      if (overall > summary.front().first)
++	overall = summary.front().first;
++      ss << summary.front().second;
++      if (f) {
++        f->open_object_section("item");
++        f->dump_stream("severity") <<  summary.front().first;
++        f->dump_string("summary", summary.front().second);
++        f->close_section();
++      }
++      summary.pop_front();
++      if (!summary.empty())
++	ss << "; ";
++    }
++  }
++  if (f)
++    f->close_section();
++
+   stringstream fss;
+   fss << overall;
+   status = fss.str() + ss.str();

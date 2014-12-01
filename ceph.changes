@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Mon Dec  1 13:31:22 UTC 2014 - tbehrens@suse.com
+
+- Add 0020-Always-provide-summary-for-non-heal.patch
+  * fix problem with calamari not always showing detailed
+    cluster health. Fixes bnc#902744.
+- Add 0021-Fix-spec-violating-extraneous-unloc.patch
+  * fix extra mutex unlock in RWLock dtor
+
+-------------------------------------------------------------------
 Fri Nov 28 12:57:09 UTC 2014 - osynge@suse.com
 
 - Enable building on SLE11.
