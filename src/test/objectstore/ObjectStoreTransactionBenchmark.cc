@@ -265,7 +265,7 @@ int main(int argc, char **argv)
   uint64_t times = atoi(args[0]);
   PerfCase c;
   uint64_t ticks = c.rados_write_4k(times);
-  Transaction.dump_stat();
+  Transaction::dump_stat();
   cerr << " Total rados op " << times << " run time " << Cycles::to_microseconds(ticks) << "us." << std::endl;
 
   return 0;
