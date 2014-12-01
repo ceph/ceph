@@ -85,6 +85,7 @@ int FileJournal::_open(bool forwrite, bool create)
   if (ret) {
     ret = errno;
     derr << "FileJournal::_open: unable to fstat journal: " << cpp_strerror(ret) << dendl;
+    ret = -ret;
     goto out_fd;
   }
 
@@ -109,6 +110,7 @@ int FileJournal::_open(bool forwrite, bool create)
     if (ret < 0) {
       ret = errno;
       derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+      ret = -ret;
       goto out_fd;
     }
   }
@@ -327,7 +329,7 @@ int FileJournal::check()
   int ret;
 
   ret = _open(false, false);
-  if (ret < 0)
+  if (ret)
     goto done;
 
   ret = read_header();
@@ -360,7 +362,7 @@ int FileJournal::create()
   dout(2) << "create " << fn << " fsid " << fsid << dendl;
 
   ret = _open(true, true);
-  if (ret < 0)
+  if (ret)
     goto done;
 
   // write empty header
@@ -437,7 +439,7 @@ done:
 int FileJournal::peek_fsid(uuid_d& fsid)
 {
   int r = _open(false, false);
-  if (r < 0)
+  if (r)
     return r;
   r = read_header();
   if (r < 0)
@@ -453,7 +455,7 @@ int FileJournal::open(uint64_t fs_op_seq)
   uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
-  if (err < 0) 
+  if (err)
     return err;
 
   // assume writeable, unless...
@@ -563,10 +565,14 @@ void FileJournal::close()
 
 int FileJournal::dump(ostream& out)
 {
-  dout(10) << "dump" << dendl;
-  _open(false, false);
+  int err = 0;
 
-  int err = read_header();
+  dout(10) << "dump" << dendl;
+  err = _open(false, false);
+  if (err)
+    return err;
+
+  err = read_header();
   if (err < 0)
     return err;
 

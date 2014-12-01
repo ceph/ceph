@@ -186,7 +186,7 @@ int ErasureCodeNonRegression::run_create()
     return code;
   for (map<int,bufferlist>::iterator chunk = encoded.begin();
        chunk != encoded.end();
-       chunk++) {
+       ++chunk) {
     if (chunk->second.write_file(chunk_path(chunk->first).c_str()))
       return 1;
   }
@@ -248,7 +248,7 @@ int ErasureCodeNonRegression::run_check()
 
   for (map<int,bufferlist>::iterator chunk = encoded.begin();
        chunk != encoded.end();
-       chunk++) {
+       ++chunk) {
     bufferlist existing;
     if (existing.read_file(chunk_path(chunk->first).c_str(), &errors)) {
       cerr << errors << endl;
