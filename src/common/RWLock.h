@@ -36,7 +36,6 @@ public:
   }
 
   virtual ~RWLock() {
-    pthread_rwlock_unlock(&L);
     pthread_rwlock_destroy(&L);
   }
 
