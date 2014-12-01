@@ -75,28 +75,24 @@ class Worker : public Thread {
 };
 
 
-class WorkerPool {
-  WorkerPool(CephContext *c):
-    cct(c), seq(0), started(false), ref(0) {}
+class WorkerPool: CephContext::AssociatedSingletonObject {
   WorkerPool(const WorkerPool &);
   WorkerPool& operator=(const WorkerPool &);
   CephContext *cct;
   uint64_t seq;
+  vector<Worker*> workers;
   // Used to indicate whether thread started
   bool started;
-  // Used to control whether need to destroy thread
-  static map<CephContext*, vector<Worker*> > workers;
-  static map<CephContext*, WorkerPool*> pools;
-  static Mutex lock;
 
  public:
-  int ref;
-  static WorkerPool *init(CephContext *cct);
-  void deinit();
+  WorkerPool(CephContext *c);
+  virtual ~WorkerPool();
   void start();
   Worker *get_worker() {
-    return workers[cct][(seq++)%workers.size()];
+    return workers[(seq++)%workers.size()];
   }
+  // uniq name for CephContext to distinguish differnt object
+  static const string name;
 };
 
 /*
