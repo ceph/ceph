@@ -1102,9 +1102,10 @@ void rgw_data_change::dump(Formatter *f) const
 }
 
 
-int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
+int RGWDataChangesLog::choose_oid(rgw_bucket& bucket, int shard_id) {
     string& name = bucket.name;
-    uint32_t r = ceph_str_hash_linux(name.c_str(), name.size()) % num_shards;
+    int shard_shift = (shard_id > 0 ? shard_id : 0);
+    uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) + shard_shift) % num_shards;
 
     return (int)r;
 }
@@ -1197,7 +1198,7 @@ void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
   status->cur_expiration = expiration;
 }
 
-int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   if (!store->need_to_log_data())
     return 0;
 
@@ -1243,7 +1244,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   status->cond = new RefCountedCond;
   status->pending = true;
 
-  string& oid = oids[choose_oid(bucket)];
+  string& oid = oids[choose_oid(bucket, shard_id)];
   utime_t expiration;
 
   int ret;
