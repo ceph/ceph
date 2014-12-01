@@ -1925,30 +1925,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
 
   health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
 
-  if (f)
-    f->open_array_section("summary");
-  stringstream ss;
-  health_status_t overall = HEALTH_OK;
-  if (!summary.empty()) {
-    ss << ' ';
-    while (!summary.empty()) {
-      if (overall > summary.front().first)
-	overall = summary.front().first;
-      ss << summary.front().second;
-      if (f) {
-        f->open_object_section("item");
-        f->dump_stream("severity") <<  summary.front().first;
-        f->dump_string("summary", summary.front().second);
-        f->close_section();
-      }
-      summary.pop_front();
-      if (!summary.empty())
-	ss << "; ";
-    }
-  }
-  if (f)
-    f->close_section();
-
   if (f) {
     f->open_object_section("timechecks");
     f->dump_int("epoch", get_epoch());
@@ -1957,6 +1933,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
       << ((timecheck_round%2) ? "on-going" : "finished");
   }
 
+  stringstream ss;
+  health_status_t overall = HEALTH_OK;
   if (!timecheck_skews.empty()) {
     list<string> warns;
     if (f)
@@ -2003,9 +1981,32 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
         if (!warns.empty())
           ss << ",";
       }
+      summary.push_back(make_pair(HEALTH_WARN, "Monitor clock skew detected "));
     }
     if (f)
       f->close_section();
+  }
+  if (f)
+    f->close_section();
+
+  if (f)
+    f->open_array_section("summary");
+  if (!summary.empty()) {
+    ss << ' ';
+    while (!summary.empty()) {
+      if (overall > summary.front().first)
+	overall = summary.front().first;
+      ss << summary.front().second;
+      if (f) {
+        f->open_object_section("item");
+        f->dump_stream("severity") <<  summary.front().first;
+        f->dump_string("summary", summary.front().second);
+        f->close_section();
+      }
+      summary.pop_front();
+      if (!summary.empty())
+	ss << "; ";
+    }
   }
   if (f)
     f->close_section();
