@@ -1929,6 +1929,8 @@ void pool_stat_t::dump(Formatter *f) const
   stats.dump(f);
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
+  f->dump_int("up", up);
+  f->dump_int("acting", acting);
 }
 
 void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
@@ -1942,20 +1944,29 @@ void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(stats, bl);
   ::encode(log_size, bl);
   ::encode(ondisk_log_size, bl);
+  ::encode(up, bl);
+  ::encode(acting, bl);
   ENCODE_FINISH(bl);
 }
 
 void pool_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   if (struct_v >= 4) {
     ::decode(stats, bl);
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
+    if (struct_v >= 6) {
+      ::decode(up, bl);
+      ::decode(acting, bl);
+    } else {
+      up = 0;
+      acting = 0;
+    }
   } else {
     ::decode(stats.sum.num_bytes, bl);
     uint64_t num_kb;
@@ -1990,6 +2001,8 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
   a.stats = *l.back();
   a.log_size = 123;
   a.ondisk_log_size = 456;
+  a.acting = 3;
+  a.up = 4;
   o.push_back(new pool_stat_t(a));
 }
 

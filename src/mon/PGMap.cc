@@ -455,12 +455,17 @@ void PGMap::remove_osd(int osd)
   }
 }
 
-void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
+void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
 {
-  num_pg++;
-  num_pg_by_state[s.state]++;
   pg_pool_sum[pgid.pool()].add(s);
   pg_sum.add(s);
+
+  if (sumonly)
+    return;
+
+  num_pg++;
+  num_pg_by_state[s.state]++;
+
   if (s.state & PG_STATE_CREATING) {
     creating_pgs.insert(pgid);
     if (s.acting_primary >= 0)
@@ -473,24 +478,27 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s)
   }
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s)
+void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
 {
-  num_pg--;
-  if (--num_pg_by_state[s.state] == 0)
-    num_pg_by_state.erase(s.state);
-
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
   ps.sub(s);
   if (ps.is_zero())
     pg_pool_sum.erase(pgid.pool());
-
   pg_sum.sub(s);
+
+  if (sumonly)
+    return;
+
+  num_pg--;
+  if (--num_pg_by_state[s.state] == 0)
+    num_pg_by_state.erase(s.state);
+
   if (s.state & PG_STATE_CREATING) {
     creating_pgs.erase(pgid);
     if (s.acting_primary >= 0) {
       creating_pgs_by_osd[s.acting_primary].erase(pgid);
       if (creating_pgs_by_osd[s.acting_primary].size() == 0)
-        creating_pgs_by_osd.erase(s.acting_primary);
+	creating_pgs_by_osd.erase(s.acting_primary);
     }
   }
 
