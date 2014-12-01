@@ -365,7 +365,7 @@ public:
   ~RGWDataChangesLog();
 
   int choose_oid(rgw_bucket& bucket);
-  int add_entry(rgw_bucket& bucket);
+  int add_entry(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
 		   list<rgw_data_change>& entries,
