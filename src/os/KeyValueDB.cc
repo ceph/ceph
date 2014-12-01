@@ -6,6 +6,9 @@
 #ifdef HAVE_LIBROCKSDB
 #include "RocksDBStore.h"
 #endif
+#ifdef HAVE_KINETIC
+#include "KineticStore.h"
+#endif
 
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir)
