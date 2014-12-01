@@ -209,7 +209,8 @@ noinst_HEADERS += \
 	common/module.h \
 	common/Continuation.h \
 	common/Readahead.h \
-	common/Cycles.h
+	common/Cycles.h \
+	common/Initialize.h
 
 noinst_LTLIBRARIES += libcommon.la
 
