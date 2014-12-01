@@ -2821,6 +2821,13 @@ int FileStore::read(
     len = st.st_size;
   }
 
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_RANDOM)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_RANDOM);
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_SEQUENTIAL);
+#endif
+
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
@@ -2831,6 +2838,13 @@ int FileStore::read(
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_DONTNEED);
+  if (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_RANDOM | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL))
+    posix_fadvise(**fd, offset, len, POSIX_FADV_NORMAL);
+#endif
 
   if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
     ostringstream ss;
