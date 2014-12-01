@@ -497,7 +497,7 @@ protected:
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
-  void _committed(version_t v);
+  void _committed(int r, version_t v);
 public:
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
