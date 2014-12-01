@@ -394,6 +394,8 @@ public:
     void rebuild();
     void rebuild(ptr& nb);
     void rebuild_aligned(unsigned align);
+    void rebuild_aligned_size_and_memory(unsigned align_size,
+					 unsigned align_memory);
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op
