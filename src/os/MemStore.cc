@@ -648,77 +648,73 @@ void MemStore::_do_transaction(Transaction& t)
   int pos = 0;
 
   while (i.have_op()) {
-    int op = i.decode_op();
+    Transaction::Op *op = i.decode_op();
     int r = 0;
 
-    switch (op) {
+    switch (op->op) {
     case Transaction::OP_NOP:
       break;
     case Transaction::OP_TOUCH:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _touch(cid, oid);
       }
       break;
       
     case Transaction::OP_WRITE:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	uint64_t off = i.decode_length();
-	uint64_t len = i.decode_length();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
 	uint32_t fadvise_flags = i.get_fadvise_flags();
-	bufferlist bl;
-	i.decode_bl(bl);
+        bufferlist bl;
+        i.decode_bl(bl);
 	r = _write(cid, oid, off, len, bl, fadvise_flags);
       }
       break;
       
     case Transaction::OP_ZERO:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	uint64_t off = i.decode_length();
-	uint64_t len = i.decode_length();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
 	r = _zero(cid, oid, off, len);
       }
       break;
       
     case Transaction::OP_TRIMCACHE:
       {
-	i.decode_cid();
-	i.decode_oid();
-	i.decode_length();
-	i.decode_length();
-	// deprecated, no-op
+        // deprecated, no-op
       }
       break;
       
     case Transaction::OP_TRUNCATE:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	uint64_t off = i.decode_length();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
 	r = _truncate(cid, oid, off);
       }
       break;
       
     case Transaction::OP_REMOVE:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _remove(cid, oid);
       }
       break;
       
     case Transaction::OP_SETATTR:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	string name = i.decode_attrname();
-	bufferlist bl;
-	i.decode_bl(bl);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        string name = i.decode_string();
+        bufferlist bl;
+        i.decode_bl(bl);
 	map<string, bufferptr> to_set;
 	to_set[name] = bufferptr(bl.c_str(), bl.length());
 	r = _setattrs(cid, oid, to_set);
@@ -727,74 +723,74 @@ void MemStore::_do_transaction(Transaction& t)
       
     case Transaction::OP_SETATTRS:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	map<string, bufferptr> aset;
-	i.decode_attrset(aset);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        map<string, bufferptr> aset;
+        i.decode_attrset(aset);
 	r = _setattrs(cid, oid, aset);
       }
       break;
 
     case Transaction::OP_RMATTR:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	string name = i.decode_attrname();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        string name = i.decode_string();
 	r = _rmattr(cid, oid, name.c_str());
       }
       break;
 
     case Transaction::OP_RMATTRS:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _rmattrs(cid, oid);
       }
       break;
       
     case Transaction::OP_CLONE:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	ghobject_t noid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
 	r = _clone(cid, oid, noid);
       }
       break;
 
     case Transaction::OP_CLONERANGE:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	ghobject_t noid = i.decode_oid();
-	uint64_t off = i.decode_length();
-	uint64_t len = i.decode_length();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
 	r = _clone_range(cid, oid, noid, off, len, off);
       }
       break;
 
     case Transaction::OP_CLONERANGE2:
       {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	ghobject_t noid = i.decode_oid();
-	uint64_t srcoff = i.decode_length();
-	uint64_t len = i.decode_length();
-	uint64_t dstoff = i.decode_length();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        ghobject_t noid = i.get_oid(op->dest_oid);
+        uint64_t srcoff = op->off;
+        uint64_t len = op->len;
+        uint64_t dstoff = op->dest_off;
 	r = _clone_range(cid, oid, noid, srcoff, len, dstoff);
       }
       break;
 
     case Transaction::OP_MKCOLL:
       {
-	coll_t cid = i.decode_cid();
+        coll_t cid = i.get_cid(op->cid);
 	r = _create_collection(cid);
       }
       break;
 
     case Transaction::OP_COLL_HINT:
       {
-        coll_t cid = i.decode_cid();
-        uint32_t type = i.decode_u32();
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
         bufferlist::iterator hiter = hint.begin();
@@ -813,24 +809,24 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_RMCOLL:
       {
-	coll_t cid = i.decode_cid();
+        coll_t cid = i.get_cid(op->cid);
 	r = _destroy_collection(cid);
       }
       break;
 
     case Transaction::OP_COLL_ADD:
       {
-	coll_t ncid = i.decode_cid();
-	coll_t ocid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+        coll_t ocid = i.get_cid(op->cid);
+        coll_t ncid = i.get_cid(op->dest_cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _collection_add(ncid, ocid, oid);
       }
       break;
 
     case Transaction::OP_COLL_REMOVE:
        {
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _remove(cid, oid);
        }
       break;
@@ -841,81 +837,81 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_COLL_MOVE_RENAME:
       {
-	coll_t oldcid = i.decode_cid();
-	ghobject_t oldoid = i.decode_oid();
-	coll_t newcid = i.decode_cid();
-	ghobject_t newoid = i.decode_oid();
+        coll_t oldcid = i.get_cid(op->cid);
+        ghobject_t oldoid = i.get_oid(op->oid);
+        coll_t newcid = i.get_cid(op->dest_cid);
+        ghobject_t newoid = i.get_oid(op->dest_oid);
 	r = _collection_move_rename(oldcid, oldoid, newcid, newoid);
       }
       break;
 
     case Transaction::OP_COLL_SETATTR:
       {
-	coll_t cid = i.decode_cid();
-	string name = i.decode_attrname();
-	bufferlist bl;
-	i.decode_bl(bl);
+        coll_t cid = i.get_cid(op->cid);
+        string name = i.decode_string();
+        bufferlist bl;
+        i.decode_bl(bl);
 	assert(0 == "not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-	coll_t cid = i.decode_cid();
-	string name = i.decode_attrname();
+        coll_t cid = i.get_cid(op->cid);
+        string name = i.decode_string();
 	assert(0 == "not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RENAME:
       {
-	coll_t cid(i.decode_cid());
-	coll_t ncid(i.decode_cid());
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = -EOPNOTSUPP;
       }
       break;
 
     case Transaction::OP_OMAP_CLEAR:
       {
-	coll_t cid(i.decode_cid());
-	ghobject_t oid = i.decode_oid();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
 	r = _omap_clear(cid, oid);
       }
       break;
     case Transaction::OP_OMAP_SETKEYS:
       {
-	coll_t cid(i.decode_cid());
-	ghobject_t oid = i.decode_oid();
-	map<string, bufferlist> aset;
-	i.decode_attrset(aset);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        map<string, bufferlist> aset;
+        i.decode_attrset(aset);
 	r = _omap_setkeys(cid, oid, aset);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
       {
-	coll_t cid(i.decode_cid());
-	ghobject_t oid = i.decode_oid();
-	set<string> keys;
-	i.decode_keyset(keys);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        set<string> keys;
+        i.decode_keyset(keys);
 	r = _omap_rmkeys(cid, oid, keys);
       }
       break;
     case Transaction::OP_OMAP_RMKEYRANGE:
       {
-	coll_t cid(i.decode_cid());
-	ghobject_t oid = i.decode_oid();
-	string first, last;
-	first = i.decode_key();
-	last = i.decode_key();
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        string first, last;
+        first = i.decode_string();
+        last = i.decode_string();
 	r = _omap_rmkeyrange(cid, oid, first, last);
       }
       break;
     case Transaction::OP_OMAP_SETHEADER:
       {
-	coll_t cid(i.decode_cid());
-	ghobject_t oid = i.decode_oid();
-	bufferlist bl;
-	i.decode_bl(bl);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        bufferlist bl;
+        i.decode_bl(bl);
 	r = _omap_setheader(cid, oid, bl);
       }
       break;
@@ -924,35 +920,33 @@ void MemStore::_do_transaction(Transaction& t)
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
       {
-	coll_t cid(i.decode_cid());
-	uint32_t bits(i.decode_u32());
-	uint32_t rem(i.decode_u32());
-	coll_t dest(i.decode_cid());
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        uint32_t rem = op->split_rem;
+        coll_t dest = i.get_cid(op->dest_cid);
 	r = _split_collection(cid, bits, rem, dest);
       }
       break;
 
     case Transaction::OP_SETALLOCHINT:
       {
-        coll_t cid(i.decode_cid());
-        ghobject_t oid = i.decode_oid();
-        i.decode_length(); // uint64_t expected_object_size
-        i.decode_length(); // uint64_t expected_write_size
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
       }
       break;
 
     default:
-      derr << "bad op " << op << dendl;
+      derr << "bad op " << op->op << dendl;
       assert(0);
     }
 
     if (r < 0) {
       bool ok = false;
 
-      if (r == -ENOENT && !(op == Transaction::OP_CLONERANGE ||
-			    op == Transaction::OP_CLONE ||
-			    op == Transaction::OP_CLONERANGE2 ||
-			    op == Transaction::OP_COLL_ADD))
+      if (r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
+			    op->op == Transaction::OP_CLONE ||
+			    op->op == Transaction::OP_CLONERANGE2 ||
+			    op->op == Transaction::OP_COLL_ADD))
 	// -ENOENT is usually okay
 	ok = true;
       if (r == -ENODATA)
@@ -961,9 +955,9 @@ void MemStore::_do_transaction(Transaction& t)
       if (!ok) {
 	const char *msg = "unexpected error code";
 
-	if (r == -ENOENT && (op == Transaction::OP_CLONERANGE ||
-			     op == Transaction::OP_CLONE ||
-			     op == Transaction::OP_CLONERANGE2))
+	if (r == -ENOENT && (op->op == Transaction::OP_CLONERANGE ||
+			     op->op == Transaction::OP_CLONE ||
+			     op->op == Transaction::OP_CLONERANGE2))
 	  msg = "ENOENT on clone suggests osd bug";
 
 	if (r == -ENOSPC)
@@ -976,7 +970,7 @@ void MemStore::_do_transaction(Transaction& t)
 	  dump_all();
 	}
 
-	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op
+	dout(0) << " error " << cpp_strerror(r) << " not handled on operation " << op->op
 		<< " (op " << pos << ", counting from 0)" << dendl;
 	dout(0) << msg << dendl;
 	dout(0) << " transaction dump:\n";
