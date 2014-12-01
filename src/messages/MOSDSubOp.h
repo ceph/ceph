@@ -45,7 +45,6 @@ public:
   // op to exec
   vector<OSDOp> ops;
   utime_t mtime;
-  bool noop;
 
   bool old_exists;
   uint64_t old_size;
@@ -119,7 +118,10 @@ public:
       off += ops[i].op.payload_len;
     }
     ::decode(mtime, p);
-    ::decode(noop, p);
+    //we don't need noop anymore
+    bool noop_dont_need;
+    ::decode(noop_dont_need, p);
+
     ::decode(acks_wanted, p);
     ::decode(version, p);
     ::decode(old_exists, p);
@@ -198,7 +200,8 @@ public:
       data.append(ops[i].indata);
     }
     ::encode(mtime, payload);
-    ::encode(noop, payload);
+    //encode a false here for backward compatiable
+    ::encode(false, payload);
     ::encode(acks_wanted, payload);
     ::encode(version, payload);
     ::encode(old_exists, payload);
@@ -237,7 +240,7 @@ public:
   MOSDSubOp()
     : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDSubOp(osd_reqid_t r, pg_shard_t from,
-	    spg_t p, const hobject_t& po, bool noop_, int aw,
+	    spg_t p, const hobject_t& po,  int aw,
 	    epoch_t mape, ceph_tid_t rtid, eversion_t v)
     : Message(MSG_OSD_SUBOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
@@ -246,7 +249,6 @@ public:
       pgid(p),
       poid(po),
       acks_wanted(aw),
-      noop(noop_),   
       old_exists(false), old_size(0),
       version(v),
       first(false), complete(false),
@@ -264,8 +266,6 @@ public:
 	<< " " << pgid
 	<< " " << poid
 	<< " " << ops;
-    if (noop)
-      out << " (NOOP)";
     if (first)
       out << " first";
     if (complete)

@@ -3336,7 +3336,7 @@ void PG::scrub_reserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(
@@ -3358,7 +3358,7 @@ void PG::scrub_unreserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
@@ -3654,7 +3654,6 @@ void PG::replica_scrub(
     pg_whoami,
     spg_t(info.pgid.pgid, get_primary().shard),
     poid,
-    false,
     0,
     msg->map_epoch,
     osd->get_tid(),
