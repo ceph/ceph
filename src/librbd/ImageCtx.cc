@@ -45,6 +45,7 @@ namespace librbd {
       snap_lock("librbd::ImageCtx::snap_lock"),
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
+      copyup_queue_lock("librbd::ImageCtx::copyup_queue_lock"),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -653,4 +654,53 @@ namespace librbd {
 		   << " from image extents " << objectx << dendl;
     return len;
  }
+
+  void ImageCtx::wait_last_completions()
+  {
+    Mutex::Locker l(copyup_queue_lock);
+    while (!copyup_queue.empty()) {
+      map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr
+         = copyup_queue.begin();
+      librados::AioCompletion *comp = (itr->second).second;
+      rados_aio_wait_for_complete(comp->pc);
+      rados_aio_release(comp->pc);
+      ldout(cct,20) << "wait_last_completions:: clean up copyup slot: ono= " << itr->first
+                    << " aio_completion_impl " << comp->pc
+                    << ": is_complete " << rados_aio_is_complete(comp->pc)
+                    << " is_safe " << rados_aio_is_safe(comp->pc)
+                    << " is_complete_and_cb " << rados_aio_is_complete_and_cb(comp->pc)
+                    << " is_safe_and_cb " << rados_aio_is_safe_and_cb(comp->pc)
+                    << " size= " << copyup_queue.size()
+                    << dendl;
+      // free bufferlist holding the entire object
+      delete (itr->second).first;
+      (itr->second).second = NULL;
+      copyup_queue.erase(itr);
+    }
+    ldout(cct,20) << "wait_last_completions:: after cleanup: size = " << copyup_queue.size() << dendl;
+  }
+
+  ceph::bufferlist* ImageCtx::alloc_copyup_queue_slot(uint64_t ono)
+  {
+    assert(copyup_queue_lock.is_locked());
+    ceph::bufferlist *entire_object = new ceph::bufferlist();
+    pair<ceph::bufferlist*, librados::AioCompletion *> new_entry =
+        pair<ceph::bufferlist*, librados::AioCompletion *>(entire_object, NULL);
+    pair<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion *> >new_slot =
+        pair<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion *> >(ono, new_entry);
+    copyup_queue.insert(new_slot);
+    ldout(cct, 20) << "alloc_copyup_queue_slot:: allocate slot, size = "<< copyup_queue.size() << dendl;
+    return entire_object;
+  }
+
+  void ImageCtx::kickoff_copyup(uint64_t ono, librados::AioCompletion *copyup_completion)
+  {
+    map<uint64_t, pair<ceph::bufferlist*, librados::AioCompletion*> >::iterator itr;
+    Mutex::Locker l(copyup_queue_lock);
+    itr = copyup_queue.find(ono);
+    assert(NULL == itr->second.second);
+    itr->second.second = copyup_completion;
+    ldout(cct, 20) << "kickoff_copyup:: kick off writing slot back, size = "
+                   << copyup_queue.size() << dendl;
+  }
 }
