@@ -47,6 +47,7 @@ namespace librbd {
 
   protected:
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void read_from_parent_cor(vector<pair<uint64_t,uint64_t> >& image_extents);
 
     ImageCtx *m_ictx;
     librados::IoCtx *m_ioctx;
@@ -57,6 +58,8 @@ namespace librbd {
     AioCompletion *m_parent_completion;
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
+    ceph::bufferlist m_entire_object;//copy-on-read : store the entire object
+    AioCompletion *m_parent_completion_cor;//copy-on-read : AioCompletion for read from parent
   };
 
   class AioRead : public AioRequest {
@@ -69,11 +72,15 @@ namespace librbd {
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
 		   false),
 	m_buffer_extents(be),
-	m_tried_parent(false), m_sparse(sparse) {
+	m_tried_parent(false), m_sparse(sparse),
+	m_entire_object(NULL), m_state(LIBRBD_AIO_READ_FLAT) {
+      guard_read();
     }
     virtual ~AioRead() {}
+    ssize_t write_cor();
     virtual bool should_complete(int r);
     virtual int send();
+    void guard_read();
 
     ceph::bufferlist &data() {
       return m_read_data;
@@ -83,9 +90,36 @@ namespace librbd {
     friend class C_AioRead;
 
   private:
+    void read_from_parent_cor(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void send_copyup();
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
+    ceph::bufferlist *m_entire_object;
+
+    /**
+     * Reads go through the following state machine to deal with
+     * layering:
+     *
+     *                          need copyup
+     * LIBRBD_AIO_READ_GUARD ---------------> LIBRBD_AIO_READ_COPYUP
+     *           |                                       |
+     *           v                                       |
+     *         done <------------------------------------/
+     *           ^
+     *           |
+     * LIBRBD_AIO_READ_FLAT
+     *
+     * Reads start in LIBRBD_AIO_READ_GUARD or _FLAT, depending on
+     * whether there is a parent or not.
+     */
+    enum read_state_d {
+      LIBRBD_AIO_READ_GUARD,
+      LIBRBD_AIO_READ_COPYUP,
+      LIBRBD_AIO_READ_FLAT
+    };
+
+    read_state_d m_state;
   };
 
   class AbstractWrite : public AioRequest {
