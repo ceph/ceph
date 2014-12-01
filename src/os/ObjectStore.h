@@ -399,8 +399,8 @@ public:
       __le32 hint_type;                 //OP_COLL_HINT
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
-      __le32 bits;                      //OP_SPLIT_COLLECTION2
-      __le32 rem;                       //OP_SPLIT_COLLECTION2
+      __le32 split_bits;                //OP_SPLIT_COLLECTION2
+      __le32 split_rem;                 //OP_SPLIT_COLLECTION2
     } __attribute__ ((packed)) ;
 
     struct TransactionData {
@@ -607,75 +607,158 @@ public:
      * buffer decoding operation codes and parameters as we go.
      *
      */
-    class iterator {
-      bufferlist::iterator p;
+    class iterator_impl {
       bool replica;
 
-      iterator(Transaction *t)
-	: p(t->tbl.begin()),
-	  replica(t->replica) {}
+      public:
+
+      iterator_impl(Transaction *t)
+        : replica(t->replica) {}
+
+      virtual ~iterator_impl() { }
+
+      bool get_replica() const { return replica; }
+
+      virtual bool have_op() = 0;
+      virtual Op* decode_op() = 0;
+      virtual string decode_string() = 0;
+      virtual void decode_bl(bufferlist& bl) = 0;
+      virtual void decode_attrset(map<string,bufferptr>& aset) = 0;
+      virtual void decode_attrset(map<string,bufferlist>& aset) = 0;
+      virtual void decode_keyset(set<string> &keys) = 0;
+
+      virtual ghobject_t get_oid(__le32 oid_id) = 0;
+      virtual coll_t get_cid(__le32 cid_id) = 0;
+
+      friend class Transaction;
+    };
+
+    class map_iterator : public iterator_impl {
+
+      uint64_t ops;
+      char* op_buffer_p;
+
+      bufferlist::iterator data_bl_p;
+
+      vector<coll_t> colls;
+      vector<ghobject_t> objects;
+
+      map_iterator(Transaction *t)
+        : iterator_impl(t),
+          data_bl_p(t->data_bl.begin()) {
+
+        ops = t->data.ops;
+        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+
+        colls.resize(t->coll_index.size());
+        map<coll_t, __le32>::iterator coll_index_p;
+        for (coll_index_p = t->coll_index.begin();
+             coll_index_p != t->coll_index.end();
+             coll_index_p++) {
+          colls[coll_index_p->second] = coll_index_p->first;
+        }
+
+        objects.resize(t->object_index.size());
+        map<ghobject_t, __le32>::iterator object_index_p;
+        for (object_index_p = t->object_index.begin();
+             object_index_p != t->object_index.end();
+             object_index_p++) {
+          objects[object_index_p->second] = object_index_p->first;
+        }
+      }
 
       friend class Transaction;
 
     public:
-      /// true if there are more operations left to be enumerated
-      bool have_op() {
-	return !p.end();
-      }
 
-      /* Decode the specified type of object from the input
-       * stream. There is no checking that the encoded data is of the
-       * correct type.
-       */
-      int decode_op() {
-	__u32 op;
-	::decode(op, p);
-	return op;
+      bool have_op() {
+        return ops > 0;
+      }
+      Op* decode_op() {
+        assert(ops > 0);
+
+        Op* op =  (Op*)op_buffer_p;
+        op_buffer_p += sizeof(Op);
+        ops--;
+
+        return op;
+      }
+      string decode_string() {
+        string s;
+        ::decode(s, data_bl_p);
+        return s;
       }
       void decode_bl(bufferlist& bl) {
-	::decode(bl, p);
-      }
-      /// Get an oid, recognize various legacy forms and update them.
-      ghobject_t decode_oid() {
-	ghobject_t oid;
-	::decode(oid, p);
-	return oid;
-      }
-      coll_t decode_cid() {
-	coll_t c;
-	::decode(c, p);
-	return c;
-      }
-      uint64_t decode_length() {
-	uint64_t len;
-	::decode(len, p);
-	return len;
-      }
-      string decode_attrname() {
-	string s;
-	::decode(s, p);
-	return s;
-      }
-      string decode_key() {
-	string s;
-	::decode(s, p);
-	return s;
+        ::decode(bl, data_bl_p);
       }
       void decode_attrset(map<string,bufferptr>& aset) {
-	::decode(aset, p);
+        ::decode(aset, data_bl_p);
       }
       void decode_attrset(map<string,bufferlist>& aset) {
-	::decode(aset, p);
+        ::decode(aset, data_bl_p);
+      }
+      void decode_keyset(set<string> &keys){
+        ::decode(keys, data_bl_p);
+      }
+
+      ghobject_t get_oid(__le32 oid_id) {
+        return objects[oid_id];
+      }
+      coll_t get_cid(__le32 cid_id) {
+        return colls[cid_id];
+      }
+    };
+
+    class iterator {
+      shared_ptr<iterator_impl> impl;
+
+      public:
+      iterator(Transaction *t) {
+        iterator_impl* iterator = NULL;
+
+        if (t->use_tbl) {
+          assert("tbl is not supported" == 0);
+          iterator = new map_iterator(t);
+        } else {
+          iterator = new map_iterator(t);
+        }
+
+        impl = shared_ptr<iterator_impl>(iterator);
+      }
+
+      bool get_replica() const {
+        return impl->get_replica();
+      }
+      bool have_op() {
+        return impl->have_op();
+      }
+      Op* decode_op() {
+        return impl->decode_op();
+      }
+      void decode_bl(bufferlist& bl) {
+        impl->decode_bl(bl);
+      }
+      string decode_string() {
+        return impl->decode_string();
+      }
+      void decode_attrset(map<string,bufferptr>& aset) {
+        impl->decode_attrset(aset);
+      }
+      void decode_attrset(map<string,bufferlist>& aset) {
+        impl->decode_attrset(aset);
       }
       void decode_keyset(set<string> &keys) {
-	::decode(keys, p);
+        impl->decode_keyset(keys);
       }
-      uint32_t decode_u32() {
-	uint32_t bits;
-	::decode(bits, p);
-	return bits;
+
+      ghobject_t get_oid(__le32 oid_id) {
+        return impl->get_oid(oid_id);
       }
-      bool get_replica() { return replica; }
+      coll_t get_cid(__le32 cid_id) {
+        return impl->get_cid(cid_id);
+      }
+
+      friend class Transaction;
     };
 
     iterator begin() {
@@ -1310,8 +1393,8 @@ public:
         _op->op = OP_SPLIT_COLLECTION2;
         _op->cid = _get_coll_id(cid);
         _op->dest_cid = _get_coll_id(destination);
-        _op->bits = bits;
-        _op->rem = rem;
+        _op->split_bits = bits;
+        _op->split_rem = rem;
       }
       data.ops++;
     }
@@ -1344,14 +1427,14 @@ public:
     Transaction() :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {}
 
     Transaction(bufferlist::iterator &dp) :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       decode(dp);
@@ -1360,7 +1443,7 @@ public:
     Transaction(bufferlist &nbl) :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       bufferlist::iterator dp = nbl.begin();
