@@ -1234,6 +1234,7 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("choose_local_fallback_tries", get_choose_local_fallback_tries());
   f->dump_int("choose_total_tries", get_choose_total_tries());
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
+  f->dump_int("chooseleaf_vary_r", get_chooseleaf_vary_r());
 
   // be helpful about it
   if (has_firefly_tunables())
