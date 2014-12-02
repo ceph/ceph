@@ -67,6 +67,58 @@ TEST(CrushWrapper, get_immediate_parent) {
   delete c;
 }
 
+TEST(CrushWrapper, straw_zero) {
+  // zero weight items should have no effect on placement.
+
+  CrushWrapper *c = new CrushWrapper;
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int n = 5;
+  int items[n], weights[n];
+  for (int i=0; i <n; ++i) {
+    items[i] = i;
+    weights[i] = 0x10000 * (n-i-1);
+  }
+
+  c->set_max_devices(n);
+
+  string root_name0("root0");
+  int root0;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n, items, weights, &root0));
+  EXPECT_EQ(0, c->set_item_name(root0, root_name0));
+
+  string name0("rule0");
+  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(0, ruleset0);
+
+  string root_name1("root1");
+  int root1;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n-1, items, weights, &root1));
+  EXPECT_EQ(0, c->set_item_name(root1, root_name1));
+
+  string name1("rule1");
+  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(1, ruleset1);
+
+  vector<unsigned> reweight(n, 0x10000);
+  for (int i=0; i<10000; ++i) {
+    vector<int> out0, out1;
+    c->do_rule(ruleset0, i, out0, 1, reweight);
+    ASSERT_EQ(1u, out0.size());
+    c->do_rule(ruleset1, i, out1, 1, reweight);
+    ASSERT_EQ(1u, out1.size());
+    ASSERT_EQ(out0[0], out1[0]);
+    //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
+  }
+}
+
 TEST(CrushWrapper, move_bucket) {
   CrushWrapper *c = new CrushWrapper;
 
