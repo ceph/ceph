@@ -53,11 +53,11 @@ class DispatchQueue {
       assert(is_code());
       return type;
     }
-    Message *get_message() const {
+    Message *get_message() {
       assert(!is_code());
       return m.get();
     }
-    Connection *get_connection() const {
+    Connection *get_connection() {
       assert(is_code());
       return con.get();
     }
