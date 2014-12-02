@@ -7014,8 +7014,9 @@ int RGWRados::get_bucket_index_object(const string& bucket_oid_base, const strin
           *shard_id = -1;
         }
       } else {
-        uint32_t sid = ceph_str_hash_linux(obj_key.c_str(),
-          obj_key.size()) % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
+        uint32_t sid = ceph_str_hash_linux(obj_key.c_str(), obj_key.size());
+        uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
+        sid = sid2 % MAX_BUCKET_INDEX_SHARDS_PRIME % num_shards;
         char buf[bucket_oid_base.size() + 32];
         snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), sid);
         (*bucket_obj) = buf;
