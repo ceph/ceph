@@ -103,7 +103,7 @@ def setup_config(config_paths):
     """
     Takes a list of config yaml files and combines them
     into a single dictionary. Processes / validates the dictionary and then
-    returns a JobConfig instance.
+    returns it.
     """
     config = merge_configs(config_paths)
 
