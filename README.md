@@ -29,9 +29,9 @@ Build Prerequisites
 debian-based
 ------------
 
-The list of debian package dependencies can be found in deps.deb.txt:
+The list of debian packages dependencies can be installed with:
 
-	sudo apt-get install `cat deps.deb.txt`
+	./install-deps.sh
 
 Note: libsnappy-dev and libleveldb-dev are not available upstream for
 natty, oneiric, and squeeze.  Backports for Ceph can be found at
@@ -40,9 +40,9 @@ ceph.com/debian-leveldb.
 rpm-based
 ---------
 
-The list of RPM package dependencies can be found in deps.rpm.txt:
+The list of RPM packages dependencies can be installed with:
 
-	sudo yum install `cat deps.rpm.txt`
+         ./install-deps.sh
 
 Building Ceph
 =============
