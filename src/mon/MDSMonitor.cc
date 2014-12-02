@@ -577,8 +577,8 @@ void MDSMonitor::get_health(list<pair<health_status_t, string> >& summary,
   mdsmap.get_health(summary, detail);
 
   // For each MDS GID...
-  for (std::map<uint64_t, MDSMap::mds_info_t>::const_iterator i = pending_mdsmap.mds_info.begin();
-      i != pending_mdsmap.mds_info.end(); ++i) {
+  for (std::map<uint64_t, MDSMap::mds_info_t>::const_iterator i = mdsmap.mds_info.begin();
+      i != mdsmap.mds_info.end(); ++i) {
     // Decode MDSHealth
     bufferlist bl;
     mon->store->get(MDS_HEALTH_PREFIX, stringify(i->first), bl);
