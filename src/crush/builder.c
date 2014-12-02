@@ -29,6 +29,7 @@ struct crush_map *crush_create()
 	m->choose_total_tries = 19;
 	m->chooseleaf_descend_once = 0;
 	m->chooseleaf_vary_r = 0;
+	m->straw_calc_version = 0;
 	return m;
 }
 

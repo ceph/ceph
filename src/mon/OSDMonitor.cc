@@ -4492,6 +4492,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       newcrush.set_tunables_bobtail();
     } else if (profile == "firefly") {
       newcrush.set_tunables_firefly();
+    } else if (profile == "hammer") {
+      newcrush.set_tunables_hammer();
     } else if (profile == "optimal") {
       newcrush.set_tunables_optimal();
     } else if (profile == "default") {
