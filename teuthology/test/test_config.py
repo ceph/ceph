@@ -1,3 +1,5 @@
+import pytest
+
 from .. import config
 
 
@@ -55,12 +57,6 @@ class TestYamlConfig(object):
         assert conf_obj.foo == 'bar'
         del conf_obj.foo
         assert conf_obj.foo is None
-
-    def test_get(self):
-        conf_obj = self.test_class()
-        conf_obj.foo = "bar"
-        assert conf_obj.get("foo") == "bar"
-        assert conf_obj.get("not_there", "default") == "default"
 
     def test_assignment(self):
         conf_obj = self.test_class()
@@ -134,3 +130,18 @@ class TestFakeNamespace(TestYamlConfig):
         assert not conf_obj.teuthology_config.automated_scheduling
         assert conf_obj.teuthology_config.ceph_git_base_url == 'https://github.com/ceph/'
         assert conf_obj.teuthology_config["ceph_git_base_url"] == 'https://github.com/ceph/'
+
+    def test_getattr(self):
+        conf_obj = self.test_class.from_dict({"foo": "bar"})
+        result = getattr(conf_obj, "not_there", "default")
+        assert result == "default"
+        result = getattr(conf_obj, "foo")
+        assert result == "bar"
+
+    def test_delattr(self):
+        conf_obj = self.test_class()
+        conf_obj.foo = 'bar'
+        assert conf_obj.foo == 'bar'
+        del conf_obj.foo
+        with pytest.raises(AttributeError):
+            conf_obj.foo

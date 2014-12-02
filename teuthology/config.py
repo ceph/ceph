@@ -80,19 +80,6 @@ class YamlConfig(collections.MutableMapping):
         """
         return str(self)
 
-    def get(self, key, default=None):
-        """
-        A function that acts like dict.get().  Will first check self._conf, then
-        _defaults for the given key.
-
-        :param key: The key to fetch
-        :returns:   The value for the given key, or the default kwarg if not found
-        """
-        result = self.__getattr__(key)
-        if not result:
-            return default
-        return result
-
     def __str__(self):
         return yaml.safe_dump(self._conf, default_flow_style=False).strip()
 
@@ -197,6 +184,16 @@ class FakeNamespace(YamlConfig):
             result[new_key] = value
 
         return result
+
+    def __getattr__(self, name):
+        """
+        We need to modify this for FakeNamespace so that getattr() will
+        work correctly on a FakeNamespace instance.
+        """
+        result = self._conf.get(name, self._defaults.get(name))
+        if result is None:
+            raise AttributeError
+        return self._conf.get(name, self._defaults.get(name))
 
 
 def _get_config_path():
