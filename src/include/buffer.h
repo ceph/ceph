@@ -184,7 +184,7 @@ public:
     bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
     bool is_n_align_sized(unsigned align) const
     {
-      return (length() & (align-1)) == 0;
+      return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
 
