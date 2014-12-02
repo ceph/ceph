@@ -539,14 +539,14 @@ int CrushTester::test()
 
       if (output_statistics)
         for (unsigned i = 0; i < per.size(); i++) {
-          if (output_utilization && num_batches > 1){
+          if (output_utilization) {
             if (num_objects_expected[i] > 0 && per[i] > 0) {
               err << "  device " << i << ":\t"
                   << "\t" << " stored " << ": " << per[i]
                   << "\t" << " expected " << ": " << num_objects_expected[i]
                   << std::endl;
             }
-          } else if (output_utilization_all && num_batches > 1) {
+          } else if (output_utilization_all) {
             err << "  device " << i << ":\t"
                 << "\t" << " stored " << ": " << per[i]
                 << "\t" << " expected " << ": " << num_objects_expected[i]
