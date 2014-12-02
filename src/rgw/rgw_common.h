@@ -681,6 +681,25 @@ inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
   return out;
 }
 
+struct rgw_bucket_shard {
+  rgw_bucket bucket;
+  int shard_id;
+
+  rgw_bucket_shard() : shard_id(-1) {}
+  rgw_bucket_shard(rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+
+  bool operator<(const rgw_bucket_shard& b) const {
+    if (bucket < b.bucket) {
+      return true;
+    }
+    if (b.bucket < bucket) {
+      return false;
+    }
+    return shard_id < b.shard_id;
+  }
+};
+
+
 struct RGWObjVersionTracker {
   obj_version read_version;
   obj_version write_version;
