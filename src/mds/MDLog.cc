@@ -575,8 +575,14 @@ int MDLog::trim_all()
            << "/" << expiring_segments.size()
            << "/" << expired_segments.size() << dendl;
 
+  uint64_t safe_pos = journaler->get_write_safe_pos();
+  uint64_t last_seq = 0;
+  if (!segments.empty())
+    last_seq = get_last_segment_seq();
+
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
-  for (; (p != segments.end()) && (p->second != peek_current_segment());) {
+  while (p != segments.end() &&
+	 p->first < last_seq && p->second->end <= safe_pos) {
     LogSegment *ls = p->second;
     ++p;
 
@@ -599,11 +605,11 @@ int MDLog::trim_all()
       expiring_events += ls->num_events;
       submit_mutex.Unlock();
 
-      uint64_t last_seq = ls->seq;
+      uint64_t next_seq = ls->seq + 1;
       try_expire(ls, CEPH_MSG_PRIO_DEFAULT);
 
       submit_mutex.Lock();
-      p = segments.lower_bound(last_seq + 1);
+      p = segments.lower_bound(next_seq);
     }
   }
 
