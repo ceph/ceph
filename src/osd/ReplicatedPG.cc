@@ -7198,7 +7198,7 @@ void ReplicatedBackend::issue_op(
       reqid, parent->whoami_shard(),
       spg_t(get_info().pgid.pgid, i->shard),
       soid,
-      false, acks_wanted,
+      acks_wanted,
       get_osdmap()->get_epoch(),
       tid, at_version);
 
@@ -7948,9 +7948,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   const hobject_t& soid = m->poid;
 
   const char *opname;
-  if (m->noop)
-    opname = "no-op";
-  else if (m->ops.size())
+  if (m->ops.size())
     opname = ceph_osd_op_name(m->ops[0].op.op);
   else
     opname = "trans";
@@ -7958,7 +7956,6 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   dout(10) << "sub_op_modify " << opname 
            << " " << soid 
            << " v " << m->version
-	   << (m->noop ? " NOOP" : "")
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
 	   << " " << m->logbl.length()
 	   << dendl;  
@@ -7979,74 +7976,61 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   rm->last_complete = get_info().last_complete;
   rm->epoch_started = get_osdmap()->get_epoch();
 
-  if (!m->noop) {
-    assert(m->logbl.length());
-    // shipped transaction and log entries
-    vector<pg_log_entry_t> log;
+  assert(m->logbl.length());
+  // shipped transaction and log entries
+  vector<pg_log_entry_t> log;
 
-    bufferlist::iterator p = m->get_data().begin();
-    ::decode(rm->opt, p);
-    if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
-      rm->opt.set_tolerate_collection_add_enoent();
+  bufferlist::iterator p = m->get_data().begin();
+  ::decode(rm->opt, p);
+  if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
+    rm->opt.set_tolerate_collection_add_enoent();
 
-    if (m->new_temp_oid != hobject_t()) {
-      dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
-      add_temp_obj(m->new_temp_oid);
-      get_temp_coll(&rm->localt);
-    }
-    if (m->discard_temp_oid != hobject_t()) {
-      dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
-      if (rm->opt.empty()) {
-	dout(10) << __func__ << ": removing object " << m->discard_temp_oid
-		 << " since we won't get the transaction" << dendl;
-	rm->localt.remove(temp_coll, m->discard_temp_oid);
-      }
-      clear_temp_obj(m->discard_temp_oid);
-    }
-
-    p = m->logbl.begin();
-    ::decode(log, p);
-    if (m->hobject_incorrect_pool) {
-      for (vector<pg_log_entry_t>::iterator i = log.begin();
-	  i != log.end();
-	  ++i) {
-	if (!i->soid.is_max() && i->soid.pool == -1)
-	  i->soid.pool = get_info().pgid.pool();
-      }
-      rm->opt.set_pool_override(get_info().pgid.pool());
-    }
-    rm->opt.set_replica();
-
-    bool update_snaps = false;
-    if (!rm->opt.empty()) {
-      // If the opt is non-empty, we infer we are before
-      // last_backfill (according to the primary, not our
-      // not-quite-accurate value), and should update the
-      // collections now.  Otherwise, we do it later on push.
-      update_snaps = true;
-    }
-    parent->update_stats(m->pg_stats);
-    parent->log_operation(
-      log,
-      m->updated_hit_set_history,
-      m->pg_trim_to,
-      m->pg_trim_rollback_to,
-      update_snaps,
-      &(rm->localt));
-      
-    rm->bytes_written = rm->opt.get_encoded_bytes();
-
-  } else {
-    assert(0);
-    #if 0
-    // just trim the log
-    if (m->pg_trim_to != eversion_t()) {
-      pg_log.trim(m->pg_trim_to, info);
-      dirty_info = true;
-      write_if_dirty(rm->localt);
-    }
-    #endif
+  if (m->new_temp_oid != hobject_t()) {
+    dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
+    add_temp_obj(m->new_temp_oid);
+    get_temp_coll(&rm->localt);
   }
+  if (m->discard_temp_oid != hobject_t()) {
+    dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
+    if (rm->opt.empty()) {
+      dout(10) << __func__ << ": removing object " << m->discard_temp_oid
+	       << " since we won't get the transaction" << dendl;
+      rm->localt.remove(temp_coll, m->discard_temp_oid);
+    }
+    clear_temp_obj(m->discard_temp_oid);
+  }
+
+  p = m->logbl.begin();
+  ::decode(log, p);
+  if (m->hobject_incorrect_pool) {
+    for (vector<pg_log_entry_t>::iterator i = log.begin();
+      i != log.end();
+      ++i) {
+      if (!i->soid.is_max() && i->soid.pool == -1)
+	i->soid.pool = get_info().pgid.pool();
+    }
+    rm->opt.set_pool_override(get_info().pgid.pool());
+  }
+  rm->opt.set_replica();
+
+  bool update_snaps = false;
+  if (!rm->opt.empty()) {
+    // If the opt is non-empty, we infer we are before
+    // last_backfill (according to the primary, not our
+    // not-quite-accurate value), and should update the
+    // collections now.  Otherwise, we do it later on push.
+    update_snaps = true;
+  }
+  parent->update_stats(m->pg_stats);
+  parent->log_operation(
+    log,
+    m->updated_hit_set_history,
+    m->pg_trim_to,
+    m->pg_trim_rollback_to,
+    update_snaps,
+    &(rm->localt));
+      
+  rm->bytes_written = rm->opt.get_encoded_bytes();
   
   op->mark_started();
 
@@ -8439,7 +8423,7 @@ void ReplicatedPG::send_remove_op(
 
   MOSDSubOp *subop = new MOSDSubOp(
     rid, pg_whoami, spg_t(info.pgid.pgid, peer.shard),
-    oid, false, CEPH_OSD_FLAG_ACK,
+    oid, CEPH_OSD_FLAG_ACK,
     get_osdmap()->get_epoch(), tid, v);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_DELETE;
@@ -8577,7 +8561,7 @@ int ReplicatedBackend::send_pull_legacy(int prio, pg_shard_t peer,
   MOSDSubOp *subop = new MOSDSubOp(
     rid, parent->whoami_shard(),
     get_info().pgid, recovery_info.soid,
-    false, CEPH_OSD_FLAG_ACK,
+    CEPH_OSD_FLAG_ACK,
     get_osdmap()->get_epoch(), tid,
     recovery_info.version);
   subop->set_priority(prio);
@@ -9021,7 +9005,7 @@ int ReplicatedBackend::send_push_op_legacy(int prio, pg_shard_t peer, PushOp &po
   MOSDSubOp *subop = new MOSDSubOp(
     rid, parent->whoami_shard(),
     spg_t(get_info().pgid.pgid, peer.shard), pop.soid,
-    false, 0, get_osdmap()->get_epoch(),
+    0, get_osdmap()->get_epoch(),
     tid, pop.recovery_info.version);
   subop->ops = vector<OSDOp>(1);
   subop->ops[0].op.op = CEPH_OSD_OP_PUSH;
