@@ -19,6 +19,7 @@
 #include "common/safe_io.h"
 #include "common/simple_spin.h"
 #include "common/strtol.h"
+#include "common/likely.h"
 #include "include/atomic.h"
 #include "common/Mutex.h"
 #include "include/types.h"
