@@ -549,7 +549,7 @@ int Pipe::accept()
 	       << " > " << existing->connect_seq << dendl;
       goto replace;
     } // existing
-    else if (policy.resetcheck && connect.connect_seq > 0) {
+    else if (connect.connect_seq > 0) {
       // we reset, and they are opening a new session
       ldout(msgr->cct,0) << "accept we reset (peer sent cseq " << connect.connect_seq << "), sending RESETSESSION" << dendl;
       msgr->lock.Unlock();
