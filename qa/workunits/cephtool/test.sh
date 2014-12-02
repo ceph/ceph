@@ -773,8 +773,13 @@ function test_mon_mds()
   ceph osd tier cache-mode mds-tier writeback
   ceph osd tier set-overlay fs_metadata mds-tier
 
+  # Clean up FS
   fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
+
+  # Clean up overlay/tier relationship
+  ceph osd tier remove-overlay fs_metadata
+  ceph osd tier remove fs_metadata mds-tier
 
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
