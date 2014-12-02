@@ -34,13 +34,22 @@ class Filesystem(object):
             raise RuntimeError("This task requires at least one MDS")
 
         first_mon = misc.get_first_mon(ctx, config)
-        (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        self.mon_manager = ceph_manager.CephManager(mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+        (self.mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        self.mon_manager = ceph_manager.CephManager(self.mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
         self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
+
+    def create(self):
+        pg_warn_min_per_osd = int(self.get_config('mon_pg_warn_min_per_osd'))
+        osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
+        pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
+
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
+        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
 
     def get_mds_hostnames(self):
         result = set()
