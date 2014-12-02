@@ -841,4 +841,10 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main())
+    result = main()
+
+    # sys.exit doesn't necessarily trigger threads to garbage collect
+    # clean up the class and shutdown the thread
+    del cluster_handle
+
+    sys.exit(result)
