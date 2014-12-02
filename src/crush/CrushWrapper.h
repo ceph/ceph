@@ -132,7 +132,11 @@ public:
     set_tunables_firefly();
   }
   void set_tunables_default() {
+    // default to bobtail tunables for the bits that affect
+    // compatibility, but default to the latest straw_calc_version
+    // because that does not.
     set_tunables_bobtail();
+    crush->straw_calc_version = 1;
   }
 
   int get_choose_local_tries() const {
