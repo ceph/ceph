@@ -177,17 +177,7 @@ def cephfs_setup(ctx, config):
             log.info("Metadata pool already exists, skipping")
         else:
             ceph_fs = Filesystem(ctx, config)
-            pg_warn_min_per_osd = int(ceph_fs.get_config('mon_pg_warn_min_per_osd'))
-            osd_count = len(list(teuthology.all_roles_of_type(ctx.cluster, 'osd')))
-            pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
-
-            mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
-            mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
-
-            # Use 'newfs' to work with either old or new Ceph, until the 'fs new'
-            # stuff is all landed.
-            mon_remote.run(args=['sudo', 'ceph', 'mds', 'newfs', '1', '2'])
-            # mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+            ceph_fs.create()
 
         is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
