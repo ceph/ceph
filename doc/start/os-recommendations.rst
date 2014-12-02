@@ -242,8 +242,9 @@ Notes
 Testing
 -------
 
-- **B**: We continuously build all branches on this platform and exercise basic
-  unit tests.  We build release packages for this platform.
+- **B**: We build release packages for this platform. For some of these
+  platforms, we may also continuously build all ceph branches and exercise
+  basic unit tests.
 
 - **I**: We do basic installation and functionality tests of releases on this
   platform.
