@@ -12,7 +12,7 @@ We started by setting aside two of the test machines: one as the 'teuthology nod
 paddles/pulpito node
 ====================
 
-We're currently running both paddles and pulpito on the same node. We have a proxy server up front listening on port 80 that forwards to the proper service based on which hostname is used. Feel free to modify our `paddles <docs/reference/nginx_paddles>`_ and `pulpito <docs/reference/nginx_pulpito>`_ configurations for your use.
+We're currently running both paddles and pulpito on the same node. We have a proxy server up front listening on port 80 that forwards to the proper service based on which hostname is used. Feel free to modify our `paddles <_static/nginx_paddles>`_ and `pulpito <_static/nginx_pulpito>`_ configurations for your use.
 
 Do the following as root or as another user with sudo access::
 
@@ -135,6 +135,6 @@ Serving Test Logs
 
 pulpito tries to provide links to test logs. Out-of-the-box, those links will be broken, but are easy to fix. 
 
-First, install your favorite web server on the teuthology node. If you use nginx, you may use `our configuration <docs/reference/nginx_test_logs>`_ as a template.
+First, install your favorite web server on the teuthology node. If you use nginx, you may use `our configuration <_static/nginx_test_logs>`_ as a template.
 
 Once you've got log files being served, edit paddles' ``config.py`` and update the ``job_log_href_templ`` value. Restart paddles when you're done.
