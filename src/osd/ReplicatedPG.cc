@@ -8265,14 +8265,14 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   
   op->mark_started();
 
-  rm->localt.append(rm->opt);
-  rm->localt.register_on_commit(
+  rm->opt.append(rm->localt);
+  rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
+  rm->opt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
-  parent->queue_transaction(&(rm->localt), op);
+  parent->queue_transaction(&(rm->opt), op);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
