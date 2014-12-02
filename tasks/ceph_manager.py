@@ -12,7 +12,33 @@ from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
 from teuthology.orchestra.remote import Remote
+from teuthology.orchestra import run
 import subprocess
+
+
+DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+
+
+def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
+    conf_fp = StringIO()
+    ctx.ceph.conf.write(conf_fp)
+    conf_fp.seek(0)
+    writes = ctx.cluster.run(
+        args=[
+            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
+            'sudo', 'python',
+            '-c',
+            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            conf_path,
+            run.Raw('&&'),
+            'sudo', 'chmod', '0644', conf_path,
+        ],
+        stdin=run.PIPE,
+        wait=False)
+    teuthology.feed_many_stdins_and_close(conf_fp, writes)
+    run.wait(writes)
+
 
 def make_admin_daemon_dir(ctx, remote):
     """
