@@ -1183,6 +1183,7 @@ static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_buc
 
                 bucket->h.weight += bucket->item_weights[i];
 	}
+	crush_calc_straw(bucket);
 
 	return 0;
 }
