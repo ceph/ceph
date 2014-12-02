@@ -781,11 +781,11 @@ private:
 
     if (!IS_ERR(parent_bucket)) {
       // zero out the bucket weight
-      crush_bucket_adjust_item_weight(parent_bucket, item, 0);
+      crush_bucket_adjust_item_weight(crush, parent_bucket, item, 0);
       adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
 
       // remove the bucket from the parent
-      crush_bucket_remove_item(parent_bucket, item);
+      crush_bucket_remove_item(crush, parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
       return PTR_ERR(parent_bucket);
     }
@@ -865,7 +865,7 @@ public:
 		 int *items, int *weights, int *idout) {
     if (type == 0)
       return -EINVAL;
-    crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
+    crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
   }
