@@ -487,18 +487,18 @@ int CrushTester::test()
           vector<int> out;
 
           if (use_crush) {
-            if (output_statistics)
-              err << "CRUSH"; // prepend CRUSH to placement output
+            if (output_mappings)
+	      err << "CRUSH"; // prepend CRUSH to placement output
             crush.do_rule(r, x, out, nr, weight);
           } else {
-            if (output_statistics)
-              err << "RNG"; // prepend RNG to placement output to denote simulation
+            if (output_mappings)
+	      err << "RNG"; // prepend RNG to placement output to denote simulation
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
           }
 
-          if (output_statistics)
-            err << " rule " << r << " x " << x << " " << out << std::endl;
+	  if (output_mappings)
+	    err << " rule " << r << " x " << x << " " << out << std::endl;
 
           if (output_data_file)
             write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);

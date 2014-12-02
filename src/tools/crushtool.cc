@@ -118,6 +118,7 @@ void usage()
   cout << "   --show utilization-all\n";
   cout << "                         include zero weight items\n";
   cout << "   --show-statistics     show chi squared statistics\n";
+  cout << "   --show-mappings       show mappings\n";
   cout << "   --show-bad-mappings   show bad mappings\n";
   cout << "   --show-choose-tries   show choose tries histogram\n";
   cout << "   --set-choose-local-tries N\n";
@@ -233,6 +234,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--show_statistics", (char*)NULL)) {
       display = true;
       tester.set_output_statistics(true);
+    } else if (ceph_argparse_flag(args, i, "--show_mappings", (char*)NULL)) {
+      display = true;
+      tester.set_output_mappings(true);
     } else if (ceph_argparse_flag(args, i, "--show_bad_mappings", (char*)NULL)) {
       display = true;
       tester.set_output_bad_mappings(true);
