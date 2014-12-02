@@ -765,6 +765,16 @@ function test_mon_mds()
   fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
+  # Create a FS and check that we can subsequently add a cache tier to it
+  ceph fs new cephfs fs_metadata fs_data
+
+  # Adding overlay to FS pool should be permitted, RADOS clients handle this.
+  ceph osd tier add fs_metadata mds-tier
+  ceph osd tier cache-mode mds-tier writeback
+  ceph osd tier set-overlay fs_metadata mds-tier
+
+  fail_all_mds
+  ceph fs rm cephfs --yes-i-really-mean-it
 
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
