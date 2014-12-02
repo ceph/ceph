@@ -730,6 +730,23 @@ ceph_multi_stress_watch_SOURCES = test/multi_stress_watch.cc
 ceph_multi_stress_watch_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 bin_DEBUGPROGRAMS += ceph_multi_stress_watch
 
+librados_test_stub_la_SOURCES = \
+	test/librados_test_stub/LibradosTestStub.cc \
+	test/librados_test_stub/TestClassHandler.cc \
+	test/librados_test_stub/TestIoCtxImpl.cc \
+	test/librados_test_stub/TestMemIoCtxImpl.cc \
+	test/librados_test_stub/TestMemRadosClient.cc \
+	test/librados_test_stub/TestRadosClient.cc \
+	test/librados_test_stub/TestWatchNotify.cc
+noinst_HEADERS += \
+	test/librados_test_stub/TestClassHandler.h \
+	test/librados_test_stub/TestRadosClient.h \
+	test/librados_test_stub/TestMemRadosClient.h \
+	test/librados_test_stub/TestWatchNotify.h \
+	test/librados_test_stub/TestMemIoCtxImpl.h \
+	test/librados_test_stub/TestIoCtxImpl.h
+noinst_LTLIBRARIES += librados_test_stub.la
+
 ceph_test_librbd_SOURCES = \
 	test/librbd/test_fixture.cc \
 	test/librbd/test_librbd.cc \
