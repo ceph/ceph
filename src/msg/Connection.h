@@ -94,7 +94,7 @@ public:
 
   virtual bool is_connected() = 0;
 
-  Messenger *get_messenger() const {
+  Messenger *get_messenger() {
     return msgr;
   }
 
@@ -161,7 +161,7 @@ public:
   void set_features(uint64_t f) { features = f; }
   void set_feature(uint64_t f) { features |= f; }
 
-  void post_rx_buffer(ceph_tid_t tid, const bufferlist& bl) {
+  void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
     Mutex::Locker l(lock);
     ++rx_buffers_version;
     rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
