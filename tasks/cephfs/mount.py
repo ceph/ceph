@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from cStringIO import StringIO
 import logging
 import datetime
 import time
@@ -104,7 +105,7 @@ class CephFSMount(object):
 
     def run_shell(self, args):
         args = ["cd", self.mountpoint, run.Raw('&&')] + args
-        return self.client_remote.run(args=args)
+        return self.client_remote.run(args=args, stdout=StringIO())
 
     def open_background(self, basename="background_file"):
         """
