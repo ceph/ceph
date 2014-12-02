@@ -3,6 +3,7 @@ librados_la_SOURCES = \
 	librados/RadosClient.cc \
 	librados/IoCtxImpl.cc \
 	librados/snap_set_diff.cc \
+	librados/RadosWhereis.cc \
 	librados/RadosXattrIter.cc
 
 # We need this to avoid basename conflicts with the librados build tests in test/Makefile.am
@@ -27,4 +28,5 @@ noinst_HEADERS += \
 	librados/PoolAsyncCompletionImpl.h \
 	librados/RadosClient.h \
 	librados/RadosXattrIter.h \
-	librados/ListObjectImpl.h
+	librados/ListObjectImpl.h \
+	librados/RadosWhereis.h 
