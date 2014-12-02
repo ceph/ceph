@@ -316,13 +316,13 @@ class RGWDataChangesLog {
 
   typedef ceph::shared_ptr<ChangeStatus> ChangeStatusPtr;
 
-  lru_map<string, ChangeStatusPtr> changes;
+  lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
 
-  map<string, rgw_bucket> cur_cycle;
+  map<rgw_bucket_shard, bool> cur_cycle;
 
-  void _get_change(string& bucket_name, ChangeStatusPtr& status);
-  void register_renew(rgw_bucket& bucket);
-  void update_renewed(string& bucket_name, utime_t& expiration);
+  void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
+  void register_renew(rgw_bucket_shard& bs);
+  void update_renewed(rgw_bucket_shard& bs, utime_t& expiration);
 
   class ChangesRenewThread : public Thread {
     CephContext *cct;
@@ -364,7 +364,7 @@ public:
 
   ~RGWDataChangesLog();
 
-  int choose_oid(rgw_bucket& bucket);
+  int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
