@@ -3,11 +3,11 @@ from StringIO import StringIO
 import json
 import logging
 import time
-from tasks.ceph import write_conf
 
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
+from tasks.ceph_manager import write_conf
 from tasks import ceph_manager
 
 
@@ -51,7 +51,12 @@ class Filesystem(object):
         return list(result)
 
     def get_config(self, key):
-        return self.mds_asok(['config', 'get', key])[key]
+        """
+        Use the mon instead of the MDS asok, so that MDS doesn't have to be running
+        for us to query config.
+        """
+        service_name, service_id = misc.get_first_mon(self._ctx, self._config).split(".")
+        return self.json_asok(['config', 'get', key], service_name, service_id)[key]
 
     def set_ceph_conf(self, subsys, key, value):
         if subsys not in self._ctx.ceph.conf:
@@ -200,16 +205,20 @@ class Filesystem(object):
 
         return version
 
-    def mds_asok(self, command, mds_id=None):
-        if mds_id is None:
-            mds_id = self.get_lone_mds_id()
-        proc = self.mon_manager.admin_socket('mds', mds_id, command)
+    def json_asok(self, command, service_type, service_id):
+        proc = self.mon_manager.admin_socket(service_type, service_id, command)
         response_data = proc.stdout.getvalue()
-        log.info("mds_asok output: {0}".format(response_data))
+        log.info("_json_asok output: {0}".format(response_data))
         if response_data.strip():
             return json.loads(response_data)
         else:
             return None
+
+    def mds_asok(self, command, mds_id=None):
+        if mds_id is None:
+            mds_id = self.get_lone_mds_id()
+
+        return self.json_asok(command, 'mds', mds_id)
 
     def set_clients_block(self, blocked, mds_id=None):
         """
