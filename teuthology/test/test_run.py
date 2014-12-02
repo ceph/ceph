@@ -1,8 +1,10 @@
 import pytest
+import docopt
 
 from mock import patch, call, Mock
 
 from teuthology import run
+from scripts import run as scripts_run
 
 
 class TestRun(object):
@@ -124,3 +126,56 @@ class TestRun(object):
         assert m_email_results.called
         assert m_file.called
         assert m_sys_exit.called
+
+    @patch("teuthology.run.set_up_logging")
+    @patch("teuthology.run.setup_config")
+    @patch("teuthology.run.get_user")
+    @patch("teuthology.run.write_initial_metadata")
+    @patch("teuthology.report.try_push_job_info")
+    @patch("teuthology.run.get_machine_type")
+    @patch("teuthology.run.get_summary")
+    @patch("yaml.safe_dump")
+    @patch("teuthology.run.validate_tasks")
+    @patch("teuthology.run.get_initial_tasks")
+    @patch("teuthology.run.fetch_tasks_if_needed")
+    @patch("teuthology.run.run_tasks")
+    @patch("teuthology.run.report_outcome")
+    def test_main(self, m_report_outcome, m_run_tasks, m_fetch_tasks_if_needed, m_get_initial_tasks, m_validate_tasks,
+                  m_safe_dump, m_get_summary, m_get_machine_type, m_try_push_job_info, m_write_initial_metadata,
+                  m_get_user, m_setup_config, m_set_up_logging):
+        """ This really should be an integration test of some sort. """
+        config = {"job_id": 1}
+        m_setup_config.return_value = config
+        m_get_machine_type.return_value = "machine_type"
+        doc = scripts_run.__doc__
+        args = docopt.docopt(doc, [
+            "--verbose",
+            "--archive", "some/archive/dir",
+            "--description", "the_description",
+            "--owner", "the_owner",
+            "--lock",
+            "--machine-type", "machine_type",
+            "--os-type", "os_type",
+            "--os-version", "os_version",
+            "--block",
+            "--name", "the_name",
+            "--suite-path", "some/suite/dir",
+            "path/to/config.yml",
+        ])
+        run.main(args)
+        m_set_up_logging.assert_called_with(True, "some/archive/dir")
+        m_setup_config.assert_called_with(["path/to/config.yml"])
+        m_write_initial_metadata.assert_called_with(
+            "some/archive/dir",
+            config,
+            "the_name",
+            "the_description",
+            "the_owner"
+        )
+        m_try_push_job_info.assert_called_with(config, dict(status='running'))
+        m_get_machine_type.assert_called_with("machine_type", config)
+        m_get_summary.assert_called_with("the_owner", "the_description")
+        m_get_initial_tasks.assert_called_with(True, config, "machine_type")
+        m_fetch_tasks_if_needed.assert_called_with(config)
+        assert m_run_tasks.called
+        assert m_report_outcome.called

@@ -243,46 +243,59 @@ def report_outcome(config, archive, summary, fake_ctx):
 
 
 def main(args):
-    set_up_logging(args["--verbose"], args["--archive"])
+    verbose = args["--verbose"]
+    archive = args["--archive"]
+    owner = args["--owner"]
+    config = args["<config>"]
+    name = args["--name"]
+    description = args["--description"]
+    machine_type = args["--machine-type"]
+    block = args["--block"]
+    lock = args["--lock"]
+    suite_path = args["--suite-path"]
 
-    if args["--owner"] is None:
-        args["--owner"] = get_user()
+    set_up_logging(verbose, archive)
 
-    args["<config>"] = setup_config(args["<config>"])
+    if owner is None:
+        owner = get_user()
 
-    write_initial_metadata(args["--archive"], args["<config>"], args["--name"], args["--description"], args["--owner"])
-    report.try_push_job_info(args["<config>"], dict(status='running'))
+    config = setup_config(config)
 
-    machine_type = get_machine_type(args["--machine-type"], args["<config>"])
+    write_initial_metadata(archive, config, name, description, owner)
+    report.try_push_job_info(config, dict(status='running'))
 
-    if args["--block"]:
-        assert args["--lock"], \
+    machine_type = get_machine_type(machine_type, config)
+    args["--machine-type"] = machine_type
+
+    if block:
+        assert lock, \
             'the --block option is only supported with the --lock option'
 
-    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(args["<config>"], default_flow_style=False).splitlines()))
+    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(config, default_flow_style=False).splitlines()))
 
-    args["summary"] = get_summary(args["--owner"], args["--description"])
+    args["summary"] = get_summary(owner, description)
 
-    args["<config>"]["tasks"] = validate_tasks(args["<config>"])
+    config["tasks"] = validate_tasks(config)
 
-    init_tasks = get_initial_tasks(args["--lock"], args["<config>"], machine_type)
+    init_tasks = get_initial_tasks(lock, config, machine_type)
 
     # prepend init_tasks to the front of the task list
-    args["<config>"]['tasks'][:0] = init_tasks
+    config['tasks'][:0] = init_tasks
 
-    if args["--suite-path"] is not None:
-        args["<config>"]['suite_path'] = args["--suite-path"]
+    if suite_path is not None:
+        config['suite_path'] = suite_path
 
     # fetches the tasks and returns a new suite_path if needed
-    args["<config>"]["suite_path"] = fetch_tasks_if_needed(args["<config>"])
+    config["suite_path"] = fetch_tasks_if_needed(config)
 
     # create a FakeNamespace instance that mimics the old argparse way of doing things
     # we do this so we can pass it to run_tasks without porting those tasks to the
     # new way of doing things right now
+    args["<config>"] = config
     fake_ctx = FakeNamespace(args)
 
     try:
-        run_tasks(tasks=args["<config>"]['tasks'], ctx=fake_ctx)
+        run_tasks(tasks=config['tasks'], ctx=fake_ctx)
     finally:
         # print to stdout the results and possibly send an email on any errors
-        report_outcome(args["<config>"], args["--archive"], args["summary"], fake_ctx)
+        report_outcome(config, archive, args["summary"], fake_ctx)
