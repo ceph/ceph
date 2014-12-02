@@ -449,9 +449,10 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 		/* set this item's straw */
 		bucket->straws[reverse[i]] = straw * 0x10000;
-		/*dprintk("item %d at %d weight %d straw %d (%lf)\n",
-		       items[reverse[i]],
-		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);*/
+		dprintk("item %d at %d weight %d straw %d (%lf)\n",
+			bucket->h.items[reverse[i]],
+			reverse[i], weights[reverse[i]],
+			bucket->straws[reverse[i]], straw);
 		i++;
 		if (i == size) break;
 
@@ -470,7 +471,8 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 				break;
 		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
 		pbelow = wbelow / (wbelow + wnext);
-		/*dprintk("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
+		dprintk("wbelow %lf  wnext %lf  pbelow %lf  numleft %d\n",
+			wbelow, wnext, pbelow, numleft);
 
 		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
 
