@@ -35,6 +35,7 @@
      --show utilization-all
                            include zero weight items
      --show-statistics     show chi squared statistics
+     --show-mappings       show mappings
      --show-bad-mappings   show bad mappings
      --show-choose-tries   show choose tries histogram
      --set-choose-local-tries N
