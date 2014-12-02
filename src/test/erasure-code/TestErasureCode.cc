@@ -111,6 +111,42 @@ TEST(ErasureCodeTest, encode_memory_align)
   ASSERT_NE(encoded[1][chunk_size / 2], 'X');
 }
 
+TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
+{
+  int k = 3;
+  int m = 1;
+  unsigned chunk_size = ErasureCode::SIMD_ALIGN * 7;
+  ErasureCodeTest erasure_code(k, m, chunk_size);
+
+  set<int> want_to_encode;
+  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++)
+    want_to_encode.insert(i);
+  string data(chunk_size, 'X');
+  // create a non contiguous bufferlist where the frist and the second
+  // bufferptr are not size aligned although they are memory aligned
+  bufferlist in;
+  {
+    bufferptr ptr(buffer::create_aligned(data.length() - 1, ErasureCode::SIMD_ALIGN));
+    in.append(ptr);
+  }
+  {
+    bufferptr ptr(buffer::create_aligned(data.length() + 1, ErasureCode::SIMD_ALIGN));
+    in.append(ptr);
+  }
+  map<int, bufferlist> encoded;
+
+  ASSERT_FALSE(in.is_contiguous());
+  ASSERT_TRUE(in.buffers().front().is_aligned(ErasureCode::SIMD_ALIGN));
+  ASSERT_FALSE(in.buffers().front().is_n_align_sized(chunk_size));
+  ASSERT_TRUE(in.buffers().back().is_aligned(ErasureCode::SIMD_ALIGN));
+  ASSERT_FALSE(in.buffers().back().is_n_align_sized(chunk_size));
+  ASSERT_EQ(0, erasure_code.encode(want_to_encode, in, &encoded));
+  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++) {
+    ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
+    ASSERT_TRUE(encoded[i].is_n_align_sized(chunk_size));
+  }
+}
+
 int main(int argc, char **argv)
 {
   vector<const char*> args;
