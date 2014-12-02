@@ -513,8 +513,8 @@ public:
       pending_attrs.clear();
     }
 
-    // pending async reads <off, len> -> <outbl, outr>
-    list<pair<pair<uint64_t, uint64_t>,
+    // pending async reads <off, len, op_flags> -> <outbl, outr>
+    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
     int async_read_result;
     unsigned inflightreads;
@@ -572,7 +572,7 @@ public:
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
-      for (list<pair<pair<uint64_t, uint64_t>,
+      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 		     pair<bufferlist*, Context*> > >::iterator i =
 	     pending_async_reads.begin();
 	   i != pending_async_reads.end();

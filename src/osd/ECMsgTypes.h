@@ -18,6 +18,7 @@
 #include "osd_types.h"
 #include "include/buffer.h"
 #include "os/ObjectStore.h"
+#include "boost/tuple/tuple.hpp"
 
 struct ECSubWrite {
   pg_shard_t from;
@@ -80,7 +81,7 @@ WRITE_CLASS_ENCODER(ECSubWriteReply)
 struct ECSubRead {
   pg_shard_t from;
   ceph_tid_t tid;
-  map<hobject_t, list<pair<uint64_t, uint64_t> > > to_read;
+  map<hobject_t, list<boost::tuple<uint64_t, uint64_t, uint32_t> > > to_read;
   set<hobject_t> attrs_to_read;
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
