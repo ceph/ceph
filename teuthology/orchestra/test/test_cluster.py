@@ -1,4 +1,7 @@
 import fudge
+import pytest
+
+from mock import patch
 
 from .. import cluster, remote
 
@@ -204,3 +207,21 @@ class TestCluster(object):
             )
         c_foo = c.exclude('foo', lambda role: role.startswith('b'))
         assert c_foo.remotes == {r2: ['bar'], r3: ['foo']}
+
+    @patch("teuthology.misc.write_file")
+    @patch("teuthology.misc.sudo_write_file")
+    def test_write_file(self, m_sudo_write_file, m_write_file):
+        r1 = remote.Remote('r1', ssh=fudge.Fake('SSH'))
+        c = cluster.Cluster(
+            remotes=[
+                (r1, ['foo', 'bar']),
+                ],
+            )
+        c.write_file("filename", "content", sudo=True)
+        m_sudo_write_file.assert_called_with(r1, "filename", "content", owner=None, perms=None)
+        with pytest.raises(ValueError):
+            c.write_file("filename", "content", sudo=False, perms="perms")
+        c.write_file("filename", "content")
+        m_write_file.assert_called_with(r1, "filename", "content")
+
+
