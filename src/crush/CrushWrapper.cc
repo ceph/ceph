@@ -63,6 +63,18 @@ bool CrushWrapper::is_v3_rule(unsigned ruleid) const
   return false;
 }
 
+bool CrushWrapper::has_v4_buckets() const
+{
+  for (int i=0; i<crush->max_buckets; ++i) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b)
+      continue;
+    if (b->type == CRUSH_BUCKET_STRAW2)
+      return true;
+  }
+  return false;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
