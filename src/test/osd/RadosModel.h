@@ -205,7 +205,7 @@ public:
     rados_id(id), initialized(false),
     max_size(max_size), 
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
-    attr_gen(2000),
+    attr_gen(2000, 20000),
     no_omap(no_omap),
     pool_snaps(pool_snaps),
     snapname_num(0)
