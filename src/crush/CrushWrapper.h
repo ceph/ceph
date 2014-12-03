@@ -108,6 +108,8 @@ public:
     crush->chooseleaf_descend_once = 0;
     crush->chooseleaf_vary_r = 0;
     crush->straw_calc_version = 0;
+    crush->allowed_bucket_types =
+      CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST | CRUSH_BUCKET_STRAW;
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -116,6 +118,8 @@ public:
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 0;
     crush->straw_calc_version = 0;
+    crush->allowed_bucket_types =
+      CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST | CRUSH_BUCKET_STRAW;
   }
   void set_tunables_firefly() {
     crush->choose_local_tries = 0;
@@ -124,6 +128,8 @@ public:
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 1;
     crush->straw_calc_version = 0;
+    crush->allowed_bucket_types =
+      CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST | CRUSH_BUCKET_STRAW;
   }
   void set_tunables_hammer() {
     crush->choose_local_tries = 0;
@@ -132,6 +138,9 @@ public:
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 1;
     crush->straw_calc_version = 1;
+    crush->allowed_bucket_types =
+      CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST | CRUSH_BUCKET_STRAW |
+      CRUSH_BUCKET_STRAW2;
   }
 
   void set_tunables_legacy() {
@@ -190,6 +199,13 @@ public:
     crush->straw_calc_version = n;
   }
 
+  unsigned get_allowed_bucket_types() const {
+    return crush->allowed_bucket_types;
+  }
+  void set_allowed_bucket_types(unsigned n) {
+    crush->allowed_bucket_types = n;
+  }
+
   bool has_argonaut_tunables() const {
     return
       crush->choose_local_tries == 2 &&
@@ -197,7 +213,9 @@ public:
       crush->choose_total_tries == 19 &&
       crush->chooseleaf_descend_once == 0 &&
       crush->chooseleaf_vary_r == 0 &&
-      crush->straw_calc_version == 0;
+      crush->straw_calc_version == 0 &&
+      crush->allowed_bucket_types == (CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST |
+				      CRUSH_BUCKET_STRAW);
   }
   bool has_bobtail_tunables() const {
     return
@@ -206,7 +224,9 @@ public:
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 0 &&
-      crush->straw_calc_version == 0;
+      crush->straw_calc_version == 0 &&
+      crush->allowed_bucket_types == (CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST |
+				      CRUSH_BUCKET_STRAW);
   }
   bool has_firefly_tunables() const {
     return
@@ -215,7 +235,9 @@ public:
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
-      crush->straw_calc_version == 0;
+      crush->straw_calc_version == 0 &&
+      crush->allowed_bucket_types == (CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST |
+				      CRUSH_BUCKET_STRAW);
   }
   bool has_hammer_tunables() const {
     return
@@ -224,7 +246,9 @@ public:
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
-      crush->straw_calc_version == 1;
+      crush->straw_calc_version == 1 &&
+      crush->allowed_bucket_types == (CRUSH_BUCKET_UNIFORM | CRUSH_BUCKET_LIST |
+				      CRUSH_BUCKET_STRAW | CRUSH_BUCKET_STRAW2);
   }
 
   bool has_optimal_tunables() const {
@@ -258,7 +282,18 @@ public:
 
   // default bucket types
   unsigned get_default_bucket_type() const {
-    return CRUSH_BUCKET_STRAW;
+    // in order of preference
+    if (crush->allowed_bucket_types & CRUSH_BUCKET_STRAW2)
+      return CRUSH_BUCKET_STRAW2;
+    if (crush->allowed_bucket_types & CRUSH_BUCKET_STRAW)
+      return CRUSH_BUCKET_STRAW;
+    if (crush->allowed_bucket_types & CRUSH_BUCKET_TREE)
+      return CRUSH_BUCKET_TREE;
+    if (crush->allowed_bucket_types & CRUSH_BUCKET_LIST)
+      return CRUSH_BUCKET_LIST;
+    if (crush->allowed_bucket_types & CRUSH_BUCKET_UNIFORM)
+      return CRUSH_BUCKET_UNIFORM;
+    return 0;
   }
 
   // bucket types
