@@ -439,6 +439,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	alg = CRUSH_BUCKET_TREE;
       else if (a == "straw")
 	alg = CRUSH_BUCKET_STRAW;
+      else if (a == "straw2")
+	alg = CRUSH_BUCKET_STRAW2;
       else {
 	err << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
 	return -EINVAL;
