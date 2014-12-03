@@ -650,7 +650,11 @@ def create_file(remote, path, data="", permissions=str(644), sudo=False):
     args.extend([
         'touch',
         path,
-        run.Raw('&&'),
+        run.Raw('&&')
+    ])
+    if sudo:
+        args.append('sudo')
+    args.extend([
         'chmod',
         permissions,
         '--',
