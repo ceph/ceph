@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Wed Dec  3 12:36:48 UTC 2014 - osynge@suse.com
+
+- Add 0022-Fix-overflowing-journel-partitions.patch
+  * this fixes bnc#896406 
+  * When using ceph-disk to create a journal partition in the next 
+    available partition and is not enough space ceph-disk did 
+    not provide a clear error message.
+
+-------------------------------------------------------------------
 Mon Dec  1 13:31:22 UTC 2014 - tbehrens@suse.com
 
 - Add 0020-Always-provide-summary-for-non-heal.patch
