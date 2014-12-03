@@ -22,6 +22,7 @@
 
 #include "crush.h"
 #include "hash.h"
+#include "crush_ln_table.h"
 
 /*
  * Implement the core CRUSH mapping algorithm.
@@ -239,6 +240,52 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 	return bucket->h.items[high];
 }
 
+/*
+ * straw2
+ *
+ * for reference, see:
+ *
+ * http://en.wikipedia.org/wiki/Exponential_distribution#Distribution_of_the_minimum_of_exponential_random_variables
+ *
+ */
+
+static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
+				int x, int r)
+{
+	unsigned i, high = 0;
+	unsigned u;
+	__s64 ln, draw, high_draw = 0;
+
+	for (i = 0; i < bucket->h.size; i++) {
+		u = crush_hash32_3(bucket->h.hash, x, bucket->h.items[i], r);
+		u &= 0xffff;
+
+		/*
+		 * for some reason slightly less than 0x10000 produces
+		 * a slightly more accurate distribution... probably a
+		 * rounding effect.
+		 *
+		 * the natural log lookup table maps [0,0xffff]
+		 * (corresponding to real numbers [1/0x10000, 1] to
+		 * [0, 0xffff] (corresponding to real numbers
+		 * [-11.090355,0]).
+		 */
+		ln = crush_ln_table[u] - 0xfffc;
+
+		/*
+		 * divide by 16.16 fixed-point weight
+		 */
+		draw = (ln << 32) / bucket->item_weights[i];
+
+		if (i == 0 || draw > high_draw) {
+			high = i;
+			high_draw = draw;
+		}
+	}
+	return bucket->h.items[high];
+}
+
+
 static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
@@ -256,11 +303,15 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 	case CRUSH_BUCKET_STRAW:
 		return bucket_straw_choose((struct crush_bucket_straw *)in,
 					   x, r);
+	case CRUSH_BUCKET_STRAW2:
+		return bucket_straw2_choose((struct crush_bucket_straw2 *)in,
+					    x, r);
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
 		return in->items[0];
 	}
 }
+
 
 /*
  * true if device is marked "out" (failed, fully offloaded)

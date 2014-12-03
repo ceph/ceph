@@ -18,6 +18,7 @@ const char *crush_bucket_alg_name(int alg)
 	case CRUSH_BUCKET_LIST: return "list";
 	case CRUSH_BUCKET_TREE: return "tree";
 	case CRUSH_BUCKET_STRAW: return "straw";
+	case CRUSH_BUCKET_STRAW2: return "straw2";
 	default: return "unknown";
 	}
 }
