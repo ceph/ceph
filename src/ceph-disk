@@ -29,6 +29,7 @@ import stat
 import sys
 import tempfile
 import uuid
+import math
 
 """
 Prepare:
@@ -920,7 +921,7 @@ def unmount(
 ###########################################
 
 
-def get_free_partition_index(dev):
+def get_free_partition_index(dev, size='megabytes'):
     """
     Get the next free partition index on a given device.
 
@@ -968,6 +969,71 @@ def get_free_partition_index(dev):
     while num in seen:
         num += 1
     return num
+
+def get_free_partition_space(dev, size='megabytes'):
+    """
+    Attempt to get the free partition space on a given device.
+
+    :param dev: the device to calculate the size
+    :param size: bytes or megabytes
+    :return: size
+
+    Finds total space and removes space for each partition.
+    Better would be to find largest free contiguous space.
+    """
+    def size_str_as_bytes(totalsize_str, tunc = False):
+        output = -1
+        found_size = float(totalsize_str[:-2])
+        if tunc:
+            found_size = math.trunc(found_size)
+        else:
+            found_size = math.ceil(found_size)
+        if totalsize_str[-2:] == "GB":
+            output = int(1024*1024*1024*found_size)
+        if totalsize_str[-2:] == "MB":
+            output = int(1024*1024*found_size)
+        return output
+    try:
+        lines = _check_output(
+            args=[
+                'parted',
+                '--machine',
+                '--',
+                dev,
+                'print',
+                ],
+            )
+    except subprocess.CalledProcessError as e:
+        print 'cannot read partition index; assume it isn\'t present\n (Error: %s)' % e
+        return 1
+
+    if not lines:
+        raise Error('parted failed to output anything')
+    lines = str(lines).splitlines(True)
+
+    # work around buggy libreadline(?) library in rhel/centos.
+    idiot_prefix = '\x1b\x5b\x3f\x31\x30\x33\x34\x68'
+    if lines[0].startswith(idiot_prefix):
+        lines[0] = lines[0][8:]
+
+    if lines[0] not in ['CHS;\n', 'CYL;\n', 'BYT;\n']:
+        raise Error('weird parted units', lines[0])
+    del lines[0]
+    if not lines[0].startswith('/dev/'):
+        raise Error('weird parted disk entry', lines[0])
+    # We want to truncate the full size to avoid rounding up errors.
+    size_free = size_str_as_bytes(lines[0].split(':')[1], True)
+    del lines[0]
+
+    seen = set()
+    for line in lines:
+        partused = size_str_as_bytes(line.split(':')[3])
+        size_free -= partused
+
+    dividers = {'bytes': 1, 'megabytes': 1024*1024}
+    divider = dividers.get(size, 1024*1024)  # default to megabytes
+    return size_free/divider
+
 
 
 def update_partition(action, dev, description):
@@ -1057,6 +1123,7 @@ def prepare_journal_dev(
 
     # it is a whole disk.  create a partition!
     num = None
+    dev_size = None
     if journal == data:
         # we're sharing the disk between osd data and journal;
         # make journal be partition number 2, so it's pretty
@@ -1065,6 +1132,8 @@ def prepare_journal_dev(
             num=num,
             size=journal_size,
             )
+        # now get dev_size
+        dev_size = get_dev_size(journal)
     else:
         # sgdisk has no way for me to say "whatever is the next
         # free index number" when setting type guids etc, so we
@@ -1078,8 +1147,8 @@ def prepare_journal_dev(
             size=journal_size,
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
-
-    dev_size = get_dev_size(journal)
+        # now get dev_size
+        dev_size = get_free_partition_space(journal)
 
     if journal_size > dev_size:
         LOG.error('refusing to create journal on %s' % journal)
