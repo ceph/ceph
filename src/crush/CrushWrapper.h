@@ -243,8 +243,10 @@ public:
     return
       crush->chooseleaf_vary_r != 0;
   }
+
   bool has_v2_rules() const;
   bool has_v3_rules() const;
+  bool has_v4_buckets() const;
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
