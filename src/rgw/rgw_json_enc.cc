@@ -546,6 +546,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
   encode_json("num_shards", num_shards, f);
+  encode_json("bi_shard_hash_type", (uint32_t)bucket_index_shard_hash_type, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -558,6 +559,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
   JSONDecoder::decode_json("num_shards", num_shards, obj);
+  uint32_t hash_type;
+  JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
+  bucket_index_shard_hash_type = (uint8_t)hash_type;
 }
 
 void RGWObjEnt::dump(Formatter *f) const
