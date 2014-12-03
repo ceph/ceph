@@ -349,12 +349,119 @@ Dumpling (v0.67) ``ceph-mon`` daemons have an internal protocol change. This
 means that v0.67 daemons cannot talk to v0.66 or older daemons.  Once you
 upgrade a majority of monitors,  the monitors form a quorum using the new
 protocol and the old monitors will be blocked until they get upgraded. For this
-reason, We recommend upgrading all monitors at once (or in relatively quick
+reason, we recommend upgrading all monitors at once (or in relatively quick
 succession) to minimize the possibility of downtime.
 
 .. important:: Do not run a mixed-version cluster for an extended period.
 
 
+
+Dumpling to Firefly
+===================
+
+If your existing cluster is running a version older than v0.67 Dumpling, please
+first upgrade to the latest Dumpling release before upgrading to v0.80 Firefly.
+
+
+Monitor
+-------
+
+Dumpling (v0.67) ``ceph-mon`` daemons have an internal protocol change. This
+means that v0.67 daemons cannot talk to v0.66 or older daemons.  Once you
+upgrade a majority of monitors,  the monitors form a quorum using the new
+protocol and the old monitors will be blocked until they get upgraded. For this
+reason, we recommend upgrading all monitors at once (or in relatively quick
+succession) to minimize the possibility of downtime.
+
+.. important:: Do not run a mixed-version cluster for an extended period.
+
+
+Ceph Config File Changes
+------------------------
+
+We recommand adding the following to the ``[mon]`` section of your 
+``ceph.conf`` prior to upgrade::
+
+    mon warn on legacy crush tunables = false
+
+This will prevent health warnings due to the use of legacy CRUSH placement.
+Although it is possible to rebalance existing data across your cluster, we do
+not normally recommend it for production environments as a large amount of data
+will move and there is a significant performance impact from the rebalancing.
+
+
+Command Line Utility
+--------------------
+
+In V0.65, the ``ceph`` commandline interface (CLI) utility changed
+significantly. You will not be able to use the old CLI with Firefly. This means
+that you must upgrade the  ``ceph-common`` library on all nodes that access the
+Ceph Storage Cluster with the ``ceph`` CLI before upgrading Ceph daemons. 
+
+For Debian/Ubuntu, execute::
+
+	sudo apt-get update && sudo apt-get install ceph-common
+
+For CentOS/RHEL, execute:: 
+	
+	sudo yum install ceph-common	
+	
+Ensure that you have the latest version. If you do not, 
+you may need to uninstall, auto remove dependencies and reinstall.
+
+See `v0.65`_ for details on the new command line interface.
+
+.. _v0.65: http://ceph.com/docs/master/release-notes/#v0-65
+
+
+Upgrade Sequence
+----------------
+
+Replace any reference to older repositories with a reference to the
+Firely repository. For example, with ``apt`` perform the following:: 
+
+	sudo rm /etc/apt/sources.list.d/ceph.list
+	echo deb http://ceph.com/debian-firefly/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+
+With CentOS/Red Hat distributions, remove the old repository. :: 
+
+	sudo rm /etc/yum.repos.d/ceph.repo
+
+Then add a new ``ceph.repo`` repository entry with the following contents and
+replace ``{distro}`` with your distribution (e.g., ``el6``, ``rhel6``, 
+``rhel7``, etc.). 
+
+.. code-block:: ini
+
+	[ceph]
+	name=Ceph Packages and Backports $basearch
+	baseurl=http://ceph.com/rpm-firefly/{distro}/$basearch
+	enabled=1
+	gpgcheck=1
+	type=rpm-md
+	gpgkey=https://ceph.com/git/?p=ceph.git;a=blob_plain;f=keys/release.asc	
+
+
+Upgrade daemons in the following order:
+
+#. **Monitors:** If the ``ceph-mon`` daemons are not restarted prior to the 
+   ``ceph-osd`` daemons, the monitors will not correctly register their new 
+   capabilities with the cluster and new features may not be usable until 
+   the monitors are restarted a second time.
+
+#. **OSDs**
+
+#. **MDSs:** If the ``ceph-mds`` daemon is restarted first, it will wait until 
+   all OSDs have been upgraded before finishing its startup sequence.  
+
+#. **Gateways:** Upgrade ``radosgw`` daemons together. There is a subtle change 
+   in behavior for multipart uploads that prevents a multipart request that 
+   was initiated with a new ``radosgw`` from being completed by an old 
+   ``radosgw``.
+   
+.. note:: Make sure you upgrade your **ALL** of your Ceph monitors **AND** 
+   restart them **BEFORE** upgrading and restarting OSDs, MDSs, and gateways!
+   
 
 Emperor to Firefly
 ==================

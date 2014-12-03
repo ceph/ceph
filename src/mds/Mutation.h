@@ -17,6 +17,7 @@
 
 #include "include/interval_set.h"
 #include "include/elist.h"
+#include "include/filepath.h"
 
 #include "mdstypes.h"
 
@@ -211,6 +212,8 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
 
   // -- i am an internal op
   int internal_op;
+  Context *internal_op_finish;
+  void *internal_op_private;
 
   // indicates how may retries of request have been made
   int retry;
@@ -263,6 +266,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     CDir* export_dir;
     dirfrag_t fragment_base;
 
+    // for internal ops doing lookup
+    filepath filepath1;
+    filepath filepath2;
+
     More() : 
       has_journaled_slaves(false), slave_update_journaled(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
@@ -293,7 +300,9 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0), snap_caps(0),
     did_early_reply(false), o_trunc(false), getattr_caps(0),
-    slave_request(NULL), internal_op(params.internal_op), retry(0),
+    slave_request(NULL), internal_op(params.internal_op), internal_op_finish(NULL),
+    internal_op_private(NULL),
+    retry(0),
     waited_for_osdmap(false), _more(NULL) {
     in[0] = in[1] = NULL;
     if (!params.throttled.is_zero())
@@ -317,6 +326,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
+  const filepath& get_filepath();
+  const filepath& get_filepath2();
+  void set_filepath(const filepath& fp);
+  void set_filepath2(const filepath& fp);
 
   void print(ostream &out);
 

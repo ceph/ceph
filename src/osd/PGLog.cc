@@ -799,7 +799,8 @@ void PGLog::_write_log(
   }
   ::encode(log.can_rollback_to, keys["can_rollback_to"]);
 
-  t.omap_rmkeys(META_COLL, log_oid, to_remove);
+  if (!to_remove.empty())
+    t.omap_rmkeys(META_COLL, log_oid, to_remove);
   t.omap_setkeys(META_COLL, log_oid, keys);
 }
 
@@ -934,7 +935,6 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
   // load bounds, based on old OndiskLog encoding.
   uint64_t ondisklog_tail = 0;
   uint64_t ondisklog_head = 0;
-  uint64_t ondisklog_zero_to;
   bool ondisklog_has_checksums;
 
   bufferlist blb;
@@ -945,10 +945,10 @@ void PGLog::read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
     ondisklog_has_checksums = (struct_v >= 2);
     ::decode(ondisklog_tail, bl);
     ::decode(ondisklog_head, bl);
-    if (struct_v >= 4)
+    if (struct_v >= 4) {
+      uint64_t ondisklog_zero_to;
       ::decode(ondisklog_zero_to, bl);
-    else
-      ondisklog_zero_to = 0;
+    }
     if (struct_v >= 5)
       ::decode(divergent_priors, bl);
     DECODE_FINISH(bl);

@@ -376,11 +376,18 @@ private:
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
+  void command_scrub_path(Formatter *f, const string& path);
+  void command_flush_path(Formatter *f, const string& path);
+  void command_flush_journal(Formatter *f);
+ private:
+  int _command_flush_journal(std::stringstream *ss);
+ public:
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed);
   void create_logger();
+  void update_log_config();
 
   void bcast_mds_map();  // to mounted clients
 

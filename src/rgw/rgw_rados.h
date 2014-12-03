@@ -781,7 +781,7 @@ struct RGWRadosCtx {
 
 struct RGWPoolIterCtx {
   librados::IoCtx io_ctx;
-  librados::ObjectIterator iter;
+  librados::NObjectIterator iter;
 };
 
 struct RGWListRawObjsCtx {
@@ -1619,6 +1619,7 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
+               string *petag,
                struct rgw_err *err,
                void (*progress_cb)(off_t, void *),
                void *progress_data);
@@ -1634,6 +1635,7 @@ public:
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                string *ptag,
+               string *petag,
                struct rgw_err *err);
 
   /**

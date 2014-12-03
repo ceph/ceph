@@ -113,7 +113,7 @@ function check_response()
 		exit 1
 	fi
 
-	if ! grep "$expected_string" $TMPFILE >/dev/null 2>&1 ; then 
+	if ! grep --quiet -- "$expected_string" $TMPFILE ; then 
 		echo "Didn't find $expected_string in output" >&2
 		cat $TMPFILE >&2
 		exit 1
@@ -157,17 +157,17 @@ function expect_config_value()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ./ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
+  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_debug_drop_ping_probability 444' >& $TMPFILE || return 1
-  check_response "osd_debug_drop_ping_probability = '444' osd_debug_op_order = 'true'"
+  ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
+  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
   ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'false'"
   ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
   check_response "osd_debug_op_order = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_debug_drop_ping_probability 555' >& $TMPFILE || return 1
-  check_response "osd_debug_drop_ping_probability = '555' osd_debug_op_order = 'true'" 
+  ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
+  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
 }
 
 function test_mon_injectargs_SI()
@@ -648,6 +648,10 @@ function test_mon_mds()
   data3_pool=$(ceph osd dump | grep 'pool.*data3' | awk '{print $2;}')
   ceph mds add_data_pool $data2_pool
   ceph mds add_data_pool $data3_pool
+  ceph mds add_data_pool 100 >& $TMPFILE || true
+  check_response "Error ENOENT"
+  ceph mds add_data_pool foobarbaz >& $TMPFILE || true
+  check_response "Error ENOENT"
   ceph mds remove_data_pool $data2_pool
   ceph mds remove_data_pool $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
@@ -878,10 +882,14 @@ function test_mon_osd()
 
   ceph osd rm 0 2>&1 | grep 'EBUSY'
 
+  local old_osds=$(echo $(ceph osd ls))
   id=`ceph osd create`
   ceph osd lost $id --yes-i-really-mean-it
   expect_false ceph osd setmaxosd $id
-  ceph osd rm $id
+  local new_osds=$(echo $(ceph osd ls))
+  for id in $(echo $new_osds | sed -e "s/$old_osds//") ; do
+      ceph osd rm $id
+  done
 
   uuid=`uuidgen`
   id=`ceph osd create $uuid`
@@ -1291,7 +1299,7 @@ function test_osd_bench()
 #
 
 set +x
-TESTS=(
+MON_TESTS=(
   mon_injectargs
   mon_injectargs_SI
   tiering
@@ -1308,9 +1316,21 @@ TESTS=(
   mon_osd_erasure_code
   mon_osd_misc
   mon_heap_profiler
+)
+
+OSD_TESTS=(
   osd_bench
+)
+
+MDS_TESTS=(
   mds_tell
   mon_mds
+)
+
+TESTS=(
+  $MON_TESTS
+  $OSD_TESTS
+  $MDS_TESTS
 )
 
 #
@@ -1346,6 +1366,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     "--no-sanity-check" )
       sanity_check=false
+      ;;
+    "--test-mon" )
+      tests_to_run=("${tests_to_run[@]}" $MON_TESTS)
+      ;;
+    "--test-osd" )
+      tests_to_run=("${tests_to_run[@]}" $OSD_TESTS)
+      ;;
+    "--test-mds" )
+      tests_to_run=("${tests_to_run[@]}" $MDS_TESTS)
       ;;
     "-t" )
       shift

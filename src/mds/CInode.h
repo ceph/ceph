@@ -49,6 +49,9 @@ class Session;
 class MClientCaps;
 struct ObjectOperation;
 class EMetaBlob;
+struct MDRequestImpl;
+typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
+
 
 ostream& operator<<(ostream& out, CInode& in);
 
@@ -542,14 +545,25 @@ public:
 
   void store(MDSInternalContextBase *fin);
   void _stored(version_t cv, Context *fin);
+  /**
+   * Flush a CInode to disk. This includes the backtrace, the parent
+   * directory's link, and the Inode object itself (if a base directory).
+   * @pre is_auth() on both the inode and its containing directory
+   * @pre can_auth_pin()
+   * @param fin The Context to call when the flush is completed.
+   */
+  void flush(MDSInternalContextBase *fin);
   void fetch(MDSInternalContextBase *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
+
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
   void _stored_backtrace(version_t v, Context *fin);
+  void fetch_backtrace(Context *fin, bufferlist *backtrace);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
+  void verify_diri_backtrace(bufferlist &bl, int err);
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
   bool is_dirty_pool() { return state_test(STATE_DIRTYPOOL); }
 
@@ -857,6 +871,67 @@ public:
 
   void print(ostream& out);
 
+  /**
+   * @defgroup Scrubbing and fsck
+   * @{
+   */
+
+  /**
+   * Report the results of validation against a particular inode.
+   * Each member is a pair of bools.
+   * <member>.first represents if validation was performed against the member.
+   * <member.second represents if the member passed validation.
+   * performed_validation is set to true if the validation was actually
+   * run. It might not be run if, for instance, the inode is marked as dirty.
+   * passed_validation is set to true if everything that was checked
+   * passed its validation.
+   */
+  struct validated_data {
+    template<typename T>struct member_status {
+      bool checked;
+      bool passed;
+      int ondisk_read_retval;
+      T ondisk_value;
+      T memory_value;
+      std::stringstream error_str;
+      member_status() : checked(false), passed(false),
+          ondisk_read_retval(0) {}
+    };
+
+    bool performed_validation;
+    bool passed_validation;
+
+    member_status<inode_backtrace_t> backtrace;
+    member_status<inode_t> inode;
+    member_status<nest_info_t> raw_rstats;
+
+    validated_data() : performed_validation(false),
+        passed_validation(false) {}
+
+    void dump(Formatter *f) const;
+  };
+
+  /**
+   * Validate that the on-disk state of an inode matches what
+   * we expect from our memory state. Currently this checks that:
+   * 1) The backtrace associated with the file data exists and is correct
+   * 2) For directories, the actual inode metadata matches our memory state,
+   * 3) For directories, the rstats match
+   *
+   * @param results A freshly-created validated_data struct, with values set
+   * as described in the struct documentation.
+   * @param Context The callback to activate once the validation has
+   * been completed.
+   */
+  void validate_disk_state(validated_data *results,
+                           MDRequestRef& mdr);
+  static void dump_validation_results(const validated_data& results,
+                                      Formatter *f);
+private:
+  bool _validate_disk_state(class ValidationContinuation *c,
+                            int rval, int stage);
+  friend class ValidationContinuation;
+  /** @} Scrubbing and fsck */
 };
 
 #endif

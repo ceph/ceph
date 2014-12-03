@@ -204,7 +204,7 @@ public:
    *
    * The data portion of an object is conceptually equivalent to a
    * file in a file system. Random and Partial access for both read
-   * and operations is required. The ability to have a sparse
+   * and write operations is required. The ability to have a sparse
    * implementation of the data portion of an object is beneficial for
    * some workloads, but not required. There is a system-wide limit on
    * the maximum size of an object, which is typically around 100 MB.
@@ -269,7 +269,7 @@ public:
    * execute quickly and must not acquire any locks of the calling
    * environment. Conversely, "on_applied" is called from the separate
    * Finisher thread, meaning that it can contend for calling
-   * environment locks. NB, on_applied and on_applied sync are
+   * environment locks. NB, on_applied and on_applied_sync are
    * sometimes called on_readable and on_readable_sync.
    *
    * The "on_commit" callback is also called from the Finisher thread
@@ -320,7 +320,7 @@ public:
    * Enumeration operations may violate transaction isolation as
    * described above when a storage element is being created or
    * deleted as part of a transaction. In this case, ObjectStore is
-   * allowed to consider the enumeration operation to either preceed
+   * allowed to consider the enumeration operation to either precede
    * or follow the violating transaction element. In other words, the
    * presence/absence of the mutated element in the enumeration is
    * entirely at the discretion of ObjectStore. The arbitrary ordering
@@ -328,7 +328,7 @@ public:
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
    * transaction is pending. It is permissable for ObjectStore to
-   * report any of the four possible combinations of the existance of
+   * report any of the four possible combinations of the existence of
    * A and B.
    *
    */
@@ -505,7 +505,7 @@ public:
     uint32_t get_data_length() {
       return largest_data_len;
     }
-    /// offset within the encoded buffer to the start of the first data buffer that's encoded
+    /// offset within the encoded buffer to the start of the largest data buffer that's encoded
     uint32_t get_data_offset() {
       if (largest_data_off_in_tbl) {
 	return largest_data_off_in_tbl +
@@ -525,7 +525,7 @@ public:
     int get_data_alignment() {
       if (!largest_data_len)
 	return -1;
-      return (largest_data_off - get_data_offset()) & ~CEPH_PAGE_MASK;
+      return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
     bool empty() {
@@ -808,7 +808,7 @@ public:
      * object are cloned (data, xattrs, omap header, omap
      * entries).
      *
-     * The destination named object may already exist in
+     * The destination named object may already exist, in
      * which case its previous contents are discarded.
      */
     void clone(coll_t cid, const ghobject_t& oid, ghobject_t noid) {
@@ -870,33 +870,20 @@ public:
       ::encode(cid, tbl);
       ops++;
     }
-    /**
-     * Add object to another collection (DEPRECATED)
-     *
-     * The Object is added to the new collection. This is a virtual
-     * add, we now have two names for the same object.  This is only
-     * used for conversion of old stores to new stores and is not
-     * needed for new implementations unless they expect to make use
-     * of the conversion infrastructure.
-     */
-    void collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid) {
+    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid) {
+      // NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
+      // always appear together, so this is effectively a single MOVE.
       __u32 op = OP_COLL_ADD;
       ::encode(op, tbl);
       ::encode(cid, tbl);
-      ::encode(ocid, tbl);
+      ::encode(oldcid, tbl);
       ::encode(oid, tbl);
       ops++;
-    }
-    void collection_remove(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_COLL_REMOVE;
+      op = OP_COLL_REMOVE;
       ::encode(op, tbl);
-      ::encode(cid, tbl);
+      ::encode(oldcid, tbl);
       ::encode(oid, tbl);
       ops++;
-    }
-    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid) {
-      collection_add(cid, oldcid, oid);
-      collection_remove(oldcid, oid);
       return;
     }
     void collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
@@ -952,14 +939,6 @@ public:
       ::encode(op, tbl);
       ::encode(cid, tbl);
       ::encode(aset, tbl);
-      ops++;
-    }
-    /// Change the name of a collection
-    void collection_rename(coll_t cid, coll_t ncid) {
-      __u32 op = OP_COLL_RENAME;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(ncid, tbl);
       ops++;
     }
 
@@ -1226,9 +1205,12 @@ public:
   ObjectStore(const ObjectStore& o);
   const ObjectStore& operator=(const ObjectStore& o);
 
+  // versioning
+  virtual int upgrade() {
+    return 0;
+  }
+
   // mgmt
-  virtual int version_stamp_is_valid(uint32_t *version) { return 1; }
-  virtual int update_version_stamp() = 0;
   virtual bool test_mount_in_use() = 0;
   virtual int mount() = 0;
   virtual int umount() = 0;
@@ -1242,11 +1224,6 @@ public:
   virtual int statfs(struct statfs *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
-
-  /**
-   * get the most recent "on-disk format version" supported
-   */
-  virtual uint32_t get_target_version() = 0;
 
   /**
    * check whether need journal device
@@ -1363,7 +1340,7 @@ public:
    * Returns an encoded map of the extents of an object's data portion
    * (map<offset,size>).
    *
-   * A non-enlightend implementation is free to return the extent (offset, len)
+   * A non-enlightened implementation is free to return the extent (offset, len)
    * as the sole extent.
    *
    * @param cid collection for object

@@ -1379,7 +1379,7 @@ void Paxos::dispatch(PaxosServiceMessage *m)
 
   case MSG_MON_PAXOS:
     {
-      MMonPaxos *pm = (MMonPaxos*)m;
+      MMonPaxos *pm = reinterpret_cast<MMonPaxos*>(m);
 
       // NOTE: these ops are defined in messages/MMonPaxos.h
       switch (pm->op) {

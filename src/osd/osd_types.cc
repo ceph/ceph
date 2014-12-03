@@ -820,7 +820,7 @@ int pg_pool_t::calc_bits_of(int t)
   int b = 0;
   while (t > 0) {
     t = t >> 1;
-    b++;
+    ++b;
   }
   return b;
 }
@@ -1929,6 +1929,8 @@ void pool_stat_t::dump(Formatter *f) const
   stats.dump(f);
   f->dump_int("log_size", log_size);
   f->dump_int("ondisk_log_size", ondisk_log_size);
+  f->dump_int("up", up);
+  f->dump_int("acting", acting);
 }
 
 void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
@@ -1942,20 +1944,29 @@ void pool_stat_t::encode(bufferlist &bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(5, 5, bl);
+  ENCODE_START(6, 5, bl);
   ::encode(stats, bl);
   ::encode(log_size, bl);
   ::encode(ondisk_log_size, bl);
+  ::encode(up, bl);
+  ::encode(acting, bl);
   ENCODE_FINISH(bl);
 }
 
 void pool_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(5, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   if (struct_v >= 4) {
     ::decode(stats, bl);
     ::decode(log_size, bl);
     ::decode(ondisk_log_size, bl);
+    if (struct_v >= 6) {
+      ::decode(up, bl);
+      ::decode(acting, bl);
+    } else {
+      up = 0;
+      acting = 0;
+    }
   } else {
     ::decode(stats.sum.num_bytes, bl);
     uint64_t num_kb;
@@ -1990,6 +2001,8 @@ void pool_stat_t::generate_test_instances(list<pool_stat_t*>& o)
   a.stats = *l.back();
   a.log_size = 123;
   a.ondisk_log_size = 456;
+  a.acting = 3;
+  a.up = 4;
   o.push_back(new pool_stat_t(a));
 }
 
@@ -2303,9 +2316,9 @@ void pg_interval_t::dump(Formatter *f) const
   f->open_array_section("acting");
   for (vector<int>::const_iterator p = acting.begin(); p != acting.end(); ++p)
     f->dump_int("osd", *p);
+  f->close_section();
   f->dump_int("primary", primary);
   f->dump_int("up_primary", up_primary);
-  f->close_section();
 }
 
 void pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
@@ -2329,18 +2342,45 @@ bool pg_interval_t::is_new_interval(
   int new_up_primary,
   const vector<int> &old_up,
   const vector<int> &new_up,
-  OSDMapRef osdmap,
-  OSDMapRef lastmap,
+  int old_min_size,
+  int new_min_size,
+  unsigned old_pg_num,
+  unsigned new_pg_num,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
     old_up_primary != new_up_primary ||
     new_up != old_up ||
-    (!(lastmap->get_pools().count(pgid.pool()))) ||
-    (lastmap->get_pools().find(pgid.pool())->second.min_size !=
-     osdmap->get_pools().find(pgid.pool())->second.min_size)  ||
-    pgid.is_split(lastmap->get_pg_num(pgid.pool()),
-		  osdmap->get_pg_num(pgid.pool()), 0);
+    old_min_size != new_min_size ||
+    pgid.is_split(old_pg_num, new_pg_num, 0);
+}
+
+bool pg_interval_t::is_new_interval(
+  int old_acting_primary,
+  int new_acting_primary,
+  const vector<int> &old_acting,
+  const vector<int> &new_acting,
+  int old_up_primary,
+  int new_up_primary,
+  const vector<int> &old_up,
+  const vector<int> &new_up,
+  OSDMapRef osdmap,
+  OSDMapRef lastmap,
+  pg_t pgid) {
+  return !(lastmap->get_pools().count(pgid.pool())) ||
+    is_new_interval(old_acting_primary,
+		    new_acting_primary,
+		    old_acting,
+		    new_acting,
+		    old_up_primary,
+		    new_up_primary,
+		    old_up,
+		    new_up,
+		    lastmap->get_pools().find(pgid.pool())->second.min_size,
+		    osdmap->get_pools().find(pgid.pool())->second.min_size,
+		    lastmap->get_pg_num(pgid.pool()),
+		    osdmap->get_pg_num(pgid.pool()),
+		    pgid);
 }
 
 bool pg_interval_t::check_new_interval(
@@ -4574,6 +4614,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     switch (op.op.op) {
     case CEPH_OSD_OP_PGLS:
     case CEPH_OSD_OP_PGLS_FILTER:
+    case CEPH_OSD_OP_PGNLS:
+    case CEPH_OSD_OP_PGNLS_FILTER:
       out << " start_epoch " << op.op.pgls.start_epoch;
       break;
     case CEPH_OSD_OP_PG_HITSET_LS:

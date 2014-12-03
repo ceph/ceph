@@ -177,13 +177,14 @@ int StripObjectMap::file_to_extents(uint64_t offset, size_t len,
   if (len == 0)
     return 0;
 
-  uint64_t start, end, strip_offset, extent_offset, extent_len;
+  uint64_t start, end, strip_offset;
   start = offset / strip_size;
   end = (offset + len) / strip_size;
   strip_offset = start * strip_size;
 
   // "offset" may in the middle of first strip object
   if (offset > strip_offset) {
+    uint64_t extent_offset, extent_len;
     extent_offset = offset - strip_offset;
     if (extent_offset + len <= strip_size)
       extent_len = len;
@@ -338,13 +339,18 @@ int KeyValueStore::BufferTransaction::get_buffer_keys(
 {
   set<string> need_lookup;
 
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
   for (set<string>::iterator it = keys.begin(); it != keys.end(); ++it) {
-    map<pair<string, string>, bufferlist>::iterator i =
-        strip_header->buffers.find(make_pair(prefix, *it));
-
-    if (i != strip_header->buffers.end()) {
-      (*out)[*it].swap(i->second);
-    } else {
+    map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+    if ( obj_it != buffers.end() ) {
+      map<pair<string, string>, bufferlist>::iterator i =
+          obj_it->second.find(make_pair(prefix, *it));
+      if (i != obj_it->second.end()) {
+        (*out)[*it].swap(i->second);
+      } else {
+        need_lookup.insert(*it);
+      }
+    }else {
       need_lookup.insert(*it);
     }
   }
@@ -368,9 +374,10 @@ void KeyValueStore::BufferTransaction::set_buffer_keys(
 {
   store->backend->set_keys(strip_header->header, prefix, values, t);
 
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
   for (map<string, bufferlist>::iterator iter = values.begin();
        iter != values.end(); ++iter) {
-    strip_header->buffers[make_pair(prefix, iter->first)].swap(iter->second);
+    buffers[uid][make_pair(prefix, iter->first)].swap(iter->second);
   }
 }
 
@@ -378,8 +385,12 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
      StripObjectMap::StripObjectHeaderRef strip_header, const string &prefix,
      const set<string> &keys)
 {
-  for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
-    strip_header->buffers[make_pair(prefix, *iter)] = bufferlist();
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+  if ( obj_it != buffers.end() ) {
+    for (set<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      obj_it->second[make_pair(prefix, *iter)] = bufferlist();
+    }
   }
 
   return store->backend->rm_keys(strip_header->header, prefix, keys, t);
@@ -388,10 +399,14 @@ int KeyValueStore::BufferTransaction::remove_buffer_keys(
 void KeyValueStore::BufferTransaction::clear_buffer_keys(
      StripObjectMap::StripObjectHeaderRef strip_header, const string &prefix)
 {
-  for (map<pair<string, string>, bufferlist>::iterator iter = strip_header->buffers.begin();
-       iter != strip_header->buffers.end(); ++iter) {
-    if (iter->first.first == prefix)
-      iter->second = bufferlist();
+  uniq_id uid = make_pair(strip_header->cid, strip_header->oid);
+  map< uniq_id, map<pair<string, string>, bufferlist> >::iterator obj_it = buffers.find(uid);
+  if ( obj_it != buffers.end() ) {
+    for (map<pair<string, string>, bufferlist>::iterator iter = obj_it->second.begin();
+         iter != obj_it->second.end(); ++iter) {
+      if (iter->first.first == prefix)
+        iter->second = bufferlist();
+    }
   }
 }
 
@@ -1432,7 +1447,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
       {
         coll_t cid(i.decode_cid());
         coll_t ncid(i.decode_cid());
-        r = _collection_rename(cid, ncid, t);
+        r = -EOPNOTSUPP;
       }
       break;
 
@@ -1630,20 +1645,26 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeaderRef header,
                                   extents);
   map<string, bufferlist> out;
   set<string> keys;
+  pair<coll_t, ghobject_t> uid = make_pair(header->cid, header->oid);
 
   for (vector<StripObjectMap::StripExtent>::iterator iter = extents.begin();
        iter != extents.end(); ++iter) {
     bufferlist old;
     string key = strip_object_key(iter->no);
 
-    if (bt && header->buffers.count(make_pair(OBJECT_STRIP_PREFIX, key))) {
+    map< pair<coll_t, ghobject_t>, map<pair<string, string>, bufferlist> >::iterator obj_it;
+    if ( bt ){
+      obj_it = bt->buffers.find(uid);
+    }
+    if ( bt && obj_it != bt->buffers.end() && obj_it->second.count(make_pair(OBJECT_STRIP_PREFIX, key))) {
       // use strip_header buffer
       assert(header->bits[iter->no]);
-      out[key] = header->buffers[make_pair(OBJECT_STRIP_PREFIX, key)];
-    } else if (header->bits[iter->no]) {
+      out[key] = obj_it->second[make_pair(OBJECT_STRIP_PREFIX, key)];
+    }else if (header->bits[iter->no]) {
       keys.insert(key);
     }
   }
+
 
   int r = backend->get_values_with_header(header, OBJECT_STRIP_PREFIX, keys, &out);
   if (r < 0) {
@@ -2247,12 +2268,16 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
     r = -EINVAL;
   }
 
-  assert(out.size());
-  bl.swap(out.begin()->second);
+  if (out.size()) {
+    bl.swap(out.begin()->second);
+    r = bl.length();
+  } else {
+    r = -ENODATA;
+  }
 
   dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
            << bl.length() << " = " << r << dendl;
-  return bl.length();
+  return r;
 }
 
 int KeyValueStore::collection_getattrs(coll_t cid,
@@ -2261,25 +2286,11 @@ int KeyValueStore::collection_getattrs(coll_t cid,
   dout(10) << __func__ << " " << cid.to_str() << dendl;
 
   map<string, bufferlist> out;
-  set<string> keys;
-  StripObjectMap::StripObjectHeaderRef header;
 
-  for (map<string, bufferptr>::iterator it = aset.begin();
-       it != aset.end(); ++it) {
-      keys.insert(it->first);
-  }
-
-  int r = backend->lookup_strip_header(get_coll_for_coll(),
-                                       make_ghobject_for_coll(cid), &header);
-  if (r < 0) {
-    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
-    return r;
-  }
-
-  r = backend->get_values_with_header(header, COLLECTION_ATTR, keys, &out);
+  int r = backend->get(get_coll_for_coll(), make_ghobject_for_coll(cid),
+                       COLLECTION_ATTR, &out);
   if (r < 0) {
     dout(10) << __func__ << " could not get keys" << dendl;
-    r = -EINVAL;
     goto out;
   }
 
@@ -2558,61 +2569,6 @@ int KeyValueStore::_collection_remove_recursive(const coll_t &cid,
   r = t.clear_buffer(header);
 
   dout(10) << __func__ << " " << cid  << " r = " << r << dendl;
-  return 0;
-}
-
-int KeyValueStore::_collection_rename(const coll_t &cid, const coll_t &ncid,
-                                      BufferTransaction &t)
-{
-  dout(10) << __func__ << " origin cid " << cid << " new cid " << ncid
-           << dendl;
-
-  StripObjectMap::StripObjectHeaderRef header;
-
-  int r = t.lookup_cached_header(get_coll_for_coll(),
-                                 make_ghobject_for_coll(ncid),
-                                 &header, false);
-  if (r == 0) {
-    dout(2) << __func__ << ": " << ncid << " DNE" << dendl;
-    return -EEXIST;
-  }
-
-  r = t.lookup_cached_header(get_coll_for_coll(), make_ghobject_for_coll(cid),
-                             &header, false);
-  if (r < 0) {
-    dout(2) << __func__ << ": " << cid << " DNE" << dendl;
-    return 0;
-  }
-
-  vector<ghobject_t> objects;
-  ghobject_t next, current;
-  int move_size = 0;
-  while (1) {
-    collection_list_partial(cid, current, get_ideal_list_min(),
-                            get_ideal_list_max(), 0, &objects, &next);
-
-    dout(20) << __func__ << cid << "objects size: " << objects.size()
-             << dendl;
-
-    if (objects.empty())
-      break;
-
-    for (vector<ghobject_t>::iterator i = objects.begin();
-        i != objects.end(); ++i) {
-      if (_collection_move_rename(cid, *i, ncid, *i, t) < 0) {
-        return -1;
-      }
-      move_size++;
-    }
-
-    objects.clear();
-    current = next;
-  }
-
-  t.rename_buffer(header, get_coll_for_coll(), make_ghobject_for_coll(ncid));
-
-  dout(10) << __func__ << " origin cid " << cid << " new cid " << ncid
-           << dendl;
   return 0;
 }
 

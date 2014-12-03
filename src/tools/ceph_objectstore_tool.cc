@@ -55,6 +55,7 @@ enum {
 
 //#define INTERNAL_TEST
 //#define INTERNAL_TEST2
+//#define INTERNAL_TEST3
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
@@ -495,7 +496,7 @@ out:
 }
 
 //Based on part of OSD::load_pgs()
-int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
+int finish_remove_pgs(ObjectStore *store)
 {
   vector<coll_t> ls;
   int r = store->list_collections(ls);
@@ -509,7 +510,6 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
        it != ls.end();
        ++it) {
     spg_t pgid;
-    snapid_t snap;
 
     if (it->is_temp(pgid)) {
       cout << "finish_remove_pgs " << *it << " clearing temp" << std::endl;
@@ -517,16 +517,13 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
       continue;
     }
 
-    if (it->is_pg(pgid, snap)) {
-      continue;
-    }
-
     uint64_t seq;
-    if (it->is_removal(&seq, &pgid)) {
-      if (seq >= *next_removal_seq)
-	*next_removal_seq = seq + 1;
-      cout << "finish_remove_pgs removing " << *it << ", seq is "
-	       << seq << " pgid is " << pgid << std::endl;
+    coll_t coll(pgid);
+    char val;
+    if (it->is_removal(&seq, &pgid) ||
+	store->collection_getattr(coll, "remove", &val, 1) == 1) {
+      cout << "finish_remove_pgs removing " << *it
+	   << " pgid is " << pgid << std::endl;
       remove_coll(store, *it);
       continue;
     }
@@ -536,17 +533,15 @@ int finish_remove_pgs(ObjectStore *store, uint64_t *next_removal_seq)
   return 0;
 }
 
-int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid,
-    uint64_t *next_removal_seq)
+int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
 {
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
 
   if (store->collection_exists(coll_t(r_pgid))) {
-      coll_t to_remove = coll_t::make_removal_coll((*next_removal_seq)++, r_pgid);
-      cout << "collection rename " << coll_t(r_pgid)
-	   << " to " << to_remove
-        << std::endl;
-      rmt->collection_rename(coll_t(r_pgid), to_remove);
+    cout << " marking collection for removal" << std::endl;
+    bufferlist one;
+    one.append('1');
+    rmt->collection_setattr(coll_t(r_pgid), "remove", one);
   } else {
     delete rmt;
     return ENOENT;
@@ -654,7 +649,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  cout << "Read " << obj << std::endl;
+  cerr << "Read " << obj << std::endl;
 
   total = st.st_size;
   if (debug)
@@ -767,6 +762,21 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
+int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
+{
+  bufferlist bl;
+  bool found = store->read(
+      META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  if (!found) {
+    cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
+    return ENOENT;
+  }
+  osdmap.decode(bl);
+  if (debug)
+    cerr << osdmap << std::endl;
+  return 0;
+}
+
 //Write super_header with its fixed 16 byte length
 void write_super()
 {
@@ -797,7 +807,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cout << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -806,6 +816,10 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   write_super();
 
   pg_begin pgb(pgid, superblock);
+  // Special case: If replicated pg don't require the importing OSD to have shard feature
+  if (pgid.is_no_shard()) {
+    pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  }
   ret = write_section(TYPE_PG_BEGIN, pgb, file_fd);
   if (ret)
     return ret;
@@ -1199,9 +1213,6 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   cout << std::endl;
 #endif
 
-  coll_t newcoll(ms.info.pgid);
-  t->collection_rename(coll, newcoll);
-
   int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
   if (ret) return ret;
 
@@ -1335,8 +1346,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   pg_info_t info;
   PGLog::IndexedLog log;
 
-  uint64_t next_removal_seq = 0;	//My local seq
-  finish_remove_pgs(store, &next_removal_seq);
+  finish_remove_pgs(store);
 
   int ret = sh.read_super();
   if (ret)
@@ -1369,9 +1379,23 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   if (debug) {
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
+
+  // Special case: Old export has SHARDS incompat feature on replicated pg, remove it
+  if (pgid.is_no_shard())
+    pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+
   if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
-    cerr << "Export has incompatible features set "
-      << pgb.superblock.compat_features << std::endl;
+    CompatSet unsupported = sb.compat_features.unsupported(pgb.superblock.compat_features);
+
+    cerr << "Export has incompatible features set " << unsupported << std::endl;
+
+    // If shards setting the issue, then inform user what they can do about it.
+    if (unsupported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << std::endl;
+      cerr << "OSD requires sharding to be enabled" << std::endl;
+      cerr << std::endl;
+      cerr << "If you wish to import, first do 'ceph_objectstore_tool...--op set-allow-sharded-objects'" << std::endl;
+    }
     return 1;
   }
 
@@ -1385,11 +1409,12 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return 1;
   }
 
-  //Switch to collection which will be removed automatically if
-  //this program is interupted.
-  coll_t rmcoll = coll_t::make_removal_coll(next_removal_seq, pgid);
+  // mark this coll for removal until we are done
+  bufferlist one;
+  one.append('1');
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  t->create_collection(rmcoll);
+  t->create_collection(coll);
+  t->collection_setattr(coll, "remove", one);
   store->apply_transaction(*t);
   delete t;
 
@@ -1409,11 +1434,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, rmcoll, ebl);
+      ret = get_object(store, coll, ebl);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, rmcoll, ebl);
+      ret = get_pg_metadata(store, coll, ebl);
       if (ret) return ret;
       found_metadata = true;
       break;
@@ -1429,6 +1454,13 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     cerr << "Missing metadata section" << std::endl;
     return EFAULT;
   }
+
+  // done, clear removal flag
+  cout << "done, clearing remove flag" << std::endl;
+  t = new ObjectStore::Transaction;
+  t->collection_rmattr(coll, "remove");
+  store->apply_transaction(*t);
+  delete t;
 
   return 0;
 }
@@ -1814,7 +1846,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import, list-lost, fix-lost")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("debug", "Enable diagnostic output to stderr")
@@ -1920,7 +1952,7 @@ int main(int argc, char **argv)
     usage(desc);
   }
   if (op != "import" && op != "list-lost" && op != "fix-lost"
-      && op != "list-pgs" && !vm.count("pgid")) {
+      && op != "list-pgs"  && op != "set-allow-sharded-objects" && !vm.count("pgid")) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
   }
@@ -1941,9 +1973,9 @@ int main(int argc, char **argv)
 
   file_fd = fd_none;
   if (op == "export") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (outistty) {
-        cerr << "stdout is a tty and no --file option specified" << std::endl;
+        cerr << "stdout is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDOUT_FILENO;
@@ -1951,9 +1983,9 @@ int main(int argc, char **argv)
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
   } else if (op == "import") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
-        cerr << "stdin is a tty and no --file option specified" << std::endl;
+        cerr << "stdin is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDIN_FILENO;
@@ -2103,6 +2135,79 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (op == "set-allow-sharded-objects") {
+    // This could only happen if we backport changes to an older release
+    if (!supported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << "Can't enable sharded objects in this release" << std::endl;
+      ret = 1;
+      goto out;
+    }
+    if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) &&
+        fs_sharded_objects) {
+      cerr << "Sharded objects already fully enabled" << std::endl;
+      ret = 0;
+      goto out;
+    }
+    OSDMap curmap;
+    ret = get_osdmap(fs, superblock.current_epoch, curmap);
+    if (ret) {
+        cerr << "Can't find local OSDMap" << std::endl;
+        goto out;
+    }
+
+    // Based on OSDMonitor::check_cluster_features()
+    // XXX: The up state of osds in the last map isn't
+    // as important from a non-running osd.  I'm using
+    // get_all_osds() instead.  An osd which was never
+    // upgraded and never removed would be flagged here.
+    stringstream unsupported_ss;
+    int unsupported_count = 0;
+    uint64_t features = CEPH_FEATURE_OSD_ERASURE_CODES;
+    set<int32_t> all_osds;
+    curmap.get_all_osds(all_osds);
+    for (set<int32_t>::iterator it = all_osds.begin();
+         it != all_osds.end(); ++it) {
+        const osd_xinfo_t &xi = curmap.get_xinfo(*it);
+#ifdef INTERNAL_TEST3
+        // Force one of the OSDs to not have support for erasure codes
+        if (unsupported_count == 0)
+            ((osd_xinfo_t &)xi).features &= ~features;
+#endif
+        if ((xi.features & features) != features) {
+            if (unsupported_count > 0)
+                unsupported_ss << ", ";
+            unsupported_ss << "osd." << *it;
+            unsupported_count ++;
+        }
+    }
+
+    if (unsupported_count > 0) {
+        cerr << "ERASURE_CODES feature unsupported by: "
+           << unsupported_ss.str() << std::endl;
+        ret = 1;
+        goto out;
+    }
+
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    ::encode(superblock, bl);
+    t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+    r = fs->apply_transaction(t);
+    if (r < 0) {
+      cerr << "Error writing OSD superblock: " << cpp_strerror(r) << std::endl;
+      ret = 1;
+      goto out;
+    }
+
+    fs->set_allow_sharded_objects();
+
+    cout << "Enabled on-disk sharded objects" << std::endl;
+
+    ret = 0;
+    goto out;
+  }
+
   // If there was a crash as an OSD was transitioning to sharded objects
   // and hadn't completed a set_allow_sharded_objects().
   // This utility does not want to attempt to finish that transition.
@@ -2113,6 +2218,8 @@ int main(int argc, char **argv)
       cerr << "FileStore sharded but OSD not set, Corruption?" << std::endl;
     else
       cerr << "Found incomplete transition to sharded objects" << std::endl;
+    cerr << std::endl;
+    cerr << "Use --op set-allow-sharded-objects to repair" << std::endl;
     ret = EINVAL;
     goto out;
   }
@@ -2138,15 +2245,14 @@ int main(int argc, char **argv)
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (op == "remove") {
-    uint64_t next_removal_seq = 0;	//My local seq
-    finish_remove_pgs(fs, &next_removal_seq);
-    int r = initiate_new_remove_pg(fs, pgid, &next_removal_seq);
+    finish_remove_pgs(fs);
+    int r = initiate_new_remove_pg(fs, pgid);
     if (r) {
       cerr << "PG '" << pgid << "' not found" << std::endl;
       ret = 1;
       goto out;
     }
-    finish_remove_pgs(fs, &next_removal_seq);
+    finish_remove_pgs(fs);
     cout << "Remove successful" << std::endl;
     goto out;
   }
@@ -2493,8 +2599,8 @@ int main(int argc, char **argv)
 
     if (op == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
-      if (ret == 0 && file_fd != STDOUT_FILENO)
-        cout << "Export successful" << std::endl;
+      if (ret == 0)
+        cerr << "Export successful" << std::endl;
     } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);

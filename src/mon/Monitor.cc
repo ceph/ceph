@@ -451,76 +451,21 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
-void Monitor::update_log_client(
-    LogChannelRef lc, const string &name,
-    map<string,string> &log_to_monitors,
-    map<string,string> &log_to_syslog,
-    map<string,string> &log_channels,
-    map<string,string> &log_prios)
-{
-  bool to_monitors = (get_str_map_key(log_to_monitors, name,
-                                      &CLOG_CHANNEL_DEFAULT) == "true");
-  bool to_syslog = (get_str_map_key(log_to_syslog, name,
-                                    &CLOG_CHANNEL_DEFAULT) == "true");
-  string syslog_facility = get_str_map_key(log_channels, name,
-                                           &CLOG_CHANNEL_DEFAULT);
-  string prio = get_str_map_key(log_prios, name, &CLOG_CHANNEL_DEFAULT);
-
-  lc->set_log_to_monitors(to_monitors);
-  lc->set_log_to_syslog(to_syslog);
-  lc->set_syslog_facility(syslog_facility);
-  lc->set_log_channel(name);
-  lc->set_log_prio(prio);
-
-  dout(15) << __func__ << " " << name << "("
-           << " to_monitors: " << (to_monitors ? "true" : "false")
-           << " to_syslog: " << (to_syslog ? "true" : "false")
-           << " syslog_facility: " << syslog_facility
-           << " prio: " << prio << ")" << dendl;
-}
-
 void Monitor::update_log_clients()
 {
   map<string,string> log_to_monitors;
   map<string,string> log_to_syslog;
   map<string,string> log_channel;
   map<string,string> log_prio;
-  ostringstream oss;
 
-  int r = get_conf_str_map_helper(g_conf->clog_to_monitors, oss,
-                                  &log_to_monitors, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_monitors'" << dendl;
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio))
     return;
-  }
 
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog, oss,
-                              &log_to_syslog, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog'" << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog_facility, oss,
-                              &log_channel, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog_facility'" << dendl;
-    return;
-  }
-
-  r = get_conf_str_map_helper(g_conf->clog_to_syslog_level, oss,
-                              &log_prio, CLOG_CHANNEL_DEFAULT);
-  if (r < 0) {
-    derr << __func__ << " error parsing 'clog_to_syslog_level'" << dendl;
-    return;
-  }
-
-  update_log_client(clog, CLOG_CHANNEL_CLUSTER,
-                    log_to_monitors, log_to_syslog,
-                    log_channel, log_prio);
-  update_log_client(audit_clog, CLOG_CHANNEL_AUDIT,
-                    log_to_monitors, log_to_syslog,
-                    log_channel, log_prio);
+  clog->update_config(log_to_monitors, log_to_syslog,
+		      log_channel, log_prio);
+  audit_clog->update_config(log_to_monitors, log_to_syslog,
+			    log_channel, log_prio);
 }
 
 int Monitor::sanitize_options()
@@ -2485,19 +2430,16 @@ void Monitor::handle_command(MMonCommand *m)
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
       << "from='" << session->inst << "' "
-      << "entity='" << session->auth_handler->get_entity_name()
-      << "' cmd=" << m->cmd << ":  access denied";
+      << "entity='" << session->entity_name << "' "
+      << "cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
     << "from='" << session->inst << "' "
-    << "entity='"
-    << (session->auth_handler ?
-        stringify(session->auth_handler->get_entity_name())
-        : "forwarded-request")
-    << "' cmd=" << m->cmd << ": dispatch";
+    << "entity='" << session->entity_name << "' "
+    << "cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
@@ -2803,6 +2745,11 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 				     rr->con_features,
 				     rr->session->caps);
     forward->set_priority(req->get_priority());
+    if (session->auth_handler) {
+      forward->entity_name = session->entity_name;
+    } else if (req->get_source().is_mon()) {
+      forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
+    }
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
@@ -2836,6 +2783,9 @@ void Monitor::handle_forward(MForward *m)
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
+    s->entity_name = m->entity_name;
+    dout(10) << " entity name '" << s->entity_name << "' type "
+             << s->entity_name.get_type() << dendl;
     s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
@@ -3093,7 +3043,6 @@ void Monitor::_ms_dispatch(Message *m)
   ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
   MonCap caps;
-  EntityName entity_name;
   bool src_is_mon;
 
   // regardless of who we are or who the sender is, the message must
@@ -3164,7 +3113,7 @@ void Monitor::_ms_dispatch(Message *m)
 
   if (s) {
     if (s->auth_handler) {
-      entity_name = s->auth_handler->get_entity_name();
+      s->entity_name = s->auth_handler->get_entity_name();
     }
     dout(20) << " caps " << s->caps.get_str() << dendl;
   }

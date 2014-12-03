@@ -908,6 +908,7 @@ public:
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
 				  const std::set <std::string> &changed);
+  void update_log_config();
   void check_config();
 
 protected:
@@ -2322,8 +2323,6 @@ protected:
 
   // static bits
   static int find_osd_dev(char *result, int whoami);
-  static int do_convertfs(ObjectStore *store);
-  static int convert_collection(ObjectStore *store, coll_t cid);
   static int mkfs(CephContext *cct, ObjectStore *store,
 		  const string& dev,
 		  uuid_d fsid, int whoami);

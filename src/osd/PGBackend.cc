@@ -552,13 +552,13 @@ void PGBackend::be_compare_scrubmaps(
 	    ++shallow_errors;
           else
 	    ++deep_errors;
-	  errorstream << pgid << " shard " << j->first
+	  errorstream << __func__ << ": " << pgid << " shard " << j->first
 		      << ": soid " << *k << " " << ss.str() << std::endl;
 	}
       } else {
 	cur_missing.insert(j->first);
 	++shallow_errors;
-	errorstream << pgid << " shard " << j->first
+	errorstream << __func__ << ": " << pgid << " shard " << j->first
 		    << " missing " << *k << std::endl;
       }
     }

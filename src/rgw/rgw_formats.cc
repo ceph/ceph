@@ -197,16 +197,23 @@ done:
   if (!buf) {
     max_len = max(LARGE_ENOUGH_BUF, size);
     buf = (char *)malloc(max_len);
+    if (!buf) {
+      cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
+      goto done_free;
+    }
   }
 
   if (len + size > max_len) {
     max_len = len + size + LARGE_ENOUGH_BUF;
-    buf = (char *)realloc(buf, max_len);
+    void *_realloc = NULL;
+    if ((_realloc = realloc(buf, max_len)) == NULL) {
+      cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
+      goto done_free;
+    } else {
+      buf = (char *)_realloc;
+    }
   }
-  if (!buf) {
-    cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
-    goto done_free;
-  }
+
   pos = len;
   if (len)
     pos--; // squash null termination

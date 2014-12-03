@@ -68,7 +68,6 @@ class StripObjectMap: public GenericObjectMap {
     ghobject_t oid;
     bool updated;
     bool deleted;
-    map<pair<string, string>, bufferlist> buffers;  // pair(prefix, key)
 
     StripObjectHeader(): strip_size(default_strip_size), max_size(0), updated(false), deleted(false) {}
 
@@ -249,6 +248,8 @@ class KeyValueStore : public ObjectStore,
 
     //Dirty records
     StripHeaderMap strip_headers;
+    map< uniq_id, map<pair<string, string>, bufferlist> > buffers;  // pair(prefix, key),to buffer updated data in one transaction
+
     list<Context*> finishes;
 
     KeyValueStore *store;
@@ -610,8 +611,6 @@ class KeyValueStore : public ObjectStore,
                               BufferTransaction &t);
   int _collection_remove_recursive(const coll_t &cid,
                                    BufferTransaction &t);
-  int _collection_rename(const coll_t &cid, const coll_t &ncid,
-                         BufferTransaction &t);
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
   bool collection_empty(coll_t c);

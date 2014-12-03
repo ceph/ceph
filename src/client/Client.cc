@@ -143,7 +143,7 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 
 dir_result_t::dir_result_t(Inode *in)
   : inode(in), offset(0), this_offset(2), next_offset(2),
-    release_count(0), start_shared_gen(0),
+    release_count(0), ordered_count(0), start_shared_gen(0),
     buffer(0) {
   inode->get();
 }
@@ -551,10 +551,10 @@ void Client::trim_dentry(Dentry *dn)
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir " << hex << dn->dir->parent_inode->ino 
 		 << dendl;
+  dn->dir->release_count++;
   if (dn->dir->parent_inode->flags & I_COMPLETE) {
-    ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *dn->dir->parent_inode << dendl;
-    dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
-    dn->dir->release_count++;
+    ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *dn->dir->parent_inode << dendl;
+    dn->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
   }
   unlink(dn, false, false);  // drop dir, drop dentry
 }
@@ -775,8 +775,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       (issued & CEPH_CAP_FILE_EXCL) == 0 &&
       in->dirstat.nfiles == 0 &&
       in->dirstat.nsubdirs == 0) {
-    ldout(cct, 10) << " marking (I_COMPLETE|I_COMPLETE_ORDERED) on empty dir " << *in << dendl;
-    in->flags |= I_COMPLETE | I_COMPLETE_ORDERED;
+    ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on empty dir " << *in << dendl;
+    in->flags |= I_COMPLETE | I_DIR_ORDERED;
     if (in->dir) {
       ldout(cct, 10) << " dir is open on empty dir " << in->ino << " with "
 		     << in->dir->dentry_list.size() << " entries, marking all dentries null" << dendl;
@@ -826,16 +826,20 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   if (!dn || dn->inode == 0) {
     in->get();
     if (old_dentry) {
-      if (old_dentry->dir->parent_inode->flags & I_COMPLETE_ORDERED) {
-	ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on "
-		       << *old_dentry->dir->parent_inode << dendl;
-	old_dentry->dir->parent_inode->flags &= ~I_COMPLETE_ORDERED;
+      if (old_dentry->dir != dir) {
+	old_dentry->dir->ordered_count++;
+	if (old_dentry->dir->parent_inode->flags & I_DIR_ORDERED) {
+	  ldout(cct, 10) << " clearing I_DIR_ORDERED on "
+			 << *old_dentry->dir->parent_inode << dendl;
+	  old_dentry->dir->parent_inode->flags &= ~I_DIR_ORDERED;
+	}
       }
       unlink(old_dentry, dir == old_dentry->dir, false);  // drop dentry, keep dir open if its the same dir
     }
-    if (dir->parent_inode->flags & I_COMPLETE_ORDERED) {
-	ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on " << *dir->parent_inode << dendl;
-	dir->parent_inode->flags &= ~I_COMPLETE_ORDERED;
+    dir->ordered_count++;
+    if (dir->parent_inode->flags & I_DIR_ORDERED) {
+	ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *dir->parent_inode << dendl;
+	dir->parent_inode->flags &= ~I_DIR_ORDERED;
     }
     dn = link(dir, dname, in, dn);
     put_inode(in);
@@ -1022,11 +1026,12 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     ldout(cct, 10) << "insert_trace -- no trace" << dendl;
 
     Dentry *d = request->dentry();
-    if (d && d->dir &&
-	(d->dir->parent_inode->flags & I_COMPLETE)) {
-      ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *d->dir->parent_inode << dendl;
-      d->dir->parent_inode->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
+    if (d && d->dir) {
       d->dir->release_count++;
+      if (d->dir->parent_inode->flags & I_COMPLETE) {
+	ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *d->dir->parent_inode << dendl;
+	d->dir->parent_inode->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
+      }
     }
 
     if (d && reply->get_result() == 0) {
@@ -1092,9 +1097,10 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (diri->dir && diri->dir->dentries.count(dname)) {
 	Dentry *dn = diri->dir->dentries[dname];
 	if (dn->inode) {
-	  if (diri->flags & I_COMPLETE_ORDERED) {
-	    ldout(cct, 10) << " clearing I_COMPLETE_ORDERED on " << *diri << dendl;
-	    diri->flags &= ~I_COMPLETE_ORDERED;
+	  diri->dir->ordered_count++;
+	  if (diri->flags & I_DIR_ORDERED) {
+	    ldout(cct, 10) << " clearing I_DIR_ORDERED on " << *diri << dendl;
+	    diri->flags &= ~I_DIR_ORDERED;
 	  }
 	  unlink(dn, true, true);  // keep dir, dentry
 	}
@@ -2578,11 +2584,23 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 	   << dendl;
 
   if (cct->_conf->client_inject_release_failure && revoking) {
+    const int would_have_issued = cap->issued & retain;
+    const int would_have_implemented = cap->implemented & (cap->issued | used);
     // Simulated bug:
     //  - tell the server we think issued is whatever they issued plus whatever we implemented
     //  - leave what we have implemented in place
     ldout(cct, 20) << __func__ << " injecting failure to release caps" << dendl;
     cap->issued = cap->issued | cap->implemented;
+
+    // Make an exception for revoking xattr caps: we are injecting
+    // failure to release other caps, but allow xattr because client
+    // will block on xattr ops if it can't release these to MDS (#9800)
+    const int xattr_mask = CEPH_CAP_XATTR_SHARED | CEPH_CAP_XATTR_EXCL;
+    cap->issued ^= xattr_mask & revoking;
+    cap->implemented ^= xattr_mask & revoking;
+
+    ldout(cct, 20) << __func__ << " issued " << ccap_string(cap->issued) << " vs " << ccap_string(would_have_issued) << dendl;
+    ldout(cct, 20) << __func__ << " implemented " << ccap_string(cap->implemented) << " vs " << ccap_string(would_have_implemented) << dendl;
   } else {
     // Normal behaviour
     cap->issued &= retain;
@@ -3092,8 +3110,8 @@ void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
     in->shared_gen++;
 
     if (in->is_dir() && (in->flags & I_COMPLETE)) {
-      ldout(cct, 10) << " clearing (I_COMPLETE|I_COMPLETE_ORDERED) on " << *in << dendl;
-      in->flags &= ~(I_COMPLETE | I_COMPLETE_ORDERED);
+      ldout(cct, 10) << " clearing (I_COMPLETE|I_DIR_ORDERED) on " << *in << dendl;
+      in->flags &= ~(I_COMPLETE | I_DIR_ORDERED);
     }
   }
 }
@@ -3860,9 +3878,10 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
   mds_rank_t mds = session->mds_num;
   int dirty = m->get_dirty();
   int cleaned = 0;
+  uint16_t flush_ack_tid = static_cast<uint16_t>(m->get_client_tid());
   for (int i = 0; i < CEPH_CAP_BITS; ++i) {
     if ((dirty & (1 << i)) &&
-	(m->get_client_tid() == in->flushing_cap_tid[i]))
+	(flush_ack_tid == in->flushing_cap_tid[i]))
       cleaned |= 1 << i;
   }
 
@@ -4157,7 +4176,7 @@ int Client::resolve_mds(
     // It is a wildcard: use all MDSs
     const std::map<mds_gid_t, MDSMap::mds_info_t> &mds_info = mdsmap->get_mds_info();
 
-    if (mds_info.size() == 0) {
+    if (mds_info.empty()) {
       lderr(cct) << __func__ << ": * passed but no MDS daemons found" << dendl;
       return -ENOENT;
     }
@@ -5456,8 +5475,10 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, int uid, int gid)
     return -ENOTDIR;
   *dirpp = new dir_result_t(in);
   (*dirpp)->set_frag(in->dirfragtree[0]);
-  if (in->dir)
+  if (in->dir) {
     (*dirpp)->release_count = in->dir->release_count;
+    (*dirpp)->ordered_count = in->dir->ordered_count;
+  }
   (*dirpp)->start_shared_gen = in->shared_gen;
   ldout(cct, 10) << "_opendir " << in->ino << ", our cache says the first dirfrag is " << (*dirpp)->frag() << dendl;
   ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
@@ -5814,13 +5835,13 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
 
   // can we read from our cache?
   ldout(cct, 10) << "offset " << hex << dirp->offset << dec << " at_cache_name " << dirp->at_cache_name
-	   << " snapid " << dirp->inode->snapid << " I_COMPLETE_ORDERED "
-	   << (bool)(dirp->inode->flags & I_COMPLETE_ORDERED)
+	   << " snapid " << dirp->inode->snapid << " (complete && ordered) "
+	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
   if ((dirp->offset == 2 || dirp->at_cache_name.length()) &&
       dirp->inode->snapid != CEPH_SNAPDIR &&
-      (dirp->inode->flags & I_COMPLETE_ORDERED) &&
+      dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
     int err = _readdir_cache_cb(dirp, cb, p);
     if (err != -EAGAIN)
@@ -5887,10 +5908,15 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p)
     }
 
     if (diri->dir &&
-	diri->dir->release_count == dirp->release_count &&
-	diri->shared_gen == dirp->start_shared_gen) {
-      ldout(cct, 10) << " marking (I_COMPLETE|I_COMPLETE_ORDERED) on " << *diri << dendl;
-      diri->flags |= I_COMPLETE | I_COMPLETE_ORDERED;
+	diri->shared_gen == dirp->start_shared_gen &&
+	diri->dir->release_count == dirp->release_count) {
+      if (diri->dir->ordered_count == dirp->ordered_count) {
+	ldout(cct, 10) << " marking (I_COMPLETE|I_DIR_ORDERED) on " << *diri << dendl;
+	diri->flags |= I_COMPLETE | I_DIR_ORDERED;
+      } else {
+	ldout(cct, 10) << " marking I_COMPLETE on " << *diri << dendl;
+	diri->flags |= I_COMPLETE;
+      }
     }
 
     dirp->set_end();

@@ -540,13 +540,8 @@ void ObjectCacher::perf_start()
 
   plb.add_u64_counter(l_objectcacher_cache_ops_hit, "cache_ops_hit");
   plb.add_u64_counter(l_objectcacher_cache_ops_miss, "cache_ops_miss");
-  plb.add_u64_counter(l_objectcacher_cache_ops_partial_hit, "cache_ops_partial_hit");
-  plb.add_u64_counter(l_objectcacher_cache_ops_wait_cow, "cache_ops_wait_cow");
   plb.add_u64_counter(l_objectcacher_cache_bytes_hit, "cache_bytes_hit");
-  plb.add_u64_counter(l_objectcacher_cache_bytes_partial_hit, "cache_bytes_partial_hit");
   plb.add_u64_counter(l_objectcacher_cache_bytes_miss, "cache_bytes_miss");
-  plb.add_u64_counter(l_objectcacher_cache_bytes_rx, "cache_bytes_rx");
-  plb.add_u64_counter(l_objectcacher_cache_bytes_wait_cow, "cache_bytes_wait_cow");
   plb.add_u64_counter(l_objectcacher_data_read, "data_read");
   plb.add_u64_counter(l_objectcacher_data_written, "data_written");
   plb.add_u64_counter(l_objectcacher_data_flushed, "data_flushed");
@@ -714,9 +709,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
       }
     }
 
-    ls.splice(ls.end(), waitfor_read);
-    waitfor_read.clear();
-
     // apply to bh's!
     loff_t opos = start;
     while (true) {
@@ -803,6 +795,8 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
   ldout(cct, 20) << "finishing waiters " << ls << dendl;
 
   finish_contexts(cct, ls, err);
+  retry_waiting_reads();
+
   --reads_outstanding;
   read_cond.Signal();
 }
@@ -955,14 +949,14 @@ void ObjectCacher::flush(loff_t amount)
 }
 
 
-void ObjectCacher::trim(uint64_t extra_space)
+void ObjectCacher::trim()
 {
   assert(lock.is_locked());
   ldout(cct, 10) << "trim  start: bytes: max " << max_size << "  clean " << get_stat_clean()
 		 << ", objects: max " << max_objects << " current " << ob_lru.lru_get_size()
 		 << dendl;
 
-  while (get_stat_clean() > 0 && (uint64_t) (get_stat_clean() + get_stat_rx() + extra_space) > max_size) {
+  while (get_stat_clean() > 0 && (uint64_t) get_stat_clean() > max_size) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1035,21 +1029,16 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   int error = 0;
   list<BufferHead*> hit_ls;
   uint64_t bytes_in_cache = 0;
-  uint64_t bytes_missing = 0;
-  uint64_t bytes_rx = 0;
+  uint64_t bytes_not_in_cache = 0;
   uint64_t total_bytes_read = 0;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ++ex_it) {
-    total_bytes_read += ex_it->length;
-  }
-
-  for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
-       ex_it != rd->extents.end();
-       ++ex_it) {
     ldout(cct, 10) << "readx " << *ex_it << dendl;
+
+    total_bytes_read += ex_it->length;
 
     // get Object cache
     sobject_t soid(ex_it->oid, rd->snap);
@@ -1082,11 +1071,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	if (wait) {
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(new C_RetryRead(this, rd, oset, onfinish));
-	  if (perfcounter && external_call) {
-	    perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-	    perfcounter->inc(l_objectcacher_cache_bytes_wait_cow, total_bytes_read);
-	    perfcounter->inc(l_objectcacher_cache_ops_wait_cow);
-	  }
+	  // FIXME: perfcounter!
 	  return 0;
 	}
       }
@@ -1105,11 +1090,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       if (allzero) {
 	ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
 	delete rd;
-	if (perfcounter && external_call) {
-	  perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-	  perfcounter->inc(l_objectcacher_cache_bytes_hit, total_bytes_read);
-	  perfcounter->inc(l_objectcacher_cache_ops_hit);
-	}
 	return -ENOENT;
       }
     }
@@ -1126,36 +1106,36 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       // TODO: make read path not call _readx for every completion
       hits.insert(errors.begin(), errors.end());
     }
-    
+
     if (!missing.empty() || !rx.empty()) {
       // read missing
       for (map<loff_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
            ++bh_it) {
-        loff_t clean = get_stat_clean() + get_stat_rx() +
-                       bh_it->second->length();
-	if (get_stat_rx() > 0 && static_cast<uint64_t>(clean) > max_size) {
-	  trim(bh_it->second->length());
-	}
-	clean = get_stat_clean() + get_stat_rx() + bh_it->second->length();
-        if (get_stat_rx() > 0 && static_cast<uint64_t>(clean) > max_size) {
-          // cache is full -- wait for rx's to complete
-          ldout(cct, 10) << "readx missed, waiting on cache to free "
-                         << (clean - max_size) << " bytes" << dendl;
-          if (success) {
-            waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish));
-          }
-          bh_remove(o, bh_it->second);
-          delete bh_it->second;
-        } else {
-          bh_read(bh_it->second);
-          if (success && onfinish) {
-            ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second 
-                     << " off " << bh_it->first << dendl;
+	uint64_t rx_bytes = static_cast<uint64_t>(
+	  stat_rx + bh_it->second->length());
+	if (!waitfor_read.empty() || rx_bytes > max_size) {
+	  // cache is full with concurrent reads -- wait for rx's to complete
+	  // to constrain memory growth (especially during copy-ups)
+	  if (success) {
+	    ldout(cct, 10) << "readx missed, waiting on cache to complete "
+			   << waitfor_read.size() << " blocked reads, "
+			   << (MAX(rx_bytes, max_size) - max_size)
+			   << " read bytes" << dendl;
+	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish));
+	  }
+
+	  bh_remove(o, bh_it->second);
+	  delete bh_it->second;
+	} else {
+	  bh_read(bh_it->second);
+	  if (success && onfinish) {
+	    ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
+			   << " off " << bh_it->first << dendl;
 	    bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
-          }
-        }
-	bytes_missing += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
+	  }
+	}
+        bytes_not_in_cache += bh_it->second->length();
 	success = false;
       }
 
@@ -1169,16 +1149,9 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
                    << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
         }
-	bytes_rx += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
+        bytes_not_in_cache += bh_it->second->length();
 	success = false;
       }      
-
-      // Count the bytes that were available in the cache, so we can track partial hits
-      for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
-           bh_it != hits.end();
-           ++bh_it) {
-	bytes_in_cache += bh_it->second->overlap_size(bh_it->first, ex_it->offset + ex_it->length);
-      }
     } else {
       assert(!hits.empty());
 
@@ -1190,6 +1163,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	if (bh_it->second->is_error() && bh_it->second->error)
 	  error = bh_it->second->error;
         hit_ls.push_back(bh_it->second);
+        bytes_in_cache += bh_it->second->length();
       }
 
       // create reverse map of buffer offset -> object for the eventual result.
@@ -1225,7 +1199,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  stripe_map[f_it->first].claim_append(bit);
 	}
 
-	bytes_in_cache += len;
         opos += len;
         bhoff += len;
         foff += len;
@@ -1251,20 +1224,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
        bhit != hit_ls.end();
        ++bhit) 
     touch_bh(*bhit);
-
-  assert(bytes_in_cache + bytes_missing + bytes_rx == total_bytes_read);
-
+  
   if (!success) {
     if (perfcounter && external_call) {
       perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-      if (bytes_in_cache > 0) {
-	perfcounter->inc(l_objectcacher_cache_ops_partial_hit);
-	perfcounter->inc(l_objectcacher_cache_bytes_partial_hit, bytes_in_cache);
-      } else {
-	perfcounter->inc(l_objectcacher_cache_ops_miss);
-      }
-      perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_missing);
-      perfcounter->inc(l_objectcacher_cache_bytes_rx, bytes_rx);
+      perfcounter->inc(l_objectcacher_cache_bytes_miss, bytes_not_in_cache);
+      perfcounter->inc(l_objectcacher_cache_ops_miss);
     }
     if (onfinish) {
       ldout(cct, 20) << "readx defer " << rd << dendl;
@@ -1276,14 +1241,14 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   }
   if (perfcounter && external_call) {
     perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
-    perfcounter->inc(l_objectcacher_cache_bytes_hit, total_bytes_read);
+    perfcounter->inc(l_objectcacher_cache_bytes_hit, bytes_in_cache);
     perfcounter->inc(l_objectcacher_cache_ops_hit);
   }
 
   // no misses... success!  do the read.
   assert(!hit_ls.empty());
   ldout(cct, 10) << "readx has all buffers" << dendl;
-  
+
   // ok, assemble into result buffer.
   uint64_t pos = 0;
   if (rd->bl && !error) {
@@ -1316,6 +1281,18 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   return ret;
 }
 
+void ObjectCacher::retry_waiting_reads()
+{
+  list<Context *> ls;
+  ls.swap(waitfor_read);
+
+  while (!ls.empty() && waitfor_read.empty()) {
+    Context *ctx = ls.front();
+    ls.pop_front();
+    ctx->complete(0);
+  }
+  waitfor_read.splice(waitfor_read.end(), ls);
+}
 
 int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
 			 Context *onfreespace)

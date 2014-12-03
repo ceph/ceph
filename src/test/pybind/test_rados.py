@@ -1,6 +1,6 @@
 from nose.tools import eq_ as eq, assert_raises
 from rados import (Rados, Error, Object, ObjectExists, ObjectNotFound,
-                   ANONYMOUS_AUID, ADMIN_AUID)
+                   ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES)
 import threading
 import json
 import errno
@@ -177,6 +177,23 @@ class TestIoctx(object):
         self.ioctx.append('d', 'jazz')
         object_names = [obj.key for obj in self.ioctx.list_objects()]
         eq(sorted(object_names), ['a', 'b', 'c', 'd'])
+
+    def test_list_ns_objects(self):
+        self.ioctx.write('a', '')
+        self.ioctx.write('b', 'foo')
+        self.ioctx.write_full('c', 'bar')
+        self.ioctx.append('d', 'jazz')
+        self.ioctx.set_namespace("ns1")
+        self.ioctx.write('ns1-a', '')
+        self.ioctx.write('ns1-b', 'foo')
+        self.ioctx.write_full('ns1-c', 'bar')
+        self.ioctx.append('ns1-d', 'jazz')
+        self.ioctx.append('d', 'jazz')
+        self.ioctx.set_namespace(LIBRADOS_ALL_NSPACES)
+        object_names = [(obj.nspace, obj.key) for obj in self.ioctx.list_objects()]
+        eq(sorted(object_names), [('', 'a'), ('','b'), ('','c'), ('','d'),\
+                ('ns1', 'd'), ('ns1', 'ns1-a'), ('ns1', 'ns1-b'),\
+                ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
         xattrs = dict(a='1', b='2', c='3', d='a\0b', e='\0')

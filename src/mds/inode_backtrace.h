@@ -61,6 +61,21 @@ struct inode_backtrace_t {
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_backtrace_t*>& ls);
+
+  /**
+   * Compare two backtraces *for the same inode*.
+   * @pre The backtraces are for the same inode
+   *
+   * @param other The backtrace to compare ourselves with
+   * @param equivalent A bool pointer which will be set to true if
+   * the other backtrace is equivalent to our own (has the same dentries)
+   * @param divergent A bool pointer which will be set to true if
+   * the backtraces have differing entries without versions supporting them
+   *
+   * @returns 1 if we are newer than the other, 0 if equal, -1 if older
+   */
+  int compare(const inode_backtrace_t& other,
+               bool *equivalent, bool *divergent) const;
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
@@ -68,6 +83,13 @@ inline ostream& operator<<(ostream& out, const inode_backtrace_t& it) {
   return out << "(" << it.pool << ")" << it.ino << ":" << it.ancestors << "//" << it.old_pools;
 }
 
+inline bool operator==(const inode_backtrace_t& l,
+                       const inode_backtrace_t& r) {
+  return l.ino == r.ino &&
+      l.pool == r.pool &&
+      l.old_pools == r.old_pools &&
+      l.ancestors == r.ancestors;
+}
 
 #endif
 

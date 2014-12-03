@@ -463,7 +463,7 @@ int RGWSetTempUrl_ObjStore_SWIFT::get_params()
     temp_url_keys[1] = temp_url;
   }
 
-  if (temp_url_keys.size() == 0)
+  if (temp_url_keys.empty())
     return -EINVAL;
 
   return 0;
@@ -566,6 +566,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
+  s->cio->print("X-Timestamp: %lld\r\n", (long long)lastmod);
 
   if (!ret) {
     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
@@ -789,8 +790,6 @@ int RGWHandler_ObjStore_SWIFT::authorize()
   bool authorized = rgw_swift->verify_swift_token(store, s);
   if (!authorized)
     return -EPERM;
-
-  s->perm_mask = RGW_PERM_FULL_CONTROL;
 
   return 0;
 }

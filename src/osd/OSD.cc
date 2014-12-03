@@ -1284,132 +1284,6 @@ void OSDService::queue_for_peering(PG *pg)
 #undef dout_prefix
 #define dout_prefix *_dout
 
-int OSD::convert_collection(ObjectStore *store, coll_t cid)
-{
-  coll_t tmp0("convertfs_temp");
-  coll_t tmp1("convertfs_temp1");
-  vector<ghobject_t> objects;
-
-  map<string, bufferptr> aset;
-  int r = store->collection_getattrs(cid, aset);
-  if (r < 0)
-    return r;
-
-  {
-    ObjectStore::Transaction t;
-    t.create_collection(tmp0);
-    for (map<string, bufferptr>::iterator i = aset.begin();
-	 i != aset.end();
-	 ++i) {
-      bufferlist val;
-      val.push_back(i->second);
-      t.collection_setattr(tmp0, i->first, val);
-    }
-    store->apply_transaction(t);
-  }
-
-  ghobject_t next;
-  while (!next.is_max()) {
-    objects.clear();
-    ghobject_t start = next;
-    r = store->collection_list_partial(cid, start,
-				       200, 300, 0,
-				       &objects, &next);
-    if (r < 0)
-      return r;
-
-    ObjectStore::Transaction t;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end();
-	 ++i) {
-      t.collection_add(tmp0, cid, *i);
-    }
-    store->apply_transaction(t);
-  }
-
-  {
-    ObjectStore::Transaction t;
-    t.collection_rename(cid, tmp1);
-    t.collection_rename(tmp0, cid);
-    store->apply_transaction(t);
-  }
-
-  recursive_remove_collection(store, tmp1);
-  store->sync_and_flush();
-  store->sync();
-  return 0;
-}
-
-int OSD::do_convertfs(ObjectStore *store)
-{
-  int r = store->mount();
-  if (r < 0)
-    return r;
-
-  uint32_t version;
-  r = store->version_stamp_is_valid(&version);
-  if (r < 0)
-    return r;
-  if (r == 1)
-    return store->umount();
-
-  derr << "ObjectStore is old at version " << version << ".  Updating..."  << dendl;
-
-  derr << "Removing tmp pgs" << dendl;
-  vector<coll_t> collections;
-  r = store->list_collections(collections);
-  if (r < 0)
-    return r;
-  for (vector<coll_t>::iterator i = collections.begin();
-       i != collections.end();
-       ++i) {
-    spg_t pgid;
-    if (i->is_temp(pgid))
-      recursive_remove_collection(store, *i);
-    else if (i->to_str() == "convertfs_temp" ||
-	     i->to_str() == "convertfs_temp1")
-      recursive_remove_collection(store, *i);
-  }
-  store->flush();
-
-
-  derr << "Getting collections" << dendl;
-
-  derr << collections.size() << " to process." << dendl;
-  collections.clear();
-  r = store->list_collections(collections);
-  if (r < 0)
-    return r;
-  int processed = 0;
-  for (vector<coll_t>::iterator i = collections.begin();
-       i != collections.end();
-       ++i, ++processed) {
-    derr << processed << "/" << collections.size() << " processed" << dendl;
-    uint32_t collection_version;
-    r = store->collection_version_current(*i, &collection_version);
-    if (r < 0) {
-      return r;
-    } else if (r == 1) {
-      derr << "Collection " << *i << " is up to date" << dendl;
-    } else {
-      derr << "Updating collection " << *i << " current version is " 
-	   << collection_version << dendl;
-      r = convert_collection(store, *i);
-      if (r < 0)
-	return r;
-      derr << "collection " << *i << " updated" << dendl;
-    }
-  }
-  derr << "All collections up to date, updating version stamp..." << dendl;
-  r = store->update_version_stamp();
-  if (r < 0)
-    return r;
-  store->sync_and_flush();
-  store->sync();
-  derr << "Version stamp updated, done with upgrade!" << dendl;
-  return store->umount();
-}
-
 int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 	      uuid_d fsid, int whoami)
 {
@@ -2012,6 +1886,7 @@ int OSD::init()
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
+  update_log_config();
 
   osd_tp.start();
   osd_op_tp.start();
@@ -2569,7 +2444,7 @@ void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
     int r = mapper.remove_oid(p->hobj, &_t);
     if (r != 0 && r != -ENOENT)
       assert(0);
-    t.collection_remove(tmp, *p);
+    t.remove(tmp, *p);
     if (removed > 300) {
       int r = store->apply_transaction(t);
       assert(r == 0);
@@ -2858,9 +2733,11 @@ void OSD::load_pgs()
     spg_t pgid;
     snapid_t snap;
     uint64_t seq;
+    char val;
 
     if (it->is_temp(pgid) ||
-	it->is_removal(&seq, &pgid)) {
+	it->is_removal(&seq, &pgid) ||
+	store->collection_getattr(*it, "remove", &val, 1) > 0) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, *it);
       continue;
@@ -4943,6 +4820,11 @@ COMMAND("injectargs " \
 	"name=injected_args,type=CephString,n=N",
 	"inject configuration arguments into running OSD",
 	"osd", "rw", "cli,rest")
+COMMAND("cluster_log " \
+	"name=level,type=CephChoices,strings=error,warning,info,debug " \
+	"name=message,type=CephString,n=N",
+	"log a message to the cluster log",
+	"osd", "rw", "cli,rest")
 COMMAND("bench " \
 	"name=count,type=CephInt,req=false " \
 	"name=size,type=CephInt,req=false ", \
@@ -5045,6 +4927,27 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     osd_lock.Unlock();
     cct->_conf->injectargs(args, &ss);
     osd_lock.Lock();
+  }
+  else if (prefix == "cluster_log") {
+    vector<string> msg;
+    cmd_getval(cct, cmdmap, "message", msg);
+    if (msg.empty()) {
+      r = -EINVAL;
+      ss << "ignoring empty log message";
+      goto out;
+    }
+    string message = msg.front();
+    for (vector<string>::iterator a = ++msg.begin(); a != msg.end(); ++a)
+      message += " " + *a;
+    string lvl;
+    cmd_getval(cct, cmdmap, "level", lvl);
+    clog_type level = string_to_clog_type(lvl);
+    if (level < 0) {
+      r = -EINVAL;
+      ss << "unknown level '" << lvl << "'";
+      goto out;
+    }
+    clog->do_log(level, message);
   }
 
   // either 'pg <pgid> <command>' or
@@ -6929,9 +6832,11 @@ void OSD::handle_pg_create(OpRequestRef op)
 
   int num_created = 0;
 
+  map<pg_t,utime_t>::iterator ci = m->ctimes.begin();
   for (map<pg_t,pg_create_t>::iterator p = m->mkpg.begin();
        p != m->mkpg.end();
-       ++p) {
+       ++p, ++ci) {
+    assert(ci != m->ctimes.end() && ci->first == p->first);
     epoch_t created = p->second.created;
     pg_t parent = p->second.parent;
     if (p->second.split_bits) // Skip split pgs
@@ -6948,7 +6853,7 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     }
 
-    dout(20) << "mkpg " << on << " e" << created << dendl;
+    dout(20) << "mkpg " << on << " e" << created << "@" << ci->second << dendl;
    
     // is it still ours?
     vector<int> up, acting;
@@ -6986,9 +6891,16 @@ void OSD::handle_pg_create(OpRequestRef op)
     history.last_epoch_clean = created;
     // Newly created PGs don't need to scrub immediately, so mark them
     // as scrubbed at creation time.
-    utime_t now = ceph_clock_now(NULL);
-    history.last_scrub_stamp = now;
-    history.last_deep_scrub_stamp = now;
+    if (ci->second == utime_t()) {
+      // Older OSD doesn't send ctime, so just do what we did before
+      // The repair_test.py can fail in a mixed cluster
+      utime_t now = ceph_clock_now(NULL);
+      history.last_scrub_stamp = now;
+      history.last_deep_scrub_stamp = now;
+    } else {
+      history.last_scrub_stamp = ci->second;
+      history.last_deep_scrub_stamp = ci->second;
+    }
     bool valid_history = project_pg_history(
       pgid, history, created, up, up_primary, acting, acting_primary);
     /* the pg creation message must have come from a mon and therefore
@@ -8095,8 +8007,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
   OSDMapRef send_map = service.try_get_map(m->get_map_epoch());
   // check send epoch
   if (!send_map) {
-
-    dout(7) << "don't have sender's osdmap; assuming it was valid and that client will resend" << dendl;
+    dout(7) << "don't have sender's osdmap; assuming it was valid and that"
+	    << " client will resend" << dendl;
     return;
   }
   if (!send_map->have_pg_pool(pgid.pool())) {
@@ -8109,7 +8021,8 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 		      << " when pool " << m->get_pg().pool() << " did not exist"
 		      << "\n";
     return;
-  } else if (send_map->get_pg_acting_role(pgid.pgid, whoami) < 0) {
+  }
+  if (!send_map->osd_is_valid_op_target(pgid.pgid, whoami)) {
     dout(7) << "we are invalid target" << dendl;
     clog->warn() << m->get_source_inst() << " misdirected " << m->get_reqid()
 		      << " pg " << m->get_pg()
@@ -8125,8 +8038,9 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 
   // check against current map too
   if (!osdmap->have_pg_pool(pgid.pool()) ||
-      osdmap->get_pg_acting_role(pgid.pgid, whoami) < 0) {
-    dout(7) << "dropping; no longer have PG (or pool); client will retarget" << dendl;
+      !osdmap->osd_is_valid_op_target(pgid.pgid, whoami)) {
+    dout(7) << "dropping; no longer have PG (or pool); client will retarget"
+	    << dendl;
     return;
   }
 
@@ -8487,6 +8401,11 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_pg_epoch_persisted_max_stale",
     "osd_disk_thread_ioprio_class",
     "osd_disk_thread_ioprio_priority",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
     NULL
   };
   return KEYS;
@@ -8522,8 +8441,27 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
     service.map_bl_cache.set_size(cct->_conf->osd_map_cache_size);
     service.map_bl_inc_cache.set_size(cct->_conf->osd_map_cache_size);
   }
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility")) {
+    update_log_config();
+  }
 
   check_config();
+}
+
+void OSD::update_log_config()
+{
+  map<string,string> log_to_monitors;
+  map<string,string> log_to_syslog;
+  map<string,string> log_channel;
+  map<string,string> log_prio;
+  if (parse_log_client_options(g_ceph_context, log_to_monitors, log_to_syslog,
+			       log_channel, log_prio) == 0)
+    clog->update_config(log_to_monitors, log_to_syslog,
+			log_channel, log_prio);
+  derr << "log_to_monitors " << log_to_monitors << dendl;
 }
 
 void OSD::check_config()

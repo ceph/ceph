@@ -405,6 +405,7 @@ int main(int argc, char **argv) {
   }
 
   done:
+  st.close();
   if (vm.count("out") && fd > 0) {
     ::close(fd);
   }

@@ -439,6 +439,7 @@ public:
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
     bool cache_evict;     ///< true if this is a cache eviction
+    bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
 
     // side effects
     list<watch_info_t> watch_connects;
@@ -541,6 +542,7 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
+      ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
@@ -1045,8 +1047,8 @@ protected:
   void log_op_stats(OpContext *ctx);
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
-				   SnapSet& ss, interval_set<uint64_t>& modified,
-				   uint64_t offset, uint64_t length, bool count_bytes);
+				   interval_set<uint64_t>& modified, uint64_t offset,
+				   uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
   /**

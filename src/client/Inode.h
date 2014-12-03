@@ -71,7 +71,7 @@ struct CapSnap {
 
 // inode flags
 #define I_COMPLETE 1
-#define I_COMPLETE_ORDERED 2
+#define I_DIR_ORDERED 2
 
 struct Inode {
   CephContext *cct;
@@ -135,6 +135,11 @@ struct Inode {
   }
 
   unsigned flags;
+
+  bool is_complete_and_ordered() {
+    static const unsigned wants = I_COMPLETE | I_DIR_ORDERED;
+    return (flags & wants) == wants;
+  }
 
   // about the dir (if this is one!)
   set<int>  dir_contacts;

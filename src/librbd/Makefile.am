@@ -17,7 +17,8 @@ endif
 
 librbd_la_LDFLAGS = ${AM_LDFLAGS} -version-info 1:0:0
 if LINUX
-librbd_la_LDFLAGS += -export-symbols-regex '^rbd_.*'
+librbd_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
+librbd_la_LDFLAGS += -Xcompiler -Xlinker -Xcompiler '--exclude-libs=ALL'
 endif
 lib_LTLIBRARIES += librbd.la
 

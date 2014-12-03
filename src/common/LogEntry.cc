@@ -61,6 +61,28 @@ int clog_type_to_syslog_level(clog_type t)
   }
 }
 
+clog_type string_to_clog_type(const string& s)
+{
+  if (boost::iequals(s, "debug") ||
+      boost::iequals(s, "dbg"))
+    return CLOG_DEBUG;
+  if (boost::iequals(s, "info") ||
+      boost::iequals(s, "inf"))
+    return CLOG_INFO;
+  if (boost::iequals(s, "warning") ||
+      boost::iequals(s, "warn") ||
+      boost::iequals(s, "wrn"))
+    return CLOG_WARN;
+  if (boost::iequals(s, "error") ||
+      boost::iequals(s, "err"))
+    return CLOG_ERROR;
+  if (boost::iequals(s, "security") ||
+      boost::iequals(s, "sec"))
+    return CLOG_SEC;
+
+  return CLOG_UNKNOWN;
+}
+
 int string_to_syslog_level(string s)
 {
   if (boost::iequals(s, "debug"))

@@ -8,7 +8,7 @@ AC_PREREQ(2.59)
 # VERSION define is not used by the code.  It gets a version string
 # from 'git describe'; see src/ceph_ver.[ch]
 
-AC_INIT([ceph], [0.86], [ceph-devel@vger.kernel.org])
+AC_INIT([ceph], [0.88], [ceph-devel@vger.kernel.org])
 
 # Create release string.  Used with VERSION for RPMs.
 RPM_RELEASE=0
@@ -47,6 +47,7 @@ m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
 case "${target_os}" in
 darwin*)
 	AC_DEFINE([DARWIN], [1], [Define if darwin/osx])
+    darwin="yes"
 	;;
 linux*)
 	linux="yes"
@@ -57,6 +58,7 @@ freebsd*)
 esac
 AM_CONDITIONAL(LINUX, test x"$linux" = x"yes")
 AM_CONDITIONAL(FREEBSD, test x"$freebsd" = x"yes")
+AM_CONDITIONAL(DARWIN, test x"$darwin" = x"yes")
 
 # Checks for programs.
 AC_PROG_CXX
@@ -307,6 +309,12 @@ AC_ARG_WITH([debug],
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
+
+AC_ARG_ENABLE([docker],
+            [AS_HELP_STRING([--enable-docker], [enable docker based functional tests])],
+            [],
+            [enable_docker=no])
+AM_CONDITIONAL(ENABLE_DOCKER, test "x$enable_docker" != xno)
 
 # code coverage?
 AC_ARG_ENABLE([coverage],

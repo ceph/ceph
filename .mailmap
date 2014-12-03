@@ -14,7 +14,7 @@ Alexandre Oliva <oliva@gnu.org> <oliva@lsd.ic.unicamp.br>
 Alex Elder <elder@inktank.com> <elder@doink.(none)>
 Alex Elder <elder@inktank.com> <elder@dreamhost.com>
 Alex Elder <elder@inktank.com> <elder@speedy.(none)>
-Alfredo Deza <alfredo.deza@inktank.com> <alfredo@deza.pe>
+Alfredo Deza <adeza@redhat.com> <alfredo@deza.pe>
 Andreas Peters <andreas.joachim.peters@cern.ch> <Andreas.Joachim.Peters@cern.ch>
 Andrew Leung <aleung@cs.ucsc.edu> anwleung <anwleung@29311d96-e01e-0410-9327-a35deaab8ce9>
 Aristoteles Neto <aristoteles.neto@webdrive.co.nz>  <wdneto@users.noreply.github.com>
@@ -25,6 +25,7 @@ Caleb Miles <caleb.miles@inktank.com> caleb miles <caselim@gmail.com>
 Caleb Miles <caleb.miles@inktank.com> Caleb Miles <caselim@gmail.com>
 Casey Marshall <csm@soe.ucsc.edu> rsdio <rsdio@29311d96-e01e-0410-9327-a35deaab8ce9>
 Carlos Maltzahn <carlosm@cs.ucsc.edu> carlosm <carlosm@29311d96-e01e-0410-9327-a35deaab8ce9>
+Cheng Cheng <ccheng.leo@gmail.com> cchengleo <ccheng.leo@gmail.com>
 Christian Brunner <christian@brunner-muc.de> <chb@muc.de> 
 Christian Marie <pingu@anchor.net.au> <christian@ponies.io>
 Christophe Courtaut <christophe.courtaut@gmail.com> Kri5 <christophe.courtaut@gmail.com>
@@ -32,8 +33,7 @@ Colin P. McCabe <colinm@hq.newdream.net> <cmccabe@alumni.cmu.edu>
 Colin P. McCabe <colinm@hq.newdream.net> <cmccabe@fatty.ops.newdream.net>
 Dan Chai <tengweicai@gmail.com> danchai <tengweicai@gmail.com>
 Dan Mick <dan.mick@inktank.com> <dan.mick@dreamhost.com>
-Dan Mick <dan.mick@inktank.com> <dan.mick@intank.com>
-Dan Mick <dan.mick@inktank.com> <dmick@danceorelse.org>
+Dan Mick <dan.mick@redhat.com> <dmick@danceorelse.org>
 Danny Al-Gaaf <danny.al-gaaf@bisect.de> <danny.kukawka@bisect.de>
 David Moreau Simard <dmsimard@iweb.com> <moi@dmsimard.com>
 Dmitry Smirnov <onlyjob@member.fsf.org> <onlyjob@debian.org>
@@ -44,18 +44,20 @@ Esteban Molina-Estolano <eestolan@lanl.gov> eestolan <eestolan@29311d96-e01e-041
 François Lafont <flafdivers@free.fr> François Lafont <francois.lafont@crdp.ac-versailles.fr>
 Florent Bautista <florent@coppint.com> FlorentCoppint <florent@coppint.com>
 Florent Flament <florent.flament@cloudwatt.com> <florent.flament-ext@cloudwatt.com>
+Federico Gimenez <fgimenez@coit.es> fgimenez <federico.gimenez@hola-internet.com>
 Gary Lowell <gary.lowell@inktank.com> Gary Lowelll <gary.lowell@inktank.com>
 Gary Lowell <gary.lowell@inktank.com> <glowell@flab.ops.newdream.net>
 Gary Lowell <gary.lowell@inktank.com> <glowell@inktank.com>
 Gerben Meijer <gerben@daybyday.nl> <infernix@gmail.com>
-Greg Farnum <greg@inktank.com> <gfarnum@GF-Macbook.local>
+Greg Farnum <gfarnum@redhat.com> <gfarnum@GF-Macbook.local>
 Greg Farnum <greg@inktank.com> Greg Farnu <greg@inktank.com>
 Greg Farnum <greg@inktank.com> <greg.farnum@dreamhost.com>
 Greg Farnum <greg@inktank.com> <gregf@hq.newdream.net>
 Greg Farnum <greg@inktank.com> <gregf@skinny.ops.newdream.net>
-Greg Farnum <greg@inktank.com> <greg@gregs42.com>
+Greg Farnum <gfarnum@redhat.com> <greg@gregs42.com>
 Greg Farnum <greg@inktank.com> <gregory.farnum@dreamhost.com>
 Greg Farnum <greg@inktank.com> Gregory Farnum <greg@inktank.com> 
+Greg Farnum <greg@inktank.com> Reviewed-by: Greg Farnum <greg@inktank.com>
 Guang Yang <yguang@yahoo-inc.com> Guang Yang <yguang@caughtrealize-dl-vm0.peking.corp.yahoo.com>
 Guang Yang <yguang@yahoo-inc.com> <guangyy@gmail.com>
 Guilhem Lettron <guilhem@lettron.fr> <guilhem+github@lettron.fr>
@@ -65,9 +67,10 @@ Henry C Chang <henry_c_chang@tcloudcomputing.com> <henry.cy.chang@gmail.com>
 Holger Macht <hmacht@suse.de> <holger@homac.de>
 Huang Jun <hjwsm1989@gmail.com> huang jun <hjwsm1989@gmail.com>
 Huang Jun <hjwsm1989@gmail.com> huangjun <hjwsm1989@gmail.com>
-Ilya Dryomov <ilya.dryomov@inktank.com> <idryomov@gmail.com>
+Ilya Dryomov <idryomov@redhat.com> <idryomov@gmail.com>
 Jiang Heng <jiangheng0511@gmail.com> jiangheng <jiangheng0511@gmail.com>
-João Eduardo Luís <joao.luis@inktank.com> <jecluis@gmail.com>
+Jiantao He <hejiantao5@gmail.com> hejiantao5 <hejiantao5@gmail.com>
+João Eduardo Luís <joao@redhat.com> <jecluis@gmail.com>
 João Eduardo Luís <joao.luis@inktank.com> Joao Eduardo Luis <joao.luis@inktank.com>
 João Eduardo Luís <joao.luis@inktank.com> <joao@inktank.com>
 João Eduardo Luís <joao.luis@inktank.com> Joao Luis <joao.luis@inktank.com>
@@ -92,10 +95,12 @@ Laszlo Boszormenyi <gcs@debian.hu> Laszlo Boszormenyi (GCS) <gcs@debian.hu>
 Lluis Pamies-Juarez <lluis.pamies-juarez@hgst.com> <lluis@pamies.cat>
 Loic Dachary <loic@dachary.org> <loic@dachary.com>
 Loic Dachary <loic@dachary.org> Loïc Dachary <loic@dachary.org>
+Loic Dachary <ldachary@redhat.com> <ldachary@dachary.org>
 Ma Jianpeng <jianpeng.ma@intel.com> <majianpeng@gmail.com>
 Ma Jianpeng <jianpeng.ma@intel.com> Ma, Jianpeng <jianpeng.ma@intel.com>
+Ma Jianpeng <jianpeng.ma@intel.com> Jianpeng Ma <jianpeng.ma@intel.com>
 Marco Garcês <marco.garces@bci.co.mz> Marco Garcês <marco@garces.cc>
-Mark Nelson <mark.nelson@inktank.com> <mark.a.nelson@gmail.com>
+Mark Nelson <mnelson@redhat.com> <mark.a.nelson@gmail.com>
 Matthew Roy <matthew@royhousehold.net> <matthew@matthew-ubuntu.(none)>
 Matthew Roy <matthew@royhousehold.net> <mroy@sandbox-ed.com>
 Matthew Wodrich <matthew.wodrich@dreamhost.com> <mattheww@Mattsbox.(none)>
@@ -103,11 +108,11 @@ Michael Riederer <michael@riederer.org> dynamike67 <michael@riederer.org>
 Michael Rodriguez <michael@newdream.net> <michael@newdream.net>
 Michael Rodriguez <michael@newdream.net> <michael@squid.newdream.net>
 Neil Levine <neil.levine@inktank.com> <levine@yoyo.org>
-Noah Watkins <noah.watkins@inktank.com> <jayhawk@cs.ucsc.edu>
-Noah Watkins <noah.watkins@inktank.com> <noahwatkins@gmail.com>
+Noah Watkins <nwatkins@redhat.com> <jayhawk@cs.ucsc.edu>
+Noah Watkins <nwatkins@redhat.com> <noahwatkins@gmail.com>
 Pascal de Bruijn <pascal@unilogicnetworks.net> Pascal de Bruijn | Unilogic Networks B.V <pascal@unilogicnetworks.net>
 Patience Warnick <patience@cranium.pelton.net> <patiencew@29311d96-e01e-0410-9327-a35deaab8ce9>
-Patrick McGarry <patrick@inktank.com> <pmcgarry@gmail.com>
+Patrick McGarry <pmcgarry@redhat.com> <pmcgarry@gmail.com>
 Patrick McGarry <patrick@inktank.com> scuttlemonkey <patrick@inktank.com>
 Pavan Rallabhandi <pavan.rallabhandi@sandisk.com> Pavan Rallabhandi <pavanrallabhandis@gmail.com>
 Roald J. van Loon <roald@roaldvanloon.nl> <roaldvanloon@gmail.com>
@@ -130,7 +135,7 @@ Sage Weil <sweil@redhat.com> Sage Weil <sage@redhat.com>
 Sahid Orentino Ferdjaoui <sahid.ferdjaoui@cloudwatt.com> <sahid.ferdjaoui@gmail.com>
 Sam Lang <sam.lang@inktank.com> <samlang@gmail.com>
 Samuel Just <sam.just@inktank.com> <sam.just@inktank.com>
-Samuel Just <sam.just@inktank.com> <rexludorum@gmail.com>
+Samuel Just <sjust@redhat.com> <rexludorum@gmail.com>
 Samuel Just <sam.just@inktank.com> <sam.just@dreamhost.com>
 Samuel Just <sam.just@inktank.com> Sam Just <sam.just@inktank.com>
 Samuel Just <sam.just@inktank.com> <sam@Pondermatic.(none)>
@@ -164,6 +169,7 @@ Wang, Yaguang <yaguang.wang@intel.com> ywang19 <yaguang.wang@intel.com>
 Warren Usui <warren.usui@inktank.com> wusui <warren.usui@inktank.com>
 Wei Luo <luowei@yahoo-inc.com> luowei <luowei@yahoo-inc.com>
 Wido den Hollander <wido@42on.com> <wido@widodh.nl>
+Xan Peng <xanpeng@gmail.com> xan <xanpeng@gmail.com>
 Yan, Zheng <zheng.z.yan@intel.com> <ukernel@gmail.com>
 Yan, Zheng <zheng.z.yan@intel.com> Zheng Yan <zheng.z.yan@intel.com>
 Yan, Zheng <zheng.z.yan@intel.com> Zheng, Yan <zheng.z.yan@intel.com>
@@ -179,6 +185,8 @@ Yehuda Sadeh <yehuda@inktank.com> <yehuda@yehuda.infit.com>
 Yehuda Sadeh <ysadehwe@redhat.com> <yehuda@redhat.com>
 Yehuda Sadeh <ysadehwe@redhat.com> <ysadeh@redhat.com>
 Yongyue Sun <abioy.sun@gmail.com> Abioy <abioy.sun@gmail.com>
+Yuan Zhou <yuan.zhou@intel.com> <dunk007@gmail.com>
 Zhiqiang Wang <wonzhq@hotmail.com> Signed-off-by: Zhiqiang Wang <wonzhq@hotmail.com>
 Zhiqiang Wang <wonzhq@hotmail.com> Zhiqiang Wang <wonzhq@hotmail.com>
 Zhiqiang Wang <wonzhq@hotmail.com> Zhiqiang Wang <zhiqiang.wang@intel.com>
+Chendi Xue <chendi.xue@intel.com> Chendi Xue <xuechendi@gmail.com>

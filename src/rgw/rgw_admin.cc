@@ -688,7 +688,11 @@ void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t 
         quota.max_objects = max_objects;
       }
       if (have_max_size) {
-        quota.max_size_kb = rgw_rounded_kb(max_size);
+        if (max_size < 0) {
+          quota.max_size_kb = -1;
+        } else {
+          quota.max_size_kb = rgw_rounded_kb(max_size);
+        }
       }
       break;
     case OPT_QUOTA_DISABLE:
@@ -1439,7 +1443,13 @@ int main(int argc, char **argv)
       cerr << "could not create user: " << err_msg << std::endl;
       return -ret;
     }
-
+    if (!subuser.empty()) {
+      ret = user.subusers.add(user_op, &err_msg);
+      if (ret < 0) {
+        cerr << "could not create subuser: " << err_msg << std::endl;
+        return -ret;
+      }
+    }
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);

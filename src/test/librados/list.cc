@@ -9,13 +9,14 @@
 #include "gtest/gtest.h"
 #include <errno.h>
 #include <string>
+#include <stdexcept>
 
 using namespace librados;
 
-typedef RadosTest LibRadosList;
-typedef RadosTestPP LibRadosListPP;
-typedef RadosTestEC LibRadosListEC;
-typedef RadosTestECPP LibRadosListECPP;
+typedef RadosTestNS LibRadosList;
+typedef RadosTestPPNS LibRadosListPP;
+typedef RadosTestECNS LibRadosListEC;
+typedef RadosTestECPPNS LibRadosListECPP;
 
 TEST_F(LibRadosList, ListObjects) {
   char buf[128];
@@ -195,6 +196,10 @@ TEST_F(LibRadosList, ListObjectsNS) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   check_list(ns2, ctx);
   rados_objects_list_close(ctx);
+
+  // Can't specify all namespaces using old interface
+  rados_ioctx_set_namespace(ioctx, LIBRADOS_ALL_NSPACES);
+  ASSERT_EQ(-EINVAL, rados_objects_list_open(ioctx, &ctx));
 }
 
 static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx)
@@ -253,6 +258,9 @@ TEST_F(LibRadosListPP, ListObjectsPPNS) {
 
   ioctx.set_namespace("ns2");
   check_listpp(ns2, ioctx);
+
+  ioctx.set_namespace(all_nspaces);
+  EXPECT_THROW(check_listpp(def, ioctx), std::runtime_error);
 }
 
 TEST_F(LibRadosListPP, ListObjectsManyPP) {
@@ -503,6 +511,10 @@ TEST_F(LibRadosListEC, ListObjectsNS) {
   ASSERT_EQ(0, rados_objects_list_open(ioctx, &ctx));
   check_list(ns2, ctx);
   rados_objects_list_close(ctx);
+
+  // Can't specify all namespaces using old interface
+  rados_ioctx_set_namespace(ioctx, LIBRADOS_ALL_NSPACES);
+  ASSERT_EQ(-EINVAL, rados_objects_list_open(ioctx, &ctx));
 }
 
 TEST_F(LibRadosListECPP, ListObjectsPPNS) {
@@ -543,6 +555,9 @@ TEST_F(LibRadosListECPP, ListObjectsPPNS) {
 
   ioctx.set_namespace("ns2");
   check_listpp(ns2, ioctx);
+
+  ioctx.set_namespace(all_nspaces);
+  EXPECT_THROW(check_listpp(def, ioctx), std::runtime_error);
 }
 
 TEST_F(LibRadosListECPP, ListObjectsManyPP) {

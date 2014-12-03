@@ -30,6 +30,11 @@ ceph_test_msgr_SOURCES = test/testmsgr.cc
 ceph_test_msgr_LDADD = $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_test_msgr
 
+ceph_test_async_driver_SOURCES = test/msgr/test_async_driver.cc
+ceph_test_async_driver_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_async_driver_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_async_driver
+
 ceph_streamtest_SOURCES = test/streamtest.cc
 ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_streamtest
@@ -232,6 +237,10 @@ bin_DEBUGPROGRAMS += ceph_bench_log
 ## Unit tests
 
 check_SCRIPTS += \
+	test/ceph_objectstore_tool.py \
+	test/cephtool-test-osd.sh \
+	test/cephtool-test-mon.sh \
+	test/cephtool-test-mds.sh \
 	unittest_bufferlist.sh \
 	test/encoding/check-generated.sh \
 	test/mon/osd-pool-create.sh \
@@ -242,8 +251,12 @@ check_SCRIPTS += \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/ceph-disk.sh \
-	test/mon/mon-handle-forward.sh \
-	test/vstart_wrapped_tests.sh
+	test/mon/mon-handle-forward.sh
+
+if ENABLE_DOCKER
+check_SCRIPTS += \
+	test/ceph-disk-root.sh
+endif
 
 EXTRA_DIST += \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
@@ -367,6 +380,11 @@ unittest_ceph_compatset_SOURCES = test/ceph_compatset.cc
 unittest_ceph_compatset_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_ceph_compatset_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_ceph_compatset
+
+unittest_mds_types_SOURCES = test/fs/mds_types.cc
+unittest_mds_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_mds_types_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_mds_types
 
 unittest_osd_types_SOURCES = test/osd/types.cc
 unittest_osd_types_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -783,6 +801,11 @@ ceph_test_rados_api_list_SOURCES = test/librados/list.cc
 ceph_test_rados_api_list_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
 ceph_test_rados_api_list_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_rados_api_list
+
+ceph_test_rados_api_nlist_SOURCES = test/librados/nlist.cc
+ceph_test_rados_api_nlist_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+ceph_test_rados_api_nlist_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_rados_api_nlist
 
 ceph_test_rados_api_pool_SOURCES = test/librados/pool.cc
 ceph_test_rados_api_pool_LDADD = $(LIBRADOS) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)

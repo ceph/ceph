@@ -955,6 +955,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   void buffer::list::swap(list& other)
   {
     std::swap(_len, other._len);
+    std::swap(_memcopy_count, other._memcopy_count);
     _buffers.swap(other._buffers);
     append_buffer.swap(other.append_buffer);
     //last_p.swap(other.last_p);
@@ -1111,6 +1112,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       nb.copy_in(pos, it->length(), it->c_str());
       pos += it->length();
     }
+    _memcopy_count += pos;
     _buffers.clear();
     _buffers.push_back(nb);
   }
@@ -1150,6 +1152,7 @@ void buffer::list::rebuild_aligned(unsigned align)
     if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align))) {
       ptr nb(buffer::create_aligned(unaligned._len, align));
       unaligned.rebuild(nb);
+      _memcopy_count += unaligned._len;
     }
     _buffers.insert(p, unaligned._buffers.front());
   }
@@ -1353,13 +1356,34 @@ void buffer::list::rebuild_page_aligned()
     return _buffers.front().c_str();  // good, we're already contiguous.
   }
 
+  char *buffer::list::get_contiguous(unsigned orig_off, unsigned len)
+  {
+    if (orig_off + len > length())
+      throw end_of_buffer();
+
+    unsigned off = orig_off;
+    std::list<ptr>::iterator curbuf = _buffers.begin();
+    while (off > 0 && off >= curbuf->length()) {
+      off -= curbuf->length();
+      ++curbuf;
+    }
+
+    if (off + len > curbuf->length()) {
+      // FIXME we'll just rebuild the whole list for now.
+      rebuild();
+      return c_str() + orig_off;
+    }
+
+    return curbuf->c_str() + off;
+  }
+
   void buffer::list::substr_of(const list& other, unsigned off, unsigned len)
   {
     if (off + len > other.length())
       throw end_of_buffer();
 
     clear();
-      
+
     // skip off
     std::list<ptr>::const_iterator curbuf = other._buffers.begin();
     while (off > 0 &&

@@ -14,6 +14,10 @@
 
 . /lib/lsb/init-functions
 
+# detect systemd, also check whether the systemd-run binary exists
+SYSTEMD_RUN=$(which systemd-run 2>/dev/null)
+grep -qs systemd /proc/1/comm || SYSTEMD_RUN=""
+
 # if we start up as ./init-ceph, assume everything else is in the
 # current directory too.
 if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
@@ -21,6 +25,7 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     SBINDIR=.
     LIBDIR=.
     ETCDIR=.
+    SYSTEMD_RUN=""
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
@@ -44,10 +49,6 @@ test -f $LIBDIR/ceph_common.sh || exit 0
 . $LIBDIR/ceph_common.sh
 
 EXIT_STATUS=0
-
-# detect systemd
-SYSTEMD=0
-grep -qs systemd /proc/1/comm && SYSTEMD=1
 
 signal_daemon() {
     name=$1
@@ -299,8 +300,8 @@ for name in $what; do
 	    [ -n "$wrap" ] && runmode="-f &" && runarg="-f"
 	    [ -n "$max_open_files" ] && files="ulimit -n $max_open_files;"
 
-	    if [ $SYSTEMD -eq 1 ]; then
-		cmd="systemd-run -r bash -c '$files $cmd --cluster $cluster -f'"
+	    if [ -n "$SYSTEMD_RUN" ]; then
+		cmd="$SYSTEMD_RUN -r bash -c '$files $cmd --cluster $cluster -f'"
 	    else
 		cmd="$files $wrap $cmd --cluster $cluster $runmode"
 	    fi
@@ -342,10 +343,10 @@ for name in $what; do
 
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
-		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe btrfs ; btrfs device scan || btrfsctl -a ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t btrfs $fs_opt $first_dev $fs_path"
 		else
 		    echo Mounting $fs_type on $host:$fs_path
-		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
+		    do_root_cmd_okfail "modprobe $fs_type ; egrep -q '^[^ ]+ $fs_path ' /proc/mounts || mount -t $fs_type $fs_opt $first_dev $fs_path"
 		fi
 		if [ "$ERR" != "0" ]; then
 		    EXIT_STATUS=$ERR
@@ -408,6 +409,8 @@ for name in $what; do
 	    get_conf post_stop "" "post stop command"
 	    [ -n "$pre_stop" ] && do_cmd "$pre_stop"
 	    stop_daemon $name ceph-$type $pid_file
+	    [ -n "$pidfile" ] && rm -f $pidfile
+	    [ -n "$asok" ] && rm -f $asok
 	    [ -n "$post_stop" ] && do_cmd "$post_stop"
 	    [ -n "$lockfile" ] && [ "$?" -eq 0 ] && rm -f $lockfile
 	    if [ $dofsumount -eq 1 ] && [ -n "$fs_devs" ]; then

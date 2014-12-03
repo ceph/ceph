@@ -40,6 +40,7 @@
 #include "Watch.h"
 #include "OpRequest.h"
 #include "include/cmp.h"
+#include "librados/ListObjectImpl.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -270,17 +271,15 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
-    m_seed = seed;
-    m_pool = pool;
-    m_preferred = pref;
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) :
+    m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  pg_t(const ceph_pg& cpg) :
+    m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
+
+  pg_t(const old_pg_t& opg) {
+    *this = opg.v;
   }
 
-  pg_t(const ceph_pg& cpg) {
-    m_pool = cpg.pool;
-    m_seed = cpg.ps;
-    m_preferred = (__s16)cpg.preferred;
-  }
   old_pg_t get_old_pg() const {
     old_pg_t o;
     assert(m_pool < 0xffffffffull);
@@ -288,9 +287,6 @@ struct pg_t {
     o.v.ps = m_seed;
     o.v.preferred = (__s16)m_preferred;
     return o;
-  }
-  pg_t(const old_pg_t& opg) {
-    *this = opg.v;
   }
 
   ps_t ps() const {
@@ -1471,8 +1467,10 @@ struct pool_stat_t {
   object_stat_collection_t stats;
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
+  int32_t up;       ///< number of up replicas or shards
+  int32_t acting;   ///< number of acting replicas or shards
 
-  pool_stat_t() : log_size(0), ondisk_log_size(0)
+  pool_stat_t() : log_size(0), ondisk_log_size(0), up(0), acting(0)
   { }
 
   void floor(int64_t f) {
@@ -1481,23 +1479,33 @@ struct pool_stat_t {
       log_size = f;
     if (ondisk_log_size < f)
       ondisk_log_size = f;
+    if (up < f)
+      up = f;
+    if (acting < f)
+      acting = f;
   }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    up += o.up.size();
+    acting += o.acting.size();
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    up -= o.up.size();
+    acting -= o.acting.size();
   }
 
   bool is_zero() const {
     return (stats.is_zero() &&
 	    log_size == 0 &&
-	    ondisk_log_size == 0);
+	    ondisk_log_size == 0 &&
+	    up == 0 &&
+	    acting == 0);
   }
 
   void dump(Formatter *f) const;
@@ -1772,6 +1780,25 @@ struct pg_interval_t {
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_interval_t*>& o);
+
+  /**
+   * Determines whether there is an interval change
+   */
+  static bool is_new_interval(
+    int old_acting_primary,
+    int new_acting_primary,
+    const vector<int> &old_acting,
+    const vector<int> &new_acting,
+    int old_up_primary,
+    int new_up_primary,
+    const vector<int> &old_up,
+    const vector<int> &new_up,
+    int old_min_size,
+    int new_min_size,
+    unsigned old_pg_num,
+    unsigned new_pg_num,
+    pg_t pgid
+    );
 
   /**
    * Determines whether there is an interval change
@@ -2321,6 +2348,75 @@ ostream& operator<<(ostream& out, const pg_missing_t& missing);
  * pg list objects response format
  *
  */
+struct pg_nls_response_t {
+  collection_list_handle_t handle;
+  list<librados::ListObjectImpl> entries;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(handle, bl);
+    __u32 n = (__u32)entries.size();
+    ::encode(n, bl);
+    for (list<librados::ListObjectImpl>::const_iterator i = entries.begin(); i != entries.end(); ++i) {
+      ::encode(i->nspace, bl);
+      ::encode(i->oid, bl);
+      ::encode(i->locator, bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(handle, bl);
+    __u32 n;
+    ::decode(n, bl);
+    entries.clear();
+    while (n--) {
+      librados::ListObjectImpl i;
+      ::decode(i.nspace, bl);
+      ::decode(i.oid, bl);
+      ::decode(i.locator, bl);
+      entries.push_back(i);
+    }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_stream("handle") << handle;
+    f->open_array_section("entries");
+    for (list<librados::ListObjectImpl>::const_iterator p = entries.begin(); p != entries.end(); ++p) {
+      f->open_object_section("object");
+      f->dump_string("namespace", p->nspace);
+      f->dump_string("object", p->oid);
+      f->dump_string("key", p->locator);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pg_nls_response_t*>& o) {
+    o.push_back(new pg_nls_response_t);
+    o.push_back(new pg_nls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 1, 2, -1, "");
+    o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
+    o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
+    o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
+    o.push_back(new pg_nls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 3, 4, -1, "");
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
+    o.push_back(new pg_nls_response_t);
+    o.back()->handle = hobject_t(object_t("hi"), "key", 5, 6, -1, "");
+    o.back()->entries.push_back(librados::ListObjectImpl("", "one", ""));
+    o.back()->entries.push_back(librados::ListObjectImpl("", "two", "twokey"));
+    o.back()->entries.push_back(librados::ListObjectImpl("", "three", ""));
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1one", ""));
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1two", "n1twokey"));
+    o.back()->entries.push_back(librados::ListObjectImpl("n1", "n1three", ""));
+  }
+};
+
+WRITE_CLASS_ENCODER(pg_nls_response_t)
+
+// For backwards compatibility with older OSD requests
 struct pg_ls_response_t {
   collection_list_handle_t handle; 
   list<pair<object_t, string> > entries;

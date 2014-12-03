@@ -288,8 +288,8 @@ int main(int argc, const char **argv)
 
   cout << "iterating over objects..." << std::endl;
   int num_objs = 0;
-  for (ObjectIterator iter = io_ctx.objects_begin();
-       iter != io_ctx.objects_end(); ++iter) {
+  for (NObjectIterator iter = io_ctx.nobjects_begin();
+       iter != io_ctx.nobjects_end(); ++iter) {
     num_objs++;
     cout << "'" << *iter << "'" << std::endl;
   }

@@ -1,6 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+# Copyright (C) 2014 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -19,7 +20,7 @@ source test/mon/mon-test-helpers.sh
 function run() {
     local dir=$1
 
-    PORT=7451
+    PORT=7300 # CEPH_MON=
     MONA=127.0.0.1:$PORT
     MONB=127.0.0.1:$(($PORT + 1))
     (
@@ -31,7 +32,7 @@ function run() {
         run_mon $dir b --public-addr $MONB
     )
 
-    timeout 10 ./ceph --mon-host $MONA mon stat || return 1
+    timeout 360 ./ceph --mon-host $MONA mon stat || return 1
     # check that MONB is indeed a peon
     ./ceph --admin-daemon $dir/b/ceph-mon.b.asok mon_status | 
        grep '"peon"' || return 1

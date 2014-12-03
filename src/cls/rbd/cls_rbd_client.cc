@@ -424,8 +424,8 @@ namespace librbd {
 	return r;
 
       bufferlist::iterator iter = outbl.begin();
-      uint32_t num_snaps;
       try {
+	uint32_t num_snaps;
 	::decode(snapc->seq, iter);
 	::decode(num_snaps, iter);
 

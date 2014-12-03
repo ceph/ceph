@@ -52,6 +52,7 @@ StRadosListObjects::
 int StRadosListObjects::
 run()
 {
+  int retval = 0;
   rados_t cl;
   RETURN1_IF_NONZERO(rados_create(&cl, NULL));
   rados_conf_parse_argv(cl, m_argc, m_argv);
@@ -69,9 +70,9 @@ run()
   const char *obj_name;
   rados_list_ctx_t h;
   printf("%s: listing objects.\n", get_id_str());
-  RETURN1_IF_NONZERO(rados_objects_list_open(io_ctx, &h));
+  RETURN1_IF_NONZERO(rados_nobjects_list_open(io_ctx, &h));
   while (true) {
-    int ret = rados_objects_list_next(h, &obj_name, NULL);
+    int ret = rados_nobjects_list_next(h, &obj_name, NULL, NULL);
     if (ret == -ENOENT) {
       break;
     }
@@ -79,7 +80,8 @@ run()
       if (m_accept_list_errors && (!m_midway_sem_post || saw > m_midway_cnt))
 	break;
       printf("%s: rados_objects_list_next error: %d\n", get_id_str(), ret);
-      return ret;
+      retval = ret;
+      goto out;
     }
     if ((saw % 25) == 0) {
       printf("%s: listed object %d...\n", get_id_str(), saw);
@@ -92,12 +94,13 @@ run()
 	m_midway_sem_post->post();
     }
   }
-  rados_objects_list_close(h);
 
   printf("%s: saw %d objects\n", get_id_str(), saw);
 
+out:
+  rados_nobjects_list_close(h);
   rados_ioctx_destroy(io_ctx);
   rados_shutdown(cl);
 
-  return 0;
+  return retval;
 }

@@ -146,6 +146,13 @@ protected:
   } submit_thread;
   friend class SubmitThread;
 
+public:
+  const std::set<LogSegment*> &get_expiring_segments() const
+  {
+    return expiring_segments;
+  }
+protected:
+
   // -- subtreemaps --
   friend class ESubtreeMap;
   friend class MDCache;
@@ -294,7 +301,13 @@ private:
   void _trim_expired_segments();
 
 public:
+  void trim_expired_segments();
   void trim(int max=-1);
+  int trim_all();
+  bool expiry_done() const
+  {
+    return expiring_segments.empty() && expired_segments.empty();
+  };
 
 private:
   void write_head(MDSInternalContextBase *onfinish);

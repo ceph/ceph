@@ -21,12 +21,13 @@ source test/osd/osd-test-helpers.sh
 function run() {
     local dir=$1
 
+    export CEPH_MON="127.0.0.1:7107"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=127.0.0.1 "
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
-    run_mon $dir a --public-addr 127.0.0.1 || return 1
+    run_mon $dir a --public-addr $CEPH_MON || return 1
     for id in $(seq 0 3) ; do
         run_osd $dir $id || return 1
     done
@@ -38,6 +39,34 @@ function run() {
         fi
     done
     teardown $dir || return 1
+}
+
+function wait_for_repair() {
+    local dir=$1
+    local primary=$2
+    local pg=$3
+    local -i tries=0
+    while [ $tries -lt 100 ] ; do
+        CEPH_ARGS='' ./ceph --admin-daemon $dir/ceph-osd.$primary.asok log flush || return 1
+        if grep --quiet "$pg repair ok" $dir/osd-$primary.log ; then
+            return 0
+        fi
+        let tries++
+        sleep 1
+    done
+    grep --quiet "$pg repair ok" $dir/osd-$primary.log || return 1
+}
+
+function TEST_log_repair() {
+    local dir=$1
+    local poolname=rbd
+    local pg=$(get_pg $poolname SOMETHING)
+    local -a osds=($(get_osds $poolname SOMETHING))
+    local primary=${osds[$first]}
+
+    ./ceph pg repair $pg
+    wait_for_repair $dir $primary $pg 
+    grep --quiet "$pg repair starts" $dir/osd-$primary.log || return 1
 }
 
 # 

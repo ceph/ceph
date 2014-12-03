@@ -457,7 +457,6 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
 
   const PGMap &pgm = mon->pgmon()->pg_map;
   vector<int> pgs_by_osd(osdmap.get_max_osd());
-  unsigned num_pg_copies = 0;
 
   // Avoid putting a small number (or 0) in the denominator when calculating
   // average_util
@@ -465,6 +464,7 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   if (by_pg) {
     // by pg mapping
     double weight_sum = 0.0;      // sum up the crush weights
+    unsigned num_pg_copies = 0;
     int num_osds = 0;
     for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator p =
 	   pgm.pg_stat.begin();
@@ -4005,12 +4005,12 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  int64_t id;
+  int64_t osdid;
   string name;
-  bool osdid_present = cmd_getval(g_ceph_context, cmdmap, "id", id);
+  bool osdid_present = cmd_getval(g_ceph_context, cmdmap, "id", osdid);
   if (osdid_present) {
     ostringstream oss;
-    oss << "osd." << id;
+    oss << "osd." << osdid;
     name = oss.str();
   }
 
@@ -4141,7 +4141,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     // osd crush set <OsdName> <weight> <loc1> [<loc2> ...]
     // osd crush add <OsdName> <weight> <loc1> [<loc2> ...]
 
-    if (!osdmap.exists(id)) {
+    if (!osdmap.exists(osdid)) {
       err = -ENOENT;
       ss << name << " does not exist.  create it before updating the crush map";
       goto reply;
@@ -4162,15 +4162,15 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     CrushWrapper::parse_loc_map(argvec, &loc);
 
     if (prefix == "osd crush set"
-        && !_get_stable_crush().item_exists(id)) {
+        && !_get_stable_crush().item_exists(osdid)) {
       err = -ENOENT;
-      ss << "unable to set item id " << id << " name '" << name
+      ss << "unable to set item id " << osdid << " name '" << name
          << "' weight " << weight << " at location " << loc
          << ": does not exist";
       goto reply;
     }
 
-    dout(5) << "adding/updating crush item id " << id << " name '"
+    dout(5) << "adding/updating crush item id " << osdid << " name '"
       << name << "' weight " << weight << " at location "
       << loc << dendl;
     CrushWrapper newcrush;
@@ -4178,12 +4178,12 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 
     string action;
     if (prefix == "osd crush set" ||
-        newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+        newcrush.check_item_loc(g_ceph_context, osdid, loc, (int *)NULL)) {
       action = "set";
-      err = newcrush.update_item(g_ceph_context, id, weight, name, loc);
+      err = newcrush.update_item(g_ceph_context, osdid, weight, name, loc);
     } else {
       action = "add";
-      err = newcrush.insert_item(g_ceph_context, id, weight, name, loc);
+      err = newcrush.insert_item(g_ceph_context, osdid, weight, name, loc);
       if (err == 0)
         err = 1;
     }
@@ -4192,14 +4192,14 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
 
     if (err == 0 && !_have_pending_crush()) {
-      ss << action << " item id " << id << " name '" << name << "' weight "
+      ss << action << " item id " << osdid << " name '" << name << "' weight "
         << weight << " at location " << loc << ": no change";
       goto reply;
     }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
-    ss << action << " item id " << id << " name '" << name << "' weight "
+    ss << action << " item id " << osdid << " name '" << name << "' weight "
       << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
@@ -4209,7 +4209,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd crush create-or-move") {
     do {
       // osd crush create-or-move <OsdName> <initial_weight> <loc1> [<loc2> ...]
-      if (!osdmap.exists(id)) {
+      if (!osdmap.exists(osdid)) {
 	err = -ENOENT;
 	ss << name << " does not exist.  create it before updating the crush map";
 	goto reply;
@@ -4235,7 +4235,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
-      err = newcrush.create_or_move_item(g_ceph_context, id, weight, name, loc);
+      err = newcrush.create_or_move_item(g_ceph_context, osdid, weight, name, loc);
       if (err == 0) {
 	ss << "create-or-move updated item name '" << name << "' weight " << weight
 	   << " at location " << loc << " to crush map";
@@ -4301,10 +4301,15 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     map<string,string> loc;
     CrushWrapper::parse_loc_map(argvec, &loc);
 
+    // Need an explicit check for name_exists because get_item_id returns
+    // 0 on unfound.
+    int id = osdmap.crush->get_item_id(name);
     if (!osdmap.crush->name_exists(name)) {
       err = -ENOENT;
       ss << "item " << name << " does not exist";
       goto reply;
+    } else {
+      dout(5) << "resolved crush name '" << name << "' to id " << id << dendl;
     }
     if (osdmap.crush->check_item_loc(g_ceph_context, id, loc, (int*) NULL)) {
       ss << "no need to move item id " << id << " name '" << name
@@ -4329,6 +4334,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
              << "' to location " << loc << " in crush map";
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush);
+	} else {
+	  ss << "cannot link item id " << id << " name '" << name
+             << "' to location " << loc;
 	}
       } else {
 	ss << "no need to move item id " << id << " name '" << name

@@ -3336,7 +3336,7 @@ void PG::scrub_reserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(
@@ -3358,7 +3358,7 @@ void PG::scrub_unreserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
@@ -3654,7 +3654,6 @@ void PG::replica_scrub(
     pg_whoami,
     spg_t(info.pgid.pgid, get_primary().shard),
     poid,
-    false,
     0,
     msg->map_epoch,
     osd->get_tid(),
@@ -3837,6 +3836,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         scrubber.start = hobject_t();
         scrubber.state = PG::Scrubber::NEW_CHUNK;
 
+	{
+	  bool repair = state_test(PG_STATE_REPAIR);
+	  bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
+	  const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
+	  stringstream oss;
+	  oss << info.pgid.pgid << " " << mode << " starts" << std::endl;
+	  osd->clog->info(oss);
+	}
         break;
 
       case PG::Scrubber::NEW_CHUNK:
@@ -4154,7 +4161,7 @@ void PG::scrub_process_inconsistent()
 
     ss << info.pgid << " " << mode << " "
        << scrubber.missing.size() << " missing, "
-       << scrubber.inconsistent.size() << " inconsistent objects\n";
+       << scrubber.inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     osd->clog->error(ss);
     if (repair) {
