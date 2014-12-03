@@ -132,3 +132,15 @@ RGWReplicaBucketLogger::RGWReplicaBucketLogger(RGWRados *_store) :
   prefix = _store->ctx()->_conf->rgw_replica_log_obj_prefix;
   prefix.append(".");
 }
+
+string RGWReplicaBucketLogger::obj_name(const rgw_bucket& bucket, int shard_id)
+{
+  string s = prefix + bucket.name;
+
+  if (shard_id >= 0) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), ".%d", shard_id);
+    s += buf;
+  }
+  return s;
+}

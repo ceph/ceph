@@ -2565,7 +2565,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, bounds);
+      ret = logger.get_bounds(bucket, shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
@@ -2616,7 +2616,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, daemon_id);
+      ret = logger.delete_bound(bucket, shard_id, daemon_id);
       if (ret < 0)
         return -ret;
     }
