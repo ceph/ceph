@@ -433,6 +433,15 @@ COMMAND("osd crush reweight " \
 COMMAND("osd crush tunables " \
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
+COMMAND("osd crush set-tunable "				    \
+	"name=tunable,type=CephChoices,strings=straw_calc_version " \
+	"name=value,type=CephInt",
+	"set crush tunable <tunable> to <value>",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush get-tunable "			      \
+	"name=tunable,type=CephChoices,strings=straw_calc_version",
+	"get crush tunable <tunable>",
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush show-tunables", \
 	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \

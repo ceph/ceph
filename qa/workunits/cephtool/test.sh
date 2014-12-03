@@ -428,6 +428,11 @@ function test_mon_osd()
   ceph osd crush tunables firefly
   ceph osd crush show-tunables | grep firefly
 
+  ceph osd crush set-tunable straw_calc_version 0
+  ceph osd crush get-tunable straw_calc_version | grep 0
+  ceph osd crush set-tunable straw_calc_version 1
+  ceph osd crush get-tunable straw_calc_version | grep 1
+
   #
   # osd scrub
   #

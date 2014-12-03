@@ -2465,6 +2465,31 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     ss << "listed " << osdmap.blacklist.size() << " entries";
 
+  } else if (prefix == "osd crush get-tunable") {
+    string tunable;
+    cmd_getval(g_ceph_context, cmdmap, "tunable", tunable);
+    int value;
+    cmd_getval(g_ceph_context, cmdmap, "value", value);
+    ostringstream rss;
+    if (f)
+      f->open_object_section("tunable");
+    if (tunable == "straw_calc_version") {
+      if (f)
+	f->dump_int(tunable.c_str(), osdmap.crush->get_straw_calc_version());
+      else
+	rss << osdmap.crush->get_straw_calc_version() << "\n";
+    } else {
+      r = -EINVAL;
+      goto reply;
+    }
+    if (f) {
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      rdata.append(rss.str());
+    }
+    r = 0;
+
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
@@ -4213,6 +4238,46 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush);
     ss << "adjusted tunables profile to " << profile;
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd crush set-tunable") {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    err = 0;
+    string tunable;
+    cmd_getval(g_ceph_context, cmdmap, "tunable", tunable);
+
+    int64_t value = -1;
+    if (!cmd_getval(g_ceph_context, cmdmap, "value", value)) {
+      err = -EINVAL;
+      ss << "failed to parse integer value " << cmd_vartype_stringify(cmdmap["value"]);
+      goto reply;
+    }
+
+    if (tunable == "straw_calc_version") {
+      if (value < 0 || value > 2) {
+	ss << "value must be 0 or 1; got " << value;
+	err = -EINVAL;
+	goto reply;
+      }
+      newcrush.set_straw_calc_version(value);
+    } else {
+      ss << "unrecognized tunable '" << tunable << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (!validate_crush_against_features(&newcrush, ss)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "adjusted tunable " << tunable << " to " << value;
     getline(ss, rs);
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
 					      get_last_committed() + 1));
