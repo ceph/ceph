@@ -1,7 +1,8 @@
 [Unit]
 Description=Ceph object storage daemon
-After=network-online.target
-Wants=network-online.target
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=ceph.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
@@ -10,4 +11,4 @@ ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
 ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=ceph.target
