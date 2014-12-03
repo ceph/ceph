@@ -103,8 +103,9 @@ class TestFakeNamespace(TestYamlConfig):
         self.test_class = config.FakeNamespace
 
     def test_docopt_dict(self):
-        """ Tests if a dict in the format that docopt returns can
-            be parsed correctly.
+        """
+        Tests if a dict in the format that docopt returns can
+        be parsed correctly.
         """
         d = {
             "--verbose": True,
@@ -119,17 +120,16 @@ class TestFakeNamespace(TestYamlConfig):
         assert conf_obj.something == "some_thing"
 
     def test_config(self):
-        """ Tests that a teuthology_config property is automatically added
-            and that defaults are properly used. However, we won't check all
-            the defaults.
+        """
+        Tests that a teuthology_config property is automatically added
+        by misc.read_config.
         """
         conf_obj = self.test_class(dict(foo="bar"))
         assert conf_obj["foo"] == "bar"
         assert conf_obj.foo == "bar"
-        assert conf_obj.teuthology_config.archive_base
-        assert not conf_obj.teuthology_config.automated_scheduling
-        assert conf_obj.teuthology_config.ceph_git_base_url == 'https://github.com/ceph/'
-        assert conf_obj.teuthology_config["ceph_git_base_url"] == 'https://github.com/ceph/'
+        # teuthology_config needs to be a dict because all
+        # of the tasks expect it to be
+        assert isinstance(conf_obj.teuthology_config, dict)
 
     def test_getattr(self):
         conf_obj = self.test_class.from_dict({"foo": "bar"})

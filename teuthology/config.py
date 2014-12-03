@@ -148,8 +148,7 @@ class JobConfig(YamlConfig):
 
 class FakeNamespace(YamlConfig):
     """
-    This class is meant to behave like a argparse Namespace with an attached
-    teuthology config at the teuthology_config property.  It mimics the old
+    This class is meant to behave like a argparse Namespace. It mimics the old
     way of doing things with argparse and teuthology.misc.read_config.
 
     We'll use this as a stop-gap as we refactor commands but allow the tasks
@@ -160,10 +159,12 @@ class FakeNamespace(YamlConfig):
             yaml_path = _get_config_path()
         if not config_dict:
             config_dict = dict()
-        # teuthology.misc.read_config attaches the teuthology config
-        # to a teuthology_config attribute of the argparse Namespace
-        config_dict["teuthology_config"] = TeuthologyConfig(yaml_path)
         self._conf = self._clean_config(config_dict)
+        # avoiding circular imports
+        from .misc import read_config
+        # teuthology.misc.read_config attaches the teuthology config
+        # to a teuthology_config key.
+        read_config(self)
 
     def _clean_config(self, config_dict):
         """
