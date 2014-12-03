@@ -97,20 +97,22 @@ public:
 class RGWReplicaBucketLogger : private RGWReplicaLogger {
   string pool;
   string prefix;
+
+  string obj_name(const rgw_bucket& bucket, int shard_id);
 public:
   RGWReplicaBucketLogger(RGWRados *_store);
-  int update_bound(const rgw_bucket& bucket, const string& daemon_id,
+  int update_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id,
                    const string& marker, const utime_t& time,
                    const list<RGWReplicaItemMarker> *entries) {
-    return RGWReplicaLogger::update_bound(prefix+bucket.name, pool,
+    return RGWReplicaLogger::update_bound(obj_name(bucket, shard_id), pool,
                                           daemon_id, marker, time, entries);
   }
-  int delete_bound(const rgw_bucket& bucket, const string& daemon_id) {
-    return RGWReplicaLogger::delete_bound(prefix+bucket.name, pool,
+  int delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id) {
+    return RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id), pool,
                                           daemon_id);
   }
-  int get_bounds(const rgw_bucket& bucket, RGWReplicaBounds& bounds) {
-    return RGWReplicaLogger::get_bounds(prefix+bucket.name, pool,
+  int get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds) {
+    return RGWReplicaLogger::get_bounds(obj_name(bucket, shard_id), pool,
                                         bounds);
   }
 };
