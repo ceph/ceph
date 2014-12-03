@@ -249,6 +249,11 @@ public:
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
 
+  // default bucket types
+  unsigned get_default_bucket_alg() const {
+    return CRUSH_BUCKET_STRAW;
+  }
+
   // bucket types
   int get_num_type_names() const {
     return type_map.size();
@@ -904,8 +909,11 @@ public:
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
 		 int *items, int *weights, int *idout) {
-    if (type == 0)
-      return -EINVAL;
+    if (alg == 0) {
+      alg = get_default_bucket_alg();
+      if (alg == 0)
+	return -EINVAL;
+    }
     crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
