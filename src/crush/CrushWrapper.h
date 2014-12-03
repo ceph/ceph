@@ -87,6 +87,8 @@ public:
       crush_destroy(crush);
   }
 
+  crush_map *get_crush_map() { return crush; }
+
   /* building */
   void create() {
     if (crush)
