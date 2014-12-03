@@ -30,6 +30,13 @@ struct crush_map *crush_create()
 	m->chooseleaf_descend_once = 0;
 	m->chooseleaf_vary_r = 0;
 	m->straw_calc_version = 0;
+
+	// by default, use legacy types, and also exclude tree,
+	// since it was buggy.
+	m->allowed_bucket_types =
+		CRUSH_BUCKET_UNIFORM |
+		CRUSH_BUCKET_LIST |
+		CRUSH_BUCKET_STRAW;
 	return m;
 }
 

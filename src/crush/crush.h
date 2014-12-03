@@ -204,6 +204,13 @@ struct crush_map {
 	 */
 	__u8 straw_calc_version;
 
+	/*
+	 * allowed bucket types is a bitmask, here the bit positions
+	 * are CRUSH_BUCKET_*.  note that the 0th bit is not used to
+	 * minimize confusion (bucket type values start at 1).
+	 */
+	__u32 allowed_bucket_types;
+
 	__u32 *choose_tries;
 };
 
