@@ -2086,7 +2086,7 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
   // pg skew
   int num_in = mon->osdmon()->osdmap.get_num_in_osds();
-  int sum_pg_up = MAX(pg_map.pg_sum.up, pg_map.pg_stat.size());
+  int sum_pg_up = MAX(pg_map.pg_sum.up, static_cast<int32_t>(pg_map.pg_stat.size()));
   if (num_in && g_conf->mon_pg_warn_min_per_osd > 0) {
     int per = sum_pg_up / num_in;
     if (per < g_conf->mon_pg_warn_min_per_osd) {
