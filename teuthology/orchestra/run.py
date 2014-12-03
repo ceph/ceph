@@ -290,7 +290,10 @@ def run(
     name=None
 ):
     """
-    Run a command remotely.
+    Run a command remotely.  If any of 'args' contains shell metacharacters
+    that you want to pass unquoted, pass it as an instance of Raw(); otherwise
+    it will be quoted with pipes.quote() (single quote, and single quotes
+    enclosed in double quotes).
 
     :param client: SSHConnection to run the command with
     :param args: command to run
