@@ -1093,7 +1093,11 @@ def stop_daemons_of_type(ctx, type_):
 
 def get_system_type(remote, distro=False, version=False):
     """
-    Return this system type (deb or rpm) or Distro.
+    If distro, return distro.
+    If version, return version (lsb_release -rs)
+    If both, return both.
+    If neither, return 'deb' or 'rpm' if distro is known to be one of those
+    Finally, if unknown, return the unfiltered distro (from lsb_release -is)
     """
     r = remote.run(
         args=[
@@ -1110,13 +1114,13 @@ def get_system_type(remote, distro=False, version=False):
         return system_value.lower(), version
     if distro:
         return system_value.lower()
+    if version:
+        return version
     if system_value in ['Ubuntu', 'Debian']:
         return "deb"
     if system_value in ['CentOS', 'Fedora', 'RedHatEnterpriseServer',
                         'openSUSE project', 'SUSE LINUX']:
         return "rpm"
-    if version:
-        return version
     return system_value
 
 
