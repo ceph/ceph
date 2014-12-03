@@ -1305,39 +1305,31 @@ function test_osd_bench()
 #
 
 set +x
-MON_TESTS=(
-  mon_injectargs
-  mon_injectargs_SI
-  tiering
-  auth
-  auth_profiles
-  mon_misc
-  mon_mon
-  mon_osd
-  mon_osd_pool
-  mon_osd_pool_quota
-  mon_pg
-  mon_osd_pool_set
-  mon_osd_tiered_pool_set
-  mon_osd_erasure_code
-  mon_osd_misc
-  mon_heap_profiler
-)
+MON_TESTS+=" mon_injectargs"
+MON_TESTS+=" mon_injectargs_SI"
+MON_TESTS+=" tiering"
+MON_TESTS+=" auth"
+MON_TESTS+=" auth_profiles"
+MON_TESTS+=" mon_misc"
+MON_TESTS+=" mon_mon"
+MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_osd_pool"
+MON_TESTS+=" mon_osd_pool_quota"
+MON_TESTS+=" mon_pg"
+MON_TESTS+=" mon_osd_pool_set"
+MON_TESTS+=" mon_osd_tiered_pool_set"
+MON_TESTS+=" mon_osd_erasure_code"
+MON_TESTS+=" mon_osd_misc"
+MON_TESTS+=" mon_heap_profiler"
 
-OSD_TESTS=(
-  osd_bench
-)
+OSD_TESTS+=" osd_bench"
 
-MDS_TESTS=(
-  mds_tell
-  mon_mds
-)
+MDS_TESTS+=" mds_tell"
+MDS_TESTS+=" mon_mds"
 
-TESTS=(
-  $MON_TESTS
-  $OSD_TESTS
-  $MDS_TESTS
-)
+TESTS+=$MON_TESTS
+TESTS+=$OSD_TESTS
+TESTS+=$MDS_TESTS
 
 #
 # "main" follows
@@ -1346,7 +1338,7 @@ TESTS=(
 function list_tests()
 {
   echo "AVAILABLE TESTS"
-  for i in ${TESTS[@]}; do
+  for i in $TESTS; do
     echo "  $i"
   done
 }
@@ -1374,13 +1366,13 @@ while [[ $# -gt 0 ]]; do
       sanity_check=false
       ;;
     "--test-mon" )
-      tests_to_run=("${tests_to_run[@]}" $MON_TESTS)
+      tests_to_run+="$MON_TESTS"
       ;;
     "--test-osd" )
-      tests_to_run=("${tests_to_run[@]}" $OSD_TESTS)
+      tests_to_run+="$OSD_TESTS"
       ;;
     "--test-mds" )
-      tests_to_run=("${tests_to_run[@]}" $MDS_TESTS)
+      tests_to_run+="$MDS_TESTS"
       ;;
     "-t" )
       shift
@@ -1389,7 +1381,7 @@ while [[ $# -gt 0 ]]; do
         usage ;
         exit 1
       fi
-      tests_to_run=("${tests_to_run[@]}" "$1")
+      tests_to_run+=" $1"
       ;;
     "-h" )
       usage ;
@@ -1404,14 +1396,14 @@ if [[ $do_list -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ${#tests_to_run[@]} -eq 0 ]]; then
-  tests_to_run=("${TESTS[@]}")
+if test -z "$tests_to_run" ; then
+  tests_to_run="$TESTS"
 fi
 
 if $sanity_check ; then
     wait_no_osd_down
 fi
-for i in ${tests_to_run[@]}; do
+for i in $tests_to_run; do
   if $sanity_check ; then
       check_no_osd_down
   fi
