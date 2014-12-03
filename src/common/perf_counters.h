@@ -94,8 +94,8 @@ public:
   void tinc(int idx, utime_t v);
   utime_t tget(int idx) const;
 
+  void reset();
   void dump_formatted(ceph::Formatter *f, bool schema);
-
   pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
 
   const std::string& get_name() const;
@@ -136,6 +136,15 @@ private:
     atomic64_t u64;
     atomic64_t avgcount;
     atomic64_t avgcount2;
+
+    void reset()
+    {
+      if (type != PERFCOUNTER_U64) {
+	u64.set(0);
+	avgcount.set(0);
+	avgcount2.set(0);
+      }
+    }
 
     perf_counter_data_any_d& operator=(const perf_counter_data_any_d& other) {
       name = other.name;
@@ -193,6 +202,7 @@ public:
   void add(class PerfCounters *l);
   void remove(class PerfCounters *l);
   void clear();
+  bool reset(const std::string &name);
   void dump_formatted(ceph::Formatter *f, bool schema);
 private:
   CephContext *m_cct;

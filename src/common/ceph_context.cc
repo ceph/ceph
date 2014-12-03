@@ -190,6 +190,15 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
     command == "perf schema") {
     _perf_counters_collection->dump_formatted(f, true);
   }
+  else if (command == "perf reset") {
+    std::string var;
+    if (!cmd_getval(this, cmdmap, "var", var)) {
+      f->dump_string("error", "syntax error: 'perf reset <var>'");
+    } else {
+     if(!_perf_counters_collection->reset(var))
+        f->dump_stream("error") << "Not find: " << var;
+    }
+  }
   else {
     f->open_object_section(command.c_str());
     if (command == "config show") {
@@ -315,6 +324,7 @@ CephContext::CephContext(uint32_t module_type_)
   _admin_socket->register_command("perfcounters_schema", "perfcounters_schema", _admin_hook, "");
   _admin_socket->register_command("2", "2", _admin_hook, "");
   _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("perf reset", "perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
   _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
   _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
@@ -343,6 +353,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("perfcounters_schema");
   _admin_socket->unregister_command("perf schema");
   _admin_socket->unregister_command("2");
+  _admin_socket->unregister_command("perf reset");
   _admin_socket->unregister_command("config show");
   _admin_socket->unregister_command("config set");
   _admin_socket->unregister_command("config get");
