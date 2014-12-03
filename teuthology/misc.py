@@ -633,11 +633,10 @@ def append_lines_to_file(remote, path, lines, sudo=False):
     # in case of connectivity of loss, and then mv it to the
     # actual desired location
     data += lines
-    temp_file_path
     write_file(remote, temp_file_path, data)
 
     # then do a 'mv' to the actual file location
-    move_file(remote, temp_file_path, path)
+    move_file(remote, temp_file_path, path, sudo)
 
 
 def create_file(remote, path, data="", permissions=str(644), sudo=False):
