@@ -215,6 +215,7 @@ def nuke_targets(targets_dict, owner):
     targets = targets_dict.get('targets')
     if not targets:
         log.info("No locked machines. Not nuking anything")
+        return
 
     to_nuke = []
     for target in targets:
