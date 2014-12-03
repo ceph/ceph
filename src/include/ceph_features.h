@@ -54,6 +54,7 @@
 #define CEPH_FEATURE_OSD_POOLRESEND    (1ULL<<43)
 #define CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 (1ULL<<44)
 #define CEPH_FEATURE_OSD_SET_ALLOC_HINT (1ULL<<45)
+#define CEPH_FEATURE_CRUSH_V4      (1ULL<<46)  /* straw2 buckets */
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -128,6 +129,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_POOLRESEND |	\
          CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 |   \
          CEPH_FEATURE_OSD_SET_ALLOC_HINT |   \
+         CEPH_FEATURE_CRUSH_V4 |	     \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
@@ -139,6 +141,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	(CEPH_FEATURE_CRUSH_TUNABLES |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES2 |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES3 |		\
-	 CEPH_FEATURE_CRUSH_V2)
+	 CEPH_FEATURE_CRUSH_V2 |		\
+	 CEPH_FEATURE_CRUSH_V4)
 
 #endif
