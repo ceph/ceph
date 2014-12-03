@@ -502,20 +502,10 @@ int crush_calc_straw(struct crush_map *map, struct crush_bucket_straw *bucket)
 			if (i == size)
 				break;
 
-			/* same weight as previous? */
-			if (weights[reverse[i]] == weights[reverse[i-1]]) {
-				dprintk("same as previous\n");
-				continue;
-			}
-
 			/* adjust straw for next guy */
 			wbelow += ((double)weights[reverse[i-1]] - lastw) *
 				numleft;
-			for (j=i; j<size; j++)
-				if (weights[reverse[j]] == weights[reverse[i]])
-					numleft--;
-				else
-					break;
+			numleft--;
 			wnext = numleft * (weights[reverse[i]] -
 					   weights[reverse[i-1]]);
 			pbelow = wbelow / (wbelow + wnext);
