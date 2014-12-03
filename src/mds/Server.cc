@@ -5084,28 +5084,28 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->pop_projected_linkage();
 
   // relink as stray?  (i.e. was primary link?)
-  CDentry::linkage_t *straydnl = 0;
-
+  CInode *strayin = NULL;
   bool snap_is_new = false;
   if (straydn) {
     dout(20) << " straydn is " << *straydn << dendl;
-    straydnl = straydn->pop_projected_linkage();
-    
-    snap_is_new = straydnl->get_inode()->snaprealm ? true : false;
+    CDentry::linkage_t *straydnl = straydn->pop_projected_linkage();
+    strayin = straydnl->get_inode();
+
+    snap_is_new = strayin->snaprealm ? true : false;
     mdcache->touch_dentry_bottom(straydn);
   }
 
   dn->mark_dirty(dnpv, mdr->ls);
   mdr->apply();
 
-  if (snap_is_new) //only new if straydnl exists
-    mdcache->do_realm_invalidate_and_update_notify(straydnl->get_inode(), CEPH_SNAP_OP_SPLIT, true);
+  if (snap_is_new) //only new if strayin exists
+    mdcache->do_realm_invalidate_and_update_notify(strayin, CEPH_SNAP_OP_SPLIT, true);
   
   mds->mdcache->send_dentry_unlink(dn, straydn, mdr);
   
   // update subtree map?
-  if (straydn && straydnl->get_inode()->is_dir()) 
-    mdcache->adjust_subtree_after_rename(straydnl->get_inode(), dn->get_dir(), true);
+  if (straydn && strayin->is_dir())
+    mdcache->adjust_subtree_after_rename(strayin, dn->get_dir(), true);
 
   // bump pop
   mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
@@ -5113,12 +5113,15 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   // reply
   respond_to_request(mdr, 0);
   
-  // clean up?
-  if (straydn)
-    mdcache->eval_stray(straydn);
-
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
+
+  // clean up?
+  if (straydn) {
+    if (strayin->is_dir())
+      mdcache->try_remove_dentries_for_stray(strayin);
+    mdcache->eval_stray(straydn);
+  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
