@@ -670,6 +670,29 @@ void CDir::remove_null_dentries() {
   assert(get_num_any() == items.size());
 }
 
+// remove dirty null dentries for deleted directory. the dirfrag will be
+// deleted soon, so it's safe to not commit dirty dentries.
+void CDir::try_remove_dentries_for_stray()
+{
+  dout(10) << __func__ << dendl;
+  assert(inode->inode.nlink == 0);
+
+  CDir::map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    ++p;
+    if (!dn->get_linkage()->is_null() || dn->is_projected())
+      continue; // shouldn't happen
+    if (dn->is_dirty())
+      dn->mark_clean();
+    if (dn->get_num_ref() == 0)
+      remove_dentry(dn);
+  }
+
+  if (is_dirty())
+    mark_clean();
+}
+
 void CDir::touch_dentries_bottom() {
   dout(12) << "touch_dentries_bottom " << *this << dendl;
 
@@ -1280,11 +1303,11 @@ void CDir::mark_clean()
 {
   dout(10) << "mark_clean " << *this << " version " << get_version() << dendl;
   if (state_test(STATE_DIRTY)) {
-    state_clear(STATE_DIRTY);
-    put(PIN_DIRTY);
-
     item_dirty.remove_myself();
     item_new.remove_myself();
+
+    state_clear(STATE_DIRTY);
+    put(PIN_DIRTY);
   }
 }
 
@@ -1348,6 +1371,15 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
       add_waiter(WAIT_UNFREEZE, c);
     } else
       dout(7) << "fetch not authpinnable and no context" << dendl;
+    return;
+  }
+
+  // unlinked directory inode shouldn't have any entry
+  if (inode->inode.nlink == 0) {
+    dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
+    mark_complete();
+    if (c)
+      cache->mds->queue_waiter(c);
     return;
   }
 
@@ -1769,6 +1801,14 @@ void CDir::commit(version_t want, MDSInternalContextBase *c, bool ignore_authpin
   assert(want > committed_version); // the caller is stupid
   assert(is_auth());
   assert(ignore_authpinnability || can_auth_pin());
+
+  if (inode->inode.nlink == 0) {
+    dout(7) << "commit dirfrag for unlinked directory, mark clean" << dendl;
+    try_remove_dentries_for_stray();
+    if (c)
+      cache->mds->queue_waiter(c);
+    return;
+  }
 
   // note: queue up a noop if necessary, so that we always
   // get an auth_pin.
