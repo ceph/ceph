@@ -114,6 +114,13 @@ TEST(PerfCounters, SinglePerfCounters) {
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,\"element2\":0.500000000,"
 	    "\"element3\":{\"avgcount\":3,\"sum\":125.000000000}}}"), msg);
+
+  fake_pf->reset();
+  msg.clear();
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,"
+	    "\"element2\":0.000000000,\"element3\":{\"avgcount\":0,\"sum\":0.000000000}}}"), msg);
+
 }
 
 enum {
@@ -152,13 +159,31 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":6,\"element2\":0.000000000,\"element3\":"
 	    "{\"avgcount\":0,\"sum\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
 
+  coll->reset(string("test_perfcounter_1"));
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":6,\"element2\":0.000000000,\"element3\":"
+	    "{\"avgcount\":0,\"sum\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
+
+  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1);
+  fake_pf1->inc(TEST_PERFCOUNTERS1_ELEMENT_1, 6);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,\"element3\":"
+	    "{\"avgcount\":0,\"sum\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
+
+  coll->reset(string("all"));
+  msg.clear();
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,\"element3\":"
+	    "{\"avgcount\":0,\"sum\":0.000000000}},\"test_perfcounter_2\":{\"foo\":0,\"bar\":0.000000000}}"), msg);
+
   coll->remove(fake_pf2);
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":6,\"element2\":0.000000000,"
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,"
 	    "\"element3\":{\"avgcount\":0,\"sum\":0.000000000}}}"), msg);
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf schema\", \"format\": \"json\" }", &msg));
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2},"
 	       "\"element2\":{\"type\":1},\"element3\":{\"type\":5}}}"), msg);
+
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perfcounters_dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ("{}", msg);
