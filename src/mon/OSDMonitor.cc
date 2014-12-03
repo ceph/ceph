@@ -5601,10 +5601,6 @@ done:
       goto reply;
     }
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
-      goto reply;
-    }
-
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->read_tier = overlaypool_id;
