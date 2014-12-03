@@ -1081,6 +1081,12 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
       }
       break;
 
+    case CRUSH_BUCKET_STRAW2:
+      for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	::encode((reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights[j], bl);
+      }
+      break;
+
     default:
       assert(0);
       break;
@@ -1229,6 +1235,9 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
   case CRUSH_BUCKET_STRAW:
     size = sizeof(crush_bucket_straw);
     break;
+  case CRUSH_BUCKET_STRAW2:
+    size = sizeof(crush_bucket_straw2);
+    break;
   default:
     {
       char str[128];
@@ -1288,6 +1297,15 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     for (unsigned j = 0; j < bucket->size; ++j) {
       ::decode(cbs->item_weights[j], blp);
       ::decode(cbs->straws[j], blp);
+    }
+    break;
+  }
+
+  case CRUSH_BUCKET_STRAW2: {
+    crush_bucket_straw2* cbs = reinterpret_cast<crush_bucket_straw2*>(bucket);
+    cbs->item_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
+    for (unsigned j = 0; j < bucket->size; ++j) {
+      ::decode(cbs->item_weights[j], blp);
     }
     break;
   }
