@@ -377,7 +377,7 @@ public:
     ino(ino_), pg_pool(pool), readonly(true),
     stream_format(-1), journal_stream(-1),
     magic(mag),
-    objecter(obj), filer(objecter), logger(l), logger_key_lat(lkey),
+    objecter(obj), filer(objecter, f), logger(l), logger_key_lat(lkey),
     timer(tim), delay_flush_event(0),
     state(STATE_UNDEF), error(0),
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0), safe_pos(0),
