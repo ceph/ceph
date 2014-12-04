@@ -283,6 +283,7 @@ void Elector::handle_ack(MMonElection *m)
       required_features) {
     dout(5) << " ignoring ack from mon" << from
 	    << " without required features" << dendl;
+    m->put();
     return;
   }
   
