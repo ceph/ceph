@@ -25,6 +25,7 @@
 
 #include "include/Context.h"
 
+#include "common/Finisher.h"
 #include "common/config.h"
 
 #define dout_subsys ceph_subsys_filer
@@ -134,8 +135,9 @@ void Filer::_probe(Probe *probe)
   for (std::vector<ObjectExtent>::iterator i = stat_extents.begin();
       i != stat_extents.end(); ++i) {
     C_Probe *c = new C_Probe(this, probe, i->oid);
-    objecter->stat(i->oid, i->oloc, probe->snapid, &c->size, &c->mtime, 
-                   probe->flags | CEPH_OSD_FLAG_RWORDERED, c);
+    objecter->stat(i->oid, i->oloc, probe->snapid, &c->size, &c->mtime,
+		   probe->flags | CEPH_OSD_FLAG_RWORDERED,
+		   new C_OnFinisher(c, finisher));
   }
 }
 
@@ -339,8 +341,8 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
     const OSDMap *osdmap = objecter->get_osdmap_read();
     const object_locator_t oloc = osdmap->file_to_object_locator(pr->layout);
     objecter->put_osdmap_read();
-    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
-		     NULL, new C_PurgeRange(this, pr));
+    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags, NULL,
+		     new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
   }
 }
 
