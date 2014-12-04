@@ -446,14 +446,14 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   return error;
 }
 
-map<pg_shard_t, ScrubMap *>::const_iterator
+list<map<pg_shard_t, ScrubMap *>::const_iterator>
   PGBackend::be_select_auth_object(
   const hobject_t &obj,
   const map<pg_shard_t,ScrubMap*> &maps,
   bool okseed,
   object_info_t *auth_oi)
 {
-  map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
+  list<map<pg_shard_t, ScrubMap *>::const_iterator> auth;
   for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
        j != maps.end();
        ++j) {
@@ -528,7 +528,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	     << " for obj " << obj
 	     << dendl;
     *auth_oi = oi;
-    auth = j;
+    auth.push_back(j);
   }
   return auth;
 }
@@ -538,7 +538,7 @@ void PGBackend::be_compare_scrubmaps(
   bool okseed,
   map<hobject_t, set<pg_shard_t> > &missing,
   map<hobject_t, set<pg_shard_t> > &inconsistent,
-  map<hobject_t, pg_shard_t> &authoritative,
+  map<hobject_t, list<pg_shard_t> > &authoritative,
   map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
   int &shallow_errors, int &deep_errors,
   const spg_t& pgid,
@@ -562,14 +562,14 @@ void PGBackend::be_compare_scrubmaps(
        k != master_set.end();
        ++k) {
     object_info_t auth_oi;
-    map<pg_shard_t, ScrubMap *>::const_iterator auth =
+    list<map<pg_shard_t, ScrubMap *>::const_iterator> auth =
       be_select_auth_object(*k, maps, okseed, &auth_oi);
-    if (auth == maps.end()) {
+    if (auth.empty()) {
       // Something is better than nothing
       // TODO: something is NOT better than nothing, do something like
       // unfound_lost if no valid copies can be found, or just mark unfound
       map<pg_shard_t, ScrubMap *>::const_iterator fallback = maps.begin();
-      auth = fallback;
+      auth.push_back(fallback);
       dout(10) << __func__ << ": selecting osd " << fallback->first
 	       << " for obj " << *k
 	       << ", something is better than nothing, FIXME"
@@ -577,18 +577,17 @@ void PGBackend::be_compare_scrubmaps(
       continue;
     }
 
-    assert(auth != maps.end());
-    ScrubMap::object& auth_object = auth->second->objects[*k];
+    ScrubMap::object& auth_object = auth.back()->second->objects[*k];
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
     for (j = maps.begin(); j != maps.end(); ++j) {
-      if (j == auth)
+      if (j == auth.back())
 	continue;
       if (j->second->objects.count(*k)) {
 	// Compare
 	stringstream ss;
 	enum scrub_error_type error =
-	  be_compare_scrub_objects(auth->first,
+	  be_compare_scrub_objects(auth.back()->first,
 				   auth_object,
 				   auth_oi,
 				   okseed,
@@ -601,16 +600,15 @@ void PGBackend::be_compare_scrubmaps(
           else
 	    ++deep_errors;
 	  errorstream << __func__ << ": " << pgid << " shard " << j->first
-		      << ": soid " << *k << " " << ss.str() << std::endl;
+		      << ": soid " << *k << " " << ss.str();
 	}
       } else {
 	cur_missing.insert(j->first);
 	++shallow_errors;
 	errorstream << __func__ << ": " << pgid << " shard " << j->first
-		    << " missing " << *k << std::endl;
+		    << " missing " << *k;
       }
     }
-    assert(auth != maps.end());
     if (!cur_missing.empty()) {
       missing[*k] = cur_missing;
     }
@@ -618,7 +616,10 @@ void PGBackend::be_compare_scrubmaps(
       inconsistent[*k] = cur_inconsistent;
     }
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
-      authoritative[*k] = auth->first;
+      list<map<pg_shard_t, ScrubMap *>::const_iterator>::const_iterator i;
+      for (i = auth.begin(); i != auth.end(); i++) {
+	authoritative[*k].push_back((*i)->first);
+      }
     }
     if (okseed &&
 	auth_object.digest_present && auth_object.omap_digest_present &&
