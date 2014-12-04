@@ -78,6 +78,14 @@ libec_fail_to_register_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libec_fail_to_register_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
 erasure_codelib_LTLIBRARIES += libec_fail_to_register.la
 
+libec_test_jerasure_neon_la_SOURCES = test/erasure-code/TestJerasurePluginNEON.cc
+test/erasure-code/TestJerasurePluginNEON.cc: ./ceph_ver.h
+libec_test_jerasure_neon_la_CFLAGS = ${AM_CFLAGS}
+libec_test_jerasure_neon_la_CXXFLAGS= ${AM_CXXFLAGS}
+libec_test_jerasure_neon_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
+libec_test_jerasure_neon_la_LDFLAGS = ${AM_LDFLAGS} -export-symbols-regex '.*__erasure_code_.*'
+erasure_codelib_LTLIBRARIES += libec_test_jerasure_neon.la
+
 libec_test_jerasure_sse4_la_SOURCES = test/erasure-code/TestJerasurePluginSSE4.cc
 test/erasure-code/TestJerasurePluginSSE4.cc: ./ceph_ver.h
 libec_test_jerasure_sse4_la_CFLAGS = ${AM_CFLAGS}
