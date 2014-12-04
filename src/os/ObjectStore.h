@@ -392,7 +392,6 @@ public:
     int64_t pool_override;
     bool use_pool_override;
     bool replica;
-    bool tolerate_collection_add_enoent;
     void *osr; // NULL on replay
 
     list<Context *> on_applied;
@@ -400,10 +399,6 @@ public:
     list<Context *> on_applied_sync;
 
   public:
-    void set_tolerate_collection_add_enoent() {
-      tolerate_collection_add_enoent = true;
-    }
-
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
       if (!c) return;
@@ -559,23 +554,17 @@ public:
       int64_t pool_override;
       bool use_pool_override;
       bool replica;
-      bool _tolerate_collection_add_enoent;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
 	  sobject_encoding(t->sobject_encoding),
 	  pool_override(t->pool_override),
 	  use_pool_override(t->use_pool_override),
-	  replica(t->replica),
-	  _tolerate_collection_add_enoent(
-	    t->tolerate_collection_add_enoent) {}
+	  replica(t->replica) {}
 
       friend class Transaction;
 
     public:
-      bool tolerate_collection_add_enoent() const {
-	return _tolerate_collection_add_enoent;
-      }
       /// true if there are more operations left to be enumerated
       bool have_op() {
 	return !p.end();
@@ -1046,13 +1035,13 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {}
+      osr(NULL) {}
 
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {
+      osr(NULL) {
       decode(dp);
     }
 
@@ -1060,7 +1049,7 @@ public:
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
       replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {
+      osr(NULL) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
@@ -1073,7 +1062,10 @@ public:
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
-      ::encode(tolerate_collection_add_enoent, bl);
+      {
+	bool tolerate_collection_add_enoent = 0;
+	::encode(tolerate_collection_add_enoent, bl);
+      }
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
@@ -1095,6 +1087,7 @@ public:
 	use_pool_override = true;
       }
       if (struct_v >= 7) {
+	bool tolerate_collection_add_enoent;
 	::decode(tolerate_collection_add_enoent, bl);
       }
       DECODE_FINISH(bl);
