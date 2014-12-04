@@ -227,11 +227,6 @@ struct ObjectOperation {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
     o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
   }
-  void create(bool excl, const string& category) {
-    OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
-    o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
-    ::encode(category, o.indata);
-  }
 
   struct C_ObjectOperation_stat : public Context {
     bufferlist bl;
@@ -629,7 +624,6 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     utime_t *out_mtime;
-    string *out_category;
     std::map<std::string,bufferlist> *out_attrs;
     bufferlist *out_data, *out_omap_header;
     std::map<std::string,bufferlist> *out_omap;
@@ -639,7 +633,6 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      utime_t *m,
-			      string *cat,
 			      std::map<std::string,bufferlist> *a,
 			      bufferlist *d, bufferlist *oh,
 			      std::map<std::string,bufferlist> *o,
@@ -647,7 +640,7 @@ struct ObjectOperation {
 			      snapid_t *osnap_seq,
 			      int *r)
       : cursor(c),
-	out_size(s), out_mtime(m), out_category(cat),
+	out_size(s), out_mtime(m),
 	out_attrs(a), out_data(d), out_omap_header(oh),
 	out_omap(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	prval(r) {}
@@ -662,8 +655,6 @@ struct ObjectOperation {
 	  *out_size = copy_reply.size;
 	if (out_mtime)
 	  *out_mtime = copy_reply.mtime;
-	if (out_category)
-	  *out_category = copy_reply.category;
 	if (out_attrs)
 	  *out_attrs = copy_reply.attrs;
 	if (out_data)
@@ -688,7 +679,6 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		utime_t *out_mtime,
-		string *out_category,
 		std::map<std::string,bufferlist> *out_attrs,
 		bufferlist *out_data,
 		bufferlist *out_omap_header,
@@ -703,7 +693,7 @@ struct ObjectOperation {
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
-      new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_category,
+      new C_ObjectOperation_copyget(cursor, out_size, out_mtime,
                                     out_attrs, out_data, out_omap_header,
 				    out_omap, out_snaps, out_snap_seq, prval);
     out_bl[p] = &h->bl;

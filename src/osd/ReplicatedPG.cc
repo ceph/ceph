@@ -2649,7 +2649,7 @@ ReplicatedPG::RepGather *ReplicatedPG::trim_object(const hobject_t &coid)
       delta.num_whiteouts--;
     }
     delta.num_object_clones--;
-    info.stats.stats.add(delta, obc->obs.oi.category);
+    info.stats.stats.add(delta);
     obc->obs.exists = false;
 
     snapset.clones.erase(p);
@@ -4166,14 +4166,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      result = -EINVAL;
 	      goto fail;
 	    }
-	    if (category.size()) {
-	      if (obs.exists && !oi.is_whiteout()) {
-		if (obs.oi.category != category)
-		  result = -EEXIST;  // category cannot be reset
-	      } else {
-		obs.oi.category = category;
-	      }
-	    }
+	    // category is no longer implemented.
 	  }
           if (result >= 0) {
             if (!obs.exists)
@@ -5480,7 +5473,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  done?
   if (ctx->op_t->empty() && !ctx->modify) {
-    unstable_stats.add(ctx->delta_stats, ctx->obc->obs.oi.category);
+    unstable_stats.add(ctx->delta_stats);
     return result;
   }
 
@@ -5680,7 +5673,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = ctx->new_snapset;
   }
 
-  info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
+  info.stats.stats.add(ctx->delta_stats);
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
@@ -5688,16 +5681,15 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     pg_shard_t bt = *i;
     pg_info_t& pinfo = peer_info[bt];
     if (soid <= pinfo.last_backfill)
-      pinfo.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
+      pinfo.stats.stats.add(ctx->delta_stats);
     else if (soid <= last_backfill_started)
-      pending_backfill_updates[soid].stats.add(ctx->delta_stats,
-					       ctx->obs->oi.category);
+      pending_backfill_updates[soid].stats.add(ctx->delta_stats);
   }
 
   if (scrubber.active) {
     assert(soid < scrubber.start || soid >= scrubber.end);
     if (soid < scrubber.start)
-      scrub_cstat.add(ctx->delta_stats, ctx->obs->oi.category);
+      scrub_cstat.add(ctx->delta_stats);
   }
 }
 
@@ -5809,7 +5801,6 @@ int ReplicatedPG::fill_in_copy_get(
   // size, mtime
   reply_obj.size = oi.size;
   reply_obj.mtime = oi.mtime;
-  reply_obj.category = oi.category;
   if (soid.snap < CEPH_NOSNAP) {
     reply_obj.snaps = oi.snaps;
   } else {
@@ -5983,7 +5974,6 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->results.category,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
 	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->rval);
@@ -6353,7 +6343,6 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
       tctx->discard_temp_oid = results->temp_oid;
     }
     tctx->new_obs.oi.size = results->object_size;
-    tctx->new_obs.oi.category = results->category;
     tctx->new_obs.oi.user_version = results->user_version;
 
     if (soid.snap != CEPH_NOSNAP) {
@@ -7851,8 +7840,6 @@ void ReplicatedPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
 
   // add it in
   pgstat->stats.sum.add(stat);
-  if (oi.category.length())
-    pgstat->stats.cat_sum[oi.category].add(stat);
 }
 
 void ReplicatedPG::kick_object_context_blocked(ObjectContextRef obc)
@@ -11340,7 +11327,7 @@ void ReplicatedPG::hit_set_persist()
 
   hit_set_trim(repop, max);
 
-  info.stats.stats.add(ctx->delta_stats, string());
+  info.stats.stats.add(ctx->delta_stats);
 
   simple_repop_submit(repop);
 }
@@ -12285,8 +12272,7 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       next_clone = hobject_t();
     }
 
-    string cat; // fixme
-    scrub_cstat.add(stat, cat);
+    scrub_cstat.add(stat);
   }
 
   if (!next_clone.is_min() &&
