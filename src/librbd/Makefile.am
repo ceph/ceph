@@ -7,8 +7,10 @@ librbd_la_SOURCES = \
 	librbd/LibrbdWriteback.cc \
 	librbd/WatchCtx.cc
 librbd_la_LIBADD = \
-	$(LIBRADOS) $(LIBOSDC) \
-	libcls_rbd_client.la libcls_lock_client.la \
+	$(LIBRADOS) $(LIBCOMMON) $(LIBOSDC) \
+	librados_internal.la \
+	libcls_rbd_client.la \
+	libcls_lock_client.la \
 	$(PTHREAD_LIBS) $(EXTRALIBS)
 
 if WITH_LTTNG

@@ -65,7 +65,7 @@ namespace librados
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
 
-  class ListObject
+  class CEPH_RADOS_API ListObject
   {
   public:
     const std::string& get_nspace() const;
@@ -84,9 +84,9 @@ namespace librados
 
     ListObjectImpl *impl;
   };
-  std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
+  CEPH_RADOS_API std::ostream& operator<<(std::ostream& out, const librados::ListObject& lop);
 
-  class NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
+  class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
   public:
     static const NObjectIterator __EndObjectIterator;
     NObjectIterator(): impl(NULL) {}
@@ -116,7 +116,7 @@ namespace librados
   };
 
   // DEPRECATED; Use NObjectIterator
-  class ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
+  class CEPH_RADOS_API ObjectIterator : public std::iterator <std::forward_iterator_tag, std::pair<std::string, std::string> > {
   public:
     static const ObjectIterator __EndObjectIterator;
     ObjectIterator() {}
@@ -145,13 +145,13 @@ namespace librados
     std::pair<std::string, std::string> cur_obj;
   };
 
-  class WatchCtx {
+  class CEPH_RADOS_API WatchCtx {
   public:
     virtual ~WatchCtx();
     virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) = 0;
   };
 
-  struct AioCompletion {
+  struct CEPH_RADOS_API AioCompletion {
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
     int set_complete_callback(void *cb_arg, callback_t cb);
     int set_safe_callback(void *cb_arg, callback_t cb);
@@ -170,7 +170,7 @@ namespace librados
     AioCompletionImpl *pc;
   };
 
-  struct PoolAsyncCompletion {
+  struct CEPH_RADOS_API PoolAsyncCompletion {
     PoolAsyncCompletion(PoolAsyncCompletionImpl *pc_) : pc(pc_) {}
     int set_callback(void *cb_arg, callback_t cb);
     int wait();
@@ -189,7 +189,7 @@ namespace librados
     OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,
   };
 
-  class ObjectOperationCompletion {
+  class CEPH_RADOS_API ObjectOperationCompletion {
   public:
     virtual ~ObjectOperationCompletion() {}
     virtual void handle_completion(int r, bufferlist& outbl) = 0;
@@ -230,7 +230,7 @@ namespace librados
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
-  class ObjectOperation
+  class CEPH_RADOS_API ObjectOperation
   {
   public:
     ObjectOperation();
@@ -295,7 +295,7 @@ namespace librados
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
-  class ObjectWriteOperation : public ObjectOperation
+  class CEPH_RADOS_API ObjectWriteOperation : public ObjectOperation
   {
   protected:
     time_t *pmtime;
@@ -397,7 +397,7 @@ namespace librados
    * Batch multiple object operations into a single request, to be applied
    * atomically.
    */
-  class ObjectReadOperation : public ObjectOperation
+  class CEPH_RADOS_API ObjectReadOperation : public ObjectOperation
   {
   public:
     ObjectReadOperation() {}
@@ -552,7 +552,7 @@ namespace librados
    * p->stat(&stats);
    * ... etc ...
    */
-  class IoCtx
+  class CEPH_RADOS_API IoCtx
   {
   public:
     IoCtx();
@@ -939,7 +939,7 @@ namespace librados
     IoCtxImpl *io_ctx_impl;
   };
 
-  class Rados
+  class CEPH_RADOS_API Rados
   {
   public:
     static void version(int *major, int *minor, int *extra);
