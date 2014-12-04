@@ -365,7 +365,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 				       next,
 				       LIST_AT_A_TIME,
 				       LIST_AT_A_TIME,
-				       CEPH_NOSNAP,
+				       0,
 				       &list,
 				       &next);
     if (r < 0) {
