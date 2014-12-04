@@ -120,15 +120,44 @@ function TEST_corrupt_and_repair_erasure_coded() {
     local not_primary_first=${osds[0]}
     local not_primary_second=${osds[1]}
 
+    # Reproduces http://tracker.ceph.com/issues/10017
+    corrupt_and_repair_one $dir $poolname $primary  || return 1
     # Reproduces http://tracker.ceph.com/issues/10409
     corrupt_and_repair_one $dir $poolname $not_primary_first || return 1
+    corrupt_and_repair_two $dir $poolname $not_primary_first $not_primary_second || return 1
+    corrupt_and_repair_two $dir $poolname $primary $not_primary_first || return 1
 
     teardown $dir || return 1
+}
+
+function corrupt_and_repair_two() {
+    local dir=$1
+    local poolname=$2
+    local first=$3
+    local second=$4
+
+    #
+    # 1) remove the corresponding file from the OSDs
+    #
+    objectstore_tool $dir $first SOMETHING remove || return 1
+    objectstore_tool $dir $second SOMETHING remove || return 1
+    #
+    # 2) repair the PG
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    repair $pg
+    #
+    # 3) The files must be back
+    #
+    objectstore_tool $dir $first SOMETHING list-attrs || return 1
+    objectstore_tool $dir $second SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
 }
 
 main osd-scrub-repair "$@"
 
 # Local Variables:
 # compile-command: "cd ../.. ; make -j4 && \
-#    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_primary_replicated"
+#    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_replicated"
 # End:
