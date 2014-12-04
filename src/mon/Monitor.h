@@ -796,6 +796,7 @@ public:
   void extract_save_mon_key(KeyRing& keyring);
 
   // features
+  static CompatSet get_initial_supported_features();
   static CompatSet get_supported_features();
   static CompatSet get_legacy_features();
   /// read the ondisk features into the CompatSet pointed to by read_features
