@@ -458,14 +458,13 @@ struct pgid_object_list {
     _objects.push_back(make_pair(coll, ghobj));
   }
 
-  void dump(Formatter *f) const {
-    bool terminal = isatty(STDOUT_FILENO);
-    if (!terminal)
+  void dump(Formatter *f, bool human_readable) const {
+    if (!human_readable)
       f->open_array_section("pgid_objects");
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 i++) {
-      if (i != _objects.begin() && terminal) {
+      if (i != _objects.begin() && human_readable) {
         f->flush(cout);
         cout << std::endl;
       }
@@ -481,7 +480,7 @@ struct pgid_object_list {
       f->close_section();
       f->close_section();
     }
-    if (!terminal)
+    if (!human_readable)
       f->close_section();
   }
 };
@@ -508,8 +507,8 @@ struct lookup_ghobject : public action_on_object_t {
      return front;
   }
 
-  void dump(Formatter *f) const {
-    _objects.dump(f);
+  void dump(Formatter *f, bool human_readable) const {
+    _objects.dump(f, human_readable);
   }
 };
 
@@ -1628,7 +1627,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   return 0;
 }
 
-int do_list(ObjectStore *store, string pgidstr, string object, Formatter *formatter, bool debug)
+int do_list(ObjectStore *store, string pgidstr, string object, Formatter *formatter, bool debug, bool human_readable)
 {
   int r;
   lookup_ghobject lookup(object);
@@ -1641,7 +1640,7 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
   }
   if (r)
     return r;
-  lookup.dump(formatter);
+  lookup.dump(formatter, human_readable);
   formatter->flush(cout);
   cout << std::endl;
   return 0;
@@ -2025,9 +2024,10 @@ void usage(po::options_description &desc)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type;
+  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   ghobject_t ghobj;
+  bool pretty_format, human_readable;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -2044,6 +2044,10 @@ int main(int argc, char **argv)
      "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
+    ("pretty-format", po::value<bool>(&pretty_format)->default_value(true),
+     "Make json or xml output more readable")
+    ("format", po::value<string>(&format)->default_value("json"),
+     "Output format which may be xml or json")
     ("debug", "Enable diagnostic output to stderr")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -2507,9 +2511,26 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  // Special list handling.  Treating pretty_format as human readable,
+  // with one object per line and not an enclosing array.
+  human_readable = pretty_format;
   if (op == "list") {
-    Formatter *formatter = new JSONFormatter(false);
-    r = do_list(fs, pgidstr, object, formatter, debug);
+    pretty_format = false;
+  }
+
+  Formatter *formatter;
+  if (format == "xml") {
+    formatter = new XMLFormatter(pretty_format);
+  } else if (format == "json") {
+    formatter = new JSONFormatter(pretty_format);
+  } else {
+    cerr << "unrecognized format: " << format << std::endl;
+    ret = 1;
+    goto out;
+  }
+
+  if (op == "list") {
+    r = do_list(fs, pgidstr, object, formatter, debug, human_readable);
     if (r) {
       cerr << "do_list failed with " << r << std::endl;
       ret = 1;
@@ -2727,7 +2748,6 @@ int main(int argc, char **argv)
       usage(desc);
     }
 
-    Formatter *formatter = new JSONFormatter(true);
     bufferlist bl;
     map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
     if (debug)

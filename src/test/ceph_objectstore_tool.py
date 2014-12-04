@@ -465,7 +465,7 @@ def main(argv):
     osd = OSDS[0]
 
     # retrieve all objects from all PGs
-    cmd = (CFSD_PREFIX + "--op list").format(osd=osd)
+    cmd = (CFSD_PREFIX + "--op list --pretty-format=false").format(osd=osd)
     logging.debug(cmd);
     tmpfd = open(TMPFILE, "a")
     logging.debug(cmd)
@@ -479,7 +479,7 @@ def main(argv):
     (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
 
     # retrieve all objects in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg}").format(osd=osd, pg=pgid)
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --pretty-format=false").format(osd=osd, pg=pgid)
     logging.debug(cmd);
     tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
@@ -498,7 +498,7 @@ def main(argv):
         ERRORS += 1
 
     # retrieve all objects with a given name in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object}").format(osd=osd, pg=pgid, object=jsondict['oid'])
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --pretty-format=false").format(osd=osd, pg=pgid, object=jsondict['oid'])
     logging.debug(cmd);
     tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
@@ -516,7 +516,7 @@ def main(argv):
                       "from the first line of --op list --pgid {pg} {object}".format(pg=pgid, object=jsondict['oid']))
         ERRORS += 1
 
-    print "Test --op list by generating json for all objects"
+    print "Test --op list by generating json for all objects using default format"
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
@@ -532,11 +532,12 @@ def main(argv):
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
-        for (pgid, jsondict) in json.loads(JSON):
-            db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
-            if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
-                logging.error("Malformed JSON {json}".format(json=JSON))
-                ERRORS += 1
+        (pgid, jsondict) = json.loads(JSON)
+        db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
+        # print db[jsondict['namespace']][jsondict['oid']]['json']
+        if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
+            logging.error("Malformed JSON {json}".format(json=JSON))
+            ERRORS += 1
 
     # Test get-bytes
     print "Test get-bytes and set-bytes"
