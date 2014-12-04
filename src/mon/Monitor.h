@@ -550,7 +550,7 @@ public:
     return quorum_features;
   }
   uint64_t get_required_features() const {
-    return quorum_features;
+    return required_features;
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
