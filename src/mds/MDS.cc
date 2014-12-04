@@ -129,7 +129,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   objecter = new Objecter(m->cct, messenger, monc, 0, 0);
   objecter->unset_honor_osdmap_full();
 
-  filer = new Filer(objecter);
+  filer = new Filer(objecter, &finisher);
 
   mdcache = new MDCache(this);
   mdlog = new MDLog(this);
