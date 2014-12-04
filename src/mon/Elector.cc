@@ -214,6 +214,9 @@ void Elector::handle_propose(MMonElection *m)
 
   assert(m->epoch % 2 == 1); // election
   uint64_t required_features = mon->get_required_features();
+  dout(10) << __func__ << " required features " << required_features
+           << ", peer features " << m->get_connection()->get_features()
+           << dendl;
   if ((required_features ^ m->get_connection()->get_features()) &
       required_features) {
     dout(5) << " ignoring propose from mon" << from
