@@ -115,7 +115,6 @@ public:
      * other accesses to the object (in order to complete the copy).
      */
     PGBackend::PGTransaction *final_tx;
-    string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
