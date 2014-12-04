@@ -65,11 +65,12 @@ def kill_job(run_name, job_id, archive_base=None, owner=None,
              machine_type=None):
     serializer = report.ResultsSerializer(archive_base)
     job_info = serializer.job_info(run_name, job_id)
-    if not owner and 'owner' not in job_info:
-        raise RuntimeError(
-            "I could not figure out the owner of the requested job. "
-            "Please pass --owner <owner>.")
-    owner = job_info['owner']
+    if not owner:
+        if 'owner' not in job_info:
+            raise RuntimeError(
+                "I could not figure out the owner of the requested job. "
+                "Please pass --owner <owner>.")
+        owner = job_info['owner']
     kill_processes(run_name, [job_info.get('pid')])
     targets = dict(targets=job_info.get('targets', {}))
     nuke_targets(targets, owner)
@@ -214,6 +215,7 @@ def nuke_targets(targets_dict, owner):
     targets = targets_dict.get('targets')
     if not targets:
         log.info("No locked machines. Not nuking anything")
+        return
 
     to_nuke = []
     for target in targets:
