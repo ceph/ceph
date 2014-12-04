@@ -457,10 +457,16 @@ struct pgid_object_list {
   }
 
   void dump(Formatter *f) const {
-    f->open_array_section("pgid_objects");
+    bool terminal = isatty(STDOUT_FILENO);
+    if (!terminal)
+      f->open_array_section("pgid_objects");
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
 	 i++) {
+      if (i != _objects.begin() && terminal) {
+        f->flush(cout);
+        cout << std::endl;
+      }
       f->open_array_section("pgid_object");
       i->first.dump(f);
       f->open_object_section("ghobject");
@@ -468,7 +474,8 @@ struct pgid_object_list {
       f->close_section();
       f->close_section();
     }
-    f->close_section();
+    if (!terminal)
+      f->close_section();
   }
 };
 
