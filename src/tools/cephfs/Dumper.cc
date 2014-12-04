@@ -85,7 +85,7 @@ int Dumper::dump(const char *dump_file)
 
   cout << "journal is " << start << "~" << len << std::endl;
 
-  Filer filer(objecter);
+  Filer filer(objecter, &finisher);
   bufferlist bl;
 
   C_SaferCond cond;
@@ -238,7 +238,7 @@ int Dumper::undump(const char *dump_file)
     return r;
   }
 
-  Filer filer(objecter);
+  Filer filer(objecter, &finisher);
 
   /* Erase any objects at the end of the region to which we shall write
    * the new log data.  This is to avoid leaving trailing junk after
