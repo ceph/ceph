@@ -1656,6 +1656,7 @@ void MDSMonitor::tick()
 	case MDSMap::STATE_CLIENTREPLAY:
 	case MDSMap::STATE_ACTIVE:
 	case MDSMap::STATE_STOPPING:
+	case MDSMap::STATE_DNE:
 	  si.state = MDSMap::STATE_REPLAY;
 	  break;
 	default:
