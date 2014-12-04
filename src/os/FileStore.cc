@@ -707,12 +707,6 @@ void FileStore::create_backend(long f_type)
 
   case XFS_SUPER_MAGIC:
     // wbthrottle is constructed with fs(WBThrottle::XFS)
-    if (m_filestore_fadvise) {
-      dout(1) << " disabling 'filestore fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
-      g_conf->set_val("filestore_fadvise", "false");
-      g_conf->apply_changes(NULL);
-      assert(m_filestore_fadvise == false);
-    }
     break;
 #endif
   }
