@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <string>
 
-#include <include/rados/rados_types.h>
+#include "rados_types.h"
 
 namespace librados {
 
