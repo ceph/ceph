@@ -424,7 +424,12 @@ namespace librbd {
     for (std::list<string>::const_iterator it = pools.begin();
 	 it != pools.end(); ++it) {
       IoCtx ioctx;
-      rados.ioctx_create(it->c_str(), ioctx);
+      r = rados.ioctx_create(it->c_str(), ioctx);
+      if (r < 0) {
+        lderr(cct) << "Error accessing child image pool " << *it << dendl;
+        return r;
+      }
+
       set<string> image_ids;
       int r = cls_client::get_children(&ioctx, RBD_CHILDREN,
 				       parent_spec, image_ids);
