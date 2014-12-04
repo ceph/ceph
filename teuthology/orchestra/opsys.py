@@ -1,3 +1,4 @@
+import ast
 import re
 
 
@@ -9,20 +10,54 @@ class OS(object):
     Must be initialized with OS.from_lsb_release or OS.from_os_release
     """
 
-    __slots__ = ['name', 'version', 'package_type']
+    __slots__ = ['name', 'version', 'codename', 'package_type']
 
     _deb_distros = ('debian', 'ubuntu')
     _rpm_distros = ('fedora', 'rhel', 'centos', 'suse')
 
-    def __init__(self, name=None, version=None):
+    def __init__(self, name=None, version=None, codename=None):
         self.name = name
         self.version = version
+        self.codename = codename
         self._set_package_type()
+
+    @classmethod
+    def from_python(cls, python_val):
+        """
+        Parse output from platform.linux_distribution() and populate attributes
+
+        Given a tuple or str()'ed tuple like this:
+            ('Ubuntu', '14.04', 'trusty')
+
+        Attributes will be:
+            name = 'ubuntu'
+            version = '14.04'
+            codename = 'trusty'
+        Additionally, we set the package type:
+            package_type = 'deb'
+        """
+        if not isinstance(python_val, tuple):
+            python_val = ast.literal_eval(python_val)
+
+        (name, version, codename) = python_val
+        name = name.lower().replace(' ', '')
+        if name.startswith('redhat'):
+            name = 'rhel'
+        elif name.startswith('centos'):
+            name = 'centos'
+        elif name.startswith('fedora'):
+            name = 'fedora'
+        obj = cls()
+        obj.name = name
+        obj.version = version
+        obj.codename = codename.lower()
+        obj._set_package_type()
+        return obj
 
     @classmethod
     def from_lsb_release(cls, lsb_release_str):
         """
-        Parse /etc/os-release and populate attributes
+        Parse output from lsb_release -a and populate attributes
 
         Given output like:
             Distributor ID: Ubuntu
@@ -33,6 +68,7 @@ class OS(object):
         Attributes will be:
             name = 'ubuntu'
             version = '12.04'
+            codename = 'precise'
         Additionally, we set the package type:
             package_type = 'deb'
         """
@@ -44,6 +80,7 @@ class OS(object):
         obj.name = name.lower()
 
         obj.version = obj._get_value(str_, 'Release')
+        obj.codename = obj._get_value(str_, 'Codename').lower()
 
         obj._set_package_type()
 
@@ -65,6 +102,7 @@ class OS(object):
         Attributes will be:
             name = 'ubuntu'
             version = '12.04'
+            codename = None
         Additionally, we set the package type:
             package_type = 'deb'
         """
@@ -72,6 +110,7 @@ class OS(object):
         str_ = os_release_str.strip()
         obj.name = cls._get_value(str_, 'ID').lower()
         obj.version = cls._get_value(str_, 'VERSION_ID')
+        obj.codename = None
 
         obj._set_package_type()
 
@@ -95,11 +134,14 @@ class OS(object):
         return dict(
             name=self.name,
             version=self.version,
+            codename=self.codename,
         )
 
     def __str__(self):
         return " ".join([self.name, self.version]).strip()
 
     def __repr__(self):
-        return "OS(name='{name}', version='{version}')".format(
-            name=self.name, version=self.version)
+        return "OS(name={name}, version={version}, codename={codename})"\
+            .format(name=repr(self.name),
+                    version=repr(self.version),
+                    codename=repr(self.codename))
