@@ -1,7 +1,8 @@
 workload:
-  sequential:
+  parallel:
     - workunit:
         branch: firefly
         clients:
-          client.0:
+          client.4:
             - rbd/test_librbd_python.sh
+    - print: "**** done rbd/test_librbd_python.sh 2-workload"
