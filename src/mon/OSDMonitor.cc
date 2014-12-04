@@ -2363,21 +2363,27 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     int64_t epochnum;
     cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
     epoch = epochnum;
+    if (!epoch)
+      epoch = osdmap.get_epoch();
 
-    OSDMap *p = &osdmap;
-    if (epoch) {
-      bufferlist b;
-      int err = get_version_full(epoch, b);
-      if (err == -ENOENT) {
-	r = -ENOENT;
-        ss << "there is no map for epoch " << epoch;
-	goto reply;
-      }
-      assert(err == 0);
-      assert(b.length());
-      p = new OSDMap;
-      p->decode(b);
+    bufferlist osdmap_bl;
+    int err = get_version_full(epoch, osdmap_bl);
+    if (err == -ENOENT) {
+      r = -ENOENT;
+      ss << "there is no map for epoch " << epoch;
+      goto reply;
     }
+    assert(err == 0);
+    assert(osdmap_bl.length());
+
+    OSDMap *p;
+    if (epoch == osdmap.get_epoch()) {
+      p = &osdmap;
+    } else {
+      p = new OSDMap;
+      p->decode(osdmap_bl);
+    }
+
     if (prefix == "osd dump") {
       stringstream ds;
       if (f) {
@@ -2424,7 +2430,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } 
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
-      p->encode(rdata, m->get_connection()->get_features());
+      rdata.append(osdmap_bl);
       ss << "got osdmap epoch " << p->get_epoch();
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata);
