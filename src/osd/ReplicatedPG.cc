@@ -7969,8 +7969,6 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
-  if (!(m->get_connection()->get_features() & CEPH_FEATURE_OSD_SNAPMAPPER))
-    rm->opt.set_tolerate_collection_add_enoent();
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -8016,7 +8014,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     m->pg_trim_rollback_to,
     update_snaps,
     &(rm->localt));
-      
+
   rm->bytes_written = rm->opt.get_encoded_bytes();
   
   op->mark_started();

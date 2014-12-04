@@ -2487,8 +2487,6 @@ unsigned FileStore::_do_transaction(
         tracepoint(objectstore, coll_add_enter);
 	r = _collection_add(ncid, ocid, oid, spos);
         tracepoint(objectstore, coll_add_exit, r);
-	if (r == -ENOENT && i.tolerate_collection_add_enoent())
-	  r = 0;
 	spos.op++;
 	if (r < 0)
 	  break;
@@ -2670,10 +2668,6 @@ unsigned FileStore::_do_transaction(
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with checkpoint mode
 	ok = true;
-      if (r == -ENOENT && (
-	  op == Transaction::OP_COLL_ADD &&
-	  i.tolerate_collection_add_enoent()))
-	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
 
