@@ -2345,7 +2345,8 @@ int main(int argc, char **argv)
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
-      exit(1);
+      ret = 1;
+      goto out;
     }
   }
 
