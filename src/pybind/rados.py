@@ -910,27 +910,65 @@ class Completion(object):
         self.onsafe = onsafe
         self.ioctx = ioctx
 
-    def wait_for_safe(self):
+    def is_safe(self):
         """
         Is an asynchronous operation safe?
 
         This does not imply that the safe callback has finished.
 
-        :returns: whether the operation is safe
+        :returns: True if the operation is safe
         """
         return run_in_thread(self.ioctx.librados.rados_aio_is_safe,
-                             (self.rados_comp,))
+                             (self.rados_comp,)) == 1
 
-    def wait_for_complete(self):
+    def is_complete(self):
         """
         Has an asynchronous operation completed?
 
         This does not imply that the safe callback has finished.
 
-        :returns:  whether the operation is completed
+        :returns: True if the operation is completed
         """
         return run_in_thread(self.ioctx.librados.rados_aio_is_complete,
-                             (self.rados_comp,))
+                             (self.rados_comp,)) == 1
+
+    def wait_for_safe(self):
+        """
+        Wait for an asynchronous operation to be marked safe
+
+        This does not imply that the safe callback has finished.
+        """
+        run_in_thread(self.ioctx.librados.rados_aio_wait_for_safe,
+                      (self.rados_comp,))
+
+    def wait_for_complete(self):
+        """
+        Wait for an asynchronous operation to complete
+
+        This does not imply that the complete callback has finished.
+        """
+        run_in_thread(self.ioctx.librados.rados_aio_wait_for_complete,
+                      (self.rados_comp,))
+
+    def wait_for_safe_and_cb(self):
+        """
+        Wait for an asynchronous operation to be marked safe and for
+        the safe callback to have returned
+        """
+        run_in_thread(self.ioctx.librados.rados_aio_wait_for_safe_and_cb,
+                      (self.rados_comp,))
+
+    def wait_for_complete_and_cb(self):
+        """
+        Wait for an asynchronous operation to complete and for the
+        complete callback to have returned
+
+        :returns:  whether the operation is completed
+        """
+        return run_in_thread(
+            self.ioctx.librados.rados_aio_wait_for_complete_and_cb,
+            (self.rados_comp,)
+        )
 
     def get_return_value(self):
         """
