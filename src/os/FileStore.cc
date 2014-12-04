@@ -1167,8 +1167,15 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
-  return -EINVAL;
+  if (version < 3) {
+    derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
+    return -EINVAL;
+  }
+
+  // nothing necessary in FileStore for v3 -> v4 upgrade; we just need to
+  // open up DBObjectMap with the do_upgrade flag, which we already did.
+  update_version_stamp();
+  return 0;
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
@@ -1255,17 +1262,19 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
-    if (do_update) {
+    if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
 	   << ". Proceeding, do_update "
 	   << "is set, performing disk format upgrade."
 	   << dendl;
+      do_update = true;
     } else {
       ret = -EINVAL;
       derr << "FileStore::mount : stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
 	   << "OSD, or set filestore_update_to to " << target_version
+	   << " (currently " << g_conf->filestore_update_to << ")"
 	   << dendl;
       goto close_fsid_fd;
     }
