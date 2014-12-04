@@ -470,7 +470,12 @@ struct pgid_object_list {
         cout << std::endl;
       }
       f->open_array_section("pgid_object");
-      i->first.dump(f);
+      string pgid = i->first.c_str();
+      std::size_t pos = pgid.find("_");
+      if (pos == string::npos)
+        f->dump_string("pgid", pgid);
+      else
+        f->dump_string("pgid", pgid.substr(0, pos));
       f->open_object_section("ghobject");
       i->second.dump(f);
       f->close_section();
