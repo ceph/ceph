@@ -287,7 +287,13 @@ AC_ARG_WITH([profiler],
             [with_profiler=no])
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
-	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])],
+	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])]),
+             AC_LANG_PUSH([C++]),
+             AC_CHECK_HEADERS([gperftools/heap-profiler.h \
+               gperftools/malloc_extension.h \
+               gperftools/profiler.h]),
+             AC_LANG_POP([C++])
+            ],
 	    [])
 AM_CONDITIONAL(WITH_PROFILER, test "$with_profiler" = "yes")
 AS_IF([test "$with_profiler" = "yes"],
