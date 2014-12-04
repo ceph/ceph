@@ -14,6 +14,8 @@
 
 #include <time.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
@@ -200,7 +202,9 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
     }
   }
   else {
-    f->open_object_section(command.c_str());
+    string section = command;
+    boost::replace_all(section, " ", "_");
+    f->open_object_section(section.c_str());
     if (command == "config show") {
       _conf->show_config(f);
     }
