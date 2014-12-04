@@ -216,7 +216,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_dirty_age,
 				  true);
   objecter_finisher.start();
-  filer = new Filer(objecter);
+  filer = new Filer(objecter, &objecter_finisher);
 }
 
 
