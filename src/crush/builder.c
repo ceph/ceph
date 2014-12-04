@@ -405,6 +405,33 @@ err:
 
 /* straw bucket */
 
+/*
+ * this code was written 8 years ago.  i have a vague recollection of
+ * drawing boxes underneath bars of different lengths, where the bar
+ * length represented the probability/weight, and that there was some
+ * trial and error involved in arriving at this implementation.
+ * however, reading the code now after all this time, the intuition
+ * that motivated is lost on me.  lame.  my only excuse is that I now
+ * know that the approach is fundamentally flawed and am not
+ * particularly motivated to reconstruct the flawed reasoning.
+ *
+ * as best as i can remember, the idea is: sort the weights, and start
+ * with the smallest.  arbitrarily scale it at 1.0 (16-bit fixed
+ * point).  look at the next larger weight, and calculate the scaling
+ * factor for that straw based on the relative difference in weight so
+ * far.  what's not clear to me now is why we are looking at wnext
+ * (the delta to the next bigger weight) for all remaining weights,
+ * and slicing things horizontally instead of considering just the
+ * next item or set of items.  or why pow() is used the way it is.
+ *
+ * note that the original version 1 of this function made special
+ * accomodation for the case where straw lengths were identical.  this
+ * is also flawed in a non-obvious way; version 2 drops the special
+ * handling and appears to work just as well.
+ *
+ * moral of the story: if you do something clever, write down why it
+ * works.
+ */
 int crush_calc_straw(struct crush_map *map, struct crush_bucket_straw *bucket)
 {
 	int *reverse;
