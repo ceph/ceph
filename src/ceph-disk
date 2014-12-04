@@ -792,11 +792,13 @@ def get_or_create_dmcrypt_key(
     # make a new key
     try:
         if not os.path.exists(key_dir):
-            os.makedirs(key_dir)
+            os.makedirs(key_dir, stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
         with file('/dev/urandom', 'rb') as i:
             key = i.read(256)
-            with file(path, 'wb') as key_file:
-                key_file.write(key)
+            fd = os.open(path, os.O_WRONLY|os.O_CREAT,
+                         stat.S_IRUSR|stat.S_IWUSR)
+            assert os.write(fd, key) == len(key)
+            os.close(fd)
         return path
     except:
         raise Error('unable to read or create dm-crypt key', path)
