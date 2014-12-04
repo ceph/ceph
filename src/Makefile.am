@@ -79,7 +79,7 @@ bin_PROGRAMS += ceph-syn
 
 
 libkrbd_la_SOURCES = krbd.cc
-libkrbd_la_LIBADD = $(LIBSECRET) -lblkid -ludev
+libkrbd_la_LIBADD = $(LIBSECRET) $(LIBCOMMON) -lblkid -ludev
 if LINUX
 noinst_LTLIBRARIES += libkrbd.la
 endif LINUX
