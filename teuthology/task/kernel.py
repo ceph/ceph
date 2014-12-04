@@ -166,7 +166,7 @@ def need_to_install(ctx, role, version):
                 cur_sha1 = cur_sha1[0:dloc]
             log.debug('extracting sha1, {ver} -> {sha1}'.format(
                       ver=cur_version, sha1=cur_sha1))
-            if version.startswith(cur_sha1):
+            if cur_sha1.startswith(version):
                 log.debug('extracted sha1 matches, do not need to install')
                 ret = False
         else:
