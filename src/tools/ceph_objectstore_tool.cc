@@ -2346,6 +2346,12 @@ int main(int argc, char **argv)
 	}
 	json_spirit::Array array = v.get_array();
 	vector<json_spirit::Value>::iterator i = array.begin();
+        if (i->type() != json_spirit::str_type) {
+	  ss << "object '" << object
+	     << "' must be a JSON array with the first element a string but "
+	     << "found type " << v.type() << " instead";
+	  throw std::runtime_error(ss.str());
+        }
 	string object_pgidstr = i->get_str();
 	spg_t object_pgid;
 	object_pgid.parse(object_pgidstr.c_str());
@@ -2361,7 +2367,12 @@ int main(int argc, char **argv)
 	  pgid = object_pgid;
 	}
 	i++;
-	ghobj.decode(*i);
+	try {
+	  ghobj.decode(*i);
+	} catch (std::runtime_error& e) {
+	  ss << "Decode object json error: " << e.what();
+	  throw std::runtime_error(ss.str());
+	}
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
