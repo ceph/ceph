@@ -1,5 +1,6 @@
 from nose.tools import eq_ as eq, assert_raises
 from rados import (Rados, Error, Object, ObjectExists, ObjectNotFound,
+                   ObjectBusy,
                    ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES)
 import time
 import threading
@@ -407,6 +408,28 @@ class TestIoctx(object):
         eq(retval[0], payload)
 
         [i.remove() for i in self.ioctx.list_objects()]
+
+    def test_lock(self):
+        self.ioctx.lock_exclusive("foo", "lock", "locker", "desc_lock",
+                                  10000, 0)
+        assert_raises(ObjectExists,
+                      self.ioctx.lock_exclusive,
+                      "foo", "lock", "locker", "desc_lock", 10000, 0)
+        self.ioctx.unlock("foo", "lock", "locker")
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker")
+
+        self.ioctx.lock_shared("foo", "lock", "locker1", "tag", "desc_lock",
+                               10000, 0)
+        self.ioctx.lock_shared("foo", "lock", "locker2", "tag", "desc_lock",
+                               10000, 0)
+        assert_raises(ObjectBusy,
+                      self.ioctx.lock_exclusive,
+                      "foo", "lock", "locker3", "desc_lock", 10000, 0)
+        self.ioctx.unlock("foo", "lock", "locker1")
+        self.ioctx.unlock("foo", "lock", "locker2")
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
+
 
 class TestObject(object):
 
