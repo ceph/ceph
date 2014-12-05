@@ -293,6 +293,7 @@ void *Worker::entry()
   ldout(cct, 10) << __func__ << " starting" << dendl;
   int r;
 
+  center.set_owner(pthread_self());
   while (!done) {
     ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
