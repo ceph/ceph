@@ -50,7 +50,7 @@ class Processor : public Thread {
   int listen_sd;
   uint64_t nonce;
 
- public:
+  public:
   Processor(AsyncMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
 
   void *entry();
@@ -62,38 +62,18 @@ class Processor : public Thread {
 };
 
 class Worker : public Thread {
-  CephContext *cct;
+  AsyncMessenger *msgr;
   bool done;
 
  public:
   EventCenter center;
-  Worker(CephContext *c): cct(c), done(false), center(c) {
+  Worker(AsyncMessenger *m, CephContext *c): msgr(m), done(false), center(c) {
     center.init(5000);
   }
   void *entry();
   void stop();
 };
 
-
-class WorkerPool: CephContext::AssociatedSingletonObject {
-  WorkerPool(const WorkerPool &);
-  WorkerPool& operator=(const WorkerPool &);
-  CephContext *cct;
-  uint64_t seq;
-  vector<Worker*> workers;
-  // Used to indicate whether thread started
-  bool started;
-
- public:
-  WorkerPool(CephContext *c);
-  virtual ~WorkerPool();
-  void start();
-  Worker *get_worker() {
-    return workers[(seq++)%workers.size()];
-  }
-  // uniq name for CephContext to distinguish differnt object
-  static const string name;
-};
 
 /*
  * AsyncMessenger is represented for maintaining a set of asynchronous connections,
@@ -190,7 +170,8 @@ public:
 
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
-    Worker *w = pool->get_worker();
+    Worker *w = workers[conn_id % workers.size()];
+    conn_id++;
     return new AsyncConnection(cct, this, &w->center);
   }
 
@@ -250,7 +231,8 @@ private:
   int _send_message(Message *m, const entity_inst_t& dest);
 
  private:
-  WorkerPool *pool;
+  vector<Worker*> workers;
+  int conn_id;
 
   Processor processor;
   friend class Processor;
@@ -399,10 +381,16 @@ public:
 
   /**
    * Unregister connection from `conns`
+   * `external` is used to indicate whether need to lock AsyncMessenger::lock,
+   * it may call. If external is false, it means that AsyncConnection take the
+   * initiative to unregister
    */
-  void unregister_conn(const entity_addr_t &addr) {
-    Mutex::Locker l(lock);
+  void unregister_conn(const entity_addr_t &addr, bool external) {
+    if (!external)
+      lock.Lock();
     conns.erase(addr);
+    if (!external)
+      lock.Unlock();
   }
   /**
    * @} // AsyncMessenger Internals

@@ -39,8 +39,7 @@ class C_handle_notify : public EventCallback {
   C_handle_notify() {}
   void do_request(int fd_or_id) {
     char c[100];
-    int r = read(fd_or_id, c, 100);
-    assert(r > 0);
+    assert(read(fd_or_id, c, 100));
   }
 };
 
