@@ -2810,15 +2810,6 @@ void OSD::load_pgs()
       }
     }
 
-    if (!pg->snap_collections.empty()) {
-      pg->snap_collections.clear();
-      pg->dirty_big_info = true;
-      pg->dirty_info = true;
-      ObjectStore::Transaction t;
-      pg->write_if_dirty(t);
-      store->apply_transaction(t);
-    }
-
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
 
     // generate state for PG's current mapping

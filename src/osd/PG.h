@@ -425,7 +425,6 @@ public:
     }
   } missing_loc;
   
-  interval_set<snapid_t> snap_collections; // obsolete
   map<epoch_t,pg_interval_t> past_intervals;
 
   interval_set<snapid_t> snap_trimq;
@@ -2105,7 +2104,6 @@ public:
   static int _write_info(ObjectStore::Transaction& t, epoch_t epoch,
     pg_info_t &info, coll_t coll,
     map<epoch_t,pg_interval_t> &past_intervals,
-    interval_set<snapid_t> &snap_collections,
     ghobject_t &pgmeta_oid,
     bool dirty_big_info);
   void write_if_dirty(ObjectStore::Transaction& t);
@@ -2132,7 +2130,7 @@ public:
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
     bufferlist &bl, pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-    interval_set<snapid_t>  &snap_collections, __u8 &);
+    __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid, bufferlist *bl);
