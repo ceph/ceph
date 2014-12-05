@@ -1367,6 +1367,10 @@ void buffer::list::rebuild_page_aligned()
     if (orig_off + len > length())
       throw end_of_buffer();
 
+    if (len == 0) {
+      return 0;
+    }
+
     unsigned off = orig_off;
     std::list<ptr>::iterator curbuf = _buffers.begin();
     while (off > 0 && off >= curbuf->length()) {

@@ -1081,6 +1081,8 @@ TEST(BufferList, get_contiguous) {
   bufferptr b("123456789", 9);
   bufferptr c("ABCDEFGHI", 9);
   bufferlist bl;
+  ASSERT_EQ(0, bl.get_contiguous(0, 0));
+
   bl.append(a);
   bl.append(b);
   bl.append(c);
