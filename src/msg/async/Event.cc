@@ -248,6 +248,8 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
+  // Must set owner before looping
+  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;
