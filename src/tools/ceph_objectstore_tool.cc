@@ -2354,6 +2354,11 @@ int main(int argc, char **argv)
     }
   }
 
+  if (op == "import" && pgidstr.length()) {
+    cerr << "--pgid option invalid with import" << std::endl;
+    return 1;
+  }
+
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
@@ -2422,11 +2427,6 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (op == "import" && pgidstr.length()) {
-    cerr << "--pgid option invalid with import" << std::endl;
-    return 1;
-  }
-
   if (op != "list" && vm.count("object")) {
     json_spirit::Value v;
     try {
@@ -2489,6 +2489,11 @@ int main(int argc, char **argv)
 	  ss << "Decode object json error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
+        if ((uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
+          cerr << "Object pool and pgid pool don't match" << std::endl;
+          ret = 1;
+          goto out;
+        }
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
