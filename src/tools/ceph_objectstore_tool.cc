@@ -29,6 +29,7 @@
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
+#include "osd/PG.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -693,9 +694,8 @@ int finish_remove_pgs(ObjectStore *store)
 
     uint64_t seq;
     coll_t coll(pgid);
-    char val;
     if (it->is_removal(&seq, &pgid) ||
-	store->collection_getattr(coll, "remove", &val, 1) == 1) {
+	PG::_has_removal_flag(store, pgid)) {
       cout << "finish_remove_pgs removing " << *it
 	   << " pgid is " << pgid << std::endl;
       remove_coll(store, *it);

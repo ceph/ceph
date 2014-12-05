@@ -2704,6 +2704,17 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
+bool PG::_has_removal_flag(ObjectStore *store,
+			   spg_t pgid)
+{
+  coll_t coll(pgid);
+  char val;
+  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
+    return true;
+  return false;
+}
+
+
 epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   spg_t pgid,
 			   hobject_t legacy_infos_oid,
