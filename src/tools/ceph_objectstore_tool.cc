@@ -714,7 +714,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
 
   bufferlist bl;
-  PG::peek_map_epoch(fs, pgid, OSD::make_infos_oid(), &bl);
+  PG::peek_map_epoch(fs, pgid, &bl);
   map<epoch_t,pg_interval_t> past_intervals;
   interval_set<snapid_t> snap_collections;
   __u8 struct_v;
@@ -2811,7 +2811,7 @@ int main(int argc, char **argv)
     }
 
     bufferlist bl;
-    map_epoch = PG::peek_map_epoch(fs, pgid, infos_oid, &bl);
+    map_epoch = PG::peek_map_epoch(fs, pgid, &bl);
     if (debug)
       cerr << "map_epoch " << map_epoch << std::endl;
 

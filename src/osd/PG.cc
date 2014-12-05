@@ -2728,10 +2728,10 @@ bool PG::_has_removal_flag(ObjectStore *store,
 
 epoch_t PG::peek_map_epoch(ObjectStore *store,
 			   spg_t pgid,
-			   hobject_t legacy_infos_oid,
 			   bufferlist *bl)
 {
   coll_t coll(pgid);
+  hobject_t legacy_infos_oid(OSD::make_infos_oid());
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
 
