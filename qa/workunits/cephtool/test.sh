@@ -813,6 +813,7 @@ function test_mon_osd()
   #
   # osd crush
   #
+  ceph osd crush reweight-all
   ceph osd crush tunables legacy
   ceph osd crush show-tunables | grep argonaut
   ceph osd crush tunables bobtail
