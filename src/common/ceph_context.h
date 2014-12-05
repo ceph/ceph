@@ -18,7 +18,6 @@
 #include <iostream>
 #include <stdint.h>
 #include <string>
-using namespace std;
 
 #include "include/buffer.h"
 #include "include/atomic.h"
@@ -109,7 +108,7 @@ public:
 		  bufferlist *out);
 
   template<typename T>
-  void lookup_or_create_singleton_object(T*& p, const string &name) {
+  void lookup_or_create_singleton_object(T*& p, const std::string &name) {
     ceph_spin_lock(&_associated_objs_lock);
     if (!_associated_objs.count(name)) {
       p = new T(this);
@@ -156,7 +155,7 @@ private:
   ceph::HeartbeatMap *_heartbeat_map;
 
   ceph_spinlock_t _associated_objs_lock;
-  map<string, AssociatedSingletonObject*> _associated_objs;
+  std::map<std::string, AssociatedSingletonObject*> _associated_objs;
 
   // crypto
   CryptoNone *_crypto_none;
