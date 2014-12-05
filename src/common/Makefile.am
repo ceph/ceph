@@ -72,7 +72,8 @@ libcommon_internal_la_SOURCES = \
 	common/bloom_filter.cc \
 	common/linux_version.c \
 	common/module.c \
-	common/Readahead.cc
+	common/Readahead.cc \
+	common/Cycles.cc
 
 # these should go out of libcommon_internal
 libcommon_internal_la_SOURCES += \
@@ -217,7 +218,9 @@ noinst_HEADERS += \
 	common/linux_version.h \
 	common/module.h \
 	common/Continuation.h \
-	common/Readahead.h
+	common/Readahead.h \
+	common/Cycles.h \
+	common/Initialize.h
 
 libsecret_la_SOURCES = common/secret.c
 libsecret_la_LIBADD = $(KEYUTILS_LIB)
