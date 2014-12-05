@@ -365,6 +365,11 @@ int MDS::_command_flush_journal(std::stringstream *ss)
 
   Mutex::Locker l(mds_lock);
 
+  if (mdcache->is_readonly()) {
+    dout(5) << __func__ << ": read-only FS" << dendl;
+    return -EROFS;
+  }
+
   // I need to seal off the current segment, and then mark all previous segments
   // for expiry
   mdlog->start_new_segment();
