@@ -2338,37 +2338,40 @@ int main(int argc, char **argv)
 	}
       } else {
 	stringstream ss;
-	if (v.type() != json_spirit::array_type) {
+	if (pgidstr.length() == 0 && v.type() != json_spirit::array_type) {
 	  ss << "object '" << object
 	     << "' must be a JSON array but is of type "
 	     << v.type() << " instead";
 	  throw std::runtime_error(ss.str());
 	}
-	json_spirit::Array array = v.get_array();
-	vector<json_spirit::Value>::iterator i = array.begin();
-        if (i->type() != json_spirit::str_type) {
-	  ss << "object '" << object
-	     << "' must be a JSON array with the first element a string but "
-	     << "found type " << v.type() << " instead";
-	  throw std::runtime_error(ss.str());
-        }
-	string object_pgidstr = i->get_str();
-	spg_t object_pgid;
-	object_pgid.parse(object_pgidstr.c_str());
-	if (pgidstr.length() > 0) {
-	  if (object_pgid != pgid) {
+	if (v.type() == json_spirit::array_type) {
+	  json_spirit::Array array = v.get_array();
+	  vector<json_spirit::Value>::iterator i = array.begin();
+	  if (i->type() != json_spirit::str_type) {
 	    ss << "object '" << object
-	       << "' has a pgid different from the --pgid="
-	       << pgidstr << " option";
+	       << "' must be a JSON array with the first element a string but "
+	       << "found type " << v.type() << " instead";
 	    throw std::runtime_error(ss.str());
 	  }
-	} else {
-	  pgidstr = object_pgidstr;
-	  pgid = object_pgid;
+	  string object_pgidstr = i->get_str();
+	  spg_t object_pgid;
+	  object_pgid.parse(object_pgidstr.c_str());
+	  if (pgidstr.length() > 0) {
+	    if (object_pgid != pgid) {
+	      ss << "object '" << object
+		 << "' has a pgid different from the --pgid="
+		 << pgidstr << " option";
+	      throw std::runtime_error(ss.str());
+	    }
+	  } else {
+	    pgidstr = object_pgidstr;
+	    pgid = object_pgid;
+	  }
+	  i++;
+	  v = *i;
 	}
-	i++;
 	try {
-	  ghobj.decode(*i);
+	  ghobj.decode(v);
 	} catch (std::runtime_error& e) {
 	  ss << "Decode object json error: " << e.what();
 	  throw std::runtime_error(ss.str());
