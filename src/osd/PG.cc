@@ -2928,7 +2928,6 @@ std::string PG::get_corrupt_pg_log_name() const
 int PG::read_info(
   ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  hobject_t &infos_oid,
   interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
 {
   // try for v8 or later
@@ -2957,6 +2956,7 @@ int PG::read_info(
   }
 
   // legacy (ver < 8)
+  hobject_t infos_oid(OSD::make_infos_oid());
   bufferlist::iterator p = bl.begin();
   bufferlist lbl;
 
@@ -3020,9 +3020,8 @@ int PG::read_info(
 
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
-  hobject_t legacy_infos_oid(OSD::make_infos_oid());
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
-		    legacy_infos_oid, snap_collections, info_struct_v);
+		    snap_collections, info_struct_v);
   assert(r >= 0);
 
   ostringstream oss;
