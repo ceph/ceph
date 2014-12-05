@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Fri Dec  5 14:15:08 UTC 2014 - lmb@suse.com
+
+- python-ceph needs python-Flask (bnc#904366)
+
+-------------------------------------------------------------------
 Wed Dec  3 12:36:48 UTC 2014 - osynge@suse.com
 
 - Add 0022-Fix-overflowing-journel-partitions.patch
