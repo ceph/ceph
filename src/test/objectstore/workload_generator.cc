@@ -295,8 +295,8 @@ void WorkloadGenerator::do_setattr_object(ObjectStore::Transaction *t,
   t->setattr(coll, obj, "objxattr", bl);
 }
 
-void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
-					      coll_t coll, C_StatState *stat)
+void WorkloadGenerator::do_pgmeta_omap_set(ObjectStore::Transaction *t, spg_t pgid,
+					   coll_t coll, C_StatState *stat)
 {
   if (m_suppress_write_xattr_coll) {
     dout(5) << __func__ << " suppressed" << dendl;
@@ -314,8 +314,12 @@ void WorkloadGenerator::do_setattr_collection(ObjectStore::Transaction *t,
   if (m_do_stats && (stat != NULL))
       stat->written_data += bl.length();
 
-  t->collection_setattr(coll, "collxattr", bl);
+  ghobject_t pgmeta(pgid.make_pgmeta_oid());
+  map<string,bufferlist> values;
+  values["_"].claim(bl);
+  t->omap_setkeys(coll, pgmeta, values);
 }
+
 
 void WorkloadGenerator::do_append_log(ObjectStore::Transaction *t,
                                       coll_entry_t *entry, C_StatState *stat)
@@ -472,7 +476,7 @@ void WorkloadGenerator::run()
 
       do_write_object(t, entry->m_coll, *obj, stat_state);
       do_setattr_object(t, entry->m_coll, *obj, stat_state);
-      do_setattr_collection(t, entry->m_coll, stat_state);
+      do_pgmeta_omap_set(t, entry->m_pgid, entry->m_coll, stat_state);
       do_append_log(t, entry, stat_state);
 
       c = new C_OnReadable(this, t);
