@@ -2954,58 +2954,27 @@ int PG::read_info(
   // legacy (ver < 8)
   hobject_t infos_oid(OSD::make_infos_oid());
   bufferlist::iterator p = bl.begin();
-  bufferlist lbl;
-
-  // info
   ::decode(struct_v, p);
-  if (struct_v < 4)
-    ::decode(info, p);
-  if (struct_v < 2) {
-    ::decode(past_intervals, p);
-  
-    // snap_collections
-    store->collection_getattr(coll, "snap_collections", lbl);
-    p = lbl.begin();
-    ::decode(struct_v, p);
-  } else {
-    if (struct_v < 6) {
-      hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pgid));
-      int r = store->read(META_COLL, biginfo_oid, 0, 0, lbl);
-      if (r < 0)
-        return r;
-      p = lbl.begin();
-      ::decode(past_intervals, p);
-    } else {
-      // get info out of leveldb
-      string k = get_info_key(info.pgid);
-      string bk = get_biginfo_key(info.pgid);
-      set<string> keys;
-      keys.insert(k);
-      keys.insert(bk);
-      map<string,bufferlist> values;
-      store->omap_get_values(META_COLL, infos_oid, keys, &values);
-      assert(values.size() == 2);
-      lbl = values[k];
-      p = lbl.begin();
-      ::decode(info, p);
+  assert(struct_v == 7);
 
-      lbl = values[bk];
-      p = lbl.begin();
-      ::decode(past_intervals, p);
-    }
-  }
+  // get info out of leveldb
+  string k = get_info_key(info.pgid);
+  string bk = get_biginfo_key(info.pgid);
+  keys.clear();
+  keys.insert(k);
+  keys.insert(bk);
+  values.clear();
+  store->omap_get_values(META_COLL, infos_oid, keys, &values);
+  assert(values.size() == 2);
 
-  if (struct_v < 3) {
-    set<snapid_t> snap_collections_temp;
-    ::decode(snap_collections_temp, p);
-  } else {
-    interval_set<snapid_t> snap_collections;
-    ::decode(snap_collections, p);
-    if (struct_v >= 4 && struct_v < 6)
-      ::decode(info, p);
-    else if (struct_v >= 6)
-      ::decode(info.purged_snaps, p);
-  }
+  p = values[k].begin();
+  ::decode(info, p);
+
+  p = values[bk].begin();
+  ::decode(past_intervals, p);
+  interval_set<snapid_t> snap_collections;  // obsolete
+  ::decode(snap_collections, p);
+  ::decode(info.purged_snaps, p);
   return 0;
 }
 
