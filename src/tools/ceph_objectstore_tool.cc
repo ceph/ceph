@@ -2323,8 +2323,7 @@ int main(int argc, char **argv)
 	  if (lookup.size() != 1) {
 	    stringstream ss;
 	    ss << "expected a single object named " << object
-	       << " but got " << lookup.size() << " instead"
-	       << std::endl;
+	       << " but got " << lookup.size() << " instead";
 	    throw std::runtime_error(ss.str());
 	  }
 	  pair<coll_t, ghobject_t> found = lookup.pop();
@@ -2337,7 +2336,7 @@ int main(int argc, char **argv)
 	if (v.type() != json_spirit::array_type) {
 	  ss << "object '" << object
 	     << "' must be a JSON array but is of type "
-	     << v.type() << " instead" << std::endl;
+	     << v.type() << " instead";
 	  throw std::runtime_error(ss.str());
 	}
 	json_spirit::Array array = v.get_array();
@@ -2349,7 +2348,7 @@ int main(int argc, char **argv)
 	  if (object_pgid != pgid) {
 	    ss << "object '" << object
 	       << "' has a pgid different from the --pgid="
-	       << pgidstr << " option" << std::endl;
+	       << pgidstr << " option";
 	    throw std::runtime_error(ss.str());
 	  }
 	} else {
