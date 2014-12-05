@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_ASYNCCONNECTION_H
 #define CEPH_MSG_ASYNCCONNECTION_H
 
+#include <pthread.h>
 #include <list>
 #include <map>
 using namespace std;
@@ -140,11 +141,16 @@ class AsyncConnection : public Connection {
   //  \                                         signal
   // finished
   //
-  // Note: Don't call it from AsyncConnection
+  // The above flow only happen when the caller isn't the pthread own center,
+  // if the owner of center is self, it's safe to call _stop() directly;
   void mark_down() {
     Mutex::Locker l(stop_lock);
-    center->dispatch_event_external(stop_handler);
-    stop_cond.Wait(stop_lock);
+    if (center->get_owner() == pthread_self()) {
+      _stop();
+    } else {
+      center->dispatch_event_external(stop_handler);
+      stop_cond.Wait(stop_lock);
+    }
   }
   void mark_disposable() {
     Mutex::Locker l(lock);
