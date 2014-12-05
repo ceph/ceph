@@ -296,6 +296,7 @@ Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
+Requires:	python-Flask
 %if 0%{defined suse_version}
 %py_requires
 %endif
