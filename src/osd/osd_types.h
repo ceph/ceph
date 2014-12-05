@@ -3303,7 +3303,6 @@ struct ScrubMap {
   WRITE_CLASS_ENCODER(object)
 
   map<hobject_t,object> objects;
-  map<string,bufferptr> attrs;
   eversion_t valid_through;
   eversion_t incr_since;
 
