@@ -211,7 +211,7 @@ class CephFSMount(object):
             'sudo', 'python', '-c', pyscript
         ])
 
-    def write_background(self, basename="background_file"):
+    def write_background(self, basename="background_file", loop=False):
         """
         Open a file for writing, complete as soon as you can
         :param basename:
@@ -222,12 +222,20 @@ class CephFSMount(object):
         path = os.path.join(self.mountpoint, basename)
 
         pyscript = dedent("""
+            import os
             import time
 
-            f = open("{path}", 'w')
-            f.write('content')
-            f.close()
-            """).format(path=path)
+            fd = os.open("{path}", os.O_RDWR | os.O_CREAT, 0644)
+            try:
+                while True:
+                    os.write(fd, 'content')
+                    time.sleep(1)
+                    if not {loop}:
+                        break
+            except IOError, e:
+                pass
+            os.close(fd)
+            """).format(path=path, loop=str(loop))
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
