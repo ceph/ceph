@@ -24,6 +24,7 @@ logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
 
 is_vpm = lambda name: 'vpm' in name
 
+
 def get_distro_from_downburst():
     """
     Return a table of valid distros.
@@ -80,6 +81,7 @@ def vps_version_or_type_valid(machine_type, os_type, os_version):
         log.error("os-version '%s' is invalid", os_version)
         return False
     return True
+
 
 def validate_distro_version(version, supported_versions):
     """
@@ -461,6 +463,77 @@ def list_locks(keyed_by_name=False, **kwargs):
             return {node['name']: node
                     for node in response.json()}
     return dict()
+
+
+def find_stale_locks(owner=None):
+    """
+    Return a list of node dicts corresponding to nodes that were locked to run
+    a job, but the job is no longer running. The purpose of this is to enable
+    us to nuke nodes that were left locked due to e.g. infrastructure failures
+    and return them to the pool.
+
+    :param owner: If non-None, return nodes locked by owner. Default is None.
+    """
+    def might_be_stale(node_dict):
+        """
+        Answer the question: "might this be a stale lock?"
+
+        The answer is yes if:
+            It is locked
+            It has a non-null description containing multiple '/' characters
+
+        ... because we really want "nodes that were locked for a particular job
+        and are still locked" and the above is currently the best way to guess.
+        """
+        if (node_dict['locked'] is True and
+            node_dict['description'] is not None and
+                node_dict['description'].count('/') > 1):
+            return True
+        return False
+
+    # Which nodes are locked for jobs?
+    nodes = list_locks()
+    if owner is not None:
+        nodes = [node for node in nodes if node['locked_by'] == owner]
+    nodes = filter(might_be_stale, nodes)
+
+    # What jobs are currently running?
+    url = os.path.join(config.results_server, 'runs', 'status', 'running', '')
+    resp = requests.get(url)
+    running_runs = resp.json()
+    running_jobs = []
+    for run in running_runs:
+        url = os.path.join(run['href'][0], 'jobs',
+                           '?status=running&fields=name,job_id,targets,href')
+        resp = requests.get(url)
+        jobs = resp.json()
+        running_jobs.extend(jobs)
+
+    def node_matches_job(node, job):
+        """
+        Is or was this node used by this job?
+        """
+        job_str = '/'.join((job['name'], job['job_id']))
+        if node['description'].endswith(job_str):
+            return True
+        elif job['targets'] and node['name'] in job['targets'].keys():
+            return True
+        return False
+
+    result = list()
+    # Here we build the list of of nodes that are locked, for a job (as opposed
+    # to being locked manually for random monkeying), where the job is not
+    # running
+    for node in nodes:
+        matched = False
+        for job in running_jobs:
+            if node_matches_job(node, job):
+                matched = True
+                break
+        if matched:
+            continue
+        result.append(node)
+    return result
 
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
