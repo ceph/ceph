@@ -654,6 +654,11 @@ struct objectstore_perf_stat_t {
   objectstore_perf_stat_t() :
     filestore_commit_latency(0), filestore_apply_latency(0) {}
 
+  bool operator==(const objectstore_perf_stat_t &r) const {
+    return filestore_commit_latency == r.filestore_commit_latency &&
+      filestore_apply_latency == r.filestore_apply_latency;
+  }
+
   void add(const objectstore_perf_stat_t &o) {
     filestore_commit_latency += o.filestore_commit_latency;
     filestore_apply_latency += o.filestore_apply_latency;
@@ -717,7 +722,9 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
     l.hb_in == r.hb_in &&
-    l.hb_out == r.hb_out;
+    l.hb_out == r.hb_out &&
+    l.op_queue_age_hist == r.op_queue_age_hist &&
+    l.fs_perf_stat == r.fs_perf_stat;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
