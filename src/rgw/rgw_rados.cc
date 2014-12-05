@@ -3834,7 +3834,7 @@ int RGWRados::open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx& index_
 }
 
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-    vector<string>& bucket_objs, int shard_id) {
+    vector<string>& bucket_objs, int shard_id, vector<string> *bucket_instance_ids) {
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket, index_ctx, bucket_oid_base);
   if (ret < 0)
@@ -3847,15 +3847,18 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
     return ret;
 
   get_bucket_index_objects(bucket_oid_base, binfo.num_shards, bucket_objs, shard_id);
+  if (bucket_instance_ids) {
+    get_bucket_instance_ids(binfo, shard_id, bucket_instance_ids);
+  }
   return 0;
 }
 
 template<typename T>
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-    map<string, T>& bucket_objs, int shard_id)
+    map<string, T>& bucket_objs, int shard_id, vector<string> *bucket_instance_ids)
 {
   vector<string> oids;
-  int ret = open_bucket_index(bucket, index_ctx, oids, shard_id);
+  int ret = open_bucket_index(bucket, index_ctx, oids, shard_id, bucket_instance_ids);
   if (ret < 0)
     return ret;
 
@@ -5522,22 +5525,26 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *m
     map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker)
 {
   map<string, rgw_bucket_dir_header> headers;
-  int r = cls_bucket_head(bucket, headers);
+  vector<string> bucket_instance_ids;
+  int r = cls_bucket_head(bucket, headers, &bucket_instance_ids);
   if (r < 0)
     return r;
 
+  assert(headers.size() == bucket_instance_ids.size());
+
   map<string, rgw_bucket_dir_header>::iterator iter = headers.begin();
+  vector<string>::iterator viter = bucket_instance_ids.begin();
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   char buf[64];
-  for(; iter != headers.end(); ++iter) {
+  for(; iter != headers.end(); ++iter, ++viter) {
     accumulate_raw_stats(iter->second, stats);
     snprintf(buf, sizeof(buf), "%lu", iter->second.ver);
-    ver_mgr.add(iter->first, string(buf));
+    ver_mgr.add(*viter, string(buf));
     snprintf(buf, sizeof(buf), "%lu", iter->second.master_ver);
-    master_ver_mgr.add(iter->first, string(buf));
-    marker_mgr.add(iter->first, iter->second.max_marker);
+    master_ver_mgr.add(*viter, string(buf));
+    marker_mgr.add(*viter, iter->second.max_marker);
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
@@ -6156,7 +6163,8 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
 
   librados::IoCtx index_ctx;
   map<string, cls_rgw_bi_log_list_ret> bi_log_lists;
-  int r = open_bucket_index(bucket, index_ctx, bi_log_lists, shard_id);
+  vector<string> bucket_instance_ids;
+  int r = open_bucket_index(bucket, index_ctx, bi_log_lists, shard_id, &bucket_instance_ids);
   if (r < 0)
     return r;
 
@@ -6176,13 +6184,11 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
 
   vector<list<rgw_bi_log_entry>::iterator> vcurrents;
   vector<list<rgw_bi_log_entry>::iterator> vends;
-  vector<string> vnames;
   if (truncated) {
     *truncated = false;
   }
   map<string, cls_rgw_bi_log_list_ret>::iterator miter = bi_log_lists.begin();
   for (; miter != bi_log_lists.end(); ++miter) {
-    vnames.push_back(miter->first);
     vcurrents.push_back(miter->second.entries.begin());
     vends.push_back(miter->second.entries.end());
     if (truncated) {
@@ -6198,14 +6204,15 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
         ++vcurrents[i], ++i) {
       if (vcurrents[i] != vends[i]) {
         rgw_bi_log_entry& entry = *(vcurrents[i]);
+        string& name = bucket_instance_ids[i];
         if (has_shards) {
           // Put the shard name as part of the ID, so that caller can easy find out
           // the next marker
           string tmp_id;
-          build_bucket_index_marker(vnames[i], entry.id, &tmp_id);
+          build_bucket_index_marker(name, entry.id, &tmp_id);
           entry.id.swap(tmp_id);
         }
-        marker_mgr.add(vnames[i], entry.id);
+        marker_mgr.add(name, entry.id);
         result.push_back(entry);
         has_more = true;
       }
@@ -6656,11 +6663,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers)
+int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers, vector<string> *bucket_instance_ids)
 {
   librados::IoCtx index_ctx;
   map<string, struct rgw_cls_list_ret> list_results;
-  int r = open_bucket_index(bucket, index_ctx, list_results);
+  int r = open_bucket_index(bucket, index_ctx, list_results, -1, bucket_instance_ids);
   if (r < 0)
     return r;
 
@@ -7000,6 +7007,29 @@ void RGWRados::get_bucket_index_objects(const string& bucket_oid_base,
       }
       snprintf(buf, sizeof(buf), "%s.%d", bucket_oid_base.c_str(), shard_id);
       bucket_objects.push_back(string(buf));
+    }
+  }
+}
+
+void RGWRados::get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, vector<string> *result)
+{
+  rgw_bucket& bucket = bucket_info.bucket;
+  string plain_id = bucket.name + ":" + bucket.bucket_id;
+  if (!bucket_info.num_shards) {
+    result->push_back(plain_id);
+  } else {
+    char buf[16];
+    if (shard_id < 0) {
+      for (uint32_t i = 0; i < bucket_info.num_shards; ++i) {
+        snprintf(buf, sizeof(buf), ":%d", i);
+        result->push_back(plain_id + buf);
+      }
+    } else {
+      if ((uint32_t)shard_id > bucket_info.num_shards) {
+        return;
+      }
+      snprintf(buf, sizeof(buf), ":%d", shard_id);
+      result->push_back(plain_id + buf);
     }
   }
 }
