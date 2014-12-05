@@ -2135,6 +2135,7 @@ public:
     hobject_t &infos_oid,
     interval_set<snapid_t>  &snap_collections, __u8 &);
   void read_state(ObjectStore *store, bufferlist &bl);
+  static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid,
 				hobject_t legacy_infos_oid,
 				bufferlist *bl);
