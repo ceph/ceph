@@ -685,6 +685,10 @@ void CDir::try_remove_dentries_for_stray()
       continue; // shouldn't happen
     if (dn->is_dirty())
       dn->mark_clean();
+    // It's OK to remove lease prematurely because we will never link
+    // the dentry to inode again.
+    if (dn->is_any_leases())
+      dn->remove_client_leases(cache->mds->locker);
     if (dn->get_num_ref() == 0)
       remove_dentry(dn);
   }
