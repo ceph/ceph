@@ -52,7 +52,7 @@ void BucketIndexAioManager::do_completion(int id) {
   // for further processing
   map<int, string>::iterator miter = pending_objs.find(id);
   if (miter != pending_objs.end()) {
-    completion_objs.push_back(miter->second);
+    completion_objs[id] = miter->second;
     pending_objs.erase(miter);
   }
 
@@ -60,7 +60,7 @@ void BucketIndexAioManager::do_completion(int id) {
 }
 
 bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
-    int *num_completions, int *ret_code, vector<string> *objs) {
+    int *num_completions, int *ret_code, map<int, string> *objs) {
   lock.Lock();
   if (pendings.empty() && completions.empty()) {
     lock.Unlock();
@@ -71,11 +71,11 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
 
   // Clear the completed AIOs
   list<librados::AioCompletion*>::iterator iter = completions.begin();
-  list<string>::iterator liter = completion_objs.begin();
+  map<int, string>::iterator liter = completion_objs.begin();
   for (; iter != completions.end() && liter != completion_objs.end(); ++iter, ++liter) {
     int r = (*iter)->get_return_value();
     if (objs && r == 0) {
-      objs->push_back(*liter);
+      (*objs)[liter->first] = liter->second;
     }
     if (ret_code && (r < 0 && r != valid_ret_code))
       (*ret_code) = r;

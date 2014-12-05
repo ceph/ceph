@@ -32,7 +32,7 @@ private:
   map<int, librados::AioCompletion*> pendings;
   list<librados::AioCompletion*> completions;
   map<int, string> pending_objs;
-  list<string> completion_objs;
+  map<int, string> completion_objs;
   int next;
   Mutex lock;
   Cond cond;
@@ -71,8 +71,7 @@ public:
   /*
    * Create a new instance.
    */
-  BucketIndexAioManager() : pendings(), completions(), pending_objs(), completion_objs(),
-  next(0), lock("BucketIndexAioManager::lock"), cond() {}
+  BucketIndexAioManager() : next(0), lock("BucketIndexAioManager::lock") {}
 
 
   /*
@@ -91,7 +90,7 @@ public:
    * Return false if there is no pending AIO, true otherwise.
    */
   bool wait_for_completions(int valid_ret_code, int *num_completions, int *ret_code,
-      vector<string> *objs);
+      map<int, string> *objs);
 
   /**
    * Do aio read operation.
@@ -214,8 +213,8 @@ protected:
   // OP needs to be re-send until a certain code is returned.
   virtual bool need_multiple_rounds() { return false; }
   // Add a new object to the end of the container.
-  virtual void add_object(const string& oid) {}
-  virtual void reset_container(vector<string>& objs) {}
+  virtual void add_object(int shard, const string& oid) {}
+  virtual void reset_container(map<int, string>& objs) {}
 
 public:
   CLSRGWConcurrentIO(librados::IoCtx& ioc, map<int, string>& _objs_container,
@@ -232,7 +231,7 @@ public:
     }
 
     int num_completions, r = 0;
-    vector<string> objs;
+    map<int, string> objs;
     while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, &objs)) {
       if (r >= 0 && ret >= 0) {
         for(int i = 0; i < num_completions && iter != objs_container.end(); ++i, ++iter) {

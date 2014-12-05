@@ -1257,14 +1257,15 @@ class RGWRados
   int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
       const string& obj_key, string *bucket_obj, int *shard_id);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-      vector<string>& bucket_objs, int shard_id = -1, vector<string> *bucket_instance_ids = NULL);
+      map<int, string>& bucket_objs, int shard_id = -1, map<int, string> *bucket_instance_ids = NULL);
   template<typename T>
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
-      map<string, T>& bucket_objs, int shard_id = -1, vector<string> *bucket_instance_ids = NULL);
-  void build_bucket_index_marker(const string& shard_name, const string& shard_marker,
+                        map<int, string>& oids, map<int, T>& bucket_objs,
+                        int shard_id = -1, map<int, string> *bucket_instance_ids = NULL);
+  void build_bucket_index_marker(const string& shard_id_str, const string& shard_marker,
       string *marker);
 
-  void get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, vector<string> *result);
+  void get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
   struct GetObjState {
     librados::IoCtx io_ctx;
@@ -1867,7 +1868,7 @@ public:
   int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix, uint32_t hint_num,
                       map<string, RGWObjEnt>& m, bool *is_truncated, string *last_entry,
                       bool (*force_check_filter)(const string&  name) = NULL);
-  int cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers, vector<string> *bucket_instance_ids = NULL);
+  int cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int *num_aio);
 
   int prepare_update_index(RGWObjState *state, BucketShard& bucket_shard,
@@ -1974,7 +1975,7 @@ public:
    * bucket_objs [out] - filled by this method, a list of bucket index objects.
    */
   void get_bucket_index_objects(const string& bucket_oid_base, uint32_t num_shards,
-      vector<string>& bucket_objs, int shard_id = -1);
+      map<int, string>& bucket_objs, int shard_id = -1);
 
   /**
    * Get the bucket index object with the given base bucket index object and object key,
