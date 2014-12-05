@@ -707,6 +707,9 @@ int finish_remove_pgs(ObjectStore *store)
   return 0;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t)
 {
   pg_info_t info(pgid);
@@ -741,6 +744,8 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   }
   return 0;
 }
+
+#pragma GCC diagnostic pop
 
 int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
 {
