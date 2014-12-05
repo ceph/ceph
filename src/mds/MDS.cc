@@ -496,6 +496,11 @@ void MDS::clean_up_admin_socket()
   admin_socket->unregister_command("dump_ops_in_flight");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
+  admin_socket->unregister_command("flush_path");
+  admin_socket->unregister_command("session evict");
+  admin_socket->unregister_command("session ls");
+  admin_socket->unregister_command("flush journal");
+  admin_socket->unregister_command("force_readonly");
   delete asok_hook;
   asok_hook = NULL;
 }
