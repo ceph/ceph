@@ -32,7 +32,7 @@
 
 class CInode;
 class CDir;
-
+class Locker;
 class Message;
 class CDentry;
 class LogSegment;
@@ -383,8 +383,8 @@ public:
   }
 
   ClientLease *add_client_lease(client_t c, Session *session);
-  void remove_client_lease(ClientLease *r, class Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
-  
+  void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
+  void remove_client_leases(Locker *locker);
 
   
   ostream& print_db_line_prefix(ostream& out);
