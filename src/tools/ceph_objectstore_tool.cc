@@ -707,28 +707,57 @@ int finish_remove_pgs(ObjectStore *store)
   return 0;
 }
 
-int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
+int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t)
 {
-  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+  pg_info_t info(pgid);
+  coll_t coll(pgid);
+  ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
 
-  if (store->collection_exists(coll_t(r_pgid))) {
-    cout << " marking collection for removal" << std::endl;
+  bufferlist bl;
+  PG::peek_map_epoch(fs, pgid, OSD::make_infos_oid(), &bl);
+  map<epoch_t,pg_interval_t> past_intervals;
+  interval_set<snapid_t> snap_collections;
+  __u8 struct_v;
+  int r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
+			infos_oid, snap_collections, struct_v);
+  if (r < 0) {
+    cerr << __func__ << " error on read_info " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+  if (struct_v < 8) {
+    // old xattr
+    cout << "setting legacy 'remove' xattr flag" << std::endl;
     bufferlist one;
     one.append('1');
-    rmt->collection_setattr(coll_t(r_pgid), "remove", one);
+    t->collection_setattr(coll, "remove", one);
+    cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
+    t->remove(META_COLL, log_oid);
+    cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
+    t->remove(META_COLL, biginfo_oid);
   } else {
-    delete rmt;
-    return ENOENT;
+    // new omap key
+    cout << "setting '_remove' omap key" << std::endl;
+    map<string,bufferlist> values;
+    ::encode((char)1, values["_remove"]);
+    t->omap_setkeys(coll, pgmeta_oid, values);
   }
-
-  cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
-  rmt->remove(META_COLL, log_oid);
-  cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
-  rmt->remove(META_COLL, biginfo_oid);
-
-  store->apply_transaction(*rmt);
-
   return 0;
+}
+
+int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
+{
+  if (!store->collection_exists(coll_t(r_pgid)))
+    return -ENOENT;
+
+  cout << " marking collection for removal" << std::endl;
+  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+  int r = mark_pg_for_removal(store, r_pgid, rmt);
+  if (r < 0) {
+    delete rmt;
+    return r;
+  }
+  store->apply_transaction(*rmt);
+  return r;
 }
 
 int header::get_header()
@@ -1583,15 +1612,14 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return 1;
   }
 
-  // mark this coll for removal until we are done
-  bufferlist one;
-  one.append('1');
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PG::_create(*t, pgid);
   PG::_init(*t, pgid, NULL);
 
   // mark this coll for removal until we're done
-  t->collection_setattr(coll, "remove", one);
+  map<string,bufferlist> values;
+  ::encode((char)1, values["_remove"]);
+  t->omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
   store->apply_transaction(*t);
   delete t;
@@ -1634,9 +1662,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   }
 
   // done, clear removal flag
-  cout << "done, clearing remove flag" << std::endl;
+  cout << "done, clearing removal flag flag" << std::endl;
   t = new ObjectStore::Transaction;
-  t->collection_rmattr(coll, "remove");
+  set<string> remove;
+  remove.insert("_remove");
+  t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
   store->apply_transaction(*t);
   delete t;
 

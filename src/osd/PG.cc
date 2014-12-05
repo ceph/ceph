@@ -2708,6 +2708,17 @@ bool PG::_has_removal_flag(ObjectStore *store,
 			   spg_t pgid)
 {
   coll_t coll(pgid);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+
+  // first try new way
+  set<string> keys;
+  keys.insert("_remove");
+  map<string,bufferlist> values;
+  if (store->omap_get_values(coll, pgmeta_oid, keys, &values) == 0 &&
+      values.size() == 1)
+    return true;
+
+  // try old way
   char val;
   if (store->collection_getattr(coll, "remove", &val, 1) > 0)
     return true;
