@@ -425,6 +425,9 @@ COMMAND("osd crush unlink " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"unlink <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush reweight-all",
+	"recalculate the weights for the tree to ensure they sum correctly",
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=weight,type=CephFloat,range=0.0", \

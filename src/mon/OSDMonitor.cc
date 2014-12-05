@@ -4167,6 +4167,19 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       }
     } while (false);
 
+  } else if (prefix == "osd crush reweight-all") {
+    // osd crush reweight <name> <weight>
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+
+    newcrush.reweight(g_ceph_context);
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush);
+    ss << "reweighted crush hierarchy";
+    getline(ss, rs);
+    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, rs,
+						  get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd crush reweight") {
     do {
       // osd crush reweight <name> <weight>
