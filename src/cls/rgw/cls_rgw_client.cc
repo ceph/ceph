@@ -115,22 +115,22 @@ static bool issue_bucket_set_tag_timeout_op(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBucketIndexInit::issue_op()
+int CLSRGWIssueBucketIndexInit::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_index_init_op(io_ctx, *iter, &manager);
+  return issue_bucket_index_init_op(io_ctx, oid, &manager);
 }
 
 void CLSRGWIssueBucketIndexInit::cleanup()
 {
   // Do best effort removal
-  for (vector<string>::iterator citer = objs_container.begin(); citer != iter; ++citer) {
-    io_ctx.remove(*citer);
+  for (map<int, string>::iterator citer = objs_container.begin(); citer != iter; ++citer) {
+    io_ctx.remove(citer->second);
   }
 }
 
-int CLSRGWIssueSetTagTimeout::issue_op()
+int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_set_tag_timeout_op(io_ctx, *iter, tag_timeout, &manager);
+  return issue_bucket_set_tag_timeout_op(io_ctx, oid, tag_timeout, &manager);
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
@@ -182,17 +182,17 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBucketList::issue_op()
+int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, iter->first, start_obj, filter_prefix, num_entries, &manager, &iter->second);
+  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, &manager, &result[shard_id]);
 }
 
-static bool issue_bi_log_list_op(librados::IoCtx& io_ctx,
-    const string& oid, BucketIndexShardsManager& marker_mgr, uint32_t max, BucketIndexAioManager *manager,
+static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, int shard_id,
+                                 BucketIndexShardsManager& marker_mgr, uint32_t max, BucketIndexAioManager *manager,
     struct cls_rgw_bi_log_list_ret *pdata) {
   bufferlist in;
   cls_rgw_bi_log_list_op call;
-  call.marker = marker_mgr.get(oid, "");
+  call.marker = marker_mgr.get(shard_id, "");
   call.max = max;
   ::encode(call, in);
 
@@ -201,27 +201,27 @@ static bool issue_bi_log_list_op(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBILogList::issue_op()
+int CLSRGWIssueBILogList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bi_log_list_op(io_ctx, iter->first, marker_mgr, max, &manager, &iter->second);
+  return issue_bi_log_list_op(io_ctx, oid, shard_id, marker_mgr, max, &manager, &result[shard_id]);
 }
 
-static bool issue_bi_log_trim(librados::IoCtx& io_ctx,
-    string& oid, BucketIndexShardsManager& start_marker_mgr,
-    BucketIndexShardsManager& end_marker_mgr, BucketIndexAioManager *manager) {
+static bool issue_bi_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
+                              BucketIndexShardsManager& start_marker_mgr,
+                              BucketIndexShardsManager& end_marker_mgr, BucketIndexAioManager *manager) {
   bufferlist in;
   cls_rgw_bi_log_trim_op call;
-  call.start_marker = start_marker_mgr.get(oid, "");
-  call.end_marker = end_marker_mgr.get(oid, "");
+  call.start_marker = start_marker_mgr.get(shard_id, "");
+  call.end_marker = end_marker_mgr.get(shard_id, "");
   ::encode(call, in);
   ObjectWriteOperation op;
   op.exec("rgw", "bi_log_trim", in);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBILogTrim::issue_op()
+int CLSRGWIssueBILogTrim::issue_op(int shard_id, const string& oid)
 {
-  return issue_bi_log_trim(io_ctx, *iter, start_marker_mgr, end_marker_mgr, &manager);
+  return issue_bi_log_trim(io_ctx, oid, shard_id, start_marker_mgr, end_marker_mgr, &manager);
 }
 
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager,
@@ -233,9 +233,9 @@ static bool issue_bucket_check_index_op(IoCtx& io_ctx, const string& oid, Bucket
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBucketCheck::issue_op()
+int CLSRGWIssueBucketCheck::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_check_index_op(io_ctx, iter->first, &manager, &iter->second);
+  return issue_bucket_check_index_op(io_ctx, oid, &manager, &result[shard_id]);
 }
 
 static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
@@ -246,9 +246,9 @@ static bool issue_bucket_rebuild_index_op(IoCtx& io_ctx, const string& oid,
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
-int CLSRGWIssueBucketRebuild::issue_op()
+int CLSRGWIssueBucketRebuild::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_rebuild_index_op(io_ctx, *iter, &manager);
+  return issue_bucket_rebuild_index_op(io_ctx, oid, &manager);
 }
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates)
@@ -262,9 +262,9 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
   o.exec("rgw", "dir_suggest_changes", updates);
 }
 
-int CLSRGWIssueGetDirHeader::issue_op()
+int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, iter->first, "", "", 0, &manager, &iter->second);
+  return issue_bucket_list_op(io_ctx, oid, "", "", 0, &manager, &result[shard_id]);
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
