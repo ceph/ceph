@@ -719,7 +719,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   interval_set<snapid_t> snap_collections;
   __u8 struct_v;
   int r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-			infos_oid, snap_collections, struct_v);
+			snap_collections, struct_v);
   if (r < 0) {
     cerr << __func__ << " error on read_info " << cpp_strerror(-r) << std::endl;
     return r;
@@ -2820,7 +2820,7 @@ int main(int argc, char **argv)
     interval_set<snapid_t> snap_collections;
     __u8 struct_ver;
     r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-      infos_oid, snap_collections, struct_ver);
+		      snap_collections, struct_ver);
     if (r < 0) {
       cerr << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;
