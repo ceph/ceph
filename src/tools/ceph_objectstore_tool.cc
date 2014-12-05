@@ -2318,12 +2318,15 @@ int main(int argc, char **argv)
       if (!json_spirit::read(object, v)) {
 	lookup_ghobject lookup(object);
 	if (action_on_all_objects(fs, lookup, debug)) {
-	  throw std::runtime_error(object + " is neither valid json nor an object name");
+	  throw std::runtime_error("Internal error");
 	} else {
 	  if (lookup.size() != 1) {
 	    stringstream ss;
-	    ss << "expected a single object named " << object
-	       << " but got " << lookup.size() << " instead";
+	    if (lookup.size() == 0)
+	      ss << objcmd << ": " << cpp_strerror(ENOENT);
+	    else
+	      ss << "expected a single object named '" << object
+		 << "' but got " << lookup.size() << " instead";
 	    throw std::runtime_error(ss.str());
 	  }
 	  pair<coll_t, ghobject_t> found = lookup.pop();
