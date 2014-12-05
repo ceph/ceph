@@ -3584,8 +3584,6 @@ int PG::build_scrub_map_chunk(
   _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
 
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
   dout(10) << __func__ << " done." << dendl;
 
   return 0;
