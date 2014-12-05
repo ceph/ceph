@@ -2468,6 +2468,9 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
   assert(info_struct_v <= 8);
@@ -2503,6 +2506,8 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
   }
   assert(r == 0);
 }
+
+#pragma GCC diagnostic pop
 
 void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
