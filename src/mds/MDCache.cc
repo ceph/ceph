@@ -11599,6 +11599,11 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {
+  if (is_readonly()) {
+    dout(10) << __func__ << ": read-only FS" << dendl;
+    fin->complete(-EROFS);
+    return;
+  }
   dout(10) << "flush_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FLUSH);
   filepath fp(path.c_str());
