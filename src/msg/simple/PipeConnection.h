@@ -41,10 +41,7 @@ public:
 
   void reset_pipe(Pipe* p);
 
-  bool is_connected() {
-    Mutex::Locker l(lock);
-    return pipe != NULL;
-  }
+  bool is_connected();
 
   int send_message(Message *m);
   void send_keepalive();
