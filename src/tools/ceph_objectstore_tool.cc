@@ -716,10 +716,8 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   bufferlist bl;
   PG::peek_map_epoch(fs, pgid, &bl);
   map<epoch_t,pg_interval_t> past_intervals;
-  interval_set<snapid_t> snap_collections;
   __u8 struct_v;
-  int r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-			snap_collections, struct_v);
+  int r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
   if (r < 0) {
     cerr << __func__ << " error on read_info " << cpp_strerror(-r) << std::endl;
     return r;
@@ -803,13 +801,11 @@ int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
     map<epoch_t,pg_interval_t> &past_intervals)
 {
   //Empty for this
-  interval_set<snapid_t> snap_collections; // obsolete
   coll_t coll(info.pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   int ret = PG::_write_info(t, epoch,
     info, coll,
     past_intervals,
-    snap_collections,
     pgmeta_oid,
     true);
   if (ret < 0) ret = -ret;
@@ -2817,10 +2813,9 @@ int main(int argc, char **argv)
 
     pg_info_t info(pgid);
     map<epoch_t,pg_interval_t> past_intervals;
-    interval_set<snapid_t> snap_collections;
     __u8 struct_ver;
     r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-		      snap_collections, struct_ver);
+		      struct_ver);
     if (r < 0) {
       cerr << "read_info error " << cpp_strerror(-r) << std::endl;
       ret = 1;

@@ -2626,13 +2626,11 @@ void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls
     }
     objects.clear();
   }
-  snap_collections.clear();
 }
 
 int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
 		    pg_info_t &info, coll_t coll,
 		    map<epoch_t,pg_interval_t> &past_intervals,
-		    interval_set<snapid_t> &snap_collections,
 		    ghobject_t &pgmeta_oid,
 		    bool dirty_big_info)
 {
@@ -2650,7 +2648,6 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     // potentially big stuff
     bufferlist& bigbl = v[biginfo_key];
     ::encode(past_intervals, bigbl);
-    ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
@@ -2695,7 +2692,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   unstable_stats.clear();
 
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-			past_intervals, snap_collections, pgmeta_oid,
+			past_intervals, pgmeta_oid,
 			dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
@@ -2928,7 +2925,7 @@ std::string PG::get_corrupt_pg_log_name() const
 int PG::read_info(
   ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
+  __u8 &struct_v)
 {
   // try for v8 or later
   set<string> keys;
@@ -2950,7 +2947,6 @@ int PG::read_info(
 
     p = values[biginfo_key].begin();
     ::decode(past_intervals, p);
-    ::decode(snap_collections, p);
     ::decode(info.purged_snaps, p);
     return 0;
   }
@@ -3002,13 +2998,8 @@ int PG::read_info(
   if (struct_v < 3) {
     set<snapid_t> snap_collections_temp;
     ::decode(snap_collections_temp, p);
-    snap_collections.clear();
-    for (set<snapid_t>::iterator i = snap_collections_temp.begin();
-	 i != snap_collections_temp.end();
-	 ++i) {
-      snap_collections.insert(*i);
-    }
   } else {
+    interval_set<snapid_t> snap_collections;
     ::decode(snap_collections, p);
     if (struct_v >= 4 && struct_v < 6)
       ::decode(info, p);
@@ -3021,7 +3012,7 @@ int PG::read_info(
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
   int r = read_info(store, pg_id, coll, bl, info, past_intervals,
-		    snap_collections, info_struct_v);
+		    info_struct_v);
   assert(r >= 0);
 
   ostringstream oss;
