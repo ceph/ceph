@@ -108,7 +108,6 @@ public:
     crush->choose_total_tries = 19;
     crush->chooseleaf_descend_once = 0;
     crush->chooseleaf_vary_r = 0;
-    crush->straw_calc_version = 0;
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -116,7 +115,6 @@ public:
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 0;
-    crush->straw_calc_version = 0;
   }
   void set_tunables_firefly() {
     crush->choose_local_tries = 0;
@@ -124,19 +122,17 @@ public:
     crush->choose_total_tries = 50;
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 1;
-    crush->straw_calc_version = 0;
   }
 
   void set_tunables_legacy() {
     set_tunables_argonaut();
+    crush->straw_calc_version = 0;
   }
   void set_tunables_optimal() {
     set_tunables_firefly();
+    crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
-    // default to bobtail tunables for the bits that affect
-    // compatibility, but default to the latest straw_calc_version
-    // because that does not.
     set_tunables_bobtail();
     crush->straw_calc_version = 1;
   }
