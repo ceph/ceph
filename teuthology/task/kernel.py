@@ -591,7 +591,8 @@ def need_to_install_distro(ctx, role):
         for kernel in output.getvalue().split():
             if kernel.startswith('kernel'):
                 if 'ceph' not in kernel:
-                    newest = kernel
+                    newest = kernel.split('kernel-')[1]
+                    break
 
     if system_type == 'deb':
         distribution = teuthology.get_system_type(role_remote, distro=True)
