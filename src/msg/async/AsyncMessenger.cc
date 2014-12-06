@@ -352,7 +352,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor(this, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), did_bind(false),
-    global_seq(0),
+    global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
@@ -471,7 +471,7 @@ void AsyncMessenger::wait()
 
     while (!conns.empty()) {
       AsyncConnectionRef p = conns.begin()->second;
-      _stop_conn(p);
+      p->mark_down();
     }
   }
   lock.Unlock();
@@ -658,7 +658,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   AsyncConnectionRef p = _lookup_conn(addr);
   if (p) {
     ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
-    _stop_conn(p);
+    p->mark_down();
     p->get();
     ms_deliver_handle_reset(p.get());
   } else {
