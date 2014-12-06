@@ -845,6 +845,13 @@ int crush_do_rule(const struct crush_map *map,
 			     -1-curstep->arg1 < map->max_buckets &&
 			     map->buckets[-1-curstep->arg1])) {
 				w[0] = curstep->arg1;
+				if (w[0] < 0 &&
+				    (-1-w[0] >= map->max_buckets ||
+				     map->buckets[-1-w[0]] == NULL)) {
+					wsize = 0;
+					dprintk("take %d bucket dne\n", w[0]);
+					continue;
+				}
 				wsize = 1;
 			} else {
 				dprintk(" bad take value %d\n", curstep->arg1);
