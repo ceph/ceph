@@ -258,6 +258,7 @@ TESTS = \
 	$(check_SCRIPTS)
 
 check-local:
+	$(top_srcdir)/qa/workunits/erasure-code/encode-decode-non-regression.sh 
 	$(srcdir)/test/encoding/readable.sh ../ceph-object-corpus
 
 
