@@ -238,10 +238,10 @@ void ghobject_t::decode(bufferlist::iterator& bl)
 void ghobject_t::dump(Formatter *f) const
 {
   hobj.dump(f);
-  if (generation != NO_GEN) {
+  if (generation != NO_GEN)
     f->dump_int("generation", generation);
+  if (shard_id != ghobject_t::NO_SHARD)
     f->dump_int("shard_id", shard_id);
-  }
 }
 
 void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
