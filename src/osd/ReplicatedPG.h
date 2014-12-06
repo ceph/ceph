@@ -431,7 +431,6 @@ public:
     const SnapSet *snapset; // Old snapset
 
     ObjectState new_obs;  // resulting ObjectState
-    SnapSet new_snapset;  // resulting SnapSet (in case of a write)
   private:
     SnapSet *_new_snapset;  ///< resulting SnapSet (in case of a write)
     bool _force_write_snapset; ///< should write snapset (even if not new)
@@ -561,14 +560,12 @@ public:
       on_finish(NULL),
       release_snapset_obc(false) {
       if (_ssc) {
-	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
       }
     }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
-	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
       }
       if (_new_snapset) {

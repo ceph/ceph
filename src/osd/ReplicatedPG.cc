@@ -5526,12 +5526,21 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	   << dendl;
   utime_t now = ceph_clock_now(cct);
 
+  if (ctx->new_obs.exists && !ctx->obs->exists) {
+    // force snapset to get rewritten for newly created object
+    ctx->force_write_snapset();
+  }
+
   // snapset
+  const SnapSet* cur_snapset = ctx->get_cur_snapset();
   bufferlist bss;
+  if (ctx->should_write_snapset()) {
+    dout(20) << "  writing snapset " << *cur_snapset << dendl;
+    ::encode(*cur_snapset, bss);
+  }
 
   if (soid.snap == CEPH_NOSNAP && maintain_ssc) {
-    ::encode(ctx->new_snapset, bss);
-    assert(ctx->new_obs.exists == ctx->new_snapset.head_exists);
+    assert(ctx->new_obs.exists == cur_snapset->head_exists);
 
     if (ctx->new_obs.exists) {
       if (!ctx->obs->exists) {
@@ -5556,14 +5565,21 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  ctx->at_version.version++;
 
 	  ctx->snapset_obc->obs.exists = false;
+
+	  // force snapset rewrite
+	  if (!bss.length()) {
+	    ctx->force_write_snapset();
+	    cur_snapset = ctx->get_cur_snapset();
+	    ::encode(*cur_snapset, bss);
+	  }
 	}
       }
-    } else if (ctx->new_snapset.clones.size() &&
+    } else if (cur_snapset->clones.size() &&
 	       !ctx->cache_evict) {
       // save snapset on _snap
       hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 			info.pgid.pool(), soid.get_namespace());
-      dout(10) << " final snapset " << ctx->new_snapset
+      dout(10) << " final snapset " << *cur_snapset
 	       << " in " << snapoid << dendl;
       ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid,
 					ctx->at_version,
@@ -5585,6 +5601,13 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
       ctx->snapset_obc->obs.oi.mtime = ctx->mtime;
       ctx->snapset_obc->obs.oi.local_mtime = now;
+
+      // force snapset rewrite
+      if (!bss.length()) {
+	ctx->force_write_snapset();
+	cur_snapset = ctx->get_cur_snapset();
+	::encode(*cur_snapset, bss);
+      }
 
       bufferlist bv(sizeof(ctx->new_obs.oi));
       ::encode(ctx->snapset_obc->obs.oi, bv);
@@ -5635,14 +5658,16 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, OI_ATTR, bv);
 
     if (soid.snap == CEPH_NOSNAP) {
-      dout(10) << " final snapset " << ctx->new_snapset
+      dout(10) << " final snapset " << *cur_snapset
 	       << " in " << soid << dendl;
-      setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
+      if (ctx->should_write_snapset())
+	setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
 
       if (pool.info.require_rollback()) {
 	set<string> changing;
 	changing.insert(OI_ATTR);
-	changing.insert(SS_ATTR);
+	if (ctx->should_write_snapset())
+	  changing.insert(SS_ATTR);
 	ctx->obc->fill_in_setattrs(changing, &(ctx->mod_desc));
       } else {
 	// replicated pools are never rollbackable in this case
@@ -5690,7 +5715,9 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     ctx->obc->ssc->snapset = SnapSet();
   } else {
     ctx->obc->ssc->exists = true;
-    ctx->obc->ssc->snapset = ctx->new_snapset;
+    ctx->obc->ssc->snapset = *cur_snapset;
+    dout(20) << "  updated ssc " << (void*)ctx->obc->ssc
+	     << " snapset to " << *cur_snapset << dendl;
   }
 
   info.stats.stats.add(ctx->delta_stats, ctx->obs->oi.category);
