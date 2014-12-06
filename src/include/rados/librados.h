@@ -63,10 +63,20 @@ extern "C" {
  * Flags that can be set on a per-op basis via
  * rados_read_op_set_flags() and rados_write_op_set_flags().
  */
-// fail a create operation if the object already exists
-#define LIBRADOS_OP_FLAG_EXCL 1
-// allow the transaction to succeed even if the flagged op fails
-#define LIBRADOS_OP_FLAG_FAILOK 2
+enum {
+  // fail a create operation if the object already exists
+  LIBRADOS_OP_FLAG_EXCL               =  0x1,
+  // allow the transaction to succeed even if the flagged op fails
+  LIBRADOS_OP_FLAG_FAILOK 	      = 0x2,
+  // indicate read/write op random
+  LIBRADOS_OP_FLAG_FADVISE_RANDOM     = 0x4,
+  // indicate read/write op sequential
+  LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8,
+  // indicate read/write data will be accessed in the near future
+  LIBRADOS_OP_FLAG_FADVISE_WILLNEED   = 0x10,
+  // indicate read/write data will not accessed int the near future
+  LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20,
+};
 
 #if __GNUC__ >= 4
   #define CEPH_RADOS_API  __attribute__ ((visibility ("default")))
