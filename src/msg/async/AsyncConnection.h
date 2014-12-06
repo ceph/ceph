@@ -245,6 +245,7 @@ class AsyncConnection : public Connection {
   Messenger::Policy policy;
   map<int, list<Message*> > out_q;  // priority queue for outbound msgs
   list<Message*> sent;
+  list<Message*> local_messages;    // local deliver
   Mutex lock;
   utime_t backoff;         // backoff time
   bool open_write;
@@ -258,6 +259,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef fast_accept_handler;
   EventCallbackRef stop_handler;
   EventCallbackRef signal_handler;
+  EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_LEN];
   Mutex stop_lock; // used to protect `mark_down_cond`
@@ -310,6 +312,7 @@ class AsyncConnection : public Connection {
     Mutex::Locker l(stop_lock);
     stop_cond.Signal();
   }
+  void local_deliver();
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
