@@ -576,21 +576,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   // local?
   if (my_inst.addr == dest_addr) {
     // local
-    ldout(cct, 20) << __func__ << " " << *m << " local" << dendl;
-    m->set_connection(local_connection.get());
-    m->set_recv_stamp(ceph_clock_now(cct));
-    ms_fast_preprocess(m);
-    if (ms_can_fast_dispatch(m)) {
-      ms_fast_dispatch(m);
-    } else {
-      if (m->get_priority() >= CEPH_MSG_PRIO_LOW) {
-        ms_fast_dispatch(m);
-      } else {
-        ms_deliver_dispatch(m);
-      }
-    }
-
-    return;
+    static_cast<AsyncConnection*>(local_connection.get())->send_message(m);
+    return ;
   }
 
   // remote, no existing connection.
@@ -602,6 +589,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
     m->put();
   } else {
     ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
+    con = create_connect(dest_addr, dest_type);
+    con->send_message(m);
   }
 }
 
