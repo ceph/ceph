@@ -169,7 +169,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false), keepalive(false),
     stop_lock("AsyncConnection::stop_lock"),
-    got_bad_auth(false), authorizer(NULL),
+    got_bad_auth(false), authorizer(NULL), replacing(false),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -1544,7 +1544,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                          << " > " << existing->connect_seq << dendl;
     goto replace;
   } // existing
-  else if (policy.resetcheck && connect.connect_seq > 0) {
+  else if (!replacing && policy.resetcheck && connect.connect_seq > 0) {
     // we reset, and they are opening a new session
     ldout(async_msgr->cct, 0) << __func__ << "accept we reset (peer sent cseq "
                         << connect.connect_seq << "), sending RESETSESSION" << dendl;
@@ -1597,10 +1597,17 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     if (_reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply) < 0)
       goto fail;
 
-    uint64_t s = existing->sd;
-    existing->sd = sd;
-    sd = s;
+    // Now existing connection will be alive and the current connection will
+    // exchange socket with existing connection because we want to maintain
+    // original "connection_state"
+    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+    center->create_file_event(sd, EVENT_READABLE, existing->read_handler);
+
+    swap(existing->sd, sd);
     existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
+    existing->open_write = false;
+    existing->discard_out_queue();
+    existing->replacing = true;
     _stop();
     existing->lock.Unlock();
     return 0;
@@ -1608,6 +1615,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   existing->lock.Unlock();
 
  open:
+  replacing = false;
   connect_seq = connect.connect_seq + 1;
   peer_global_seq = connect.global_seq;
   ldout(async_msgr->cct, 10) << __func__ << " accept success, connect_seq = "
@@ -1777,6 +1785,7 @@ void AsyncConnection::discard_out_queue()
       (*r)->put();
     }
   out_q.clear();
+  outcoming_bl.clear();
 }
 
 int AsyncConnection::randomize_out_seq()
@@ -1855,7 +1864,6 @@ void AsyncConnection::was_session_reset()
 {
   ldout(async_msgr->cct,10) << __func__ << "was_session_reset" << dendl;
   discard_out_queue();
-  outcoming_bl.clear();
 
   center->dispatch_event_external(remote_reset_handler);
 
@@ -1871,15 +1879,16 @@ void AsyncConnection::was_session_reset()
 void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
-  center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+  if (sd > 0)
+    center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
   shutdown_socket();
   discard_out_queue();
-  outcoming_bl.clear();
   open_write = false;
   state = STATE_CLOSED;
-  ::close(sd);
+  if (sd > 0)
+    ::close(sd);
   sd = -1;
-  async_msgr->unregister_conn(peer_addr);
+  async_msgr->unregister_conn(this);
   // Here we need to dispatch "signal" event, because we want to ensure signal
   // it after all events called by this "_stop" has be done.
   center->dispatch_event_external(signal_handler);
