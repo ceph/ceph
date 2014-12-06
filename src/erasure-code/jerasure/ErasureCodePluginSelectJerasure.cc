@@ -19,7 +19,7 @@
 #include "common/debug.h"
 #include "arch/probe.h"
 #include "arch/intel.h"
-#include "arch/neon.h"
+#include "arch/arm.h"
 #include "erasure-code/ErasureCodePlugin.h"
 
 #define dout_subsys ceph_subsys_osd
