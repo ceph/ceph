@@ -1259,6 +1259,16 @@ void ReplicatedPG::do_request(
   }
   assert(!op_must_wait_for_map(get_osdmap()->get_epoch(), op));
   if (can_discard_request(op)) {
+    if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+      MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+      hobject_t oid(m->get_oid(),
+                    m->get_object_locator().key,
+                    m->get_snapid(),
+                    m->get_pg().ps(),
+                    m->get_object_locator().get_pool(),
+                    m->get_object_locator().nspace);
+      promote_in_flight.erase(oid);
+    }
     return;
   }
   if (flushes_in_progress > 0) {
@@ -1951,6 +1961,9 @@ void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
 
   assert(obc->is_blocked());
   wait_for_blocked_object(obc->obs.oi.soid, op);
+
+  utime_t now = ceph_clock_now(cct);
+  promote_in_flight[obc->obs.oi.soid] = now;
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -1962,6 +1975,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   ObjectContextRef obc = ctx->obc;
   const hobject_t& soid = obc->obs.oi.soid;
   map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
+
+  promote_in_flight.erase(soid);
 
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
@@ -9850,6 +9865,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   debug_op_order.clear();
   unstable_stats.clear();
+  promote_in_flight.clear();
 }
 
 void ReplicatedPG::on_role_change()
@@ -11728,6 +11744,16 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   if (obc->is_blocked()) {
     dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
     return false;
+  }
+  if (promote_in_flight.count(soid)) {
+    utime_t now = ceph_clock_now(cct);
+    if (promote_in_flight[soid] + utime_t(60, 0) > now) {
+      dout(20) << __func__ << " skip (promoting) " << obc->obs.oi << dendl;
+      return false;
+    } else {
+      // Erase the entry and allow evict if it is older than 60s
+      promote_in_flight.erase(soid);
+    }
   }
 
   if (soid.snap == CEPH_NOSNAP) {
