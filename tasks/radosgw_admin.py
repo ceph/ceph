@@ -429,33 +429,36 @@ def task(ctx, config):
             if c_config.get('metadata-only'):
                 continue
 
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            k = boto.s3.key.Key(bucket)
-            k.key = 'tiny_file'
-            k.set_contents_from_string("123456789")
-            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
-            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
-            (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
-            dest_connection = boto.s3.connection.S3Connection(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                is_secure=False,
-                port=dest_port,
-                host=dest_host,
-                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+            for full in (True, False):
+                source_client = c_config['src']
+                dest_client = c_config['dest']
+                k = boto.s3.key.Key(bucket)
+                k.key = 'tiny_file'
+                k.set_contents_from_string("123456789")
+                safety_window = rgw_utils.radosgw_data_log_window(ctx, source_client)
+                time.sleep(safety_window)
+                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=full)
+                (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
+                dest_connection = boto.s3.connection.S3Connection(
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    is_secure=False,
+                    port=dest_port,
+                    host=dest_host,
+                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
                 )
-            dest_k = dest_connection.get_bucket(bucket_name + 'data').get_key('tiny_file')
-            assert k.get_contents_as_string() == dest_k.get_contents_as_string()
+                dest_k = dest_connection.get_bucket(bucket_name + 'data').get_key('tiny_file')
+                assert k.get_contents_as_string() == dest_k.get_contents_as_string()
 
-            # check that deleting it removes it from the dest zone
-            k.delete()
-            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
-            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+                # check that deleting it removes it from the dest zone
+                k.delete()
+                time.sleep(safety_window)
+                # full sync doesn't handle deleted objects yet
+                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=False)
 
-            dest_bucket = dest_connection.get_bucket(bucket_name + 'data')
-            dest_k = dest_bucket.get_key('tiny_file')
-            assert dest_k == None, 'object not deleted from destination zone'
+                dest_bucket = dest_connection.get_bucket(bucket_name + 'data')
+                dest_k = dest_bucket.get_key('tiny_file')
+                assert dest_k == None, 'object not deleted from destination zone'
 
         # finally we delete the bucket
         bucket.delete()
@@ -465,40 +468,43 @@ def task(ctx, config):
             if c_config.get('metadata-only'):
                 continue
 
-            source_client = c_config['src']
-            dest_client = c_config['dest']
-            (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
-            dest_connection = boto.s3.connection.S3Connection(
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-                is_secure=False,
-                port=dest_port,
-                host=dest_host,
-                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+            for full in (True, False):
+                source_client = c_config['src']
+                dest_client = c_config['dest']
+                (dest_host, dest_port) = ctx.rgw.role_endpoints[dest_client]
+                dest_connection = boto.s3.connection.S3Connection(
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    is_secure=False,
+                    port=dest_port,
+                    host=dest_host,
+                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
                 )
-            for i in range(20):
-                k = boto.s3.key.Key(bucket)
-                k.key = 'tiny_file_' + str(i)
-                k.set_contents_from_string(str(i) * 100)
+                for i in range(20):
+                    k = boto.s3.key.Key(bucket)
+                    k.key = 'tiny_file_' + str(i)
+                    k.set_contents_from_string(str(i) * 100)
 
-            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
-            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+                safety_window = rgw_utils.radosgw_data_log_window(ctx, source_client)
+                time.sleep(safety_window)
+                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=full)
 
-            for i in range(20):
-                dest_k = dest_connection.get_bucket(bucket_name + 'data2').get_key('tiny_file_' + str(i))
-                assert (str(i) * 100) == dest_k.get_contents_as_string()
-                k = boto.s3.key.Key(bucket)
-                k.key = 'tiny_file_' + str(i)
-                k.delete()
+                for i in range(20):
+                    dest_k = dest_connection.get_bucket(bucket_name + 'data2').get_key('tiny_file_' + str(i))
+                    assert (str(i) * 100) == dest_k.get_contents_as_string()
+                    k = boto.s3.key.Key(bucket)
+                    k.key = 'tiny_file_' + str(i)
+                    k.delete()
 
-            # check that deleting removes the objects from the dest zone
-            time.sleep(rgw_utils.radosgw_data_log_window(ctx, source_client))
-            rgw_utils.radosgw_agent_sync_all(ctx, data=True)
+                # check that deleting removes the objects from the dest zone
+                time.sleep(safety_window)
+                # full sync doesn't delete deleted objects yet
+                rgw_utils.radosgw_agent_sync_all(ctx, data=True, full=False)
 
-            for i in range(20):
-                dest_bucket = dest_connection.get_bucket(bucket_name + 'data2')
-                dest_k = dest_bucket.get_key('tiny_file_' + str(i))
-                assert dest_k == None, 'object %d not deleted from destination zone' % i
+                for i in range(20):
+                    dest_bucket = dest_connection.get_bucket(bucket_name + 'data2')
+                    dest_k = dest_bucket.get_key('tiny_file_' + str(i))
+                    assert dest_k == None, 'object %d not deleted from destination zone' % i
         bucket.delete()
 
     # end of 'if multi_region_run:'
