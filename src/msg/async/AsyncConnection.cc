@@ -97,23 +97,23 @@ class C_handle_dispatch : public EventCallback {
   }
 };
 
-class C_handle_connect : public EventCallback {
+class C_deliver_connect : public EventCallback {
   AsyncMessenger *msgr;
   AsyncConnectionRef conn;
 
  public:
-  C_handle_connect(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  C_deliver_connect(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
   void do_request(int id) {
     msgr->ms_deliver_handle_connect(conn.get());
   }
 };
 
-class C_handle_accept : public EventCallback {
+class C_deliver_accept : public EventCallback {
   AsyncMessenger *msgr;
   AsyncConnectionRef conn;
 
  public:
-  C_handle_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  C_deliver_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
   void do_request(int id) {
     msgr->ms_deliver_handle_accept(conn.get());
   }
@@ -178,8 +178,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
   stop_handler.reset(new C_handle_stop(this));
   signal_handler.reset(new C_handle_signal(this));
-  connect_handler.reset(new C_handle_connect(async_msgr, this));
-  accept_handler.reset(new C_handle_connect(async_msgr, this));
+  connect_handler.reset(new C_deliver_connect(async_msgr, this));
+  accept_handler.reset(new C_deliver_accept(async_msgr, this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
