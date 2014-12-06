@@ -6253,6 +6253,9 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
 
+  // SnapSet likely changed from previous incarnation of object
+  ctx->force_write_snapset();
+
   osd->logger->inc(l_osd_copyfrom);
 }
 
