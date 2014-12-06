@@ -244,7 +244,7 @@ class ClientStub : public TestStub
       return err;
     }
 
-    messenger.reset(Messenger::create(cct, entity_name_t::CLIENT(-1),
+    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
 				      "stubclient", getpid()));
     assert(messenger.get() != NULL);
 
@@ -357,7 +357,7 @@ class OSDStub : public TestStub
 	     << cct->_conf->auth_supported << dendl;
     stringstream ss;
     ss << "client-osd" << whoami;
-    messenger.reset(Messenger::create(cct, entity_name_t::OSD(whoami),
+    messenger.reset(Messenger::create(cct, cct->_conf->ms_type, entity_name_t::OSD(whoami),
 				      ss.str().c_str(), getpid()));
 
     Throttle throttler(g_ceph_context, "osd_client_bytes",

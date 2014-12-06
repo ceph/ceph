@@ -25,8 +25,6 @@
 #include "msg/msg_types.h"
 #include "msg/Message.h"
 #include "msg/Messenger.h"
-#include "msg/simple/SimpleMessenger.h"
-#include "msg/async/AsyncMessenger.h"
 #include "msg/Connection.h"
 #include "messages/MPing.h"
 
@@ -42,14 +40,8 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
   MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
   virtual void SetUp() {
     cerr << __func__ << " start set up " << GetParam() << std::endl;
-    if (strcmp(GetParam(), "simple")) {
-      server_msgr = new SimpleMessenger(g_ceph_context, entity_name_t::OSD(0), "server", getpid());
-      client_msgr = new SimpleMessenger(g_ceph_context, entity_name_t::CLIENT(-1), "client", getpid());
-    } else if (strcmp(GetParam(), "async")) {
-      server_msgr = new AsyncMessenger(g_ceph_context, entity_name_t::OSD(0), "server", getpid());
-      client_msgr = new AsyncMessenger(g_ceph_context, entity_name_t::CLIENT(-1), "client", getpid());
-      server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
-    }
+    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0, 0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0, 0));
   }

@@ -369,22 +369,22 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  Messenger *ms_public = Messenger::create(g_ceph_context,
+  Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid());
-  Messenger *ms_cluster = Messenger::create(g_ceph_context,
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
 					    getpid());
-  Messenger *ms_hbclient = Messenger::create(g_ceph_context,
+  Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
 					     getpid());
-  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context,
+  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
 						   getpid());
-  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context,
+  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid());
-  Messenger *ms_objecter = Messenger::create(g_ceph_context,
+  Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
