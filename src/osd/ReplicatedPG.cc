@@ -6290,17 +6290,18 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     RepGather *repop = simple_repop_create(obc);
     OpContext *tctx = repop->ctx;
     tctx->at_version = get_next_version();
-    filter_snapc(tctx->new_snapset.snaps);
-    vector<snapid_t> new_clones(tctx->new_snapset.clones.size());
-    for (vector<snapid_t>::iterator i = tctx->new_snapset.clones.begin();
-	 i != tctx->new_snapset.clones.end();
+    SnapSet *new_snapset = tctx->modify_snapset();
+    filter_snapc(new_snapset->snaps);
+    vector<snapid_t> new_clones(new_snapset->clones.size());
+    for (vector<snapid_t>::iterator i = new_snapset->clones.begin();
+	 i != new_snapset->clones.end();
 	 ++i) {
       if (*i != soid.snap)
 	new_clones.push_back(*i);
     }
-    tctx->new_snapset.clones.swap(new_clones);
-    tctx->new_snapset.clone_overlap.erase(soid.snap);
-    tctx->new_snapset.clone_size.erase(soid.snap);
+    new_snapset->clones.swap(new_clones);
+    new_snapset->clone_overlap.erase(soid.snap);
+    new_snapset->clone_size.erase(soid.snap);
 
     // take RWWRITE lock for duration of our local write.  ignore starvation.
     if (!obc->rwstate.take_write_lock()) {
@@ -6404,12 +6405,13 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
     }
   }
 
+  SnapSet *new_snapset = tctx->modify_snapset();
   if (results->mirror_snapset) {
     assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
-    tctx->new_snapset.from_snap_set(results->snapset);
+    new_snapset->from_snap_set(results->snapset);
   }
-  tctx->new_snapset.head_exists = true;
-  dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
+  new_snapset->head_exists = true;
+  dout(20) << __func__ << " new_snapset " << *new_snapset << dendl;
 
   // take RWWRITE lock for duration of our local write.  ignore starvation.
   if (!obc->rwstate.take_write_lock()) {
