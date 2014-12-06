@@ -109,8 +109,8 @@ class AsyncConnection : public Connection {
   ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() {
-    // FIXME?
-    return state != STATE_CLOSED;
+    Mutex::Locker l(lock);
+    return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
 
   // Only call when AsyncConnection first construct
@@ -146,7 +146,7 @@ class AsyncConnection : public Connection {
   void mark_down() {
     Mutex::Locker l(stop_lock);
     if (center->get_owner() == pthread_self()) {
-      _stop();
+      stop();
     } else {
       center->dispatch_event_external(stop_handler);
       stop_cond.Wait(stop_lock);
@@ -281,6 +281,12 @@ class AsyncConnection : public Connection {
   // Accepting state
   entity_addr_t socket_addr;
   CryptoKey session_key;
+  bool replacing;    // when replacing process happened, we will reply connect
+                     // side with RETRY tag and accept side will clear replaced
+                     // connection. So when connect side reissue connect_msg,
+                     // there won't exists conflicting connection so we use
+                     // "replacing" to skip RESETSESSION to avoid detect wrong
+                     // presentation
 
   // used only for local state, it will be overwrite when state transition
   bufferptr state_buffer;
