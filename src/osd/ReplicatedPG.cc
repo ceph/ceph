@@ -5171,7 +5171,7 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   // clone?
   assert(soid.snap == CEPH_NOSNAP);
   dout(20) << "make_writeable " << soid << " snapset=" << ctx->snapset
-	   << "  snapc=" << snapc << dendl;
+           << "  snapc=" << snapc << dendl;
   
   bool was_dirty = ctx->obc->obs.oi.is_dirty();
   if (ctx->new_obs.exists) {
@@ -5210,9 +5210,11 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   // use newer snapc?
-  if (ctx->new_snapset.seq > snapc.seq) {
-    snapc.seq = ctx->new_snapset.seq;
-    snapc.snaps = ctx->new_snapset.snaps;
+  const SnapSet* cur_snapset = ctx->get_cur_snapset();
+  // use newer snapc?
+  if (cur_snapset->seq > snapc.seq) {
+    snapc.seq = cur_snapset->seq;
+    snapc.snaps = cur_snapset->snaps;
     dout(10) << " using newer snapc " << snapc << dendl;
   }
 
@@ -5222,13 +5224,15 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_evict &&
-      snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
+      snapc.snaps[0] > cur_snapset->seq) {  // existing object is old
     // clone
+    SnapSet *new_snapset = ctx->modify_snapset();
+    cur_snapset = new_snapset;
     hobject_t coid = soid;
     coid.snap = snapc.seq;
     
     unsigned l;
-    for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > ctx->new_snapset.seq; l++) ;
+    for (l=1; l<snapc.snaps.size() && snapc.snaps[l] > new_snapset->seq; l++) ;
     
     vector<snapid_t> snaps(l);
     for (unsigned i=0; i<l; i++)
@@ -5271,14 +5275,14 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     if (snap_oi->is_omap())
       ctx->delta_stats.num_objects_omap++;
     ctx->delta_stats.num_object_clones++;
-    ctx->new_snapset.clones.push_back(coid.snap);
-    ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
+    new_snapset->clones.push_back(coid.snap);
+    new_snapset->clone_size[coid.snap] = ctx->obs->oi.size;
 
     // clone_overlap should contain an entry for each clone 
     // (an empty interval_set if there is no overlap)
-    ctx->new_snapset.clone_overlap[coid.snap];
+    new_snapset->clone_overlap[coid.snap];
     if (ctx->obs->oi.size)
-      ctx->new_snapset.clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
+      new_snapset->clone_overlap[coid.snap].insert(0, ctx->obs->oi.size);
     
     // log clone
     dout(10) << " cloning v " << ctx->obs->oi.version
@@ -5295,17 +5299,24 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   }
 
   // update most recent clone_overlap and usage stats
-  if (ctx->new_snapset.clones.size() > 0) {
+  if (cur_snapset->clones.size() > 0) {
     /* we need to check whether the most recent clone exists, if it's been evicted,
      * it's not included in the stats */
     hobject_t last_clone_oid = soid;
-    last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
+    last_clone_oid.snap = cur_snapset->clone_overlap.rbegin()->first;
     if (is_present_clone(last_clone_oid)) {
-      interval_set<uint64_t> &newest_overlap = ctx->new_snapset.clone_overlap.rbegin()->second;
-      ctx->modified_ranges.intersection_of(newest_overlap);
+      const interval_set<uint64_t>& old_overlap =
+	cur_snapset->clone_overlap.rbegin()->second;
+      ctx->modified_ranges.intersection_of(old_overlap);
       // modified_ranges is still in use by the clone
-      add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
-      newest_overlap.subtract(ctx->modified_ranges);
+      if (!ctx->modified_ranges.empty()) {
+	add_interval_usage(ctx->modified_ranges, ctx->delta_stats);
+	interval_set<uint64_t> newest_overlap = old_overlap;
+	newest_overlap.subtract(ctx->modified_ranges);
+	SnapSet *new_snapset = ctx->modify_snapset();
+	cur_snapset = new_snapset;
+	new_snapset->clone_overlap.rbegin()->second.swap(newest_overlap);
+      }
     }
   }
   
@@ -5315,10 +5326,10 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
   ctx->op_t = t;
 
   // update snapset with latest snap context
-  ctx->new_snapset.seq = snapc.seq;
-  ctx->new_snapset.snaps = snapc.snaps;
-  ctx->new_snapset.head_exists = ctx->new_obs.exists;
-  dout(20) << "make_writeable " << soid << " done, snapset=" << ctx->new_snapset << dendl;
+  ctx->set_new_snapset_snapc_exists(snapc, ctx->new_obs.exists);
+
+  dout(20) << "make_writeable " << soid << " done, snapset="
+	   << *cur_snapset << dendl;
 }
 
 
