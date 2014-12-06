@@ -139,6 +139,14 @@ class C_handle_signal : public EventCallback {
   }
 };
 
+class C_local_deliver : public EventCallback {
+  AsyncConnectionRef conn;
+ public:
+  C_local_deliver(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->local_deliver();
+  }
+};
 
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
@@ -180,6 +188,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   signal_handler.reset(new C_handle_signal(this));
   connect_handler.reset(new C_deliver_connect(async_msgr, this));
   accept_handler.reset(new C_deliver_accept(async_msgr, this));
+  local_deliver_handler.reset(new C_local_deliver(this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
@@ -1723,6 +1732,10 @@ int AsyncConnection::send_message(Message *m)
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
+    } else if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
+      ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
+      local_messages.push_back(m);
+      center->dispatch_event_external(local_deliver_handler);
     } else if (sd > 0 && !open_write) {
       center->dispatch_event_external(write_handler);
     }
@@ -2108,4 +2121,25 @@ void AsyncConnection::handle_write()
   return ;
  fail:
   fault();
+}
+
+void AsyncConnection::local_deliver()
+{
+  ldout(async_msgr->cct, 10) << __func__ << dendl;
+  Mutex::Locker l(lock);
+  while (!local_messages.empty()) {
+    Message *m = local_messages.back();
+    local_messages.pop_back();
+    m->set_connection(this);
+    m->set_recv_stamp(ceph_clock_now(async_msgr->cct));
+    ldout(async_msgr->cct, 10) << __func__ << " " << *m << " local deliver " << dendl;
+    async_msgr->ms_fast_preprocess(m);
+    lock.Unlock();
+    if (async_msgr->ms_can_fast_dispatch(m)) {
+      async_msgr->ms_fast_dispatch(m);
+    } else {
+      msgr->ms_deliver_dispatch(m);
+    }
+    lock.Lock();
+  }
 }
