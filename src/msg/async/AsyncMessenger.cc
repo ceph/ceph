@@ -14,13 +14,20 @@
  *
  */
 
+#include "acconfig.h"
+
 #include <errno.h>
 #include <iostream>
 #include <fstream>
 #include <poll.h>
+#ifdef HAVE_SCHED
+#include <sched.h>
+#endif
 
 #include "AsyncMessenger.h"
 
+#include "include/str_list.h"
+#include "common/strtol.h"
 #include "common/config.h"
 #include "common/Timer.h"
 #include "common/errno.h"
@@ -39,7 +46,11 @@ static ostream& _prefix(std::ostream *_dout, Processor *p) {
 }
 
 static ostream& _prefix(std::ostream *_dout, Worker *w) {
-  return *_dout << "--";
+  return *_dout << " Worker -- ";
+}
+
+static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
+  return *_dout << " WorkerPool -- ";
 }
 
 
@@ -291,6 +302,29 @@ void Worker::stop()
 void *Worker::entry()
 {
   ldout(cct, 10) << __func__ << " starting" << dendl;
+  if (cct->_conf->ms_async_set_affinity) {
+#ifdef HAVE_SCHED
+    int cpuid;
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+
+    cpuid = pool->get_cpuid(id);
+    if (cpuid < 0) {
+      cpuid = sched_getcpu();
+    }
+
+    if (cpuid < CPU_SETSIZE) {
+      CPU_SET(cpuid, &cpuset);
+
+      if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0) {
+        ldout(cct, 0) << __func__ << " sched_setaffinity failed: "
+                      << cpp_strerror(errno) << dendl;
+      }
+      /* guaranteed to take effect immediately */
+      sched_yield();
+    }
+#endif
+  }
 
   center.set_owner(pthread_self());
   while (!done) {
@@ -307,7 +341,6 @@ void *Worker::entry()
   return 0;
 }
 
-
 /*******************
  * WorkerPool
  *******************/
@@ -315,9 +348,21 @@ const string WorkerPool::name = "AsyncMessenger::WorkerPool";
 
 WorkerPool::WorkerPool(CephContext *c): cct(c), seq(0), started(false)
 {
+  assert(cct->_conf->ms_async_op_threads > 0);
   for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
-    Worker *w = new Worker(cct);
+    Worker *w = new Worker(cct, this, i);
     workers.push_back(w);
+  }
+  vector<string> corestrs;
+  get_str_vec(cct->_conf->ms_async_affinity_cores, corestrs);
+  for (vector<string>::iterator it = corestrs.begin();
+       it != corestrs.end(); ++it) {
+    string err;
+    int coreid = strict_strtol(it->c_str(), 10, &err);
+    if (err == "")
+      coreids.push_back(coreid);
+    else
+      lderr(cct) << __func__ << " failed to parse " << *it << " in " << cct->_conf->ms_async_affinity_cores << dendl;
   }
 }
 
