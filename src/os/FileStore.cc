@@ -437,8 +437,10 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 {
   Index index;
   int r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(25) << __func__ << " get_index failed " << cpp_strerror(r) << dendl;
     return r;
+  }
 
   assert(NULL != index.index);
   RWLock::WLocker l((index.index)->access_lock);
@@ -463,6 +465,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	} else {
 	  assert(!m_filestore_fail_eio || r != -EIO);
 	}
+	dout(25) << __func__ << " stat failed " << cpp_strerror(r) << dendl;
 	return r;
       } else if (st.st_nlink == 1) {
 	force_clear_omap = true;
@@ -473,6 +476,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	       << " in cid " << cid << dendl;
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT) {
+	dout(25) << __func__ << " omap clear failed " << cpp_strerror(r) << dendl;
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
@@ -489,7 +493,12 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	object_map->sync(&o, &spos);
     }
   }
-  return index->unlink(o);
+  r = index->unlink(o);
+  if (r < 0) {
+    dout(25) << __func__ << " index unlink failed " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
 }
 
 FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbits_t flags, const char *name, bool do_update) :
