@@ -328,7 +328,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     ~raw_pipe() {
       if (data)
-	delete data;
+	free(data);
       close_pipe(pipefds);
       dec_total_alloc(len);
       bdout << "raw_pipe " << this << " free " << (void *)data << " "
