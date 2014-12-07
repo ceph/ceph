@@ -1971,11 +1971,14 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
   ObjectOperation obj_op;
   obj_op.dup(prdop->ops);
 
-  C_ProxyRead *fin = new C_ProxyRead(this, soid, get_last_peering_reset(), prdop);
-  ceph_tid_t tid = osd->objecter->read(soid.oid, oloc, obj_op,
-				  m->get_snapid(), NULL,
-				  flags, fin,
-				  &prdop->user_version, &prdop->data_offset);
+  C_ProxyRead *fin = new C_ProxyRead(this, soid, get_last_peering_reset(),
+				     prdop);
+  ceph_tid_t tid = osd->objecter->read(
+    soid.oid, oloc, obj_op,
+    m->get_snapid(), NULL,
+    flags, new C_OnFinisher(fin, &osd->objecter_finisher),
+    &prdop->user_version,
+    &prdop->data_offset);
   fin->tid = tid;
   prdop->objecter_tid = tid;
   proxyread_ops[tid] = prdop;
