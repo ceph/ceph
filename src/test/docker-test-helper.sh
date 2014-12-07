@@ -21,10 +21,6 @@ function get_image_name() {
     echo ceph-$os_type-$os_version
 }
 
-function get_branch() {
-    git rev-parse --abbrev-ref HEAD
-}
-
 function compile_ubuntu() {
     cat <<EOF
 set -ex
@@ -82,7 +78,7 @@ function setup_downstream() {
 
     local image=$(get_image_name $os_type $os_version)
     local root=$(git rev-parse --show-toplevel)
-    local branch=$(get_branch)
+    local commit=$(git rev-parse HEAD)
     local dir=$(dirname $root)
     local upstream=$(basename $root)
     local downstream=$(get_downstream $os_type $os_version)
@@ -90,15 +86,24 @@ function setup_downstream() {
     (
         cd $dir
         if ! test -d $downstream ; then
-            git clone $upstream $downstream || return 1
-            cd $downstream
-            git checkout -b docker-build origin/$branch || return 1
-            git submodule update --init || return 1
-        else
-            cd $downstream
+            # Inspired by https://github.com/git/git/blob/master/contrib/workdir/git-new-workdir
+            mkdir -p $downstream/.git || return 1
+            for x in config refs logs/refs objects info hooks packed-refs remotes rr-cache
+            do
+	        case $x in
+	            */*)
+		        mkdir -p "$downstream/.git/$x"
+		        ;;
+	        esac
+	        ln -s "$root/.git/$x" "$downstream/.git/$x"
+                cp "$root/.git/HEAD" "$downstream/.git/HEAD"
+            done
         fi
-        git fetch origin
-        git reset --hard origin/$branch || return 1
+        cd $downstream
+        git reset --hard $commit || return 1
+        git clean --force -d -x || return 1
+        git submodule sync || return 1
+        git submodule update --init || return 1
     )
 }
 
