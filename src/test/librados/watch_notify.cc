@@ -314,9 +314,9 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
     ::decode(reply_map, reply_p);
     ::decode(missed_map, reply_p);
     ASSERT_EQ(1u, reply_map.size());
-    ASSERT_EQ(0, missed_map.size());
-    ASSERT_EQ(1, notify_cookies.count(handle));
-    ASSERT_EQ(5, reply_map.begin()->second.length());
+    ASSERT_EQ(0u, missed_map.size());
+    ASSERT_EQ(1u, notify_cookies.count(handle));
+    ASSERT_EQ(5u, reply_map.begin()->second.length());
     ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   }
   ASSERT_EQ(1u, notify_cookies.size());
@@ -353,10 +353,10 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ::decode(reply_map, reply_p);
   ::decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
-  ASSERT_EQ(0, missed_map.size());
+  ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
-  ASSERT_EQ(1, notify_cookies.count(handle));
-  ASSERT_EQ(5, reply_map.begin()->second.length());
+  ASSERT_EQ(1u, notify_cookies.count(handle));
+  ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
   ASSERT_TRUE(rados_watch_check(ioctx, handle) > 0);
   rados_buffer_free(reply_buf);
@@ -366,7 +366,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   ASSERT_EQ(-ENOENT, rados_notify2(ioctx, "doesnotexist",
 				   "notify", 6, 0,
 				   &reply_buf, &reply_buf_len));
-  ASSERT_EQ(NULL, reply_buf);
+  ASSERT_EQ((char*)0, reply_buf);
   ASSERT_EQ(0, reply_buf_len);
 
   rados_unwatch2(ioctx, handle);
