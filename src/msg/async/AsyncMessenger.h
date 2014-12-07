@@ -61,19 +61,23 @@ class Processor : public Thread {
   void accept();
 };
 
+class WorkerPool;
+
 class Worker : public Thread {
   CephContext *cct;
+  WorkerPool *pool;
   bool done;
+  int id;
 
  public:
   EventCenter center;
-  Worker(CephContext *c): cct(c), done(false), center(c) {
+  Worker(CephContext *c, WorkerPool *p, int i)
+    : cct(c), pool(p), done(false), id(i), center(c) {
     center.init(5000);
   }
   void *entry();
   void stop();
 };
-
 
 class WorkerPool: CephContext::AssociatedSingletonObject {
   WorkerPool(const WorkerPool &);
@@ -81,6 +85,7 @@ class WorkerPool: CephContext::AssociatedSingletonObject {
   CephContext *cct;
   uint64_t seq;
   vector<Worker*> workers;
+  vector<int> coreids;
   // Used to indicate whether thread started
   bool started;
 
@@ -90,6 +95,11 @@ class WorkerPool: CephContext::AssociatedSingletonObject {
   void start();
   Worker *get_worker() {
     return workers[(seq++)%workers.size()];
+  }
+  int get_cpuid(int id) {
+    if (coreids.empty())
+      return -1;
+    return coreids[id % coreids.size()];
   }
   // uniq name for CephContext to distinguish differnt object
   static const string name;
