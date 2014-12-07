@@ -2072,9 +2072,10 @@ CEPH_RADOS_API int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver,
  * @param reply_buffer_len pointer to size of reply buffer
  * @returns 0 on success, negative error code on failure
  */
-int rados_notify2(rados_ioctx_t io, const char *o, const char *buf, int buf_len,
-		  uint64_t timeout_ms,
-		  char **reply_buffer, size_t *reply_buffer_len);
+CEPH_RADOS_API int rados_notify2(rados_ioctx_t io, const char *o,
+				 const char *buf, int buf_len,
+				 uint64_t timeout_ms,
+				 char **reply_buffer, size_t *reply_buffer_len);
 
 /**
  * Acknolwedge receipt of a notify
@@ -2087,9 +2088,9 @@ int rados_notify2(rados_ioctx_t io, const char *o, const char *buf, int buf_len,
  * @param buf_len payload length
  * @returns 0 on success
  */
-int rados_notify_ack(rados_ioctx_t io, const char *o,
-		     uint64_t notify_id, uint64_t cookie,
-		     const char *buf, int buf_len);
+CEPH_RADOS_API int rados_notify_ack(rados_ioctx_t io, const char *o,
+				    uint64_t notify_id, uint64_t cookie,
+				    const char *buf, int buf_len);
 
 
 /** @} Watch/Notify */
