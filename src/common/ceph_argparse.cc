@@ -157,29 +157,22 @@ CephInitParameters::CephInitParameters(uint32_t module_type_)
   name.set(module_type, "admin");
 }
 
-static void dashes_to_underscores(const char *input, char *output)
+static string dashes_to_underscores(const char *input)
 {
-  char c = 0;
-  char *o = output;
-  const char *i = input;
-  // first two characters are copied as-is
-  *o = *i++;
-  if (*o++ == '\0')
-    return;
-  *o = *i++;
-  if (*o++ == '\0')
-    return;
-  for (; ((c = *i)); ++i) {
-    if (c == '=') {
-      strcpy(o, i);
-      return;
+  string output_str;
+  if(input) {
+    const int NUMBER_CHARS_TO_IGNORE = 2;
+
+    output_str = input;
+    if(output_str.size() > NUMBER_CHARS_TO_IGNORE) {
+      size_t pos = output_str.find('=', NUMBER_CHARS_TO_IGNORE);
+      string::iterator it = (pos == string::npos ?
+                               output_str.end() : output_str.begin() + pos);
+
+      replace(output_str.begin() + NUMBER_CHARS_TO_IGNORE, it, '-', '_');
     }
-    if (c == '-')
-      *o++ = '_';
-    else
-      *o++ = c;
   }
-  *o++ = '\0';
+  return output_str;
 }
 
 /** Once we see a standalone double dash, '--', we should remove it and stop
@@ -195,74 +188,68 @@ bool ceph_argparse_double_dash(std::vector<const char*> &args,
 }
 
 bool ceph_argparse_flag(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, ...)
+                        std::vector<const char*>::iterator &i, ...)
 {
-  const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
-  va_list ap;
+  string str1 = dashes_to_underscores(*i);
 
+  va_list ap;
   va_start(ap, i);
-  while (1) {
-    const char *a = va_arg(ap, char*);
-    if (a == NULL) {
-      va_end(ap);
-      return false;
-    }
-    char a2[strlen(a)+1];
-    dashes_to_underscores(a, a2);
-    if (strcmp(a2, first) == 0) {
+
+  bool is_matched = false;
+  string str2;
+  while(!is_matched &&
+        ((str2 = dashes_to_underscores(va_arg(ap, char*))) != "")) {
+    if(str1 == str2) {
       i = args.erase(i);
-      va_end(ap);
-      return true;
+      is_matched = true;
     }
   }
+
+  va_end(ap);
+  return is_matched;
 }
 
-static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, int *ret,
-	std::ostream *oss, va_list ap)
-{
-  const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
 
-  // does this argument match any of the possibilities?
-  while (1) {
-    const char *a = va_arg(ap, char*);
-    if (a == NULL)
-      return false;
-    int strlen_a = strlen(a);
-    char a2[strlen_a+1];
-    dashes_to_underscores(a, a2);
-    if (strncmp(a2, first, strlen(a2)) == 0) {
-      if (first[strlen_a] == '=') {
-	i = args.erase(i);
-	const char *val = first + strlen_a + 1;
-	if ((strcmp(val, "true") == 0) || (strcmp(val, "1") == 0)) {
-	  *ret = 1;
-	  return true;
-	}
-	else if ((strcmp(val, "false") == 0) || (strcmp(val, "0") == 0)) {
-	  *ret = 0;
-	  return true;
-	}
-	if (oss) {
-	  (*oss) << "Parse error parsing binary flag  " << a
-	         << ". Expected true or false, but got '" << val << "'\n";
-	}
-	*ret = -EINVAL;
-	return true;
+static bool va_ceph_argparse_binary_flag(std::vector<const char*> &args,
+					 std::vector<const char*>::iterator &i,
+					 int *ret,
+					 std::ostream *oss, va_list ap)
+{
+  string str1 = dashes_to_underscores(*i);
+
+  bool is_matched = false;
+  string str2;
+
+  while (!is_matched &&
+         ((str2 = dashes_to_underscores(va_arg(ap, char*))) != "")) {
+    if(str1.compare(0, str2.size(), str2) == 0) {
+      string str1_val = str1.substr(str2.size());
+      if(str1_val == "=true" || str1_val == "=1" || str1_val == ""){
+        *ret = 1;
+        is_matched = true;
       }
-      else if (first[strlen_a] == '\0') {
-	i = args.erase(i);
-	*ret = 1;
-	return true;
+      else if(str1_val == "=false" || str1_val == "=0") {
+        *ret = 0;
+        is_matched = true;
+      }
+      else if(str1_val[0] == '=') {
+        if (oss) {
+          string str1_val_without_equal_sign = str1_val.substr(1);
+          (*oss) << "Parse error parsing binary flag  " << str2
+                 << ". Expected true or false, but got '"
+                 << str1_val_without_equal_sign << "'\n";
+        }
+        *ret = -EINVAL;
+        is_matched = true;
+      }
+
+      if(is_matched) {
+        i = args.erase(i);
       }
     }
   }
+
+  return is_matched;
 }
 
 bool ceph_argparse_binary_flag(std::vector<const char*> &args,
@@ -278,40 +265,40 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 }
 
 static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
-	std::vector<const char*>::iterator &i, std::string *ret, va_list ap)
+                                     std::vector<const char*>::iterator &i,
+                                     std::string *ret,
+                                     va_list ap)
 {
-  const char *first = *i;
-  char tmp[strlen(first)+1];
-  dashes_to_underscores(first, tmp);
-  first = tmp;
+  string str1 = dashes_to_underscores(*i);
 
-  // does this argument match any of the possibilities?
-  while (1) {
-    const char *a = va_arg(ap, char*);
-    if (a == NULL)
-      return false;
-    int strlen_a = strlen(a);
-    char a2[strlen_a+1];
-    dashes_to_underscores(a, a2);
-    if (strncmp(a2, first, strlen(a2)) == 0) {
-      if (first[strlen_a] == '=') {
-	*ret = first + strlen_a + 1;
-	i = args.erase(i);
-	return true;
+  bool is_matched = false;
+  string str2;
+  while (!is_matched &&
+         ((str2 = dashes_to_underscores(va_arg(ap, char*))) != "")) {
+    if(str1.compare(0, str2.size(), str2) == 0) {
+      string str1_value = str1.substr(str2.size());
+
+      if(str1_value.empty()){
+        // find second part (or not)
+        if (i + 1 == args.end()) {
+          cerr << "Option " << *i << " requires an argument." << std::endl;
+          _exit(1);
+        }
+        i = args.erase(i);
+        *ret = *i;
+        i = args.erase(i);
+        is_matched = true;
       }
-      else if (first[strlen_a] == '\0') {
-	// find second part (or not)
-	if (i+1 == args.end()) {
-	  cerr << "Option " << *i << " requires an argument." << std::endl;
-	  _exit(1);
-	}
-	i = args.erase(i);
-	*ret = *i;
-	i = args.erase(i);
-	return true;
+      else if(str1_value[0] == '=') {
+        string str1_value_without_equal_sign = str1_value.substr(1);
+        *ret = str1_value_without_equal_sign;
+        i = args.erase(i);
+        is_matched =  true;
       }
     }
   }
+
+  return is_matched;
 }
 
 bool ceph_argparse_witharg(std::vector<const char*> &args,

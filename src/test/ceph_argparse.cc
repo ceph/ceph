@@ -16,7 +16,9 @@
 
 #include "gtest/gtest.h"
 #include <vector>
+#include <sstream>
 
+#include <errno.h>
 /* Holds a std::vector with C-strings.
  * Will free() them properly in the destructor.
  *
@@ -106,6 +108,80 @@ TEST(CephArgParse, SimpleArgParse) {
   ASSERT_EQ(found_foo, false);
   ASSERT_EQ(found_bar, "");
 }
+
+
+void binary_flag_helper(const char **args, const char *searched_arg, ostringstream& stream,
+                      bool *is_found, int *ret_val, string *following_val)
+{
+   VectorContainer vec_args(args);
+
+   *ret_val = -1;
+   *is_found = false;
+   *following_val = "";
+
+   std::vector<const char*>::iterator it = vec_args.arr.begin();
+   while(it != vec_args.arr.end()) {
+     if(ceph_argparse_binary_flag(vec_args.arr, it, ret_val, &stream, searched_arg, NULL)){
+       *is_found = true;
+       *following_val = (it != vec_args.arr.end() ? *it : "");
+       break;
+     }
+     ++it;
+   }
+}
+
+TEST(CephArgParse, BinaryFlag) {
+  bool is_found;
+  int ret_val;
+  string following_val;
+  std::ostringstream stream;
+
+  const char *TEST1[] = { "./myprog", "--foo", "5", "--", "test=true", "--bar", "6", NULL };
+  binary_flag_helper(TEST1, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(1, ret_val);
+  ASSERT_EQ("--bar", following_val);
+
+  const char *TEST2[] = { "./myprog", "--foo", "5", "--", "test=1", "--bar", "6", NULL };
+  binary_flag_helper(TEST2, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(1, ret_val);
+  ASSERT_EQ("--bar", following_val);
+
+  const char *TEST3[] = { "./myprog", "--foo", "5", "--", "test", NULL };
+  binary_flag_helper(TEST3, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(1, ret_val);
+  ASSERT_EQ("", following_val);
+
+  const char *TEST4[] = { "./myprog", "--foo", "5", "--", "test=false", "--bar", "6", NULL };
+  binary_flag_helper(TEST4, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(0, ret_val);
+  ASSERT_EQ("--bar", following_val);
+
+  const char *TEST5[] = { "./myprog", "--foo", "5", "--", "test=0", "--bar", "6", NULL };
+  binary_flag_helper(TEST5, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(0, ret_val);
+  ASSERT_EQ("--bar", following_val);
+
+  const char *TEST6[] = { "./myprog", "--foo", "5", "--", "test=d", "--bar", "6", NULL };
+  stream.clear();
+  binary_flag_helper(TEST6, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(true, is_found);
+  ASSERT_EQ(-EINVAL, ret_val);
+  ASSERT_EQ("--bar", following_val);
+  ASSERT_EQ("Parse error parsing binary flag  test. Expected true or false, but got 'd'\n",
+            stream.str());
+
+  const char *TEST7[] = { "./myprog", "--foo", "5", "--", "testt=0", "--bar", "6", NULL };
+  binary_flag_helper(TEST7, "test", stream, &is_found, &ret_val, &following_val);
+  ASSERT_EQ(false, is_found);
+  ASSERT_EQ(-1, ret_val);
+  ASSERT_EQ("", following_val);
+}
+
 
 TEST(CephArgParse, DoubleDash) {
   const char *ARGS[] = { "./myprog", "--foo", "5", "--", "--bar", "6", NULL };
