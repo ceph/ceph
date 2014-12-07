@@ -39,28 +39,6 @@ using namespace std;
 
 
 class AsyncMessenger;
-
-/**
- * If the Messenger binds to a specific address, the Processor runs
- * and listens for incoming connections.
- */
-class Processor : public Thread {
-  AsyncMessenger *msgr;
-  bool done;
-  int listen_sd;
-  uint64_t nonce;
-
- public:
-  Processor(AsyncMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
-
-  void *entry();
-  void stop();
-  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
-  int rebind(const set<int>& avoid_port);
-  int start();
-  void accept();
-};
-
 class WorkerPool;
 
 class Worker : public Thread {
@@ -77,6 +55,31 @@ class Worker : public Thread {
   }
   void *entry();
   void stop();
+};
+
+/**
+ * If the Messenger binds to a specific address, the Processor runs
+ * and listens for incoming connections.
+ */
+class Processor {
+  AsyncMessenger *msgr;
+  Worker *worker;
+  int listen_sd;
+  uint64_t nonce;
+  Mutex stop_lock;
+  Cond stop_cond;
+
+ public:
+  Processor(AsyncMessenger *r, uint64_t n)
+    : msgr(r), worker(NULL), listen_sd(-1), nonce(n),
+      stop_lock("AsyncMessenger::Processor::stop_lock") {}
+
+  void stop_cb();
+  void stop();
+  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
+  int rebind(const set<int>& avoid_port);
+  int start(Worker *w);
+  void accept();
 };
 
 class WorkerPool: CephContext::AssociatedSingletonObject {
