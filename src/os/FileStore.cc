@@ -4998,16 +4998,22 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
   int r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(20) << __func__ << " get_index got " << cpp_strerror(r) << dendl;
     return r;
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
+    if (r < 0) {
+      dout(20) << __func__ << " lfn_find got " << cpp_strerror(r) << dendl;
       return r;
+    }
   }
-  return object_map->set_keys(hoid, aset, &spos);
+  r = object_map->set_keys(hoid, aset, &spos);
+  dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
