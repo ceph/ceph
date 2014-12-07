@@ -67,11 +67,9 @@ void PipeConnection::reset_pipe(Pipe *p)
   pipe = p->get();
 }
 
-bool PipeConnection::is_connected() {
-  Mutex::Locker l(lock);
-  if (pipe)
-    return pipe->is_connected();
-  return false;
+bool PipeConnection::is_connected()
+{
+  return static_cast<SimpleMessenger*>(msgr)->is_connected(this);
 }
 
 int PipeConnection::send_message(Message *m)
