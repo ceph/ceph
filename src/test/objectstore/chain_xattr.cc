@@ -83,7 +83,7 @@ TEST(chain_xattr, get_and_set) {
     const string x(LARGE_BLOCK_LEN, 'X');
 
     {
-      char y[CHAIN_XATTR_MAX_NAME_LEN];
+      char y[CHAIN_XATTR_MAX_BLOCK_LEN];
       ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name.c_str(), x.c_str(), LARGE_BLOCK_LEN));
       ASSERT_EQ(CHAIN_XATTR_MAX_BLOCK_LEN, chain_setxattr(file, name.c_str(), x.c_str(), CHAIN_XATTR_MAX_BLOCK_LEN));
       ASSERT_EQ(CHAIN_XATTR_MAX_BLOCK_LEN, chain_getxattr(file, name.c_str(), 0, 0));
