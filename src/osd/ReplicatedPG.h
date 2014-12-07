@@ -217,11 +217,13 @@ public:
     vector<OSDOp> &ops;
     version_t user_version;
     int data_offset;
+    bool canceled;              ///< true if canceled
 
     ProxyReadOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
       : op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
-	user_version(0), data_offset(0) { }
+	user_version(0), data_offset(0),
+	canceled(false) { }
   };
   typedef boost::shared_ptr<ProxyReadOp> ProxyReadOpRef;
 
