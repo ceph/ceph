@@ -1,5 +1,5 @@
 workload:
-  sequential:
+  parallel:
     - rados:
        clients: [client.0]
        ops: 4000
@@ -16,4 +16,4 @@ workload:
          copy_from: 50
          setattr: 25
          rmattr: 25
-    - print: "**** done rados ec sequential"
+    - print: "**** done rados ec parallel"
