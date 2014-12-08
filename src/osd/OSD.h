@@ -2267,10 +2267,6 @@ protected:
       remove_queue.clear();
     }
   } remove_wq;
-  uint64_t next_removal_seq;
-  coll_t get_next_removal_coll(spg_t pgid) {
-    return coll_t::make_removal_coll(next_removal_seq++, pgid);
-  }
 
  private:
   bool ms_can_fast_dispatch_any() const { return true; }
