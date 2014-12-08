@@ -465,12 +465,15 @@ def list_locks(keyed_by_name=False, **kwargs):
 
 def update_lock(name, description=None, status=None, ssh_pub_key=None):
     name = misc.canonicalize_hostname(name, user=None)
-    status_info = get_status(name)
-    if status_info['is_vm']:
-        ssh_key = None
-        while not ssh_key:
-            time.sleep(10)
-            ssh_key = ssh_keyscan([name])
+    # Only do VM specific things (key lookup) if we are not
+    # Just updating the status (like marking down).
+    if not status:
+        status_info = get_status(name)
+        if status_info['is_vm']:
+            ssh_key = None
+            while not ssh_key:
+                time.sleep(10)
+                ssh_key = ssh_keyscan([name])
     updated = {}
     if description is not None:
         updated['description'] = description
