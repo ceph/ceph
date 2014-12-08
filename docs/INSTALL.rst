@@ -1,3 +1,5 @@
+.. _installation_and_setup:
+
 Installation and setup
 ======================
 
