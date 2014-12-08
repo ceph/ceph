@@ -26,7 +26,7 @@
 class MOSDSubOp : public Message {
 
   static const int HEAD_VERSION = 11;
-  static const int COMPAT_VERSION = 1;
+  static const int COMPAT_VERSION = 7;
 
 public:
   epoch_t map_epoch;
@@ -85,8 +85,6 @@ public:
   map<string,bufferlist> omap_entries;
   bufferlist omap_header;
 
-  // indicates that we must fix hobject_t encoding
-  bool hobject_incorrect_pool;
 
   hobject_t new_temp_oid;      ///< new temp object that we must now start tracking
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
@@ -101,7 +99,9 @@ public:
   }
 
   virtual void decode_payload() {
-    hobject_incorrect_pool = false;
+    //since we drop incorrect_pools flag, now we only support
+    //version >=7
+    assert (header.version >= 7);
     bufferlist::iterator p = payload.begin();
     ::decode(map_epoch, p);
     ::decode(reqid, p);
@@ -138,29 +138,15 @@ public:
     ::decode(data_subset, p);
     ::decode(clone_subsets, p);
     
-    if (header.version >= 2) {
-      ::decode(first, p);
-      ::decode(complete, p);
-    }
-    if (header.version >= 3)
-      ::decode(oloc, p);
-    if (header.version >= 4) {
-      ::decode(data_included, p);
-      recovery_info.decode(p, pgid.pool());
-      ::decode(recovery_progress, p);
-      ::decode(current_progress, p);
-    }
-    if (header.version >= 5)
-      ::decode(omap_entries, p);
-    if (header.version >= 6)
-      ::decode(omap_header, p);
-
-    if (header.version < 7) {
-      // Handle hobject_t format change
-      if (!poid.is_max() && poid.pool == -1)
-	poid.pool = pgid.pool();
-      hobject_incorrect_pool = true;
-    }
+    ::decode(first, p);
+    ::decode(complete, p);
+    ::decode(oloc, p);
+    ::decode(data_included, p);
+    recovery_info.decode(p, pgid.pool());
+    ::decode(recovery_progress, p);
+    ::decode(current_progress, p);
+    ::decode(omap_entries, p);
+    ::decode(omap_header, p);
 
     if (header.version >= 8) {
       ::decode(new_temp_oid, p);
@@ -251,8 +237,7 @@ public:
       acks_wanted(aw),
       old_exists(false), old_size(0),
       version(v),
-      first(false), complete(false),
-      hobject_incorrect_pool(false) {
+      first(false), complete(false) {
     memset(&peer_stat, 0, sizeof(peer_stat));
     set_tid(rtid);
   }
