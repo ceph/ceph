@@ -542,7 +542,7 @@ class KeyValueStore : public ObjectStore,
                     bool allow_eio = false, BufferTransaction *bt = 0);
   int _generic_write(StripObjectMap::StripObjectHeaderRef header,
                      uint64_t offset, size_t len, const bufferlist& bl,
-                     BufferTransaction &t, bool replica = false);
+                     BufferTransaction &t, uint32_t fadvise_flags = 0);
 
   bool exists(coll_t cid, const ghobject_t& oid);
   int stat(coll_t cid, const ghobject_t& oid, struct stat *st,
@@ -554,7 +554,7 @@ class KeyValueStore : public ObjectStore,
 
   int _touch(coll_t cid, const ghobject_t& oid, BufferTransaction &t);
   int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
-             const bufferlist& bl, BufferTransaction &t, bool replica = false);
+             const bufferlist& bl, BufferTransaction &t, uint32_t fadvise_flags = 0);
   int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
             BufferTransaction &t);
   int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size,

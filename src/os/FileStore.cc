@@ -2280,12 +2280,12 @@ unsigned FileStore::_do_transaction(
 	ghobject_t oid = i.decode_oid();
 	uint64_t off = i.decode_length();
 	uint64_t len = i.decode_length();
-	bool replica = i.get_replica();
+	uint32_t fadvise_flags = i.get_fadvise_flags();
 	bufferlist bl;
 	i.decode_bl(bl);
         tracepoint(objectstore, write_enter, osr_name, off, len);
 	if (_check_replay_guard(cid, oid, spos) > 0)
-	  r = _write(cid, oid, off, len, bl, replica);
+	  r = _write(cid, oid, off, len, bl, fadvise_flags);
         tracepoint(objectstore, write_exit, r);
       }
       break;
@@ -2971,7 +2971,7 @@ int FileStore::_touch(coll_t cid, const ghobject_t& oid)
 
 int FileStore::_write(coll_t cid, const ghobject_t& oid,
                      uint64_t offset, size_t len,
-                     const bufferlist& bl, bool replica)
+                     const bufferlist& bl, uint32_t fadvise_flags)
 {
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
@@ -3015,7 +3015,8 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   // flush?
   if (!replaying &&
       g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len, replica);
+    wbthrottle.queue_wb(fd, oid, offset, len,
+			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   lfn_close(fd);
 
  out:
