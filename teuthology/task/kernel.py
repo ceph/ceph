@@ -4,6 +4,7 @@ Kernel installation task
 from cStringIO import StringIO
 
 import logging
+import os
 import re
 import shlex
 import urllib2
@@ -853,6 +854,22 @@ def get_version_from_pkg(remote, ostype):
     err_mess.close()
     return newest
 
+def get_sha1_from_pkg_name(path):
+    """
+    Get commit hash (min 7 max 40 chars) from (rpm or deb) package name.
+    Sample basenames of "make deb-pkg" and "make rpm-pkg" packages
+        linux-image-3.10.0-ceph-rhdeb-00050-g687d1a5f0083_3.10.0-ceph-rhdeb-00050-g687d1a5f0083-6_amd64.deb
+        kernel-3.10.0_ceph_rhrpm_00050_g687d1a5f0083-8.x86_64.rpm
+    Make sure kernel was built with CONFIG_LOCALVERSION_AUTO=y.
+
+    :param path: (rpm or deb) package path (only basename is used)
+    """
+    basename = os.path.basename(path)
+    match = re.search('\d+[-_]g([0-9a-f]{7,40})', basename)
+    sha1 = match.group(1) if match else None
+    log.debug("get_sha1_from_pkg_name: %s -> %s -> %s", path, basename, sha1)
+    return sha1
+
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
@@ -921,16 +938,11 @@ def task(ctx, config):
     for role, role_config in config.iteritems():
         if role_config.get('deb'):
             path = role_config.get('deb')
-            match = re.search('\d+-g(\w{7})', path)
-            if match:
-                sha1 = match.group(1)
-                log.info('kernel deb sha1 appears to be %s', sha1)
-                if need_to_install(ctx, role, sha1):
-                    need_install[role] = path
-                    need_version[role] = sha1
-            else:
-                log.info('unable to extract sha1 from deb path, forcing install')
-                assert False
+            sha1 = get_sha1_from_pkg_name(path)
+            assert sha1, "failed to extract commit hash from path %s" % path
+            if need_to_install(ctx, role, sha1):
+                need_install[role] = path
+                need_version[role] = sha1
         elif role_config.get('sha1') == 'distro':
             if need_to_install_distro(ctx, role):
                 need_install[role] = 'distro'
