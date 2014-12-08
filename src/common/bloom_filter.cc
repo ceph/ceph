@@ -34,7 +34,7 @@ void bloom_filter::decode(bufferlist::iterator& p)
   salt_.clear();
   generate_unique_salt();
   table_size_ = t.length();
-  delete bit_table_;
+  delete[] bit_table_;
   if (table_size_) {
     bit_table_ = new cell_type[table_size_];
     t.copy(0, table_size_, (char *)bit_table_);
