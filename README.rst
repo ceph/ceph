@@ -43,7 +43,7 @@ Provided Utilities
 
 Installation
 ============
-See the separate installation documentation.
+See, :ref:`installation_and_setup`.
 
 
 Infrastructure
