@@ -325,7 +325,7 @@ public:
     uint32_t fadvise_flags
     ) {
     written += len;
-    t->write(get_coll_ct(hoid), hoid, off, len, bl);
+    t->write(get_coll_ct(hoid), hoid, off, len, bl, fadvise_flags);
   }
   void remove(
     const hobject_t &hoid
