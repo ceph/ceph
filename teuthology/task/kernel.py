@@ -248,12 +248,13 @@ def download_kernel(ctx, config):
     :param config: Configuration
     """
     procs = {}
-    #Don't need to download distro kernels
     for role, src in config.iteritems():
+        if src == 'distro':
+            # don't need to download distro kernels
+            log.debug("src is distro, skipping download");
+            continue
+
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-	if src.find('distro') >= 0:
-            log.info('Installing newest kernel distro');
-            return
         package_type = teuthology.get_system_type(role_remote)
         if src.find('/') >= 0:
             # local deb
