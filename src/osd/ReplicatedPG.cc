@@ -8042,17 +8042,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
-  if (m->hobject_incorrect_pool) {
-    for (vector<pg_log_entry_t>::iterator i = log.begin();
-      i != log.end();
-      ++i) {
-      if (!i->soid.is_max() && i->soid.pool == -1)
-	i->soid.pool = get_info().pgid.pool();
-    }
-    rm->opt.set_pool_override(get_info().pgid.pool());
-  }
-  
-  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+
   bool update_snaps = false;
   if (!rm->opt.empty()) {
     // If the opt is non-empty, we infer we are before
