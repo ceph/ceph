@@ -13,6 +13,7 @@ import urlparse
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..config import config as teuth_config
+from ..exceptions import UnsupportedPackageTypeError
 
 log = logging.getLogger(__name__)
 
@@ -222,6 +223,23 @@ def install_firmware(ctx, config):
                 ],
             )
 
+def gitbuilder_pkg_name(remote):
+    if remote.os.package_type == 'rpm':
+        pkg_name = 'kernel.x86_64.rpm'
+    elif remote.os.package_type == 'deb':
+        pkg_name = 'linux-image.deb'
+    else:
+        raise UnsupportedPackageTypeError(remote)
+    return pkg_name
+
+def remote_pkg_path(remote):
+    """
+    This is where kernel packages are copied over (in case of local
+    packages) or downloaded to (in case of gitbuilder packages) and
+    then installed from.
+    """
+    return os.path.join('/tmp', gitbuilder_pkg_name(remote))
+
 def download_kernel(ctx, config):
     """
     Download a Debian kernel and copy the assocated linux image.
@@ -246,7 +264,7 @@ def download_kernel(ctx, config):
                 args=[
                     'python', '-c',
                     'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                    '/tmp/linux-image.deb',
+                    remote_pkg_path(role_remote),
                     ],
                 wait=False,
                 stdin=f
@@ -296,15 +314,15 @@ def download_kernel(ctx, config):
             log.info('fetching kernel from {url}'.format(url=deb_url))
             proc = role_remote.run(
                 args=[
-                    'sudo', 'rm', '-f', '/tmp/linux-image.deb',
+                    'rm', '-f', remote_pkg_path(role_remote),
                     run.Raw('&&'),
                     'echo',
-                    'linux-image.deb',
+                    gitbuilder_pkg_name(role_remote),
                     run.Raw('|'),
                     'wget',
                     '-nv',
                     '-O',
-                    '/tmp/linux-image.deb',
+                    remote_pkg_path(role_remote),
                     '--base={url}'.format(url=deb_url),
                     '--input-file=-',
                     ],
@@ -368,7 +386,7 @@ def install_and_reboot(ctx, config):
                 'sudo',
                 'dpkg',
                 '-i',
-                '/tmp/linux-image.deb',
+                remote_pkg_path(role_remote),
                 ],
             )
 
@@ -379,7 +397,7 @@ def install_and_reboot(ctx, config):
                 # extract the actual boot image name from the deb
                 'dpkg-deb',
                 '--fsys-tarfile',
-                '/tmp/linux-image.deb',
+                remote_pkg_path(role_remote),
                 run.Raw('|'),
                 'tar',
                 '-t',
@@ -479,7 +497,7 @@ def install_and_reboot(ctx, config):
                 'update-grub',
                 run.Raw('&&'),
                 'rm',
-                '/tmp/linux-image.deb',
+                remote_pkg_path(role_remote),
                 run.Raw('&&'),
                 'sudo',
                 'shutdown',
