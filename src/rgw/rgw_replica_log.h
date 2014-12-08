@@ -103,10 +103,7 @@ public:
   RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id,
                    const string& marker, const utime_t& time,
-                   const list<RGWReplicaItemMarker> *entries) {
-    return RGWReplicaLogger::update_bound(obj_name(bucket, shard_id), pool,
-                                          daemon_id, marker, time, entries);
-  }
+                   const list<RGWReplicaItemMarker> *entries);
   int delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id) {
     return RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id), pool,
                                           daemon_id);
