@@ -151,7 +151,8 @@ def validate_tasks(config):
     """
     Ensures that config tasks do not include 'kernel'.
 
-    If there is not tasks, return an empty list.
+    Returns the original tasks key if found.  If not, returns an
+    empty list.
     """
     if 'tasks' not in config:
         log.warning('No tasks specified. Continuing anyway...')
