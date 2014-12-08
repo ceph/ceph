@@ -189,6 +189,12 @@ LIBMON += $(LIBPERFGLUE)
 LIBOSD += $(LIBPERFGLUE)
 LIBMDS += $(LIBPERFGLUE)
 
+if WITH_JEMALLOC
+LIBMON += -ljemalloc
+LIBOSD += -ljemalloc
+LIBMDS += -ljemalloc
+endif # WITH_JEMALLOC
+
 # Always use system leveldb
 LIBOS += -lleveldb -lsnappy
 
