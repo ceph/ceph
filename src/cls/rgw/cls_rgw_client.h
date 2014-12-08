@@ -142,6 +142,10 @@ public:
     return (iter == value_by_shards.end() ? default_value : iter->second);
   }
 
+  map<int, string>& get() {
+    return value_by_shards;
+  }
+
   bool empty() {
     return value_by_shards.empty();
   }
@@ -166,6 +170,10 @@ public:
         }
       }
     }
+  }
+
+  static bool is_shards_marker(const string& marker) {
+    return marker.find(KEY_VALUE_SEPARATOR) != string::npos;
   }
 
   int from_string(const string& composed_marker, bool has_shards) {
