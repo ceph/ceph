@@ -866,7 +866,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       unsigned howmuch = p->length() - p_off;
       if (len < howmuch)
 	howmuch = len;
-      dest.append(*p, p_off, howmuch);
+      dest.append(p->c_str() + p_off, howmuch);
       
       len -= howmuch;
       advance(howmuch);
