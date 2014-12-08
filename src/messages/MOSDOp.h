@@ -361,8 +361,11 @@ struct ceph_osd_request_head {
 
     if (oloc.key.size())
       out << " " << oloc;
-
-    out << " " << ops;
+    //The content of ops may be changed by other thread, 
+    //and trigger bugs when traverse the ops
+    //So clone a copy to print
+    vector<OSDOp> cops(ops);
+    out << " " << cops;
     out << " " << pgid;
     if (is_retry_attempt())
       out << " RETRY=" << get_retry_attempt();
