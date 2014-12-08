@@ -385,12 +385,8 @@ public:
 
   private:
     uint64_t ops;
-    uint64_t pad_unused_bytes;
     uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
     bufferlist tbl;
-    bool sobject_encoding;
-    int64_t pool_override;
-    bool use_pool_override;
     uint32_t fadvise_flags; //record write flags
     void *osr; // NULL on replay
 
@@ -450,11 +446,6 @@ public:
       return C_Contexts::list_to_context(on_applied_sync);
     }
 
-    /// For legacy transactions, provide the pool to override the encoded pool with
-    void set_pool_override(int64_t pool) {
-      pool_override = pool;
-    }
-
     void set_fadvise_flags(uint32_t flags) {
       fadvise_flags = flags;
     }
@@ -480,8 +471,6 @@ public:
     /// Append the operations of the parameter to this Transaction. Those operations are removed from the parameter Transaction
     void append(Transaction& other) {
       ops += other.ops;
-      assert(pad_unused_bytes == 0);
-      assert(other.pad_unused_bytes == 0);
       if (other.largest_data_len > largest_data_len) {
 	largest_data_len = other.largest_data_len;
 	largest_data_off = other.largest_data_off;
@@ -516,7 +505,7 @@ public:
 	  sizeof(__u8) +  // encode compat_v
 	  sizeof(__u32) + // encode len
 	  sizeof(ops) +
-	  sizeof(pad_unused_bytes) +
+	  sizeof(uint64_t) +  //encode old pad_unused_bytes
 	  sizeof(largest_data_len) +
 	  sizeof(largest_data_off) +
 	  sizeof(largest_data_off_in_tbl) +
@@ -559,16 +548,10 @@ public:
      */
     class iterator {
       bufferlist::iterator p;
-      bool sobject_encoding;
-      int64_t pool_override;
-      bool use_pool_override;
       uint32_t fadvise_flags;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
-	  sobject_encoding(t->sobject_encoding),
-	  pool_override(t->pool_override),
-	  use_pool_override(t->use_pool_override),
 	  fadvise_flags(t->fadvise_flags) {}
 
       friend class Transaction;
@@ -594,20 +577,7 @@ public:
       /// Get an oid, recognize various legacy forms and update them.
       ghobject_t decode_oid() {
 	ghobject_t oid;
-	if (sobject_encoding) {
-	  sobject_t soid;
-	  ::decode(soid, p);
-	  oid.hobj.snap = soid.snap;
-	  oid.hobj.oid = soid.oid;
-	  oid.generation = ghobject_t::NO_GEN;
-	  oid.shard_id = shard_id_t::NO_SHARD;
-	} else {
-	  ::decode(oid, p);
-	  if (use_pool_override && pool_override != -1 &&
-	      !oid.hobj.is_max() && oid.hobj.pool == -1) {
-	    oid.hobj.pool = pool_override;
-	  }
-	}
+	::decode(oid, p);
 	return oid;
       }
       coll_t decode_cid() {
@@ -1040,22 +1010,28 @@ public:
 
     // etc.
     Transaction() :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      ops(0),
+      largest_data_len(0),
+      largest_data_off(0),
+      largest_data_off_in_tbl(0),
       fadvise_flags(0),
       osr(NULL) {}
 
     Transaction(bufferlist::iterator &dp) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      ops(0),
+      largest_data_len(0),
+      largest_data_off(0),
+      largest_data_off_in_tbl(0),
       fadvise_flags(0),
       osr(NULL) {
       decode(dp);
     }
 
     Transaction(bufferlist &nbl) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
+      ops(0),
+      largest_data_len(0),
+      largest_data_off(0),
+      largest_data_off_in_tbl(0),
       fadvise_flags(0),
       osr(NULL) {
       bufferlist::iterator dp = nbl.begin();
@@ -1064,26 +1040,23 @@ public:
 
     void encode(bufferlist& bl) const {
       ENCODE_START(8, 5, bl);
+      uint64_t pad_unused_bytes = 0;
+      bool tolerate_collection_add_enoent = false;
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
       ::encode(largest_data_off, bl);
       ::encode(largest_data_off_in_tbl, bl);
       ::encode(tbl, bl);
-      {
-	bool tolerate_collection_add_enoent = 0;
-	::encode(tolerate_collection_add_enoent, bl);
-      }
+      ::encode(tolerate_collection_add_enoent, bl);
       ::encode(fadvise_flags, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
       DECODE_OLDEST(2);
-      if (struct_v < 4)
-	sobject_encoding = true;
-      else
-	sobject_encoding = false;
+      uint64_t pad_unused_bytes;                //no used
+      bool tolerate_collection_add_enoent;      //no used
       ::decode(ops, bl);
       ::decode(pad_unused_bytes, bl);
       if (struct_v >= 3) {
@@ -1092,11 +1065,7 @@ public:
 	::decode(largest_data_off_in_tbl, bl);
       }
       ::decode(tbl, bl);
-      if (struct_v < 6) {
-	use_pool_override = true;
-      }
       if (struct_v >= 7) {
-	bool tolerate_collection_add_enoent;
 	::decode(tolerate_collection_add_enoent, bl);
       }
       if (struct_v >= 8) {
