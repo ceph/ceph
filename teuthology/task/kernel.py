@@ -391,29 +391,8 @@ def install_and_reboot(ctx, config):
             )
 
         # collect kernel image name from the .deb
-        cmdout = StringIO()
-        proc = role_remote.run(
-            args=[
-                # extract the actual boot image name from the deb
-                'dpkg-deb',
-                '--fsys-tarfile',
-                remote_pkg_path(role_remote),
-                run.Raw('|'),
-                'tar',
-                '-t',
-                '-v',
-                '-f', '-',
-                '--wildcards',
-                '--',
-                './boot/vmlinuz-*',
-                run.Raw('|'),
-                'sed',
-                r'-e s;.*\./boot/vmlinuz-;;',
-            ],
-            stdout = cmdout,
-            )
-        kernel_title = cmdout.getvalue().rstrip()
-        cmdout.close()
+        kernel_title = get_image_version(role_remote,
+                                         remote_pkg_path(role_remote))
         log.info('searching for kernel {}'.format(kernel_title))
 
         if kernel_title.endswith("-highbank"):
@@ -831,6 +810,40 @@ def generate_legacy_grub_entry(remote, newversion):
             newgrubconf.append(line)
         linenum += 1
     return newgrubconf
+
+def get_image_version(remote, path):
+    """
+    Get kernel image version from (rpm or deb) package.
+
+    :param path: (rpm or deb) package path
+    """
+    if remote.os.package_type == 'rpm':
+        proc = remote.run(
+            args=[
+                'rpm',
+                '-qlp',
+                path
+            ],
+            stdout=StringIO())
+    elif remote.os.package_type == 'deb':
+        proc = remote.run(
+            args=[
+                'dpkg-deb',
+                '-c',
+                path
+            ],
+            stdout=StringIO())
+    else:
+        raise UnsupportedPackageTypeError(remote)
+
+    files = proc.stdout.getvalue()
+    for file in files.split('\n'):
+        if '/boot/vmlinuz-' in file:
+            version = file.split('/boot/vmlinuz-')[1]
+            break
+
+    log.debug("get_image_version: %s", version)
+    return version
 
 def get_version_from_pkg(remote, ostype):
     """
