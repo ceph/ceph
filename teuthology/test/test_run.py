@@ -152,9 +152,7 @@ class TestRun(object):
             "--verbose",
             "--archive", "some/archive/dir",
             "--description", "the_description",
-            "--owner", "the_owner",
             "--lock",
-            "--machine-type", "machine_type",
             "--os-type", "os_type",
             "--os-version", "os_version",
             "--block",
@@ -178,7 +176,7 @@ class TestRun(object):
             "the_owner"
         )
         m_try_push_job_info.assert_called_with(config, dict(status='running'))
-        m_get_machine_type.assert_called_with("machine_type", config)
+        m_get_machine_type.assert_called_with(None, config)
         m_get_summary.assert_called_with("the_owner", "the_description")
         m_get_initial_tasks.assert_called_with(True, config, "machine_type")
         m_fetch_tasks_if_needed.assert_called_with(config)
@@ -193,3 +191,6 @@ class TestRun(object):
         assert isinstance(fake_ctx["config"], dict)
         assert isinstance(fake_ctx["summary"], dict)
         assert "tasks" in fake_ctx["config"]
+        # ensures that values missing in args are added with the correct value
+        assert fake_ctx["owner"] == "the_owner"
+        assert fake_ctx["machine_type"] == "machine_type"
