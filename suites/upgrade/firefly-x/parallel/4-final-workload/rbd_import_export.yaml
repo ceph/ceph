@@ -5,3 +5,4 @@ tasks:
           - rbd/import_export.sh
       env:
         RBD_CREATE_ARGS: --new-format
+  - print: "**** done rbd/import_export.sh 4-final-workload"
