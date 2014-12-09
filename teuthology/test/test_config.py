@@ -138,6 +138,10 @@ class TestFakeNamespace(TestYamlConfig):
         result = getattr(conf_obj, "foo")
         assert result == "bar"
 
+    def test_none(self):
+        conf_obj = self.test_class.from_dict(dict(null=None))
+        assert conf_obj.null is None
+
     def test_delattr(self):
         conf_obj = self.test_class()
         conf_obj.foo = 'bar'

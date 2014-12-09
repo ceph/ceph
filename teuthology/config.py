@@ -168,8 +168,9 @@ class FakeNamespace(YamlConfig):
 
     def _clean_config(self, config_dict):
         """
-        Makes sure that the keys of config_dict are able to be used.  For example
-        the "--" prefix of a docopt dict isn't valid and won't populate correctly.
+        Makes sure that the keys of config_dict are able to be used.  For
+        example the "--" prefix of a docopt dict isn't valid and won't populate
+        correctly.
         """
         result = dict()
         for key, value in config_dict.iteritems():
@@ -191,10 +192,11 @@ class FakeNamespace(YamlConfig):
         We need to modify this for FakeNamespace so that getattr() will
         work correctly on a FakeNamespace instance.
         """
-        result = self._conf.get(name, self._defaults.get(name))
-        if result is None:
-            raise AttributeError
-        return self._conf.get(name, self._defaults.get(name))
+        if name in self._conf:
+            return self._conf[name]
+        elif name in self._defaults:
+            return self._defaults[name]
+        raise AttributeError(name)
 
 
 def _get_config_path():
