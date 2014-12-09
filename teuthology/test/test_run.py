@@ -162,6 +162,11 @@ class TestRun(object):
             "--suite-path", "some/suite/dir",
             "path/to/config.yml",
         ])
+        m_get_user.return_value = "the_owner"
+        m_get_summary.return_value = dict(success=True, owner="the_owner", description="the_description")
+        m_validate_tasks.return_value = ['task3']
+        m_get_initial_tasks.return_value = ['task1', 'task2']
+        m_fetch_tasks_if_needed.return_value = "some/suite/dir"
         run.main(args)
         m_set_up_logging.assert_called_with(True, "some/archive/dir")
         m_setup_config.assert_called_with(["path/to/config.yml"])
@@ -177,5 +182,14 @@ class TestRun(object):
         m_get_summary.assert_called_with("the_owner", "the_description")
         m_get_initial_tasks.assert_called_with(True, config, "machine_type")
         m_fetch_tasks_if_needed.assert_called_with(config)
-        assert m_run_tasks.called
         assert m_report_outcome.called
+        args, kwargs = m_run_tasks.call_args
+        fake_ctx = kwargs["ctx"]._conf
+        # fields that must be in ctx for the tasks to behave
+        expected_ctx = ["verbose", "archive", "description", "owner", "lock", "machine_type", "os_type", "os_version",
+                        "block", "name", "suite_path", "config", "summary"]
+        for key in expected_ctx:
+            assert key in fake_ctx
+        assert isinstance(fake_ctx["config"], dict)
+        assert isinstance(fake_ctx["summary"], dict)
+        assert "tasks" in fake_ctx["config"]
