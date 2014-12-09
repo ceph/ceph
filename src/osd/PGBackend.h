@@ -599,7 +599,6 @@
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
      map<hobject_t, pg_shard_t> &authoritative,
-     map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
      const vector<int> &acting,
