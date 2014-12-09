@@ -258,7 +258,7 @@ def main(args):
     set_up_logging(verbose, archive)
 
     if owner is None:
-        owner = get_user()
+        args["--owner"] = owner = get_user()
 
     config = setup_config(config)
 
@@ -272,7 +272,9 @@ def main(args):
         assert lock, \
             'the --block option is only supported with the --lock option'
 
-    log.debug('\n  '.join(['Config:', ] + yaml.safe_dump(config, default_flow_style=False).splitlines()))
+    log.debug(
+        '\n  '.join(['Config:', ] + yaml.safe_dump(
+            config, default_flow_style=False).splitlines()))
 
     args["summary"] = get_summary(owner, description)
 
@@ -289,9 +291,9 @@ def main(args):
     # fetches the tasks and returns a new suite_path if needed
     config["suite_path"] = fetch_tasks_if_needed(config)
 
-    # create a FakeNamespace instance that mimics the old argparse way of doing things
-    # we do this so we can pass it to run_tasks without porting those tasks to the
-    # new way of doing things right now
+    # create a FakeNamespace instance that mimics the old argparse way of doing
+    # things we do this so we can pass it to run_tasks without porting those
+    # tasks to the new way of doing things right now
     args["<config>"] = config
     fake_ctx = FakeNamespace(args)
 
