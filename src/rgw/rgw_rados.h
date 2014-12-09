@@ -1573,6 +1573,34 @@ public:
   virtual bool aio_completed(void *handle);
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
+  int fetch_remote_obj(RGWObjectCtx& obj_ctx,
+                       const string& user_id,
+                       const string& client_id,
+                       const string& op_id,
+                       req_info *info,
+                       const string& source_zone,
+                       rgw_obj& dest_obj,
+                       rgw_obj& src_obj,
+                       RGWBucketInfo& dest_bucket_info,
+                       RGWBucketInfo& src_bucket_info,
+                       time_t *mtime,
+                       const time_t *mod_ptr,
+                       const time_t *unmod_ptr,
+                       const char *if_match,
+                       const char *if_nomatch,
+                       bool replace_attrs,
+                       map<string, bufferlist>& attrs,
+                       RGWObjCategory category,
+                       string *ptag,
+                       struct rgw_err *err,
+                       void (*progress_cb)(off_t, void *),
+                       void *progress_data);
+  int copy_obj_to_remote_dest(RGWObjState *astate,
+                              map<string, bufferlist>& src_attrs,
+                              RGWRados::Object::Read& read_op,
+                              const string& user_id,
+                              rgw_obj& dest_obj,
+                              time_t *mtime);
   /**
    * Copy an object.
    * dest_obj: the object to copy into
