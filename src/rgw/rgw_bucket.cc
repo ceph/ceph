@@ -1728,7 +1728,7 @@ public:
 
     objv_tracker = bci.info.objv_tracker;
 
-    ret = store->init_bucket_index(bci.info.bucket);
+    ret = store->init_bucket_index(bci.info.bucket, bci.info.num_shards);
     if (ret < 0)
       return ret;
 

@@ -2375,7 +2375,7 @@ int RGWRados::create_pool(rgw_bucket& bucket)
   return 0;
 }
 
-int RGWRados::init_bucket_index(rgw_bucket& bucket)
+int RGWRados::init_bucket_index(rgw_bucket& bucket, int num_shards)
 {
   librados::IoCtx index_ctx; // context for new bucket
 
@@ -2387,7 +2387,7 @@ int RGWRados::init_bucket_index(rgw_bucket& bucket)
   dir_oid.append(bucket.marker);
 
   map<int, string> bucket_objs;
-  get_bucket_index_objects(dir_oid, bucket_index_max_shards, bucket_objs);
+  get_bucket_index_objects(dir_oid, num_shards, bucket_objs);
 
   return CLSRGWIssueBucketIndexInit(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
@@ -2440,7 +2440,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     string dir_oid =  dir_oid_prefix;
     dir_oid.append(bucket.marker);
 
-    r = init_bucket_index(bucket);
+    r = init_bucket_index(bucket, bucket_index_max_shards);
     if (r < 0)
       return r;
 

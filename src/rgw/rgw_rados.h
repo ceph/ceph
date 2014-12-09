@@ -1489,7 +1489,7 @@ public:
    * create a bucket with name bucket and the given list of attrs
    * returns 0 on success, -ERR# otherwise.
    */
-  virtual int init_bucket_index(rgw_bucket& bucket);
+  virtual int init_bucket_index(rgw_bucket& bucket, int num_shards);
   int select_bucket_placement(RGWUserInfo& user_info, const string& region_name, const std::string& rule,
                               const std::string& bucket_name, rgw_bucket& bucket, string *pselected_rule);
   int select_legacy_bucket_placement(const string& bucket_name, rgw_bucket& bucket);
