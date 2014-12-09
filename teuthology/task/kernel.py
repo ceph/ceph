@@ -242,7 +242,10 @@ def remote_pkg_path(remote):
 
 def download_kernel(ctx, config):
     """
-    Download a Debian kernel and copy the assocated linux image.
+    Supply each remote with a kernel package:
+      - local kernels are copied over
+      - gitbuilder kernels are downloaded
+      - nothing is done for distro kernels
 
     :param ctx: Context
     :param config: Configuration
@@ -255,7 +258,6 @@ def download_kernel(ctx, config):
             continue
 
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        package_type = teuthology.get_system_type(role_remote)
         if src.find('/') >= 0:
             # local deb
             log.info('Copying kernel deb {path} to {role}...'.format(path=src,
@@ -274,45 +276,30 @@ def download_kernel(ctx, config):
         else:
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
+            package_type = role_remote.os.package_type
             if package_type == 'rpm':
-                kernelstring, kernel_url = get_version_from_rpm(role_remote, src)
-                unamestring = kernelstring.split('-')[1]
-                output, err_mess = StringIO(), StringIO()
-                role_remote.run(args=['sudo', 'yum', 'list', 'installed', 'kernel'], stdout=output, stderr=err_mess )
-                # Check if short (first 8 digits) sha1 is in uname output as expected
-                short_sha1 = src[0:7]
-                if short_sha1 in output.getvalue() or unamestring in output.getvalue():
-                    output.close()
-                    err_mess.close()
-                    continue
-                output.close()
-                err_mess.close()
-                proc = role_remote.run(
-                    args=[
-                        'sudo',
-                        'rpm',
-                        '-ivh',
-                        '--oldpackage',
-                        '--replacefiles',
-                        '--replacepkgs', 
-                        kernel_url
-                        ],
-                    wait=False
-                    )
-                procs[role_remote.name] = proc
-                continue
+                system_type, system_ver = teuthology.get_system_type(
+                    role_remote, distro=True, version=True)
+                if '.' in system_ver:
+                   system_ver = system_ver.split('.')[0]
+                ldist = '{system_type}{system_ver}'.format(
+                    system_type=system_type, system_ver=system_ver)
+                larch = 'x86_64'
+            elif package_type == 'deb':
+                ldist, larch = role_remote.os.codename, role_remote.arch
+            else:
+                raise UnsupportedPackageTypeError(role_remote)
 
-            larch, ldist = role_remote.arch, role_remote.os.codename
-            _, deb_url = teuthology.get_ceph_binary_url(
+            _, baseurl = teuthology.get_ceph_binary_url(
                 package='kernel',
                 sha1=src,
-                format='deb',
+                format=package_type,
                 flavor='basic',
                 arch=larch,
                 dist=ldist,
                 )
 
-            log.info('fetching kernel from {url}'.format(url=deb_url))
+            log.info("fetching, gitbuilder baseurl is %s", baseurl)
             proc = role_remote.run(
                 args=[
                     'rm', '-f', remote_pkg_path(role_remote),
@@ -324,7 +311,7 @@ def download_kernel(ctx, config):
                     '-nv',
                     '-O',
                     remote_pkg_path(role_remote),
-                    '--base={url}'.format(url=deb_url),
+                    '--base={url}'.format(url=baseurl),
                     '--input-file=-',
                     ],
                 wait=False)
@@ -375,12 +362,24 @@ def install_and_reboot(ctx, config):
             log.info('Installing distro kernel on {role}...'.format(role=role))
             install_kernel(role_remote)
             continue
+
         log.info('Installing kernel {src} on {role}...'.format(src=src,
                                                                role=role))
         system_type = teuthology.get_system_type(role_remote)
         if system_type == 'rpm':
+            proc = role_remote.run(
+                args=[
+                    'sudo',
+                    'rpm',
+                    '-ivh',
+                    '--oldpackage',
+                    '--replacefiles',
+                    '--replacepkgs',
+                    remote_pkg_path(role_remote),
+                ])
             install_kernel(role_remote, src)
             continue
+
         proc = role_remote.run(
             args=[
                 # install the kernel deb
