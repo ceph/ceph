@@ -2305,6 +2305,7 @@ int RGWCopyObj::init_common()
     const string& val = iter->second;
     attrbl.append(val.c_str(), val.size() + 1);
   }
+
   return 0;
 }
 
