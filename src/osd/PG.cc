@@ -4187,14 +4187,13 @@ void PG::scrub_compare_maps()
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
-      scrubber.inconsistent_snapcolls,
       scrubber.shallow_errors,
       scrubber.deep_errors,
       info.pgid, acting,
       ss);
     dout(2) << ss.str() << dendl;
 
-    if (!authoritative.empty() || !scrubber.inconsistent_snapcolls.empty()) {
+    if (!authoritative.empty()) {
       osd->clog->error(ss);
     }
 
@@ -4228,19 +4227,6 @@ void PG::scrub_process_inconsistent()
 
   if (!scrubber.authoritative.empty() || !scrubber.inconsistent.empty()) {
     stringstream ss;
-    for (map<hobject_t, set<pg_shard_t> >::iterator obj =
-	   scrubber.inconsistent_snapcolls.begin();
-	 obj != scrubber.inconsistent_snapcolls.end();
-	 ++obj) {
-      for (set<pg_shard_t>::iterator j = obj->second.begin();
-	   j != obj->second.end();
-	   ++j) {
-	++scrubber.shallow_errors;
-	ss << info.pgid << " " << mode << " " << " object " << obj->first
-	   << " has inconsistent snapcolls on " << *j << std::endl;
-      }
-    }
-
     ss << info.pgid << " " << mode << " "
        << scrubber.missing.size() << " missing, "
        << scrubber.inconsistent.size() << " inconsistent objects";
