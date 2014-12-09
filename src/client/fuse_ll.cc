@@ -464,8 +464,10 @@ static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 static void fuse_ll_flush(fuse_req_t req, fuse_ino_t ino,
 			  struct fuse_file_info *fi)
 {
-  // NOOP
-  fuse_reply_err(req, 0);
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)fuse_req_userdata(req);
+  Fh *fh = reinterpret_cast<Fh*>(fi->fh);
+  int r = cfuse->client->ll_flush(fh);
+  fuse_reply_err(req, -r);
 }
 
 #ifdef FUSE_IOCTL_COMPAT

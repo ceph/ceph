@@ -235,7 +235,8 @@ struct Inode {
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dir(0), dn_set(),
-      fcntl_locks(NULL), flock_locks(NULL)
+      fcntl_locks(NULL), flock_locks(NULL),
+      async_err(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
@@ -275,6 +276,9 @@ struct Inode {
 
   bool have_valid_size();
   Dir *open_dir();
+
+  // Record errors to be exposed in fclose/fflush
+  int async_err;
 
   void dump(Formatter *f) const;
 };

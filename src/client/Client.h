@@ -402,7 +402,7 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
-  friend class C_Client_PutInode; // calls put_inode()
+  friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
@@ -546,7 +546,7 @@ protected:
    * 
    * @returns true if the data was already flushed, false otherwise.
    */
-  bool _flush(Inode *in, Context *c=NULL);
+  bool _flush(Inode *in, Context *c);
   void _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
