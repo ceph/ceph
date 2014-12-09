@@ -156,13 +156,11 @@ Client::Client(Messenger *m, MonClient *mc)
     logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
+    callback_handle(NULL),
     switch_interrupt_cb(NULL),
     ino_invalidate_cb(NULL),
-    ino_invalidate_cb_handle(NULL),
     dentry_invalidate_cb(NULL),
-    dentry_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
-    getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
@@ -2968,7 +2966,7 @@ public:
 void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps)
 {
   ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
-  ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
+  ino_invalidate_cb(callback_handle, in->vino(), off, len);
 
   client_lock.Lock();
   if (!keep_caps)
@@ -3965,7 +3963,7 @@ void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string&
 {
   ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
 		 << " in dir " << dirino << dendl;
-  dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
+  dentry_invalidate_cb(callback_handle, dirino, ino, name);
 }
 
 void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
@@ -4103,7 +4101,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(getgroups_cb_handle, uid, &sgids);
+    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
     if (sgid_count < 0) {
       ldout(cct, 3) << "getgroups failed!" << dendl;
       return sgid_count;
@@ -7593,43 +7591,31 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf)
   return statfs(0, stbuf);
 }
 
-void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle)
+void Client::ll_register_callbacks(struct client_callback_args *args)
 {
-  Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_ino_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
-  if (cb == NULL)
+  if (!args)
     return;
-  ino_invalidate_cb = cb;
-  ino_invalidate_cb_handle = handle;
-  async_ino_invalidator.start();
-}
-
-void Client::ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle)
-{
   Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_dentry_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
-  if (cb == NULL)
-    return;
-  dentry_invalidate_cb = cb;
-  dentry_invalidate_cb_handle = handle;
-  async_dentry_invalidator.start();
-}
-
-void Client::ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb)
-{
-  Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_switch_interrupt_cb cb " << (void*)cb << dendl;
-  if (cb == NULL)
-    return;
-  switch_interrupt_cb = cb;
-  interrupt_finisher.start();
-}
-
-void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)
-{
-  Mutex::Locker l(client_lock);
-  getgroups_cb = cb;
-  getgroups_cb_handle = handle;
+  ldout(cct, 10) << "ll_register_callbacks cb " << args->handle
+		 << " invalidate_ino_cb " << args->ino_cb
+		 << " invalidate_dentry_cb " << args->dentry_cb
+		 << " getgroups_cb" << args->getgroups_cb
+		 << " switch_interrupt_cb " << args->switch_intr_cb
+		 << dendl;
+  callback_handle = args->handle;
+  if (args->ino_cb) {
+    ino_invalidate_cb = args->ino_cb;
+    async_ino_invalidator.start();
+  }
+  if (args->dentry_cb) {
+    dentry_invalidate_cb = args->dentry_cb;
+    async_dentry_invalidator.start();
+  }
+  if (args->switch_intr_cb) {
+    switch_interrupt_cb = args->switch_intr_cb;
+    interrupt_finisher.start();
+  }
+  getgroups_cb = args->getgroups_cb;
 }
 
 int Client::_sync_fs()
