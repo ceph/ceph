@@ -844,7 +844,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
 
   // was/is paused?
-  if (was_pauserd || was_pausewr || pauserd || pausewr) {
+  if (was_pauserd || was_pausewr || pauserd || pausewr || osdmap->get_epoch() < epoch_barrier) {
     int r = _maybe_request_map();
     assert(r == 0);
   }
@@ -2048,7 +2048,8 @@ bool Objecter::target_should_be_paused(op_target_t *t)
   bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
-         (t->flags & CEPH_OSD_FLAG_WRITE && pausewr);
+         (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
+         (osdmap->get_epoch() < epoch_barrier);
 }
 
 
@@ -4239,5 +4240,24 @@ Objecter::~Objecter()
   assert(!tick_event);
   assert(!m_request_state_hook);
   assert(!logger);
+}
+
+/**
+ * Wait until this OSD map epoch is received before
+ * sending any more operations to OSDs.  Use this
+ * when it is known that the client can't trust
+ * anything from before this epoch (e.g. due to
+ * client blacklist at this epoch).
+ */
+void Objecter::set_epoch_barrier(epoch_t epoch)
+{
+  RWLock::WLocker wl(rwlock);
+
+  ldout(cct, 7) << __func__ << ": barrier " << epoch << " (was " << epoch_barrier
+                << ") current epoch " << osdmap->get_epoch() << dendl;
+  if (epoch >= epoch_barrier) {
+    epoch_barrier = epoch;
+    _maybe_request_map();
+  }
 }
 
