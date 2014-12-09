@@ -106,7 +106,7 @@ As 'teuthworker', do the following::
     ./bootstrap
     popd
     mkdir ~/bin
-    wget -O ~/bin/worker_start https://raw.githubusercontent.com/ceph/teuthology/docs/docs/reference/worker_start.sh
+    wget -O ~/bin/worker_start https://raw.githubusercontent.com/ceph/teuthology/master/docs/_static/worker_start.sh
     echo 'PATH="$HOME/src/teuthology_master/virtualenv/bin:$PATH"' >> ~/.profile
     source ~/.profile
     mkdir -p ~/archive/worker_logs
@@ -118,7 +118,7 @@ Submitting Nodes
 
 First::
 
-    wget https://raw.githubusercontent.com/ceph/teuthology/docs/docs/reference/create_nodes.py
+    wget https://raw.githubusercontent.com/ceph/teuthology/master/docs/_static/create_nodes.py
 
 Edit ``create_nodes.py`` to generate the hostnames of the machines you want to submit to paddles.
 
