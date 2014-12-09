@@ -1785,7 +1785,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
 	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
-	do_proxy_read(op);
+	do_proxy_read(op, missing_oid);
 	return true;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -1801,7 +1801,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // Always proxy
-    do_proxy_read(op);
+    do_proxy_read(op, missing_oid);
 
     // Avoid duplicate promotion
     if (obc.get() && obc->is_blocked()) {
@@ -1895,7 +1895,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // If it is a read, we can read, we need to proxy it
-    do_proxy_read(op);
+    do_proxy_read(op, missing_oid);
     return true;
 
   default:
@@ -1956,21 +1956,31 @@ struct C_ProxyRead : public Context {
   }
 };
 
-void ReplicatedPG::do_proxy_read(OpRequestRef op)
+void ReplicatedPG::do_proxy_read(OpRequestRef op, const hobject_t& missing_oid)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   object_locator_t oloc(m->get_object_locator());
   oloc.pool = pool.info.tier_of;
 
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  snapid_t snap;
+  if (missing_oid.snap && missing_oid.snap != CEPH_NOSNAP) {
+    // we have the head; read the specific clone we need
+    flags |= CEPH_OSD_FLAG_MAP_SNAP_CLONE;
+    snap = missing_oid.snap;
+    dout(10) << __func__ << " start on clone " << snap << " for " << *m << dendl;
+  } else {
+    // we don't have the head; let the backend resolve logical snap to clone
+    snap = m->get_snapid();
+    dout(10) << __func__ << " start want snap " << snap << " for " << *m << dendl;
+  }
+
   hobject_t soid(m->get_oid(),
 		 m->get_object_locator().key,
-		 m->get_snapid(),
+		 snap,
 		 m->get_pg().ps(),
 		 m->get_object_locator().get_pool(),
 		 m->get_object_locator().nspace);
-  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
-                   CEPH_OSD_FLAG_MAP_SNAP_CLONE;
-  dout(10) << __func__ << " Start proxy read for " << *m << dendl;
 
   ProxyReadOpRef prdop(new ProxyReadOp(op, soid, m->ops));
 
@@ -1981,7 +1991,7 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
 				     prdop);
   ceph_tid_t tid = osd->objecter->read(
     soid.oid, oloc, obj_op,
-    m->get_snapid(), NULL,
+    snap, NULL,
     flags, new C_OnFinisher(fin, &osd->objecter_finisher),
     &prdop->user_version,
     &prdop->data_offset);
