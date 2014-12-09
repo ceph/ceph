@@ -1751,7 +1751,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	     << " missing_oid " << missing_oid
 	     << dendl;
 
-  if (obc.get() && obc->is_blocked()) {
+  // if it is write-ordered and blocked, stop now
+  if (obc.get() && obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
     dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
     return false;
