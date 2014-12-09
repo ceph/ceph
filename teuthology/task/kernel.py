@@ -377,9 +377,11 @@ def install_and_reboot(ctx, config):
                     '--replacepkgs',
                     remote_pkg_path(role_remote),
                 ])
-            install_kernel(role_remote, src)
+            install_kernel(role_remote, remote_pkg_path(role_remote))
             continue
 
+        # TODO: Refactor this into install_kernel() so that it handles all
+        # cases for both rpm and deb packages.
         proc = role_remote.run(
             args=[
                 # install the kernel deb
@@ -607,68 +609,29 @@ def need_to_install_distro(ctx, role):
     log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
     return True
 
-def get_version_from_rpm(remote, sha1):
+def install_kernel(remote, path=None):
     """
-    Get Actual version string from kernel file RPM URL.
-    """
-    system_type, system_ver = teuthology.get_system_type(remote, distro=True, version=True)
-    if '.' in system_ver:
-       system_ver = system_ver.split('.')[0]
-    ldist = '{system_type}{system_ver}'.format(system_type=system_type, system_ver=system_ver)
-    _, rpm_url = teuthology.get_ceph_binary_url(
-        package='kernel',
-        sha1=sha1,
-        format='rpm',
-        flavor='basic',
-        arch='x86_64',
-        dist=ldist,
-        )
-    kernel_url = urlparse.urljoin(rpm_url, 'kernel.x86_64.rpm')
-    kerninfo, kern_err = StringIO(), StringIO()
-    remote.run(args=['rpm', '-qp', kernel_url ], stdout=kerninfo, stderr=kern_err)
-    kernelstring = ''
-    if '\n' in kerninfo.getvalue():
-        kernelstring = kerninfo.getvalue().split('\n')[0]
-    else:
-        kernelstring = kerninfo.getvalue()
-    return kernelstring, kernel_url
+    A bit of misnomer perhaps - the actual kernel package is installed
+    elsewhere, this function deals with initrd and grub.  Currently the
+    following cases are handled:
+      - local, gitbuilder, distro for rpm packages
+      - distro for deb packages - see TODO in install_and_reboot()
 
-def install_kernel(remote, sha1=None):
+    TODO: reboots should be issued from install_and_reboot()
+
+    :param path: package path (for local and gitbuilder cases)
     """
-    RPM: Find newest kernel on the machine and update grub to use kernel + reboot.
-    DEB: Find newest kernel. Parse grub.cfg to figure out the entryname/subentry.
-    then modify 01_ceph_kernel to have correct entry + updategrub + reboot.
-    """
-    if sha1:
-        short_sha1 = sha1[0:7]
-    else:
-        short_sha1 = None
     system_type = teuthology.get_system_type(remote)
     distribution = ''
     if system_type == 'rpm':
-        output, err_mess = StringIO(), StringIO()
-        kern_out, kern_err = StringIO(), StringIO()
-        if short_sha1:
-            kernelstring, kernel_url = get_version_from_rpm(remote, sha1)
-            remote.run(args=['rpm', '-q', 'kernel' ], stdout=output, stderr=err_mess )
-            if kernelstring in output.getvalue():
-                for kernel in output.getvalue().split('\n'):
-                    if kernelstring in kernel:
-                        remote.run(args=['rpm', '-ql', kernel ], stdout=kern_out, stderr=kern_err )
-                        for file in kern_out.getvalue().split('\n'):
-                            if 'vmlinuz' in file:
-                                newest = file.split('/boot/vmlinuz-')[1]
-                                log.info('Kernel Version: {version}'.format(version=newest)) 
-            else:
-                raise 'Something went wrong kernel file was installed but version is missing'
+        if path:
+            version = get_image_version(remote, path)
         else:
             remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
-            newest=output.getvalue().split()[0].split('kernel-')[1]
-            log.info('Distro Kernel Version: {version}'.format(version=newest))
-        update_grub_rpm(remote, newest)
+            version=output.getvalue().split()[0].split('kernel-')[1]
+            log.info('Distro Kernel Version: {version}'.format(version=version))
+        update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
-        output.close()
-        err_mess.close()
         return
 
     if system_type == 'deb':
