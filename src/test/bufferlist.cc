@@ -943,6 +943,24 @@ TEST(BufferListIterator, copy) {
     EXPECT_EQ('C', copy[4]);
     EXPECT_EQ((unsigned)(2 + 3), copy.length());
   }
+
+  // void buffer::list::iterator::copy(unsigned len, list &dest)
+  {
+    // demonstrates that copy the data rather than share the src data
+    bufferlist b1;
+    b1.append("ceph-test");
+    bufferlist::iterator datap = b1.begin();
+
+    bufferlist b2;
+    datap.copy(4, b2);
+    const char *p = b2.c_str();
+
+    EXPECT_EQ(4, strlen(p));
+
+    b1.copy_in(0, 4, "XXXX");
+    EXPECT_EQ(0, strcmp(p, "ceph"));
+   }
+
   //
   // void buffer::list::iterator::copy_all(list &dest)
   //
