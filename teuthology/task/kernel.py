@@ -579,12 +579,14 @@ def need_to_install_distro(ctx, role):
         role_remote.run(args=['sudo', 'yum', 'install', '-y', 'kernel'], stdout=output, stderr=err_mess )
         if 'Nothing to do' in output.getvalue():
             output.truncate(0), err_mess.truncate(0)
-            role_remote.run(args=['sudo', 'yum', 'reinstall', '-y', 'kernel', run.Raw('||'), 'true'], stdout=output, stderr=err_mess )
-            if 'Skipping the running kernel' in output.getvalue():
-                if 'Error: Nothing to do' in output.getvalue():
-                    # Current running kernel is already newest and updated
-                    log.info('Newest distro kernel already installed/running')
-                    return False
+            role_remote.run(args=['echo', 'no', run.Raw('|'), 'sudo', 'yum', 'reinstall', 'kernel', run.Raw('||'), 'true'], stdout=output, stderr=err_mess )
+            if 'Skipping the running kernel' in err_mess.getvalue():
+                # Current running kernel is already newest and updated
+                log.info('Newest distro kernel already installed/running')
+                return False
+            else:
+                output.truncate(0), err_mess.truncate(0)
+                role_remote.run(args=['sudo', 'yum', 'reinstall', '-y', 'kernel', run.Raw('||'), 'true'], stdout=output, stderr=err_mess )
         #reset stringIO output.
         output.truncate(0), err_mess.truncate(0)
         role_remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
