@@ -19,8 +19,7 @@ optional arguments:
   --machine-type MACHINE_TYPE    Type of machine to lock/run tests on.
   --os-type OS_TYPE              Distro/OS of machine to run test on [default: ubuntu].
   --os-version OS_VERSION        Distro/OS version of machine to run test on.
-  --block                        block until locking machines succeeds (use with
-                                 --lock)
+  --block                        block until locking machines succeeds (use with --lock)
   --name NAME                    name for this teuthology run
   --suite-path SUITE_PATH        Location of ceph-qa-suite on disk. If not specified,
                                  it will be fetched
