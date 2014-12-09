@@ -432,7 +432,7 @@ public:
 
     ObjectState new_obs;  // resulting ObjectState
   private:
-    SnapSet *_new_snapset;  ///< resulting SnapSet (in case of a write)
+    boost::scoped_ptr<SnapSet> _new_snapset;  ///< resulting SnapSet (in case of a write)
     bool _force_write_snapset; ///< should write snapset (even if not new)
   public:
     object_stat_sum_t delta_stats;
@@ -543,7 +543,6 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
-      _new_snapset(NULL),
       _force_write_snapset(false),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false),
@@ -568,25 +567,22 @@ public:
       if (obc->ssc) {
 	snapset = &obc->ssc->snapset;
       }
-      if (_new_snapset) {
-	delete _new_snapset;
-	_new_snapset = NULL;
-      }
+      _new_snapset.reset(NULL);
       _force_write_snapset = false;
     }
     /// return latest (unmodified or modified) SnapSet
     const SnapSet *get_cur_snapset() const {
       if (_new_snapset)
-	return _new_snapset;
+	return _new_snapset.get();
       return snapset;
     }
     /// mark SnapSet dirty, allocate/copy as needed, return ptr
     SnapSet *modify_snapset() {
       if (!_new_snapset) {
-	_new_snapset = new SnapSet;
+	_new_snapset.reset(new SnapSet);
 	*_new_snapset = *snapset;
       }
-      return _new_snapset;
+      return _new_snapset.get();
     }
     /// force a SnapSet write, even if it is unchanged
     void force_write_snapset() {
@@ -594,7 +590,7 @@ public:
     }
     /// true if we should write the SnapSet (modified or forced write)
     bool should_write_snapset() const {
-      return _new_snapset != NULL || _force_write_snapset;
+      return _new_snapset || _force_write_snapset;
     }
     /// ensure head_exists = true
     void set_new_snapset_head_exists(bool e) {
@@ -627,7 +623,6 @@ public:
 	delete i->second.second;
       }
       assert(on_finish == NULL);
-      delete _new_snapset;
     }
     void finish(int r) {
       if (on_finish) {
