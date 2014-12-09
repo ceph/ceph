@@ -337,10 +337,11 @@ public:
   }
 
   bufferlist& get_data() { return data; }
-  void claim_data(bufferlist& bl) {
+  void claim_data(bufferlist& bl,
+		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    bl.claim(data);
+    bl.claim(data, flags);
   }
   off_t get_data_len() { return data.length(); }
 

@@ -179,6 +179,7 @@ public:
 
     raw *clone();
     void swap(ptr& other);
+    ptr& make_shareable();
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
@@ -329,12 +330,15 @@ public:
       append_buffer.set_length(0);   // unused, so far.
     }
     ~list() {}
-    
-    list(const list& other) : _buffers(other._buffers), _len(other._len), _memcopy_count(other._memcopy_count),last_p(this) { }
+    list(const list& other) : _buffers(other._buffers), _len(other._len),
+			      _memcopy_count(other._memcopy_count), last_p(this) {
+      make_shareable();
+    }
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
         _len = other._len;
+	make_shareable();
       }
       return *this;
     }
@@ -404,10 +408,33 @@ public:
 					 unsigned align_memory);
     void rebuild_page_aligned();
 
-    // sort-of-like-assignment-op
-    void claim(list& bl);
-    void claim_append(list& bl);
-    void claim_prepend(list& bl);
+    // assignment-op with move semantics
+    const static unsigned int CLAIM_DEFAULT = 0;
+    const static unsigned int CLAIM_ALLOW_NONSHAREABLE = 1;
+
+    void claim(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim_prepend(list& bl, unsigned int flags = CLAIM_DEFAULT);
+
+    // clone non-shareable buffers (make shareable)
+    void make_shareable() {
+      std::list<buffer::ptr>::iterator pb;
+      for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
+        (void) pb->make_shareable();
+      }
+    }
+
+    // copy with explicit volatile-sharing semantics
+    void share(const list& bl)
+    {
+      if (this != &bl) {
+        clear();
+        std::list<buffer::ptr>::const_iterator pb;
+        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
+          push_back(*pb);
+        }
+      }
+    }
 
     iterator begin() {
       return iterator(this, 0);
