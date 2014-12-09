@@ -283,8 +283,7 @@ void Objecter::start()
 
   schedule_tick();
   if (osdmap->get_epoch() == 0) {
-    int r = _maybe_request_map();
-    assert (r == 0 || osdmap->get_epoch() > 0);
+    _maybe_request_map();
   }
 }
 
@@ -779,8 +778,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  if (e >= m->get_oldest()) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch "
 			  << osdmap->get_epoch()+1 << dendl;
-	    int r = _maybe_request_map();
-            assert(r == 0);
+	    _maybe_request_map();
 	    break;
 	  }
 	  ldout(cct, 3) << "handle_osd_map missing epoch "
@@ -845,8 +843,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   // was/is paused?
   if (was_pauserd || was_pausewr || pauserd || pausewr || osdmap->get_epoch() < epoch_barrier) {
-    int r = _maybe_request_map();
-    assert(r == 0);
+    _maybe_request_map();
   }
 
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
@@ -923,8 +920,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   monc->sub_got("osdmap", osdmap->get_epoch());
 
   if (!waiting_for_map.empty()) {
-    int r = _maybe_request_map();
-    assert(r == 0);
+    _maybe_request_map();
   }
 }
 
@@ -1426,13 +1422,10 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 void Objecter::maybe_request_map()
 {
   RWLock::RLocker rl(rwlock);
-  int r;
-  do {
-    r = _maybe_request_map();
-  } while (r == -EAGAIN);
+  _maybe_request_map();
 }
 
-int Objecter::_maybe_request_map()
+void Objecter::_maybe_request_map()
 {
   assert(rwlock.is_locked());
   int flag = 0;
@@ -1448,15 +1441,13 @@ int Objecter::_maybe_request_map()
   if (monc->sub_want("osdmap", epoch, flag)) {
     monc->renew_subs();
   }
-  return 0;
 }
 
 void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
 {
   assert(rwlock.is_wlocked());
   waiting_for_map[epoch].push_back(pair<Context *, int>(c, err));
-  int r = _maybe_request_map();
-  assert(r == 0);
+  _maybe_request_map();
 }
 
 
@@ -1630,10 +1621,7 @@ void Objecter::tick()
       }
     }
     if (num_homeless_ops.read() || !toping.empty()) {
-      r = _maybe_request_map();
-      if (r == -EAGAIN) {
-        toping.clear();
-      }
+      _maybe_request_map();
     }
   } while (r == -EAGAIN);
 
@@ -4064,8 +4052,7 @@ int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
   if (!c->session->is_homeless()) {
     _send_command(c);
   } else {
-    int r = _maybe_request_map();
-    assert(r != -EAGAIN); /* because rwlock is already write-locked */
+    _maybe_request_map();
   }
   if (c->map_check_error)
     _send_command_map_check(c);
