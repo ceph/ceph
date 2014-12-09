@@ -323,7 +323,7 @@ void PGBackend::be_scan_list(
   ScrubMap &map, const vector<hobject_t> &ls, bool deep,
   ThreadPool::TPHandle &handle)
 {
-  dout(10) << "_scan_list scanning " << ls.size() << " objects"
+  dout(10) << __func__ << " scanning " << ls.size() << " objects"
            << (deep ? " deeply" : "") << dendl;
   int i = 0;
   for (vector<hobject_t>::const_iterator p = ls.begin();
@@ -354,15 +354,17 @@ void PGBackend::be_scan_list(
 	be_deep_scrub(*p, o, handle);
       }
 
-      dout(25) << "_scan_list  " << poid << dendl;
+      dout(25) << __func__ << "  " << poid << dendl;
     } else if (r == -ENOENT) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", skipping" << dendl;
+      dout(25) << __func__ << "  " << poid << " got " << r
+	       << ", skipping" << dendl;
     } else if (r == -EIO) {
-      dout(25) << "_scan_list  " << poid << " got " << r << ", read_error" << dendl;
+      dout(25) << __func__ << "  " << poid << " got " << r
+	       << ", read_error" << dendl;
       ScrubMap::object &o = map.objects[poid];
       o.read_error = true;
     } else {
-      derr << "_scan_list got: " << cpp_strerror(r) << dendl;
+      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
       assert(0);
     }
   }
