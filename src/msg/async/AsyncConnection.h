@@ -50,7 +50,7 @@ class AsyncConnection : public Connection {
   // the main usage is avoid error happen outside messenger threads
   int _try_send(bufferlist bl, bool send=true);
   int _send(Message *m);
-  int read_until(uint64_t needed, bufferptr &p);
+  int read_until(uint64_t needed, char *p);
   int _process_connection();
   void _connect();
   void _stop();
@@ -195,6 +195,7 @@ class AsyncConnection : public Connection {
     STATE_WAIT,       // just wait for racing connection
   };
 
+  static const int TCP_PREFETCH_MIN_SIZE;
   static const char *get_state_name(int state) {
       const char* const statenames[] = {"STATE_NONE",
                                         "STATE_OPEN",
@@ -263,6 +264,10 @@ class AsyncConnection : public Connection {
   EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
+  char *recv_buf;
+  uint32_t recv_max_prefetch;
+  uint32_t recv_start;
+  uint32_t recv_end;
   Mutex stop_lock; // used to protect `mark_down_cond`
   Cond stop_cond;
   set<uint64_t> register_time_events; // need to delete it if stop
@@ -294,7 +299,7 @@ class AsyncConnection : public Connection {
   atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
-  bufferptr state_buffer;
+  char *state_buffer;
   // used only by "read_until"
   uint64_t state_offset;
   bufferlist outcoming_bl;
