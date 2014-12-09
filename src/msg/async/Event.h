@@ -141,6 +141,7 @@ class EventCenter {
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
+  void delete_time_event(uint64_t id);
   int process_events(int timeout_microseconds);
   void wakeup();
 

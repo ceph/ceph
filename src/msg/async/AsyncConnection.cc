@@ -39,12 +39,22 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
         << ").";
 }
 
+class C_time_wakeup : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_time_wakeup(AsyncConnectionRef c): conn(c) {}
+  void do_request(int fd_or_id) {
+    conn->wakeup_from(fd_or_id);
+  }
+};
+
 class C_handle_read : public EventCallback {
   AsyncConnectionRef conn;
 
  public:
   C_handle_read(AsyncConnectionRef c): conn(c) {}
-  void do_request(int fd) {
+  void do_request(int fd_or_id) {
     conn->process();
   }
 };
@@ -277,7 +287,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
     assert(!outcoming_bl.length());
     connect_seq++;
     state = STATE_CONNECTING;
-    center->create_time_event(0, read_handler);
+    center->dispatch_event_external(read_handler);
     return 0;
   }
 
@@ -760,7 +770,7 @@ void AsyncConnection::process()
           // if send_message always successfully send, it may have no
           // opportunity to send seq ack. 10 is a experience value.
           if (in_seq > in_seq_acked + 10) {
-            center->create_time_event(2, write_handler);
+            center->dispatch_event_external(write_handler);
           }
 
           state = STATE_OPEN;
@@ -771,7 +781,7 @@ void AsyncConnection::process()
             async_msgr->ms_fast_dispatch(message);
             lock.Lock();
           } else {
-            center->create_time_event(1, EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
+            center->dispatch_event_external(EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
           }
 
           break;
@@ -1158,7 +1168,7 @@ int AsyncConnection::_process_connection()
         // message may in queue between last _try_send and connection ready
         // write event may already notify and we need to force scheduler again
         if (is_queued())
-          center->create_time_event(1, write_handler);
+          center->dispatch_event_external(write_handler);
 
         break;
       }
@@ -1870,7 +1880,8 @@ void AsyncConnection::fault()
   }
 
   // woke up again;
-  center->create_time_event(backoff, read_handler);
+  register_time_events.insert(center->create_time_event(
+          backoff, EventCallbackRef(new C_time_wakeup(this))));
 }
 
 void AsyncConnection::was_session_reset()
@@ -1901,11 +1912,13 @@ void AsyncConnection::_stop()
   if (sd > 0)
     ::close(sd);
   sd = -1;
+  for (set<uint64_t>::iterator it = register_time_events.begin();
+       it != register_time_events.end(); ++it)
+    center->delete_time_event(*it);
   async_msgr->unregister_conn(this);
   // Here we need to dispatch "signal" event, because we want to ensure signal
   // it after all events called by this "_stop" has be done.
   center->dispatch_event_external(signal_handler);
-  put();
 }
 
 int AsyncConnection::_send(Message *m)
@@ -2121,6 +2134,14 @@ void AsyncConnection::handle_write()
   return ;
  fail:
   fault();
+}
+
+void AsyncConnection::wakeup_from(uint64_t id)
+{
+  lock.Lock();
+  register_time_events.erase(id);
+  lock.Unlock();
+  process();
 }
 
 void AsyncConnection::local_deliver()

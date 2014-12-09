@@ -323,6 +323,7 @@ private:
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.count(p->second)) {
       deleted_conns.erase(p->second);
+      p->second->put();
       conns.erase(p);
       return NULL;
     }

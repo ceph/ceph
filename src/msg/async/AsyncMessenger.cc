@@ -624,7 +624,6 @@ void AsyncMessenger::mark_down_all()
     AsyncConnectionRef p = *q;
     ldout(cct, 5) << __func__ << " accepting_conn " << p << dendl;
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   accepting_conns.clear();
@@ -635,7 +634,6 @@ void AsyncMessenger::mark_down_all()
     ldout(cct, 5) << __func__ << " " << it->first << " " << p << dendl;
     conns.erase(it);
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   lock.Unlock();
@@ -648,7 +646,6 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   if (p) {
     ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   } else {
     ldout(cct, 1) << __func__ << " " << addr << " -- connection dne" << dendl;

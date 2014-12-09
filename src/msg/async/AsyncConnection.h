@@ -264,6 +264,7 @@ class AsyncConnection : public Connection {
   struct iovec msgvec[IOV_LEN];
   Mutex stop_lock; // used to protect `mark_down_cond`
   Cond stop_cond;
+  set<uint64_t> register_time_events; // need to delete it if stop
 
   // Tis section are temp variables used by state transition
 
@@ -303,6 +304,7 @@ class AsyncConnection : public Connection {
   // used by eventcallback
   void handle_write();
   void process();
+  void wakeup_from(uint64_t id);
   // Helper: only called by C_handle_stop
   void stop() {
     Mutex::Locker l(lock);
