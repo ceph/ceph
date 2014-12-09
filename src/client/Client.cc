@@ -543,7 +543,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
   if (s->caps.size() > 0)
-    _invalidate_kernel_dcache(s);
+    _invalidate_kernel_dcache();
 }
 
 void Client::trim_dentry(Dentry *dn)
@@ -3277,19 +3277,16 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-void Client::_invalidate_kernel_dcache(MetaSession *s)
+void Client::_invalidate_kernel_dcache()
 {
-  if (!dentry_invalidate_cb)
-    return;
-
-  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
-    Inode *in = (*p)->inode;
-    if (in->dn_set.empty())
-      continue;
-    for (set<Dentry*>::iterator q = in->dn_set.begin();
-	 q != in->dn_set.end();
-	 ++q) {
-      _schedule_invalidate_dentry_callback(*q, false);
+  // notify kernel to invalidate top level directory entries. As a side effect,
+  // unused inodes underneath these entries get pruned.
+  if (dentry_invalidate_cb && root->dir) {
+    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+	 p != root->dir->dentries.end();
+	 ++p) {
+      if (p->second->inode)
+	_schedule_invalidate_dentry_callback(p->second, false);
     }
   }
 }
@@ -3323,8 +3320,14 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
-	  _schedule_invalidate_dentry_callback(dn, false);
+          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+            // Only issue one of these per DN for inodes in root: handle
+            // others more efficiently by calling for root-child DNs at
+            // the end of this function.
+            _schedule_invalidate_dentry_callback(dn, true);
+          }
 	  trim_dentry(dn);
+
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
@@ -3345,6 +3348,9 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+
+  if (s->caps.size() > max)
+    _invalidate_kernel_dcache();
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
