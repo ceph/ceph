@@ -27,12 +27,14 @@ log = logging.getLogger(__name__)
 
 def clear_firewall(ctx):
     """
-    Remove any iptables rules created by teuthology.  These rules are identified by containing
-    a comment with 'teuthology' in it.  Non-teuthology firewall rules are unaffected.
+    Remove any iptables rules created by teuthology.  These rules are
+    identified by containing a comment with 'teuthology' in it.  Non-teuthology
+    firewall rules are unaffected.
     """
     ctx.cluster.run(
         args=[
-            "sudo", "sh", "-c", "iptables-save | grep -v teuthology | iptables-restore"
+            "sudo", "sh", "-c",
+            "iptables-save | grep -v teuthology | iptables-restore"
         ],
         wait=False,
     )
@@ -249,15 +251,16 @@ def dpkg_configure(ctx):
 
 
 def remove_installed_packages(ctx):
-
     dpkg_configure(ctx)
-    config = {'project': 'ceph'}
+    conf = {'project': 'ceph'}
     install_task.remove_packages(
         ctx,
-        config,
-        {"deb": install_task.deb_packages['ceph'] + ['salt-common', 'salt-minion', 'calamari-server'],
-         "rpm": install_task.rpm_packages['ceph'] + ['salt-common', 'salt-minion', 'calamari-server']})
-    install_task.remove_sources(ctx, config)
+        conf,
+        {"deb": install_task.deb_packages['ceph'] +
+         ['salt-common', 'salt-minion', 'calamari-server'],
+         "rpm": install_task.rpm_packages['ceph'] +
+         ['salt-common', 'salt-minion', 'calamari-server']})
+    install_task.remove_sources(ctx, conf)
     install_task.purge_data(ctx)
 
 
@@ -450,7 +453,8 @@ def nuke_helper(ctx, should_unlock):
         return
     log.debug('shortname: %s' % shortname)
     log.debug('{ctx}'.format(ctx=ctx))
-    if not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and 'vpm' not in shortname:
+    if (not ctx.noipmi and 'ipmi_user' in ctx.teuthology_config and
+            'vpm' not in shortname):
         console = orchestra.remote.getRemoteConsole(
             name=host,
             ipmiuser=ctx.teuthology_config['ipmi_user'],
