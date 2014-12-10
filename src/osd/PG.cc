@@ -195,7 +195,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
-  recovery_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
+  recovery_item(this), scrub_item(this), stat_queue_item(this),
+  snap_trim_queued(false),
   recovery_ops_active(0),
   role(0),
   state(0),
@@ -884,7 +885,6 @@ void PG::clear_primary_state()
   scrub_after_recovery = false;
 
   osd->recovery_wq.dequeue(this);
-  osd->snap_trim_wq.dequeue(this);
 
   agent_clear();
 }
@@ -1928,10 +1928,13 @@ void PG::all_activated_and_committed()
 
 void PG::queue_snap_trim()
 {
-  if (osd->queue_for_snap_trim(this))
+  if (snap_trim_queued) {
+    dout(10) << "queue_snap_trim -- already queued" << dendl;
+  } else {
     dout(10) << "queue_snap_trim -- queuing" << dendl;
-  else
-    dout(10) << "queue_snap_trim -- already trimming" << dendl;
+    snap_trim_queued = true;
+    osd->queue_for_snap_trim(this);
+  }
 }
 
 bool PG::queue_scrub()
@@ -2110,7 +2113,9 @@ void PG::split_ops(PG *child, unsigned split_bits) {
   assert(waiting_for_active.empty());
   split_replay_queue(&replay_queue, &(child->replay_queue), match, split_bits);
 
+  snap_trim_queued = false;
   osd->dequeue_pg(this, &waiting_for_peered);
+
   OSD::split_list(
     &waiting_for_peered, &(child->waiting_for_peered), match, split_bits);
   {
@@ -4810,6 +4815,7 @@ void PG::start_peering_interval(
   peer_missing.clear();
   peer_purged.clear();
   actingbackfill.clear();
+  snap_trim_queued = false;
 
   // reset primary state?
   if (was_old_primary || is_primary()) {
