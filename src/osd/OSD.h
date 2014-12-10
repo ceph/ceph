@@ -316,9 +316,19 @@ public:
 typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
 
 class OSD;
+
+struct PGSnapTrim {
+  epoch_t epoch_queued;
+  PGSnapTrim(epoch_t e) : epoch_queued(e) {}
+  ostream &operator<<(ostream &rhs) {
+    return rhs << "SnapTrim";
+  }
+};
+
 class PGQueueable {
   typedef boost::variant<
-    OpRequestRef
+    OpRequestRef,
+    PGSnapTrim
     > QVariant;
   QVariant qvariant;
   int cost; 
@@ -332,6 +342,7 @@ class PGQueueable {
     RunVis(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle)
       : osd(osd), pg(pg), handle(handle) {}
     void operator()(OpRequestRef &op);
+    void operator()(PGSnapTrim &op);
   };
 public:
   PGQueueable(OpRequestRef op)
@@ -340,6 +351,11 @@ public:
       start_time(op->get_req()->get_recv_stamp()),
       owner(op->get_req()->get_source_inst())
     {}
+  PGQueueable(
+    const PGSnapTrim &op, int cost, unsigned priority, utime_t start_time,
+    const entity_inst_t &owner)
+    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+      owner(owner) {}
   boost::optional<OpRequestRef> maybe_get_op() {
     OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
     return op ? *op : boost::optional<OpRequestRef>();
@@ -375,7 +391,6 @@ public:
   ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
   ThreadPool::WorkQueue<PG> &recovery_wq;
-  ThreadPool::WorkQueue<PG> &snap_trim_wq;
   ThreadPool::WorkQueue<PG> &scrub_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
@@ -743,8 +758,16 @@ public:
 
   void queue_for_peering(PG *pg);
   bool queue_for_recovery(PG *pg);
-  bool queue_for_snap_trim(PG *pg) {
-    return snap_trim_wq.queue(pg);
+  void queue_for_snap_trim(PG *pg) {
+    op_wq.queue(
+      make_pair(
+	pg,
+	PGQueueable(
+	  PGSnapTrim(pg->get_osdmap()->get_epoch()),
+	  cct->_conf->osd_snap_trim_cost,
+	  cct->_conf->osd_snap_trim_priority,
+	  ceph_clock_now(cct),
+	  entity_inst_t())));
   }
   bool queue_for_scrub(PG *pg) {
     return scrub_wq.queue(pg);
@@ -2126,48 +2149,6 @@ protected:
   list< pair<spg_t, utime_t > > replay_queue;
   
   void check_replay_queue();
-
-
-  // -- snap trimming --
-  xlist<PG*> snap_trim_queue;
-  
-  struct SnapTrimWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    SnapTrimWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::SnapTrimWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->snap_trim_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (pg->snap_trim_item.is_on_list())
-	return false;
-      pg->get("SnapTrimWQ");
-      osd->snap_trim_queue.push_back(&pg->snap_trim_item);
-      return true;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->snap_trim_item.remove_myself())
-	pg->put("SnapTrimWQ");
-    }
-    PG *_dequeue() {
-      if (osd->snap_trim_queue.empty())
-	return NULL;
-      PG *pg = osd->snap_trim_queue.front();
-      osd->snap_trim_queue.pop_front();
-      return pg;
-    }
-    void _process(PG *pg) {
-      pg->snap_trimmer();
-      pg->put("SnapTrimWQ");
-    }
-    void _clear() {
-      while (PG *pg = _dequeue()) {
-	pg->put("SnapTrimWQ");
-      }
-    }
-  } snap_trim_wq;
-
 
   // -- scrubbing --
   void sched_scrub();
