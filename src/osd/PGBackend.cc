@@ -90,20 +90,10 @@ void PGBackend::on_change_cleanup(ObjectStore::Transaction *t)
     dout(10) << __func__ << ": Removing oid "
 	     << *i << " from the temp collection" << dendl;
     t->remove(
-      get_temp_coll(t),
+      coll,
       ghobject_t(*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   temp_contents.clear();
-}
-
-coll_t PGBackend::get_temp_coll(ObjectStore::Transaction *t)
-{
-  if (temp_created)
-    return temp_coll;
-  if (!store->collection_exists(temp_coll))
-      t->create_collection(temp_coll);
-  temp_created = true;
-  return temp_coll;
 }
 
 int PGBackend::objects_list_partial(
@@ -188,7 +178,7 @@ int PGBackend::objects_get_attr(
 {
   bufferptr bp;
   int r = store->getattr(
-    hoid.is_temp() ? temp_coll : coll,
+    coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     attr.c_str(),
     bp);
@@ -204,7 +194,7 @@ int PGBackend::objects_get_attrs(
   map<string, bufferlist> *out)
 {
   return store->getattrs(
-    hoid.is_temp() ? temp_coll : coll,
+    coll,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     *out);
 }
@@ -282,13 +272,12 @@ PGBackend *PGBackend::build_pg_backend(
   const OSDMapRef curmap,
   Listener *l,
   coll_t coll,
-  coll_t temp_coll,
   ObjectStore *store,
   CephContext *cct)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED: {
-    return new ReplicatedBackend(l, coll, temp_coll, store, cct);
+    return new ReplicatedBackend(l, coll, store, cct);
   }
   case pg_pool_t::TYPE_ERASURE: {
     ErasureCodeInterfaceRef ec_impl;
@@ -304,7 +293,6 @@ PGBackend *PGBackend::build_pg_backend(
     return new ECBackend(
       l,
       coll,
-      temp_coll,
       store,
       cct,
       ec_impl,
