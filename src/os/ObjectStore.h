@@ -722,7 +722,10 @@ public:
 	    sizeof(uint32_t) +   //fadvise_flags
             sizeof(__u32);      // tbl length
         } else {
-          return data.largest_data_off_in_tbl;
+          return data.largest_data_off_in_tbl +
+            sizeof(__u8) +      // encode struct_v
+            sizeof(__u8) +      // encode compat_v
+            sizeof(__u32);      // encode len
         }
       }
       return 0;  // none
