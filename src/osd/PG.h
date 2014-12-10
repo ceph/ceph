@@ -2096,7 +2096,7 @@ public:
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info, bool force_ver = false);
+    __u8 &info_struct_v, bool dirty_big_info, bool force_ver = false);
   void write_if_dirty(ObjectStore::Transaction& t);
 
   eversion_t get_next_version() const {
