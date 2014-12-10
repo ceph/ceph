@@ -245,7 +245,8 @@ Rados object in state %s." % (self.state))
 
     def shutdown(self):
         """
-        Disconnects from the cluster.
+        Disconnects from the cluster.  Call this explicitly when a
+        Rados.connect()ed object is no longer used.
         """
         if (self.__dict__.has_key("state") and self.state != "shutdown"):
             run_in_thread(self.librados.rados_shutdown, (self.cluster,))
@@ -258,9 +259,6 @@ Rados object in state %s." % (self.state))
     def __exit__(self, type_, value, traceback):
         self.shutdown()
         return False
-
-    def __del__(self):
-        self.shutdown()
 
     def version(self):
         """
@@ -409,7 +407,7 @@ Rados object in state %s." % (self.state))
 
     def connect(self, timeout=0):
         """
-        Connect to the cluster.
+        Connect to the cluster.  Use shutdown() to release resources.
         """
         self.require_state("configuring")
         ret = run_in_thread(self.librados.rados_connect, (self.cluster,),
