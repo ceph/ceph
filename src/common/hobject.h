@@ -36,7 +36,9 @@ private:
   uint32_t hash;
   bool max;
   filestore_hobject_key_t filestore_key_cache;
-  static const int64_t POOL_IS_TEMP = -1;
+  static const int64_t POOL_META = -1;
+  static const int64_t POOL_TEMP_START = -2; // and then negative
+  friend class spg_t;  // for POOL_TEMP_START
 public:
   int64_t pool;
   string nspace;
@@ -66,11 +68,11 @@ public:
     return match_hash(hash, bits, match);
   }
 
-  static hobject_t make_temp(const string &name) {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP, 0, POOL_IS_TEMP, "");
-  }
   bool is_temp() const {
-    return pool == POOL_IS_TEMP;
+    return pool < POOL_TEMP_START && pool != INT64_MIN;
+  }
+  bool is_meta() const {
+    return pool == POOL_META;
   }
 
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {
