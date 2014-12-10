@@ -504,7 +504,9 @@ public:
     void set_replica() {
       replica = true;
     }
-    bool get_replica() { return replica; }
+    bool get_replica() {
+        return replica;
+    }
 
     void swap(Transaction& other) {
       std::swap(data, other.data);
@@ -667,9 +669,6 @@ public:
       //append data_bl
       data_bl.append(other.data_bl);
     }
-    void make_op_bl_continue() {
-      op_bl.get_contiguous(0, op_bl.length());
-    }
 
     /** Inquires about the Transaction as a whole. */
 
@@ -750,33 +749,8 @@ public:
      * buffer decoding operation codes and parameters as we go.
      *
      */
-    class iterator_impl {
+    class iterator {
       bool replica;
-
-      public:
-
-      iterator_impl(Transaction *t)
-        : replica(t->replica) {}
-
-      virtual ~iterator_impl() { }
-
-      bool get_replica() const { return replica; }
-
-      virtual bool have_op() = 0;
-      virtual Op* decode_op() = 0;
-      virtual string decode_string() = 0;
-      virtual void decode_bl(bufferlist& bl) = 0;
-      virtual void decode_attrset(map<string,bufferptr>& aset) = 0;
-      virtual void decode_attrset(map<string,bufferlist>& aset) = 0;
-      virtual void decode_keyset(set<string> &keys) = 0;
-
-      virtual ghobject_t get_oid(__le32 oid_id) = 0;
-      virtual coll_t get_cid(__le32 cid_id) = 0;
-
-      friend class Transaction;
-    };
-
-    class map_iterator : public iterator_impl {
 
       uint64_t ops;
       char* op_buffer_p;
@@ -786,14 +760,14 @@ public:
       vector<coll_t> colls;
       vector<ghobject_t> objects;
 
-      map_iterator(Transaction *t)
-        : iterator_impl(t),
-          data_bl_p(t->data_bl.begin()) {
+      iterator(Transaction *t)
+        : data_bl_p(t->data_bl.begin()),
+          colls(t->coll_index.size()),
+          objects(t->object_index.size()) {
 
         ops = t->data.ops;
         op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
 
-        colls.resize(t->coll_index.size());
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
              coll_index_p != t->coll_index.end();
@@ -801,7 +775,6 @@ public:
           colls[coll_index_p->second] = coll_index_p->first;
         }
 
-        objects.resize(t->object_index.size());
         map<ghobject_t, __le32>::iterator object_index_p;
         for (object_index_p = t->object_index.begin();
              object_index_p != t->object_index.end();
@@ -813,6 +786,10 @@ public:
       friend class Transaction;
 
     public:
+
+      bool get_replica() const {
+        return replica;
+      }
 
       bool have_op() {
         return ops > 0;
@@ -854,61 +831,15 @@ public:
       }
     };
 
-    class iterator {
-      shared_ptr<iterator_impl> impl;
-
-      public:
-      iterator(Transaction *t) {
-        iterator_impl* iterator = NULL;
-
-        if (t->use_tbl) {
-          assert("tbl encode is not supported" == 0);
-          iterator = new map_iterator(t);
-        } else {
-          iterator = new map_iterator(t);
-        }
-
-        impl = shared_ptr<iterator_impl>(iterator);
-      }
-
-      bool get_replica() const {
-        return impl->get_replica();
-      }
-      bool have_op() {
-        return impl->have_op();
-      }
-      Op* decode_op() {
-        return impl->decode_op();
-      }
-      void decode_bl(bufferlist& bl) {
-        impl->decode_bl(bl);
-      }
-      string decode_string() {
-        return impl->decode_string();
-      }
-      void decode_attrset(map<string,bufferptr>& aset) {
-        impl->decode_attrset(aset);
-      }
-      void decode_attrset(map<string,bufferlist>& aset) {
-        impl->decode_attrset(aset);
-      }
-      void decode_keyset(set<string> &keys) {
-        impl->decode_keyset(keys);
-      }
-
-      ghobject_t get_oid(__le32 oid_id) {
-        return impl->get_oid(oid_id);
-      }
-      coll_t get_cid(__le32 cid_id) {
-        return impl->get_cid(cid_id);
-      }
-
-      friend class Transaction;
-    };
-
     iterator begin() {
+      if (use_tbl) {
+        _build_actions_from_tbl();
+      }
       return iterator(this);
     }
+
+private:
+    void _build_actions_from_tbl();
 
     /**
      * Helper functions to encode the various mutation elements of a
@@ -949,6 +880,7 @@ public:
       return index_id;
     }
 
+public:
     /// Commence a global file system sync operation.
     void start_sync() {
       if (use_tbl) {
@@ -1572,14 +1504,14 @@ public:
     Transaction() :
       replica(false),
       osr(NULL),
-      use_tbl(false),
+      use_tbl(true),
       coll_id(0),
       object_id(0) { }
 
     Transaction(bufferlist::iterator &dp) :
       replica(false),
       osr(NULL),
-      use_tbl(false),
+      use_tbl(true),
       coll_id(0),
       object_id(0) {
       decode(dp);
@@ -1588,7 +1520,7 @@ public:
     Transaction(bufferlist &nbl) :
       replica(false),
       osr(NULL),
-      use_tbl(false),
+      use_tbl(true),
       coll_id(0),
       object_id(0) {
       bufferlist::iterator dp = nbl.begin();
