@@ -10,9 +10,11 @@ import teuthology
 from . import orchestra
 import orchestra.remote
 from .orchestra import run
+from .config import FakeNamespace
 from .lock import list_locks
 from .lock import unlock_one
 from .misc import config_file
+from .misc import merge_configs
 from .misc import get_testdir
 from .misc import get_user
 from .misc import read_config
@@ -336,7 +338,8 @@ def synch_clocks(remotes):
         proc.wait()
 
 
-def main(ctx):
+def main(args):
+    ctx = FakeNamespace(args)
     if ctx.verbose:
         teuthology.log.setLevel(logging.DEBUG)
 
@@ -355,6 +358,9 @@ def main(ctx):
             ctx.owner = info.get('owner')
             if not ctx.owner:
                 ctx.owner = open(ctx.archive + '/owner').read().rstrip('\n')
+
+    if ctx.targets:
+        ctx.config = merge_configs(ctx.targets)
 
     read_config(ctx)
 
