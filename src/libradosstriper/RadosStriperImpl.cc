@@ -573,7 +573,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
       std::string err;
       // this intermediate string allows to add a null terminator before calling strtol
       std::string strsize(bl2.c_str(), bl2.length());
-      uint64_t size = strict_strtol(strsize.c_str(), 10, &err);
+      uint64_t size = strict_strtoll(strsize.c_str(), 10, &err);
       if (!err.empty()) {
         lderr(cct()) << XATTR_SIZE << " : " << err << dendl;
         
