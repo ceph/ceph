@@ -25,7 +25,7 @@ def normalize_config(ctx, config):
     specifies a different version for a specific role, this is
     unchanged.
 
-    For example, with 3 OSDs this::
+    For example, with 4 OSDs this::
 
          osd:
            tag: v3.0
@@ -58,7 +58,7 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb'],
+                                       'deb', 'rpm'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
@@ -259,9 +259,9 @@ def download_kernel(ctx, config):
 
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if src.find('/') >= 0:
-            # local deb
-            log.info('Copying kernel deb {path} to {role}...'.format(path=src,
-                                                                     role=role))
+            # local package - src is path
+            log.info('Copying kernel package {path} to {role}...'.format(
+                path=src, role=role))
             f = open(src, 'r')
             proc = role_remote.run(
                 args=[
@@ -274,6 +274,7 @@ def download_kernel(ctx, config):
                 )
             procs[role_remote.name] = proc
         else:
+            # gitbuilder package - src is sha1
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
             package_type = role_remote.os.package_type
@@ -980,12 +981,18 @@ def task(ctx, config):
     validate_config(ctx, config)
     log.info('config %s' % config)
 
-    need_install = {}  # sha1 to dl, or path to deb
+    need_install = {}  # sha1 to dl, or path to rpm or deb
     need_version = {}  # utsrelease or sha1
     kdb = {}
     for role, role_config in config.iteritems():
-        if role_config.get('deb'):
-            path = role_config.get('deb')
+        if role_config.get('rpm') or role_config.get('deb'):
+            # We only care about path - deb: vs rpm: is meaningless,
+            # rpm: just happens to be parsed first.  Nothing is stopping
+            # 'deb: /path/to/foo.rpm' and it will work provided remote's
+            # os.package_type is 'rpm' and vice versa.
+            path = role_config.get('rpm')
+            if not path:
+                path = role_config.get('deb')
             sha1 = get_sha1_from_pkg_name(path)
             assert sha1, "failed to extract commit hash from path %s" % path
             if need_to_install(ctx, role, sha1):
