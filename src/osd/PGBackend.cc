@@ -537,6 +537,7 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t> > &missing,
   map<hobject_t, set<pg_shard_t> > &inconsistent,
   map<hobject_t, pg_shard_t> &authoritative,
+  map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
   int &shallow_errors, int &deep_errors,
   const spg_t& pgid,
   const vector<int> &acting,
@@ -573,6 +574,7 @@ void PGBackend::be_compare_scrubmaps(
     }
 
     assert(auth != maps.end());
+    ScrubMap::object& auth_object = auth->second->objects[*k];
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
     for (j = maps.begin(); j != maps.end(); ++j) {
@@ -583,7 +585,7 @@ void PGBackend::be_compare_scrubmaps(
 	stringstream ss;
 	enum scrub_error_type error =
 	  be_compare_scrub_objects(auth->first,
-				   auth->second->objects[*k],
+				   auth_object,
 				   auth_oi,
 				   okseed,
 				   j->second->objects[*k],
@@ -614,5 +616,13 @@ void PGBackend::be_compare_scrubmaps(
     if (!cur_inconsistent.empty() || !cur_missing.empty()) {
       authoritative[*k] = auth->first;
     }
+    if (okseed &&
+	auth_object.digest_present && auth_object.omap_digest_present &&
+	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
+      dout(20) << __func__ << " noting missing digest on " << *k << dendl;
+      missing_digest[*k] = make_pair(auth_object.digest,
+				     auth_object.omap_digest);
+    }
+
   }
 }
