@@ -2602,7 +2602,7 @@ int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
     map<epoch_t,pg_interval_t> &past_intervals,
     interval_set<snapid_t> &snap_collections,
     hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
+    __u8 &info_struct_v, bool dirty_big_info, bool force_ver)
 {
   // pg state
 
