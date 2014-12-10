@@ -33,7 +33,6 @@ public:
   ReplicatedBackend(
     PGBackend::Listener *pg,
     coll_t coll,
-    coll_t temp_coll,
     ObjectStore *store,
     CephContext *cct);
 

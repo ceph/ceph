@@ -1243,7 +1243,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
+      _pool.info, curmap, this, coll_t(p), o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   new_backfill(false),
@@ -5775,11 +5775,6 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   }
 }
 
-coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
-{
-  return pgbackend->get_temp_coll(t);
-}
-
 hobject_t ReplicatedPG::generate_temp_object()
 {
   ostringstream ss;
@@ -8508,14 +8503,13 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
     add_temp_obj(m->new_temp_oid);
-    get_temp_coll(&rm->localt);
   }
   if (m->discard_temp_oid != hobject_t()) {
     dout(20) << __func__ << " stop tracking temp " << m->discard_temp_oid << dendl;
     if (rm->opt.empty()) {
       dout(10) << __func__ << ": removing object " << m->discard_temp_oid
 	       << " since we won't get the transaction" << dendl;
-      rm->localt.remove(temp_coll, m->discard_temp_oid);
+      rm->localt.remove(coll, m->discard_temp_oid);
     }
     clear_temp_obj(m->discard_temp_oid);
   }
@@ -9134,13 +9128,10 @@ void ReplicatedBackend::submit_push_data(
   map<string, bufferlist> &omap_entries,
   ObjectStore::Transaction *t)
 {
-  coll_t target_coll;
   hobject_t target_oid;
   if (first && complete) {
-    target_coll = coll;
     target_oid = recovery_info.soid;
   } else {
-    target_coll = get_temp_coll(t);
     target_oid = get_parent()->get_temp_recovery_object(recovery_info.version,
 							recovery_info.soid.snap);
     if (first) {
@@ -9151,10 +9142,10 @@ void ReplicatedBackend::submit_push_data(
   }
 
   if (first) {
-    t->remove(target_coll, target_oid);
-    t->touch(target_coll, target_oid);
-    t->truncate(target_coll, target_oid, recovery_info.size);
-    t->omap_setheader(target_coll, target_oid, omap_header);
+    t->remove(coll, target_oid);
+    t->touch(coll, target_oid);
+    t->truncate(coll, target_oid, recovery_info.size);
+    t->omap_setheader(coll, target_oid, omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -9162,15 +9153,15 @@ void ReplicatedBackend::submit_push_data(
        ++p) {
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
-    t->write(target_coll, target_oid,
+    t->write(coll, target_oid,
 	     p.get_start(), p.get_len(), bit);
     off += p.get_len();
   }
 
   if (!omap_entries.empty())
-    t->omap_setkeys(target_coll, target_oid, omap_entries);
+    t->omap_setkeys(coll, target_oid, omap_entries);
   if (!attrs.empty())
-    t->setattrs(target_coll, target_oid, attrs);
+    t->setattrs(coll, target_oid, attrs);
 
   if (complete) {
     if (!first) {
@@ -9178,7 +9169,7 @@ void ReplicatedBackend::submit_push_data(
 	       << target_oid << " from the temp collection" << dendl;
       clear_temp_obj(target_oid);
       t->remove(coll, recovery_info.soid);
-      t->collection_move_rename(target_coll, target_oid, coll, recovery_info.soid);
+      t->collection_move_rename(coll, target_oid, coll, recovery_info.soid);
     }
 
     submit_push_complete(recovery_info, t);
