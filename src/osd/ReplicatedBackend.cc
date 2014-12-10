@@ -300,9 +300,11 @@ class RPGTransaction : public PGBackend::PGTransaction {
       return coll;
   }
 public:
-  RPGTransaction(coll_t coll, coll_t temp_coll)
+  RPGTransaction(coll_t coll, coll_t temp_coll, bool use_tbl)
     : coll(coll), temp_coll(temp_coll), t(new ObjectStore::Transaction), written(0)
-    {}
+    {
+      t->set_use_tbl(use_tbl);
+    }
 
   /// Yields ownership of contained transaction
   ObjectStore::Transaction *get_transaction() {
@@ -476,7 +478,7 @@ public:
 
 PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
 {
-  return new RPGTransaction(coll, get_temp_coll());
+  return new RPGTransaction(coll, get_temp_coll(), parent->transaction_use_tbl());
 }
 
 class C_OSD_OnOpCommit : public Context {
@@ -557,6 +559,7 @@ void ReplicatedBackend::submit_transaction(
     op_t);
 
   ObjectStore::Transaction local_t;
+  local_t.set_use_tbl(op_t->get_use_tbl());
   if (t->get_temp_added().size()) {
     get_temp_coll(&local_t);
     add_temp_objs(t->get_temp_added());

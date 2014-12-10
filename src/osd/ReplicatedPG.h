@@ -415,6 +415,11 @@ public:
     return primary;
   }
 
+  bool transaction_use_tbl() {
+    uint64_t min_features = get_min_peer_features();
+    return !(min_features & CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT);
+  }
+
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch);
   void send_message_osd_cluster(
