@@ -1234,7 +1234,8 @@ public:
       }
       data.ops++;
     }
-    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid) {
+    void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid)
+      __attribute__ ((deprecated)) {
       // NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
       // always appear together, so this is effectively a single MOVE.
       if (use_tbl) {
