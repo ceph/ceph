@@ -846,6 +846,12 @@ void Paxos::commit_start()
     state = STATE_WRITING;
   else
     assert(0);
+
+  if (mon->get_quorum().size() > 1) {
+    // cancel timeout event
+    mon->timer.cancel_event(accept_timeout_event);
+    accept_timeout_event = 0;
+  }
 }
 
 void Paxos::commit_finish()
@@ -900,15 +906,11 @@ void Paxos::commit_finish()
 
   if (do_refresh()) {
     commit_proposal();
-
-    finish_contexts(g_ceph_context, waiting_for_commit);
-
     if (mon->get_quorum().size() > 1) {
-      // cancel timeout event
-      mon->timer.cancel_event(accept_timeout_event);
-      accept_timeout_event = 0;
       extend_lease();
     }
+
+    finish_contexts(g_ceph_context, waiting_for_commit);
 
     assert(g_conf->paxos_kill_at != 10);
 
