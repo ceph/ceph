@@ -507,8 +507,14 @@ public:
     void set_fadvise_flag(uint32_t flag) {
       data.fadvise_flags = data.fadvise_flags | flag;
     }
-
     uint32_t get_fadvise_flags() { return data.fadvise_flags; }
+
+    void set_use_tbl(bool value) {
+      use_tbl = value;
+    }
+    bool get_use_tbl() {
+      return use_tbl;
+    }
 
     void swap(Transaction& other) {
       std::swap(data, other.data);
@@ -1507,13 +1513,13 @@ public:
     // etc.
     Transaction() :
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) { }
 
     Transaction(bufferlist::iterator &dp) :
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       decode(dp);
@@ -1521,7 +1527,7 @@ public:
 
     Transaction(bufferlist &nbl) :
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       bufferlist::iterator dp = nbl.begin();

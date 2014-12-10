@@ -55,6 +55,7 @@
 #define CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 (1ULL<<44)
 #define CEPH_FEATURE_OSD_SET_ALLOC_HINT (1ULL<<45)
 #define CEPH_FEATURE_OSD_FADVISE_FLAGS (1ULL<<46)
+#define CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT (1ULL<<46) /* overlap w/ fadvise */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -134,6 +135,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
          CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 |   \
          CEPH_FEATURE_OSD_SET_ALLOC_HINT |   \
 	 CEPH_FEATURE_OSD_FADVISE_FLAGS | \
+         CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT |   \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
