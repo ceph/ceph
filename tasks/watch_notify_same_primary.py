@@ -97,8 +97,15 @@ def task(ctx, config):
 
         for watch in watches:
             lines = watch.stdout.getvalue().split("\n")
-            print lines
-            assert len(lines) == 4
+            got1 = False
+            got2 = False
+            for l in lines:
+                if 'notify1' in l:
+                    got1 = True
+                if 'notify2' in l:
+                    got2 = True
+            log.info(lines)
+            assert got1 and got2
 
         ctx.manager.revive_osd(0)
         ctx.manager.remove_pool(pool)
