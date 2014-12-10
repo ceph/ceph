@@ -1620,6 +1620,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
   if (!multipart) {
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, bucket_owner, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
     ((RGWPutObjProcessor_Atomic *)processor)->set_olh_epoch(olh_epoch);
+    ((RGWPutObjProcessor_Atomic *)processor)->set_version_id(version_id);
   } else {
     processor = new RGWPutObjProcessor_Multipart(obj_ctx, bucket_owner, part_size, s);
   }
