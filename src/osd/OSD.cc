@@ -4252,21 +4252,15 @@ void OSD::RemoveWQ::_process(
   if (!item.second->start_or_resume_clearing())
     return;
 
-  list<coll_t>& remaining_colls = item.second->colls_to_remove;
-  for (list<coll_t>::iterator i = remaining_colls.begin();
-       i != remaining_colls.end();) {
-    bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second,
-      &finished, handle);
-    if (!cont)
-      return;
-    if (finished) {
-      i = remaining_colls.erase(i);
-    } else {
-      if (item.second->pause_clearing())
-        queue_front(item);
-      return;
-    }
+  bool cont = remove_dir(
+    pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second,
+    &finished, handle);
+  if (!cont)
+    return;
+  if (!finished) {
+    if (item.second->pause_clearing())
+      queue_front(item);
+    return;
   }
 
   if (!item.second->start_deleting())
@@ -4275,18 +4269,11 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PGLog::clear_info_log(pg->info.pgid, t);
 
-  // remove the collections themselves
-  list<coll_t> colls_to_remove;
-  pg->get_colls(&colls_to_remove);
-  for (list<coll_t>::iterator i = colls_to_remove.begin();
-       i != colls_to_remove.end();
-       ++i) {
-    if (g_conf->osd_inject_failure_on_pg_removal) {
-      generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
-      exit(1);
-    }
-    t->remove_collection(*i);
+  if (g_conf->osd_inject_failure_on_pg_removal) {
+    generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
+    exit(1);
   }
+  t->remove_collection(coll);
 
   // We need the sequencer to stick around until the op is complete
   store->queue_transaction(

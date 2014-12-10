@@ -1212,7 +1212,6 @@ public:
     const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
-  virtual void get_colls(list<coll_t> *out) = 0;
   virtual void split_colls(
     spg_t child,
     int split_bits,

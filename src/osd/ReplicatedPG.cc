@@ -1214,7 +1214,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
+      _pool.info, curmap, this, coll_t(p), o->store, cct)),
   object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   new_backfill(false),
@@ -5634,11 +5634,6 @@ void ReplicatedPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
       i->second->notify_ack(p->notify_id, p->reply_bl);
     }
   }
-}
-
-coll_t ReplicatedPG::get_temp_coll(ObjectStore::Transaction *t)
-{
-  return pgbackend->get_temp_coll(t);
 }
 
 hobject_t ReplicatedPG::generate_temp_object()

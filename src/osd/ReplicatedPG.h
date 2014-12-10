@@ -1424,15 +1424,14 @@ public:
 private:
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
+
   uint64_t temp_seq; ///< last id for naming temp objects
-  coll_t get_temp_coll(ObjectStore::Transaction *t);
   hobject_t generate_temp_object();  ///< generate a new temp object name
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
 public:
-  void get_colls(list<coll_t> *out) {
-    out->push_back(coll);
-    return pgbackend->temp_colls(out);
+  coll_t get_coll() {
+    return coll;
   }
   void split_colls(
     spg_t child,
@@ -1448,7 +1447,6 @@ public:
       seed,
       target);
     PG::_init(*t, child, pool);
-    pgbackend->split_colls(child, split_bits, seed, t);
   }
 private:
   struct NotTrimming;
