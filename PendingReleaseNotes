@@ -28,3 +28,8 @@ v0.90
 
 * The 'rados create <objectname> [category]' optional category argument is no
   longer supported or recognized.
+
+* rados.py's Rados class no longer has a __del__ method; it was causing
+  problems on interpreter shutdown and use of threads.  If your code has
+  Rados objects with limited lifetimes and you're concerned about locked
+  resources, call Rados.shutdown() explicitly.
