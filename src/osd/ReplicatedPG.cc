@@ -5563,7 +5563,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
   return result;
 }
 
-void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc)
+void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc,
+			      bool scrub_ok)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   dout(20) << __func__ << " " << soid << " " << ctx
@@ -5751,7 +5752,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       pending_backfill_updates[soid].stats.add(ctx->delta_stats);
   }
 
-  if (scrubber.active) {
+  if (!scrub_ok && scrubber.active) {
     assert(soid < scrubber.start || soid >= scrubber.end);
     if (soid < scrubber.start)
       scrub_cstat.add(ctx->delta_stats);
@@ -12401,6 +12402,24 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
     osd->clog->error() << mode << " " << info.pgid
 		      << " expected clone " << next_clone;
     ++scrubber.shallow_errors;
+  }
+
+  if (scrubber.shallow_errors == 0) {
+    for (map<hobject_t,pair<uint32_t,uint32_t> >::iterator p =
+	   scrubber.missing_digest.begin();
+	 p != scrubber.missing_digest.end();
+	 ++p) {
+      dout(10) << __func__ << " recording digests for " << p->first << dendl;
+      ObjectContextRef obc = get_object_context(p->first, false);
+      assert(obc);
+      RepGather *repop = simple_repop_create(obc);
+      OpContext *ctx = repop->ctx;
+      ctx->at_version = get_next_version();
+      ctx->new_obs.oi.set_data_digest(p->second.first);
+      ctx->new_obs.oi.set_omap_digest(p->second.second);
+      finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
+      simple_repop_submit(repop);
+    }
   }
   
   dout(10) << "_scrub (" << mode << ") finish" << dendl;
