@@ -43,17 +43,6 @@ struct MOSDRepScrub : public Message {
       deep(false),
       seed(0) { }
 
-  MOSDRepScrub(spg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
-	       epoch_t map_epoch)
-    : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-      pgid(pgid),
-      scrub_from(scrub_from),
-      scrub_to(scrub_to),
-      map_epoch(map_epoch),
-      chunky(false),
-      deep(false),
-      seed(0) { }
-
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
                hobject_t start, hobject_t end, bool deep, uint32_t seed)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
