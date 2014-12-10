@@ -1125,6 +1125,40 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
   return 0;
 }
 
+int skip_object(bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  bufferlist ebl;
+  bool done = false;
+  while(!done) {
+    sectiontype_t type;
+    int ret = read_section(file_fd, &type, &ebl);
+    if (ret)
+      return ret;
+
+    ebliter = ebl.begin();
+    if (type >= END_OF_TYPES) {
+      cout << "Skipping unknown object section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_DATA:
+    case TYPE_ATTRS:
+    case TYPE_OMAP_HDR:
+    case TYPE_OMAP:
+      if (debug)
+        cerr << "Skip type " << (int)type << std::endl;
+      break;
+    case TYPE_OBJECT_END:
+      done = true;
+      break;
+    default:
+      return EFAULT;
+    }
+  }
+  return 0;
+}
+
 int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 {
   bufferlist::iterator ebliter = bl.begin();
@@ -1140,6 +1174,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
   if (!ob.hoid.hobj.is_head()) {
     cout << "Skipping non-head for " << ob.hoid << std::endl;
+    skip_object(bl);
+    return 0;
   }
 
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
