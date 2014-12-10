@@ -505,7 +505,14 @@ public:
       replica = true;
     }
     bool get_replica() {
-        return replica;
+      return replica;
+    }
+
+    void set_use_tbl(bool value) {
+      use_tbl = value;
+    }
+    bool get_use_tbl() {
+      return use_tbl;
     }
 
     void swap(Transaction& other) {
@@ -1504,14 +1511,14 @@ public:
     Transaction() :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) { }
 
     Transaction(bufferlist::iterator &dp) :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       decode(dp);
@@ -1520,7 +1527,7 @@ public:
     Transaction(bufferlist &nbl) :
       replica(false),
       osr(NULL),
-      use_tbl(true),
+      use_tbl(false),
       coll_id(0),
       object_id(0) {
       bufferlist::iterator dp = nbl.begin();
