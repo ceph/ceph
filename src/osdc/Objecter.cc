@@ -510,9 +510,11 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
 		 << " (last_error " << info->last_error << ")" << dendl;
   if (r < 0) {
     info->watch_lock.get_write();
-    info->last_error = r;
-    if (info->watch_context)
-      finisher->queue(new C_DoWatchError(info, r));
+    if (!info->last_error) {
+      info->last_error = r;
+      if (info->watch_context)
+	finisher->queue(new C_DoWatchError(info, r));
+    }
     info->watch_lock.put_write();
   }
 }
@@ -569,7 +571,7 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
   if (info->register_gen == register_gen) {
     if (r == 0) {
       info->watch_valid_thru = sent;
-    } else if (r < 0) {
+    } else if (r < 0 && !info->last_error) {
       info->last_error = r;
       if (info->watch_context)
 	finisher->queue(new C_DoWatchError(info, r));
@@ -752,9 +754,14 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
   }
   RWLock::WLocker wl(info->watch_lock);
   if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
-    info->last_error = -ENOTCONN;
+    if (!info->last_error) {
+      info->last_error = -ENOTCONN;
+      if (info->watch_context)
+	finisher->queue(new C_DoWatchError(info, -ENOTCONN));
+    }
+  } else {
+    finisher->queue(new C_DoWatchNotify(this, info, m));
   }
-  finisher->queue(new C_DoWatchNotify(this, info, m));
 }
 
 void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
@@ -783,16 +790,14 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 
   assert(info->is_watch);
   assert(info->watch_context);
+  assert(m->opcode != CEPH_WATCH_EVENT_DISCONNECT);
+
   rwlock.put_read();
 
   switch (m->opcode) {
   case CEPH_WATCH_EVENT_NOTIFY:
     info->watch_context->handle_notify(m->notify_id, m->cookie,
 				       m->notifier_gid, m->bl);
-    break;
-
-  case CEPH_WATCH_EVENT_DISCONNECT:
-    info->watch_context->handle_error(m->cookie, -ENOTCONN);
     break;
   }
 
