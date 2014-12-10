@@ -3744,9 +3744,15 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
           return r;
       }
     } else if (name == "quota.max_bytes") {
-      quota->max_bytes = boost::lexical_cast<unsigned>(value);
+      int64_t q = boost::lexical_cast<int64_t>(value);
+      if (q < 0)
+        return -EINVAL;
+      quota->max_bytes = q;
     } else if (name == "quota.max_files") {
-      quota->max_files = boost::lexical_cast<unsigned>(value);
+      int64_t q = boost::lexical_cast<int64_t>(value);
+      if (q < 0)
+        return -EINVAL;
+      quota->max_files = q;
     } else {
       dout(10) << " unknown quota vxattr " << name << dendl;
       return -EINVAL;
