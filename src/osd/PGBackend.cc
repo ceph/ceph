@@ -453,17 +453,6 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (i == j->second->objects.end()) {
       continue;
     }
-    if (auth == maps.end()) {
-      // Something is better than nothing
-      // TODO: something is NOT better than nothing, do something like
-      // unfound_lost if no valid copies can be found, or just mark unfound
-      auth = j;
-      dout(10) << __func__ << ": selecting osd " << j->first
-	       << " for obj " << obj
-	       << ", auth == maps.end()"
-	       << dendl;
-      continue;
-    }
     if (i->second.read_error) {
       // scrub encountered read error, probably corrupt
       dout(10) << __func__ << ": rejecting osd " << j->first
@@ -541,6 +530,18 @@ void PGBackend::be_compare_scrubmaps(
        ++k) {
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
       be_select_auth_object(*k, maps);
+    if (auth == maps.end()) {
+      // Something is better than nothing
+      // TODO: something is NOT better than nothing, do something like
+      // unfound_lost if no valid copies can be found, or just mark unfound
+      auth = j;
+      dout(10) << __func__ << ": selecting osd " << j->first
+	       << " for obj " << *k
+	       << ", something is better than nothing, FIXME"
+	       << dendl;
+      continue;
+    }
+
     assert(auth != maps.end());
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
