@@ -17,6 +17,8 @@ optional arguments:
                         yaml config containing machines to nuke
   -a DIR, --archive DIR
                         archive path for a job to kill and nuke
+  --stale               attempt to find and nuke 'stale' machines
+                        (e.g. locked by jobs that are no longer running)
   --owner OWNER         job owner
   -p PID, --pid PID     pid of the process to be killed
   -r, --reboot-all      reboot all machines

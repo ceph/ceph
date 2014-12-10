@@ -13,6 +13,7 @@ from .orchestra import run
 from .config import FakeNamespace
 from .lock import list_locks
 from .lock import unlock_one
+from .lock import find_stale_locks
 from .misc import config_file
 from .misc import merge_configs
 from .misc import get_testdir
@@ -361,6 +362,13 @@ def main(args):
 
     if ctx.targets:
         ctx.config = merge_configs(ctx.targets)
+
+    if ctx.stale:
+        stale_nodes = find_stale_locks(ctx.owner)
+        targets = dict()
+        for node in stale_nodes:
+            targets[node['name']] = node['ssh_pub_key']
+        ctx.config = dict(targets=targets)
 
     read_config(ctx)
 
