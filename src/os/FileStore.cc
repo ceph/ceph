@@ -1808,7 +1808,9 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (o->onreadable) {
     op_finisher.queue(o->onreadable);
   }
-  op_finisher.queue(to_queue);
+  if (!to_queue.empty()) {
+    op_finisher.queue(to_queue);
+  }
   delete o;
 }
 
@@ -1958,7 +1960,9 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
     dout(10) << " queueing ondisk " << ondisk << dendl;
     ondisk_finisher.queue(ondisk);
   }
-  ondisk_finisher.queue(to_queue);
+  if (!to_queue.empty()) {
+    ondisk_finisher.queue(to_queue);
+  }
 }
 
 int FileStore::_do_transactions(
