@@ -532,7 +532,7 @@ void DeterministicOpSequence::_do_coll_move(coll_t orig_coll, coll_t new_coll,
   ObjectStore::Transaction t;
   note_txn(&t);
   t.remove(new_coll, obj);
-  t.collection_move(new_coll, orig_coll, obj);
+  t.collection_move_rename(orig_coll, obj, new_coll, obj);
   m_store->apply_transaction(t);
 }
 
