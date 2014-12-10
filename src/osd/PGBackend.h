@@ -585,7 +585,7 @@
 
    virtual bool scrub_supported() { return false; }
    void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
    enum scrub_error_type be_compare_scrub_objects(
      const ScrubMap::object &auth,
@@ -607,6 +607,7 @@
      uint64_t logical_size) { assert(0); return 0; }
    virtual void be_deep_scrub(
      const hobject_t &poid,
+     uint32_t seed,
      ScrubMap::object &o,
      ThreadPool::TPHandle &handle) { assert(0); }
 
