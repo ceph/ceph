@@ -2394,6 +2394,8 @@ void RGWCopyObj::execute()
                         if_nomatch,
                         replace_attrs,
                         attrs, RGW_OBJ_CATEGORY_MAIN,
+                        olh_epoch,
+                        (version_id.empty() ? NULL : &version_id),
                         &s->req_id, /* use req_id as tag */
                         &s->err,
                         copy_obj_progress_cb, (void *)this
