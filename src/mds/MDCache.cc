@@ -8869,10 +8869,6 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
       dout(20) << " caps | leases" << dendl;
       return;  // wait
     }
-    if (!in->dirfrags.empty()) {
-      dout(20) << " open dirfrags" << dendl;
-      return;  // wait for dirs to close/trim
-    }
     if (dn->state_test(CDentry::STATE_PURGING)) {
       dout(20) << " already purging" << dendl;
       return;  // already purging
@@ -8893,8 +8889,11 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
     if (delay) {
       if (!dn->item_stray.is_on_list())
 	delayed_eval_stray.push_back(&dn->item_stray);
-    } else
+    } else {
+      if (in->is_dir())
+	in->close_dirfrags();
       purge_stray(dn);
+    }
   }
   else if (in->inode.nlink >= 1) {
     // trivial reintegrate?
@@ -8914,6 +8913,16 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
     }
   } else {
     // wait for next use.
+  }
+}
+
+void MDCache::try_remove_dentries_for_stray(CInode* diri) {
+  assert(diri->inode.nlink == 0);
+  if (diri->has_dirfrags()) {
+    list<CDir*> ls;
+    diri->get_nested_dirfrags(ls);
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
+      (*p)->try_remove_dentries_for_stray();
   }
 }
 
