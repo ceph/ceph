@@ -246,12 +246,6 @@ enum {
 
 // pg stuff
 
-// object namespaces
-#define CEPH_METADATA_NS       1
-#define CEPH_DATA_NS           2
-#define CEPH_CAS_NS            3
-#define CEPH_OSDMETADATA_NS 0xff
-
 #define OSD_SUPERBLOCK_POBJECT hobject_t(sobject_t(object_t("osd_superblock"), 0))
 
 // placement seed (a hash value)
