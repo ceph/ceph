@@ -119,6 +119,7 @@ Patch0019:      0019-udev-rules-now-explicitly-specify-i.patch
 Patch0020:      0020-Always-provide-summary-for-non-heal.patch
 Patch0021:      0021-Fix-spec-violating-extraneous-unloc.patch
 Patch0022:      0022-Fix-overflowing-journel-partitions.patch
+Patch0023:      0023-Unconditionally-chown-rados-log-fil.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -360,6 +361,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0020 -p1
 %patch0021 -p1
 %patch0022 -p1
+%patch0023 -p1
 
 %build
 
@@ -467,6 +469,7 @@ install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/li
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw/
 %if 0%{?suse_version} >= 1310
 %{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
 %{__install} -m 0644 %{SOURCE3} %{buildroot}/%{_tmpfilesdir}/%{name}.conf
@@ -696,6 +699,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_sbindir}/rcceph-radosgw
+%dir %{_localstatedir}/log/radosgw/
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
 
 %post radosgw

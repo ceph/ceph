@@ -1,0 +1,46 @@
+From: Thorsten Behrens <tbehrens@suse.com>
+Date: Wed, 10 Dec 2014 11:53:43 +0100
+Subject: [PATCH] Unconditionally chown rados log file.
+
+This fixes bnc#905047 (in a somewhat ad-hoc way). Sadly the log
+file gets created from several places, so its existence does not
+mean init-radosgw had actually run.
+---
+ src/init-radosgw      | 6 ++++--
+ src/init-radosgw.sysv | 6 ++++--
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/src/init-radosgw b/src/init-radosgw
+index b0f6a9a..9f019bc 100644
+--- a/src/init-radosgw
++++ b/src/init-radosgw
+@@ -72,8 +72,10 @@ case "$1" in
+             fi
+ 
+             log_file=`$RADOSGW -n $name --show-config-value log_file`
+-            if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
+-                touch "$log_file"
++            if [ -n "$log_file" ]; then
++                if [ ! -e "$log_file" ]; then
++                    touch "$log_file"
++                fi
+                 chown $user $log_file
+             fi
+ 
+diff --git a/src/init-radosgw.sysv b/src/init-radosgw.sysv
+index dd3dbb0..4598e68 100644
+--- a/src/init-radosgw.sysv
++++ b/src/init-radosgw.sysv
+@@ -79,8 +79,10 @@ case "$1" in
+             fi
+ 
+             log_file=`$RADOSGW -n $name --show-config-value log_file`
+-            if [ -n "$log_file" ] && [ ! -e "$log_file" ]; then
+-                touch "$log_file"
++            if [ -n "$log_file" ]; then
++                if [ ! -e "$log_file" ]; then
++                    touch "$log_file"
++                fi
+                 chown $user $log_file
+             fi
+ 

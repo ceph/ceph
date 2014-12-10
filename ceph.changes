@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Wed Dec 10 11:15:33 UTC 2014 - tbehrens@suse.com
+
+- Add 0023-Unconditionally-chown-rados-log-fil.patch
+  * this fixes bnc#905047 by chowning the logfile unconditionally
+- Add /var/log/radosgw directory to package content
+
+-------------------------------------------------------------------
 Wed Dec 10 08:59:11 UTC 2014 - tbehrens@suse.com
 
 - Fix bnc#906576 - package rbd-fuse 
