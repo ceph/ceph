@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Wed Dec 10 08:59:11 UTC 2014 - tbehrens@suse.com
+
+- Fix bnc#906576 - package rbd-fuse 
+
+-------------------------------------------------------------------
 Fri Dec  5 14:15:08 UTC 2014 - lmb@suse.com
 
 - python-ceph needs python-Flask (bnc#904366)

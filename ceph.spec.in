@@ -148,8 +148,6 @@ BuildRequires:  fuse-devel
 %description fuse
 FUSE based client for Ceph distributed network file system
 
-%if 0%{?rbd_fuse}
-
 %package -n rbd-fuse
 Summary:        RBD fuse-based client
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
@@ -159,8 +157,6 @@ BuildRequires:  fuse-devel
 
 %description -n rbd-fuse
 FUSE based client for Ceph distributed network file system
-
-%endif
 
 %package devel
 Summary:        Ceph headers
@@ -624,10 +620,10 @@ fi
 %{_bindir}/rbd-fuse
 %{_mandir}/man8/rbd-fuse.8*
 
-%if 0%{?rbd_fuse}
 %files -n rbd-fuse
 %defattr(-,root,root,-)
-%endif
+%{_bindir}/rbd-fuse
+%{_mandir}/man8/rbd-fuse.8*
 
 #################################################################################
 %files devel
