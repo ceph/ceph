@@ -609,6 +609,39 @@ def need_to_install_distro(ctx, role):
     log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
     return True
 
+def maybe_generate_initrd_rpm(remote, path, version):
+    """
+    Generate initrd with mkinitrd if the hooks that should make it
+    happen on its own aren't there.
+
+    :param path: rpm package path
+    :param version: kernel version to generate initrd for
+                    e.g. 3.18.0-rc6-ceph-00562-g79a9fa5
+    """
+    proc = remote.run(
+        args=[
+            'rpm',
+            '--scripts',
+            '-qp',
+            path,
+        ],
+        stdout=StringIO())
+    out = proc.stdout.getvalue()
+    if 'bin/installkernel' in out or 'bin/kernel-install' in out:
+        return
+
+    log.info("No installkernel or kernel-install hook in %s, "
+             "will generate initrd for %s", path, version)
+    remote.run(
+        args=[
+            'sudo',
+            'mkinitrd',
+            '--allow-missing',
+            '-f', # overwrite existing initrd
+            '/boot/initramfs-' + version + '.img',
+            version,
+        ])
+
 def install_kernel(remote, path=None):
     """
     A bit of misnomer perhaps - the actual kernel package is installed
@@ -625,6 +658,10 @@ def install_kernel(remote, path=None):
     if system_type == 'rpm':
         if path:
             version = get_image_version(remote, path)
+            # This is either a gitbuilder or a local package and both of these
+            # could have been built with upstream rpm targets with specs that
+            # don't have a %post section at all, which means no initrd.
+            maybe_generate_initrd_rpm(remote, path, version)
         else:
             version = get_latest_image_version_rpm(remote)
         update_grub_rpm(remote, version)
