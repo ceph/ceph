@@ -374,6 +374,7 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
   pg_shard_t auth_shard,
   const ScrubMap::object &auth,
   const object_info_t& auth_oi,
+  bool okseed,
   const ScrubMap::object &candidate,
   ostream &errorstream)
 {
@@ -445,6 +446,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   PGBackend::be_select_auth_object(
   const hobject_t &obj,
   const map<pg_shard_t,ScrubMap*> &maps,
+  bool okseed,
   object_info_t *auth_oi)
 {
   map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
@@ -498,6 +500,24 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       // invalid object info, probably corrupt
       continue;
     }
+    if (okseed && oi.is_data_digest() && i->second.digest_present &&
+	oi.data_digest != i->second.digest) {
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", data digest mismatch "
+	       << i->second.digest << " != " << oi.data_digest
+	       << dendl;
+      continue;
+    }
+    if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
+	oi.omap_digest != i->second.omap_digest) {
+      dout(10) << __func__ << ": rejecting osd " << j->first
+	       << " for obj " << obj
+	       << ", omap digest mismatch "
+	       << i->second.omap_digest << " != " << oi.omap_digest
+	       << dendl;
+      continue;
+    }
     dout(10) << __func__ << ": selecting osd " << j->first
 	     << " for obj " << obj
 	     << dendl;
@@ -509,6 +529,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
 void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
+  bool okseed,
   map<hobject_t, set<pg_shard_t> > &missing,
   map<hobject_t, set<pg_shard_t> > &inconsistent,
   map<hobject_t, pg_shard_t> &authoritative,
@@ -534,7 +555,7 @@ void PGBackend::be_compare_scrubmaps(
        ++k) {
     object_info_t auth_oi;
     map<pg_shard_t, ScrubMap *>::const_iterator auth =
-      be_select_auth_object(*k, maps, &auth_oi);
+      be_select_auth_object(*k, maps, okseed, &auth_oi);
     if (auth == maps.end()) {
       // Something is better than nothing
       // TODO: something is NOT better than nothing, do something like
@@ -560,6 +581,7 @@ void PGBackend::be_compare_scrubmaps(
 	  be_compare_scrub_objects(auth->first,
 				   auth->second->objects[*k],
 				   auth_oi,
+				   okseed,
 				   j->second->objects[*k],
 				   ss);
         if (error != CLEAN) {
