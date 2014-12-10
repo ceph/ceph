@@ -8222,6 +8222,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
+  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;

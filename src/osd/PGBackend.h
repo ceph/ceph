@@ -206,6 +206,8 @@
 
      virtual uint64_t min_peer_features() const = 0;
 
+     virtual bool transaction_use_tbl() = 0;
+
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
