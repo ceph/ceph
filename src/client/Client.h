@@ -671,6 +671,7 @@ private:
 	  bool (Client::*exists_cb)(Inode *in);
   };
 
+  bool _vxattrcb_quota_exists(Inode *in);
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);

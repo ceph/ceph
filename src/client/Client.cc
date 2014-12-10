@@ -8373,6 +8373,10 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   return _removexattr(in, name, uid, gid);
 }
 
+bool Client::_vxattrcb_quota_exists(Inode *in)
+{
+  return in->quota.is_enable();
+}
 size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size)
 {
   return snprintf(val, size,
@@ -8495,8 +8499,8 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME(_type, _name),			        \
   getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
   readonly: false,						\
-  hidden: false,						\
-  exists_cb: NULL,						\
+  hidden: true,							\
+  exists_cb: &Client::_vxattrcb_quota_exists,			\
 }
 
 const Client::VXattr Client::_dir_vxattrs[] = {
@@ -8524,7 +8528,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     getxattr_cb: &Client::_vxattrcb_quota,
     readonly: false,
     hidden: true,
-    exists_cb: NULL,
+    exists_cb: &Client::_vxattrcb_quota_exists,
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
