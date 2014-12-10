@@ -220,11 +220,13 @@ protected:
     return osdmap_ref;
   }
 
+public:
   OSDMapRef get_osdmap() const {
     assert(is_locked());
     assert(osdmap_ref);
     return osdmap_ref;
   }
+protected:
 
   /** locking and reference counting.
    * I destroy myself when the reference count hits zero.
@@ -432,7 +434,9 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, stat_queue_item;
+  bool snap_trim_queued;
+
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -2247,7 +2251,7 @@ public:
     ThreadPool::TPHandle &handle
   ) = 0;
   virtual void do_backfill(OpRequestRef op) = 0;
-  virtual void snap_trimmer() = 0;
+  virtual void snap_trimmer(epoch_t epoch_queued) = 0;
 
   virtual int do_command(cmdmap_t cmdmap, ostream& ss,
 			 bufferlist& idata, bufferlist& odata) = 0;
