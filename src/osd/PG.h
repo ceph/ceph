@@ -431,7 +431,7 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1172,19 +1172,15 @@ public:
     pg_shard_t ok_peer);
 
   void scrub(ThreadPool::TPHandle &handle);
-  void classic_scrub(ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
-  void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
-  bool scrub_gather_replica_maps();
   void _scan_snaps(ScrubMap &map);
   void _scan_rollback_obs(
     const vector<ghobject_t> &rollback_obs,
     ThreadPool::TPHandle &handle);
-  void _request_scrub_map_classic(pg_shard_t replica, eversion_t version);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep,
 			  uint32_t seed);
@@ -1192,9 +1188,6 @@ public:
     ScrubMap &map,
     hobject_t start, hobject_t end, bool deep, uint32_t seed,
     ThreadPool::TPHandle &handle);
-  void build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle);
-  void build_inc_scrub_map(
-    ScrubMap &map, eversion_t v, ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
    * a false return value obliges the implementer to requeue scrub when the

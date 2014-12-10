@@ -191,7 +191,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
-  recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
+  recovery_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
   role(0),
   state(0),
@@ -3270,20 +3270,6 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   }
 }
 
-// send scrub v2-compatible messages (classic scrub)
-void PG::_request_scrub_map_classic(pg_shard_t replica, eversion_t version)
-{
-  assert(replica != pg_whoami);
-  dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
-  MOSDRepScrub *repscrubop =
-    new MOSDRepScrub(
-      spg_t(info.pgid.pgid, replica.shard), version,
-      last_update_applied,
-      get_osdmap()->get_epoch());
-  osd->send_message_osd_cluster(
-    replica.osd, repscrubop, get_osdmap()->get_epoch());
-}
-
 // send scrub v3 messages (chunky scrub)
 void PG::_request_scrub_map(
   pg_shard_t replica, eversion_t version,
@@ -3593,76 +3579,6 @@ int PG::build_scrub_map_chunk(
   return 0;
 }
 
-/*
- * build a (sorted) summary of pg content for purposes of scrubbing
- * called while holding pg lock
- */ 
-void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
-{
-  dout(10) << "build_scrub_map" << dendl;
-
-  map.valid_through = info.last_update;
-  epoch_t epoch = get_osdmap()->get_epoch();
-
-  unlock();
-
-  // wait for any writes on our pg to flush to disk first.  this avoids races
-  // with scrub starting immediately after trim or recovery completion.
-  osr->flush();
-
-  // objects
-  vector<hobject_t> ls;
-  osd->store->collection_list(coll, ls);
-
-  get_pgbackend()->be_scan_list(map, ls, false, 0, handle);
-  lock();
-  _scan_snaps(map);
-
-  if (pg_has_reset_since(epoch)) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    return;
-  }
-
-
-  dout(10) << "PG relocked, finalizing" << dendl;
-
-  dout(10) << __func__ << " done." << dendl;
-}
-
-
-/* 
- * build a summary of pg content changed starting after v
- * called while holding pg lock
- */
-void PG::build_inc_scrub_map(
-  ScrubMap &map, eversion_t v,
-  ThreadPool::TPHandle &handle)
-{
-  map.valid_through = last_update_applied;
-  map.incr_since = v;
-  vector<hobject_t> ls;
-  list<pg_log_entry_t>::const_iterator p;
-  if (v == pg_log.get_tail()) {
-    p = pg_log.get_log().log.begin();
-  } else if (v > pg_log.get_tail()) {
-    p = pg_log.get_log().find_entry(v);
-    ++p;
-  } else {
-    assert(0);
-  }
-  
-  for (; p != pg_log.get_log().log.end(); ++p) {
-    if (p->is_update()) {
-      ls.push_back(p->soid);
-      map.objects[p->soid].negative = false;
-    } else if (p->is_delete()) {
-      map.objects[p->soid].negative = true;
-    }
-  }
-
-  get_pgbackend()->be_scan_list(map, ls, false, 0, handle);
-}
-
 void PG::repair_object(
   const hobject_t& soid, ScrubMap::object *po,
   pg_shard_t bad_peer, pg_shard_t ok_peer)
@@ -3752,7 +3668,7 @@ void PG::replica_scrub(
  * PG_STATE_SCRUBBING is set when the scrub is queued
  * 
  * scrub will be chunky if all OSDs in PG support chunky scrub
- * scrub will fall back to classic in any other case
+ * scrub will fail if OSDs are too old.
  */
 void PG::scrub(ThreadPool::TPHandle &handle)
 {
@@ -4137,30 +4053,6 @@ void PG::scrub_clear_state()
   _scrub_clear_state();
 }
 
-bool PG::scrub_gather_replica_maps()
-{
-  assert(scrubber.waiting_on == 0);
-  assert(_lock.is_locked());
-
-  for (map<pg_shard_t, ScrubMap>::iterator p = scrubber.received_maps.begin();
-       p != scrubber.received_maps.end();
-       ++p) {
-    
-    if (scrubber.received_maps[p->first].valid_through != pg_log.get_head()) {
-      scrubber.waiting_on++;
-      scrubber.waiting_on_whom.insert(p->first);
-      // Need to request another incremental map
-      _request_scrub_map_classic(p->first, p->second.valid_through);
-    }
-  }
-  
-  if (scrubber.waiting_on > 0) {
-    return false;
-  } else {
-    return true;
-  }
-}
-
 void PG::scrub_compare_maps() 
 {
   dout(10) << __func__ << " has maps, analyzing" << dendl;
@@ -4275,38 +4167,6 @@ void PG::scrub_process_inconsistent()
       }
     }
   }
-}
-
-void PG::scrub_finalize()
-{
-  lock();
-  if (deleting) {
-    unlock();
-    return;
-  }
-
-  assert(last_update_applied == info.last_update);
-
-  if (scrubber.epoch_start != info.history.same_interval_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    scrub_clear_state();
-    scrub_unreserve_replicas();
-    unlock();
-    return;
-  }
-
-  if (!scrub_gather_replica_maps()) {
-    dout(10) << "maps not yet up to date, sent out new requests" << dendl;
-    unlock();
-    return;
-  }
-
-  scrub_compare_maps();
-
-  scrub_finish();
-
-  dout(10) << "scrub done" << dendl;
-  unlock();
 }
 
 // the part that actually finalizes a scrub
