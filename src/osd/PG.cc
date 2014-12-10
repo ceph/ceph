@@ -4089,6 +4089,7 @@ void PG::scrub_compare_maps()
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
+      scrubber.missing_digest,
       scrubber.shallow_errors,
       scrubber.deep_errors,
       info.pgid, acting,

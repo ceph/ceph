@@ -1064,6 +1064,9 @@ public:
     // Map from object with errors to good peer
     map<hobject_t, pair<ScrubMap::object, pg_shard_t> > authoritative;
 
+    // Objects who need digest updates
+    map<hobject_t, pair<uint32_t,uint32_t> > missing_digest;
+
     // chunky scrub
     hobject_t start, end;
     eversion_t subset_last_update;
@@ -1158,6 +1161,7 @@ public:
       inconsistent.clear();
       missing.clear();
       authoritative.clear();
+      missing_digest.clear();
     }
 
   } scrubber;
