@@ -498,7 +498,7 @@ struct C_DoWatchError : public Context {
     info->_queued_async();
   }
   void finish(int r) {
-    info->watch_context->handle_error(info->linger_id, err);
+    info->watch_context->handle_error(info->get_cookie(), err);
     info->finished_async();
     info->put();
   }
