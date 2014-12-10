@@ -1516,6 +1516,7 @@ void ECBackend::start_write(Op *op) {
        i != get_parent()->get_actingbackfill_shards().end();
        ++i) {
     trans[i->shard];
+    trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
   }
   op->t->generate_transactions(
     op->unstable_hash_infos,
