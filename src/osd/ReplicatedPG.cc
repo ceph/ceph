@@ -3342,6 +3342,22 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	  dout(10) << " read got " << r << " / " << op.extent.length
 		   << " bytes from obj " << soid << dendl;
+
+	  // whole object?  can we verify the checksum?
+	  if (result >= 0 &&
+	      op.extent.offset == 0 && op.extent.length == oi.size &&
+	      oi.is_data_digest()) {
+	    uint32_t crc = osd_op.outdata.crc32c(-1);
+	    if (oi.data_digest != crc) {
+	      osd->clog->error() << info.pgid << std::hex
+				 << " full-object read crc " << crc
+				 << " != expected " << oi.data_digest
+				 << std::dec << " on " << soid;
+	      // FIXME fall back to replica or something?
+	      if (g_conf->osd_read_eio_on_bad_digest)
+		result = -EIO;
+	    }
+	  }
 	}
 	if (first_read) {
 	  first_read = false;
