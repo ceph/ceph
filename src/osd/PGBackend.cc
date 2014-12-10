@@ -546,6 +546,7 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t,ScrubMap::object>::const_iterator i;
   map<pg_shard_t, ScrubMap *>::const_iterator j;
   set<hobject_t> master_set;
+  utime_t now = ceph_clock_now(NULL);
 
   // Construct master set
   for (j = maps.begin(); j != maps.end(); ++j) {
@@ -619,10 +620,16 @@ void PGBackend::be_compare_scrubmaps(
     if (okseed &&
 	auth_object.digest_present && auth_object.omap_digest_present &&
 	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
-      dout(20) << __func__ << " noting missing digest on " << *k << dendl;
-      missing_digest[*k] = make_pair(auth_object.digest,
-				     auth_object.omap_digest);
+      utime_t age = now - auth_oi.local_mtime;
+      if (age > g_conf->osd_deep_scrub_update_digest_min_age) {
+	dout(20) << __func__ << " noting missing digest on " << *k << dendl;
+	missing_digest[*k] = make_pair(auth_object.digest,
+				       auth_object.omap_digest);
+      } else {
+	dout(20) << __func__ << " missing digest but age " << age
+		 << " < " << g_conf->osd_deep_scrub_update_digest_min_age
+		 << " on " << *k << dendl;
+      }
     }
-
   }
 }
