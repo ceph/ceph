@@ -301,4 +301,4 @@ def main(args):
         run_tasks(tasks=config['tasks'], ctx=fake_ctx)
     finally:
         # print to stdout the results and possibly send an email on any errors
-        report_outcome(config, archive, args["summary"], fake_ctx)
+        report_outcome(config, archive, fake_ctx.summary, fake_ctx)
