@@ -442,7 +442,6 @@ public:
   ECBackend(
     PGBackend::Listener *pg,
     coll_t coll,
-    coll_t temp_coll,
     ObjectStore *store,
     CephContext *cct,
     ErasureCodeInterfaceRef ec_impl,

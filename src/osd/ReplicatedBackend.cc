@@ -33,11 +33,9 @@ static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
 ReplicatedBackend::ReplicatedBackend(
   PGBackend::Listener *pg,
   coll_t coll,
-  coll_t temp_coll,
   ObjectStore *store,
   CephContext *cct) :
-  PGBackend(pg, store,
-	    coll, temp_coll),
+  PGBackend(pg, store, coll),
   cct(cct) {}
 
 void ReplicatedBackend::run_recovery_op(
@@ -223,15 +221,6 @@ void ReplicatedBackend::on_change()
 
 void ReplicatedBackend::on_flushed()
 {
-  if (have_temp_coll() &&
-      !store->collection_empty(get_temp_coll())) {
-    vector<hobject_t> objects;
-    store->collection_list(get_temp_coll(), objects);
-    derr << __func__ << ": found objects in the temp collection: "
-	 << objects << ", crashing now"
-	 << dendl;
-    assert(0 == "found garbage in the temp collection");
-  }
 }
 
 int ReplicatedBackend::objects_read_sync(
@@ -287,7 +276,6 @@ void ReplicatedBackend::objects_read_async(
 
 class RPGTransaction : public PGBackend::PGTransaction {
   coll_t coll;
-  coll_t temp_coll;
   set<hobject_t> temp_added;
   set<hobject_t> temp_cleared;
   ObjectStore::Transaction *t;
@@ -307,17 +295,13 @@ class RPGTransaction : public PGBackend::PGTransaction {
     return get_coll(hoid);
   }
   const coll_t &get_coll(const hobject_t &hoid) {
-    if (hoid.is_temp())
-      return temp_coll;
-    else
-      return coll;
+    return coll;
   }
 public:
-  RPGTransaction(coll_t coll, coll_t temp_coll, bool use_tbl)
-    : coll(coll), temp_coll(temp_coll), t(new ObjectStore::Transaction), written(0)
-    {
-      t->set_use_tbl(use_tbl);
-    }
+  RPGTransaction(coll_t coll, bool use_tbl)
+    : coll(coll), t(new ObjectStore::Transaction), written(0) {
+    t->set_use_tbl(use_tbl);
+  }
 
   /// Yields ownership of contained transaction
   ObjectStore::Transaction *get_transaction() {
@@ -491,7 +475,7 @@ public:
 
 PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
 {
-  return new RPGTransaction(coll, get_temp_coll(), parent->transaction_use_tbl());
+  return new RPGTransaction(coll, parent->transaction_use_tbl());
 }
 
 class C_OSD_OnOpCommit : public Context {
@@ -574,7 +558,6 @@ void ReplicatedBackend::submit_transaction(
   ObjectStore::Transaction local_t;
   local_t.set_use_tbl(op_t->get_use_tbl());
   if (t->get_temp_added().size()) {
-    get_temp_coll(&local_t);
     add_temp_objs(t->get_temp_added());
   }
   clear_temp_objs(t->get_temp_cleared());

@@ -91,20 +91,17 @@ struct TransGenerator : public boost::static_visitor<void> {
       temp_removed->erase(hoid);
       temp_added->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
   coll_t get_coll_rm(shard_id_t shard, const hobject_t &hoid) {
     if (hoid.is_temp()) {
       temp_added->erase(hoid);
       temp_removed->insert(hoid);
     }
-    return get_coll(shard, hoid);
+    return get_coll(shard);
   }
-  coll_t get_coll(shard_id_t shard, const hobject_t &hoid) {
-    if (hoid.is_temp())
-      return coll_t::make_temp_coll(spg_t(pgid, shard));
-    else
-      return coll_t(spg_t(pgid, shard));
+  coll_t get_coll(shard_id_t shard) {
+    return coll_t(spg_t(pgid, shard));
   }
 
   void operator()(const ECTransaction::TouchOp &op) {

@@ -4142,17 +4142,11 @@ void OSD::RemoveWQ::_process(
   if (!item.second->start_clearing())
     return;
 
-  list<coll_t> colls_to_remove;
-  pg->get_colls(&colls_to_remove);
-  for (list<coll_t>::iterator i = colls_to_remove.begin();
-       i != colls_to_remove.end();
-       ++i) {
-    bool cont = remove_dir(
-      pg->cct, store, &mapper, &driver, pg->osr.get(), *i, item.second,
-      handle);
-    if (!cont)
-      return;
-  }
+  bool cont = remove_dir(
+    pg->cct, store, &mapper, &driver, pg->osr.get(), coll, item.second,
+    handle);
+  if (!cont)
+    return;
 
   if (!item.second->start_deleting())
     return;
@@ -4160,11 +4154,7 @@ void OSD::RemoveWQ::_process(
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   PGLog::clear_info_log(pg->info.pgid, t);
 
-  for (list<coll_t>::iterator i = colls_to_remove.begin();
-       i != colls_to_remove.end();
-       ++i) {
-    t->remove_collection(*i);
-  }
+  t->remove_collection(coll);
 
   // We need the sequencer to stick around until the op is complete
   store->queue_transaction(
