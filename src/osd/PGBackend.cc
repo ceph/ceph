@@ -390,9 +390,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-
-      errorstream << "digest " << candidate.digest
-                  << " != known digest " << auth.digest;
+      errorstream << "data_digest " << candidate.digest
+		  << " != "
+		  << (auth_oi.is_data_digest() && okseed ? "known" : "best guess")
+		  << " data_digest " << auth.digest
+		  << " from auth shard " << auth_shard;
     }
   }
   if (auth.omap_digest_present && candidate.omap_digest_present) {
@@ -400,9 +402,11 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-
       errorstream << "omap_digest " << candidate.omap_digest
-                  << " != known omap_digest " << auth.omap_digest;
+		  << " != "
+		  << (auth_oi.is_omap_digest() && okseed ? "known" : "best guess")
+		  << " omap_digest " << auth.omap_digest
+		  << " from auth shard " << auth_shard;
     }
   }
   // Shallow error takes precendence because this will be seen by
