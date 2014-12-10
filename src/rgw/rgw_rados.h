@@ -1458,10 +1458,11 @@ public:
         int flags;
         const char *if_match;
         const char *if_nomatch;
+        uint64_t olh_epoch;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), set_mtime(0), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL) {}
+                 if_match(NULL), if_nomatch(NULL), olh_epoch(0) {}
       } meta;
 
       Write(RGWRados::Object *_target) : target(_target) {}
@@ -1595,6 +1596,8 @@ public:
                        bool replace_attrs,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
+                       uint64_t olh_epoch,
+                       string *version_id,
                        string *ptag,
                        string *petag,
                        struct rgw_err *err,
@@ -1632,6 +1635,8 @@ public:
                bool replace_attrs,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
+               uint64_t olh_epoch,
+               string *version_id,
                string *ptag,
                string *petag,
                struct rgw_err *err,
@@ -1648,6 +1653,8 @@ public:
 	       time_t set_mtime,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
+               uint64_t olh_epoch,
+               string *version_id,
                string *ptag,
                string *petag,
                struct rgw_err *err);
