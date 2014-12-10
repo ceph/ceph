@@ -1095,7 +1095,11 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
   head_obj.init(bucket, obj_str);
 
   if (versioned_object) {
-    store->gen_rand_obj_instance_name(&head_obj);
+    if (!version_id.empty()) {
+      head_obj.set_instance(version_id);
+    } else {
+      store->gen_rand_obj_instance_name(&head_obj);
+    }
   }
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
@@ -1183,6 +1187,7 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
   obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.owner = bucket_owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.olh_epoch = olh_epoch;
 
   bool is_olh = false;
   if (head_obj.get_instance().empty()) {
