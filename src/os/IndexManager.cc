@@ -13,7 +13,7 @@
  */
 
 #include "include/memory.h"
-#include <map>
+#include "include/unordered_map.h"
 
 #if defined(__FreeBSD__)
 #include <sys/param.h>
@@ -63,7 +63,7 @@ static int get_version(const char *path, uint32_t *version) {
 
 IndexManager::~IndexManager() {
 
-  for (map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
+  for (ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.begin(); 
        it != col_indices.end(); ++it) {
 
     delete it->second;
@@ -123,7 +123,7 @@ int IndexManager::build_index(coll_t c, const char *path, CollectionIndex **inde
 int IndexManager::get_index(coll_t c, const string& baseDir, Index *index) {
 
   Mutex::Locker l(lock);
-  map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
+  ceph::unordered_map<coll_t, CollectionIndex* > ::iterator it = col_indices.find(c);
   if (it == col_indices.end()) {
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "%s/current/%s", baseDir.c_str(), c.to_str().c_str());

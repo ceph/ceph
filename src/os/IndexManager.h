@@ -15,7 +15,7 @@
 #define OS_INDEXMANAGER_H
 
 #include "include/memory.h"
-#include <map>
+#include "include/unordered_map.h"
 
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -52,7 +52,7 @@ struct Index {
 class IndexManager {
   Mutex lock; ///< Lock for Index Manager
   bool upgrade;
-  map<coll_t, CollectionIndex* > col_indices;
+  ceph::unordered_map<coll_t, CollectionIndex* > col_indices;
 
   /**
    * Index factory
