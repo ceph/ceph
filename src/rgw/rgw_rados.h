@@ -2084,6 +2084,7 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
 
   bool versioned_object;
   uint64_t olh_epoch;
+  string version_id;
 
 protected:
   rgw_bucket bucket;
@@ -2132,6 +2133,10 @@ public:
 
   void set_olh_epoch(uint64_t epoch) {
     olh_epoch = epoch;
+  }
+
+  void set_version_id(const string& vid) {
+    version_id = vid;
   }
 };
 
