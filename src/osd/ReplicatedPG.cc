@@ -5526,7 +5526,7 @@ hobject_t ReplicatedPG::generate_temp_object()
 {
   ostringstream ss;
   ss << "temp_" << info.pgid << "_" << get_role() << "_" << osd->monc->get_global_id() << "_" << (++temp_seq);
-  hobject_t hoid = hobject_t::make_temp(ss.str());
+  hobject_t hoid = info.pgid.make_temp_object(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }
@@ -5539,7 +5539,7 @@ hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t sn
      << "_" << info.history.last_epoch_started
      << "_" << snap;
   // pgid + version + interval + snapid is unique, and short
-  hobject_t hoid = hobject_t::make_temp(ss.str());
+  hobject_t hoid = info.pgid.make_temp_object(ss.str());
   dout(20) << __func__ << " " << hoid << dendl;
   return hoid;
 }

@@ -452,6 +452,12 @@ struct spg_t {
     ::decode(shard, bl);
     DECODE_FINISH(bl);
   }
+
+  hobject_t make_temp_object(const string& name) {
+    return hobject_t(object_t(name), "", CEPH_NOSNAP,
+		     pgid.ps(),
+		     hobject_t::POOL_TEMP_START - pgid.pool(), "");
+  }
 };
 WRITE_CLASS_ENCODER(spg_t)
 WRITE_EQ_OPERATORS_2(spg_t, pgid, shard)
