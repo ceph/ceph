@@ -600,7 +600,7 @@ def need_to_install_distro(ctx, role):
 
     if system_type == 'deb':
         distribution = teuthology.get_system_type(role_remote, distro=True)
-        newest = get_version_from_pkg(role_remote, distribution)
+        newest = get_latest_image_version_deb(role_remote, distribution)
 
     output.close()
     err_mess.close()
@@ -622,21 +622,18 @@ def install_kernel(remote, path=None):
     :param path: package path (for local and gitbuilder cases)
     """
     system_type = teuthology.get_system_type(remote)
-    distribution = ''
     if system_type == 'rpm':
         if path:
             version = get_image_version(remote, path)
         else:
-            remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
-            version=output.getvalue().split()[0].split('kernel-')[1]
-            log.info('Distro Kernel Version: {version}'.format(version=version))
+            version = get_latest_image_version_rpm(remote)
         update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
         return
 
     if system_type == 'deb':
         distribution = teuthology.get_system_type(remote, distro=True)
-        newversion = get_version_from_pkg(remote, distribution)
+        newversion = get_latest_image_version_deb(remote, distribution)
         if 'ubuntu' in distribution:
             grub2conf = teuthology.get_file(remote, '/boot/grub/grub.cfg', True)
             submenu = ''
@@ -808,8 +805,28 @@ def get_image_version(remote, path):
     log.debug("get_image_version: %s", version)
     return version
 
-def get_version_from_pkg(remote, ostype):
+def get_latest_image_version_rpm(remote):
     """
+    Get kernel image version of the newest kernel rpm package.
+    Used for distro case.
+    """
+    proc = remote.run(
+        args=[
+            'rpm',
+            '-q',
+            'kernel',
+            '--last', # order by install time
+        ], stdout=StringIO())
+    out = proc.stdout.getvalue()
+    version = out.split()[0].split('kernel-')[1]
+    log.debug("get_latest_image_version_rpm: %s", version)
+    return version
+
+def get_latest_image_version_deb(remote, ostype):
+    """
+    Get kernel image version of the newest kernel deb package.
+    Used for distro case.
+
     Round-about way to get the newest kernel uname -r compliant version string
     from the virtual package which is the newest kenel for debian/ubuntu.
     """
