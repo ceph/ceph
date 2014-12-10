@@ -231,7 +231,7 @@ TEST_F(LibRadosWatchNotify, Watch2Delete) {
 			 watch_notify2_test_cb,
 			 watch_notify2_test_errcb, NULL));
   ASSERT_EQ(0, rados_remove(ioctx, notify_oid));
-  int left = 180;
+  int left = 300;
   std::cout << "waiting up to " << left << " for disconnect notification ..."
 	    << std::endl;
   while (notify_err == 0 && --left) {
@@ -262,7 +262,7 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   ASSERT_LT(age, age_bound * 1000);
   ASSERT_GT(age, 0);
   rados_conf_set(cluster, "objecter_inject_no_watch_ping", "true");
-  int left = 180;
+  int left = 300;
   std::cout << "waiting up to " << left << " for osd to time us out ..."
 	    << std::endl;
   while (notify_err == 0 && --left) {
