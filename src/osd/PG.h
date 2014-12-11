@@ -2120,9 +2120,9 @@ public:
     return at_version;
   }
 
-  void add_log_entry(pg_log_entry_t& e, bufferlist& log_bl);
+  void add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl);
   void append_log(
-    vector<pg_log_entry_t>& logv,
+    const vector<pg_log_entry_t>& logv,
     eversion_t trim_to,
     eversion_t trim_rollback_to,
     ObjectStore::Transaction &t,
@@ -2139,7 +2139,7 @@ public:
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
   static epoch_t peek_map_epoch(ObjectStore *store, spg_t pgid, bufferlist *bl);
   void update_snap_map(
-    vector<pg_log_entry_t> &log_entries,
+    const vector<pg_log_entry_t> &log_entries,
     ObjectStore::Transaction& t);
 
   void filter_snapc(vector<snapid_t> &snaps);

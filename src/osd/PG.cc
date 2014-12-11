@@ -2843,7 +2843,7 @@ void PG::trim_peers()
   }
 }
 
-void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
+void PG::add_log_entry(const pg_log_entry_t& e, bufferlist& log_bl)
 {
   // raise last_complete only if we were previously up to date
   if (info.last_complete == info.last_update)
@@ -2867,7 +2867,7 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
 
 
 void PG::append_log(
-  vector<pg_log_entry_t>& logv,
+  const vector<pg_log_entry_t>& logv,
   eversion_t trim_to,
   eversion_t trim_rollback_to,
   ObjectStore::Transaction &t,
@@ -2878,7 +2878,7 @@ void PG::append_log(
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;
-  for (vector<pg_log_entry_t>::iterator p = logv.begin();
+  for (vector<pg_log_entry_t>::const_iterator p = logv.begin();
        p != logv.end();
        ++p) {
     add_log_entry(*p, keys[p->get_key_name()]);
@@ -3050,10 +3050,10 @@ void PG::log_weirdness()
 }
 
 void PG::update_snap_map(
-  vector<pg_log_entry_t> &log_entries,
+  const vector<pg_log_entry_t> &log_entries,
   ObjectStore::Transaction &t)
 {
-  for (vector<pg_log_entry_t>::iterator i = log_entries.begin();
+  for (vector<pg_log_entry_t>::const_iterator i = log_entries.begin();
        i != log_entries.end();
        ++i) {
     OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
@@ -3066,7 +3066,8 @@ void PG::update_snap_map(
       } else {
 	assert(i->snaps.length() > 0);
 	vector<snapid_t> snaps;
-	bufferlist::iterator p = i->snaps.begin();
+	bufferlist snapbl = i->snaps;
+	bufferlist::iterator p = snapbl.begin();
 	try {
 	  ::decode(snaps, p);
 	} catch (...) {

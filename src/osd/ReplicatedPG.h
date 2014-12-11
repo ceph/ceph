@@ -374,7 +374,7 @@ public:
     return get_object_context(hoid, true, &attrs);
   }
   void log_operation(
-    vector<pg_log_entry_t> &logv,
+    const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
