@@ -504,6 +504,16 @@ struct C_DoWatchError : public Context {
   }
 };
 
+int Objecter::_normalize_watch_error(int r)
+{
+  // translate ENOENT -> ENOTCONN so that a delete->disconnection
+  // notification and a failure to reconnect becuase we raced with
+  // the delete appear the same to the user.
+  if (r == -ENOENT)
+    r = -ENOTCONN;
+  return r;
+}
+
 void Objecter::_linger_reconnect(LingerOp *info, int r)
 {
   ldout(cct, 10) << __func__ << " " << info->linger_id << " = " << r
@@ -511,6 +521,7 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
   if (r < 0) {
     info->watch_lock.get_write();
     if (!info->last_error) {
+      r = _normalize_watch_error(r);
       info->last_error = r;
       if (info->watch_context)
 	finisher->queue(new C_DoWatchError(info, r));
@@ -572,6 +583,7 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
     if (r == 0) {
       info->watch_valid_thru = sent;
     } else if (r < 0 && !info->last_error) {
+      r = _normalize_watch_error(r);
       info->last_error = r;
       if (info->watch_context)
 	finisher->queue(new C_DoWatchError(info, r));

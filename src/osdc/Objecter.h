@@ -1710,6 +1710,7 @@ public:
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
   void _linger_ping(LingerOp *info, int r, utime_t sent, uint32_t register_gen);
+  int _normalize_watch_error(int r);
 
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
