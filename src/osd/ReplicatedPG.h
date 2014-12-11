@@ -223,12 +223,13 @@ public:
     bool sent_disk;
     bool sent_ack;
     utime_t mtime;
+    bool canceled;
 
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), sent_disk(false),
-	sent_ack(false) { }
+	sent_ack(false), canceled(false) { }
   };
   typedef boost::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 
@@ -1321,15 +1322,15 @@ protected:
   int get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter);
 
   map<hobject_t, list<OpRequestRef> > in_progress_proxy_ops;
+  void kick_proxy_ops_blocked(hobject_t& soid);
+  void cancel_proxy_ops(bool requeue);
 
   // -- proxyread --
   map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
 
   void do_proxy_read(OpRequestRef op, const hobject_t& missing_oid);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
-  void kick_proxy_read_blocked(hobject_t& soid);
   void cancel_proxy_read(ProxyReadOpRef prdop);
-  void cancel_proxy_read_ops(bool requeue);
 
   friend struct C_ProxyRead;
 
@@ -1338,6 +1339,7 @@ protected:
 
   void do_proxy_write(OpRequestRef op, const hobject_t& missing_oid);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
+  void cancel_proxy_write(ProxyWriteOpRef pwop);
 
   friend struct C_ProxyWrite_Apply;
   friend struct C_ProxyWrite_Commit;
