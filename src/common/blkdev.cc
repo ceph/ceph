@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <dirent.h>
+#include <stdlib.h>
 #include "include/int_types.h"
 
 #ifdef __linux__
@@ -94,40 +95,52 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   return r;
 }
 
-bool block_device_support_discard(const char *devname)
+/**
+ * get a block device property
+ *
+ * return the value (we assume it is positive)
+ * return negative error on error
+ */
+int64_t get_block_device_int_property(const char *devname, const char *property)
 {
-  bool can_trim = false;
-  char *p = strstr((char *)devname, "sd");
-  char name[32];
+  char basename[PATH_MAX], filename[PATH_MAX];
+  int64_t r;
 
-  strncpy(name, p, sizeof(name) - 1);
-  name[sizeof(name) - 1] = '\0';
+  r = get_block_device_base(devname, basename, sizeof(basename));
+  if (r < 0)
+    return r;
 
-  for (unsigned int i = 0; i < strlen(name); i++) {
-    if(isdigit(name[i])) {
-      name[i] = 0;
-      break;
-    }
-  }
-
-  char filename[100] = {0};
-  sprintf(filename, "/sys/block/%s/queue/discard_granularity", name);
+  snprintf(filename, sizeof(filename),
+	   "/sys/block/%s/queue/discard_granularity", basename);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
-    can_trim = false;
-  } else {
-    char buff[256] = {0};
-    if (fgets(buff, sizeof(buff) - 1, fp)) {
-      if (strcmp(buff, "0"))
-	can_trim = false;
-      else
-	can_trim = true;
-    } else
-      can_trim = false;
-    fclose(fp);
+    return -errno;
   }
-  return can_trim;
+
+  char buff[256] = {0};
+  if (fgets(buff, sizeof(buff) - 1, fp)) {
+    // strip newline etc
+    for (char *p = buff; *p; ++p) {
+      if (!isdigit(*p)) {
+	*p = 0;
+	break;
+      }
+    }
+    char *endptr = 0;
+    r = strtoll(buff, &endptr, 10);
+    if (endptr != buff + strlen(buff))
+      r = -EINVAL;
+  } else {
+    r = 0;
+  }
+  fclose(fp);
+  return r;
+}
+
+bool block_device_support_discard(const char *devname)
+{
+  return get_block_device_int_property(devname, "discard_granularity") > 0;
 }
 
 int block_device_discard(int fd, int64_t offset, int64_t len)
