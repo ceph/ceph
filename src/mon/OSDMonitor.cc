@@ -4792,7 +4792,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd set") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
-    if (key == "pause")
+    if (key == "full")
+      return prepare_set_flag(m, CEPH_OSDMAP_FULL);
+    else if (key == "pause")
       return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_set_flag(m, CEPH_OSDMAP_NOUP);
@@ -4820,7 +4822,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd unset") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
-    if (key == "pause")
+    if (key == "full")
+      return prepare_unset_flag(m, CEPH_OSDMAP_FULL);
+    else if (key == "pause")
       return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_unset_flag(m, CEPH_OSDMAP_NOUP);
