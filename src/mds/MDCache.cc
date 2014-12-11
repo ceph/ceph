@@ -7858,7 +7858,7 @@ MDSInternalContextBase* MDCache::_open_ino_get_waiter(inodeno_t ino, MMDSOpenIno
 
 void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int ret)
 {
-  dout(10) << "_open_ino_trvserse_dir ino " << ino << " ret " << ret << dendl;
+  dout(10) << __func__ << ": ino " << ino << " ret " << ret << dendl;
 
   CInode *in = get_inode(ino);
   if (in) {
