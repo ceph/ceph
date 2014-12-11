@@ -181,7 +181,7 @@ public:
   void *entry()
     {
       int size, code = 0;
-      uint32_t xio_qdepth;
+      uint32_t xio_qdepth_high;
       XioSubmit::Queue send_q;
       XioSubmit::Queue::iterator q_iter;
       struct xio_msg *msg = NULL;
@@ -208,8 +208,8 @@ public:
             xmsg = static_cast<XioMsg*>(xs);
 
             /* guard Accelio send queue */
-            xio_qdepth = xcon->xio_queue_depth();
-            if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) > xio_qdepth)) {
+            xio_qdepth_high = xcon->xio_qdepth_high_mark();
+            if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) > xio_qdepth_high)) {
               ++q_iter;
               continue;
             }

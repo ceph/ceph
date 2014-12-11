@@ -55,6 +55,7 @@ private:
   uint32_t special_handling;
   uint64_t scount;
   uint32_t send_ctr;
+  int q_high_mark;
 
   struct lifecycle {
     // different from Pipe states?
@@ -139,8 +140,8 @@ private:
     return 0;
   }
 
-  int xio_queue_depth() {
-    return msgr->cct->_conf->xio_queue_depth;
+  int xio_qdepth_high_mark() {
+    return q_high_mark;
   }
 
 public:
