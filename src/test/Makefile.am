@@ -747,20 +747,37 @@ noinst_HEADERS += \
 	test/librados_test_stub/TestIoCtxImpl.h
 noinst_LTLIBRARIES += librados_test_stub.la
 
-ceph_test_librbd_SOURCES = \
+librbd_test_la_SOURCES = \
 	test/librbd/test_fixture.cc \
 	test/librbd/test_librbd.cc \
 	test/librbd/test_ImageWatcher.cc \
-	test/librbd/test_internal.cc
-ceph_test_librbd_LDADD = \
-	librbd_api.la librbd_internal.la \
+	test/librbd/test_internal.cc \
+	test/librbd/test_main.cc
+librbd_test_la_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+noinst_LTLIBRARIES += librbd_test.la
+
+unittest_librbd_SOURCES =
+nodist_EXTRA_unittest_librbd_SOURCES = dummy.cc
+unittest_librbd_LDADD = \
+	librbd_test.la librbd_api.la librbd_internal.la \
 	libcls_rbd_client.la libcls_lock_client.la \
+	librados_test_stub.la librados_internal.la \
+	$(LIBOSDC) $(UNITTEST_LDADD) \
+	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
+check_PROGRAMS += unittest_librbd
+
+ceph_test_librbd_SOURCES =
+nodist_EXTRA_ceph_test_librbd_SOURCES = dummy.cc
+ceph_test_librbd_LDADD = \
+	librbd_test.la librbd_api.la librbd_internal.la \
+        libcls_rbd_client.la libcls_lock_client.la \
 	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_librbd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_librbd
 
 if WITH_LTTNG
+unittest_librbd_LDADD += $(LIBRBD_TP)
 ceph_test_librbd_LDADD += $(LIBRBD_TP)
 endif
 
