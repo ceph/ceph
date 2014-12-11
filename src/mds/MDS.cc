@@ -299,6 +299,10 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     command_flush_path(f, path);
   } else if (command == "flush journal") {
     command_flush_journal(f);
+  } else if (command == "force_readonly") {
+    mds_lock.Lock();
+    mdcache->force_readonly();
+    mds_lock.Unlock();
   }
   f->flush(ss);
   delete f;
@@ -360,6 +364,11 @@ int MDS::_command_flush_journal(std::stringstream *ss)
   assert(ss != NULL);
 
   Mutex::Locker l(mds_lock);
+
+  if (mdcache->is_readonly()) {
+    dout(5) << __func__ << ": read-only FS" << dendl;
+    return -EROFS;
+  }
 
   // I need to seal off the current segment, and then mark all previous segments
   // for expiry
@@ -478,6 +487,11 @@ void MDS::set_up_admin_socket()
 				     asok_hook,
 				     "Flush the journal to the backing store");
   assert(0 == r);
+  r = admin_socket->register_command("force_readonly",
+				     "force_readonly",
+				     asok_hook,
+				     "Force MDS to read-only mode");
+  assert(0 == r);
 }
 
 void MDS::clean_up_admin_socket()
@@ -487,6 +501,11 @@ void MDS::clean_up_admin_socket()
   admin_socket->unregister_command("dump_ops_in_flight");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
+  admin_socket->unregister_command("flush_path");
+  admin_socket->unregister_command("session evict");
+  admin_socket->unregister_command("session ls");
+  admin_socket->unregister_command("flush journal");
+  admin_socket->unregister_command("force_readonly");
   delete asok_hook;
   asok_hook = NULL;
 }
@@ -2242,8 +2261,25 @@ void MDS::respawn()
   suicide();
 }
 
+void MDS::handle_write_error(int err)
+{
+  if (err == -EBLACKLISTED) {
+    derr << "we have been blacklisted (fenced), respawning..." << dendl;
+    respawn();
+    return;
+  }
 
-
+  if (g_conf->mds_action_on_write_error >= 2) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", suicide..." << dendl;
+    suicide();
+  } else if (g_conf->mds_action_on_write_error == 1) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", force readonly..." << dendl;
+    mdcache->force_readonly();
+  } else {
+    // ignore;
+    derr << "unhandled write error " << cpp_strerror(err) << ", ignore..." << dendl;
+  }
+}
 
 bool MDS::ms_dispatch(Message *m)
 {

@@ -408,6 +408,8 @@ OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a sna
 OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 
+OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 

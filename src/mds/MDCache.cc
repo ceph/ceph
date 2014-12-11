@@ -172,6 +172,7 @@ MDCache::MDCache(MDS *m) :
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
+  readonly = false;
 
   stray_index = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -10451,6 +10452,10 @@ public:
 
 bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
 {
+  if (is_readonly()) {
+    dout(7) << "can_fragment: read-only FS, no fragmenting for now" << dendl;
+    return false;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "can_fragment: cluster degraded, no fragmenting for now" << dendl;
     return false;
@@ -10473,6 +10478,10 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     }
     if (!dir->is_auth()) {
       dout(7) << "can_fragment: not auth on " << *dir << dendl;
+      return false;
+    }
+    if (dir->is_bad()) {
+      dout(7) << "can_fragment: bad dirfrag " << *dir << dendl;
       return false;
     }
     if (dir->is_frozen() ||
@@ -11278,6 +11287,29 @@ void MDCache::rollback_uncommitted_fragments()
   }
 }
 
+void MDCache::force_readonly()
+{
+  if (is_readonly())
+    return;
+
+  dout(1) << "force file system read-only" << dendl;
+  mds->clog->warn() << "force file system read-only\n";
+
+  set_readonly();
+
+  mds->server->force_clients_readonly();
+
+  // revoke write caps
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->is_head())
+      mds->locker->eval(in, CEPH_CAP_LOCKS);
+  }
+
+  mds->mdlog->flush();
+}
 
 
 // ==============================================================
@@ -11576,6 +11608,11 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {
+  if (is_readonly()) {
+    dout(10) << __func__ << ": read-only FS" << dendl;
+    fin->complete(-EROFS);
+    return;
+  }
   dout(10) << "flush_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FLUSH);
   filepath fp(path.c_str());
