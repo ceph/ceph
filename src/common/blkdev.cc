@@ -1,9 +1,11 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <dirent.h>
 #include "include/int_types.h"
 
 #ifdef __linux__
@@ -23,6 +25,73 @@ int get_block_device_size(int fd, int64_t *psize)
   if (ret < 0)
     ret = -errno;
   return ret;
+}
+
+/**
+ * get the base device (strip off partition suffix and /dev/ prefix)
+ *  e.g.,
+ *   /dev/sda3 -> sda
+ *   /dev/cciss/c0d1p2 -> cciss/c0d1
+ */
+int get_block_device_base(const char *dev, char *out, size_t out_len)
+{
+  struct stat st;
+  int r = 0;
+  char buf[PATH_MAX*2];
+  struct dirent *de;
+  DIR *dir;
+  char devname[PATH_MAX], fn[PATH_MAX];
+  char *p;
+
+  if (strncmp(dev, "/dev/", 5) != 0)
+    return -EINVAL;
+
+  strcpy(devname, dev + 5);
+  for (p = devname; *p; ++p)
+    if (*p == '/')
+      *p = '!';
+
+  snprintf(fn, sizeof(fn), "/sys/block/%s", devname);
+  if (stat(fn, &st) == 0) {
+    if (strlen(devname) + 1 > out_len) {
+      return -ERANGE;
+    }
+    strncpy(out, devname, out_len);
+    return 0;
+  }
+
+  dir = opendir("/sys/block");
+  if (!dir)
+    return -errno;
+
+  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
+    if (!de) {
+      if (errno) {
+	r = -errno;
+	goto out;
+      }
+      break;
+    }
+    if (de->d_name[0] == '.')
+      continue;
+    snprintf(fn, sizeof(fn), "/sys/block/%s/%s", de->d_name, devname);
+
+    if (stat(fn, &st) == 0) {
+      // match!
+      if (strlen(de->d_name) + 1 > out_len) {
+	r = -ERANGE;
+	goto out;
+      }
+      strncpy(out, de->d_name, out_len);
+      r = 0;
+      goto out;
+    }
+  }
+  r = -ENOENT;
+
+ out:
+  closedir(dir);
+  return r;
 }
 
 bool block_device_support_discard(const char *devname)
