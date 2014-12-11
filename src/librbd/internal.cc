@@ -3019,6 +3019,8 @@ reprotect_and_return_err:
 				     objectx, object_overlap,
 				     bl, snapc, snap_id, req_comp);
 	c->add_request();
+
+	req->set_op_flags(op_flags);
 	r = req->send();
 	if (r < 0)
 	  goto done;

@@ -165,6 +165,9 @@ namespace librbd {
     }
     virtual ~AioWrite() {}
 
+    void set_op_flags(int op_flags) {
+      m_write.set_op_flags2(op_flags);
+    }
   protected:
     virtual void add_copyup_ops() {
       add_write_ops(m_copyup);
