@@ -877,6 +877,6 @@ int HashIndex::list_by_hash(const vector<string> &path,
     }
   }
   if (next)
-    *next = ghobject_t(hobject_t::get_max());
+    *next = ghobject_t::get_max();
   return 0;
 }
