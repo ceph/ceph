@@ -1387,10 +1387,13 @@ public:
 
   class Object {
     RGWRados *store;
+    RGWBucketInfo bucket_info;
     RGWObjectCtx& ctx;
     rgw_obj obj;
 
     RGWObjState *state;
+
+    bool versioning_disabled;
 
   protected:
     int get_state(RGWObjState **pstate, bool follow_olh);
@@ -1399,11 +1402,21 @@ public:
     int complete_atomic_modification();
 
   public:
-    Object(RGWRados *_store, RGWObjectCtx& _ctx, rgw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
+    Object(RGWRados *_store, RGWBucketInfo& _bucket_info, RGWObjectCtx& _ctx, rgw_obj& _obj) : store(_store), bucket_info(_bucket_info),
+                                                                                               ctx(_ctx), obj(_obj), state(NULL), versioning_disabled(false) {}
 
     RGWRados *get_store() { return store; }
     rgw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }
+    RGWBucketInfo& get_bucket_info() { return bucket_info; }
+
+    void set_versioning_disabled(bool status) {
+      versioning_disabled = status;
+    }
+
+    bool versioning_enabled() {
+      return (!versioning_disabled && bucket_info.versioning_enabled());
+    }
 
     struct Read {
       RGWRados::Object *source;
@@ -1665,7 +1678,7 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& src_obj, int versioning_status);
+  virtual int delete_obj(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_owner, rgw_obj& src_obj, int versioning_status);
 
   /* Delete a system object */
   virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
@@ -1755,13 +1768,13 @@ public:
   int bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(RGWObjState& obj_state, rgw_obj& obj_instance, uint64_t ver);
-  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, const string& bucket_owner, rgw_obj& obj,
+  int apply_olh_log(RGWObjectCtx& ctx, RGWObjState& obj_state, RGWBucketInfo& bucket_info, rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver);
-  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
-  int set_olh(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
+  int update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, rgw_obj& obj);
+  int set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch);
-  int unlink_obj_instance(RGWObjectCtx& obj_ctx, const string& bucket_owner, rgw_obj& target_obj,
+  int unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj,
                           uint64_t olh_epoch);
 
   void check_pending_olh_entries(map<string, bufferlist>& pending_entries, map<string, bufferlist> *rm_pending_entries);
@@ -2025,7 +2038,7 @@ protected:
   RGWRados *store;
   RGWObjectCtx& obj_ctx;
   bool is_complete;
-  string bucket_owner;
+  RGWBucketInfo bucket_info;
 
   virtual int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs) = 0;
 
@@ -2035,7 +2048,7 @@ protected:
     objs.push_back(obj);
   }
 public:
-  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, const string& _bo) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_owner(_bo) {}
+  RGWPutObjProcessor(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bi) : store(NULL), obj_ctx(_obj_ctx), is_complete(false), bucket_info(_bi) {}
   virtual ~RGWPutObjProcessor();
   virtual int prepare(RGWRados *_store, string *oid_rand) {
     store = _store;
@@ -2070,7 +2083,7 @@ protected:
 public:
   int throttle_data(void *handle, bool need_to_wait);
 
-  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, const string& bucket_owner) : RGWPutObjProcessor(obj_ctx, bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
+  RGWPutObjProcessor_Aio(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info) : RGWPutObjProcessor(obj_ctx, bucket_info), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
   virtual ~RGWPutObjProcessor_Aio() {
     drain_pending();
   }
@@ -2116,9 +2129,9 @@ protected:
 
 public:
   ~RGWPutObjProcessor_Atomic() {}
-  RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, const string& bucket_owner,
+  RGWPutObjProcessor_Atomic(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
                             rgw_bucket& _b, const string& _o, uint64_t _p, const string& _t, bool versioned) :
-                                RGWPutObjProcessor_Aio(obj_ctx, bucket_owner),
+                                RGWPutObjProcessor_Aio(obj_ctx, bucket_info),
                                 part_size(_p),
                                 cur_part_ofs(0),
                                 next_part_ofs(_p),
