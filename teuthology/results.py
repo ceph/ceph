@@ -29,7 +29,7 @@ def main(args):
 
     try:
         results(args['--archive-dir'], args['--name'], args['--email'],
-                args['--timeout'], args['--dry-run'])
+                int(args['--timeout']), args['--dry-run'])
     except Exception:
         log.exception('error generating results')
         raise
