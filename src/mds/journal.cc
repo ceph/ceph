@@ -1252,6 +1252,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
 	p->update_inode(mds, in);
+	in->first = p->dnfirst;
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
