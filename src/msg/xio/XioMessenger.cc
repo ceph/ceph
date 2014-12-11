@@ -289,11 +289,10 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_OUT_IOVLEN,
 		  &xopt, sizeof(xopt));
 
-      xopt = cct->_conf->xio_queue_depth; // defaults to 512
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
-		  &xopt, sizeof(xopt));
-      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
-		  &xopt, sizeof(xopt));
+      /* enable flow-control */
+      xopt = 1;
+      xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_ENABLE_FLOW_CONTROL,
+                 &xopt, sizeof(xopt));
 
       /* and set threshold for buffer callouts */
       xopt = 16384;
