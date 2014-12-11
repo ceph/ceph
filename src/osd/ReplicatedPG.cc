@@ -7554,7 +7554,6 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       }
       reply->add_flags(CEPH_OSD_FLAG_ACK);
       dout(10) << " sending ack on " << *repop << " " << reply << dendl;
-      assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
       osd->send_message_osd_client(reply, m->get_connection());
       repop->sent_ack = true;
     }
