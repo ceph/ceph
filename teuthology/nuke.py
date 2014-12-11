@@ -18,7 +18,6 @@ from .misc import config_file
 from .misc import merge_configs
 from .misc import get_testdir
 from .misc import get_user
-from .misc import read_config
 from .misc import reconnect
 from .parallel import parallel
 from .task import install as install_task
@@ -369,8 +368,6 @@ def main(args):
         for node in stale_nodes:
             targets[node['name']] = node['ssh_pub_key']
         ctx.config = dict(targets=targets)
-
-    read_config(ctx)
 
     log.info(
         '\n  '.join(
