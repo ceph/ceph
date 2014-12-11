@@ -179,6 +179,12 @@ struct PGLog {
       // add to log
       log.push_back(e);
 
+      /**
+       * Make sure we don't keep around more than we need to in the
+       * in-memory log
+       */
+      log.back().mod_desc.trim_bl();
+
       // riter previously pointed to the previous entry
       if (rollback_info_trimmed_to_riter == log.rbegin())
 	++rollback_info_trimmed_to_riter;

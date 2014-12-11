@@ -2858,12 +2858,6 @@ void PG::add_log_entry(pg_log_entry_t& e, bufferlist& log_bl)
   if (e.user_version > info.last_user_version)
     info.last_user_version = e.user_version;
 
-  /**
-   * Make sure we don't keep around more than we need to in the
-   * in-memory log
-   */
-  e.mod_desc.trim_bl();
-
   // log mutation
   pg_log.add(e);
   dout(10) << "add_log_entry " << e << dendl;
