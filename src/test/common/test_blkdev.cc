@@ -14,63 +14,73 @@ TEST(blkdev, get_block_device_base) {
   char buf[PATH_MAX*2];
   char buf2[PATH_MAX*2];
   char buf3[PATH_MAX*2];
+  char root[PATH_MAX];
   struct dirent *de, *de2;
 
-  ASSERT_EQ(-ERANGE, get_block_device_base("/dev/sda1", buf, 1));
+  ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
 
-  // work backwards
-  DIR *dir = opendir("/sys/block");
-  ASSERT_TRUE(dir);
-  while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
-    if (!de)
-      break;
-    if (de->d_name[0] == '.')
-      continue;
+  for (int i=0; i<2; ++i) {
+    const char *root = "";
+    if (i == 0)
+      root = "test/common/test_blkdev_sys_block";
+    set_block_device_sandbox_dir(root);
 
-    char base[PATH_MAX];
-    sprintf(base, "/dev/%s", de->d_name);
-    printf("base %s (%s)\n", base, de->d_name);
-    for (char *p = base; *p; ++p)
-      if (*p == '!')
-	*p = '/';
-
-    ASSERT_EQ(0, get_block_device_base(base, buf3, sizeof(buf3)));
-    printf("  got '%s' expected '%s'\n", buf3, de->d_name);
-    ASSERT_EQ(0, strcmp(de->d_name, buf3));
-    printf("  discard granularity = %lld .. supported = %d\n",
-	   get_block_device_int_property(base, "discard_granularity"),
-	   (int)block_device_support_discard(base));
-
-    char subdirfn[PATH_MAX];
-    sprintf(subdirfn, "/sys/block/%s", de->d_name);
-    DIR *subdir = opendir(subdirfn);
-    ASSERT_TRUE(subdir);
-    while (!::readdir_r(subdir, reinterpret_cast<struct dirent*>(buf2), &de2)) {
-      if (!de2)
+    // work backwards
+    sprintf(buf, "%s/sys/block", root);
+    DIR *dir = opendir(buf);
+    ASSERT_TRUE(dir);
+    while (!::readdir_r(dir, reinterpret_cast<struct dirent*>(buf), &de)) {
+      if (!de)
 	break;
-      if (de2->d_name[0] == '.')
+      if (de->d_name[0] == '.')
 	continue;
-      // partiions will be prefixed with the base name
-      if (strncmp(de2->d_name, de->d_name, strlen(de->d_name))) {
-	//printf("skipping %s\n", de2->d_name);
-	continue;
-      }
-      char part[PATH_MAX];
-      sprintf(part, "/dev/%s", de2->d_name);
-      for (char *p = part; *p; ++p)
+
+      char base[PATH_MAX];
+      sprintf(base, "/dev/%s", de->d_name);
+      printf("base %s (%s)\n", base, de->d_name);
+      for (char *p = base; *p; ++p)
 	if (*p == '!')
 	  *p = '/';
-      printf(" part %s (%s %s)\n", part, de->d_name, de2->d_name);
 
-      ASSERT_EQ(0, get_block_device_base(part, buf3, sizeof(buf3)));
+      ASSERT_EQ(-ERANGE, get_block_device_base(base, buf3, 1));
+      ASSERT_EQ(0, get_block_device_base(base, buf3, sizeof(buf3)));
       printf("  got '%s' expected '%s'\n", buf3, de->d_name);
-      ASSERT_EQ(0, strcmp(buf3, de->d_name));
+      ASSERT_EQ(0, strcmp(de->d_name, buf3));
       printf("  discard granularity = %lld .. supported = %d\n",
-	     get_block_device_int_property(part, "discard_granularity"),
-	     (int)block_device_support_discard(part));
-    }
+	     (long long)get_block_device_int_property(base, "discard_granularity"),
+	     (int)block_device_support_discard(base));
 
-    closedir(subdir);
+      char subdirfn[PATH_MAX];
+      sprintf(subdirfn, "%s/sys/block/%s", root, de->d_name);
+      DIR *subdir = opendir(subdirfn);
+      ASSERT_TRUE(subdir);
+      while (!::readdir_r(subdir, reinterpret_cast<struct dirent*>(buf2), &de2)) {
+	if (!de2)
+	  break;
+	if (de2->d_name[0] == '.')
+	  continue;
+	// partiions will be prefixed with the base name
+	if (strncmp(de2->d_name, de->d_name, strlen(de->d_name))) {
+	  //printf("skipping %s\n", de2->d_name);
+	  continue;
+	}
+	char part[PATH_MAX];
+	sprintf(part, "/dev/%s", de2->d_name);
+	for (char *p = part; *p; ++p)
+	  if (*p == '!')
+	    *p = '/';
+	printf(" part %s (%s %s)\n", part, de->d_name, de2->d_name);
+
+	ASSERT_EQ(0, get_block_device_base(part, buf3, sizeof(buf3)));
+	printf("  got '%s' expected '%s'\n", buf3, de->d_name);
+	ASSERT_EQ(0, strcmp(buf3, de->d_name));
+	printf("  discard granularity = %lld .. supported = %d\n",
+	       (long long)get_block_device_int_property(part, "discard_granularity"),
+	       (int)block_device_support_discard(part));
+      }
+
+      closedir(subdir);
+    }
+    closedir(dir);
   }
-  closedir(dir);
 }
