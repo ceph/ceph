@@ -506,7 +506,7 @@ int XMLArgs::parse()
     }
     string substr, nameval;
     substr = str.substr(pos, fpos - pos);
-    url_decode(substr, nameval);
+    url_decode(substr, nameval, true);
     NameVal nv(nameval);
     int ret = nv.parse();
     if (ret >= 0) {
@@ -690,14 +690,13 @@ static char hex_to_num(char c)
   return hex_table.to_num(c);
 }
 
-bool url_decode(string& src_str, string& dest_str)
+bool url_decode(string& src_str, string& dest_str, bool in_query)
 {
   const char *src = src_str.c_str();
   char dest[src_str.size() + 1];
   int pos = 0;
   char c;
 
-  bool in_query = false;
   while (*src) {
     if (*src != '%') {
       if (!in_query || *src != '+') {
