@@ -2829,7 +2829,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   if (r < 0)
     return r;
 
-  rgw_obj& obj = state->obj;
+  rgw_obj& obj = target->get_obj();
   r = store->get_obj_ref(obj, &ref, &bucket);
   if (r < 0)
     return r;
@@ -2849,6 +2849,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     meta.set_mtime = ut.sec();
   }
 
+  op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
   op.mtime(&meta.set_mtime);
 
   if (meta.data) {
@@ -2905,6 +2906,9 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   uint64_t epoch;
   int64_t poolid;
 
+  bool orig_exists = state->exists;
+  uint64_t orig_size = state->size;
+
   index_tag = state->write_tag;
 
   RGWRados::Bucket bop(store, bucket);
@@ -2924,14 +2928,6 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   epoch = ref.ioctx.get_last_version();
   poolid = ref.ioctx.get_id();
 
-  /* successfully modified object, update internal object state */
-  state->exists = true;
-  state->mtime = meta.set_mtime;
-  state->size = size;
-  state->has_attrs = true;
-  state->epoch = epoch;
-  state->attrset = attrs;
-
   r = target->complete_atomic_modification();
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
@@ -2947,6 +2943,10 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     *meta.mtime = meta.set_mtime;
   }
 
+  /* note that index_op was using state so we couldn't invalidate it earlier */
+  target->invalidate_state();
+  state = NULL;
+
   if (target->versioning_enabled() || is_olh) {
     r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch);
     if (r < 0) {
@@ -2955,7 +2955,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   }
 
   /* update quota cache */
-  store->quota_handler->update_stats(meta.owner, bucket, (state->exists ? 0 : 1), size, state->size);
+  store->quota_handler->update_stats(meta.owner, bucket, (orig_exists ? 0 : 1), size, orig_size);
 
   return 0;
 
@@ -4391,6 +4391,11 @@ int RGWRados::append_atomic_test(RGWObjectCtx *rctx, rgw_obj& obj,
 int RGWRados::Object::get_state(RGWObjState **pstate, bool follow_olh)
 {
   return store->get_obj_state(&ctx, obj, pstate, NULL, follow_olh);
+}
+
+void RGWRados::Object::invalidate_state()
+{
+  ctx.invalidate(obj);
 }
 
 int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
