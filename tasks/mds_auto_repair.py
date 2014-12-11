@@ -98,6 +98,36 @@ class TestMDSAutoRepair(CephFSTestCase):
         proc = self.mount_a.run_shell(["sudo", "rados", "-p", "metadata", "getxattr", objname, "parent"])
         self.assertEqual(proc.exitstatus, 0)
 
+    def test_mds_readonly(self):
+        """
+        test if MDS behave correct when it's readonly
+        """
+        # operation should successd when MDS is not readonly
+        self.mount_a.run_shell(["sudo", "touch", "test_file1"])
+        writer = self.mount_a.write_background(loop=True)
+
+        time.sleep(10)
+        self.assertFalse(writer.finished)
+
+        # force MDS to read-only mode
+        self.fs.mds_asok(['force_readonly'])
+        time.sleep(10)
+
+        # touching test file should fail
+        try:
+            self.mount_a.run_shell(["sudo", "touch", "test_file1"])
+        except CommandFailedError, e:
+            pass
+        else:
+            self.assertTrue(False)
+
+        # background writer also should fail
+        self.assertTrue(writer.finished)
+
+        # restart mds to make it writable
+        self.fs.mds_restart()
+        self.fs.wait_for_daemons()
+
 @contextlib.contextmanager
 def task(ctx, config):
     fs = Filesystem(ctx, config)
