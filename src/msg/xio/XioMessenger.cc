@@ -303,6 +303,21 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_INLINE_HEADER,
                  &xopt, sizeof(xopt));
 
+      struct xio_mempool_config mempool_config = {
+        6,
+        {
+          {1024,  0,  4096,  262144},
+          {4096,  0,  4096,  262144},
+          {16384, 0,  4096,  262144},
+          {65536, 0,  1024,  65536},
+          {262144, 0,  512,  16384},
+          {1048576, 0, 128,  8192}
+        }
+      };
+      xio_set_opt(NULL,
+                  XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_CONFIG_MEMPOOL,
+                  &mempool_config, sizeof(mempool_config));
+
       /* and unregisterd one */
 #define XMSG_MEMPOOL_QUANTUM 4096
 
