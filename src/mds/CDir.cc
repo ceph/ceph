@@ -121,6 +121,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
+  if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -1521,8 +1522,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
-    log_mark_dirty();
-
+    state_set(STATE_BADFRAG);
     // mark complete, !fetching
     mark_complete();
     state_clear(STATE_FETCHING);
@@ -1835,8 +1835,7 @@ class C_IO_Dir_Committed : public CDirIOContext {
 public:
   C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) {
-    assert(r == 0);
-    dir->_committed(version);
+    dir->_committed(r, version);
   }
 };
 
@@ -1913,6 +1912,11 @@ void CDir::_omap_commit(int op_prio)
     if (write_size >= max_write_size) {
       ObjectOperation op;
       op.priority = op_prio;
+
+      // don't create new dirfrag blindly
+      if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+	op.stat(NULL, (utime_t*)NULL, NULL);
+
       op.tmap_to_omap(true); // convert tmap to omap
 
       if (!to_set.empty())
@@ -1931,6 +1935,11 @@ void CDir::_omap_commit(int op_prio)
 
   ObjectOperation op;
   op.priority = op_prio;
+
+  // don't create new dirfrag blindly
+  if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+    op.stat(NULL, (utime_t*)NULL, NULL);
+
   op.tmap_to_omap(true); // convert tmap to omap
 
   /*
@@ -2040,8 +2049,16 @@ void CDir::_commit(version_t want, int op_prio)
  *
  * @param v version i just committed
  */
-void CDir::_committed(version_t v)
+void CDir::_committed(int r, version_t v)
 {
+  if (r < 0) {
+    dout(1) << "commit error " << r << " v " << v << dendl;
+    cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+			      << " errno " << r << "\n";
+    cache->mds->handle_write_error(r);
+    return;
+  }
+
   dout(10) << "_committed v " << v << " on " << *this << dendl;
   assert(is_auth());
 

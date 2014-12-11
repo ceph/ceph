@@ -3692,6 +3692,14 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
       return;
   }
 
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "simple_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
+
   CInode *in = 0;
   int wanted = 0;
   if (lock->get_type() != CEPH_LOCK_DN) {
@@ -4119,6 +4127,14 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
     dout(20) << "  freezing|frozen" << dendl;
     return;
   }
+
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "scatter_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
   
   if (!lock->is_rdlocked() &&
       lock->get_state() != LOCK_MIX &&
@@ -4225,6 +4241,14 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool fo
 	  return;
 	}
 	*/
+
+	if (mdcache->is_readonly()) {
+	  if (lock->get_state() != LOCK_SYNC) {
+	    dout(10) << "scatter_nudge auth, read-only FS, syncing " << *lock << " on " << *p << dendl;
+	    simple_sync(static_cast<ScatterLock*>(lock));
+	  }
+	  break;
+	}
 
 	// adjust lock state
 	dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
@@ -4467,6 +4491,14 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 
   if (lock->get_parent()->is_freezing_or_frozen())
     return;
+
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "file_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
 
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {

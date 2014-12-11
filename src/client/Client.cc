@@ -1752,6 +1752,10 @@ void Client::handle_client_session(MClientSession *m)
     session->con->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
+  case CEPH_SESSION_FORCE_RO:
+    force_session_readonly(session);
+    break;
+
   default:
     assert(0);
   }
@@ -2148,6 +2152,8 @@ void Client::send_reconnect(MetaSession *session)
   // trim unused caps to reduce MDS's cache rejoin time
   trim_cache_for_reconnect(session);
 
+  session->readonly = false;
+
   if (session->release) {
     session->release->put();
     session->release = NULL;
@@ -2541,6 +2547,10 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
       }
       ldout(cct, 10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
     }
+
+    if ((need & CEPH_CAP_FILE_WR) && in->auth_cap &&
+	in->auth_cap->session->readonly)
+      return -EROFS;
     
     wait_on_list(in->waitfor_caps);
   }
@@ -3345,6 +3355,16 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+}
+
+void Client::force_session_readonly(MetaSession *s)
+{
+  s->readonly = true;
+  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
+    Inode *in = (*p)->inode;
+    if (in->caps_wanted() & CEPH_CAP_FILE_WR)
+      signal_cond_list(in->waitfor_caps);
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
