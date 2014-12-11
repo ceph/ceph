@@ -156,8 +156,10 @@ int FileJournal::_open_block_device()
   /* block devices have to write in blocks of CEPH_PAGE_SIZE */
   block_size = CEPH_PAGE_SIZE;
 
-  discard = block_device_support_discard(fn.c_str());
-  dout(10) << fn << " support discard: " << (int)discard << dendl;
+  if (g_conf->journal_discard) {
+    discard = block_device_support_discard(fn.c_str());
+    dout(10) << fn << " support discard: " << (int)discard << dendl;
+  }
   _check_disk_write_cache();
   return 0;
 }
@@ -1586,7 +1588,7 @@ void FileJournal::committed_thru(uint64_t seq)
     header.start_seq = seq + 1;
   }
 
-  if (g_conf->journal_discard && discard) {
+  if (discard) {
     dout(10) << __func__  << " will trim (" << old_start << ", " << header.start << ")" << dendl;
     if (old_start < header.start)
       do_discard(old_start, header.start - 1);

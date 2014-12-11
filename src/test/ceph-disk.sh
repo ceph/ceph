@@ -231,6 +231,16 @@ function test_activate_dir() {
     $rm -fr $osd_data
 }
 
+function activate_dev_body() {
+    local disk=$1
+
+    ./ceph-disk zap $disk || return 1
+    test_activate ${disk} ${disk}p1 || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    ./ceph-disk zap $disk || return 1
+}
+
 function test_activate_dev() {
     run_mon
 
@@ -242,11 +252,7 @@ function test_activate_dev() {
     dd if=/dev/zero of=vde.disk bs=1024k count=200
     losetup --find vde.disk
     local disk=$(losetup --associated vde.disk | cut -f1 -d:)
-    ./ceph-disk zap $disk
-    test_activate ${disk} ${disk}p1
-    kill_daemons
-    umount ${disk}p1
-    ./ceph-disk zap $disk
+    activate_dev_body $disk
     status=$?
     losetup --detach $disk
     rm vde.disk
