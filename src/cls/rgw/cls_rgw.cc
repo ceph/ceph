@@ -1216,6 +1216,10 @@ public:
     return true;
   }
 
+  void inc_epoch() {
+    olh_data_entry.epoch++;
+  }
+
   uint64_t get_epoch() {
     return olh_data_entry.epoch;
   }
@@ -1440,6 +1444,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
+    olh.inc_epoch(); /* need to increase epoch, otherwise entries are going to be in the wrong order */
     olh.set_tag(op.olh_tag);
   }
 

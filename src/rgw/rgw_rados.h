@@ -1397,6 +1397,7 @@ public:
 
   protected:
     int get_state(RGWObjState **pstate, bool follow_olh);
+    void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
                                     const char *ifmatch, const char *ifnomatch);
