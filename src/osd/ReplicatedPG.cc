@@ -1838,15 +1838,17 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
 
-    if (op->may_write() || write_ordered || !hit_set) {
+    if (!hit_set) {
       promote_object(obc, missing_oid, oloc, op);
       return true;
+    } else if (op->may_write() || op->may_cache()) {
+      do_proxy_write(op, missing_oid);
+    } else {
+      if (can_proxy_read)
+        do_proxy_read(op);
+      else
+        promote_op = op;   // for non-proxy case promote_object needs this
     }
-
-    if (can_proxy_read)
-      do_proxy_read(op);
-    else
-      promote_op = op;   // for non-proxy case promote_object needs this
 
     // Avoid duplicate promotion
     if (obc.get() && obc->is_blocked()) {
@@ -2098,7 +2100,7 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   complete_read_ctx(r, ctx);
 }
 
-void ReplicatedPG::kick_proxy_read_blocked(hobject_t& soid)
+void ReplicatedPG::kick_proxy_ops_blocked(hobject_t& soid)
 {
   map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_ops.find(soid);
   if (p == in_progress_proxy_ops.end())
@@ -2123,12 +2125,20 @@ void ReplicatedPG::cancel_proxy_read(ProxyReadOpRef prdop)
   }
 }
 
-void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
+void ReplicatedPG::cancel_proxy_ops(bool requeue)
 {
   dout(10) << __func__ << dendl;
+
+  // cancel proxy reads
   map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.begin();
   while (p != proxyread_ops.end()) {
     cancel_proxy_read((p++)->second);
+  }
+
+  // cancel proxy writes
+  map<ceph_tid_t, ProxyWriteOpRef>::iterator q = proxywrite_ops.begin();
+  while (q != proxywrite_ops.end()) {
+    cancel_proxy_write((q++)->second);
   }
 
   if (requeue) {
@@ -2158,7 +2168,13 @@ struct C_ProxyWrite_Commit : public Context {
       tid(0), pwop(pw)
   {}
   void finish(int r) {
+    if (pwop->canceled)
+      return;
     pg->lock();
+    if (pwop->canceled) {
+      pg->unlock();
+      return;
+    }
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_proxy_write(oid, tid, r);
     }
@@ -2228,6 +2244,8 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_ops.find(oid);
   if (q == in_progress_proxy_ops.end()) {
     dout(10) << __func__ << " no in_progress_proxy_ops found" << dendl;
+    delete pwop->ctx;
+    pwop->ctx = NULL;
     return;
   }
   list<OpRequestRef>& in_progress_op = q->second;
@@ -2273,6 +2291,21 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   delete pwop->ctx;
   pwop->ctx = NULL;
+}
+
+void ReplicatedPG::cancel_proxy_write(ProxyWriteOpRef pwop)
+{
+  dout(10) << __func__ << " " << pwop->soid << dendl;
+  pwop->canceled = true;
+
+  // cancel objecter op, if we can
+  if (pwop->objecter_tid) {
+    osd->objecter->op_cancel(pwop->objecter_tid, -ECANCELED);
+    delete pwop->ctx;
+    pwop->ctx = NULL;
+    proxywrite_ops.erase(pwop->objecter_tid);
+    pwop->objecter_tid = 0;
+  }
 }
 
 class PromoteCallback: public ReplicatedPG::CopyCallback {
@@ -6524,13 +6557,19 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
 
-  // cancel and requeue proxy reads on this object
+  // cancel and requeue proxy ops on this object
   if (!r) {
-    kick_proxy_read_blocked(cobc->obs.oi.soid);
+    kick_proxy_ops_blocked(cobc->obs.oi.soid);
     for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
-	it != proxyread_ops.end(); ++it) {
+        it != proxyread_ops.end(); ++it) {
       if (it->second->soid == cobc->obs.oi.soid) {
-	cancel_proxy_read(it->second);
+        cancel_proxy_read(it->second);
+      }
+    }
+    for (map<ceph_tid_t, ProxyWriteOpRef>::iterator it = proxywrite_ops.begin();
+        it != proxywrite_ops.end(); ++it) {
+      if (it->second->soid == cobc->obs.oi.soid) {
+        cancel_proxy_write(it->second);
       }
     }
   }
@@ -8932,7 +8971,7 @@ void ReplicatedPG::on_shutdown()
   unreg_next_scrub();
   cancel_copy_ops(false);
   cancel_flush_ops(false);
-  cancel_proxy_read_ops(false);
+  cancel_proxy_ops(false);
   apply_and_flush_repops(false);
 
   pgbackend->on_change();
@@ -9019,7 +9058,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   cancel_copy_ops(is_primary());
   cancel_flush_ops(is_primary());
-  cancel_proxy_read_ops(is_primary());
+  cancel_proxy_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
