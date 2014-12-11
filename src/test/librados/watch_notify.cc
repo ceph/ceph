@@ -66,7 +66,7 @@ static void watch_notify2_test_cb(void *arg,
 
 static void watch_notify2_test_errcb(void *arg, uint64_t cookie, int err)
 {
-  std::cout << __func__ << " cookie " << cookie << std::endl;
+  std::cout << __func__ << " cookie " << cookie << " err " << err << std::endl;
   assert(cookie > 1000);
   notify_err = err;
 }
@@ -89,7 +89,8 @@ public:
   }
 
   void handle_error(uint64_t cookie, int err) {
-    std::cout << __func__ << " cookie " << cookie << std::endl;
+    std::cout << __func__ << " cookie " << cookie
+	      << " err " << err << std::endl;
     assert(cookie > 1000);
     notify_err = err;
   }
