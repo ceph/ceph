@@ -26,6 +26,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -210,6 +211,142 @@ TEST_P(StoreTest, SimpleObjectTest) {
   {
     ObjectStore::Transaction t;
     t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, SimpleListTest) {
+  int r;
+  coll_t cid = coll_t("coll");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  set<ghobject_t> all, saw;
+  {
+    ObjectStore::Transaction t;
+    for (int i=0; i<200; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
+      all.insert(hoid);
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+    }
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    ghobject_t next, current;
+    while (!next.is_max()) {
+      int r = store->collection_list_partial(cid, current, 25, 50,
+					     0, &objects, &next);
+      ASSERT_EQ(r, 0);
+      cout << " got " << objects.size() << " next " << next << std::endl;
+      for (vector<ghobject_t>::iterator p = objects.begin(); p != objects.end();
+	   ++p) {
+	saw.insert(*p);
+      }
+      objects.clear();
+      current = next;
+    }
+    ASSERT_EQ(saw, all);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
+      t.remove(cid, *p);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, Sort) {
+  {
+    hobject_t a(sobject_t("a", CEPH_NOSNAP));
+    hobject_t b = a;
+    ASSERT_EQ(a, b);
+    b.oid.name = "b";
+    ASSERT_NE(a, b);
+    ASSERT_LT(a, b);
+    a.pool = 1;
+    b.pool = 2;
+    ASSERT_LT(a, b);
+    a.pool = 3;
+    ASSERT_GT(a, b);
+  }
+  {
+    ghobject_t a(hobject_t(sobject_t("a", CEPH_NOSNAP)));
+    ghobject_t b(hobject_t(sobject_t("b", CEPH_NOSNAP)));
+    a.hobj.pool = 1;
+    b.hobj.pool = 1;
+    ASSERT_LT(a, b);
+    a.hobj.pool = -3;
+    ASSERT_LT(a, b);
+    a.hobj.pool = 1;
+    b.hobj.pool = -3;
+    ASSERT_GT(a, b);
+  }
+}
+
+TEST_P(StoreTest, MultipoolListTest) {
+  int r;
+  coll_t cid = coll_t("coll");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  set<ghobject_t> all, saw;
+  {
+    ObjectStore::Transaction t;
+    for (int i=0; i<200; ++i) {
+      string name("object_");
+      name += stringify(i);
+      ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
+      if (rand() & 1)
+	hoid.hobj.pool = -3;
+      else
+	hoid.hobj.pool = 1;
+      all.insert(hoid);
+      t.touch(cid, hoid);
+      cerr << "Creating object " << hoid << std::endl;
+    }
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  {
+    vector<ghobject_t> objects;
+    ghobject_t next, current;
+    while (!next.is_max()) {
+      int r = store->collection_list_partial(cid, current, 25, 50,
+					     0, &objects, &next);
+      ASSERT_EQ(r, 0);
+      cout << " got " << objects.size() << " next " << next << std::endl;
+      for (vector<ghobject_t>::iterator p = objects.begin(); p != objects.end();
+	   ++p) {
+	saw.insert(*p);
+      }
+      objects.clear();
+      current = next;
+    }
+    ASSERT_EQ(saw, all);
+  }
+  {
+    ObjectStore::Transaction t;
+    for (set<ghobject_t>::iterator p = all.begin(); p != all.end(); ++p)
+      t.remove(cid, *p);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
     r = store->apply_transaction(t);
