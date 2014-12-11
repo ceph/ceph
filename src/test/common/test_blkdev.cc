@@ -37,6 +37,9 @@ TEST(blkdev, get_block_device_base) {
     ASSERT_EQ(0, get_block_device_base(base, buf3, sizeof(buf3)));
     printf("  got '%s' expected '%s'\n", buf3, de->d_name);
     ASSERT_EQ(0, strcmp(de->d_name, buf3));
+    printf("  discard granularity = %lld .. supported = %d\n",
+	   get_block_device_int_property(base, "discard_granularity"),
+	   (int)block_device_support_discard(base));
 
     char subdirfn[PATH_MAX];
     sprintf(subdirfn, "/sys/block/%s", de->d_name);
@@ -62,6 +65,9 @@ TEST(blkdev, get_block_device_base) {
       ASSERT_EQ(0, get_block_device_base(part, buf3, sizeof(buf3)));
       printf("  got '%s' expected '%s'\n", buf3, de->d_name);
       ASSERT_EQ(0, strcmp(buf3, de->d_name));
+      printf("  discard granularity = %lld .. supported = %d\n",
+	     get_block_device_int_property(part, "discard_granularity"),
+	     (int)block_device_support_discard(part));
     }
 
     closedir(subdir);
