@@ -307,6 +307,12 @@ def main(args):
     args["<config>"] = config
     fake_ctx = FakeNamespace(args)
 
+    # store on global config if interactive-on-error, for contextutil.nested()
+    # FIXME this should become more generic, and the keys should use
+    # '_' uniformly
+    if fake_ctx.config.get('interactive-on-error'):
+        teuthology.config.config.ctx = fake_ctx
+
     try:
         run_tasks(tasks=config['tasks'], ctx=fake_ctx)
     finally:
