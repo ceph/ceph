@@ -89,7 +89,7 @@ TYPE(ECUtil::HashInfo)
 #include "osd/ECMsgTypes.h"
 TYPE(ECSubWrite)
 TYPE(ECSubWriteReply)
-TYPE(ECSubRead)
+TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"
