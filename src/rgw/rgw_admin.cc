@@ -820,13 +820,13 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, instance, ns);
 }
 
-int check_min_obj_stripe_size(RGWRados *store, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
+int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
   map<string, bufferlist> attrs;
   uint64_t obj_size;
 
   RGWObjectCtx obj_ctx(store);
-  RGWRados::Object op_target(store, obj_ctx, obj);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
@@ -2087,7 +2087,7 @@ next:
       return -ret;
     }
     rgw_obj_key key(object, object_version);
-    ret = rgw_remove_object(store, bucket_info.owner, bucket, key, bucket_info.versioning_enabled());
+    ret = rgw_remove_object(store, bucket_info, bucket, key, bucket_info.versioning_enabled());
 
     if (ret < 0) {
       cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
@@ -2116,7 +2116,7 @@ next:
     obj.set_instance(object_version);
     bool need_rewrite = true;
     if (min_rewrite_stripe_size > 0) {
-      ret = check_min_obj_stripe_size(store, obj, min_rewrite_stripe_size, &need_rewrite);
+      ret = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
       }
@@ -2207,7 +2207,7 @@ next:
 
           bool need_rewrite = true;
           if (min_rewrite_stripe_size > 0) {
-            r = check_min_obj_stripe_size(store, obj, min_rewrite_stripe_size, &need_rewrite);
+            r = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
             if (r < 0) {
               ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << r << dendl;
             }
@@ -2264,7 +2264,7 @@ next:
     uint64_t obj_size;
     map<string, bufferlist> attrs;
     RGWObjectCtx obj_ctx(store);
-    RGWRados::Object op_target(store, obj_ctx, obj);
+    RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
     RGWRados::Object::Read read_op(&op_target);
 
     read_op.params.attrs = &attrs;
