@@ -748,7 +748,7 @@ string HashIndex::get_hash_str(uint32_t hash) {
 
 string HashIndex::get_path_str(const ghobject_t &oid) {
   assert(!oid.is_max());
-  return get_hash_str(oid.hobj.hash);
+  return get_hash_str(oid.hobj.get_hash());
 }
 
 uint32_t HashIndex::hash_prefix_to_hash(string prefix) {

@@ -73,18 +73,18 @@ public:
   typedef ceph::shared_ptr<FD> FDRef;
 
   FDRef lookup(const ghobject_t &hoid) {
-    int registry_id = hoid.hobj.hash % registry_shards;
+    int registry_id = hoid.hobj.get_hash() % registry_shards;
     return registry[registry_id].lookup(hoid);
   }
 
   FDRef add(const ghobject_t &hoid, int fd, bool *existed) {
-    int registry_id = hoid.hobj.hash % registry_shards;
+    int registry_id = hoid.hobj.get_hash() % registry_shards;
     return registry[registry_id].add(hoid, new FD(fd), existed);
   }
 
   /// clear cached fd for hoid, subsequent lookups will get an empty FD
   void clear(const ghobject_t &hoid) {
-    int registry_id = hoid.hobj.hash % registry_shards;
+    int registry_id = hoid.hobj.get_hash() % registry_shards;
     registry[registry_id].purge(hoid);
   }
 
