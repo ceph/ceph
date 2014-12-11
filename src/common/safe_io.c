@@ -216,7 +216,7 @@ int safe_read_file(const char *base, const char *file,
   if (fd < 0) {
     return -errno;
   }
-  len = safe_read(fd, val, vallen - 1);
+  len = safe_read(fd, val, vallen);
   if (len < 0) {
     VOID_TEMP_FAILURE_RETRY(close(fd));
     return len;
@@ -224,6 +224,5 @@ int safe_read_file(const char *base, const char *file,
   // close sometimes returns errors, but only after write()
   VOID_TEMP_FAILURE_RETRY(close(fd));
 
-  val[len] = 0;
   return len;
 }
