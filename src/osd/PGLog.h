@@ -175,7 +175,7 @@ struct PGLog {
     }
 
     // actors
-    void add(pg_log_entry_t& e) {
+    void add(const pg_log_entry_t& e) {
       // add to log
       log.push_back(e);
 
@@ -355,7 +355,7 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(pg_log_entry_t& e) {
+  void add(const pg_log_entry_t& e) {
     mark_writeout_from(e.version);
     log.add(e);
   }

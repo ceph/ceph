@@ -1222,7 +1222,7 @@ void ECBackend::submit_transaction(
   PGTransaction *_t,
   const eversion_t &trim_to,
   const eversion_t &trim_rollback_to,
-  vector<pg_log_entry_t> &log_entries,
+  const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
   Context *on_local_applied_sync,
   Context *on_all_applied,
@@ -1238,7 +1238,7 @@ void ECBackend::submit_transaction(
   op->version = at_version;
   op->trim_to = trim_to;
   op->trim_rollback_to = trim_rollback_to;
-  op->log_entries.swap(log_entries);
+  op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
   op->on_all_applied = on_all_applied;
