@@ -230,6 +230,24 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	   << inc.full_crc << " but actual is " << osdmap.crc
 	   << " features " << f
 	   << dendl;
+
+      derr << "full map dump (crc " << full_bl.crc32c(-1) << "):\n";
+      full_bl.hexdump(*_dout);
+      *_dout << "\ninc map dump (crc " << inc_bl.crc32c(-1) << "):\n";
+      inc_bl.hexdump(*_dout);
+      *_dout << dendl;
+      bufferlist prev_bl, prev_bl2, again_bl;
+      get_version_full(osdmap.epoch-1, prev_bl);
+      OSDMap pristine;
+      pristine.decode(prev_bl);
+      pristine.encode(prev_bl2, f | CEPH_FEATURE_RESERVED);
+      derr << "previous osdmap reload, raw crc " << prev_bl.crc32c(-1) << dendl;
+      derr << "reencode of that is " << prev_bl2.crc32c(-1) << dendl;
+      pristine.apply_incremental(inc);
+      pristine.encode(again_bl, f | CEPH_FEATURE_RESERVED);
+      derr << "again raw crc is " << again_bl.crc32c(-1) << dendl;
+      derr << " full_crc " << pristine.crc << dendl;
+
       assert(0 == "got mismatched crc encoding full map");
     }
 
