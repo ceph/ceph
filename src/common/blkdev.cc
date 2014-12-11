@@ -12,6 +12,16 @@
 #ifdef __linux__
 #include <linux/fs.h>
 
+static const char *sandbox_dir = "";
+
+void set_block_device_sandbox_dir(const char *dir)
+{
+  if (dir)
+    sandbox_dir = dir;
+  else
+    sandbox_dir = "";
+}
+
 int get_block_device_size(int fd, int64_t *psize)
 {
 #ifdef BLKGETSIZE64
@@ -52,7 +62,7 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
     if (*p == '/')
       *p = '!';
 
-  snprintf(fn, sizeof(fn), "/sys/block/%s", devname);
+  snprintf(fn, sizeof(fn), "%s/sys/block/%s", sandbox_dir, devname);
   if (stat(fn, &st) == 0) {
     if (strlen(devname) + 1 > out_len) {
       return -ERANGE;
@@ -61,7 +71,8 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
     return 0;
   }
 
-  dir = opendir("/sys/block");
+  snprintf(fn, sizeof(fn), "%s/sys/block", sandbox_dir);
+  dir = opendir(fn);
   if (!dir)
     return -errno;
 
@@ -75,7 +86,8 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
     }
     if (de->d_name[0] == '.')
       continue;
-    snprintf(fn, sizeof(fn), "/sys/block/%s/%s", de->d_name, devname);
+    snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
+	     devname);
 
     if (stat(fn, &st) == 0) {
       // match!
@@ -111,7 +123,7 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
     return r;
 
   snprintf(filename, sizeof(filename),
-	   "/sys/block/%s/queue/discard_granularity", basename);
+	   "%s/sys/block/%s/queue/discard_granularity", sandbox_dir, basename);
 
   FILE *fp = fopen(filename, "r");
   if (fp == NULL) {
