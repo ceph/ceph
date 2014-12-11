@@ -241,7 +241,9 @@ namespace librados
     virtual ~ObjectOperation();
 
     size_t size();
-    void set_op_flags(ObjectOperationFlags flags);
+    void set_op_flags(ObjectOperationFlags flags) __attribute__((deprecated));
+    //flag mean ObjectOperationFlags
+    void set_op_flags2(int flags);
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
