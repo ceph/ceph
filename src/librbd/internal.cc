@@ -3256,7 +3256,7 @@ reprotect_and_return_err:
 	AioRead *req = new AioRead(ictx, q->oid.name, 
 				   q->objectno, q->offset, q->length,
 				   q->buffer_extents,
-				   snap_id, true, req_comp);
+				   snap_id, true, req_comp, op_flags);
 	req_comp->set_req(req);
 	c->add_request();
 
