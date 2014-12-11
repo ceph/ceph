@@ -21,6 +21,9 @@
 #include "ECBackend.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
+#include "ReplicatedPG.h"
+
+class ReplicatedPG;
 
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -832,6 +835,11 @@ void ECBackend::handle_sub_write(
     op.trim_rollback_to,
     !(op.t.empty()),
     localt);
+
+  if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
+      get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
+    op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+
   localt->append(op.t);
   if (on_local_applied_sync) {
     dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
