@@ -90,6 +90,9 @@ class MDCache {
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
 
+  bool readonly;
+  void set_readonly() { readonly = true; }
+
   CInode *strays[NUM_STRAY];         // my stray dir
   int stray_index;
 
@@ -103,6 +106,8 @@ public:
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;
   }
+  bool is_readonly() { return readonly; }
+  void force_readonly();
 
   DecayRate decayrate;
 
@@ -858,7 +863,7 @@ public:
   void eval_remote(CDentry *dn);
 
   void maybe_eval_stray(CInode *in, bool delay=false) {
-    if (in->inode.nlink > 0 || in->is_base())
+    if (in->inode.nlink > 0 || in->is_base() || is_readonly())
       return;
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->state_test(CDentry::STATE_PURGING) &&
