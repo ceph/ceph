@@ -97,6 +97,49 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   peer_type = peer.name.type();
   set_peer_addr(peer.addr);
 
+  Messenger::Policy policy;
+  int64_t max_msgs = 0, max_bytes = 0, bytes_opt = 0;
+  int xopt;
+
+  policy = m->get_policy(peer_type);
+
+  if (policy.throttler_messages) {
+    max_msgs = policy.throttler_messages->get_max();
+    ldout(m->cct,0) << "XioMessenger throttle_msgs: " << max_msgs << dendl;
+  }
+
+  xopt = m->cct->_conf->xio_queue_depth;
+  if (max_msgs > xopt)
+    xopt = max_msgs;
+
+  /* set high mark for send, reserved 20% for credits */
+  q_high_mark = xopt * 4 / 5;
+  q_low_mark = q_high_mark/2;
+
+  /* set send & receive msgs queue depth */
+  xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_MSGS,
+             &xopt, sizeof(xopt));
+  xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_MSGS,
+             &xopt, sizeof(xopt));
+
+  if (policy.throttler_bytes) {
+    max_bytes = policy.throttler_bytes->get_max();
+    ldout(m->cct,0) << "XioMessenger throttle_bytes: " << max_bytes << dendl;
+  }
+
+  bytes_opt = (2 << 28); /* default: 512 MB */
+  if (max_bytes > bytes_opt)
+    bytes_opt = max_bytes;
+
+  /* set send & receive total bytes throttle */
+  xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_SND_QUEUE_DEPTH_BYTES,
+             &bytes_opt, sizeof(bytes_opt));
+  xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_RCV_QUEUE_DEPTH_BYTES,
+             &bytes_opt, sizeof(bytes_opt));
+
+  ldout(m->cct,0) << "Peer type: " << peer.name.type_str() <<
+        " throttle_msgs: " << xopt << " throttle_bytes: " << bytes_opt << dendl;
+
   /* XXXX fake features, aieee! */
   set_features(XIO_ALL_FEATURES);
 }
