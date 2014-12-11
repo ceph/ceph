@@ -279,7 +279,7 @@ def prepare_and_schedule(job_config, suite_repo_path, base_yaml_paths, limit,
         dry_run=dry_run,
         filter_in=filter_in,
         filter_out=filter_out,
-        )
+    )
 
     if job_config.email and num_jobs:
         arg = copy.deepcopy(base_args)
@@ -535,19 +535,19 @@ def schedule_suite(job_config,
         arg.extend(base_yamls)
         arg.extend(fragment_paths)
 
-        jobs_to_schedule.append((parsed_yaml, arg))
+        jobs_to_schedule.append({'yaml': parsed_yaml, 'desc': description,
+                                'args': arg})
 
-    for job_tuple in jobs_to_schedule:
-        arg = job_tuple[1]
+    for job in jobs_to_schedule:
         log.info(
-            'Scheduling %s', description
+            'Scheduling %s', job['desc']
         )
 
         if dry_run:
             # Quote any individual args so that individual commands can be
             # copied and pasted in order to execute them individually.
             printable_args = []
-            for item in arg:
+            for item in job['args']:
                 if ' ' in item:
                     printable_args.append("'%s'" % item)
                 else:
@@ -555,7 +555,7 @@ def schedule_suite(job_config,
             log.info('dry-run: %s' % ' '.join(printable_args))
         else:
             subprocess.check_call(
-                args=arg,
+                args=job['args'],
             )
 
     count = len(jobs_to_schedule)
