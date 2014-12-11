@@ -60,7 +60,7 @@ void PGLog::IndexedLog::split_into(
   for (list<pg_log_entry_t>::iterator i = oldlog.begin();
        i != oldlog.end();
        ) {
-    if ((i->soid.hash & mask) == child_pgid.m_seed) {
+    if ((i->soid.get_hash() & mask) == child_pgid.m_seed) {
       olog->log.push_back(*i);
     } else {
       log.push_back(*i);
