@@ -26,6 +26,9 @@
 
 using namespace ceph;
 
+void register_test_image_watcher() {
+}
+
 class TestImageWatcher : public TestFixture {
 public:
 
@@ -342,14 +345,17 @@ TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
 
   ASSERT_EQ(0, register_image_watch(*ictx));
   m_notify_acks = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()))(
-    std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
+    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
 
   RWLock::WLocker l(ictx->owner_lock);
   ASSERT_EQ(0, ictx->image_watcher->try_lock());
-  ASSERT_EQ(0, ictx->image_watcher->unlock());
-
   ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
+  ASSERT_EQ(0, ictx->image_watcher->unlock());
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
   ASSERT_TRUE(m_notify_acks.empty());
   NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()))(
