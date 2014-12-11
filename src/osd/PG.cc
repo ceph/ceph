@@ -2881,7 +2881,6 @@ void PG::append_log(
   for (vector<pg_log_entry_t>::iterator p = logv.begin();
        p != logv.end();
        ++p) {
-    p->offset = 0;
     add_log_entry(*p, keys[p->get_key_name()]);
   }
 
