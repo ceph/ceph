@@ -334,7 +334,11 @@ typedef void *rbd_completion_t;
 typedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg);
 CEPH_RBD_API ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
                               char *buf);
-
+/*
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+CEPH_RBD_API ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
+                               char *buf, int op_flags);
 /* DEPRECATED; use rbd_read_iterate2 */
 CEPH_RBD_API int64_t rbd_read_iterate(rbd_image_t image, uint64_t ofs, size_t len,
 			              int (*cb)(uint64_t, size_t, const char *, void *),
@@ -383,11 +387,27 @@ CEPH_RBD_API int rbd_diff_iterate(rbd_image_t image,
                                   void *arg);
 CEPH_RBD_API ssize_t rbd_write(rbd_image_t image, uint64_t ofs, size_t len,
                                const char *buf);
+/*
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+CEPH_RBD_API ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
+                                const char *buf, int op_flags);
 CEPH_RBD_API int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len);
 CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
                                const char *buf, rbd_completion_t c);
+
+/*
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+CEPH_RBD_API int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
+                                const char *buf, rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
                               char *buf, rbd_completion_t c);
+/*
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
+ */
+CEPH_RBD_API int rbd_aio_read2(rbd_image_t image, uint64_t off, size_t len,
+                               char *buf, rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_discard(rbd_image_t image, uint64_t off, uint64_t len,
                                  rbd_completion_t c);
 CEPH_RBD_API int rbd_aio_create_completion(void *cb_arg,
