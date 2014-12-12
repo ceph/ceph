@@ -28,18 +28,18 @@
 librados::IoCtxImpl::IoCtxImpl() :
   ref_cnt(0), client(NULL), poolid(0), assert_ver(0), last_objver(0),
   notify_timeout(30), aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
-  aio_write_seq(0), lock(NULL), objecter(NULL)
+  aio_write_seq(0), objecter(NULL)
 {
 }
 
 librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
-			       Mutex *client_lock, int poolid,
+			       int poolid,
 			       const char *pool_name, snapid_t s)
   : ref_cnt(0), client(c), poolid(poolid), pool_name(pool_name), snap_seq(s),
     assert_ver(0), notify_timeout(c->cct->_conf->client_notify_timeout),
     oloc(poolid),
     aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
-    aio_write_seq(0), lock(client_lock), objecter(objecter)
+    aio_write_seq(0), objecter(objecter)
 {
 }
 
