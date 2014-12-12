@@ -242,7 +242,7 @@ CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const hobject_t& o);
 
-WRITE_EQ_OPERATORS_7(hobject_t, oid, get_key(), snap, hash, max, pool, nspace)
+WRITE_EQ_OPERATORS_7(hobject_t, hash, oid, get_key(), snap, pool, max, nspace)
 WRITE_CMP_OPERATORS_7(hobject_t,
 		      max,
 		      pool,
