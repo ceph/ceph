@@ -1172,6 +1172,13 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   omap_hdr_section oh;
   omap_section os;
 
+  assert(g_ceph_context);
+  if (ob.hoid.hobj.nspace == g_ceph_context->_conf->osd_hit_set_namespace) {
+    cout << "Skipping internal object " << ob.hoid << std::endl;
+    skip_object(bl);
+    return 0;
+  }
+
   if (!ob.hoid.hobj.is_head()) {
     cout << "Skipping non-head for " << ob.hoid << std::endl;
     skip_object(bl);
