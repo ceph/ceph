@@ -2364,10 +2364,12 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
   PromoteCallback *cb = new PromoteCallback(obc, this);
   object_locator_t my_oloc = oloc;
   my_oloc.pool = pool.info.tier_of;
-  start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0,
-	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
-	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
-	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
+
+  unsigned flags = CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+                   CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+                   CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |
+                   CEPH_OSD_COPY_FROM_FLAG_RWORDERED;
+  start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0, flags,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
 	     src_fadvise_flags, 0);
 
@@ -6369,6 +6371,8 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
     flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
   if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE)
     flags |= CEPH_OSD_FLAG_MAP_SNAP_CLONE;
+  if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_RWORDERED)
+    flags |= CEPH_OSD_FLAG_RWORDERED;
 
   C_GatherBuilder gather(g_ceph_context);
 
