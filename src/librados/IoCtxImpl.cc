@@ -33,7 +33,7 @@ librados::IoCtxImpl::IoCtxImpl() :
 }
 
 librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
-			       Mutex *client_lock, int poolid,
+			       Mutex *client_lock, int64_t poolid,
 			       const char *pool_name, snapid_t s)
   : ref_cnt(0), client(c), poolid(poolid), pool_name(pool_name), snap_seq(s),
     assert_ver(0), notify_timeout(c->cct->_conf->client_notify_timeout),
