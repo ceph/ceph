@@ -35,7 +35,7 @@
 class Context;
 class Messenger;
 class OSDMap;
-
+class Finisher;
 
 
 /**** Filer interface ***/
@@ -43,6 +43,7 @@ class OSDMap;
 class Filer {
   CephContext *cct;
   Objecter   *objecter;
+  Finisher   *finisher;
   
   // probes
   struct Probe {
@@ -88,7 +89,7 @@ class Filer {
   Filer(const Filer& other);
   const Filer operator=(const Filer& other);
 
-  Filer(Objecter *o) : cct(o->cct), objecter(o) {}
+  Filer(Objecter *o, Finisher *f) : cct(o->cct), objecter(o), finisher(f) {}
   ~Filer() {}
 
   bool is_active() {
