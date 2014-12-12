@@ -2283,7 +2283,10 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
-    (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
+    if 'loop' in dev or 'cciss' in dev:
+        (base, partnum) = re.match('(.*\d+)p(\d+)', dev).group(1, 2)
+    else:
+        (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)
