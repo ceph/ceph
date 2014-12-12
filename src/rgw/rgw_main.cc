@@ -639,6 +639,10 @@ void RGWFCGXProcess::handle_request(RGWRequest *r)
 
   FCGX_Finish_r(fcgx);
 
+  if (store->ctx()->_conf->rgw_fcgi_explicit_free) {
+    FCGX_Free(fcgx, 1);
+  }
+
   delete req;
 }
 
