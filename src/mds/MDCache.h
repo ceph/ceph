@@ -907,7 +907,6 @@ public:
 	dn->get_dir()->get_inode()->is_stray())
       eval_stray(dn, delay);
   }
-  void try_remove_dentries_for_stray(CInode* diri);
 
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
 

@@ -5280,11 +5280,8 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // clean up?
-  if (straydn) {
-    if (strayin->is_dir())
-      mdcache->try_remove_dentries_for_stray(strayin);
+  if (straydn)
     mdcache->eval_stray(straydn);
-  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)

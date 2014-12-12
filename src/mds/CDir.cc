@@ -678,23 +678,45 @@ void CDir::try_remove_dentries_for_stray()
   dout(10) << __func__ << dendl;
   assert(inode->inode.nlink == 0);
 
+  // clear dirty only when the directory was not snapshotted
+  bool clear_dirty = !inode->snaprealm;
+
   CDir::map_t::iterator p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
     ++p;
-    if (!dn->get_linkage()->is_null() || dn->is_projected())
-      continue; // shouldn't happen
-    if (dn->is_dirty())
-      dn->mark_clean();
-    // It's OK to remove lease prematurely because we will never link
-    // the dentry to inode again.
-    if (dn->is_any_leases())
-      dn->remove_client_leases(cache->mds->locker);
-    if (dn->get_num_ref() == 0)
-      remove_dentry(dn);
+    if (dn->last == CEPH_NOSNAP) {
+      if (!dn->get_linkage()->is_null() || dn->is_projected())
+	continue; // shouldn't happen
+      if (clear_dirty && dn->is_dirty())
+	dn->mark_clean();
+      // It's OK to remove lease prematurely because we will never link
+      // the dentry to inode again.
+      if (dn->is_any_leases())
+	dn->remove_client_leases(cache->mds->locker);
+      if (dn->get_num_ref() == 0)
+	remove_dentry(dn);
+    } else {
+      if (dn->is_projected())
+	continue; // shouldn't happen
+      CDentry::linkage_t *dnl= dn->get_linkage();
+      CInode *in = NULL;
+      if (dnl->is_primary()) {
+	in = dnl->get_inode();
+	if (clear_dirty && in->is_dirty())
+	  in->mark_clean();
+      }
+      if (clear_dirty && dn->is_dirty())
+	dn->mark_clean();
+      if (dn->get_num_ref() == 0) {
+	remove_dentry(dn);
+	if (in)
+	  cache->remove_inode(in);
+      }
+    }
   }
 
-  if (is_dirty())
+  if (clear_dirty && is_dirty())
     mark_clean();
 }
 
@@ -1380,7 +1402,7 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   }
 
   // unlinked directory inode shouldn't have any entry
-  if (inode->inode.nlink == 0) {
+  if (inode->inode.nlink == 0 && !inode->snaprealm) {
     dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
     if (get_version() == 0)
       set_version(1);
@@ -1808,7 +1830,7 @@ void CDir::commit(version_t want, MDSInternalContextBase *c, bool ignore_authpin
   assert(is_auth());
   assert(ignore_authpinnability || can_auth_pin());
 
-  if (inode->inode.nlink == 0) {
+  if (inode->inode.nlink == 0 && !inode->snaprealm) {
     dout(7) << "commit dirfrag for unlinked directory, mark clean" << dendl;
     try_remove_dentries_for_stray();
     if (c)
@@ -2137,6 +2159,10 @@ void CDir::_committed(int r, version_t v)
     waiting_for_commit.erase(p);
     p = n;
   } 
+
+  // try drop dentries in this dirfrag if it's about to be purged
+  if (inode->inode.nlink == 0 && inode->snaprealm)
+    cache->maybe_eval_stray(inode, true);
 
   // unpin if we kicked the last waiter.
   if (were_waiters &&
