@@ -65,11 +65,11 @@ namespace librbd {
 	    uint64_t objectno, uint64_t offset, uint64_t len,
 	    vector<pair<uint64_t,uint64_t> >& be,
 	    librados::snap_t snap_id, bool sparse,
-	    Context *completion)
+	    Context *completion, int op_flags)
       : AioRequest(ictx, oid, objectno, offset, len, snap_id, completion,
 		   false),
-	m_buffer_extents(be),
-	m_tried_parent(false), m_sparse(sparse) {
+	m_buffer_extents(be), m_tried_parent(false),
+	m_sparse(sparse), m_op_flags(op_flags) {
     }
     virtual ~AioRead() {}
     virtual bool should_complete(int r);
@@ -86,6 +86,7 @@ namespace librbd {
     vector<pair<uint64_t,uint64_t> > m_buffer_extents;
     bool m_tried_parent;
     bool m_sparse;
+    int m_op_flags;
   };
 
   class AbstractWrite : public AioRequest {
@@ -164,6 +165,9 @@ namespace librbd {
     }
     virtual ~AioWrite() {}
 
+    void set_op_flags(int op_flags) {
+      m_write.set_op_flags2(op_flags);
+    }
   protected:
     virtual void add_copyup_ops() {
       add_write_ops(m_copyup);

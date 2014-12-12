@@ -2280,12 +2280,12 @@ unsigned FileStore::_do_transaction(
 	ghobject_t oid = i.decode_oid();
 	uint64_t off = i.decode_length();
 	uint64_t len = i.decode_length();
-	bool replica = i.get_replica();
+	uint32_t fadvise_flags = i.get_fadvise_flags();
 	bufferlist bl;
 	i.decode_bl(bl);
         tracepoint(objectstore, write_enter, osr_name, off, len);
 	if (_check_replay_guard(cid, oid, spos) > 0)
-	  r = _write(cid, oid, off, len, bl, replica);
+	  r = _write(cid, oid, off, len, bl, fadvise_flags);
         tracepoint(objectstore, write_exit, r);
       }
       break;
@@ -2795,6 +2795,7 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
+  uint32_t op_flags,
   bool allow_eio)
 {
   int got;
@@ -2818,6 +2819,13 @@ int FileStore::read(
     len = st.st_size;
   }
 
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_RANDOM)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_RANDOM);
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_SEQUENTIAL);
+#endif
+
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
@@ -2828,6 +2836,13 @@ int FileStore::read(
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_DONTNEED);
+  if (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_RANDOM | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL))
+    posix_fadvise(**fd, offset, len, POSIX_FADV_NORMAL);
+#endif
 
   if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
     ostringstream ss;
@@ -2970,7 +2985,7 @@ int FileStore::_touch(coll_t cid, const ghobject_t& oid)
 
 int FileStore::_write(coll_t cid, const ghobject_t& oid,
                      uint64_t offset, size_t len,
-                     const bufferlist& bl, bool replica)
+                     const bufferlist& bl, uint32_t fadvise_flags)
 {
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
@@ -3014,7 +3029,8 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   // flush?
   if (!replaying &&
       g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len, replica);
+    wbthrottle.queue_wb(fd, oid, offset, len,
+			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   lfn_close(fd);
 
  out:

@@ -69,6 +69,51 @@ string ceph_osd_flag_string(unsigned flags)
   return string("-");
 }
 
+const char * ceph_osd_op_flag_name(unsigned flag)
+{
+  const char *name;
+
+  switch(flag) {
+    case CEPH_OSD_OP_FLAG_EXCL:
+      name = "excl";
+      break;
+    case CEPH_OSD_OP_FLAG_FAILOK:
+      name = "failok";
+      break;
+    case CEPH_OSD_OP_FLAG_FADVISE_RANDOM:
+      name = "fadvise_random";
+      break;
+    case CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL:
+      name = "fadvise_sequential";
+      break;
+    case CEPH_OSD_OP_FLAG_FADVISE_WILLNEED:
+      name = "favise_willneed";
+      break;
+    case CEPH_OSD_OP_FLAG_FADVISE_DONTNEED:
+      name = "fadvise_dontneed";
+      break;
+    default:
+      name = "???";
+  };
+
+  return name;
+}
+
+string ceph_osd_op_flag_string(unsigned flags)
+{
+  string s;
+  for (unsigned i=0; i<31; ++i) {
+    if (flags & (1u<<i)) {
+      if (s.length())
+	s += "+";
+      s += ceph_osd_op_flag_name(1u << i);
+    }
+  }
+  if (s.length())
+    return s;
+  return string("-");
+}
+
 void pg_shard_t::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
@@ -4572,6 +4617,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;
       if (op.op.extent.truncate_seq)
 	out << " [" << op.op.extent.truncate_seq << "@" << (int64_t)op.op.extent.truncate_size << "]";
+      if (op.op.flags)
+	out << " [" << ceph_osd_op_flag_string(op.op.flags) << "]";
     }
   } else if (ceph_osd_op_type_attr(op.op.op)) {
     // xattr name

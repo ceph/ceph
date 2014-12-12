@@ -187,6 +187,10 @@ namespace librados
   enum ObjectOperationFlags {
     OP_EXCL =   LIBRADOS_OP_FLAG_EXCL,
     OP_FAILOK = LIBRADOS_OP_FLAG_FAILOK,
+    OP_FADVISE_RANDOM = LIBRADOS_OP_FLAG_FADVISE_RANDOM,
+    OP_FADVISE_SEQUENTIAL = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL,
+    OP_FADVISE_WILLNEED = LIBRADOS_OP_FLAG_FADVISE_WILLNEED,
+    OP_FADVISE_DONTNEED = LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
   };
 
   class CEPH_RADOS_API ObjectOperationCompletion {
@@ -237,7 +241,9 @@ namespace librados
     virtual ~ObjectOperation();
 
     size_t size();
-    void set_op_flags(ObjectOperationFlags flags);
+    void set_op_flags(ObjectOperationFlags flags) __attribute__((deprecated));
+    //flag mean ObjectOperationFlags
+    void set_op_flags2(int flags);
 
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
