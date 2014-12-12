@@ -44,7 +44,7 @@ int RGWMongoose::complete_request()
 
       if (0 && data.length() == 0) {
         has_content_length = true;
-        print("Transfer-Enconding: %s\n", "chunked");
+        print("Transfer-Enconding: %s\r\n", "chunked");
         data.append("0\r\n\r\n", sizeof("0\r\n\r\n")-1);
       } else {
         int r = send_content_length(data.length());
@@ -130,7 +130,7 @@ int RGWMongoose::send_status(const char *status, const char *status_name)
   if (!status_name)
     status_name = "";
 
-  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\n", status, status_name);
+  snprintf(buf, sizeof(buf), "HTTP/1.1 %s %s\r\n", status, status_name);
 
   bufferlist bl;
   bl.append(buf);
@@ -170,5 +170,5 @@ int RGWMongoose::send_content_length(uint64_t len)
   has_content_length = true;
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\n", buf);
+  return print("Content-Length: %s\r\n", buf);
 }
