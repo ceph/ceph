@@ -1,3 +1,5 @@
+#include "include/int_types.h"
+
 TRACEPOINT_EVENT(oprequest, set_rmw_flags,
     TP_ARGS(
         // osd_reqid_t
