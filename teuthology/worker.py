@@ -189,7 +189,8 @@ def run_with_watchdog(process, job_config):
             kill_job(job_info['name'], job_info['job_id'],
                      teuth_config.archive_base)
 
-        report.try_push_job_info(job_info, dict(status='running'))
+        # calling this without a status just updates the jobs updated time
+        report.try_push_job_info(job_info)
         time.sleep(teuth_config.watchdog_interval)
 
     # The job finished. Let's make sure paddles knows.
