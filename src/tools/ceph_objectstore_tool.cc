@@ -1443,7 +1443,8 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap, 
   return 0;
 }
 
-int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms, const OSDSuperblock& sb)
+int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
+    const OSDSuperblock& sb, OSDMap& curmap)
 {
   bufferlist::iterator ebliter = bl.begin();
   ms.decode(ebliter);
@@ -1451,7 +1452,21 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms, co
 #if DIAGNOSTIC
   Formatter *formatter = new JSONFormatter(true);
   cout << "struct_v " << (int)ms.struct_ver << std::endl;
-  cout << "epoch " << ms.map_epoch << std::endl;
+  cout << "map epoch " << ms.map_epoch << std::endl;
+
+  formatter->open_object_section("importing OSDMap");
+  ms.osdmap.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+
+  cout << "osd current epoch " << sb.current_epoch << std::endl;
+  formatter->open_object_section("current OSDMap");
+  curmap.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+
   formatter->open_object_section("info");
   ms.info.dump(formatter);
   formatter->close_section();
@@ -1465,24 +1480,44 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms, co
   cout << std::endl;
 #endif
 
+  if (ms.map_epoch > sb.current_epoch) {
+    cerr << "ERROR: Export map_epoch " << ms.map_epoch << " > osd epoch " << sb.current_epoch << std::endl;
+    return 1;
+  }
+
   // If the osdmap was present in the metadata we can check for splits.
   // Pool verified to exist for call to get_pg_num().
-  if (ms.osdmap.get_epoch() != 0) {
-    OSDMap curmap;
-    int ret = get_osdmap(store, sb.current_epoch, curmap);
-    if (ret)
-      return ret;
-    spg_t parent(ms.info.pgid);
-    if (parent.is_split(
-	ms.osdmap.get_pg_num(ms.info.pgid.pgid.m_pool),
-	curmap.get_pg_num(ms.info.pgid.pgid.m_pool),
-	NULL)) {
-      // ms.past_intervals.clear();
-      // ms.map_epoch = sb.current_epoch;
-      cerr << "Import failed due to a split" << std::endl;
-      return EINVAL;    
+  if (ms.map_epoch < sb.current_epoch) {
+    bool found_map = false;
+    OSDMap findmap;
+    int ret = get_osdmap(store, ms.map_epoch, findmap);
+    if (ret == 0)
+      found_map = true;
+
+    // Old export didn't include OSDMap
+    if (ms.osdmap.get_epoch() == 0) {
+      // If we found the map locally and an older export didn't have it,
+      // then we'll use the local one.
+      if (found_map) {
+        ms.osdmap = findmap;
+      } else {
+        cerr << "WARNING: No OSDMap in old export,"
+             " some objects may be ignored due to a split" << std::endl;
+      }
+    }
+
+    // If OSDMap is available check for splits
+    if (ms.osdmap.get_epoch()) {
+      spg_t parent(ms.info.pgid);
+      if (parent.is_split(ms.osdmap.get_pg_num(ms.info.pgid.pgid.m_pool),
+          curmap.get_pg_num(ms.info.pgid.pgid.m_pool), NULL)) {
+        cerr << "WARNING: Split occurred, some objects may be ignored" << std::endl;
+      }
     }
   }
+
+  ms.past_intervals.clear();
+  ms.info.history.same_interval_since = ms.map_epoch = sb.current_epoch;
 
   return 0;
 }
@@ -1726,7 +1761,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, ebl, ms, sb);
+      ret = get_pg_metadata(store, ebl, ms, sb, curmap);
       if (ret) return ret;
       found_metadata = true;
       break;
