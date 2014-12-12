@@ -29,6 +29,13 @@ namespace ceph {
   class Formatter;
 }
 
+#ifndef UINT64_MAX
+#define UINT64_MAX (18446744073709551615ULL)
+#endif
+#ifndef INT64_MIN
+#define INT64_MIN ((int64_t)0x8000000000000000ll)
+#endif
+
 struct hobject_t {
   object_t oid;
   snapid_t snap;
@@ -75,7 +82,7 @@ public:
     return pool == POOL_META;
   }
 
-  hobject_t() : snap(0), hash(0), max(false), pool(-1) {
+  hobject_t() : snap(0), hash(0), max(false), pool(INT64_MIN) {
     build_filestore_key_cache();
   }
 
@@ -140,7 +147,7 @@ public:
 
   /* Do not use when a particular hash function is needed */
   explicit hobject_t(const sobject_t &o) :
-    oid(o.oid), snap(o.snap), max(false), pool(-1) {
+    oid(o.oid), snap(o.snap), max(false), pool(POOL_META) {
     set_hash(CEPH_HASH_NAMESPACE::hash<sobject_t>()(o));
   }
 
@@ -158,7 +165,7 @@ public:
     return snap == 0 &&
 	   hash == 0 &&
 	   !max &&
-	   pool == -1;
+	   pool == INT64_MIN;
   }
 
   static uint32_t _reverse_nibbles(uint32_t retval) {
@@ -248,10 +255,6 @@ WRITE_CMP_OPERATORS_7(hobject_t,
 
 typedef version_t gen_t;
 
-#ifndef UINT64_MAX
-#define UINT64_MAX (18446744073709551615ULL)
-#endif
-
 struct ghobject_t {
   hobject_t hobj;
   gen_t generation;
@@ -271,7 +274,7 @@ public:
     return ghobject_t(h, NO_GEN, shard);
   }
   bool is_pgmeta() const {
-    // make sure we are distinct from hobject_t(), which has pool -1
+    // make sure we are distinct from hobject_t(), which has pool INT64_MIN
     return hobj.pool >= 0 && hobj.oid.name.empty();
   }
 
