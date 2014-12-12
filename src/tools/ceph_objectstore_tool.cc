@@ -1354,7 +1354,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   return 0;
 }
 
-int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
+int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap, coll_t final_coll)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -1368,6 +1368,34 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
   spg_t pg;
   coll.is_pg_prefix(pg);
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+
+  assert(g_ceph_context);
+  if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
+    object_t oid = ob.hoid.hobj.oid;
+    object_locator_t loc(ob.hoid.hobj);
+    // XXX: Do we need to set the hash?
+    // loc.hash = ob.hoid.hash;
+    pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
+    pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
+  
+    spg_t coll_pgid;
+    snapid_t coll_snap;
+    if (final_coll.is_pg(coll_pgid, coll_snap) == false) {
+      cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
+      return 1;
+    }
+    if (coll_pgid.shard != ob.hoid.shard_id) {
+      cerr << "INTERNAL ERROR: Importing shard " << coll_pgid.shard 
+        << " but object shard is " << ob.hoid.shard_id << std::endl;
+      return 1;
+    }
+     
+    if (coll_pgid.pgid != pgid) {
+      cerr << "Skipping object '" << ob.hoid << "' which no longer belongs in exported pg" << std::endl;
+      skip_object(bl);
+      return 0;
+    }
+  }
 
   t->touch(coll, ob.hoid);
 
@@ -1694,7 +1722,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, rmcoll, ebl);
+      ret = get_object(store, rmcoll, ebl, curmap, coll);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -1716,6 +1744,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   }
 
   t = new ObjectStore::Transaction;
+  assert(ms.info.pgid == pgid);
   coll_t newcoll(ms.info.pgid);
   t->collection_rename(rmcoll, newcoll);
 
