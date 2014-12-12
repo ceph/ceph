@@ -1,3 +1,5 @@
+#include "include/int_types.h"
+
 TRACEPOINT_EVENT(osd, prepare_tx_enter,
     TP_ARGS(
         // osd_reqid_t
