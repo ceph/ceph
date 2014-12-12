@@ -258,15 +258,27 @@ struct ghobject_t {
   hobject_t hobj;
   gen_t generation;
   shard_id_t shard_id;
+  bool max;
 
 public:
   static const gen_t NO_GEN = UINT64_MAX;
 
-  ghobject_t() : generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  ghobject_t()
+    : generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj) : hobj(obj), generation(NO_GEN), shard_id(shard_id_t::NO_SHARD) {}
+  ghobject_t(const hobject_t &obj)
+    : hobj(obj),
+      generation(NO_GEN),
+      shard_id(shard_id_t::NO_SHARD),
+      max(false) {}
 
-  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard) : hobj(obj), generation(gen), shard_id(shard) {}
+  ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
+    : hobj(obj),
+      generation(gen),
+      shard_id(shard),
+      max(false) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
@@ -309,11 +321,12 @@ public:
 
   // maximum sorted value.
   static ghobject_t get_max() {
-    ghobject_t h(hobject_t::get_max());
+    ghobject_t h;
+    h.max = true;
     return h;
   }
   bool is_max() const {
-    return hobj.is_max();
+    return max;
   }
 
   void swap(ghobject_t &o) {
@@ -348,14 +361,11 @@ CEPH_HASH_NAMESPACE_END
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
-WRITE_EQ_OPERATORS_3(ghobject_t, hobj, shard_id, generation)
-// sort ghobject_t's by <hobj, shard_id, generation> 
-// 
-// Two objects which differ by generation are more related than
-// two objects of the same generation which differ by shard.
-// 
-WRITE_CMP_OPERATORS_3(ghobject_t,
-		      hobj,
+WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
+
+WRITE_CMP_OPERATORS_4(ghobject_t,
+		      max,
 		      shard_id,
+		      hobj,
 		      generation)
 #endif
