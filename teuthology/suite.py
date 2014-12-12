@@ -65,8 +65,6 @@ def main(args):
                                        teuthology_branch, kernel_branch,
                                        kernel_flavor, distro, machine_type,
                                        name)
-    if dry_run:
-        log.debug("Base job config:\n%s" % job_config)
 
     if suite_dir:
         suite_repo_path = suite_dir
@@ -79,6 +77,9 @@ def main(args):
         job_config.email = config.results_email
     if owner:
         job_config.owner = owner
+
+    if dry_run:
+        log.debug("Base job config:\n%s" % job_config)
 
     # Interpret any relative paths as being relative to ceph-qa-suite (absolute
     # paths are unchanged by this)
@@ -523,9 +524,8 @@ def schedule_suite(job_config,
             package_version = package_versions_for_hash[str(os_type)]
 
         if not package_version:
-            name = parsed_yaml.get('name')
             schedule_fail("Packages for ceph hash '{ver}' not found".format(
-                ver=sha1), name)
+                ver=sha1), job_config.name)
 
         arg = copy.deepcopy(base_args)
         arg.extend([
