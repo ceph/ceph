@@ -1,81 +1,39 @@
-import argparse
-from argparse import RawTextHelpFormatter
-import textwrap
+import docopt
 
-import teuthology.misc
 import teuthology.nuke
+
+doc = """
+usage: teuthology-nuke --help
+       teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
+                            [-t CONFIG...] [-a DIR] [-p PID]
+       teuthology-nuke [-v] [-u] [-i] [-r] [-s] --owner OWNER --stale
+
+Reset test machines
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --verbose         be more verbose
+  -t CONFIG [CONFIG ...], --targets CONFIG [CONFIG ...]
+                        yaml config containing machines to nuke
+  -a DIR, --archive DIR
+                        archive path for a job to kill and nuke
+  --stale               attempt to find and nuke 'stale' machines
+                        (e.g. locked by jobs that are no longer running)
+  --owner OWNER         job owner
+  -p PID, --pid PID     pid of the process to be killed
+  -r, --reboot-all      reboot all machines
+  -s, --synch-clocks    synchronize clocks on all machines
+  -u, --unlock          Unlock each successfully nuked machine, and output
+                        targets thatcould not be nuked.
+  -n NAME, --name NAME  Name of run to cleanup
+  -i, --noipmi          Skip ipmi checking
+
+Examples:
+teuthology-nuke -t target.yaml --unlock --owner user@host
+teuthology-nuke -t target.yaml --pid 1234 --unlock --owner user@host
+"""
 
 
 def main():
-    teuthology.nuke.main(parse_args())
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description='Reset test machines',
-        epilog=textwrap.dedent('''
-        Examples:
-        teuthology-nuke -t target.yaml --unlock --owner user@host
-        teuthology-nuke -t target.yaml --pid 1234 --unlock --owner user@host \n
-        '''),
-        formatter_class=RawTextHelpFormatter)
-    parser.add_argument(
-        '-v', '--verbose',
-        action='store_true', default=None,
-        help='be more verbose'
-    )
-    parser.add_argument(
-        '-t', '--targets',
-        nargs='+',
-        type=teuthology.misc.config_file,
-        action=teuthology.misc.MergeConfig,
-        default={},
-        dest='config',
-        help='yaml config containing machines to nuke',
-    )
-    parser.add_argument(
-        '-a', '--archive',
-        metavar='DIR',
-        help='archive path for a job to kill and nuke',
-    )
-    parser.add_argument(
-        '--owner',
-        help='job owner',
-    )
-    parser.add_argument(
-        '-p',
-        '--pid',
-        type=int,
-        default=False,
-        help='pid of the process to be killed',
-    )
-    parser.add_argument(
-        '-r', '--reboot-all',
-        action='store_true',
-        default=False,
-        help='reboot all machines',
-    )
-    parser.add_argument(
-        '-s', '--synch-clocks',
-        action='store_true',
-        default=False,
-        help='synchronize clocks on all machines',
-    )
-    parser.add_argument(
-        '-u', '--unlock',
-        action='store_true',
-        default=False,
-        help='Unlock each successfully nuked machine, and output targets that'
-        'could not be nuked.'
-    )
-    parser.add_argument(
-        '-n', '--name',
-        metavar='NAME',
-        help='Name of run to cleanup'
-    )
-    parser.add_argument(
-        '-i', '--noipmi',
-        action='store_true', default=False,
-        help='Skip ipmi checking'
-    )
-    return parser.parse_args()
+    args = docopt.docopt(doc)
+    teuthology.nuke.main(args)
