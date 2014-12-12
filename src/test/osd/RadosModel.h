@@ -995,7 +995,7 @@ public:
       std::cerr << num << ":  started" << std::endl;
       bufferlist bl;
       context->io_ctx.set_notify_timeout(600);
-      int r = context->io_ctx.notify(context->prefix+oid, bl, 0, NULL);
+      int r = context->io_ctx.notify2(context->prefix+oid, bl, 0, NULL);
       if (r < 0) {
 	std::cerr << "r is " << r << std::endl;
 	assert(0);
@@ -1315,11 +1315,11 @@ public:
 	ctx = context->watch(oid);
       }
 
-      r = context->io_ctx.watch(context->prefix+oid,
-				&ctx->get_handle(),
-				ctx);
+      r = context->io_ctx.watch2(context->prefix+oid,
+				 &ctx->get_handle(),
+				 ctx);
     } else {
-      r = context->io_ctx.unwatch(ctx->get_handle());
+      r = context->io_ctx.unwatch2(ctx->get_handle());
       {
 	Mutex::Locker l(context->state_lock);
 	context->unwatch(oid);

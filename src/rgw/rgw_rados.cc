@@ -1473,7 +1473,7 @@ void RGWRados::finalize_watch()
     if (notify_oid.empty())
       continue;
     uint64_t watch_handle = watch_handles[i];
-    control_pool_ctx.unwatch(watch_handle);
+    control_pool_ctx.unwatch2(watch_handle);
 
     RGWWatcher *watcher = watchers[i];
     delete watcher;
@@ -1608,7 +1608,7 @@ int RGWRados::init_watch()
     RGWWatcher *watcher = new RGWWatcher(this);
     watchers[i] = watcher;
 
-    r = control_pool_ctx.watch(notify_oid, &watch_handles[i], watcher);
+    r = control_pool_ctx.watch2(notify_oid, &watch_handles[i], watcher);
     if (r < 0)
       return r;
   }
@@ -5814,7 +5814,7 @@ int RGWRados::distribute(const string& key, bufferlist& bl)
   pick_control_oid(key, notify_oid);
 
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
-  int r = control_pool_ctx.notify(notify_oid, bl, 0, NULL);
+  int r = control_pool_ctx.notify2(notify_oid, bl, 0, NULL);
   return r;
 }
 
