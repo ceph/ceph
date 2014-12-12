@@ -1666,8 +1666,8 @@ int librados::IoCtx::watch(const string& oid, uint64_t ver, uint64_t *cookie,
   return io_ctx_impl->watch(obj, cookie, ctx, NULL);
 }
 
-int librados::IoCtx::watch(const string& oid, uint64_t *cookie,
-			   librados::WatchCtx2 *ctx2)
+int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
+			    librados::WatchCtx2 *ctx2)
 {
   object_t obj(oid);
   return io_ctx_impl->watch(obj, cookie, NULL, ctx2);
@@ -1679,7 +1679,7 @@ int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
   return io_ctx_impl->unwatch(handle);
 }
 
-int librados::IoCtx::unwatch(uint64_t handle)
+int librados::IoCtx::unwatch2(uint64_t handle)
 {
   return io_ctx_impl->unwatch(handle);
 }
@@ -1695,8 +1695,8 @@ int librados::IoCtx::notify(const string& oid, uint64_t ver, bufferlist& bl)
   return io_ctx_impl->notify(obj, bl, 0, NULL, NULL, NULL);
 }
 
-int librados::IoCtx::notify(const string& oid, bufferlist& bl,
-			    uint64_t timeout_ms, bufferlist *preplybl)
+int librados::IoCtx::notify2(const string& oid, bufferlist& bl,
+			     uint64_t timeout_ms, bufferlist *preplybl)
 {
   object_t obj(oid);
   return io_ctx_impl->notify(obj, bl, timeout_ms, preplybl, NULL, NULL);
