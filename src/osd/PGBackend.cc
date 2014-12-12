@@ -112,7 +112,8 @@ int PGBackend::objects_list_partial(
   int max,
   snapid_t seq,
   vector<hobject_t> *ls,
-  hobject_t *next)
+  hobject_t *next,
+  snapid_t snap_seq)
 {
   assert(ls);
   // Starts with the smallest shard id and generation to
@@ -131,7 +132,7 @@ int PGBackend::objects_list_partial(
       max - ls->size(),
       seq,
       &objects,
-      &_next);
+      &_next,snap_seq);
     if (r != 0)
       break;
     for (vector<ghobject_t>::iterator i = objects.begin();

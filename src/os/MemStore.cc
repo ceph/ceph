@@ -483,7 +483,7 @@ int MemStore::collection_list(coll_t cid, vector<ghobject_t>& o)
 
 int MemStore::collection_list_partial(coll_t cid, ghobject_t start,
 				      int min, int max, snapid_t snap, 
-				      vector<ghobject_t> *ls, ghobject_t *next)
+				      vector<ghobject_t> *ls, ghobject_t *next, snapid_t snap_seq)
 {
   dout(10) << __func__ << " " << cid << " " << start << " " << min << "-"
 	   << max << " " << snap << dendl;

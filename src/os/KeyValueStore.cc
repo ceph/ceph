@@ -2651,7 +2651,7 @@ int KeyValueStore::collection_list_range(coll_t c, ghobject_t start,
 int KeyValueStore::collection_list_partial(coll_t c, ghobject_t start,
                                            int min, int max, snapid_t seq,
                                            vector<ghobject_t> *ls,
-                                           ghobject_t *next)
+                                           ghobject_t *next, snapid_t snap_seq)
 {
   dout(10) << __func__ << " " << c << " start:" << start << " is_max:"
            << start.is_max() << dendl;

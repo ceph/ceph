@@ -552,7 +552,8 @@
      int max,
      snapid_t seq,
      vector<hobject_t> *ls,
-     hobject_t *next);
+     hobject_t *next,
+     snapid_t snap_seq=0);
 
    int objects_list_range(
      const hobject_t &start,

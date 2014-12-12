@@ -127,11 +127,11 @@ int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)
 
 int ObjectStore::collection_list_partial(coll_t c, hobject_t start,
 			      int min, int max, snapid_t snap,
-				      vector<hobject_t> *ls, hobject_t *next)
+				      vector<hobject_t> *ls, hobject_t *next, snapid_t snap_seq)
 {
   vector<ghobject_t> go;
   ghobject_t gnext, gstart(start);
-  int ret = collection_list_partial(c, gstart, min, max, snap, &go, &gnext);
+  int ret = collection_list_partial(c, gstart, min, max, snap, &go, &gnext, snap_seq);
   if (ret == 0) {
     *next = gnext.hobj;
     ls->reserve(go.size());

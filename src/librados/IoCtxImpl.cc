@@ -499,6 +499,7 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
 
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid << " nspace=" << oloc.nspace << dendl;
+  snapc.seq = objecter->get_pool_seq(poolid);
   Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
 	                                                  *o, snapc, ut, flags,
 	                                                  NULL, oncommit, &ver);
@@ -791,7 +792,7 @@ int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
   ::ObjectOperation rd;
   rd.hit_set_ls(pls, NULL);
   object_locator_t oloc(poolid);
-  c->tid = objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL, NULL);
+  c->tid = objecter->pg_read(hash, oloc, rd, 0, NULL, 0, onack, NULL, NULL);
   return 0;
 }
 
@@ -806,7 +807,7 @@ int librados::IoCtxImpl::hit_set_get(uint32_t hash, AioCompletionImpl *c,
   ::ObjectOperation rd;
   rd.hit_set_get(utime_t(stamp, 0), pbl, 0);
   object_locator_t oloc(poolid);
-  c->tid = objecter->pg_read(hash, oloc, rd, NULL, 0, onack, NULL, NULL);
+  c->tid = objecter->pg_read(hash, oloc, rd, 0, NULL, 0, onack, NULL, NULL);
   return 0;
 }
 

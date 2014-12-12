@@ -170,7 +170,8 @@ protected:
     int max_count,          ///< [in] return at most max_count objects
     snapid_t seq,           ///< [in] list only objects with snap >= seq
     vector<ghobject_t> *ls,  ///< [out] Listed objects
-    ghobject_t *next         ///< [out] Next object to list
+    ghobject_t *next,         ///< [out] Next object to list
+    snapid_t snap_seq=0           ///< [in] list only objects with snap >= seq
     ) = 0;
 
   /// List contents of collection.

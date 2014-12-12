@@ -4519,7 +4519,7 @@ int FileStore::collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
 
 int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 				       int min, int max, snapid_t seq,
-				       vector<ghobject_t> *ls, ghobject_t *next)
+				       vector<ghobject_t> *ls, ghobject_t *next, snapid_t snap_seq)
 {
   tracepoint(objectstore, collection_list_partial_enter, c.c_str());
   dout(10) << "collection_list_partial: " << c << dendl;
@@ -4533,7 +4533,7 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
 
   r = index->collection_list_partial(start,
 				     min, max, seq,
-				     ls, next);
+				     ls, next, snap_seq);
   if (r < 0) {
     assert(!m_filestore_fail_eio || r != -EIO);
     return r;

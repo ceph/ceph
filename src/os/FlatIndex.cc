@@ -377,7 +377,8 @@ int FlatIndex::collection_list_partial(const ghobject_t &start,
 				       int max_count,
 				       snapid_t seq,
 				       vector<ghobject_t> *ls,
-				       ghobject_t *next) {
+				       ghobject_t *next,
+                                       snapid_t snap_seq) {
   assert(0); // Should not be called
   return 0;
 }

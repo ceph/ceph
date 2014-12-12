@@ -617,7 +617,7 @@ class KeyValueStore : public ObjectStore,
   int collection_list(coll_t c, vector<ghobject_t>& oid);
   int collection_list_partial(coll_t c, ghobject_t start,
                               int min, int max, snapid_t snap,
-                              vector<ghobject_t> *ls, ghobject_t *next);
+                              vector<ghobject_t> *ls, ghobject_t *next, snapid_t snap_seq=0);
   int collection_list_range(coll_t c, ghobject_t start, ghobject_t end,
                             snapid_t seq, vector<ghobject_t> *ls);
   int collection_version_current(coll_t c, uint32_t *version);

@@ -1208,6 +1208,19 @@ void Objecter::C_Op_Map_Latest::finish(int r)
   op->put();
 }
 
+uint64_t Objecter::get_pool_seq(int64_t poolid)
+{
+  RWLock::RLocker rl(rwlock);
+
+  const map<int64_t, pg_pool_t>& pools = osdmap->get_pools();
+  map<int64_t, pg_pool_t>::const_iterator iter = pools.find(poolid);
+   if (iter == pools.end()) {
+    return -ENOENT;
+  }
+  const pg_pool_t& pg_pool = iter->second;
+  return pg_pool.snap_seq;
+}
+
 int Objecter::pool_snap_by_name(int64_t poolid, const char *snap_name, snapid_t *snap)
 {
   RWLock::RLocker rl(rwlock);
@@ -3117,7 +3130,7 @@ void Objecter::list_nobjects(NListContext *list_context, Context *onfinish)
   C_NList *onack = new C_NList(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
 
-  pg_read(list_context->current_pg, oloc, op,
+  pg_read(list_context->current_pg, oloc, op, list_context->pool_snap_seq, 
 	  &list_context->bl, 0, onack, &onack->epoch, &list_context->ctx_budget);
 }
 
@@ -3256,7 +3269,7 @@ void Objecter::list_objects(ListContext *list_context, Context *onfinish)
   C_List *onack = new C_List(list_context, onfinish, this);
   object_locator_t oloc(list_context->pool_id, list_context->nspace);
 
-  pg_read(list_context->current_pg, oloc, op,
+  pg_read(list_context->current_pg, oloc, op, list_context->pool_snap_seq,
 	  &list_context->bl, 0, onack, &onack->epoch, &list_context->ctx_budget);
 }
 

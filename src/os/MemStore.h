@@ -309,7 +309,7 @@ public:
   int collection_list(coll_t cid, vector<ghobject_t>& o);
   int collection_list_partial(coll_t cid, ghobject_t start,
 			      int min, int max, snapid_t snap, 
-			      vector<ghobject_t> *ls, ghobject_t *next);
+			      vector<ghobject_t> *ls, ghobject_t *next, snapid_t snap_seq=0);
   int collection_list_range(coll_t cid, ghobject_t start, ghobject_t end,
 			    snapid_t seq, vector<ghobject_t> *ls);
 

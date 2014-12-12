@@ -196,7 +196,8 @@ public:
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
-    ghobject_t *next
+    ghobject_t *next,
+    snapid_t snap_seq
     );
 
   virtual int _split(
@@ -272,7 +273,8 @@ protected:
     int max_count,
     snapid_t seq,
     vector<ghobject_t> *ls,
-    ghobject_t *next
+    ghobject_t *next,
+    snapid_t snap_seq=0
     ) = 0;
 
 protected:
@@ -379,7 +381,8 @@ protected:
     const vector<string> &to_list,
     int max_objects,
     long *handle,
-    map<string, ghobject_t> *out
+    map<string, ghobject_t> *out,
+    map<string, snapid_t> *out1=0
     );
 
   /// Lists subdirectories.

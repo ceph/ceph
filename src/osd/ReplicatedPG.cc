@@ -803,6 +803,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 
   vector<OSDOp> ops = m->ops;
 
+  snapid_t snap_seq = m->get_snap_seq();
+   
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
     OSDOp& osd_op = *p;
     bufferlist::iterator bp = p->indata.begin();
@@ -854,7 +856,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  list_size,
 	  snapid,
 	  &sentries,
-	  &next);
+	  &next,
+          snap_seq);
 	if (r != 0) {
 	  result = -EINVAL;
 	  break;
@@ -1010,7 +1013,8 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  list_size,
 	  snapid,
 	  &sentries,
-	  &next);
+	  &next,
+          snap_seq);
 	if (r != 0) {
 	  result = -EINVAL;
 	  break;

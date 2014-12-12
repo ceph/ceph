@@ -1507,7 +1507,7 @@ public:
    */
   virtual int collection_list_partial(coll_t c, ghobject_t start,
 				      int min, int max, snapid_t snap,
-				      vector<ghobject_t> *ls, ghobject_t *next) = 0;
+				      vector<ghobject_t> *ls, ghobject_t *next, snapid_t snap_seq=0) = 0;
 
   /**
    * list contents of a collection that fall in the range [start, end)
@@ -1527,7 +1527,7 @@ public:
 
   int collection_list_partial(coll_t c, hobject_t start,
 				      int min, int max, snapid_t snap,
-				      vector<hobject_t> *ls, hobject_t *next);
+				      vector<hobject_t> *ls, hobject_t *next, snapid_t snap_seq=0);
 
   int collection_list_range(coll_t c, hobject_t start, hobject_t end,
 	                            snapid_t seq, vector<hobject_t> *ls);
