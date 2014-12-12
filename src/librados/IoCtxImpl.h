@@ -47,11 +47,10 @@ struct librados::IoCtxImpl {
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
-  Mutex *lock;
   Objecter *objecter;
 
   IoCtxImpl();
-  IoCtxImpl(RadosClient *c, Objecter *objecter, Mutex *client_lock,
+  IoCtxImpl(RadosClient *c, Objecter *objecter,
 	    int poolid, const char *pool_name, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
@@ -66,7 +65,6 @@ struct librados::IoCtxImpl {
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
     oloc = rhs.oloc;
-    lock = rhs.lock;
     objecter = rhs.objecter;
   }
 

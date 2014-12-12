@@ -338,8 +338,7 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
     }
   }
 
-  *io = new librados::IoCtxImpl(this, objecter, &lock, poolid, name,
-				CEPH_NOSNAP);
+  *io = new librados::IoCtxImpl(this, objecter, poolid, name, CEPH_NOSNAP);
   return 0;
 }
 
