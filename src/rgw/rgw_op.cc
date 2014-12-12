@@ -33,7 +33,8 @@ using ceph::crypto::MD5;
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
-#define MULTIPART_UPLOAD_ID_PREFIX "2/" // must contain a unique char that may not come up in gen_rand_alpha()
+#define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
+#define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -1438,7 +1439,8 @@ static bool is_v2_upload_id(const string& upload_id)
 {
   const char *uid = upload_id.c_str();
 
-  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
+  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0) ||
+         (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
@@ -2485,7 +2487,7 @@ void RGWInitMultipart::execute()
   do {
     char buf[33];
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    upload_id = "2/"; /* v2 upload id */
+    upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
 
     string tmp_obj_name;
