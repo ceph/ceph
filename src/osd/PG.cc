@@ -210,9 +210,10 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p), pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
-  recovery_item(this), stat_queue_item(this),
+  stat_queue_item(this),
   snap_trim_queued(false),
   scrub_queued(false),
+  recovery_queued(false),
   recovery_ops_active(0),
   role(-1),
   state(0),
@@ -948,8 +949,6 @@ void PG::clear_primary_state()
 
   scrubber.reserved_peers.clear();
   scrub_after_recovery = false;
-
-  osd->recovery_wq.dequeue(this);
 
   agent_clear();
 }
@@ -1847,8 +1846,6 @@ void PG::activate(ObjectStore::Transaction& t,
       build_might_have_unfound();
 
       state_set(PG_STATE_DEGRADED);
-      dout(10) << "activate - starting recovery" << dendl;
-      osd->queue_for_recovery(this);
       if (have_unfound())
 	discover_all_missing(query_map);
     }
@@ -2069,6 +2066,20 @@ bool PG::requeue_scrub()
   }
 }
 
+void PG::queue_recovery(bool front)
+{
+  if (!is_primary() || !is_peered()) {
+    dout(10) << "queue_recovery -- not primary or not peered " << dendl;
+    assert(!recovery_queued);
+  } else if (recovery_queued) {
+    dout(10) << "queue_recovery -- already queued" << dendl;
+  } else {
+    dout(10) << "queue_recovery -- queuing" << dendl;
+    recovery_queued = true;
+    osd->queue_for_recovery(this, front);
+  }
+}
+
 bool PG::queue_scrub()
 {
   assert(_lock.is_locked());
@@ -2229,6 +2240,9 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 #endif
   // TODOSAM: osd->osd-> not good
   osd->osd->finish_recovery_op(this, soid, dequeue);
+
+  if (!dequeue) {
+  }
 }
 
 static void split_replay_queue(
@@ -6034,7 +6048,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->backfill_reserved = true;
-  pg->osd->queue_for_recovery(pg);
+  pg->queue_recovery();
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL);
@@ -6062,8 +6076,6 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
 	con.get());
     }
   }
-
-  pg->osd->recovery_wq.dequeue(pg);
 
   pg->waiting_on_backfill.clear();
   pg->finish_recovery_op(hobject_t::get_max());
@@ -6466,7 +6478,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_set(PG_STATE_RECOVERING);
-  pg->osd->queue_for_recovery(pg);
+  pg->queue_recovery();
 }
 
 void PG::RecoveryState::Recovering::release_reservations()
@@ -6734,7 +6746,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   if (!pg->is_clean() &&
       !pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
       (!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) || pg->is_degraded())) {
-    pg->osd->queue_for_recovery(pg);
+    pg->queue_recovery();
   }
   return forward_event();
 }
@@ -6800,7 +6812,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
     logevt.from,
     context< RecoveryMachine >().get_recovery_ctx());
   if (got_missing)
-    pg->osd->queue_for_recovery(pg);
+    pg->queue_recovery();
   return discard_event();
 }
 

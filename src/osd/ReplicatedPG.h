@@ -842,7 +842,7 @@ protected:
       &requeue_recovery,
       &requeue_snaptrim);
     if (requeue_recovery)
-      osd->recovery_wq.queue(this);
+      queue_recovery();
     if (requeue_snaptrim)
       queue_snap_trim();
 
