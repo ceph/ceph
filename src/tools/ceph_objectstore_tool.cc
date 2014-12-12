@@ -2130,6 +2130,15 @@ int main(int argc, char **argv)
     debug = true;
   }
 
+  vector<const char *> ceph_options;
+  env_to_vec(ceph_options);
+  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
+  for (vector<string>::iterator i = ceph_option_strings.begin();
+       i != ceph_option_strings.end();
+       ++i) {
+    ceph_options.push_back(i->c_str());
+  }
+
   // Handle completely different operation "import-rados"
   if (object == "import-rados") {
     if (vm.count("objcmd") == 0) {
@@ -2159,6 +2168,10 @@ int main(int argc, char **argv)
         return 1;
       }
     }
+
+    global_init(NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+    common_init_finish(g_ceph_context);
+
     int ret = do_import_rados(pool);
     if (ret == 0)
       cout << "Import successful" << std::endl;
@@ -2226,17 +2239,6 @@ int main(int argc, char **argv)
   if (dpath.length() == 0) {
     cerr << "Invalid params" << std::endl;
     return 1;
-  }
-
-  vector<const char *> ceph_options;
-  env_to_vec(ceph_options);
-  vector<string> ceph_option_strings = po::collect_unrecognized(
-    parsed.options, po::include_positional);
-  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
-  for (vector<string>::iterator i = ceph_option_strings.begin();
-       i != ceph_option_strings.end();
-       ++i) {
-    ceph_options.push_back(i->c_str());
   }
 
   osflagbits_t flags = 0;
