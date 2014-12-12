@@ -1930,6 +1930,22 @@ int librados::Rados::pool_delete_async(const char *name, PoolAsyncCompletion *c)
 
 int librados::Rados::pool_list(std::list<std::string>& v)
 {
+  std::list<std::pair<int64_t, std::string> > pools;
+  int r = client->pool_list(pools);
+  if (r < 0) {
+    return r;
+  }
+
+  v.clear();
+  for (std::list<std::pair<int64_t, std::string> >::iterator it = pools.begin();
+       it != pools.end(); ++it) {
+    v.push_back(it->second);
+  }
+  return 0;
+}
+
+int librados::Rados::pool_list2(std::list<std::pair<int64_t, std::string> >& v)
+{
   return client->pool_list(v);
 }
 
@@ -1955,6 +1971,16 @@ int librados::Rados::ioctx_create(const char *name, IoCtx &io)
 {
   rados_ioctx_t p;
   int ret = rados_ioctx_create((rados_t)client, name, &p);
+  if (ret)
+    return ret;
+  io.io_ctx_impl = (IoCtxImpl*)p;
+  return 0;
+}
+
+int librados::Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
+{
+  rados_ioctx_t p;
+  int ret = rados_ioctx_create2((rados_t)client, pool_id, &p);
   if (ret)
     return ret;
   io.io_ctx_impl = (IoCtxImpl*)p;
@@ -2390,7 +2416,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
 {
   tracepoint(librados, rados_pool_list_enter, cluster, len);
   librados::RadosClient *client = (librados::RadosClient *)cluster;
-  std::list<std::string> pools;
+  std::list<std::pair<int64_t, std::string> > pools;
   int r = client->pool_list(pools);
   if (r < 0) {
     tracepoint(librados, rados_pool_list_exit, r);
@@ -2406,13 +2432,14 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
   if (b)
     memset(b, 0, len);
   int needed = 0;
-  std::list<std::string>::const_iterator i = pools.begin();
-  std::list<std::string>::const_iterator p_end = pools.end();
+  std::list<std::pair<int64_t, std::string> >::const_iterator i = pools.begin();
+  std::list<std::pair<int64_t, std::string> >::const_iterator p_end =
+    pools.end();
   for (; i != p_end; ++i) {
-    int rl = i->length() + 1;
+    int rl = i->second.length() + 1;
     if (len < (unsigned)rl)
       break;
-    const char* pool = i->c_str();
+    const char* pool = i->second.c_str();
     tracepoint(librados, rados_pool_list_pool, pool);
     strncat(b, pool, rl);
     needed += rl;
@@ -2420,7 +2447,7 @@ extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)
     b += rl;
   }
   for (; i != p_end; ++i) {
-    int rl = i->length() + 1;
+    int rl = i->second.length() + 1;
     needed += rl;
   }
   int retval = needed + 1;
@@ -2623,7 +2650,6 @@ extern "C" int rados_monitor_log(rados_t cluster, const char *level, rados_log_c
   return retval;
 }
 
-
 extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx_t *io)
 {
   tracepoint(librados, rados_ioctx_create_enter, cluster, name);
@@ -2640,6 +2666,26 @@ extern "C" int rados_ioctx_create(rados_t cluster, const char *name, rados_ioctx
   ctx->get();
   int retval = 0;
   tracepoint(librados, rados_ioctx_create_exit, retval, ctx);
+  return retval;
+}
+
+extern "C" int rados_ioctx_create2(rados_t cluster, int64_t pool_id,
+                                   rados_ioctx_t *io)
+{
+  tracepoint(librados, rados_ioctx_create2_enter, cluster, pool_id);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  librados::IoCtxImpl *ctx;
+
+  int r = client->create_ioctx(pool_id, &ctx);
+  if (r < 0) {
+    tracepoint(librados, rados_ioctx_create2_exit, r, NULL);
+    return r;
+  }
+
+  *io = ctx;
+  ctx->get();
+  int retval = 0;
+  tracepoint(librados, rados_ioctx_create2_exit, retval, ctx);
   return retval;
 }
 

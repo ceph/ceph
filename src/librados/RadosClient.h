@@ -87,6 +87,7 @@ public:
   int wait_for_latest_osdmap();
 
   int create_ioctx(const char *name, IoCtxImpl **io);
+  int create_ioctx(int64_t, IoCtxImpl **io);
 
   int get_fsid(std::string *s);
   int64_t lookup_pool(const char *name);
@@ -95,7 +96,7 @@ public:
   int pool_get_auid(uint64_t pool_id, unsigned long long *auid);
   int pool_get_name(uint64_t pool_id, std::string *auid);
 
-  int pool_list(std::list<string>& ls);
+  int pool_list(std::list<std::pair<int64_t, string> >& ls);
   int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
   int get_fs_stats(ceph_statfs& result);
 
