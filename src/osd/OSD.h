@@ -345,11 +345,21 @@ struct PGSnapTrim {
   }
 };
 
+struct PGRecovery {
+  epoch_t epoch_queued;
+  PGRecovery(epoch_t e) : epoch_queued(e) {}
+  ostream &operator<<(ostream &rhs) {
+    return rhs << "PGRecovery";
+  }
+};
+
+
 class PGQueueable {
   typedef boost::variant<
     OpRequestRef,
     PGSnapTrim,
-    PGScrub
+    PGScrub,
+    PGRecovery
     > QVariant;
   QVariant qvariant;
   int cost; 
@@ -365,6 +375,7 @@ class PGQueueable {
     void operator()(const OpRequestRef &op);
     void operator()(const PGSnapTrim &op);
     void operator()(const PGScrub &op);
+    void operator()(const PGRecovery &op);
   };
 public:
   // cppcheck-suppress noExplicitConstructor
@@ -384,9 +395,14 @@ public:
     const entity_inst_t &owner)
     : qvariant(op), cost(cost), priority(priority), start_time(start_time),
       owner(owner) {}
-  boost::optional<OpRequestRef> maybe_get_op() {
-    OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
-    return op ? *op : boost::optional<OpRequestRef>();
+  PGQueueable(
+    const PGRecovery &op, int cost, unsigned priority, utime_t start_time,
+    const entity_inst_t &owner)
+    : qvariant(op), cost(cost), priority(priority), start_time(start_time),
+      owner(owner) {}
+  const boost::optional<OpRequestRef> maybe_get_op() const {
+    const OpRequestRef *op = boost::get<OpRequestRef>(&qvariant);
+    return op ? OpRequestRef(*op) : boost::optional<OpRequestRef>();
   }
   void run(OSD *osd, PGRef &pg, ThreadPool::TPHandle &handle) {
     RunVis v(osd, pg, handle);
@@ -419,7 +435,6 @@ public:
   MonClient   *&monc;
   ShardedThreadPool::ShardedWQ < pair <PGRef, PGQueueable> > &op_wq;
   ThreadPool::BatchWorkQueue<PG> &peering_wq;
-  ThreadPool::WorkQueue<PG> &recovery_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
   ClassHandler  *&class_handler;
@@ -868,7 +883,21 @@ public:
   void send_pg_temp();
 
   void queue_for_peering(PG *pg);
-  bool queue_for_recovery(PG *pg);
+  void queue_for_recovery(PG *pg, bool front = false) {
+    pair<PGRef, PGQueueable> to_queue = make_pair(
+      pg,
+      PGQueueable(
+	PGRecovery(pg->get_osdmap()->get_epoch()),
+	cct->_conf->osd_recovery_cost,
+	cct->_conf->osd_recovery_priority,
+	ceph_clock_now(cct),
+	entity_inst_t()));
+    if (front) {
+      op_wq.queue_front(to_queue);
+    } else {
+      op_wq.queue(to_queue);
+    }
+  }
   void queue_for_snap_trim(PG *pg) {
     op_wq.queue(
       make_pair(
@@ -1278,7 +1307,6 @@ private:
 
   ThreadPool osd_tp;
   ShardedThreadPool osd_op_tp;
-  ThreadPool recovery_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
 
@@ -2219,59 +2247,16 @@ protected:
   void do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data);
 
   // -- pg recovery --
-  xlist<PG*> recovery_queue;
+  Mutex recovery_lock;
   utime_t defer_recovery_until;
   int recovery_ops_active;
 #ifdef DEBUG_RECOVERY_OIDS
   map<spg_t, set<hobject_t, hobject_t::BitwiseComparator> > recovery_oids;
 #endif
 
-  struct RecoveryWQ : public ThreadPool::WorkQueue<PG> {
-    OSD *osd;
-    RecoveryWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::RecoveryWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() {
-      return osd->recovery_queue.empty();
-    }
-    bool _enqueue(PG *pg);
-    void _dequeue(PG *pg) {
-      if (pg->recovery_item.remove_myself())
-	pg->put("RecoveryWQ");
-    }
-    PG *_dequeue() {
-      if (osd->recovery_queue.empty())
-	return NULL;
-      
-      if (!osd->_recover_now())
-	return NULL;
-
-      PG *pg = osd->recovery_queue.front();
-      osd->recovery_queue.pop_front();
-      return pg;
-    }
-    void _queue_front(PG *pg) {
-      if (!pg->recovery_item.is_on_list()) {
-	pg->get("RecoveryWQ");
-	osd->recovery_queue.push_front(&pg->recovery_item);
-      }
-    }
-    void _process(PG *pg, ThreadPool::TPHandle &handle) override {
-      osd->do_recovery(pg, handle);
-      pg->put("RecoveryWQ");
-    }
-    void _clear() {
-      while (!osd->recovery_queue.empty()) {
-	PG *pg = osd->recovery_queue.front();
-	osd->recovery_queue.pop_front();
-	pg->put("RecoveryWQ");
-      }
-    }
-  } recovery_wq;
-
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
-  void do_recovery(PG *pg, ThreadPool::TPHandle &handle);
+  void do_recovery(PG *pg, epoch_t epoch_queued, ThreadPool::TPHandle &handle);
   bool _recover_now();
 
   // replay / delayed pg activation
