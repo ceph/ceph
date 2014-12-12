@@ -1623,7 +1623,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                          << " > " << existing->connect_seq << dendl;
     goto replace;
   } // existing
-  else if (!replacing && policy.resetcheck && connect.connect_seq > 0) {
+  else if (!replacing && connect.connect_seq > 0) {
     // we reset, and they are opening a new session
     ldout(async_msgr->cct, 0) << __func__ << "accept we reset (peer sent cseq "
                         << connect.connect_seq << "), sending RESETSESSION" << dendl;
