@@ -1085,8 +1085,6 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   version_t objver;
   C_SaferCond onfinish;
 
-  lock->Lock();
-
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
   *handle = linger_op->get_cookie();
   linger_op->watch_context = new WatchInfo(this,
@@ -1099,16 +1097,13 @@ int librados::IoCtxImpl::watch(const object_t& oid,
 			 snapc, ceph_clock_now(NULL), bl,
 			 &onfinish,
 			 &objver);
-  lock->Unlock();
 
   int r = onfinish.wait();
 
   set_sync_op_version(objver);
 
   if (r < 0) {
-    lock->Lock();
     objecter->linger_cancel(linger_op);
-    lock->Unlock();
   }
 
   return r;
@@ -1121,7 +1116,6 @@ int librados::IoCtxImpl::notify_ack(
   uint64_t cookie,
   bufferlist& bl)
 {
-  Mutex::Locker l(*lock);
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.notify_ack(notify_id, cookie, bl);
@@ -1131,7 +1125,6 @@ int librados::IoCtxImpl::notify_ack(
 
 int librados::IoCtxImpl::watch_check(uint64_t cookie)
 {
-  Mutex::Locker l(*lock);
   Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
   return objecter->linger_check(linger_op);
 }
@@ -1143,14 +1136,12 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   C_SaferCond onfinish;
   version_t ver = 0;
 
-  lock->Lock();
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
 		   snapc, ceph_clock_now(client->cct), 0, NULL, &onfinish, &ver);
   objecter->linger_cancel(linger_op);
-  lock->Unlock();
 
   int r = onfinish.wait();
   set_sync_op_version(ver);
@@ -1192,8 +1183,6 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
     }
   } notify_private;
 
-  lock->Lock();
-
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
   linger_op->on_notify_finish = &notify_private;
   linger_op->notify_result_bl = &notify_private.reply_bl;
@@ -1217,7 +1206,6 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   objecter->linger_notify(linger_op,
 			  rd, snap_seq, inbl, NULL,
 			  &onack, &objver);
-  lock->Unlock();
 
   ldout(client->cct, 10) << __func__ << " issued linger op " << linger_op << dendl;
   int r_issue = onack.wait();
@@ -1253,9 +1241,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   if (preply_bl)
     preply_bl->claim(notify_private.reply_bl);
 
-  lock->Lock();
   objecter->linger_cancel(linger_op);
-  lock->Unlock();
 
   set_sync_op_version(objver);
 
