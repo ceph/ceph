@@ -99,6 +99,16 @@ function kill_daemons() {
     done
 }
 
+function kill_osd_daemons() {
+    for pidfile in $(find $DIR | grep pidfile | grep osd) ; do
+        pid=$(cat $pidfile)
+        for try in 0 1 1 1 2 3 ; do
+            kill $pid || break
+            sleep $try
+        done
+    done
+}
+
 function command_fixture() {
     local command=$1
 
@@ -256,6 +266,98 @@ function test_activate_dev() {
     status=$?
     losetup --detach $disk
     rm vde.disk
+    return $status
+}
+
+function activate_journal_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+
+    ./ceph-disk zap $disk || return 1
+
+    $mkdir -p $OSD_DATA
+
+    ./ceph-disk $CEPH_DISK_ARGS \
+        prepare $disk $journal || return 1
+
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        ${disk}p1 || return 1
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+
+    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+    kill_osd_daemons
+    umount ${disk}p1 || return 1
+    ./ceph-disk zap $disk || return 1
+
+    $timeout $TIMEOUT ./ceph osd crush rm osd.$id || return 1
+    $timeout $TIMEOUT ./ceph osd pool delete $TEST_POOL $TEST_POOL --yes-i-really-really-mean-it || return 1
+
+    # now make another OSD and try to re-use the journal dev
+    ./ceph-disk $CEPH_DISK_ARGS \
+        prepare $newdisk ${journal}p1 || return 1
+
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        ${newdisk}p1 || return 1
+
+    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    $timeout $TIMEOUT ./ceph osd pool create $TEST_POOL 8 || return 1
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+
+    kill_daemons
+
+    umount ${newdisk}p1 || return 1
+    ./ceph-disk zap $newdisk || return 1
+}
+
+function test_activate_journal_dev() {
+    run_mon
+
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    dd if=/dev/zero of=vde.disk bs=1024k count=200
+    losetup --find vde.disk
+    local disk=$(losetup --associated vde.disk | cut -f1 -d:)
+
+    dd if=/dev/zero of=vdf.disk bs=1024k count=200
+    losetup --find vdf.disk
+    local journal=$(losetup --associated vdf.disk | cut -f1 -d:)
+
+    dd if=/dev/zero of=vdg.disk bs=1024k count=200
+    losetup --find vdg.disk
+    local newdisk=$(losetup --associated vdg.disk | cut -f1 -d:)
+
+    activate_journal_dev_body $disk $journal $newdisk
+    status=$?
+
+    losetup --detach $disk
+    rm vde.disk
+
+    losetup --detach $journal
+    rm vdf.disk
+
+    losetup --detach $newdisk
+    rm vdg.disk
+
     return $status
 }
 
