@@ -76,7 +76,7 @@ class ScheduleFailError(RuntimeError):
         self.name = name
 
     def __str__(self):
-        return "Job scheduling {name} failed: {msg}".format(
+        return "Scheduling {name} failed: {msg}".format(
             name=self.name,
             msg=self.message,
         ).replace('  ', ' ')
