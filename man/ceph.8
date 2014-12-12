@@ -1,8 +1,8 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH" "8" "January 12, 2014" "dev" "Ceph"
+.TH "CEPH" "8" "December 13, 2014" "dev" "Ceph"
 .SH NAME
-ceph \- ceph file system control utility
+ceph \- ceph administration tool
 .
 .nr rst2man-indent-level 0
 .
@@ -59,36 +59,731 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 ..
 .SH SYNOPSIS
 .nf
-\fBceph\fP [ \-m \fImonaddr\fP ] [ \-w | \fIcommand\fP ... ]
+\fBceph\fP \fBauth\fP \fIadd\fP \fI<entity>\fP {\fI<caps>\fP [\fI<caps>\fP\&...]}
+.fi
+.sp
+.nf
+\fBceph\fP \fBauth\fP \fIexport\fP \fI<entity>\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBconfig\-key\fP \fIget\fP \fI<key>\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBmds\fP \fIadd_data_pool\fP \fI<pool>\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBmds\fP \fIgetmap\fP {\fI<int[0\-]>\fP}
+.fi
+.sp
+.nf
+\fBceph\fP \fBmon\fP \fIadd\fP \fI<name>\fP <\fIIPaddr[:port]\fP>
+.fi
+.sp
+.nf
+\fBceph\fP \fBmon_status\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBosd\fP \fIcreate\fP {\fI<uuid>\fP}
+.fi
+.sp
+.nf
+\fBceph\fP \fBosd\fP \fBcrush\fP \fIadd\fP \fI<osdname (id|osd.id)>\fP
+.fi
+.sp
+.sp
+\fI<float[0.0\-]>\fP \fI<args>\fP [\fI<args>\fP\&...]
+.nf
+\fBceph\fP \fBpg\fP \fIforce_create_pg\fP \fI<pgid>\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBpg\fP \fIstat\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBquorum_status\fP
 .fi
 .sp
 .SH DESCRIPTION
 .sp
-\fBceph\fP is a control utility for communicating with the monitor
-cluster of a running Ceph distributed storage system.
+\fBceph\fP is a control utility which is used for manual deployment and maintenance
+of a Ceph cluster. It provides a diverse set of commands that allows deployment of
+monitors, OSDs, placement groups, MDS and overall maintenance, administration
+of the cluster.
+.SH COMMANDS
 .sp
-There are three basic modes of operation.
-.SS Interactive mode
+\fBauth\fP: Manage authentication keys. It is used for adding, removing, exporting
+or updating of authentication keys for a particular  entity such as a monitor or
+OSD. It uses some additional subcommands.
 .sp
-To start in interactive mode, no arguments are necessary. Control\-d or
-\(aqquit\(aq will exit.
-.SS Watch mode
+Subcommand \fBadd\fP adds authentication info for a particular entity from input
+file, or random key if no input given and/or any caps specified in the command.
 .sp
-Watch mode shows cluster state changes as they occur. For example:
-.INDENT 0.0
-.INDENT 3.5
+Usage: ceph auth add <entity> {<caps> [<caps>...]}
 .sp
-.nf
-.ft C
-ceph \-w
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.SS Command line mode
+Subcommand \fBcaps\fP updates caps for \fBname\fP from caps specified in the command.
 .sp
-Finally, to send a single instruction to the monitor cluster (and wait
-for a response), the command can be specified on the command line.
+Usage: ceph auth caps <entity> <caps> [<caps>...]
+.sp
+Subcommand \fBdel\fP deletes all caps for \fBname\fP\&.
+.sp
+Usage: ceph auth del <entity>
+.sp
+Subcommand \fBexport\fP writes keyring for requested entity, or master keyring if
+none given.
+.sp
+Usage: ceph auth export {<entity>}
+.sp
+Subcommand \fBget\fP writes keyring file with requested key.
+.sp
+Usage: ceph auth get <entity>
+.sp
+Subcommand \fBget\-key\fP displays requested key.
+.sp
+Usage: ceph auth get\-key <entity>
+.sp
+Subcommand \fBget\-or\-create\fP adds authentication info for a particular entity
+from input file, or random key if no input given and/or any caps specified in the
+command.
+.sp
+Usage: ceph auth get\-or\-create <entity> {<caps> [<caps>...]}
+.sp
+Subcommand \fBget\-or\-create\-key\fP gets or adds key for \fBname\fP from system/caps
+pairs specified in the command.  If key already exists, any given caps must match
+the existing caps for that key.
+.sp
+Subcommand \fBimport\fP reads keyring from input file.
+.sp
+Usage: ceph auth import
+.sp
+Subcommand \fBlist\fP lists authentication state.
+.sp
+Usage: ceph auth list
+.sp
+Subcommand \fBprint\-key\fP displays requested key.
+.sp
+Usage: ceph auth print\-key <entity>
+.sp
+Subcommand \fBprint_key\fP displays requested key.
+.sp
+Usage: ceph auth print_key <entity>
+.sp
+\fBcompact\fP: Causes compaction of monitor\(aqs leveldb storage.
+.sp
+Usage: ceph compact
+.sp
+\fBconfig\-key\fP: Manage configuration key. It uses some additional subcommands.
+.sp
+Subcommand \fBget\fP gets the configuration key.
+.sp
+Usage: ceph config\-key get <key>
+.sp
+Subcommand \fBput\fP puts configuration key and values.
+.sp
+Usage: ceph config\-key put <key> {<val>}
+.sp
+Subcommand \fBexists\fP checks for configuration keys existence.
+.sp
+Usage: ceph config\-key exists <key>
+.sp
+Subcommand \fBlist\fP lists configuration keys.
+.sp
+Usage: ceph config\-key list
+.sp
+Subcommand \fBdel\fP deletes configuration key.
+.sp
+Usage: ceph config\-key del <key>
+.sp
+\fBdf\fP: Show cluster\(aqs free space status.
+.sp
+Usage: ceph df
+.sp
+\fBfsid\fP: Show cluster\(aqs FSID/UUID.
+.sp
+Usage: ceph fsid
+.sp
+\fBhealth\fP: Show cluster\(aqs health.
+.sp
+Usage: ceph health
+.sp
+\fBheap\fP: Show heap usage info (available only if compiled with tcmalloc)
+.sp
+Usage: ceph heap dump|start_profiler|stop_profiler|release|stats
+.sp
+\fBinjectargs\fP: Inject configuration arguments into monitor.
+.sp
+Usage: ceph injectargs <injected_args> [<injected_args>...]
+.sp
+\fBlog\fP: Log supplied text to the monitor log.
+.sp
+Usage: ceph log <logtext> [<logtext>...]
+.sp
+\fBmds\fP: Manage metadata server configuration and administration. It uses some
+additional subcommands.
+.sp
+Subcommand \fBadd_data_pool\fP adds data pool.
+.sp
+Usage: ceph mds add_data_pool <pool>
+.sp
+Subcommand \fBcluster_down\fP takes mds cluster down.
+.sp
+Usage: ceph mds cluster_down
+.sp
+Subcommand \fBcluster_up\fP brings mds cluster up.
+.sp
+Usage: ceph mds cluster_up
+.sp
+Subcommand \fBcompat\fP manages compatible features. It uses some additional
+subcommands.
+.sp
+Subcommand \fBrm_compat\fP removes compatible feature.
+.sp
+Usage: ceph mds compat rm_compat <int[0\-]>
+.sp
+Subcommand \fBrm_incompat\fP removes incompatible feature.
+.sp
+Usage: ceph mds compat rm_incompat <int[0\-]>
+.sp
+Subcommand \fBshow\fP shows mds compatibility settings.
+.sp
+Usage: ceph mds compat show
+.sp
+Subcommand \fBdeactivate\fP stops mds.
+.sp
+Usage: ceph mds deactivate <who>
+.sp
+Subcommand \fBdump\fP dumps information, optionally from epoch.
+.sp
+Usage: ceph mds dump {<int[0\-]>}
+.sp
+Subcommand \fBfail\fP forces mds to status fail.
+.sp
+Usage: ceph mds fail <who>
+.sp
+Subcommand \fBgetmap\fP gets MDS map, optionally from epoch.
+.sp
+Usage: ceph mds getmap {<int[0\-]>}
+.sp
+Subcommand \fBnewfs\fP makes new filesystem using pools <metadata> and <data>.
+.sp
+Usage: ceph mds newfs <int[0\-]> <int[0\-]> {\-\-yes\-i\-really\-mean\-it}
+.sp
+Subcommand \fBremove_data_pool\fP removes data pool.
+.sp
+Usage: ceph mds remove_data_pool <pool>
+.sp
+Subcommand \fBrm\fP removes inactive mds.
+.sp
+Usage: ceph mds rm <int[0\-]> <name> (type.id)>
+.sp
+Subcommand \fBrmfailed\fP removes failed mds.
+.sp
+Usage: ceph mds rmfailed <int[0\-]>
+.sp
+Subcommand \fBset_max_mds\fP sets max MDS index.
+.sp
+Usage: ceph mds set_max_mds <int[0\-]>
+.sp
+Subcommand \fBset_state\fP sets mds state of <gid> to <numeric\-state>.
+.sp
+Usage: ceph mds set_state <int[0\-]> <int[0\-20]>
+.sp
+Subcommand \fBsetmap\fP sets mds map; must supply correct epoch number.
+.sp
+Usage: ceph mds setmap <int[0\-]>
+.sp
+Subcommand \fBstat\fP shows MDS status.
+.sp
+Usage: ceph mds stat
+.sp
+Subcommand \fBstop\fP stops mds.
+.sp
+Usage: ceph mds stop <who>
+.sp
+Subcommand \fBtell\fP sends command to particular mds.
+.sp
+Usage: ceph mds tell <who> <args> [<args>...]
+.sp
+\fBmon\fP: Manage monitor configuration and administration. It uses some
+additional subcommands.
+.sp
+Subcommand \fBadd\fP adds new monitor named <name> at <addr>.
+.sp
+Usage: ceph mon add <name> <IPaddr[:port]>
+.sp
+Subcommand \fBdump\fP dumps formatted monmap (optionally from epoch)
+.sp
+Usage: ceph mon dump {<int[0\-]>}
+.sp
+Subcommand \fBgetmap\fP gets monmap.
+.sp
+Usage: ceph mon getmap {<int[0\-]>}
+.sp
+Subcommand \fBremove\fP removes monitor named <name>.
+.sp
+Usage: ceph mon remove <name>
+.sp
+Subcommand \fBstat\fP summarizes monitor status.
+.sp
+Usage: ceph mon stat
+.sp
+Subcommand \fBmon_status\fP reports status of monitors.
+.sp
+Usage: ceph mon_status
+.sp
+\fBosd\fP: Manage OSD configuration and administration. It uses some additional
+subcommands.
+.sp
+Subcommand \fBcreate\fP creates new osd (with optional UUID).
+.sp
+Usage: ceph osd create {<uuid>}
+.sp
+Subcommand \fBcrush\fP is used for CRUSH management. It uses some additional
+subcommands.
+.sp
+Subcommand \fBadd\fP adds or updates crushmap position and weight for <name> with
+<weight> and location <args>.
+.sp
+Usage: ceph osd crush add <osdname (id|osd.id)> <float[0.0\-]> <args> [<args>...]
+.sp
+Subcommand \fBadd\-bucket\fP adds no\-parent (probably root) crush bucket <name> of
+type <type>.
+.sp
+Usage: ceph osd crush add\-bucket <name> <type>
+.sp
+Subcommand \fBcreate\-or\-move\fP creates entry or moves existing entry for <name>
+<weight> at/to location <args>.
+.sp
+Usage: ceph osd crush create\-or\-move <osdname (id|osd.id)> <float[0.0\-]> <args>
+[<args>...]
+.sp
+Subcommand \fBdump\fP dumps crush map.
+.sp
+Usage: ceph osd crush dump
+.sp
+Subcommand \fBlink\fP links existing entry for <name> under location <args>.
+.sp
+Usage: ceph osd crush link <name> <args> [<args>...]
+.sp
+Subcommand \fBmove\fP moves existing entry for <name> to location <args>.
+.sp
+Usage: ceph osd crush move <name> <args> [<args>...]
+.sp
+Subcommand \fBremove\fP removes <name> from crush map (everywhere, or just at
+<ancestor>).
+.sp
+Usage: ceph osd crush remove <name> {<ancestor>}
+.sp
+Subcommand \fBreweight\fP change <name>\(aqs weight to <weight> in crush map.
+.sp
+Usage: ceph osd crush reweight <name> <float[0.0\-]>
+.sp
+Subcommand \fBrm\fP removes <name> from crush map (everywhere, or just at
+<ancestor>).
+.sp
+Usage: ceph osd crush rm <name> {<ancestor>}
+.sp
+Subcommand \fBrule\fP is used for creating crush rules. It uses some additional
+subcommands.
+.sp
+Subcommand \fBcreate\-erasure\fP creates crush rule <name> for erasure coded pool
+created with <profile> (default default).
+.sp
+Usage: ceph osd crush rule create\-erasure <name> {<profile>}
+.sp
+Subcommand \fBcreate\-simple\fP creates crush rule <name> to start from <root>,
+replicate across buckets of type <type>, using a choose mode of <firstn|indep>
+(default firstn; indep best for erasure pools).
+.sp
+Usage: ceph osd crush rule create\-simple <name> <root> <type> {firstn|indep}
+.sp
+Subcommand \fBdump\fP dumps crush rule <name> (default all).
+.sp
+Usage: ceph osd crush rule dump {<name>}
+.sp
+Subcommand \fBlist\fP lists crush rules.
+.sp
+Usage: ceph osd crush rule list
+.sp
+Subcommand \fBls\fP lists crush rules.
+.sp
+Usage: ceph osd crush rule ls
+.sp
+Subcommand \fBrm\fP removes crush rule <name>.
+.sp
+Usage: ceph osd crush rule rm <name>
+.sp
+Subcommand \fBset\fP sets crush map from input file.
+.sp
+Usage: ceph osd crush set
+.sp
+Subcommand \fBset\fP with osdname/osd.id update crushmap position and weight
+for <name> to <weight> with location <args>.
+.sp
+Usage: ceph osd crush set <osdname (id|osd.id)> <float[0.0\-]> <args> [<args>...]
+.sp
+Subcommand \fBshow\-tunables\fP shows current crush tunables.
+.sp
+Usage: ceph osd crush show\-tunables
+.sp
+Subcommand \fBtunables\fP sets crush tunables values to <profile>.
+.sp
+Usage: ceph osd crush tunables legacy|argonaut|bobtail|firefly|optimal|default
+.sp
+Subcommand \fBunlink\fP unlinks <name> from crush map (everywhere, or just at
+<ancestor>).
+.sp
+Usage: ceph osd crush unlink <name> {<ancestor>}
+.sp
+Subcommand \fBdeep\-scrub\fP initiates deep scrub on specified osd.
+.sp
+Usage: ceph osd deep\-scrub <who>
+.sp
+Subcommand \fBdown\fP sets osd(s) <id> [<id>...] down.
+.sp
+Usage: ceph osd down <ids> [<ids>...]
+.sp
+Subcommand \fBdump\fP prints summary of OSD map.
+.sp
+Usage: ceph osd dump {<int[0\-]>}
+.sp
+Subcommand \fBerasure\-code\-profile\fP is used for managing the erasure code
+profiles. It uses some additional subcommands.
+.sp
+Subcommand \fBget\fP gets erasure code profile <name>.
+.sp
+Usage: ceph osd erasure\-code\-profile get <name>
+.sp
+Subcommand \fBls\fP lists all erasure code profiles.
+.sp
+Usage: ceph osd erasure\-code\-profile ls
+.sp
+Subcommand \fBrm\fP removes erasure code profile <name>.
+.sp
+Usage: ceph osd erasure\-code\-profile rm <name>
+.sp
+Subcommand \fBset\fP creates erasure code profile <name> with [<key[=value]> ...]
+pairs. Add a \-\-force at the end to override an existing profile (IT IS RISKY).
+.sp
+Usage: ceph osd erasure\-code\-profile set <name> {<profile> [<profile>...]}
+.sp
+Subcommand \fBfind\fP find osd <id> in the CRUSH map and shows its location.
+.sp
+Usage: ceph osd find <int[0\-]>
+.sp
+Subcommand \fBgetcrushmap\fP gets CRUSH map.
+.sp
+Usage: ceph osd getcrushmap {<int[0\-]>}
+.sp
+Subcommand \fBgetmap\fP gets OSD map.
+.sp
+Usage: ceph osd getmap {<int[0\-]>}
+.sp
+Subcommand \fBgetmaxosd\fP shows largest OSD id.
+.sp
+Usage: ceph osd getmaxosd
+.sp
+Subcommand \fBin\fP sets osd(s) <id> [<id>...] in.
+.sp
+Usage: ceph osd in <ids> [<ids>...]
+.sp
+Subcommand \fBlost\fP marks osd as permanently lost. THIS DESTROYS DATA IF NO
+MORE REPLICAS EXIST, BE CAREFUL.
+.sp
+Usage: ceph osd lost <int[0\-]> {\-\-yes\-i\-really\-mean\-it}
+.sp
+Subcommand \fBls\fP shows all OSD ids.
+.sp
+Usage: ceph osd ls {<int[0\-]>}
+.sp
+Subcommand \fBlspools\fP lists pools.
+.sp
+Usage: ceph osd lspools {<int>}
+.sp
+Subcommand \fBmap\fP finds pg for <object> in <pool>.
+.sp
+Usage: ceph osd map <poolname> <objectname>
+.sp
+Subcommand \fBmetadata\fP fetches metadata for osd <id>.
+.sp
+Usage: ceph osd metadata <int[0\-]>
+.sp
+Subcommand \fBout\fP sets osd(s) <id> [<id>...] out.
+.sp
+Usage: ceph osd out <ids> [<ids>...]
+.sp
+Subcommand \fBpause\fP pauses osd.
+.sp
+Usage: ceph osd pause
+.sp
+Subcommand \fBperf\fP prints dump of OSD perf summary stats.
+.sp
+Usage: ceph osd perf
+.sp
+Subcommand \fBpg\-temp\fP set pg_temp mapping pgid:[<id> [<id>...]] (developers
+only).
+.sp
+Usage: ceph osd pg\-temp <pgid> {<id> [<id>...]}
+.sp
+Subcommand \fBpool\fP is used for managing data pools. It uses some additional
+subcommands.
+.sp
+Subcommand \fBcreate\fP creates pool.
+.sp
+Usage: ceph osd pool create <poolname> <int[0\-]> {<int[0\-]>} {replicated|erasure}
+{<erasure_code_profile>} {<ruleset>}
+.sp
+Subcommand \fBdelete\fP deletes pool.
+.sp
+Usage: ceph osd pool delete <poolname> {<poolname>} {\-\-yes\-i\-really\-really\-mean\-it}
+.sp
+Subcommand \fBget\fP gets pool parameter <var>.
+.sp
+Usage: ceph osd pool get <poolname> size|min_size|crash_replay_interval|pg_num|
+pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
+.sp
+ceph osd pool get <poolname> auid|target_max_objects|target_max_bytes
+.sp
+ceph osd pool get <poolname> cache_target_dirty_ratio|cache_target_full_ratio
+.sp
+ceph osd pool get <poolname> cache_min_flush_age|cache_min_evict_age|
+erasure_code_profile
+.sp
+Subcommand \fBget\-quota\fP obtains object or byte limits for pool.
+.sp
+Usage: ceph osd pool get\-quota <poolname>
+.sp
+Subcommand \fBmksnap\fP makes snapshot <snap> in <pool>.
+.sp
+Usage: ceph osd pool mksnap <poolname> <snap>
+.sp
+Subcommand \fBrename\fP renames <srcpool> to <destpool>.
+.sp
+Usage: ceph osd pool rename <poolname> <poolname>
+.sp
+Subcommand \fBrmsnap\fP removes snapshot <snap> from <pool>.
+.sp
+Usage: ceph osd pool rmsnap <poolname> <snap>
+.sp
+Subcommand \fBset\fP sets pool parameter <var> to <val>.
+.sp
+Usage: ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
+pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
+.sp
+ceph osd pool set <poolname> hit_set_count|hit_set_fpp|debug_fake_ec_pool
+.sp
+ceph osd pool set <poolname> target_max_bytes|target_max_objects
+.sp
+ceph osd pool set <poolname> cache_target_dirty_ratio|cache_target_full_ratio
+.sp
+ceph osd pool set <poolname> cache_min_flush_age
+.sp
+ceph osd pool set <poolname> cache_min_evict_age|auid <val> {\-\-yes\-i\-really\-mean\-it}
+.sp
+Subcommand \fBset\-quota\fP sets object or byte limit on pool.
+.sp
+Usage: ceph osd pool set\-quota <poolname> max_objects|max_bytes <val>
+.sp
+Subcommand \fBstats\fP obtain stats from all pools, or from specified pool.
+.sp
+Usage: ceph osd pool stats {<name>}
+.sp
+Subcommand \fBprimary\-affinity\fP adjust osd primary\-affinity from 0.0 <=<weight>
+<= 1.0
+.sp
+Usage: ceph osd primary\-affinity <osdname (id|osd.id)> <float[0.0\-1.0]>
+.sp
+Subcommand \fBprimary\-temp\fP sets primary_temp mapping pgid:<id>|\-1 (developers
+only).
+.sp
+Usage: ceph osd primary\-temp <pgid> <id>
+.sp
+Subcommand \fBrepair\fP initiates repair on a specified osd.
+.sp
+Usage: ceph osd repair <who>
+.sp
+Subcommand \fBreweight\fP reweights osd to 0.0 < <weight> < 1.0.
+.sp
+Usage: osd reweight <int[0\-]> <float[0.0\-1.0]>
+.sp
+Subcommand \fBreweight\-by\-utilization\fP reweight OSDs by utilization
+[overload\-percentage\-for\-consideration, default 120].
+.sp
+Usage: ceph osd reweight\-by\-utilization {<int[100\-]>}
+.sp
+Subcommand \fBrm\fP removes osd(s) <id> [<id>...] in the cluster.
+.sp
+Usage: ceph osd rm <ids> [<ids>...]
+.sp
+Subcommand \fBscrub\fP initiates scrub on specified osd.
+.sp
+Usage: ceph osd scrub <who>
+.sp
+Subcommand \fBset\fP sets <key>.
+.sp
+Usage: ceph osd set pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
+nodeep\-scrub|notieragent
+.sp
+Subcommand \fBsetcrushmap\fP sets crush map from input file.
+.sp
+Usage: ceph osd setcrushmap
+.sp
+Subcommand \fBsetmaxosd\fP sets new maximum osd value.
+.sp
+Usage: ceph osd setmaxosd <int[0\-]>
+.sp
+Subcommand \fBstat\fP prints summary of OSD map.
+.sp
+Usage: ceph osd stat
+.sp
+Subcommand \fBthrash\fP thrashes OSDs for <num_epochs>.
+.sp
+Usage: ceph osd thrash <int[0\-]>
+.sp
+Subcommand \fBtier\fP is used for managing tiers. It uses some additional
+subcommands.
+.sp
+Subcommand \fBadd\fP adds the tier <tierpool> (the second one) to base pool <pool>
+(the first one).
+.sp
+Usage: ceph osd tier add <poolname> <poolname> {\-\-force\-nonempty}
+.sp
+Subcommand \fBadd\-cache\fP adds a cache <tierpool> (the second one) of size <size>
+to existing pool <pool> (the first one).
+.sp
+Usage: ceph osd tier add\-cache <poolname> <poolname> <int[0\-]>
+.sp
+Subcommand \fBcache\-mode\fP specifies the caching mode for cache tier <pool>.
+.sp
+Usage: ceph osd tier cache\-mode <poolname> none|writeback|forward|readonly
+.sp
+Subcommand \fBremove\fP removes the tier <tierpool> (the second one) from base pool
+<pool> (the first one).
+.sp
+Usage: ceph osd tier remove <poolname> <poolname>
+.sp
+Subcommand \fBremove\-overlay\fP removes the overlay pool for base pool <pool>.
+.sp
+Usage: ceph osd tier remove\-overlay <poolname>
+.sp
+Subcommand \fBset\-overlay\fP set the overlay pool for base pool <pool> to be
+<overlaypool>.
+.sp
+Usage: ceph osd tier set\-overlay <poolname> <poolname>
+.sp
+Subcommand \fBtree\fP prints OSD tree.
+.sp
+Usage: ceph osd tree {<int[0\-]>}
+.sp
+Subcommand \fBunpause\fP unpauses osd.
+.sp
+Usage: ceph osd unpause
+.sp
+Subcommand \fBunset\fP unsets <key>.
+.sp
+Usage: osd unset pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
+nodeep\-scrub|notieragent
+.sp
+\fBpg\fP: It is used for managing the placement groups in OSDs. It uses some
+additional subcommands.
+.sp
+Subcommand \fBdebug\fP shows debug info about pgs.
+.sp
+Usage: ceph pg debug unfound_objects_exist|degraded_pgs_exist
+.sp
+Subcommand \fBdeep\-scrub\fP starts deep\-scrub on <pgid>.
+.sp
+Usage: ceph pg deep\-scrub <pgid>
+.sp
+Subcommand \fBdump\fP shows human\-readable versions of pg map (only \(aqall\(aq valid with
+plain).
+.sp
+Usage: ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief}
+.sp
+ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief...}
+.sp
+Subcommand \fBdump_json\fP shows human\-readable version of pg map in json only.
+.sp
+Usage: ceph pg dump_json {all|summary|sum|pools|osds|pgs[all|summary|sum|pools|
+osds|pgs...]}
+.sp
+Subcommand \fBdump_pools_json\fP shows pg pools info in json only.
+.sp
+Usage: ceph pg dump_pools_json
+.sp
+Subcommand \fBdump_stuck\fP shows information about stuck pgs.
+.sp
+Usage: ceph pg dump_stuck {inactive|unclean|stale[inactive|unclean|stale...]}
+{<int>}
+.sp
+Subcommand \fBforce_create_pg\fP forces creation of pg <pgid>.
+.sp
+Usage: ceph pg force_create_pg <pgid>
+.sp
+Subcommand \fBgetmap\fP gets binary pg map to \-o/stdout.
+.sp
+Usage: ceph pg getmap
+.sp
+Subcommand \fBmap\fP shows mapping of pg to osds.
+.sp
+Usage: ceph pg map <pgid>
+.sp
+Subcommand \fBrepair\fP starts repair on <pgid>.
+.sp
+Usage: ceph pg repair <pgid>
+.sp
+Subcommand \fBscrub\fP starts scrub on <pgid>.
+.sp
+Usage: ceph pg scrub <pgid>
+.sp
+Subcommand \fBsend_pg_creates\fP triggers pg creates to be issued.
+.sp
+Usage: ceph pg send_pg_creates
+.sp
+Subcommand \fBset_full_ratio\fP sets ratio at which pgs are considered full.
+.sp
+Usage: ceph pg set_full_ratio <float[0.0\-1.0]>
+.sp
+Subcommand \fBset_nearfull_ratio\fP sets ratio at which pgs are considered nearly
+full.
+.sp
+Usage: ceph pg set_nearfull_ratio <float[0.0\-1.0]>
+.sp
+Subcommand \fBstat\fP shows placement group status.
+.sp
+Usage: ceph pg stat
+.sp
+\fBquorum\fP: Enter or exit quorum.
+.sp
+Usage: ceph quorum enter|exit
+.sp
+\fBquorum_status\fP: Reports status of monitor quorum.
+.sp
+Usage: ceph quorum_status
+.sp
+\fBreport\fP: Reports full status of cluster, optional title tag strings.
+.sp
+Usage: ceph report {<tags> [<tags>...]}
+.sp
+\fBscrub\fP: Scrubs the monitor stores.
+.sp
+Usage: ceph scrub
+.sp
+\fBstatus\fP: Shows cluster status.
+.sp
+Usage: ceph status
+.sp
+\fBsync force\fP: Forces sync of and clear monitor store.
+.sp
+Usage: ceph sync force {\-\-yes\-i\-really\-mean\-it} {\-\-i\-know\-what\-i\-am\-doing}
+.sp
+\fBtell\fP: Sends a command to a specific daemon.
+.sp
+Usage: ceph tell <name (type.id)> <args> [<args>...]
 .SH OPTIONS
 .INDENT 0.0
 .TP
@@ -112,42 +807,88 @@ Use ceph.conf configuration file instead of the default
 .UNINDENT
 .INDENT 0.0
 .TP
-.B \-m monaddress[:port]
-Connect to specified monitor (instead of looking through ceph.conf).
+.B \-\-id CLIENT_ID, \-\-user CLIENT_ID
+Client id for authentication.
 .UNINDENT
-.SH EXAMPLES
-.sp
-To grab a copy of the current OSD map:
 .INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-ceph \-m 1.2.3.4:6789 osd getmap \-o osdmap
-.ft P
-.fi
+.TP
+.B \-\-name CLIENT_NAME, \-n CLIENT_NAME
+Client name for authentication.
 .UNINDENT
-.UNINDENT
-.sp
-To get a dump of placement group (PG) state:
 .INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-ceph pg dump \-o pg.txt
-.ft P
-.fi
+.TP
+.B \-\-cluster CLUSTER
+Name of the Ceph cluster.
 .UNINDENT
-.UNINDENT
-.SH MONITOR COMMANDS
-.sp
-A more complete summary of commands understood by the monitor cluster can be found in the
-online documentation, at
 .INDENT 0.0
-.INDENT 3.5
-\fI\%http://ceph.com/docs/master/rados/operations/control\fP
+.TP
+.B \-\-admin\-daemon ADMIN_SOCKET
+Submit admin\-socket commands.
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-admin\-socket ADMIN_SOCKET_NOPE
+You probably mean \-\-admin\-daemon
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-s, \-\-status
+Show cluster status.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-w, \-\-watch
+Watch live cluster changes.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-watch\-debug
+Watch debug events.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-watch\-info
+Watch info events.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-watch\-sec
+Watch security events.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-watch\-warn
+Watch warning events.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-watch\-error
+Watch error events.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-version, \-v
+Display version.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-verbose
+Make verbose.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-concise
+Make less verbose.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-f {json,json\-pretty,xml,xml\-pretty,plain}, \-\-format
+Format of output.
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-connect\-timeout CLUSTER_TIMEOUT
+Set a timeout for connecting to the cluster.
 .UNINDENT
 .SH AVAILABILITY
 .sp
@@ -155,7 +896,9 @@ online documentation, at
 \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
-\fBceph\fP(8),
+\fBceph\-mon\fP(8),
+\fBceph\-osd\fP(8),
+\fBceph\-mds\fP(8)
 .SH COPYRIGHT
 2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA
 .\" Generated by docutils manpage writer.
