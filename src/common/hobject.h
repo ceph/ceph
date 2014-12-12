@@ -243,12 +243,11 @@ CEPH_HASH_NAMESPACE_END
 ostream& operator<<(ostream& out, const hobject_t& o);
 
 WRITE_EQ_OPERATORS_7(hobject_t, oid, get_key(), snap, hash, max, pool, nspace)
-// sort hobject_t's by <max, get_filestore_key(hash), key, oid, snapid>
 WRITE_CMP_OPERATORS_7(hobject_t,
 		      max,
+		      pool,
 		      get_filestore_key(),
 		      nspace,
-		      pool,
 		      get_effective_key(),
 		      oid,
 		      snap)
