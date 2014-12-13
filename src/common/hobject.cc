@@ -184,6 +184,8 @@ void hobject_t::generate_test_instances(list<hobject_t*>& o)
 
 ostream& operator<<(ostream& out, const hobject_t& o)
 {
+  if (o == hobject_t())
+    return out << "MIN";
   if (o.is_max())
     return out << "MAX";
   out << o.pool << '/';
