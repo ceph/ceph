@@ -8060,12 +8060,6 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
   assert(m->get_header().type == MSGTYPE);
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
-  epoch_t up_epoch = service.get_up_epoch();
-  if (m->map_epoch < up_epoch) {
-    dout(3) << "replica op from before up" << dendl;
-    return;
-  }
-
   if (!require_self_aliveness(op, m->map_epoch))
     return;
   if (!require_osd_peer(op))
