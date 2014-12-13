@@ -1205,7 +1205,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
                                 version_t uv)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
 
@@ -1218,7 +1218,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
 void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
 
   assert(m->get_map_epoch() >= pg->info.history.same_primary_since);
 
@@ -5540,7 +5540,7 @@ template<typename T, int MSGTYPE>
 epoch_t replica_op_required_epoch(OpRequestRef op)
 {
   T *m = static_cast<T *>(op->get_req());
-  assert(m->get_header().type == MSGTYPE);
+  assert(m->get_type() == MSGTYPE);
   return m->map_epoch;
 }
 
@@ -6800,7 +6800,7 @@ void OSD::split_pgs(
 void OSD::handle_pg_create(OpRequestRef op)
 {
   MOSDPGCreate *m = (MOSDPGCreate*)op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_CREATE);
+  assert(m->get_type() == MSG_OSD_PG_CREATE);
 
   dout(10) << "handle_pg_create " << *m << dendl;
 
@@ -7216,7 +7216,7 @@ void OSD::do_infos(map<int,
 void OSD::handle_pg_notify(OpRequestRef op)
 {
   MOSDPGNotify *m = (MOSDPGNotify*)op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_NOTIFY);
+  assert(m->get_type() == MSG_OSD_PG_NOTIFY);
 
   dout(7) << "handle_pg_notify from " << m->get_source() << dendl;
   int from = m->get_source().num();
@@ -7254,7 +7254,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
 void OSD::handle_pg_log(OpRequestRef op)
 {
   MOSDPGLog *m = (MOSDPGLog*) op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_LOG);
+  assert(m->get_type() == MSG_OSD_PG_LOG);
   dout(7) << "handle_pg_log " << *m << " from " << m->get_source() << dendl;
 
   if (!require_osd_peer(op))
@@ -7284,7 +7284,7 @@ void OSD::handle_pg_log(OpRequestRef op)
 void OSD::handle_pg_info(OpRequestRef op)
 {
   MOSDPGInfo *m = static_cast<MOSDPGInfo *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_INFO);
+  assert(m->get_type() == MSG_OSD_PG_INFO);
   dout(7) << "handle_pg_info " << *m << " from " << m->get_source() << dendl;
 
   if (!require_osd_peer(op))
@@ -7321,7 +7321,7 @@ void OSD::handle_pg_info(OpRequestRef op)
 void OSD::handle_pg_trim(OpRequestRef op)
 {
   MOSDPGTrim *m = (MOSDPGTrim *)op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_TRIM);
+  assert(m->get_type() == MSG_OSD_PG_TRIM);
 
   dout(7) << "handle_pg_trim " << *m << " from " << m->get_source() << dendl;
 
@@ -7379,7 +7379,7 @@ void OSD::handle_pg_trim(OpRequestRef op)
 void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 {
   MBackfillReserve *m = static_cast<MBackfillReserve*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_BACKFILL_RESERVE);
+  assert(m->get_type() == MSG_OSD_BACKFILL_RESERVE);
 
   if (!require_osd_peer(op))
     return;
@@ -7428,7 +7428,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
 void OSD::handle_pg_recovery_reserve(OpRequestRef op)
 {
   MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_RECOVERY_RESERVE);
+  assert(m->get_type() == MSG_OSD_RECOVERY_RESERVE);
 
   if (!require_osd_peer(op))
     return;
@@ -7484,7 +7484,7 @@ void OSD::handle_pg_query(OpRequestRef op)
   assert(osd_lock.is_locked());
 
   MOSDPGQuery *m = (MOSDPGQuery*)op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_QUERY);
+  assert(m->get_type() == MSG_OSD_PG_QUERY);
 
   if (!require_osd_peer(op))
     return;
@@ -7591,7 +7591,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 void OSD::handle_pg_remove(OpRequestRef op)
 {
   MOSDPGRemove *m = (MOSDPGRemove *)op->get_req();
-  assert(m->get_header().type == MSG_OSD_PG_REMOVE);
+  assert(m->get_type() == MSG_OSD_PG_REMOVE);
   assert(osd_lock.is_locked());
 
   if (!require_osd_peer(op))
@@ -7910,7 +7910,7 @@ struct send_map_on_destruct {
 void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
     return;
@@ -8062,7 +8062,7 @@ template<typename T, int MSGTYPE>
 void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
   T *m = static_cast<T *>(op->get_req());
-  assert(m->get_header().type == MSGTYPE);
+  assert(m->get_type() == MSGTYPE);
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   epoch_t up_epoch = service.get_up_epoch();
