@@ -1908,6 +1908,13 @@ void RGWPutMetadata::execute()
   if (ret < 0)
     return;
 
+  if (!s->object && !placement_rule.empty()) {
+    if (placement_rule != s->bucket_info.placement_rule) {
+      ret = -EEXIST;
+      return;
+    }
+  }
+
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
     const string& name = iter->first;
