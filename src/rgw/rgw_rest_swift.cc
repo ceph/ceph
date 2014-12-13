@@ -441,6 +441,7 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
       return r;
     }
   }
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
 }
