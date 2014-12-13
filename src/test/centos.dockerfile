@@ -40,4 +40,4 @@ RUN yum install -y make gcc-c++ libtool boost-devel bzip2-devel libedit-devel pe
 # development tools
 RUN yum install -y ccache valgrind gdb git
 # make check dependencies
-RUN yum install -y python-virtualenv gdisk kpartx
+RUN yum install -y python-virtualenv gdisk kpartx hdparm
