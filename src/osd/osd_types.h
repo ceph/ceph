@@ -480,10 +480,6 @@ public:
     return coll_t(pg_to_tmp_str(pgid));
   }
 
-  static coll_t make_removal_coll(uint64_t seq, spg_t pgid) {
-    return coll_t(seq_to_removal_str(seq, pgid));
-  }
-
   const std::string& to_str() const {
     return str;
   }
@@ -521,11 +517,6 @@ private:
   static std::string pg_to_tmp_str(spg_t p) {
     std::ostringstream oss;
     oss << p << "_TEMP";
-    return oss.str();
-  }
-  static std::string seq_to_removal_str(uint64_t seq, spg_t pgid) {
-    std::ostringstream oss;
-    oss << "FORREMOVAL_" << seq << "_" << pgid;
     return oss.str();
   }
 
