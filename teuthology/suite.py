@@ -120,7 +120,7 @@ def make_run_name(suite, ceph_branch, kernel_branch, kernel_flavor,
     worker = get_worker(machine_type)
     return '-'.join(
         [user, str(timestamp), suite, ceph_branch,
-         kernel_branch, kernel_flavor, worker]
+         kernel_branch or '-', kernel_flavor, worker]
     )
 
 
@@ -163,8 +163,8 @@ def create_initial_config(suite, suite_branch, ceph_branch, teuthology_branch,
     # Put together a stanza specifying the kernel hash
     if kernel_branch == 'distro':
         kernel_hash = 'distro'
-    # Skip the stanza if the branch passed is '-'
-    elif kernel_branch == '-':
+    # Skip the stanza if no -k given
+    elif kernel_branch is None:
         kernel_hash = None
     else:
         kernel_hash = get_hash('kernel', kernel_branch, kernel_flavor,
