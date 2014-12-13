@@ -7,19 +7,14 @@ This guide will describe how to build and test Ceph for development.
 Development
 -----------
 
-After installing the dependencies described in the ``README``,
-prepare the git source tree by updating the submodules
+The ``run-make-check.sh`` script will install Ceph dependencies,
+compiles everything in debug mode and runs a number of tests to verify
+the result behaves as expected.
 
 .. code::
 
-	git submodule update --init
+       $ ./run-make-check.sh
 
-To build the server daemons, and FUSE client, execute the following:
-
-.. code::
-
-	./do_autogen.sh -d 1
-	make -j [number of cpus]
 
 Running a development deployment
 --------------------------------
