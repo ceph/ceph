@@ -1554,19 +1554,19 @@ protected:
   void repeer(PG *pg, map< int, map<spg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
-  bool require_osd_peer(OpRequestRef& op);
+  bool require_osd_peer(Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
    * still are.
    */
-  bool require_self_aliveness(OpRequestRef& op, epoch_t alive_since);
+  bool require_self_aliveness(Message *m, epoch_t alive_since);
   /**
    * Verifies that the OSD who sent the given op has the same
    * address as in the given map.
    * @pre op was sent by an OSD using the cluster messenger
    */
-  bool require_same_peer_instance(OpRequestRef& op, OSDMapRef& map);
-  bool require_up_osd_peer(OpRequestRef& Op, OSDMapRef& map,
+  bool require_same_peer_instance(Message *m, OSDMapRef& map);
+  bool require_up_osd_peer(Message *m, OSDMapRef& map,
                            epoch_t their_epoch);
 
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e);
