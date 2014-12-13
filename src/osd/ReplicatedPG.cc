@@ -789,7 +789,7 @@ bool ReplicatedPG::pg_op_must_wait(MOSDOp *op)
 void ReplicatedPG::do_pg_op(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp *>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   dout(10) << "do_pg_op " << *m << dendl;
 
   op->mark_started();
@@ -1369,7 +1369,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
 void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  assert(m->get_header().type == CEPH_MSG_OSD_OP);
+  assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
@@ -2211,7 +2211,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
   assert(have_same_or_newer_map(m->map_epoch));
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
 
   OSDOp *first = NULL;
@@ -2249,7 +2249,7 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
 void ReplicatedPG::do_sub_op_reply(OpRequestRef op)
 {
   MOSDSubOpReply *r = static_cast<MOSDSubOpReply *>(op->get_req());
-  assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(r->get_type() == MSG_OSD_SUBOPREPLY);
   if (r->ops.size() >= 1) {
     OSDOp& first = r->ops[0];
     switch (first.op.op) {
@@ -2265,7 +2265,7 @@ void ReplicatedPG::do_scan(
   ThreadPool::TPHandle &handle)
 {
   MOSDPGScan *m = static_cast<MOSDPGScan*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_SCAN);
+  assert(m->get_type() == MSG_OSD_PG_SCAN);
   dout(10) << "do_scan " << *m << dendl;
 
   op->mark_started();
@@ -2350,7 +2350,7 @@ void ReplicatedPG::do_scan(
 void ReplicatedBackend::_do_push(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
   vector<PushReplyOp> replies;
@@ -2409,7 +2409,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
   MOSDPGPush *m = static_cast<MOSDPGPush *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH);
+  assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
   vector<PullOp> replies(1);
@@ -2457,7 +2457,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 void ReplicatedBackend::do_pull(OpRequestRef op)
 {
   MOSDPGPull *m = static_cast<MOSDPGPull *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PULL);
+  assert(m->get_type() == MSG_OSD_PG_PULL);
   pg_shard_t from = m->from;
 
   map<pg_shard_t, vector<PushOp> > replies;
@@ -2473,7 +2473,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
 void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
   MOSDPGPushReply *m = static_cast<MOSDPGPushReply *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_PUSH_REPLY);
+  assert(m->get_type() == MSG_OSD_PG_PUSH_REPLY);
   pg_shard_t from = m->from;
 
   vector<PushOp> replies(1);
@@ -2494,7 +2494,7 @@ void ReplicatedBackend::do_push_reply(OpRequestRef op)
 void ReplicatedPG::do_backfill(OpRequestRef op)
 {
   MOSDPGBackfill *m = static_cast<MOSDPGBackfill*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
+  assert(m->get_type() == MSG_OSD_PG_BACKFILL);
   dout(10) << "do_backfill " << *m << dendl;
 
   op->mark_started();
@@ -7943,7 +7943,7 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
 
   const hobject_t& soid = m->poid;
 
@@ -8051,7 +8051,7 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   dout(10) << "sub_op_modify_applied on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
   MOSDSubOp *m = static_cast<MOSDSubOp*>(rm->op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   
   if (!rm->committed) {
     // send ack to acker only if we haven't sent a commit already
@@ -9034,7 +9034,7 @@ void ReplicatedBackend::sub_op_push_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
   const hobject_t& soid = reply->get_poid();
-  assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
   dout(10) << "sub_op_push_reply from " << reply->get_source() << " " << *reply << dendl;
   pg_shard_t peer = reply->from;
 
@@ -9128,7 +9128,7 @@ void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 void ReplicatedBackend::sub_op_pull(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
 
   op->mark_started();
 
@@ -9400,7 +9400,7 @@ void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
 void ReplicatedPG::sub_op_remove(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_remove " << m->poid << dendl;
 
   op->mark_started();

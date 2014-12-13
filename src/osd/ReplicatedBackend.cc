@@ -626,7 +626,7 @@ void ReplicatedBackend::op_commit(
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
   MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
-  assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(r->get_type() == MSG_OSD_SUBOPREPLY);
 
   op->mark_started();
 
