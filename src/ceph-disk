@@ -947,7 +947,7 @@ def get_free_partition_index(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        print 'cannot read partition index; assume it isn\'t present\n (Error: %s)' % e
+        LOG.info('cannot read partition index; assume it isn\'t present\n (Error: %s)' % e)
         return 1
 
     if not lines:
