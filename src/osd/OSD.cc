@@ -5723,11 +5723,11 @@ void OSD::_dispatch(Message *m)
 
   case MSG_OSD_SCRUB:
     handle_scrub(static_cast<MOSDScrub*>(m));
-    break;    
+    break;
 
   case MSG_OSD_REP_SCRUB:
     handle_rep_scrub(static_cast<MOSDRepScrub*>(m));
-    break;    
+    break;
 
     // -- need OSDMap --
 
@@ -5753,7 +5753,21 @@ void OSD::_dispatch(Message *m)
 
 void OSD::handle_rep_scrub(MOSDRepScrub *m)
 {
-  dout(10) << "queueing MOSDRepScrub " << *m << dendl;
+  dout(10) << __func__ << " " << *m << dendl;
+  if (!require_self_aliveness(m, m->map_epoch)) {
+    m->put();
+    return;
+  }
+  if (!require_osd_peer(m)) {
+    m->put();
+    return;
+  }
+  if (osdmap->get_epoch() >= m->map_epoch &&
+      !require_same_peer_instance(m, osdmap, true)) {
+    m->put();
+    return;
+  }
+
   rep_scrub_wq.queue(m);
 }
 
