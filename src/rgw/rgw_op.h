@@ -419,6 +419,7 @@ protected:
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
+  string placement_rule;
 
 public:
   RGWPutMetadata() {
