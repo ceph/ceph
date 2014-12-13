@@ -233,7 +233,7 @@ allows you to submit pull requests directly from the command line:
 
     $ hub pull-request -b ceph:master -h you:mything
 
-Pull rqeuests appear in the review queue at
+Pull requests appear in the review queue at
 
      https://github.com/organizations/ceph/dashboard/pulls
 
