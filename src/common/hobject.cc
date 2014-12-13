@@ -301,6 +301,8 @@ void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
 
 ostream& operator<<(ostream& out, const ghobject_t& o)
 {
+  if (o == ghobject_t())
+    return out << "GHMIN";
   if (o.is_max())
     return out << "GHMAX";
   out << o.hobj;
