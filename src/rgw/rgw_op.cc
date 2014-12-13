@@ -1945,10 +1945,14 @@ void RGWPutMetadata::execute()
   /* no need to track object versioning, need it for bucket's data only */
   RGWObjVersionTracker *ptracker = (s->object ? NULL : &s->bucket_info.objv_tracker);
 
-  /* check if obj exists, read orig attrs */
-  ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
-  if (ret < 0)
-    return;
+  if (s->object) {
+    /* check if obj exists, read orig attrs */
+    ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
+    if (ret < 0)
+      return;
+  } else {
+    orig_attrs = s->bucket_attrs;
+  }
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
