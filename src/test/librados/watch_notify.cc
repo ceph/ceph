@@ -278,7 +278,7 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
   char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 0,
+			     "notify", 6, 300000,
 			     &reply_buf, &reply_buf_len));
   {
     bufferlist reply;
@@ -306,7 +306,7 @@ TEST_F(LibRadosWatchNotify, Watch2Timeout) {
 
   // and now a notify will work.
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 0,
+			     "notify", 6, 300000,
 			     &reply_buf, &reply_buf_len));
   {
     bufferlist reply;
@@ -346,7 +346,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 0,
+			     "notify", 6, 300000,
 			     &reply_buf, &reply_buf_len));
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
@@ -367,7 +367,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   // try it on a non-existent object ... our buffer pointers
   // should get zeroed.
   ASSERT_EQ(-ENOENT, rados_notify2(ioctx, "doesnotexist",
-				   "notify", 6, 0,
+				   "notify", 6, 300000,
 				   &reply_buf, &reply_buf_len));
   ASSERT_EQ((char*)0, reply_buf);
   ASSERT_EQ(0u, reply_buf_len);
@@ -392,7 +392,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   ASSERT_EQ(0, ioctx.list_watchers(notify_oid, &watches));
   ASSERT_EQ(watches.size(), 1u);
   bufferlist bl2, bl_reply;
-  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 0, &bl_reply));
+  ASSERT_EQ(0, ioctx.notify2(notify_oid, bl2, 300000, &bl_reply));
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
@@ -432,7 +432,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   char *reply_buf = 0;
   size_t reply_buf_len;
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 0,
+			     "notify", 6, 300000,
 			     &reply_buf, &reply_buf_len));
   bufferlist reply;
   reply.append(reply_buf, reply_buf_len);
@@ -494,7 +494,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   notify_sleep = 0;
   notify_cookies.clear();
   ASSERT_EQ(0, rados_notify2(ioctx, notify_oid,
-			     "notify", 6, 30000, // 30s
+			     "notify", 6, 300000, // 300s
 			     &reply_buf, &reply_buf_len));
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
