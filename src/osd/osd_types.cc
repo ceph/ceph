@@ -3330,11 +3330,13 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
   ::decode(data, bl);
   ::decode(omap, bl);
   ::decode(cursor, bl);
+  flags = 0;
+  data_digest = omap_digest = 0;
 }
 
 void object_copy_data_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 1, bl);
+  ENCODE_START(4, 1, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
   ::encode((__u32)0, bl);  // was category; no longer used
@@ -3345,12 +3347,15 @@ void object_copy_data_t::encode(bufferlist& bl) const
   ::encode(omap_header, bl);
   ::encode(snaps, bl);
   ::encode(snap_seq, bl);
+  ::encode(flags, bl);
+  ::encode(data_digest, bl);
+  ::encode(omap_digest, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(4, bl);
   ::decode(size, bl);
   ::decode(mtime, bl);
   {
@@ -3369,6 +3374,11 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
   } else {
     snaps.clear();
     snap_seq = 0;
+  }
+  if (struct_v >= 4) {
+    ::decode(flags, bl);
+    ::decode(data_digest, bl);
+    ::decode(omap_digest, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -3412,6 +3422,9 @@ void object_copy_data_t::dump(Formatter *f) const
   /* we should really print out the attrs here, but bufferlist
      const-correctness prents that */
   f->dump_int("attrs_size", attrs.size());
+  f->dump_int("flags", flags);
+  f->dump_unsigned("data_digest", data_digest);
+  f->dump_unsigned("omap_digest", omap_digest);
   f->dump_int("omap_size", omap.size());
   f->dump_int("omap_header_length", omap_header.length());
   f->dump_int("data_length", data.length());

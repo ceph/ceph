@@ -629,6 +629,100 @@ TEST_F(LibRadosMiscPP, CopyPP) {
   }
 }
 
+TEST_F(LibRadosMiscPP, CopyScrubPP) {
+  bufferlist inbl, bl, x;
+  for (int i=0; i<100; ++i)
+    x.append("barrrrrrrrrrrrrrrrrrrrrrrrrr");
+  bl.append(buffer::create(g_conf->osd_copyfrom_max_chunk * 3));
+  bl.zero();
+  bl.append("tail");
+  bufferlist cbl;
+
+  map<string, bufferlist> to_set;
+  for (int i=0; i<1000; ++i)
+    to_set[string("foo") + stringify(i)] = x;
+
+  // small
+  cbl = x;
+  ASSERT_EQ(0, ioctx.write_full("small", cbl));
+  ASSERT_EQ(0, ioctx.setxattr("small", "myattr", x));
+
+  // big
+  cbl = bl;
+  ASSERT_EQ(0, ioctx.write_full("big", cbl));
+
+  // without header
+  cbl = bl;
+  ASSERT_EQ(0, ioctx.write_full("big2", cbl));
+  ASSERT_EQ(0, ioctx.setxattr("big2", "myattr", x));
+  ASSERT_EQ(0, ioctx.setxattr("big2", "myattr2", x));
+  ASSERT_EQ(0, ioctx.omap_set("big2", to_set));
+
+  // with header
+  cbl = bl;
+  ASSERT_EQ(0, ioctx.write_full("big3", cbl));
+  ASSERT_EQ(0, ioctx.omap_set_header("big3", x));
+  ASSERT_EQ(0, ioctx.omap_set("big3", to_set));
+
+  // deep scrub to ensure digests are in place
+  {
+    for (int i=0; i<10; ++i) {
+      ostringstream ss;
+      ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
+	 << ioctx.get_id() << "." << i
+	 << "\"}";
+      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+    }
+
+    // give it a few seconds to go.  this is sloppy but is usually enough time
+    cout << "waiting for initial deep scrubs..." << std::endl;
+    sleep(30);
+    cout << "done waiting, doing copies" << std::endl;
+  }
+
+  {
+    ObjectWriteOperation op;
+    op.copy_from("small", ioctx, 0);
+    ASSERT_EQ(0, ioctx.operate("small.copy", &op));
+  }
+
+  {
+    ObjectWriteOperation op;
+    op.copy_from("big", ioctx, 0);
+    ASSERT_EQ(0, ioctx.operate("big.copy", &op));
+  }
+
+  {
+    ObjectWriteOperation op;
+    op.copy_from("big2", ioctx, 0);
+    ASSERT_EQ(0, ioctx.operate("big2.copy", &op));
+  }
+
+  {
+    ObjectWriteOperation op;
+    op.copy_from("big3", ioctx, 0);
+    ASSERT_EQ(0, ioctx.operate("big3.copy", &op));
+  }
+
+  // deep scrub to ensure digests are correct
+  {
+    for (int i=0; i<10; ++i) {
+      ostringstream ss;
+      ss << "{\"prefix\": \"pg deep-scrub\", \"pgid\": \""
+	 << ioctx.get_id() << "." << i
+	 << "\"}";
+      cluster.mon_command(ss.str(), inbl, NULL, NULL);
+    }
+
+    // give it a few seconds to go.  this is sloppy but is usually enough time
+    cout << "waiting for final deep scrubs..." << std::endl;
+    sleep(30);
+    cout << "done waiting" << std::endl;
+  }
+}
+
+
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

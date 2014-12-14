@@ -5889,6 +5889,14 @@ int ReplicatedPG::fill_in_copy_get(
     assert(obc->ssc);
     reply_obj.snap_seq = obc->ssc->snapset.seq;
   }
+  if (oi.is_data_digest()) {
+    reply_obj.flags |= object_copy_data_t::FLAG_DATA_DIGEST;
+    reply_obj.data_digest = oi.data_digest;
+  }
+  if (oi.is_omap_digest()) {
+    reply_obj.flags |= object_copy_data_t::FLAG_OMAP_DIGEST;
+    reply_obj.omap_digest = oi.omap_digest;
+  }
 
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
@@ -6058,6 +6066,9 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results.object_size, &cop->results.mtime,
 	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
 	      &cop->results.snaps, &cop->results.snap_seq,
+	      &cop->results.flags,
+	      &cop->results.source_data_digest,
+	      &cop->results.source_omap_digest,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -6152,9 +6163,47 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
 
-  dout(20) << __func__ << " success; committing" << dendl;
   cop->results.final_tx = pgbackend->get_transaction();
   _build_finish_copy_transaction(cop, cop->results.final_tx);
+
+  // verify digests?
+  dout(20) << __func__ << std::hex
+	   << " got digest: rx data 0x" << cop->results.data_digest
+	   << " omap 0x" << cop->results.omap_digest
+	   << ", source: data 0x" << cop->results.source_data_digest
+	   << " omap 0x" <<  cop->results.source_omap_digest
+	   << std::dec
+	   << " flags " << cop->results.flags
+	   << dendl;
+  if (cop->results.is_data_digest() &&
+      cop->results.data_digest != cop->results.source_data_digest) {
+    derr << __func__ << std::hex << " data digest 0x" << cop->results.data_digest
+	 << " != source 0x" << cop->results.source_data_digest << std::dec
+	 << dendl;
+    osd->clog->error() << info.pgid << " copy from " << cop->src
+		       << " to " << cop->obc->obs.oi.soid << std::hex
+		       << " data digest 0x" << cop->results.data_digest
+		       << " != source 0x" << cop->results.source_data_digest
+		       << std::dec;
+    r = -EIO;
+    goto out;
+  }
+  if (cop->results.is_omap_digest() &&
+      cop->results.omap_digest != cop->results.source_omap_digest) {
+    derr << __func__ << std::hex
+	 << " omap digest 0x" << cop->results.omap_digest
+	 << " != source 0x" << cop->results.source_omap_digest
+	 << std::dec << dendl;
+    osd->clog->error() << info.pgid << " copy from " << cop->src
+		       << " to " << cop->obc->obs.oi.soid << std::hex
+		       << " omap digest 0x" << cop->results.omap_digest
+		       << " != source 0x" << cop->results.source_omap_digest
+		       << std::dec;
+    r = -EIO;
+    goto out;
+  }
+
+  dout(20) << __func__ << " success; committing" << dendl;
 
  out:
   dout(20) << __func__ << " complete r = " << cpp_strerror(r) << dendl;
@@ -6207,6 +6256,7 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
 	       cop->cursor.data_offset);
       }
     }
+    cop->results.data_digest = cop->data.crc32c(cop->results.data_digest);
     t->append(
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
@@ -6218,10 +6268,22 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
   if (!pool.info.require_rollback()) {
     if (!cop->temp_cursor.omap_complete) {
       if (cop->omap_header.length()) {
+	cop->results.omap_digest =
+	  cop->omap_header.crc32c(cop->results.omap_digest);
 	t->omap_setheader(
 	  cop->results.temp_oid,
 	  cop->omap_header);
 	cop->omap_header.clear();
+      }
+      if (cop->omap.size()) {
+	for (map<string,bufferlist>::iterator p = cop->omap.begin();
+	     p != cop->omap.end(); ++p) {
+	  cop->results.omap_digest = ceph_crc32c(
+	    cop->results.omap_digest,
+	    (const unsigned char *)p->first.data(),
+	    p->first.length());
+	  cop->results.omap_digest = p->second.crc32c(cop->results.omap_digest);
+	}
       }
       t->omap_setkeys(cop->results.temp_oid, cop->omap);
       cop->omap.clear();
@@ -6284,6 +6346,9 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
 
   // CopyFromCallback fills this in for us
   obs.oi.user_version = ctx->user_at_version;
+
+  obs.oi.set_data_digest(cb->results->data_digest);
+  obs.oi.set_omap_digest(cb->results->omap_digest);
 
   // cache: clear whiteout?
   if (obs.oi.is_whiteout()) {
