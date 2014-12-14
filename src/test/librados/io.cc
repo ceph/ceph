@@ -258,7 +258,7 @@ TEST_F(LibRadosIoPP, RoundTripPP2)
   read.read(0, bl.length(), NULL, NULL);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
-  ASSERT_EQ(0, strcmp(bl.c_str(), "ceph"));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
 TEST_F(LibRadosIo, OverlappingWriteRoundTrip) {
@@ -334,7 +334,7 @@ TEST_F(LibRadosIoPP, WriteFullRoundTripPP2)
   read.read(0, bl.length(), NULL, NULL);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
-  ASSERT_EQ(0, strcmp(bl.c_str(), "ceph"));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
 TEST_F(LibRadosIo, AppendRoundTrip) {
@@ -724,7 +724,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP2)
   read.read(0, bl.length(), NULL, NULL);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
-  ASSERT_EQ(0, strcmp(bl.c_str(), "ceph"));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
 TEST_F(LibRadosIoEC, OverlappingWriteRoundTrip) {
@@ -811,7 +811,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
   read.read(0, bl.length(), NULL, NULL);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
-  ASSERT_EQ(0, strcmp(bl.c_str(), "ceph"));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
 TEST_F(LibRadosIoEC, AppendRoundTrip) {
