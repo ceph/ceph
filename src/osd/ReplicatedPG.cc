@@ -6202,6 +6202,11 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     r = -EIO;
     goto out;
   }
+  if (g_conf->osd_debug_inject_copyfrom_error) {
+    derr << __func__ << " injecting copyfrom failure" << dendl;
+    r = -EIO;
+    goto out;
+  }
 
   dout(20) << __func__ << " success; committing" << dendl;
 
