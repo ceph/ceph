@@ -2490,9 +2490,15 @@ WRITE_CLASS_ENCODER(object_copy_cursor_t)
  * based on the contents of the cursor.
  */
 struct object_copy_data_t {
+  enum {
+    FLAG_DATA_DIGEST = 1<<0,
+    FLAG_OMAP_DIGEST = 1<<1,
+  };
   object_copy_cursor_t cursor;
   uint64_t size;
   utime_t mtime;
+  uint32_t data_digest, omap_digest;
+  uint32_t flags;
   map<string, bufferlist> attrs;
   bufferlist data;
   bufferlist omap_header;
@@ -2503,7 +2509,8 @@ struct object_copy_data_t {
   ///< latest snap seq for the object (if head)
   snapid_t snap_seq;
 public:
-  object_copy_data_t() : size((uint64_t)-1) {}
+  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
+			 omap_digest(-1), flags(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
