@@ -2,7 +2,7 @@ import pprint
 import yaml
 
 import teuthology.beanstalk
-from teuthology.misc import deep_merge, get_user
+from teuthology.misc import get_user, merge_configs
 from teuthology import report
 
 
@@ -30,15 +30,7 @@ def build_config(args):
     Given a dict of arguments, build a job config
     """
     config_paths = args.get('<conf_file>', list())
-    conf_dict = dict()
-    for conf_path in config_paths:
-        with file(conf_path) as partial_file:
-            partial_dict = yaml.safe_load(partial_file)
-        try:
-            conf_dict = deep_merge(conf_dict, partial_dict)
-        except Exception:
-            pprint.pprint("failed to merge {0} into {1}".format(conf_dict, partial_dict))
-            raise
+    conf_dict = merge_configs(config_paths)
     # strip out targets; the worker will allocate new ones when we run
     # the job with --lock.
     if 'targets' in conf_dict:

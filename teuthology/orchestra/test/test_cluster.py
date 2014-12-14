@@ -1,4 +1,7 @@
 import fudge
+import pytest
+
+from mock import patch, Mock
 
 from .. import cluster, remote
 
@@ -204,3 +207,34 @@ class TestCluster(object):
             )
         c_foo = c.exclude('foo', lambda role: role.startswith('b'))
         assert c_foo.remotes == {r2: ['bar'], r3: ['foo']}
+
+
+class TestWriteFile(object):
+    """ Tests for cluster.write_file """
+    def setup(self):
+        self.r1 = remote.Remote('r1', ssh=Mock())
+        self.c = cluster.Cluster(
+            remotes=[
+                (self.r1, ['foo', 'bar']),
+            ],
+        )
+
+    @patch("teuthology.misc.write_file")
+    def test_write_file(self, m_write_file):
+        self.c.write_file("filename", "content")
+        m_write_file.assert_called_with(self.r1, "filename", "content")
+
+    @patch("teuthology.misc.write_file")
+    def test_fails_with_invalid_perms(self, m_write_file):
+        with pytest.raises(ValueError):
+            self.c.write_file("filename", "content", sudo=False, perms="invalid")
+
+    @patch("teuthology.misc.write_file")
+    def test_fails_with_invalid_owner(self, m_write_file):
+        with pytest.raises(ValueError):
+            self.c.write_file("filename", "content", sudo=False, owner="invalid")
+
+    @patch("teuthology.misc.sudo_write_file")
+    def test_with_sudo(self, m_sudo_write_file):
+        self.c.write_file("filename", "content", sudo=True)
+        m_sudo_write_file.assert_called_with(self.r1, "filename", "content", owner=None, perms=None)

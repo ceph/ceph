@@ -19,6 +19,7 @@ from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
 from ..orchestra import cluster, remote, run
+from .. import report
 
 log = logging.getLogger(__name__)
 
@@ -73,6 +74,9 @@ def lock_machines(ctx, config):
     how_many = config[0]
     # We want to make sure there are always this many machines available
     to_reserve = 5
+
+    # change the status during the locking process
+    report.try_push_job_info(ctx.config, dict(status='waiting'))
 
     while True:
         # get a candidate list of machines
@@ -138,8 +142,13 @@ def lock_machines(ctx, config):
                 ctx.config['targets'] = newscandict
             else:
                 ctx.config['targets'] = newly_locked
-            # FIXME: Ugh.
-            log.info('\n  '.join(['Locked targets:', ] + yaml.safe_dump(ctx.config['targets'], default_flow_style=False).splitlines()))
+            locked_targets = yaml.safe_dump(
+                ctx.config['targets'],
+                default_flow_style=False
+            ).splitlines()
+            log.info('\n  '.join(['Locked targets:', ] + locked_targets))
+            # successfully locked machines, change status back to running
+            report.try_push_job_info(ctx.config, dict(status='running'))
             break
         elif not ctx.block:
             assert 0, 'not enough machines are available'
@@ -154,6 +163,7 @@ def lock_machines(ctx, config):
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
                 lock.unlock_one(ctx, machine, ctx.owner)
+
 
 def save_config(ctx, config):
     """

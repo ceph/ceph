@@ -1,0 +1,7 @@
+server {
+        allow all;
+        autoindex on;
+        server_name test_logs.example.com;
+        root /home/teuthworker/archive;
+        default_type text/plain;
+}

@@ -71,7 +71,8 @@ def create_if_vm(ctx, machine_name):
         file_info['additional-disks-size'] = lcnfg.get(
             'additional-disks-size', '200G')
         file_info['arch'] = lcnfg.get('arch', 'x86_64')
-        file_out = {'downburst': file_info}
+        fqdn = machine_name.split('@')[1]
+        file_out = {'downburst': file_info, 'local-hostname': fqdn}
         yaml.safe_dump(file_out, tmp)
         metadata = "--meta-data=%s" % tmp.name
         dbrst = _get_downburst_exec()

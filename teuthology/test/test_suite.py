@@ -52,3 +52,17 @@ class TestSuiteOffline(object):
         assert isinstance(
             suite.dict_templ['overrides']['admin_socket']['branch'],
             suite.Placeholder)
+
+    def test_null_placeholders_dropped(self):
+        input_dict = dict(
+            suite='suite',
+            suite_branch='suite_branch',
+            ceph_branch='ceph_branch',
+            ceph_hash='ceph_hash',
+            teuthology_branch='teuthology_branch',
+            machine_type='machine_type',
+            distro=None,
+        )
+        output_dict = suite.substitute_placeholders(suite.dict_templ,
+                                                    input_dict)
+        assert 'os_type' not in output_dict
