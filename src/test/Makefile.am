@@ -247,6 +247,7 @@ check_SCRIPTS += \
 	test/mon/mkfs.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
+	test/osd/osd-copy-from.sh \
 	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh
 
