@@ -39,6 +39,20 @@
    fun:_ZN8tcmalloc8PageHeap3NewEm
 }
 {
+   tcmalloc: msync heap allocation points to uninit bytes (rhel7)
+   Memcheck:Param
+   msync(start)
+   obj:/usr/lib64/libpthread-2.17.so
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   obj:/usr/lib64/libunwind.so.8.0.1
+   fun:_ULx86_64_step
+   fun:_Z13GetStackTracePPvii
+   fun:_ZN8tcmalloc8PageHeap8GrowHeapEm
+   fun:_ZN8tcmalloc8PageHeap3NewEm
+}
+{
    tcmalloc: msync heap allocation points to uninit bytes (wheezy)
    Memcheck:Param
    msync(start)
