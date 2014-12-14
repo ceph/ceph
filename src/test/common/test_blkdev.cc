@@ -14,7 +14,6 @@ TEST(blkdev, get_block_device_base) {
   char buf[PATH_MAX*2];
   char buf2[PATH_MAX*2];
   char buf3[PATH_MAX*2];
-  char root[PATH_MAX];
   struct dirent *de, *de2;
 
   ASSERT_EQ(-EINVAL, get_block_device_base("/etc/notindev", buf, 100));
