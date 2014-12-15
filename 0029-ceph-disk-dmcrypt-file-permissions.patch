@@ -14,7 +14,7 @@ Signed-off-by: Loic Dachary <ldachary@redhat.com>
  1 file changed, 5 insertions(+), 3 deletions(-)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index 0bcfe51..2287124 100755
+index 944caf8..9130bb1 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
 @@ -792,11 +792,13 @@ def get_or_create_dmcrypt_key(

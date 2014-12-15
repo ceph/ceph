@@ -1,4 +1,18 @@
 -------------------------------------------------------------------
+Mon Dec 15 13:39:37 UTC 2014 - tbehrens@suse.com
+
+- Remove 0026-ceph-disk-run-partprobe-after-zap.patch
+- Remove 0027-ceph-disk-use-update_partition-in-p.patch
+- Renamed 0028-rgw-set-length-for-keystone-token-v.patch to
+  0026-rgw-set-length-for-keystone-token-v.patch
+- Renamed 0029-client-cast-m-get_client_tid-to-com.patch to
+  0027-client-cast-m-get_client_tid-to-com.patch
+- Renamed 0030-Add-annotation-to-all-assembly-file.patch to
+  0028-Add-annotation-to-all-assembly-file.patch
+- Renamed 0031-ceph-disk-dmcrypt-file-permissions.patch to
+  0029-ceph-disk-dmcrypt-file-permissions.patch
+
+-------------------------------------------------------------------
 Mon Dec 15 09:58:29 UTC 2014 - tbehrens@suse.com
 
 - Add 0024-rgw-subuser-creation-fixes.patch: fix bnc#905066
