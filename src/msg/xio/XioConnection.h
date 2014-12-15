@@ -22,12 +22,16 @@ extern "C" {
 #include "libxio.h"
 }
 #include "XioInSeq.h"
+#include "XioSubmit.h"
 #include "msg/Connection.h"
 #include "msg/Messenger.h"
 #include "include/atomic.h"
+#include "auth/AuthSessionHandler.h"
 
 #define XIO_ALL_FEATURES (CEPH_FEATURES_ALL & \
 			  ~CEPH_FEATURE_MSGR_KEEPALIVE2)
+
+#define XIO_NOP_TAG_MARKDOWN 0x0001
 
 namespace bi = boost::intrusive;
 
@@ -39,6 +43,24 @@ class XioConnection : public Connection
 {
 public:
   enum type { ACTIVE, PASSIVE };
+
+  enum session_states {
+    INIT = 0,
+    START,
+    UP,
+    FLOW_CONTROLLED,
+    DISCONNECTED,
+    DELETED,
+    BARRIER
+  };
+
+  enum session_startup_states {
+    IDLE = 0,
+    CONNECTING,
+    ACCEPTING,
+    READY,
+    FAIL
+  };
 
 private:
   XioConnection::type xio_conn_type;
@@ -56,6 +78,7 @@ private:
   uint64_t scount;
   uint32_t send_ctr;
   int q_high_mark;
+  int q_low_mark;
 
   struct lifecycle {
     // different from Pipe states?
@@ -81,12 +104,91 @@ private:
 
     uint32_t next_out_seq() {
       return out_seq.inc();
-    };
+    }
 
   } state;
 
   /* batching */
   XioInSeq in_seq;
+
+  class CState
+  {
+  public:
+    static const int FLAG_NONE = 0x0000;
+    static const int FLAG_BAD_AUTH = 0x0001;
+    static const int FLAG_MAPPED = 0x0002;
+    static const int FLAG_RESET = 0x0004;
+
+    static const int OP_FLAG_NONE = 0x0000;
+    static const int OP_FLAG_LOCKED = 0x0001;
+    static const int OP_FLAG_LRU = 0x0002;
+
+    uint64_t features;
+    Messenger::Policy policy;
+
+    CryptoKey session_key;
+    ceph::shared_ptr<AuthSessionHandler> session_security;
+    AuthAuthorizer *authorizer;
+    XioConnection *xcon;
+    uint32_t protocol_version;
+
+    atomic_t session_state;
+    atomic_t startup_state;
+
+    uint32_t reconnects;
+    uint32_t connect_seq, global_seq, peer_global_seq;
+    uint32_t in_seq, out_seq_acked; // atomic<uint64_t>, got receipt
+    atomic_t out_seq; // atomic<uint32_t>
+
+    uint32_t flags;
+
+    CState(XioConnection* _xcon)
+      : xcon(_xcon),
+	protocol_version(0),
+	session_state(INIT),
+	startup_state(IDLE),
+	in_seq(0),
+	out_seq(0),
+	flags(FLAG_NONE) {}
+
+    uint64_t get_session_state() {
+      return session_state.read();
+    }
+
+    uint64_t get_startup_state() {
+      return startup_state.read();
+    }
+
+    void set_in_seq(uint32_t seq) {
+      in_seq = seq;
+    }
+
+    uint32_t next_out_seq() {
+      return out_seq.inc();
+    };
+
+    // state machine
+    int init_state();
+    int next_state(Message* m);
+#if 0 // future (session startup)
+    int msg_connect(MConnect *m);
+    int msg_connect_reply(MConnectReply *m);
+    int msg_connect_reply(MConnectAuthReply *m);
+    int msg_connect_auth(MConnectAuth *m);
+    int msg_connect_auth_reply(MConnectAuthReply *m);
+#endif
+    int state_up_ready(uint32_t flags);
+    int state_flow_controlled(uint32_t flags);
+    int state_discon();
+    int state_fail(Message* m, uint32_t flags);
+
+  } cstate; /* CState */
+
+  // message submission queue
+  struct SendQ {
+    Message::Queue mqueue; // deferred
+    XioSubmit::Queue requeue;
+  } outgoing;
 
   // conns_entity_map comparison functor
   struct EntityComp
@@ -118,12 +220,14 @@ private:
 
   friend class XioPortal;
   friend class XioMessenger;
-  friend class XioCompletionHook;
+  friend class XioDispatchHook;
+  friend class XioMarkDownHook;
   friend class XioMsg;
 
   int on_disconnect_event() {
     connected.set(false);
     pthread_spin_lock(&sp);
+    discard_input_queue(CState::OP_FLAG_LOCKED);
     if (!conn)
       this->put();
     pthread_spin_unlock(&sp);
@@ -144,6 +248,10 @@ private:
     return q_high_mark;
   }
 
+  int xio_qdepth_low_mark() {
+    return q_low_mark;
+  }
+
 public:
   XioConnection(XioMessenger *m, XioConnection::type _type,
 		const entity_inst_t& peer);
@@ -157,8 +265,10 @@ public:
 
   int send_message(Message *m);
   void send_keepalive() {}
-  void mark_down() {}
-  void mark_disposable() {}
+  virtual void mark_down();
+  int _mark_down(uint32_t flags);
+  virtual void mark_disposable();
+  int _mark_disposable(uint32_t flags);
 
   const entity_inst_t& get_peer() const { return peer; }
 
@@ -196,16 +306,15 @@ public:
 
   int on_msg_req(struct xio_session *session, struct xio_msg *req,
 		 int more_in_batch, void *cb_user_context);
-
   int on_ow_msg_send_complete(struct xio_session *session, struct xio_msg *msg,
 			      void *conn_user_context);
-
   int on_msg_error(struct xio_session *session, enum xio_status error,
 		   struct xio_msg  *msg, void *conn_user_context);
-
   void msg_send_fail(XioMsg *xmsg, int code);
-
   void msg_release_fail(struct xio_msg *msg, int code);
+  int flush_input_queue(uint32_t flags);
+  int discard_input_queue(uint32_t flags);
+  int adjust_clru(uint32_t flags);
 };
 
 typedef boost::intrusive_ptr<XioConnection> XioConnectionRef;

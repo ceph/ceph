@@ -89,7 +89,8 @@ XioConnection::XioConnection(XioMessenger *m, XioConnection::type _type,
   magic(m->get_magic()),
   scount(0),
   send_ctr(0),
-  in_seq()
+  in_seq(),
+  cstate(this)
 {
   pthread_spin_init(&sp, PTHREAD_PROCESS_PRIVATE);
   if (xio_conn_type == XioConnection::ACTIVE)
@@ -185,16 +186,16 @@ int XioConnection::passive_setup()
 
 #define uint_to_timeval(tv, s) ((tv).tv_sec = (s), (tv).tv_usec = 0)
 
-static inline XioCompletionHook* pool_alloc_xio_completion_hook(
+static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
   XioConnection *xcon, Message *m, XioInSeq& msg_seq)
 {
   struct xio_mempool_obj mp_mem;
   int e = xpool_alloc(xio_msgr_noreg_mpool,
-		      sizeof(XioCompletionHook), &mp_mem);
+		      sizeof(XioDispatchHook), &mp_mem);
   if (!!e)
     return NULL;
-  XioCompletionHook *xhook = (XioCompletionHook*) mp_mem.addr;
-  new (xhook) XioCompletionHook(xcon, m, msg_seq, mp_mem);
+  XioDispatchHook *xhook = (XioDispatchHook*) mp_mem.addr;
+  new (xhook) XioDispatchHook(xcon, m, msg_seq, mp_mem);
   return xhook;
 }
 
@@ -237,8 +238,8 @@ int XioConnection::on_msg_req(struct xio_session *session,
   }
 
   XioMessenger *msgr = static_cast<XioMessenger*>(get_messenger());
-  XioCompletionHook *m_hook =
-    pool_alloc_xio_completion_hook(this, NULL /* msg */, in_seq);
+  XioDispatchHook *m_hook =
+    pool_alloc_xio_dispatch_hook(this, NULL /* msg */, in_seq);
   XioInSeq& msg_seq = m_hook->msg_seq;
   in_seq.clear();
 
@@ -448,6 +449,16 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     " seq: " << xmsg->m->get_seq() << dendl;
 
   --send_ctr; /* atomic, because portal thread */
+
+  /* unblock flow-controlled connections, avoid oscillation */
+  if (unlikely(cstate.session_state.read() ==
+	       XioConnection::FLOW_CONTROLLED)) {
+    if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
+	(1 /* XXX memory <= memory low-water mark */))  {
+      cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
+    }
+  }
+
   xmsg->put();
 
   return 0;
@@ -467,6 +478,98 @@ void XioConnection::msg_release_fail(struct xio_msg *msg, int code)
     " (" << xio_strerror(code) << ")" << dendl;
 } /* msg_release_fail */
 
+int XioConnection::flush_input_queue(uint32_t flags) {
+  XioMessenger* msgr = static_cast<XioMessenger*>(get_messenger());
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_lock(&sp);
+
+  // send deferred 1 (direct backpresssure)
+  if (outgoing.requeue.size() > 0)
+    portal->requeue(this, outgoing.requeue);
+
+  // send deferred 2 (sent while deferred)
+  int ix, q_size = outgoing.mqueue.size();
+  for (ix = 0; ix < q_size; ++ix) {
+    Message::Queue::iterator q_iter = outgoing.mqueue.begin();
+    Message* m = &(*q_iter);
+    outgoing.mqueue.erase(q_iter);
+    msgr->_send_message_impl(m, this);
+  }
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&sp);
+  return 0;
+}
+
+int XioConnection::discard_input_queue(uint32_t flags)
+{
+  Message::Queue disc_q;
+  XioSubmit::Queue deferred_q;
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_lock(&sp);
+
+  /* the two send queues contain different objects:
+   * - anything on the mqueue is a Message
+   * - anything on the requeue is an XioMsg
+   */
+  Message::Queue::const_iterator i1 = disc_q.end();
+  disc_q.splice(i1, outgoing.mqueue);
+
+  XioSubmit::Queue::const_iterator i2 = deferred_q.end();
+  deferred_q.splice(i2, outgoing.requeue);
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&sp);
+
+  // mqueue
+  int ix, q_size =  disc_q.size();
+  for (ix = 0; ix < q_size; ++ix) {
+    Message::Queue::iterator q_iter = disc_q.begin();
+    Message* m = &(*q_iter);
+    disc_q.erase(q_iter);
+    m->put();
+  }
+
+  // requeue
+  q_size =  deferred_q.size();
+  for (ix = 0; ix < q_size; ++ix) {
+    XioSubmit::Queue::iterator q_iter = deferred_q.begin();
+    XioSubmit* xs = &(*q_iter);
+    assert(xs->type == XioSubmit::OUTGOING_MSG);
+    XioMsg* xmsg = static_cast<XioMsg*>(xs);
+    deferred_q.erase(q_iter);
+    // release once for each chained xio_msg
+    for (ix = 0; ix < int(xmsg->hdr.msg_cnt); ++ix)
+      xmsg->put();
+  }
+
+  return 0;
+}
+
+int XioConnection::adjust_clru(uint32_t flags)
+{
+  if (flags & CState::OP_FLAG_LOCKED)
+    pthread_spin_unlock(&sp);
+
+  XioMessenger* msgr = static_cast<XioMessenger*>(get_messenger());
+  msgr->conns_sp.lock();
+  pthread_spin_lock(&sp);
+
+  if (cstate.flags & CState::FLAG_MAPPED) {
+    XioConnection::ConnList::iterator citer =
+      XioConnection::ConnList::s_iterator_to(*this);
+    msgr->conns_list.erase(citer);
+    msgr->conns_list.push_front(*this); // LRU
+  }
+
+  msgr->conns_sp.unlock();
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&sp);
+
+  return 0;
+}
+
 int XioConnection::on_msg_error(struct xio_session *session,
 				enum xio_status error,
 				struct xio_msg  *msg,
@@ -479,6 +582,116 @@ int XioConnection::on_msg_error(struct xio_session *session,
   --send_ctr; /* atomic, because portal thread */
   return 0;
 } /* on_msg_error */
+
+void XioConnection::mark_down()
+{
+  _mark_down(XioConnection::CState::OP_FLAG_NONE);
+}
+
+int XioConnection::_mark_down(uint32_t flags)
+{
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_lock(&sp);
+
+  // per interface comment, we only stage a remote reset if the
+  // current policy required it
+  if (cstate.policy.resetcheck)
+    cstate.flags |= CState::FLAG_RESET;
+
+  // Accelio disconnect
+  xio_disconnect(conn);
+
+  /* XXX this will almost certainly be called again from
+   * on_disconnect_event() */
+  discard_input_queue(flags|CState::OP_FLAG_LOCKED);
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&sp);
+
+  return 0;
+}
+
+void XioConnection::mark_disposable()
+{
+  _mark_disposable(XioConnection::CState::OP_FLAG_NONE);
+}
+
+int XioConnection::_mark_disposable(uint32_t flags)
+{
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_lock(&sp);
+
+  cstate.policy.lossy = true;
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&sp);
+
+  return 0;
+}
+
+int XioConnection::CState::state_up_ready(uint32_t flags)
+{
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_lock(&xcon->sp);
+
+  xcon->flush_input_queue(flags|CState::OP_FLAG_LOCKED);
+
+  session_state.set(UP);
+  startup_state.set(READY);
+
+  if (! (flags & CState::OP_FLAG_LOCKED))
+    pthread_spin_unlock(&xcon->sp);
+
+  return (0);
+}
+
+int XioConnection::CState::state_discon()
+{
+  session_state.set(DISCONNECTED);
+  startup_state.set(IDLE);
+
+  return 0;
+}
+
+int XioConnection::CState::state_flow_controlled(uint32_t flags) {
+  dout(11) << __func__ << " ENTER " << dendl;
+
+  if (! (flags & OP_FLAG_LOCKED))
+    pthread_spin_lock(&xcon->sp);
+
+  session_state.set(FLOW_CONTROLLED);
+
+  if (! (flags & OP_FLAG_LOCKED))
+    pthread_spin_unlock(&xcon->sp);
+
+  return (0);
+}
+
+int XioConnection::CState::state_fail(Message* m, uint32_t flags)
+{
+  if (! (flags & OP_FLAG_LOCKED))
+    pthread_spin_lock(&xcon->sp);
+
+  // advance to state FAIL, drop queued, msgs, adjust LRU
+  session_state.set(DISCONNECTED);
+  startup_state.set(FAIL);
+
+  xcon->discard_input_queue(flags|OP_FLAG_LOCKED);
+  xcon->adjust_clru(flags|OP_FLAG_LOCKED|OP_FLAG_LRU);
+
+  // Accelio disconnect
+  xio_disconnect(xcon->conn);
+
+  if (! (flags & OP_FLAG_LOCKED))
+    pthread_spin_unlock(&xcon->sp);
+
+  // notify ULP
+  XioMessenger* msgr = static_cast<XioMessenger*>(xcon->get_messenger());
+  msgr->ms_deliver_handle_reset(xcon);
+  m->put();
+
+  return 0;
+}
 
 
 int XioLoopbackConnection::send_message(Message *m)

@@ -18,7 +18,7 @@
 #include "XioMsg.h"
 
 
-int XioCompletionHook::release_msgs()
+int XioDispatchHook::release_msgs()
 {
   XioRsp *xrsp;
   int r = msg_seq.size();
