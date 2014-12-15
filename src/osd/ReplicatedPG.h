@@ -430,8 +430,10 @@ public:
     const SnapSet *snapset; // Old snapset
 
     ObjectState new_obs;  // resulting ObjectState
-    SnapSet new_snapset;  // resulting SnapSet (in case of a write)
-    //pg_stat_t new_stats;  // resulting Stats
+  private:
+    boost::scoped_ptr<SnapSet> _new_snapset;  ///< resulting SnapSet (in case of a write)
+    bool _force_write_snapset; ///< should write snapset (even if not new)
+  public:
     object_stat_sum_t delta_stats;
 
     bool modify;          // (force) modification (even if op_t is empty)
@@ -540,6 +542,7 @@ public:
 	      ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
       new_obs(_obs->oi, _obs->exists),
+      _force_write_snapset(false),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
       ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
@@ -555,17 +558,57 @@ public:
       on_finish(NULL),
       release_snapset_obc(false) {
       if (_ssc) {
-	new_snapset = _ssc->snapset;
 	snapset = &_ssc->snapset;
       }
     }
     void reset_obs(ObjectContextRef obc) {
       new_obs = ObjectState(obc->obs.oi, obc->obs.exists);
       if (obc->ssc) {
-	new_snapset = obc->ssc->snapset;
 	snapset = &obc->ssc->snapset;
       }
+      _new_snapset.reset(NULL);
+      _force_write_snapset = false;
     }
+    /// return latest (unmodified or modified) SnapSet
+    const SnapSet *get_cur_snapset() const {
+      if (_new_snapset)
+	return _new_snapset.get();
+      return snapset;
+    }
+    /// mark SnapSet dirty, allocate/copy as needed, return ptr
+    SnapSet *modify_snapset() {
+      if (!_new_snapset) {
+	_new_snapset.reset(new SnapSet);
+	*_new_snapset = *snapset;
+      }
+      return _new_snapset.get();
+    }
+    /// force a SnapSet write, even if it is unchanged
+    void force_write_snapset() {
+      _force_write_snapset = true;
+    }
+    /// true if we should write the SnapSet (modified or forced write)
+    bool should_write_snapset() const {
+      return _new_snapset || _force_write_snapset;
+    }
+    /// ensure head_exists = true
+    void set_new_snapset_head_exists(bool e) {
+      if (get_cur_snapset()->head_exists != e)
+	modify_snapset()->head_exists = e;
+    }
+    /// ensure snapc and exists are set as needed
+    void set_new_snapset_snapc_exists(const SnapContext& snapc, bool exists) {
+      const SnapSet *c = get_cur_snapset();
+      if (snapc.seq != c->seq ||
+	  snapc.snaps != c->snaps ||
+	  exists != c->head_exists) {
+	SnapSet *n = modify_snapset();
+	n->seq = snapc.seq;
+	n->snaps = snapc.snaps;
+	n->head_exists = exists;
+      }
+    }
+
     ~OpContext() {
       assert(!op_t);
       assert(lock_to_release == NONE);
