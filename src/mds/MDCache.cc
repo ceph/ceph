@@ -1567,21 +1567,31 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     // multiversion inode.
     CInode *in = dnl->get_inode();
 
-    if (follows == CEPH_NOSNAP)
+    if (in->get_projected_parent_dn() != dn) {
+      assert(follows == CEPH_NOSNAP);
+      snapid_t dir_follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
+
+      if (dir_follows+1 > dn->first) {
+	snapid_t oldfirst = dn->first;
+	dn->first = dir_follows+1;
+	CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+						    oldfirst, dir_follows);
+	olddn->pre_dirty();
+	dout(10) << " olddn " << *olddn << dendl;
+	metablob->add_remote_dentry(olddn, true);
+	mut->add_cow_dentry(olddn);
+	// FIXME: adjust link count here?  hmm.
+
+	if (dir_follows+1 > in->first)
+	  in->cow_old_inode(dir_follows, false);
+      }
+
+      if (in->snaprealm)
+	follows = in->snaprealm->get_newest_seq();
+      else
+	follows = dir_follows;
+    } else if (follows == CEPH_NOSNAP) {
       follows = in->find_snaprealm()->get_newest_seq();
-
-    if (in->get_projected_parent_dn() != dn &&
-	follows+1 > dn->first) {
-      snapid_t oldfirst = dn->first;
-      dn->first = follows+1;
-      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
-						  oldfirst, follows);
-      olddn->pre_dirty();
-      dout(10) << " olddn " << *olddn << dendl;
-      metablob->add_remote_dentry(olddn, true);
-      mut->add_cow_dentry(olddn);
-
-      // FIXME: adjust link count here?  hmm.
     }
 
     // already cloned?
