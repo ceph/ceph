@@ -220,7 +220,9 @@ class Thrasher:
             # import
             cmd = (prefix + "--op import --file {file}").format(id=imp_osd, file=exp_path)
             proc = imp_remote.run(args=cmd, wait=True, check_status=False)
-            if proc.exitstatus:
+            if proc.exitstatus == 10:
+                self.log("Pool went away before processing an import...ignored");
+            elif proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: import failure with status {ret}".format(ret=proc.exitstatus))
             cmd = "rm -f {file}".format(file=exp_path)
             exp_remote.run(args=cmd)
