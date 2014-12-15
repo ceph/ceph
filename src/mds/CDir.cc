@@ -1586,7 +1586,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // purge stale snaps?
   // only if we have past_parents open!
-  bool purged_any = false;
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
@@ -1627,7 +1626,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       if (p == snaps->end() || *p > last) {
 	dout(10) << " skipping stale dentry on [" << first << "," << last << "]" << dendl;
 	stale = true;
-	purged_any = true;
       }
     }
     
@@ -1786,9 +1784,6 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   }
 
   //cache->mds->logger->inc("newin", num_new_inodes_loaded);
-
-  if (purged_any)
-    log_mark_dirty();
 
   // mark complete, !fetching
   mark_complete();
