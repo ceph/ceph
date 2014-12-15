@@ -1,0 +1,72 @@
+From: Loic Dachary <loic-201408@dachary.org>
+Date: Fri, 10 Oct 2014 10:26:31 +0200
+Subject: [PATCH] ceph-disk: use update_partition in prepare_dev and
+ main_prepare
+
+In the case of prepare_dev the partx alternative was missing and is not
+added because update_partition does it.
+
+http://tracker.ceph.com/issues/9721 Fixes: #9721
+
+Signed-off-by: Loic Dachary <loic-201408@dachary.org>
+(cherry picked from commit 23e71b1ee816c0ec8bd65891998657c46e364fbe)
+
+Conflicts:
+	src/ceph-disk
+---
+ src/ceph-disk | 35 ++---------------------------------
+ 1 file changed, 2 insertions(+), 33 deletions(-)
+
+diff --git a/src/ceph-disk b/src/ceph-disk
+index fb4400b..0bcfe51 100755
+--- a/src/ceph-disk
++++ b/src/ceph-disk
+@@ -1358,12 +1358,7 @@ def prepare_dev(
+                     data,
+                 ],
+             )
+-            command(
+-                [
+-                    'partprobe',
+-                    data,
+-                    ],
+-                )
++            update_partition('-a', data, 'created')
+             command(
+                 [
+                     # wait for udev event queue to clear
+@@ -1579,33 +1574,7 @@ def main_prepare(args):
+         prepare_lock.release()  # noqa
+ 
+         if stat.S_ISBLK(dmode):
+-            # try to make sure the kernel refreshes the table.  note
+-            # that if this gets ebusy, we are probably racing with
+-            # udev because it already updated it.. ignore failure here.
+-
+-            # On RHEL and CentOS distros, calling partprobe forces a reboot of
+-            # the server. Since we are not resizing partitons so we rely on
+-            # calling partx
+-            if platform_distro().startswith(('centos', 'red')):
+-                LOG.info('calling partx on prepared device %s', args.data)
+-                LOG.info('re-reading known partitions will display errors')
+-
+-                command(
+-                    [
+-                        'partx',
+-                        '-a',
+-                        args.data,
+-                        ],
+-                    )
+-
+-            else:
+-                LOG.debug('Calling partprobe on prepared device %s', args.data)
+-                command(
+-                    [
+-                        'partprobe',
+-                        args.data,
+-                        ],
+-                    )
++            update_partition('-a', args.data, 'prepared')
+ 
+     except Error as e:
+         if journal_dm_keypath:

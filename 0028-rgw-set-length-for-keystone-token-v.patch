@@ -1,0 +1,29 @@
+From: Yehuda Sadeh <yehuda@redhat.com>
+Date: Thu, 9 Oct 2014 10:20:27 -0700
+Subject: [PATCH] rgw: set length for keystone token validation request
+
+Fixes: #7796
+Backport: giany, firefly
+Need to set content length to this request, as the server might not
+handle a chunked request (even though we don't send anything).
+
+Tested-by: Mark Kirkwood <mark.kirkwood@catalyst.net.nz>
+Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+(cherry picked from commit 3dd4ccad7fe97fc16a3ee4130549b48600bc485c)
+---
+ src/rgw/rgw_swift.cc | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/rgw/rgw_swift.cc b/src/rgw/rgw_swift.cc
+index d9654a7..2445e17 100644
+--- a/src/rgw/rgw_swift.cc
++++ b/src/rgw/rgw_swift.cc
+@@ -505,6 +505,8 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
+ 
+     validate.append_header("X-Auth-Token", admin_token);
+ 
++    validate.set_send_length(0);
++
+     int ret = validate.process(url.c_str());
+     if (ret < 0)
+       return ret;

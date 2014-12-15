@@ -1,0 +1,45 @@
+From: Yehuda Sadeh <yehuda@redhat.com>
+Date: Tue, 19 Aug 2014 13:15:46 -0700
+Subject: [PATCH] rgw: subuser creation fixes
+
+Fixes: #8587
+There were a couple of issues, one when trying to identify whether swift
+user exists, we weren't using the correct swift id. The second problem
+is that we relied on the gen_access flag in the swift case, where it
+doesn't really need to apply.
+
+Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+(cherry picked from commit 1441ffe8103f03c6b2f625f37adbb2e1cfec66bb)
+---
+ src/rgw/rgw_user.cc | 11 +----------
+ 1 file changed, 1 insertion(+), 10 deletions(-)
+
+diff --git a/src/rgw/rgw_user.cc b/src/rgw/rgw_user.cc
+index 23575d8..55d1d6a 100644
+--- a/src/rgw/rgw_user.cc
++++ b/src/rgw/rgw_user.cc
+@@ -666,15 +666,6 @@ bool RGWAccessKeyPool::check_existing_key(RGWUserAdminOpState& op_state)
+ 
+   switch (key_type) {
+   case KEY_TYPE_SWIFT:
+-    kiter = swift_keys->find(kid);
+-
+-    existing_key = (kiter != swift_keys->end());
+-    if (existing_key)
+-      break;
+-
+-    if (swift_kid.empty())
+-      return false;
+-
+     kiter = swift_keys->find(swift_kid);
+ 
+     existing_key = (kiter != swift_keys->end());
+@@ -845,7 +836,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
+     } while (!rgw_get_user_info_by_access_key(store, id, duplicate_check));
+   }
+ 
+-  if (key_type == KEY_TYPE_SWIFT && gen_access) {
++  if (key_type == KEY_TYPE_SWIFT) {
+     id = op_state.build_default_swift_kid();
+     if (id.empty()) {
+       set_err_msg(err_msg, "empty swift access key");

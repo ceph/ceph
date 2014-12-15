@@ -1,4 +1,32 @@
 -------------------------------------------------------------------
+Mon Dec 15 09:58:29 UTC 2014 - tbehrens@suse.com
+
+- Add 0024-rgw-subuser-creation-fixes.patch: fix bnc#905066
+  (backport of upstream http://tracker.ceph.com/issues/8587), make
+  swift subuser creation actually work
+- Add 0025-ReplicatedPG-cancel-cb-on-blacklist.patch: (backport of
+  upstream http://tracker.ceph.com/issues/8315) - fix osd crash due to
+  race
+- Add 0026-ceph-disk-run-partprobe-after-zap.patch: (backport of upstream
+  http://tracker.ceph.com/issues/9665) - workaround udev probs,
+  resulting in symlinks not being created in /dev/disk/by-partuuid
+- Add 0027-ceph-disk-use-update_partition-in-p.patch: (backport of
+  upstream http://tracker.ceph.com/issues/9721) - fix a race with udev
+  for partition creation
+- Add 0028-rgw-set-length-for-keystone-token-v.patch: (backport of upstream
+  http://tracker.ceph.com/issues/7796) - set correct content-length on
+  keystone token validation request
+- Add 0029-client-cast-m-get_client_tid-to-com.patch: (backport of upstream
+  http://tracker.ceph.com/issues/9869) - fix mishandling of
+  cap_flush_ack messages
+- Add 0030-Add-annotation-to-all-assembly-file.patch: (backport of upstream
+  http://tracker.ceph.com/issues/10114) - add annotation to all
+  assembly files to turn off stack-execute bit
+- Add 0031-ceph-disk-dmcrypt-file-permissions.patch: (backport of upstream
+  http://tracker.ceph.com/issues/9785) - key file dir for dmcrypt must
+  be 700 and the file 600
+
+-------------------------------------------------------------------
 Wed Dec 10 11:15:33 UTC 2014 - tbehrens@suse.com
 
 - Add 0023-Unconditionally-chown-rados-log-fil.patch

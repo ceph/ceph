@@ -120,6 +120,14 @@ Patch0020:      0020-Always-provide-summary-for-non-heal.patch
 Patch0021:      0021-Fix-spec-violating-extraneous-unloc.patch
 Patch0022:      0022-Fix-overflowing-journel-partitions.patch
 Patch0023:      0023-Unconditionally-chown-rados-log-fil.patch
+Patch0024:      0024-rgw-subuser-creation-fixes.patch
+Patch0025:      0025-ReplicatedPG-cancel-cb-on-blacklist.patch
+Patch0026:      0026-ceph-disk-run-partprobe-after-zap.patch
+Patch0027:      0027-ceph-disk-use-update_partition-in-p.patch
+Patch0028:      0028-rgw-set-length-for-keystone-token-v.patch
+Patch0029:      0029-client-cast-m-get_client_tid-to-com.patch
+Patch0030:      0030-Add-annotation-to-all-assembly-file.patch
+Patch0031:      0031-ceph-disk-dmcrypt-file-permissions.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -362,6 +370,14 @@ This package contains Ceph benchmarks and test tools.
 %patch0021 -p1
 %patch0022 -p1
 %patch0023 -p1
+%patch0024 -p1
+%patch0025 -p1
+%patch0026 -p1
+%patch0027 -p1
+%patch0028 -p1
+%patch0029 -p1
+%patch0030 -p1
+%patch0031 -p1
 
 %build
 
