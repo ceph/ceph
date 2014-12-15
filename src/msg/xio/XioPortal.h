@@ -77,7 +77,18 @@ private:
 	pthread_spin_unlock(&lane->sp);
       }
 
-    void deq(XioSubmit::Queue &send_q)
+    void enq(XioConnection *xcon, XioSubmit::Queue& requeue_q)
+      {
+	int size = requeue_q.size();
+	Lane* lane = get_lane(xcon);
+	pthread_spin_lock(&lane->sp);
+	XioSubmit::Queue::const_iterator i1 = lane->q.end();
+	lane->q.splice(i1, requeue_q);
+	lane->size += size;
+	pthread_spin_unlock(&lane->sp);
+      }
+
+    void deq(XioSubmit::Queue& send_q)
       {
 	int ix;
 	Lane* lane;
@@ -178,6 +189,38 @@ public:
       };
     }
 
+  void requeue(XioConnection* xcon, XioSubmit::Queue& send_q) {
+    submit_q.enq(xcon, send_q);
+  }
+
+  void requeue_all_xcon(XioMsg* xmsg,
+			XioConnection* xcon,
+			XioSubmit::Queue::iterator& q_iter,
+			XioSubmit::Queue& send_q) {
+    // XXX gather all already-dequeued outgoing messages for xcon
+    // and push them in FIFO order to front of the input queue,
+    // having first marked the connection as flow-controlled
+    XioSubmit::Queue requeue_q;
+    XioSubmit *xs;
+    requeue_q.push_back(*xmsg);
+    ++q_iter;
+    while (q_iter != send_q.end()) {
+      xs = &(*q_iter);
+      // skip retires and anything for other connections
+      if ((xs->type != XioSubmit::OUTGOING_MSG) ||
+	  (xs->xcon != xcon))
+	continue;
+      xmsg = static_cast<XioMsg*>(xs);
+      q_iter = send_q.erase(q_iter);
+      requeue_q.push_back(*xmsg);
+    }
+    pthread_spin_lock(&xcon->sp);
+    XioSubmit::Queue::const_iterator i1 = xcon->outgoing.requeue.begin();
+    xcon->outgoing.requeue.splice(i1, requeue_q);
+    xcon->cstate.state_flow_controlled(XioConnection::CState::OP_FLAG_LOCKED);
+    pthread_spin_unlock(&xcon->sp);
+  }
+
   void *entry()
     {
       int size, code = 0;
@@ -191,55 +234,70 @@ public:
 
       do {
 	submit_q.deq(send_q);
-	size = send_q.size();
 
 	/* shutdown() barrier */
 	pthread_spin_lock(&sp);
 
+      restart:
+	size = send_q.size();
+
 	if (_shutdown) {
+	  // XXX XioMsg queues for flow-controlled connections may require
+	  // cleanup
 	  drained = true;
 	}
 
 	if (size > 0) {
-          q_iter = send_q.begin();
-          while (q_iter != send_q.end()) {
-            xs = &(*q_iter);
-            xcon = xs->xcon;
-            xmsg = static_cast<XioMsg*>(xs);
+	  q_iter = send_q.begin();
+	  while (q_iter != send_q.end()) {
+	    xs = &(*q_iter);
+	    xcon = xs->xcon;
+	    xmsg = static_cast<XioMsg*>(xs);
 
-            /* guard Accelio send queue */
-            xio_qdepth_high = xcon->xio_qdepth_high_mark();
-            if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) > xio_qdepth_high)) {
-              ++q_iter;
-              continue;
-            }
+	    /* guard Accelio send queue */
+	    xio_qdepth_high = xcon->xio_qdepth_high_mark();
+	    if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
+			 xio_qdepth_high)) {
+	      requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+	      goto restart;
+	    }
 
-            q_iter = send_q.erase(q_iter);
+	    q_iter = send_q.erase(q_iter);
 
-            switch (xs->type) {
-            case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
+	    switch (xs->type) {
+	    case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
 	      if (unlikely(!xs->xcon->conn))
-                code = ENOTCONN;
+		code = ENOTCONN;
 	      else {
-                msg = &xmsg->req_0.msg;
-                code = xio_send_msg(xcon->conn, msg);
-                /* header trace moved here to capture xio serial# */
-                if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
-                  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
-                  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
-                }
+		msg = &xmsg->req_0.msg;
+		code = xio_send_msg(xcon->conn, msg);
+		/* header trace moved here to capture xio serial# */
+		if (ldlog_p1(msgr->cct, ceph_subsys_xio, 11)) {
+		  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
+		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
+		}
 	      }
 	      if (unlikely(code)) {
-                xs->xcon->msg_send_fail(xmsg, code);
+		switch (code) {
+		case XIO_E_TX_QUEUE_OVERFLOW:
+		{
+		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  goto restart;
+		}
+		  break;
+		default:
+		  xs->xcon->msg_send_fail(xmsg, code);
+		  break;
+		};
 	      } else {
-                xs->xcon->send.set(msg->timestamp); // need atomic?
-                xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
-              }
-              break;
-            default:
-              /* INCOMING_MSG_RELEASE */
-              release_xio_rsp(static_cast<XioRsp*>(xs));
-              break;
+		xs->xcon->send.set(msg->timestamp); // need atomic?
+		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
+	      }
+	      break;
+	    default:
+	      /* INCOMING_MSG_RELEASE */
+	      release_xio_rsp(static_cast<XioRsp*>(xs));
+	      break;
 	    }
 	  }
 	}
