@@ -37,6 +37,21 @@ void SnapServer::reset_state()
   last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */
   snaps.clear();
   need_to_purge.clear();
+
+  // find any removed snapshot in data pools
+  snapid_t first_free = 0;
+  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+  for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
+       p != mds->mdsmap->get_data_pools().end();
+       ++p) {
+    const pg_pool_t *pi = osdmap->get_pg_pool(*p);
+    if (!pi->removed_snaps.empty() &&
+        pi->removed_snaps.range_end() > first_free)
+      first_free = pi->removed_snaps.range_end();
+  }
+  mds->objecter->put_osdmap_read();
+  if (first_free > last_snap)
+    last_snap = first_free;
 }
 
 
