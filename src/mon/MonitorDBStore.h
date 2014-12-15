@@ -304,6 +304,24 @@ class MonitorDBStore
       : store(s), t(t), oncommit(f)
     {}
     void finish(int r) {
+      /* The store serializes writes.  Each transaction is handled
+       * sequentially by the io_work Finisher.  If a transaction takes longer
+       * to apply its state to permanent storage, then no other transaction
+       * will be handled meanwhile.
+       *
+       * We will now randomly inject random delays.  We can safely sleep prior
+       * to applying the transaction as it won't break the model.
+       */
+      double delay_prob = g_conf->mon_inject_transaction_delay_probability;
+      if (delay_prob && (rand() % 10000 < delay_prob * 10000.0)) {
+        utime_t delay;
+        double delay_max = g_conf->mon_inject_transaction_delay_max;
+        delay.set_from_double(delay_max * (double)(rand() % 10000) / 10000.0);
+        lsubdout(g_ceph_context, mon, 1)
+          << "apply_transaction will be delayed for " << delay
+          << " seconds" << dendl;
+        delay.sleep();
+      }
       int ret = store->apply_transaction(t);
       oncommit->complete(ret);
     }
