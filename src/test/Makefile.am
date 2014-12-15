@@ -635,6 +635,10 @@ unittest_readahead_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_readahead_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_readahead
 
+unittest_tableformatter_SOURCES = test/common/test_tableformatter.cc
+unittest_tableformatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_tableformatter_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_tableformatter
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
