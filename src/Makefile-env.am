@@ -177,6 +177,13 @@ if WITH_TCMALLOC
 LIBPERFGLUE += -ltcmalloc
 endif # WITH_TCMALLOC
 
+if WITH_JEMALLOC
+LIBMON += -ljemalloc
+LIBOSD += -ljemalloc
+LIBMDS += -ljemalloc
+LIBRGW += -ljemalloc
+endif # WITH_JEMALLOC
+
 if ENABLE_COVERAGE
 EXTRALIBS += -lgcov
 endif # ENABLE_COVERAGE
