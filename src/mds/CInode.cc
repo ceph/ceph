@@ -371,7 +371,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
   } else {
     new_srnode = new sr_t();
     new_srnode->created = snapid;
-    new_srnode->current_parent_since = snapid;
+    new_srnode->current_parent_since = get_oldest_snap();
   }
   dout(10) << "project_snaprealm " << new_srnode << dendl;
   projected_nodes.back()->snapnode = new_srnode;
