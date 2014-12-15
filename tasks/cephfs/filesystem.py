@@ -59,13 +59,15 @@ class Filesystem(object):
 
         return list(result)
 
-    def get_config(self, key):
+    def get_config(self, key, service_type=None):
         """
-        Use the mon instead of the MDS asok, so that MDS doesn't have to be running
-        for us to query config.
+        Get config from mon by default, or a specific service if caller asks for it
         """
-        service_name, service_id = misc.get_first_mon(self._ctx, self._config).split(".")
-        return self.json_asok(['config', 'get', key], service_name, service_id)[key]
+        if service_type is None:
+            service_type = 'mon'
+
+        service_id = sorted(misc.all_roles_of_type(self._ctx.cluster, service_type))[0]
+        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
 
     def set_ceph_conf(self, subsys, key, value):
         if subsys not in self._ctx.ceph.conf:
