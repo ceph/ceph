@@ -908,9 +908,14 @@ void read_test_data(librbd::Image& image, const char *expected, off_t off, size_
   ceph::bufferlist bl;
   read = image.read(off + total_read, len, bl);
   ASSERT_TRUE(read >= 0);
+  std::string bl_str(bl.c_str(), read);
+
   printf("read: %u\n", (unsigned int) read);
-  printf("read: %s\nexpected: %s\n", bl.c_str(), expected);
-  ASSERT_EQ(0, memcmp(bl.c_str(), expected, expected_len));
+  int result = memcmp(bl_str.c_str(), expected, expected_len);
+  if (result != 0) {
+    printf("read: %s\nexpected: %s\n", bl_str.c_str(), expected);
+    ASSERT_EQ(0, result);
+  }
   *passed = true;
 }
 
