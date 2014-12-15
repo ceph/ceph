@@ -403,6 +403,30 @@ AS_IF([test "x$with_tcmalloc" != xno],
 		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
 AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
+# jemalloc?
+AC_ARG_WITH([jemalloc],
+	    [AS_HELP_STRING([--with-jemalloc], [enable jemalloc for memory allocations])],
+	    [],
+	    [with_jemalloc=no])
+JEMALLOC=
+AS_IF([test "x$with_jemalloc" = xyes],
+	    [AC_CHECK_LIB([jemalloc], [malloc],
+	     [AC_SUBST([LIBJEMALLOC], ["-ljemalloc"])
+	       AC_DEFINE([HAVE_LIBJEMALLOC], [1],
+                         [Define if you have jemalloc])
+	       HAVE_LIBJEMALLOC=1
+	     ],
+	    [AC_MSG_FAILURE(
+		  [no jemalloc found (do not use --with-jemalloc)])])])
+AM_CONDITIONAL(WITH_JEMALLOC, [test "$HAVE_LIBJEMALLOC" = "1"])
+
+# error out if --with-jemalloc and ! --without-tcmalloc
+if test "x$with_jemalloc" = "xyes"; then
+	if test "x$with_tcmalloc" != "xno"; then
+		AC_MSG_FAILURE([--with-jemalloc called without --without-tcmalloc])
+	fi
+fi
+
 #set pg ref debugging?
 AC_ARG_ENABLE([pgrefdebugging],
 	    [AS_HELP_STRING([--enable-pgrefdebugging], [enable pg ref debugging])],
@@ -595,6 +619,14 @@ AS_IF([test "x$with_librocksdb_static" = "xyes"],
             [AC_DEFINE([HAVE_LIBROCKSDB], [1], [Defined if you have librocksdb enabled])])
 AM_CONDITIONAL(WITH_SLIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" ])
 AM_CONDITIONAL(WITH_LIBROCKSDB, [ test "x$with_librocksdb_static" = "xyes" -o "x$with_librocksdb" = "xyes" ])
+
+# error out if --with-jemalloc and --with-librocksdb_static as rocksdb uses tcmalloc
+if test "x$with_jemalloc" = "xyes"; then
+	if test "x$with_librocksdb_static" != "xno"; then
+		AC_MSG_FAILURE([--with-jemalloc called with --with-librocksdb_static, turn off
+			        --with-librocksdb-static or --with-jemalloc])
+	fi
+fi
 
 # use system libs3?
 AC_ARG_WITH([system-libs3],
