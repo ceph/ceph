@@ -7982,6 +7982,7 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
+  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -8000,15 +8001,6 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
-  if (m->hobject_incorrect_pool) {
-    for (vector<pg_log_entry_t>::iterator i = log.begin();
-      i != log.end();
-      ++i) {
-      if (!i->soid.is_max() && i->soid.pool == -1)
-	i->soid.pool = get_info().pgid.pool();
-    }
-    rm->opt.set_pool_override(get_info().pgid.pool());
-  }
   rm->opt.set_replica();
 
   bool update_snaps = false;
@@ -8032,14 +8024,14 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
   
   op->mark_started();
 
-  rm->localt.append(rm->opt);
-  rm->localt.register_on_commit(
+  rm->opt.append(rm->localt);
+  rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
+  rm->opt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
-  parent->queue_transaction(&(rm->localt), op);
+  parent->queue_transaction(&(rm->opt), op);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
