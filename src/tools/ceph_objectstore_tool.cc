@@ -1617,7 +1617,8 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   }
   if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
     cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
-    return 1;
+    // Special exit code for this error, used by test code
+    return 10;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -2944,5 +2945,5 @@ out:
     return 1;
   }
 
-  return (ret != 0);
+  return ret;
 }
