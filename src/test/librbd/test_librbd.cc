@@ -2044,6 +2044,57 @@ TEST_F(TestLibRBD, LargeCacheRead)
   rados_ioctx_destroy(ioctx);
 }
 
+TEST_F(TestLibRBD, TestPendingAio)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  int features = RBD_FEATURE_LAYERING;
+  rbd_image_t image;
+  int order = 0;
+
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 4 << 20;
+  ASSERT_EQ(0, create_image_full(ioctx, name.c_str(), size, &order,
+				 false, features));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char test_data[TEST_IO_SIZE];
+  for (size_t i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+
+  size_t num_aios = 256;
+  rbd_completion_t comps[num_aios];
+  for (size_t i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &comps[i]));
+    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    ASSERT_EQ(0, rbd_aio_write(image, offset, TEST_IO_SIZE, test_data,
+                               comps[i]));
+  }
+  for (size_t i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(0, rbd_aio_wait_for_complete(comps[i]));
+    rbd_aio_release(comps[i]);
+  }
+  ASSERT_EQ(0, rbd_invalidate_cache(image));
+
+  for (size_t i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(0, rbd_aio_create_completion(NULL, NULL, &comps[i]));
+    uint64_t offset = rand() % (size - TEST_IO_SIZE);
+    ASSERT_LE(0, rbd_aio_read(image, offset, TEST_IO_SIZE, test_data,
+                              comps[i]));
+  }
+
+  ASSERT_EQ(0, rbd_close(image));
+  for (size_t i = 0; i < num_aios; ++i) {
+    ASSERT_EQ(1, rbd_aio_is_complete(comps[i]));
+    rbd_aio_release(comps[i]);
+  }
+
+  rados_ioctx_destroy(ioctx);
+}
+
 int main(int argc, char **argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

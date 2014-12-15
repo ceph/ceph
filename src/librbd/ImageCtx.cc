@@ -45,6 +45,7 @@ namespace librbd {
       snap_lock("librbd::ImageCtx::snap_lock"),
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
+      aio_lock("librbd::ImageCtx::aio_lock"),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -53,7 +54,8 @@ namespace librbd {
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0)
+      total_bytes_read(0),
+      pending_aio(0)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -583,6 +585,7 @@ namespace librbd {
     } else if (r) {
       lderr(cct) << "flush_cache returned " << r << dendl;
     }
+    wait_for_pending_aio();
     cache_lock.Lock();
     loff_t unclean = object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -652,5 +655,12 @@ namespace librbd {
 		   << ", object overlap " << len
 		   << " from image extents " << objectx << dendl;
     return len;
- }
+  }
+
+  void ImageCtx::wait_for_pending_aio() {
+    Mutex::Locker l(aio_lock);
+    while (pending_aio > 0) {
+      pending_aio_cond.Wait(aio_lock);
+    }
+  }
 }
