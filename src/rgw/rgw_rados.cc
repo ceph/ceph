@@ -871,8 +871,14 @@ int RGWPutObjProcessor::complete(string& etag, time_t *mtime, time_t set_mtime,
                                  const char *if_match, const char * if_nomatch)
 {
   int r = do_complete(etag, mtime, set_mtime, attrs, if_match, if_nomatch);
-  if (r < 0)
+  if (r < 0) {
+    if (r == -ERR_PRECONDITION_FAILED) {
+      if (!objs.empty()) {
+        objs.erase(objs.begin());
+      }
+    }
     return r;
+  }
 
   is_complete = true;
   return 0;
