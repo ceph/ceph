@@ -535,9 +535,9 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #if defined(HAVE_XIO)
   class buffer::xio_msg_buffer : public buffer::raw {
   private:
-    XioCompletionHook* m_hook;
+    XioDispatchHook* m_hook;
   public:
-    xio_msg_buffer(XioCompletionHook* _m_hook, const char *d,
+    xio_msg_buffer(XioDispatchHook* _m_hook, const char *d,
 	unsigned l) :
       raw((char*)d, l), m_hook(_m_hook->get()) {}
 
@@ -576,7 +576,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   }
 
   buffer::raw* buffer::create_msg(
-      unsigned len, char *buf, XioCompletionHook *m_hook) {
+      unsigned len, char *buf, XioDispatchHook* m_hook) {
     XioPool& pool = m_hook->get_pool();
     buffer::raw* bp =
       static_cast<buffer::raw*>(pool.alloc(sizeof(xio_msg_buffer)));

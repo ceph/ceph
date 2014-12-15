@@ -60,7 +60,7 @@
 
 #if defined(HAVE_XIO)
 struct xio_mempool_obj;
-class XioCompletionHook;
+class XioDispatchHook;
 #endif
 
 namespace ceph {
@@ -160,7 +160,7 @@ public:
   static raw* create_unshareable(unsigned len);
 
 #if defined(HAVE_XIO)
-  static raw* create_msg(unsigned len, char *buf, XioCompletionHook *m_hook);
+  static raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
   /*

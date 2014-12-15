@@ -44,6 +44,8 @@ private:
   Mutex sh_mtx;
   Cond sh_cond;
 
+  friend class XioConnection;
+
 public:
   XioMessenger(CephContext *cct, entity_name_t name,
 	       string mname, uint64_t nonce,
@@ -60,6 +62,7 @@ public:
 
   int _send_message(Message *m, const entity_inst_t &dest);
   int _send_message(Message *m, Connection *con);
+  int _send_message_impl(Message *m, XioConnection *xcon);
 
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
@@ -120,20 +123,11 @@ public:
   virtual int send_keepalive(Connection *con)
     { return EINVAL; }
 
-  virtual void mark_down(const entity_addr_t& a)
-    { }
-
-  virtual void mark_down(Connection *con)
-    { }
-
-  virtual void mark_down_on_empty(Connection *con)
-    { }
-
-  virtual void mark_disposable(Connection *con)
-    { }
-
-  virtual void mark_down_all()
-    { }
+  virtual void mark_down(const entity_addr_t& a);
+  virtual void mark_down(Connection *con);
+  virtual void mark_down_all();
+  virtual void mark_down_on_empty(Connection *con);
+  virtual void mark_disposable(Connection *con);
 
   void ds_dispatch(Message *m)
     { dispatch_strategy->ds_dispatch(m); }
