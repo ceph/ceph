@@ -8,7 +8,7 @@ import contextlib
 import logging
 import time
 from unittest import SkipTest
-
+from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 
 from tasks.cephfs.filesystem import Filesystem
@@ -95,7 +95,7 @@ class TestClientLimits(CephFSTestCase):
             self.mount_b.mount()
             self.mount_b.wait_until_mounted()
 
-        self.mount_a.run_shell(["rm", "-rf", "*"])
+        self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
 
     def tearDown(self):
         self.fs.clear_firewall()
