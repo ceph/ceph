@@ -1560,6 +1560,7 @@ public:
   };
   map<int,OSDSession*> osd_sessions;
 
+  bool osdmap_full_flag() const;
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
@@ -1599,7 +1600,7 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
-  bool osdmap_full_flag() const;
+  bool _osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, bool any_change=false);
