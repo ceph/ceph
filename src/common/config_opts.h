@@ -226,6 +226,8 @@ OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
 OPTION(mon_debug_dump_location, OPT_STR, "/var/log/ceph/$cluster-$name.tdump")
+OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE, 10.0)      // seconds
+OPTION(mon_inject_transaction_delay_probability, OPT_DOUBLE, 0) // range [0, 1]
 
 OPTION(mon_sync_provider_kill_at, OPT_INT, 0)  // kill the sync provider at a specific point in the work flow
 OPTION(mon_sync_requester_kill_at, OPT_INT, 0) // kill the sync requester at a specific point in the work flow
@@ -410,6 +412,8 @@ OPTION(mds_snap_min_uid, OPT_U32, 0) // The minimum UID required to create a sna
 OPTION(mds_snap_max_uid, OPT_U32, 65536) // The maximum UID allowed to create a snapshot
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 
+OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
+
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
 
@@ -493,6 +497,7 @@ OPTION(osd_map_max_advance, OPT_INT, 200) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT, 500)
 OPTION(osd_map_message_max, OPT_INT, 100)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT, 100)  // cap on # of inc maps we send to peers, clients
+OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT, 0)
 OPTION(osd_op_threads, OPT_INT, 2)    // 0 == no threading
 OPTION(osd_peering_wq_batch_size, OPT_U64, 20)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64, 4194304)
@@ -728,6 +733,7 @@ OPTION(filestore_btrfs_clone_range, OPT_BOOL, true)
 OPTION(filestore_zfs_snap, OPT_BOOL, false) // zfsonlinux is still unstable
 OPTION(filestore_fsync_flushes_journal_data, OPT_BOOL, false)
 OPTION(filestore_fiemap, OPT_BOOL, false)     // (try to) use fiemap
+OPTION(filestore_fadvise, OPT_BOOL, true)
 
 // (try to) use extsize for alloc hint
 // WARNING: extsize seems to trigger data corruption in xfs -- that is why it is
@@ -756,7 +762,6 @@ OPTION(filestore_dump_file, OPT_STR, "")         // file onto which store transa
 OPTION(filestore_kill_at, OPT_INT, 0)            // inject a failure at the n'th opportunity
 OPTION(filestore_inject_stall, OPT_INT, 0)       // artificially stall for N seconds in op queue thread
 OPTION(filestore_fail_eio, OPT_BOOL, true)       // fail/crash on EIO
-OPTION(filestore_replica_fadvise, OPT_BOOL, true)
 OPTION(filestore_debug_verify_split, OPT_BOOL, false)
 OPTION(journal_dio, OPT_BOOL, true)
 OPTION(journal_aio, OPT_BOOL, true)

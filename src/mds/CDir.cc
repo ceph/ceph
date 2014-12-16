@@ -121,6 +121,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
+  if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -668,6 +669,33 @@ void CDir::remove_null_dentries() {
   assert(num_snap_null == 0);
   assert(num_head_null == 0);
   assert(get_num_any() == items.size());
+}
+
+// remove dirty null dentries for deleted directory. the dirfrag will be
+// deleted soon, so it's safe to not commit dirty dentries.
+void CDir::try_remove_dentries_for_stray()
+{
+  dout(10) << __func__ << dendl;
+  assert(inode->inode.nlink == 0);
+
+  CDir::map_t::iterator p = items.begin();
+  while (p != items.end()) {
+    CDentry *dn = p->second;
+    ++p;
+    if (!dn->get_linkage()->is_null() || dn->is_projected())
+      continue; // shouldn't happen
+    if (dn->is_dirty())
+      dn->mark_clean();
+    // It's OK to remove lease prematurely because we will never link
+    // the dentry to inode again.
+    if (dn->is_any_leases())
+      dn->remove_client_leases(cache->mds->locker);
+    if (dn->get_num_ref() == 0)
+      remove_dentry(dn);
+  }
+
+  if (is_dirty())
+    mark_clean();
 }
 
 void CDir::touch_dentries_bottom() {
@@ -1280,11 +1308,11 @@ void CDir::mark_clean()
 {
   dout(10) << "mark_clean " << *this << " version " << get_version() << dendl;
   if (state_test(STATE_DIRTY)) {
-    state_clear(STATE_DIRTY);
-    put(PIN_DIRTY);
-
     item_dirty.remove_myself();
     item_new.remove_myself();
+
+    state_clear(STATE_DIRTY);
+    put(PIN_DIRTY);
   }
 }
 
@@ -1348,6 +1376,17 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
       add_waiter(WAIT_UNFREEZE, c);
     } else
       dout(7) << "fetch not authpinnable and no context" << dendl;
+    return;
+  }
+
+  // unlinked directory inode shouldn't have any entry
+  if (inode->inode.nlink == 0) {
+    dout(7) << "fetch dirfrag for unlinked directory, mark complete" << dendl;
+    if (get_version() == 0)
+      set_version(1);
+    mark_complete();
+    if (c)
+      cache->mds->queue_waiter(c);
     return;
   }
 
@@ -1483,8 +1522,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(0) << "_fetched missing object for " << *this << dendl;
     clog->error() << "dir " << dirfrag() << " object missing on disk; some files may be lost\n";
 
-    log_mark_dirty();
-
+    state_set(STATE_BADFRAG);
     // mark complete, !fetching
     mark_complete();
     state_clear(STATE_FETCHING);
@@ -1770,6 +1808,14 @@ void CDir::commit(version_t want, MDSInternalContextBase *c, bool ignore_authpin
   assert(is_auth());
   assert(ignore_authpinnability || can_auth_pin());
 
+  if (inode->inode.nlink == 0) {
+    dout(7) << "commit dirfrag for unlinked directory, mark clean" << dendl;
+    try_remove_dentries_for_stray();
+    if (c)
+      cache->mds->queue_waiter(c);
+    return;
+  }
+
   // note: queue up a noop if necessary, so that we always
   // get an auth_pin.
   if (!c)
@@ -1789,8 +1835,7 @@ class C_IO_Dir_Committed : public CDirIOContext {
 public:
   C_IO_Dir_Committed(CDir *d, version_t v) : CDirIOContext(d), version(v) { }
   void finish(int r) {
-    assert(r == 0);
-    dir->_committed(version);
+    dir->_committed(r, version);
   }
 };
 
@@ -1867,6 +1912,11 @@ void CDir::_omap_commit(int op_prio)
     if (write_size >= max_write_size) {
       ObjectOperation op;
       op.priority = op_prio;
+
+      // don't create new dirfrag blindly
+      if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+	op.stat(NULL, (utime_t*)NULL, NULL);
+
       op.tmap_to_omap(true); // convert tmap to omap
 
       if (!to_set.empty())
@@ -1885,6 +1935,11 @@ void CDir::_omap_commit(int op_prio)
 
   ObjectOperation op;
   op.priority = op_prio;
+
+  // don't create new dirfrag blindly
+  if (!is_new() && !state_test(CDir::STATE_FRAGMENTING))
+    op.stat(NULL, (utime_t*)NULL, NULL);
+
   op.tmap_to_omap(true); // convert tmap to omap
 
   /*
@@ -1994,8 +2049,16 @@ void CDir::_commit(version_t want, int op_prio)
  *
  * @param v version i just committed
  */
-void CDir::_committed(version_t v)
+void CDir::_committed(int r, version_t v)
 {
+  if (r < 0) {
+    dout(1) << "commit error " << r << " v " << v << dendl;
+    cache->mds->clog->error() << "failed to commit dir " << dirfrag() << " object,"
+			      << " errno " << r << "\n";
+    cache->mds->handle_write_error(r);
+    return;
+  }
+
   dout(10) << "_committed v " << v << " on " << *this << dendl;
   assert(is_auth());
 

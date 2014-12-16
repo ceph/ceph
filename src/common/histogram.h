@@ -74,6 +74,10 @@ public:
     return b;
   }
 
+  bool operator==(const pow2_hist_t &r) const {
+    return h == r.h;
+  }
+
   /// get a value's position in the histogram.
   ///
   /// positions are represented as values in the range [0..1000000]

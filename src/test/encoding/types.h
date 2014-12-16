@@ -30,8 +30,8 @@ TYPE(entity_addr_t)
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(osd_xinfo_t)
-TYPEWITHSTRAYDATA(OSDMap)
-TYPEWITHSTRAYDATA(OSDMap::Incremental)
+TYPE_FEATUREFUL_STRAYDATA(OSDMap)
+TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
 TYPE_NOCOPY(CrushWrapper)
@@ -89,7 +89,7 @@ TYPE(ECUtil::HashInfo)
 #include "osd/ECMsgTypes.h"
 TYPE(ECSubWrite)
 TYPE(ECSubWriteReply)
-TYPE(ECSubRead)
+TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)
 
 #include "osd/HitSet.h"

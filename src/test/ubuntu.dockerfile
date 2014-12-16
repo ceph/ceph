@@ -27,4 +27,4 @@ RUN apt-get install -y autoconf automake autotools-dev libbz2-dev debhelper defa
 # development tools
 RUN apt-get install -y ccache valgrind gdb
 # make check dependencies
-RUN apt-get install -y python-virtualenv gdisk kpartx
+RUN apt-get install -y python-virtualenv gdisk kpartx hdparm
