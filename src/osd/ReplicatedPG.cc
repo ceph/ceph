@@ -8641,6 +8641,7 @@ void ReplicatedBackend::submit_push_data(
     get_parent()->on_local_recover_start(recovery_info.soid, t);
     t->remove(get_temp_coll(t), recovery_info.soid);
     t->touch(target_coll, recovery_info.soid);
+    t->truncate(target_coll, recovery_info.soid, recovery_info.size);
     t->omap_setheader(target_coll, recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
@@ -8987,9 +8988,30 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   }
 
   if (available > 0) {
-    out_op->data_included.span_of(recovery_info.copy_subset,
-				 progress.data_recovered_to,
-				 available);
+    if (!recovery_info.copy_subset.empty()) {
+      interval_set<uint64_t> copy_subset = recovery_info.copy_subset;
+      bufferlist bl;
+      int r = store->fiemap(coll, recovery_info.soid, 0,
+                            copy_subset.range_end(), bl);
+      if (r >= 0)  {
+        interval_set<uint64_t> fiemap_included;
+        map<uint64_t, uint64_t> m;
+        bufferlist::iterator iter = bl.begin();
+        ::decode(m, iter);
+        map<uint64_t, uint64_t>::iterator miter;
+        for (miter = m.begin(); miter != m.end(); ++miter) {
+          fiemap_included.insert(miter->first, miter->second);
+        }
+
+        copy_subset.intersection_of(fiemap_included);
+      }
+      out_op->data_included.span_of(copy_subset, progress.data_recovered_to,
+                                    available);
+      if (out_op->data_included.empty()) // zero filled section, skip to end!
+        new_progress.data_recovered_to = recovery_info.copy_subset.range_end();
+      else
+        new_progress.data_recovered_to = out_op->data_included.range_end();
+    }
   } else {
     out_op->data_included.clear();
   }
@@ -9009,9 +9031,6 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     }
     out_op->data.claim_append(bit);
   }
-
-  if (!out_op->data_included.empty())
-    new_progress.data_recovered_to = out_op->data_included.range_end();
 
   if (new_progress.is_complete(recovery_info)) {
     new_progress.data_complete = true;
@@ -9213,7 +9232,7 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
       recovery_info.size = st.st_size;
       recovery_info.copy_subset.clear();
       if (st.st_size)
-	recovery_info.copy_subset.insert(0, st.st_size);
+        recovery_info.copy_subset.insert(0, st.st_size);
       assert(recovery_info.clone_subset.empty());
     }
 
