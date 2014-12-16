@@ -1153,16 +1153,21 @@ def get_distro(ctx):
     """
     Get the name of the distro that we are using (usually the os_type).
     """
+    os_type = None
+    # first, try to get the os_type from the config of --os-type
     try:
         os_type = ctx.config.get('os_type', ctx.os_type)
     except AttributeError:
-        os_type = 'ubuntu'
+        pass
+    # next, look for an override in the downburst config for os_type
     try:
-        return ctx.config['downburst'].get('distro', os_type)
-    except KeyError:
-        return os_type
-    except AttributeError:
-        return ctx.os_type
+        os_type = ctx.config['downburst'].get('distro', os_type)
+    except (KeyError, AttributeError):
+        pass
+    if os_type is None:
+        # default to ubuntu if we can't find the os_type anywhere else
+        return "ubuntu"
+    return os_type
 
 
 def get_distro_version(ctx):

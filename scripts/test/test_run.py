@@ -43,5 +43,3 @@ class TestRun(Script):
             "config2.yml",
         ])
         assert args["<config>"] == ["config1.yml", "config2.yml"]
-        # make sure defaults are working
-        assert args["--os-type"] == "ubuntu"

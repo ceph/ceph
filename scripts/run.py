@@ -17,7 +17,7 @@ optional arguments:
   --owner OWNER                  job owner
   --lock                         lock machines for the duration of the run
   --machine-type MACHINE_TYPE    Type of machine to lock/run tests on.
-  --os-type OS_TYPE              Distro/OS of machine to run test on [default: ubuntu].
+  --os-type OS_TYPE              Distro/OS of machine to run test on.
   --os-version OS_VERSION        Distro/OS version of machine to run test on.
   --block                        block until locking machines succeeds (use with --lock)
   --name NAME                    name for this teuthology run

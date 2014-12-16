@@ -254,6 +254,8 @@ def main(args):
     block = args["--block"]
     lock = args["--lock"]
     suite_path = args["--suite-path"]
+    os_type = args["--os-type"]
+    os_version = args["--os-version"]
 
     set_up_logging(verbose, archive)
 
@@ -290,6 +292,14 @@ def main(args):
 
     # fetches the tasks and returns a new suite_path if needed
     config["suite_path"] = fetch_tasks_if_needed(config)
+
+    # overwrite the config value of os_type if --os-type is provided
+    if os_type:
+        config["os_type"] = os_type
+
+    # overwrite the config value of os_version if --os-version is provided
+    if os_version:
+        config["os_version"] = os_version
 
     # create a FakeNamespace instance that mimics the old argparse way of doing
     # things we do this so we can pass it to run_tasks without porting those
