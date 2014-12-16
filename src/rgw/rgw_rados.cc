@@ -306,7 +306,7 @@ void RGWZoneParams::init_default(RGWRados *store)
 
   /* check for old pools config */
   rgw_obj obj(domain_root, avail_pools);
-  int r =  store->obj_stat(NULL, obj, NULL, NULL, NULL, NULL, NULL, NULL);
+  int r =  store->raw_obj_stat(obj, NULL, NULL, NULL, NULL, NULL, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
     /* a new system, let's set new placement info */
@@ -3463,11 +3463,9 @@ set_err_state:
   ep.manifest = pmanifest;
   ep.ptag = &tag;
   ep.owner = dest_bucket_info.owner;
+  ep.mtime = mtime;
 
   ret = put_obj_meta(ctx, dest_obj, end + 1, src_attrs, category, PUT_OBJ_CREATE, ep);
-
-  if (mtime)
-    obj_stat(ctx, dest_obj, NULL, mtime, NULL, NULL, NULL, NULL);
 
   return 0;
 
@@ -3942,7 +3940,13 @@ static void generate_fake_tag(CephContext *cct, map<string, bufferlist>& attrset
   tag_bl.append(tag.c_str(), tag.size() + 1);
 }
 
-int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker)
+static bool is_olh(map<string, bufferlist>& attrs)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_INFO);
+  return (iter != attrs.end());
+}
+
+int RGWRados::get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
 {
   RGWObjState *s = rctx->get_state(obj);
   ldout(cct, 20) << "get_obj_state: rctx=" << (void *)rctx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
@@ -3950,7 +3954,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
   if (s->has_attrs)
     return 0;
 
-  int r = obj_stat(rctx, obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv_tracker);
+  int r = raw_obj_stat(obj, &s->size, &s->mtime, &s->epoch, &s->attrset, (s->prefetch_data ? &s->data : NULL), objv_tracker);
   if (r == -ENOENT) {
     s->exists = false;
     s->has_attrs = true;
@@ -3962,6 +3966,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
 
   s->exists = true;
   s->has_attrs = true;
+
   map<string, bufferlist>::iterator iter = s->attrset.find(RGW_ATTR_SHADOW_OBJ);
   if (iter != s->attrset.end()) {
     bufferlist bl = iter->second;
@@ -3970,6 +3975,7 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
     s->shadow_obj[bl.length()] = '\0';
   }
   s->obj_tag = s->attrset[RGW_ATTR_ID_TAG];
+
   bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
   if (manifest_bl.length()) {
     bufferlist::iterator miter = manifest_bl.begin();
@@ -4002,7 +4008,35 @@ int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state
     ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
     ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
+
+  if (is_olh(s->attrset)) {
+    s->is_olh = true;
+
+    if (follow_olh) {
+      rgw_obj target;
+      r = RGWRados::follow_olh((void *)rctx, s, obj, &target); /* might return -EAGAIN */
+      if (r < 0) {
+        return r;
+      }
+      r = get_obj_state(rctx, target, state, objv_tracker, false);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
   return 0;
+}
+
+int RGWRados::get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh)
+{
+  int ret;
+
+  do {
+    ret = get_obj_state_impl(rctx, obj, state, objv_tracker, follow_olh);
+  } while (ret == -EAGAIN);
+
+  return ret;
 }
 
 /**
@@ -5093,18 +5127,46 @@ int RGWRados::obj_operate(rgw_obj& obj, ObjectReadOperation *op)
   return ref.ioctx.operate(ref.oid, op, &outbl);
 }
 
-int RGWRados::olh_init_modification(rgw_obj& obj, string *tag)
+int RGWRados::olh_init_modification_impl(void *ctx, rgw_obj& obj, string *obj_tag, string *op_tag)
 {
+  RGWRadosCtx *rctx = static_cast<RGWRadosCtx *>(ctx);
+
+  RGWObjState *astate = NULL;
+  int r = get_obj_state(rctx, obj, &astate, NULL, false);
+  if (r < 0)
+    return r;
+
+  ObjectWriteOperation op;
+
+  if (!astate->exists) {
+    /* generate a new object tag */
+    op.create(true);
+    int ret = gen_rand_alphanumeric_lower(cct, obj_tag, 32);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
+      return ret;
+    }
+    bufferlist bl;
+    bl.append(obj_tag->c_str(), obj_tag->size());
+    op.setxattr(RGW_ATTR_ID_TAG, bl);
+
+    bufferlist verbl;
+    op.setxattr(RGW_ATTR_OLH_VER, verbl);
+
+    state->attrset[RGW_ATTR_ID_TAG] = bl;
+    state->obj_tag = bl;
+  }
+
 #define OLH_PENDING_TAG_LEN 32
-  int ret = gen_rand_alphanumeric_lower(cct, tag, OLH_PENDING_TAG_LEN);
+  int ret = gen_rand_alphanumeric_lower(cct, op_tag, OLH_PENDING_TAG_LEN);
   if (ret < 0) {
+    ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
     return ret;
   }
 
   string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
-  attr_name.append(*tag);
+  attr_name.append(*op_tag);
 
-  ObjectWriteOperation op;
   bufferlist bl;
 #warning FIXME bl need to encode timestamp
   op.setxattr(attr_name.c_str(), bl);
@@ -5116,6 +5178,17 @@ int RGWRados::olh_init_modification(rgw_obj& obj, string *tag)
 
   state->exists = true;
   state->attrset[attr_name] = bl;
+
+  return 0;
+}
+
+int RGWRados::olh_init_modification(void *ctx, rgw_obj& obj, string *obj_tag, string *op_tag)
+{
+  int ret;
+
+  do {
+    ret = olh_init_modification_impl(ctx, obj, obj_tag, op_tag);
+  } while (ret == -EAGAIN);
 
   return 0;
 }
@@ -5146,7 +5219,7 @@ int RGWRados::bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, c
   return 0;
 }
 
-int RGWRados::bucket_index_read_olh_log(rgw_obj& obj_instance, uint64_t ver_marker,
+int RGWRados::bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
                                         map<uint64_t, rgw_bucket_olh_log_entry> *log,
                                         bool *is_truncated)
 {
@@ -5164,6 +5237,8 @@ int RGWRados::bucket_index_read_olh_log(rgw_obj& obj_instance, uint64_t ver_mark
   if (ret < 0) {
     return ret;
   }
+
+#warning TODO ensure atomicity, use state
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
   ret = cls_rgw_get_olh_log(index_ctx, oid, key, ver_marker, log, is_truncated);
@@ -5208,7 +5283,7 @@ static void op_setxattr(librados::ObjectWriteOperation& op, const char *name, co
 }
 
 int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
-                            const string& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+                            bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                             uint64_t *plast_ver)
 {
   if (log.empty()) {
@@ -5222,9 +5297,7 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
 
   map<uint64_t, rgw_bucket_olh_log_entry>::iterator iter = log.begin();
 
-  bufferlist bl;
-  bl.append(obj_tag);
-  op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, bl);
+  op.cmpxattr(RGW_ATTR_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, obj_tag);
   op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
 
   bool need_to_link = false;
@@ -5290,6 +5363,7 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
     return r;
   }
 
+#warning need to protect the following
   r = bucket_index_trim_olh_log(obj, last_ver);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
@@ -5300,18 +5374,18 @@ int RGWRados::apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
 /*
  * read olh log and apply it
  */
-int RGWRados::update_olh(void *ctx, const string& bucket_owner, rgw_obj& obj, const string& obj_tag)
+int RGWRados::update_olh(void *ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj)
 {
   map<uint64_t, rgw_bucket_olh_log_entry> log;
   bool is_truncated;
   uint64_t ver_marker = 0;
 
   do {
-    int ret = bucket_index_read_olh_log(obj, ver_marker, &log, &is_truncated);
+    int ret = bucket_index_read_olh_log(state, obj, ver_marker, &log, &is_truncated);
     if (ret < 0) {
       return ret;
     }
-    ret = apply_olh_log(ctx, bucket_owner, obj, obj_tag, log, &ver_marker);
+    ret = apply_olh_log(ctx, bucket_owner, obj, state->obj_tag, log, &ver_marker);
     if (ret < 0) {
       return ret;
     }
@@ -5323,6 +5397,7 @@ int RGWRados::update_olh(void *ctx, const string& bucket_owner, rgw_obj& obj, co
 static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
                            map<string, bufferlist> *attrset)
 {
+  attrset->clear();
   map<string, bufferlist>::iterator iter;
   for (iter = unfiltered_attrset.lower_bound(check_prefix);
        iter != unfiltered_attrset.end(); ++iter) {
@@ -5365,22 +5440,22 @@ int RGWRados::get_olh(rgw_obj& obj, RGWOLHInfo *olh)
   return 0;
 }
 
-int RGWRados::set_olh(rgw_obj& obj, RGWOLHInfo& olh)
-{
-  return 0;
-}
-
-int RGWRados::follow_olh(map<string, bufferlist>& attrset, rgw_obj& target)
+int RGWRados::follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target)
 {
   map<string, bufferlist> pending_entries;
-  filter_attrset(attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
+  filter_attrset(state->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
 
   if (!pending_entries.empty()) {
-#warning fixme
+#warning FIXME: bucket_owner
+    string bucket_owner;
+    int ret = update_olh(ctx, state, bucket_owner, olh_obj);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
-  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
-  assert(iter != attrset.end());
+  map<string, bufferlist>::iterator iter = state->attrset.find(RGW_ATTR_OLH_INFO);
+  assert(iter != state->attrset.end());
   RGWOLHInfo olh;
   try {
     bufferlist::iterator biter = iter->second.begin();
@@ -5394,14 +5469,14 @@ int RGWRados::follow_olh(map<string, bufferlist>& attrset, rgw_obj& target)
     return -ENOENT;
   }
 
-  target = olh.target;
+  *target = olh.target;
 
   return 0;
 }
 
-int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
-                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                       RGWObjVersionTracker *objv_tracker)
+int RGWRados::raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
+                           map<string, bufferlist> *attrs, bufferlist *first_chunk,
+                           RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -5418,43 +5493,32 @@ int RGWRados::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
   if (objv_tracker) {
     objv_tracker->prepare_op_for_read(&op);
   }
-  op.getxattrs(&unfiltered_attrset, NULL);
-  op.stat(&size, &mtime, NULL);
+  if (attrs) {
+    op.getxattrs(&unfiltered_attrset, NULL);
+  }
+  if (psize || pmtime) {
+    op.stat(&size, &mtime, NULL);
+  }
   if (first_chunk) {
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
   r = ref.ioctx.operate(ref.oid, &op, &outbl);
 
-  if (epoch)
+  if (epoch) {
     *epoch = ref.ioctx.get_last_version();
+  }
 
   if (r < 0)
     return r;
-
-  map<string, bufferlist> attrset;
-  filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, &attrset);
-
-  map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_OLH_INFO);
-  if (iter != attrset.end()) {
-    /* this is an olh */
-    rgw_obj target;
-
-    r = follow_olh(attrset, target);
-    if (r < 0) {
-      return r;
-    }
-
-    return obj_stat(ctx, target, psize, pmtime, epoch, attrs, first_chunk, objv_tracker);
-#warning implment me
-  }
 
   if (psize)
     *psize = size;
   if (pmtime)
     *pmtime = mtime;
-  if (attrs)
-    *attrs = attrset;
+  if (attrs) {
+    filter_attrset(unfiltered_attrset, RGW_ATTR_PREFIX, attrs);
+  }
 
   return 0;
 }

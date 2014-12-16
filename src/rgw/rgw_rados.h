@@ -727,12 +727,13 @@ struct RGWObjState {
   bufferlist data;
   bool prefetch_data;
   bool keep_tail;
+  bool is_olh;
   RGWObjVersionTracker objv_tracker;
 
   map<string, bufferlist> attrset;
   RGWObjState() : is_atomic(false), has_attrs(0), exists(false),
                   size(0), mtime(0), epoch(0), fake_tag(false), has_manifest(false),
-                  has_data(false), prefetch_data(false), keep_tail(false) {}
+                  has_data(false), prefetch_data(false), keep_tail(false), is_olh(false) {}
   RGWObjState(const RGWObjState& rhs) {
     is_atomic = rhs.is_atomic;
     has_attrs = rhs.has_attrs;
@@ -1317,7 +1318,11 @@ class RGWRados
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
   uint64_t max_bucket_id;
 
-  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker);
+  int get_obj_state_impl(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker, bool follow_olh);
+  int get_obj_state(RGWRadosCtx *rctx, rgw_obj& obj, RGWObjState **state, RGWObjVersionTracker *objv_tracker) {
+    return get_obj_state(rctx, obj, state, objv_tracker, true);
+  }
   int append_atomic_test(RGWRadosCtx *rctx, rgw_obj& obj,
                          librados::ObjectOperation& op, RGWObjState **state);
   int prepare_atomic_for_write_impl(RGWRadosCtx *rctx, rgw_obj& obj,
@@ -1718,26 +1723,26 @@ public:
    */
   virtual int read(void *ctx, rgw_obj& obj, off_t ofs, size_t size, bufferlist& bl);
 
-  virtual int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
-                       uint64_t *epoch, map<string, bufferlist> *attrs, bufferlist *first_chunk,
+  virtual int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch,
+                       map<string, bufferlist> *attrs, bufferlist *first_chunk,
                        RGWObjVersionTracker *objv_tracker);
 
   int obj_operate(rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(rgw_obj& obj, librados::ObjectReadOperation *op);
 
-  int olh_init_modification(rgw_obj& obj, string *tag);
+  int olh_init_modification(void *ctx, rgw_obj& obj, string *obj_tag, string *op_tag);
+  int olh_init_modification_impl(void *ctx, rgw_obj& obj, string *obj_tag, string *op_tag);
   int bucket_index_link_olh(rgw_obj& obj_instance, bool delete_marker, const string& op_tag);
-  int bucket_index_read_olh_log(rgw_obj& obj_instance, uint64_t ver_marker,
+  int bucket_index_read_olh_log(RGWObjState *state, rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, rgw_bucket_olh_log_entry> *log, bool *is_truncated);
   int bucket_index_trim_olh_log(rgw_obj& obj_instance, uint64_t ver);
   int apply_olh_log(void *ctx, const string& bucket_owner, rgw_obj& obj,
-                    const string& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
+                    bufferlist& obj_tag, map<uint64_t, rgw_bucket_olh_log_entry>& log,
                     uint64_t *plast_ver);
-  int update_olh(void *ctx, const string& bucket_owner, rgw_obj& obj, const string& obj_tag);
+  int update_olh(void *ctx, RGWObjState *state, const string& bucket_owner, rgw_obj& obj);
 
-  int follow_olh(map<string, bufferlist>& attrset, rgw_obj& target);
+  int follow_olh(void *ctx, RGWObjState *state, rgw_obj& olh_obj, rgw_obj *target);
   int get_olh(rgw_obj& obj, RGWOLHInfo *olh);
-  int set_olh(rgw_obj& obj, RGWOLHInfo& olh);
 
   virtual bool supports_omap() { return true; }
   int omap_get_vals(rgw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);

@@ -222,8 +222,8 @@ public:
   int get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end,
               rgw_cache_entry_info *cache_info);
 
-  int obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
-               bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
+  int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
+                   bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
 
   int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, RGWObjVersionTracker *objv_tracker);
 
@@ -476,7 +476,7 @@ int RGWCache<T>::put_obj_data(void *ctx, rgw_obj& obj, const char *data,
 }
 
 template <class T>
-int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmtime,
+int RGWCache<T>::raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime,
                           uint64_t *pepoch, map<string, bufferlist> *attrs,
                           bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker)
 {
@@ -484,7 +484,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.')
-    return T::obj_stat(ctx, obj, psize, pmtime, pepoch, attrs, first_chunk, objv_tracker);
+    return T::raw_obj_stat(obj, psize, pmtime, pepoch, attrs, first_chunk, objv_tracker);
 
   string name = normal_name(bucket, oid);
 
@@ -508,7 +508,7 @@ int RGWCache<T>::obj_stat(void *ctx, rgw_obj& obj, uint64_t *psize, time_t *pmti
       objv_tracker->read_version = info.version;
     goto done;
   }
-  r = T::obj_stat(ctx, obj, &size, &mtime, &epoch, &info.xattrs, first_chunk, objv_tracker);
+  r = T::raw_obj_stat(obj, &size, &mtime, &epoch, &info.xattrs, first_chunk, objv_tracker);
   if (r < 0) {
     if (r == -ENOENT) {
       info.status = r;
