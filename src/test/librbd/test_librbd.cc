@@ -650,12 +650,15 @@ void simple_read_cb(rbd_completion_t cb, void *arg)
   printf("read completion cb called!\n");
 }
 
-void aio_write_test_data(rbd_image_t image, const char *test_data, uint64_t off, size_t len, bool *passed)
+void aio_write_test_data(rbd_image_t image, const char *test_data, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   rbd_completion_t comp;
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_write_cb, &comp);
   printf("created completion\n");
-  rbd_aio_write(image, off, len, test_data, comp);
+  if (iohint)
+    rbd_aio_write2(image, off, len, test_data, comp, iohint);
+  else
+    rbd_aio_write(image, off, len, test_data, comp);
   printf("started write\n");
   rbd_aio_wait_for_complete(comp);
   int r = rbd_aio_get_return_value(comp);
@@ -666,10 +669,13 @@ void aio_write_test_data(rbd_image_t image, const char *test_data, uint64_t off,
   *passed = true;
 }
 
-void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, size_t len, bool *passed)
+void write_test_data(rbd_image_t image, const char *test_data, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   ssize_t written;
-  written = rbd_write(image, off, len, test_data);
+  if (iohint)
+    written = rbd_write2(image, off, len, test_data, iohint);
+  else
+    written = rbd_write(image, off, len, test_data);
   printf("wrote: %d\n", (int) written);
   ASSERT_EQ(len, static_cast<size_t>(written));
   *passed = true;
@@ -697,7 +703,7 @@ void discard_test_data(rbd_image_t image, uint64_t off, size_t len, bool *passed
   *passed = true;
 }
 
-void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len, bool *passed)
+void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   rbd_completion_t comp;
   char *result = (char *)malloc(len + 1);
@@ -705,7 +711,10 @@ void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, s
   ASSERT_NE(static_cast<char *>(NULL), result);
   rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
   printf("created completion\n");
-  rbd_aio_read(image, off, len, result, comp);
+  if (iohint)
+    rbd_aio_read2(image, off, len, result, comp, iohint);
+  else
+    rbd_aio_read(image, off, len, result, comp);
   printf("started read\n");
   rbd_aio_wait_for_complete(comp);
   int r = rbd_aio_get_return_value(comp);
@@ -720,13 +729,16 @@ void aio_read_test_data(rbd_image_t image, const char *expected, uint64_t off, s
   *passed = true;
 }
 
-void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len, bool *passed)
+void read_test_data(rbd_image_t image, const char *expected, uint64_t off, size_t len, uint32_t iohint, bool *passed)
 {
   ssize_t read;
   char *result = (char *)malloc(len + 1);
 
   ASSERT_NE(static_cast<char *>(NULL), result);
-  read = rbd_read(image, off, len, result);
+  if (iohint)
+    read = rbd_read2(image, off, len, result, iohint);
+  else
+    read = rbd_read(image, off, len, result);
   printf("read: %d\n", (int) read);
   ASSERT_EQ(len, static_cast<size_t>(read));
   result[len] = '\0';
@@ -762,26 +774,26 @@ TEST_F(TestLibRBD, TestIO)
   memset(zero_data, 0, sizeof(zero_data));
 
   for (i = 0; i < 5; ++i)
-    ASSERT_PASSED(write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+    ASSERT_PASSED(write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
   for (i = 5; i < 10; ++i)
-    ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+    ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
   for (i = 0; i < 5; ++i)
-    ASSERT_PASSED(read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+    ASSERT_PASSED(read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
   for (i = 5; i < 10; ++i)
-    ASSERT_PASSED(aio_read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+    ASSERT_PASSED(aio_read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE, 0);
 
   // discard 2nd, 4th sections.
   ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
   ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
 
-  ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE);
-  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE, TEST_IO_SIZE);
-  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE);
-  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE*3, TEST_IO_SIZE);
-  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE);
+  ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE*3, TEST_IO_SIZE, 0);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE, 0);
   
   rbd_image_info_t info;
   rbd_completion_t comp;
@@ -801,6 +813,83 @@ TEST_F(TestLibRBD, TestIO)
   ASSERT_EQ(0, rbd_close(image));
 
   rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestIOWithIOHint)
+{
+  rados_ioctx_t ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
+
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+
+  char test_data[TEST_IO_SIZE + 1];
+  char zero_data[TEST_IO_SIZE + 1];
+  int i;
+
+  for (i = 0; i < TEST_IO_SIZE; ++i) {
+    test_data[i] = (char) (rand() % (126 - 33) + 33);
+  }
+  test_data[TEST_IO_SIZE] = '\0';
+  memset(zero_data, 0, sizeof(zero_data));
+
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(write_test_data, image, test_data, TEST_IO_SIZE * i,
+		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i,
+		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+  for (i = 0; i < 5; ++i)
+    ASSERT_PASSED(read_test_data, image, test_data, TEST_IO_SIZE * i, TEST_IO_SIZE,
+		  LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+
+  for (i = 5; i < 10; ++i)
+    ASSERT_PASSED(aio_read_test_data, image, test_data, TEST_IO_SIZE * i,
+		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL|LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+  // discard 2nd, 4th sections.
+  ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
+  ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
+
+  ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE,
+		LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE, TEST_IO_SIZE,
+		LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE,
+		LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+  ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE*3, TEST_IO_SIZE,
+		LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL);
+  ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE, 0);
+
+  rbd_image_info_t info;
+  rbd_completion_t comp;
+  ASSERT_EQ(0, rbd_stat(image, &info, sizeof(info)));
+  // can't read or write starting past end
+  ASSERT_EQ(-EINVAL, rbd_write(image, info.size, 1, test_data));
+  ASSERT_EQ(-EINVAL, rbd_read(image, info.size, 1, test_data));
+  // reading through end returns amount up to end
+  ASSERT_EQ(10, rbd_read2(image, info.size - 10, 100, test_data,
+			  LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+  // writing through end returns amount up to end
+  ASSERT_EQ(10, rbd_write2(image, info.size - 10, 100, test_data,
+			    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+
+  rbd_aio_create_completion(NULL, (rbd_callback_t) simple_read_cb, &comp);
+  ASSERT_EQ(-EINVAL, rbd_aio_write(image, info.size, 1, test_data, comp));
+  ASSERT_EQ(-EINVAL, rbd_aio_read2(image, info.size, 1, test_data, comp,
+				    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
+
+  ASSERT_EQ(0, rbd_close(image));
+
+  rados_ioctx_destroy(ioctx);
+
 }
 
 TEST_F(TestLibRBD, TestEmptyDiscard)
@@ -835,13 +924,17 @@ void simple_read_cb_pp(librbd::completion_t cb, void *arg)
   cout << "read completion cb called!" << endl;
 }
 
-void aio_write_test_data(librbd::Image& image, const char *test_data, off_t off, bool *passed)
+void aio_write_test_data(librbd::Image& image, const char *test_data,
+			 off_t off, uint32_t iohint, bool *passed)
 {
   ceph::bufferlist bl;
   bl.append(test_data, strlen(test_data));
   librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_write_cb_pp);
   printf("created completion\n");
-  image.aio_write(off, strlen(test_data), bl, comp);
+  if (iohint)
+    image.aio_write2(off, strlen(test_data), bl, comp, iohint);
+  else
+    image.aio_write(off, strlen(test_data), bl, comp);
   printf("started write\n");
   comp->wait_for_complete();
   int r = comp->get_return_value();
@@ -863,13 +956,16 @@ void aio_discard_test_data(librbd::Image& image, off_t off, size_t len, bool *pa
   *passed = true;
 }
 
-void write_test_data(librbd::Image& image, const char *test_data, off_t off, bool *passed)
+void write_test_data(librbd::Image& image, const char *test_data, off_t off, uint32_t iohint, bool *passed)
 {
   size_t written;
   size_t len = strlen(test_data);
   ceph::bufferlist bl;
   bl.append(test_data, len);
-  written = image.write(off, len, bl);
+  if (iohint)
+    written = image.write2(off, len, bl, iohint);
+  else
+    written = image.write(off, len, bl);
   printf("wrote: %u\n", (unsigned int) written);
   ASSERT_EQ(bl.length(), written);
   *passed = true;
@@ -884,12 +980,15 @@ void discard_test_data(librbd::Image& image, off_t off, size_t len, bool *passed
   *passed = true;
 }
 
-void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, bool *passed)
+void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, uint32_t iohint, bool *passed)
 {
   librbd::RBD::AioCompletion *comp = new librbd::RBD::AioCompletion(NULL, (librbd::callback_t) simple_read_cb_pp);
   ceph::bufferlist bl;
   printf("created completion\n");
-  image.aio_read(off, expected_len, bl, comp);
+  if (iohint)
+    image.aio_read2(off, expected_len, bl, comp, iohint);
+  else
+    image.aio_read(off, expected_len, bl, comp);
   printf("started read\n");
   comp->wait_for_complete();
   int r = comp->get_return_value();
@@ -901,12 +1000,15 @@ void aio_read_test_data(librbd::Image& image, const char *expected, off_t off, s
   *passed = true;
 }
 
-void read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, bool *passed)
+void read_test_data(librbd::Image& image, const char *expected, off_t off, size_t expected_len, uint32_t iohint, bool *passed)
 {
   int read, total_read = 0;
   size_t len = expected_len;
   ceph::bufferlist bl;
-  read = image.read(off + total_read, len, bl);
+  if (iohint)
+    read = image.read2(off + total_read, len, bl, iohint);
+  else
+    read = image.read(off + total_read, len, bl);
   ASSERT_TRUE(read >= 0);
   std::string bl_str(bl.c_str(), read);
 
@@ -945,30 +1047,72 @@ TEST_F(TestLibRBD, TestIOPP)
     memset(zero_data, 0, sizeof(zero_data));
 
     for (i = 0; i < 5; ++i)
-      ASSERT_PASSED(write_test_data, image, test_data, strlen(test_data) * i);
+      ASSERT_PASSED(write_test_data, image, test_data, strlen(test_data) * i, 0);
     
     for (i = 5; i < 10; ++i)
-      ASSERT_PASSED(aio_write_test_data, image, test_data, strlen(test_data) * i);
+      ASSERT_PASSED(aio_write_test_data, image, test_data, strlen(test_data) * i, 0);
     
     for (i = 0; i < 5; ++i)
-      ASSERT_PASSED(read_test_data, image, test_data, strlen(test_data) * i, TEST_IO_SIZE);
+      ASSERT_PASSED(read_test_data, image, test_data, strlen(test_data) * i, TEST_IO_SIZE, 0);
     
     for (i = 5; i < 10; ++i)
-      ASSERT_PASSED(aio_read_test_data, image, test_data, strlen(test_data) * i, TEST_IO_SIZE);
+      ASSERT_PASSED(aio_read_test_data, image, test_data, strlen(test_data) * i, TEST_IO_SIZE, 0);
 
     // discard 2nd, 4th sections.
     ASSERT_PASSED(discard_test_data, image, TEST_IO_SIZE, TEST_IO_SIZE);
     ASSERT_PASSED(aio_discard_test_data, image, TEST_IO_SIZE*3, TEST_IO_SIZE);
     
-    ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE);
-    ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE, TEST_IO_SIZE);
-    ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE);
-    ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE*3, TEST_IO_SIZE);
-    ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE);
+    ASSERT_PASSED(read_test_data, image, test_data,  0, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*2, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, image,  zero_data, TEST_IO_SIZE*3, TEST_IO_SIZE, 0);
+    ASSERT_PASSED(read_test_data, image, test_data,  TEST_IO_SIZE*4, TEST_IO_SIZE, 0);
   }
 
   ioctx.close();
 }
+
+TEST_F(TestLibRBD, TestIOPPWithIOHint)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  {
+    librbd::RBD rbd;
+    librbd::Image image;
+    int order = 0;
+    std::string name = get_temp_image_name();
+    uint64_t size = 2 << 20;
+
+    ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+    ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+    char test_data[TEST_IO_SIZE + 1];
+    int i;
+
+    for (i = 0; i < TEST_IO_SIZE; ++i) {
+      test_data[i] = (char) (rand() % (126 - 33) + 33);
+    }
+
+    for (i = 0; i < 5; ++i)
+      ASSERT_PASSED(write_test_data, image, test_data, strlen(test_data) * i,
+		    LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+    for (i = 5; i < 10; ++i)
+      ASSERT_PASSED(aio_write_test_data, image, test_data, strlen(test_data) * i,
+		    LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+
+    ASSERT_PASSED(read_test_data, image, test_data, strlen(test_data),
+		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_RANDOM);
+
+    for (i = 5; i < 10; ++i)
+      ASSERT_PASSED(aio_read_test_data, image, test_data, strlen(test_data) * i,
+		    TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL|LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  }
+
+  ioctx.close();
+}
+
 
 
 TEST_F(TestLibRBD, TestIOToSnapshot)
@@ -1000,20 +1144,20 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   ASSERT_EQ(0, test_ls_snaps(image, 0));
   ASSERT_EQ(0, rbd_snap_create(image, "orig"));
   ASSERT_EQ(1, test_ls_snaps(image, 1, "orig", isize));
-  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   printf("write test data!\n");
-  ASSERT_PASSED(write_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(write_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
   ASSERT_EQ(0, rbd_snap_create(image, "written"));
   ASSERT_EQ(2, test_ls_snaps(image, 2, "orig", isize, "written", isize));
 
-  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   rbd_snap_set(image, "orig");
-  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   rbd_snap_set(image, "written");
-  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   rbd_snap_set(image, "orig");
 
@@ -1022,9 +1166,9 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   ASSERT_LT(r, 0);
   cout << cpp_strerror(-r) << std::endl;
 
-  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
   rbd_snap_set(image, "written");
-  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   r = rbd_snap_rollback(image, "orig");
   ASSERT_EQ(r, -EROFS);
@@ -1034,13 +1178,13 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
   r = rbd_snap_rollback(image, "orig");
   ASSERT_EQ(r, 0);
 
-  ASSERT_PASSED(write_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(write_test_data, image, test_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
 
   rbd_flush(image);
 
   printf("opening testimg@orig\n");
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image_at_snap, "orig"));
-  ASSERT_PASSED(read_test_data, image_at_snap, orig_data, 0, TEST_IO_TO_SNAP_SIZE);
+  ASSERT_PASSED(read_test_data, image_at_snap, orig_data, 0, TEST_IO_TO_SNAP_SIZE, 0);
   r = rbd_write(image_at_snap, 0, TEST_IO_TO_SNAP_SIZE, test_data);
   printf("write to snapshot returned %d\n", r);
   ASSERT_LT(r, 0);
@@ -1113,12 +1257,12 @@ TEST_F(TestLibRBD, TestClone)
   printf("made and opened clone \"child\"\n");
 
   // check read
-  ASSERT_PASSED(read_test_data, child, data, 0, strlen(data));
+  ASSERT_PASSED(read_test_data, child, data, 0, strlen(data), 0);
 
   // check write
   ASSERT_EQ((ssize_t)strlen(data), rbd_write(child, 20, strlen(data), data));
-  ASSERT_PASSED(read_test_data, child, data, 20, strlen(data));
-  ASSERT_PASSED(read_test_data, child, data, 0, strlen(data));
+  ASSERT_PASSED(read_test_data, child, data, 20, strlen(data), 0);
+  ASSERT_PASSED(read_test_data, child, data, 0, strlen(data), 0);
 
   // check attributes
   ASSERT_EQ(0, rbd_stat(parent, &pinfo, sizeof(pinfo)));

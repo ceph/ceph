@@ -3327,12 +3327,12 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else if (pool.info.require_rollback()) {
 	  ctx->pending_async_reads.push_back(
 	    make_pair(
-	      make_pair(op.extent.offset, op.extent.length),
+	      boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
 	      make_pair(&osd_op.outdata, new FillInExtent(&op.extent.length))));
 	  dout(10) << " async_read noted for " << soid << dendl;
 	} else {
 	  int r = pgbackend->objects_read_sync(
-	    soid, op.extent.offset, op.extent.length, &osd_op.outdata);
+	    soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
 	  if (r >= 0)
 	    op.extent.length = r;
 	  else {
@@ -3407,8 +3407,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      last < miter->first) {
 	    bufferlist t;
 	    uint64_t len = miter->first - last;
-	    r = pgbackend->objects_read_sync(
-	      soid, last, len, &t);
+	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
 	    if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -3416,8 +3415,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 
           bufferlist tmpbl;
-	  r = pgbackend->objects_read_sync(
-	    soid, miter->first, miter->second, &tmpbl);
+	  r = pgbackend->objects_read_sync(soid, miter->first, miter->second, op.flags, &tmpbl);
           if (r < 0)
             break;
 
@@ -3435,8 +3433,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (last < end) {
 	    bufferlist t;
 	    uint64_t len = end - last;
-	    r = pgbackend->objects_read_sync(
-	      soid, last, len, &t);
+	    r = pgbackend->objects_read_sync(soid, last, len, op.flags, &t);
 	    if (!t.is_zero()) {
 	      osd->clog->error() << coll << " " << soid << " sparse-read found data in hole "
 				<< last << "~" << len << "\n";
@@ -4040,9 +4037,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 	if (pool.info.require_rollback()) {
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	} else {
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
@@ -4075,7 +4072,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	  }
 	  ctx->mod_desc.create();
-	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->append(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	  if (obs.exists) {
 	    map<string, bufferlist> to_set = ctx->obc->attr_cache;
 	    map<string, boost::optional<bufferlist> > &overlay =
@@ -4097,7 +4094,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (obs.exists) {
 	    t->truncate(soid, 0);
 	  }
-	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata);
+	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
 	if (!obs.exists) {
 	  ctx->delta_stats.num_objects++;
@@ -5835,13 +5832,13 @@ int ReplicatedPG::fill_in_copy_get(
 	async_read_started = true;
 	ctx->pending_async_reads.push_back(
 	  make_pair(
-	    make_pair(cursor.data_offset, left),
+	    boost::make_tuple(cursor.data_offset, left, 0),
 	    make_pair(&bl, cb)));
 	result = MIN(oi.size - cursor.data_offset, (uint64_t)left);
 	cb->len = result;
       } else {
 	result = pgbackend->objects_read_sync(
-	  oi.soid, cursor.data_offset, left, &bl);
+	  oi.soid, cursor.data_offset, left, osd_op.op.flags, &bl);
 	if (result < 0)
 	  return result;
       }
@@ -6129,7 +6126,8 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       cop->results.temp_oid,
       cop->temp_cursor.data_offset,
       cop->data.length(),
-      cop->data);
+      cop->data,
+      0);
     cop->data.clear();
   }
   if (!pool.info.require_rollback()) {
@@ -8009,8 +8007,8 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
     }
     rm->opt.set_pool_override(get_info().pgid.pool());
   }
-  rm->opt.set_replica();
-
+  
+  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   bool update_snaps = false;
   if (!rm->opt.empty()) {
     // If the opt is non-empty, we infer we are before
@@ -11325,7 +11323,7 @@ void ReplicatedPG::hit_set_persist()
   bufferlist boi(sizeof(ctx->new_obs.oi));
   ::encode(ctx->new_obs.oi, boi);
 
-  ctx->op_t->append(oid, 0, bl.length(), bl);
+  ctx->op_t->append(oid, 0, bl.length(), bl, 0);
   setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, OI_ATTR, boi);
   setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
   ctx->log.push_back(

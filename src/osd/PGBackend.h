@@ -434,7 +434,8 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags = 0 ///< [in] fadvise hint
        ) { assert(0); }
      virtual void omap_setkeys(
        const hobject_t &hoid,         ///< [in] object to write
@@ -475,8 +476,9 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
-       ) { write(hoid, off, len, bl); }
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags ///< [in] fadvise hint
+       ) { write(hoid, off, len, bl, fadvise_flags); }
 
      /// to_append *must* have come from the same PGBackend (same concrete type)
      virtual void append(
@@ -572,11 +574,12 @@
      const hobject_t &hoid,
      uint64_t off,
      uint64_t len,
+     uint32_t op_flags,
      bufferlist *bl) = 0;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const list<pair<pair<uint64_t, uint64_t>,
+     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete) = 0;
 
