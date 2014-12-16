@@ -258,6 +258,62 @@ TEST_P(StoreTest, SimpleCloneTest) {
   }
 }
 
+TEST_P(StoreTest, SimpleCloneRangeTest) {
+  int r;
+  coll_t cid = coll_t("coll");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  bufferlist small, newdata;
+  small.append("small");
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 10, 5, small);
+    cerr << "Creating object and write bl " << hoid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.clone_range(cid, hoid, hoid2, 10, 5, 0);
+    cerr << "Clone range object" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+    r = store->read(cid, hoid2, 0, 5, newdata);
+    ASSERT_EQ(r, 5);
+    ASSERT_TRUE(newdata.contents_equal(small));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, hoid, 1024*1024);
+    t.clone_range(cid, hoid, hoid2, 0, 1024*1024, 0);
+    cerr << "Clone range object" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+    struct stat stat, stat2;
+    r = store->stat(cid, hoid, &stat);
+    r = store->stat(cid, hoid2, &stat2);
+    ASSERT_EQ(stat.st_size, stat2.st_size);
+    ASSERT_EQ(1024*1024, stat2.st_size);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
+
 TEST_P(StoreTest, SimpleObjectLongnameTest) {
   int r;
   coll_t cid = coll_t("coll");
@@ -1843,6 +1899,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
+  g_ceph_context->_conf->set_val("filestore_fiemap", "true");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
