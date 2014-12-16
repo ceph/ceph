@@ -14,6 +14,8 @@
 
 #include <time.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/Thread.h"
@@ -200,7 +202,9 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
     }
   }
   else {
-    f->open_object_section(command.c_str());
+    string section = command;
+    boost::replace_all(section, " ", "_");
+    f->open_object_section(section.c_str());
     if (command == "config show") {
       _conf->show_config(f);
     }
@@ -306,6 +310,7 @@ CephContext::CephContext(uint32_t module_type_)
     _crypto_aes(NULL)
 {
   ceph_spin_init(&_service_thread_lock);
+  ceph_spin_init(&_associated_objs_lock);
 
   _log = new ceph::log::Log(&_conf->subsys);
   _log->start();
@@ -342,6 +347,10 @@ CephContext::CephContext(uint32_t module_type_)
 CephContext::~CephContext()
 {
   join_service_thread();
+
+  for (map<string, AssociatedSingletonObject*>::iterator it = _associated_objs.begin();
+       it != _associated_objs.end(); it++)
+    delete it->second;
 
   if (_conf->lockdep) {
     lockdep_unregister_ceph_context(this);
@@ -382,6 +391,7 @@ CephContext::~CephContext()
 
   delete _conf;
   ceph_spin_destroy(&_service_thread_lock);
+  ceph_spin_destroy(&_associated_objs_lock);
 
   delete _crypto_none;
   delete _crypto_aes;

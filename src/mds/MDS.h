@@ -441,6 +441,7 @@ private:
 
   void suicide();
   void respawn();
+  void handle_write_error(int err);
 
   void tick();
   

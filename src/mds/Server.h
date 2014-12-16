@@ -102,6 +102,7 @@ public:
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   void recall_client_state(float ratio);
+  void force_clients_readonly();
 
   // -- requests --
   void handle_client_request(MClientRequest *m);

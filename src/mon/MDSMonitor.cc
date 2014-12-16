@@ -776,19 +776,19 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
     if (f) {
       f->open_array_section("filesystems");
       {
-        if (pending_mdsmap.get_enabled()) {
+        if (mdsmap.get_enabled()) {
           f->open_object_section("filesystem");
           {
-            f->dump_string("name", pending_mdsmap.fs_name);
-            const string &md_pool_name = mon->osdmon()->osdmap.get_pool_name(pending_mdsmap.metadata_pool);
+            f->dump_string("name", mdsmap.fs_name);
+            const string &md_pool_name = mon->osdmon()->osdmap.get_pool_name(mdsmap.metadata_pool);
             /* Output both the names and IDs of pools, for use by
              * humans and machines respectively */
             f->dump_string("metadata_pool", md_pool_name);
-            f->dump_int("metadata_pool_id", pending_mdsmap.metadata_pool);
+            f->dump_int("metadata_pool_id", mdsmap.metadata_pool);
             f->open_array_section("data_pool_ids");
             {
-              for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
-                   dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+              for (std::set<int64_t>::iterator dpi = mdsmap.data_pools.begin();
+                   dpi != mdsmap.data_pools.end(); ++dpi) {
                 f->dump_int("data_pool_id", *dpi);
               }
             }
@@ -796,8 +796,8 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
 
             f->open_array_section("data_pools");
             {
-                for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
-                   dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+                for (std::set<int64_t>::iterator dpi = mdsmap.data_pools.begin();
+                   dpi != mdsmap.data_pools.end(); ++dpi) {
                   const string &pool_name = mon->osdmon()->osdmap.get_pool_name(*dpi);
                   f->dump_string("data_pool", pool_name);
                 }
@@ -811,12 +811,12 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
       f->close_section();
       f->flush(ds);
     } else {
-      if (pending_mdsmap.get_enabled()) {
-        const string &md_pool_name = mon->osdmon()->osdmap.get_pool_name(pending_mdsmap.metadata_pool);
+      if (mdsmap.get_enabled()) {
+        const string &md_pool_name = mon->osdmon()->osdmap.get_pool_name(mdsmap.metadata_pool);
         
-        ds << "name: " << pending_mdsmap.fs_name << ", metadata pool: " << md_pool_name << ", data pools: [";
-        for (std::set<int64_t>::iterator dpi = pending_mdsmap.data_pools.begin();
-           dpi != pending_mdsmap.data_pools.end(); ++dpi) {
+        ds << "name: " << mdsmap.fs_name << ", metadata pool: " << md_pool_name << ", data pools: [";
+        for (std::set<int64_t>::iterator dpi = mdsmap.data_pools.begin();
+           dpi != mdsmap.data_pools.end(); ++dpi) {
           const string &pool_name = mon->osdmon()->osdmap.get_pool_name(*dpi);
           ds << pool_name << " ";
         }

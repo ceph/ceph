@@ -93,6 +93,7 @@ struct ceph_dir_layout {
 /* client <-> monitor */
 #define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_MON_GET_MAP            5
+#define CEPH_MSG_MON_GET_OSDMAP         6
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15
@@ -287,6 +288,7 @@ enum {
 	CEPH_SESSION_RECALL_STATE,
 	CEPH_SESSION_FLUSHMSG,
 	CEPH_SESSION_FLUSHMSG_ACK,
+	CEPH_SESSION_FORCE_RO,
 };
 
 extern const char *ceph_session_op_name(int op);

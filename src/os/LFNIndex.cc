@@ -604,7 +604,7 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
     t += snprintf(t, end - t, "_snapdir");
   else
     t += snprintf(t, end - t, "_%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
 
   return string(s);
 }
@@ -658,7 +658,7 @@ string LFNIndex::lfn_generate_object_name(const ghobject_t &oid)
     t += snprintf(t, end - t, "snapdir");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
   full_name += string(buf);
   full_name.append("_");
 
@@ -722,7 +722,7 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
     t += snprintf(t, end - t, "snapdir");
   else
     t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.hash)*2), oid.hobj.hash);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
   full_name += string(snap_with_hash);
   return full_name;
 }
@@ -1010,7 +1010,10 @@ static int parse_object(const char *s, ghobject_t& o)
       o.hobj.snap = CEPH_SNAPDIR;
     else 
       o.hobj.snap = strtoull(bar+1, NULL, 16);
-    sscanf(hash, "_%X", &o.hobj.hash);
+      
+    uint32_t hobject_hash_input;
+    sscanf(hash, "_%X", &hobject_hash_input);
+    o.hobj.set_hash(hobject_hash_input);
 
     return 1;
   }

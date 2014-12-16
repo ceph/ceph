@@ -18,6 +18,7 @@ do_autogen.sh: make a ceph build by running autogen, etc.
 -c                               use cryptopp
 -j                               with java
 -r                               with rocksdb
+-J				 --with-jemalloc
 
 EOF
 }
@@ -31,7 +32,7 @@ debug_level=0
 verbose=0
 profile=0
 CONFIGURE_FLAGS="--disable-static"
-while getopts  "d:e:hHrTPjpcvO:" flag
+while getopts  "d:e:hHrTPJjpcvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -55,6 +56,8 @@ do
     v) verbose=1;;
 
     e) encode_dump=$OPTARG;;
+
+    J) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-jemalloc";;
 
     *)
         echo

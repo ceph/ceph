@@ -328,7 +328,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     ~raw_pipe() {
       if (data)
-	delete data;
+	free(data);
       close_pipe(pipefds);
       dec_total_alloc(len);
       bdout << "raw_pipe " << this << " free " << (void *)data << " "
@@ -1366,6 +1366,10 @@ void buffer::list::rebuild_page_aligned()
   {
     if (orig_off + len > length())
       throw end_of_buffer();
+
+    if (len == 0) {
+      return 0;
+    }
 
     unsigned off = orig_off;
     std::list<ptr>::iterator curbuf = _buffers.begin();

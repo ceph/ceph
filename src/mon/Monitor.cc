@@ -3173,6 +3173,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   switch (m->get_type()) {
 
     // OSDs
+    case CEPH_MSG_MON_GET_OSDMAP:
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:

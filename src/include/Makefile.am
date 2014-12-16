@@ -67,7 +67,6 @@ noinst_HEADERS += \
 	include/str_list.h \
 	include/str_map.h \
 	include/stringify.h \
-	include/triple.h \
 	include/types.h \
 	include/utime.h \
 	include/elist.h \

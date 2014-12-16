@@ -463,7 +463,7 @@ int main(int argc, const char **argv)
 
   if (modified) {
     bl.clear();
-    osdmap.encode(bl);
+    osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
 
     // write it out
     cout << me << ": writing epoch " << osdmap.get_epoch()
