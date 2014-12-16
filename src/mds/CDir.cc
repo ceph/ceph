@@ -1712,7 +1712,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  in->xattrs.swap(inode_data.xattrs);
 	  in->decode_snap_blob(inode_data.snap_blob);
 	  in->old_inodes.swap(inode_data.old_inodes);
-	  if (snaps)
+	  if (snaps && !in->snaprealm)
 	    in->purge_stale_snap_data(*snaps);
 
 	  if (!undef_inode) {
@@ -2015,7 +2015,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
 
-    if (in->is_multiversion() && snaps)
+    if (in->is_multiversion() && snaps && !in->snaprealm)
       in->purge_stale_snap_data(*snaps);
 
     in->encode_bare(bl);
