@@ -12,12 +12,14 @@
 #define TYPE(t)
 #define TYPEWITHSTRAYDATA(t)
 #define TYPE_FEATUREFUL(t)
+#define TYPE_FEATUREFUL_STRAYDATA(t)
 #define TYPE_NOCOPY(t)
 #define MESSAGE(t)
 #include "types.h"
 #undef TYPE
 #undef TYPEWITHSTRAYDATA
 #undef TYPE_FEATUREFUL
+#undef TYPE_FEATUREFUL_STRAYDATA
 #undef TYPE_NOCOPY
 #undef MESSAGE
 
@@ -239,12 +241,14 @@ int main(int argc, const char **argv)
 #define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false);
 #define TYPEWITHSTRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(true);
 #define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false);
+#define TYPE_FEATUREFUL_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(true);
 #define TYPE_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeatureNoCopy<t>(false);
 #define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
 #include "types.h"
 #undef TYPE
 #undef TYPEWITHSTRAYDATA
 #undef TYPE_FEATUREFUL
+#undef TYPE_FEATUREFUL_STRAYDATA
 #undef T_STR
 #undef T_STRINGIFY
 
@@ -312,7 +316,7 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      den->encode(encbl, features);
+      den->encode(encbl, features | CEPH_FEATURE_RESERVED); // hack for OSDMap
     } else if (*i == string("decode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;

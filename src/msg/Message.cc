@@ -66,6 +66,7 @@ using namespace std;
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MMonGetOSDMap.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
@@ -375,6 +376,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case CEPH_MSG_MON_GET_MAP:
     m = new MMonGetMap;
+    break;
+  case CEPH_MSG_MON_GET_OSDMAP:
+    m = new MMonGetOSDMap;
     break;
   case CEPH_MSG_MON_GET_VERSION:
     m = new MMonGetVersion();
