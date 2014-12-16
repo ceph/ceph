@@ -825,6 +825,10 @@ def task(ctx, config):
         assert entry['category'] == cat
         assert entry['successful_ops'] > 0
 
+    # the usage flush interval is 30 seconds, wait that much an then some
+    # to make sure everything has been flushed
+    time.sleep(35)
+
     # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
     (err, out) = rgwadmin(ctx, client, ['usage', 'trim', '--uid', user1],
         check_status=True)
