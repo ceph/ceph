@@ -28,8 +28,8 @@ Standard arguments:
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
                               [default: master]
   -k <kernel>, --kernel <kernel>
-                              The kernel branch to run against
-                              [default: testing]
+                              The kernel branch to run against; if not
+                              supplied, the installed kernel is unchanged
   -f <flavor>, --flavor <flavor>
                               The kernel flavor to run against: ('basic',
                               'gcov', 'notcmalloc')
