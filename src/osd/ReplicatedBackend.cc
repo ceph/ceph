@@ -225,9 +225,10 @@ int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
-  return store->read(coll, hoid, off, len, *bl);
+  return store->read(coll, hoid, off, len, *bl, op_flags);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
@@ -244,18 +245,19 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
 };
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<pair<uint64_t, uint64_t>,
+  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete)
 {
   int r = 0;
-  for (list<pair<pair<uint64_t, uint64_t>,
+  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		 pair<bufferlist*, Context*> > >::const_iterator i =
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = store->read(coll, hoid, i->first.first,
-			 i->first.second, *(i->second.first));
+    int _r = store->read(coll, hoid, i->first.get<0>(),
+			 i->first.get<1>(), *(i->second.first),
+			 i->first.get<2>());
     if (i->second.second) {
       get_parent()->schedule_recovery_work(
 	get_parent()->bless_gencontext(
@@ -319,10 +321,11 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
-    bufferlist &bl
+    bufferlist &bl,
+    uint32_t fadvise_flags
     ) {
     written += len;
-    t->write(get_coll_ct(hoid), hoid, off, len, bl);
+    t->write(get_coll_ct(hoid), hoid, off, len, bl, fadvise_flags);
   }
   void remove(
     const hobject_t &hoid

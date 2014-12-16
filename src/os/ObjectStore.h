@@ -391,7 +391,7 @@ public:
     bool sobject_encoding;
     int64_t pool_override;
     bool use_pool_override;
-    bool replica;
+    uint32_t fadvise_flags; //record write flags
     void *osr; // NULL on replay
 
     list<Context *> on_applied;
@@ -454,16 +454,23 @@ public:
     void set_pool_override(int64_t pool) {
       pool_override = pool;
     }
-    void set_replica() {
-      replica = true;
+
+    void set_fadvise_flags(uint32_t flags) {
+      fadvise_flags = flags;
     }
-    bool get_replica() { return replica; }
+
+    void set_fadvise_flag(uint32_t flag) {
+      fadvise_flags |= flag;
+    }
+
+    uint32_t get_fadvise_flags() { return fadvise_flags; }
 
     void swap(Transaction& other) {
       std::swap(ops, other.ops);
       std::swap(largest_data_len, other.largest_data_len);
       std::swap(largest_data_off, other.largest_data_off);
       std::swap(largest_data_off_in_tbl, other.largest_data_off_in_tbl);
+      std::swap(fadvise_flags, other.fadvise_flags);
       std::swap(on_applied, other.on_applied);
       std::swap(on_commit, other.on_commit);
       std::swap(on_applied_sync, other.on_applied_sync);
@@ -490,7 +497,7 @@ public:
 
     /// How big is the encoded Transaction buffer?
     uint64_t get_encoded_bytes() {
-      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
+      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
     }
 
     uint64_t get_num_bytes() {
@@ -512,6 +519,7 @@ public:
 	  sizeof(largest_data_len) +
 	  sizeof(largest_data_off) +
 	  sizeof(largest_data_off_in_tbl) +
+	  sizeof(fadvise_flags) +
 	  sizeof(__u32);  // tbl length
       }
       return 0;  // none
@@ -553,14 +561,14 @@ public:
       bool sobject_encoding;
       int64_t pool_override;
       bool use_pool_override;
-      bool replica;
+      uint32_t fadvise_flags;
 
       iterator(Transaction *t)
 	: p(t->tbl.begin()),
 	  sobject_encoding(t->sobject_encoding),
 	  pool_override(t->pool_override),
 	  use_pool_override(t->use_pool_override),
-	  replica(t->replica) {}
+	  fadvise_flags(t->fadvise_flags) {}
 
       friend class Transaction;
 
@@ -635,7 +643,8 @@ public:
 	::decode(bits, p);
 	return bits;
       }
-      bool get_replica() { return replica; }
+
+      uint32_t get_fadvise_flags() { return fadvise_flags; }
     };
 
     iterator begin() {
@@ -687,7 +696,7 @@ public:
      * "hole" in the file.
      */
     void write(coll_t cid, const ghobject_t& oid, uint64_t off, uint64_t len,
-	       const bufferlist& data) {
+	       const bufferlist& data, uint32_t flags = 0) {
       __u32 op = OP_WRITE;
       ::encode(op, tbl);
       ::encode(cid, tbl);
@@ -695,6 +704,7 @@ public:
       ::encode(off, tbl);
       ::encode(len, tbl);
       assert(len == data.length());
+      fadvise_flags |= flags;
       if (data.length() > largest_data_len) {
 	largest_data_len = data.length();
 	largest_data_off = off;
@@ -1034,13 +1044,13 @@ public:
     Transaction() :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
+      fadvise_flags(0),
       osr(NULL) {}
 
     Transaction(bufferlist::iterator &dp) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
+      fadvise_flags(0),
       osr(NULL) {
       decode(dp);
     }
@@ -1048,14 +1058,14 @@ public:
     Transaction(bufferlist &nbl) :
       ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
       sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
+      fadvise_flags(0),
       osr(NULL) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(7, 5, bl);
+      ENCODE_START(8, 5, bl);
       ::encode(ops, bl);
       ::encode(pad_unused_bytes, bl);
       ::encode(largest_data_len, bl);
@@ -1066,10 +1076,11 @@ public:
 	bool tolerate_collection_add_enoent = 0;
 	::encode(tolerate_collection_add_enoent, bl);
       }
+      ::encode(fadvise_flags, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
       DECODE_OLDEST(2);
       if (struct_v < 4)
 	sobject_encoding = true;
@@ -1089,6 +1100,9 @@ public:
       if (struct_v >= 7) {
 	bool tolerate_collection_add_enoent;
 	::decode(tolerate_collection_add_enoent, bl);
+      }
+      if (struct_v >= 8) {
+	::decode(fadvise_flags, bl);
       }
       DECODE_FINISH(bl);
     }
@@ -1316,6 +1330,7 @@ public:
    * @param offset location offset of first byte to be read
    * @param len number of bytes to be read
    * @param bl output bufferlist
+   * @param op_flags is CEPH_OSD_OP_FLAG_*
    * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
@@ -1325,6 +1340,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags = 0,
     bool allow_eio = false) = 0;
 
   /**

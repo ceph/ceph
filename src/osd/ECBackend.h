@@ -112,6 +112,7 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
+    uint32_t op_flags,
     bufferlist *bl);
 
   /**
@@ -142,7 +143,7 @@ public:
   list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
     const hobject_t &hoid,
-    const list<pair<pair<uint64_t, uint64_t>,
+    const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		    pair<bufferlist*, Context*> > > &to_read,
     Context *on_complete);
 
@@ -264,13 +265,13 @@ public:
     read_result_t() : r(0) {}
   };
   struct read_request_t {
-    const list<pair<uint64_t, uint64_t> > to_read;
+    const list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     const set<pg_shard_t> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
     read_request_t(
       const hobject_t &hoid,
-      const list<pair<uint64_t, uint64_t> > &to_read,
+      const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const set<pg_shard_t> &need,
       bool want_attrs,
       GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
