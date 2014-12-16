@@ -2224,8 +2224,9 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     dout(15) << "auth_sign=" << auth_sign << dendl;
     dout(15) << "compare=" << auth_sign.compare(digest) << dendl;
 
-    if (auth_sign != digest)
-      return -EPERM;
+    if (auth_sign != digest) {
+      return -ERR_SIGNATURE_NO_MATCH;
+    }
 
     if (s->user.system) {
       s->system_request = true;
