@@ -159,6 +159,7 @@ TYPE(mds_load_t)
 TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
+TYPE(quota_info_t)
 
 #include "mds/CInode.h"
 TYPE(InodeStore)
