@@ -1123,6 +1123,10 @@ public:
     return 0;
   }
 
+  int clear_instance() {
+    return set_instance(string());
+  }
+
   void set_loc(const string& k) {
     loc = k;
   }
