@@ -77,6 +77,7 @@ Makefile
 /cls_test_*
 /unittest_*
 /get_command_descriptions
+/ceph_perf_objectstore
 
 # old dir, may in use by older branches
 /leveldb

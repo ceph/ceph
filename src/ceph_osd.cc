@@ -506,9 +506,6 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  // Now close the standard file descriptors
-  global_init_shutdown_stderr(g_ceph_context);
-
   ms_public->start();
   ms_hbclient->start();
   ms_hb_front_server->start();

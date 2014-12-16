@@ -18,7 +18,7 @@
 
 #include "arch/probe.h"
 #include "arch/intel.h"
-#include "arch/neon.h"
+#include "arch/arm.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
@@ -47,7 +47,7 @@ TEST(Arch, all)
 
   int expected;
 
-  expected = strstr(flags, " neon ") ? 1 : 0;
+  expected = (strstr(flags, " neon ") || strstr(flags, " asimd ")) ? 1 : 0;
   EXPECT_EQ(expected, ceph_arch_neon);
 
   expected = strstr(flags, " pclmulqdq ") ? 1 : 0;

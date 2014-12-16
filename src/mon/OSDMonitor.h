@@ -224,6 +224,8 @@ private:
 
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
+  bool preprocess_get_osdmap(class MMonGetOSDMap *m);
+
   bool preprocess_mark_me_down(class MOSDMarkMeDown *m);
 
   friend class C_AckMarkedDown;

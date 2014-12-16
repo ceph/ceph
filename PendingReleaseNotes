@@ -29,6 +29,11 @@ v0.90
 * The 'rados create <objectname> [category]' optional category argument is no
   longer supported or recognized.
 
+* rados.py's Rados class no longer has a __del__ method; it was causing
+  problems on interpreter shutdown and use of threads.  If your code has
+  Rados objects with limited lifetimes and you're concerned about locked
+  resources, call Rados.shutdown() explicitly.
+
 * There is a new version of the librados watch/notify API with vastly
   improved semantics.  Any applications using this interface are
   encouraged to migrate to the new API.  The old API calls are marked
@@ -38,3 +43,4 @@ v0.90
   invalid handle.  The new version has undefined behavior when passed
   a bogus value (for example, when rados_watch() returns an error and
   handle is not defined).
+

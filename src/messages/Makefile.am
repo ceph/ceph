@@ -56,6 +56,7 @@ noinst_HEADERS += \
 	messages/MMonCommandAck.h \
 	messages/MMonElection.h \
 	messages/MMonGetMap.h \
+	messages/MMonGetOSDMap.h \
 	messages/MMonGetVersion.h \
 	messages/MMonGetVersionReply.h \
 	messages/MMonGlobalID.h \

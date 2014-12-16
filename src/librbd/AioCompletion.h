@@ -87,6 +87,10 @@ namespace librbd {
 
     void init_time(ImageCtx *i, aio_type_t t) {
       ictx = i;
+      {
+        Mutex::Locker l(ictx->aio_lock);
+        ++ictx->pending_aio;
+      }
       aio_type = t;
       start_time = ceph_clock_now(ictx->cct);
     }

@@ -54,6 +54,11 @@
 #define CEPH_FEATURE_OSD_POOLRESEND    (1ULL<<43)
 #define CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 (1ULL<<44)
 #define CEPH_FEATURE_OSD_SET_ALLOC_HINT (1ULL<<45)
+#define CEPH_FEATURE_OSD_FADVISE_FLAGS (1ULL<<46)
+
+#define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
+#define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
+#define CEPH_FEATURE_RESERVED_BROKEN  (1ULL<<63)  /* DO NOT USE THIS; see below */
 
 /*
  * The introduction of CEPH_FEATURE_OSD_SNAPMAPPER caused the feature
@@ -66,10 +71,10 @@
  * and fixed by commit
  *   4255b5c2fb54ae40c53284b3ab700fdfc7e61748 v0.65-263-g4255b5c
  */
-#define CEPH_FEATURE_RESERVED (1ULL<<63)
+#define CEPH_FEATURE_RESERVED_BROKEN (1ULL<<63)
 
 static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
-	if (f & CEPH_FEATURE_RESERVED) {
+	if (f & CEPH_FEATURE_RESERVED_BROKEN) {
 		/* everything through OSD_SNAPMAPPER */
 		return 0x1ffffffffull;
 	} else {
@@ -128,6 +133,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_POOLRESEND |	\
          CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2 |   \
          CEPH_FEATURE_OSD_SET_ALLOC_HINT |   \
+	 CEPH_FEATURE_OSD_FADVISE_FLAGS | \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
@@ -140,5 +146,17 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_CRUSH_TUNABLES2 |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES3 |		\
 	 CEPH_FEATURE_CRUSH_V2)
+
+/*
+ * make sure we don't try to use the reserved features
+ */
+#define CEPH_STATIC_ASSERT(x) (void)(sizeof(int[((x)==0) ? -1 : 0]))
+
+static inline void ____build_time_check_for_reserved_bits(void) {
+	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
+			    (CEPH_FEATURE_RESERVED |
+			     CEPH_FEATURE_RESERVED2 |
+			     CEPH_FEATURE_RESERVED_BROKEN)) == 0);
+}
 
 #endif

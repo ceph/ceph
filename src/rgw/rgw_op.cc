@@ -373,7 +373,7 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
 
     string& region = s->bucket_info.region;
     map<string, RGWRegion>::iterator dest_region = store->region_map.regions.find(region);
-    if (dest_region != store->region_map.regions.end()) {
+    if (dest_region != store->region_map.regions.end() && !dest_region->second.endpoints.empty()) {
       s->region_endpoint = dest_region->second.endpoints.front();
     }
     if (s->bucket_exists && !store->region.equals(region)) {
@@ -1253,6 +1253,16 @@ void RGWCreateBucket::execute()
     region_name = store->region.name;
   }
 
+  if (s->bucket_exists) {
+    string selected_placement_rule;
+    rgw_bucket bucket;
+    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    if (selected_placement_rule != s->bucket_info.placement_rule) {
+      ret = -EEXIST;
+      return;
+    }
+  }
+
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
@@ -1383,7 +1393,9 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 
 protected:
   int prepare(RGWRados *store, void *obj_ctx, string *oid_rand);
-  int do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs);
+  int do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                  map<string, bufferlist>& attrs,
+                  const char *if_match = NULL, const char *if_nomatch = NULL);
 
 public:
   bool immutable_head() { return true; }
@@ -1454,7 +1466,9 @@ static bool is_v2_upload_id(const string& upload_id)
   return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
 }
 
-int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime, map<string, bufferlist>& attrs)
+int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
+                                              map<string, bufferlist>& attrs,
+                                              const char *if_match, const char *if_nomatch)
 {
   complete_writing_data();
 
@@ -1744,7 +1758,7 @@ void RGWPutObj::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  ret = processor->complete(etag, &mtime, 0, attrs);
+  ret = processor->complete(etag, &mtime, 0, attrs, if_match, if_nomatch);
 done:
   dispose_processor(processor);
   perfcounter->tinc(l_rgw_put_lat,
@@ -1901,6 +1915,13 @@ void RGWPutMetadata::execute()
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
   if (ret < 0)
     return;
+
+  if (!s->object && !placement_rule.empty()) {
+    if (placement_rule != s->bucket_info.placement_rule) {
+      ret = -EEXIST;
+      return;
+    }
+  }
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {

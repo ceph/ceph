@@ -17,6 +17,7 @@
 
 #include <iostream>
 #include <stdint.h>
+#include <string>
 
 #include "include/buffer.h"
 #include "include/atomic.h"
@@ -58,6 +59,10 @@ private:
   ~CephContext();
   atomic_t nref;
 public:
+  class AssociatedSingletonObject {
+   public:
+    virtual ~AssociatedSingletonObject() {}
+  };
   CephContext *get() {
     nref.inc();
     return this;
@@ -102,6 +107,17 @@ public:
   void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
 		  bufferlist *out);
 
+  template<typename T>
+  void lookup_or_create_singleton_object(T*& p, const std::string &name) {
+    ceph_spin_lock(&_associated_objs_lock);
+    if (!_associated_objs.count(name)) {
+      p = new T(this);
+      _associated_objs[name] = reinterpret_cast<AssociatedSingletonObject*>(p);
+    } else {
+      p = reinterpret_cast<T*>(_associated_objs[name]);
+    }
+    ceph_spin_unlock(&_associated_objs_lock);
+  }
   /**
    * get a crypto handler
    */
@@ -137,6 +153,9 @@ private:
   CephContextHook *_admin_hook;
 
   ceph::HeartbeatMap *_heartbeat_map;
+
+  ceph_spinlock_t _associated_objs_lock;
+  std::map<std::string, AssociatedSingletonObject*> _associated_objs;
 
   // crypto
   CryptoNone *_crypto_none;

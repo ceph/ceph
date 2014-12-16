@@ -303,6 +303,8 @@ public:
       iterator& operator++();
       ptr get_current_ptr();
 
+      list& get_bl() { return *bl; }
+
       // copy data out.
       // note that these all _append_ to dest!
       void copy(unsigned len, char *dest);

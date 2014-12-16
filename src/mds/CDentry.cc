@@ -542,6 +542,12 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
     locker->eval_gather(&lock);
 }
 
+void CDentry::remove_client_leases(Locker *locker)
+{
+  while (!client_lease_map.empty())
+    remove_client_lease(client_lease_map.begin()->second, locker);
+}
+
 void CDentry::_put()
 {
   if (get_num_ref() <= ((int)is_dirty() + 1)) {

@@ -166,7 +166,7 @@ void *WBThrottle::entry()
     ::fsync(**wb.get<1>());
 #endif
 #ifdef HAVE_POSIX_FADVISE
-    if (wb.get<2>().nocache) {
+    if (g_conf->filestore_fadvise && wb.get<2>().nocache) {
       int fa_r = posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
       assert(fa_r == 0);
     }
@@ -219,6 +219,13 @@ void WBThrottle::clear()
 	 pending_wbs.begin();
        i != pending_wbs.end();
        ++i) {
+#ifdef HAVE_POSIX_FADVISE
+    if (g_conf->filestore_fadvise && i->second.first.nocache) {
+      int fa_r = posix_fadvise(**i->second.second, 0, 0, POSIX_FADV_DONTNEED);
+      assert(fa_r == 0);
+    }
+#endif
+
     cur_ios -= i->second.first.ios;
     logger->dec(l_wbthrottle_ios_dirtied, i->second.first.ios);
     cur_size -= i->second.first.size;

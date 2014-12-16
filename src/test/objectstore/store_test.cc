@@ -1490,7 +1490,7 @@ void colsplittest(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(!(i->hobj.hash & (1<<common_suffix_size)), 0u);
+    ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
     t.remove(cid, *i);
   }
 
@@ -1501,7 +1501,7 @@ void colsplittest(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(i->hobj.hash & (1<<common_suffix_size), 0u);
+    ASSERT_EQ(i->hobj.get_hash() & (1<<common_suffix_size), 0u);
     t.remove(tid, *i);
   }
 
@@ -1545,10 +1545,10 @@ TEST_P(StoreTest, TwoHash) {
     ObjectStore::Transaction t;
     ghobject_t o;
     if (i < 8) {
-      o.hobj.hash = (i << 16) | 0xA1;
+      o.hobj.set_hash((i << 16) | 0xA1);
       t.touch(cid, o);
     }
-    o.hobj.hash = (i << 16) | 0xB1;
+    o.hobj.set_hash((i << 16) | 0xB1);
     t.touch(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -1557,7 +1557,7 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.hash = (i << 16) | 0xA1;
+    o.hobj.set_hash((i << 16) | 0xA1);
     t.remove(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
@@ -1566,13 +1566,13 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.hash = (i << 16) | 0xA1;
+    o.hobj.set_hash((i << 16) | 0xA1);
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, false);
   }
   {
     ghobject_t o;
-    o.hobj.hash = 0xA1;
+    o.hobj.set_hash(0xA1);
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, true);
   }
@@ -1580,9 +1580,9 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.hash = (i << 16) | 0xA1;
+    o.hobj.set_hash((i << 16) | 0xA1);
     t.remove(cid, o);
-    o.hobj.hash = (i << 16) | 0xB1;
+    o.hobj.set_hash((i << 16) | 0xB1);
     t.remove(cid, o);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);

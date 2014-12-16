@@ -34,10 +34,10 @@ RUN rm -f /lib/systemd/system/anaconda.target.wants/*
 RUN yum install -y redhat-lsb-core
 # build dependencies from spec.in
 RUN yum install -y wget 
-RUN wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-2.noarch.rpm
-RUN rpm -ivh epel-release-7-2.noarch.rpm
-RUN yum install -y make gcc-c++ libtool boost-devel bzip2-devel libedit-devel perl gdbm pkgconfig python python-nose python-argparse libaio-devel libcurl-devel libxml2-devel libuuid-devel libblkid-devel libudev-devel leveldb-devel xfsprogs-devel yasm snappy-devel sharutils gperftools-devel google-perftools-devel mozilla-nss-devel keyutils-devel libatomic-ops-devel fdupes nss-devel keyutils-libs-devel libatomic_ops-devel gperftools-devel fuse-devel libexpat-devel FastCGI-devel expat-devel fcgi-devel lttng-ust-devel libbabeltrace-devel java-devel java-devel junit4 
+RUN wget http://dl.fedoraproject.org/pub/epel/7/x86_64/e/epel-release-7-5.noarch.rpm
+RUN rpm -ivh epel-release-7-5.noarch.rpm
+RUN yum install -y make gcc-c++ libtool boost-devel bzip2-devel libedit-devel perl gdbm pkgconfig python python-nose python-argparse libaio-devel libcurl-devel libxml2-devel libuuid-devel libblkid-devel libudev-devel leveldb-devel xfsprogs-devel yasm snappy-devel sharutils gperftools-devel google-perftools-devel mozilla-nss-devel keyutils-devel libatomic-ops-devel fdupes nss-devel keyutils-libs-devel libatomic_ops-devel gperftools-devel fuse-devel libexpat-devel FastCGI-devel expat-devel fcgi-devel lttng-ust-devel libbabeltrace-devel java-devel java-devel junit4 parted
 # development tools
 RUN yum install -y ccache valgrind gdb git
 # make check dependencies
-RUN yum install -y python-virtualenv gdisk kpartx
+RUN yum install -y python-virtualenv gdisk kpartx hdparm

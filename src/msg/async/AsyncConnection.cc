@@ -97,6 +97,48 @@ class C_handle_dispatch : public EventCallback {
   }
 };
 
+class C_handle_connect : public EventCallback {
+  AsyncMessenger *msgr;
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_connect(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  void do_request(int id) {
+    msgr->ms_deliver_handle_connect(conn.get());
+  }
+};
+
+class C_handle_accept : public EventCallback {
+  AsyncMessenger *msgr;
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_accept(AsyncMessenger *msgr, AsyncConnectionRef c): msgr(msgr), conn(c) {}
+  void do_request(int id) {
+    msgr->ms_deliver_handle_accept(conn.get());
+  }
+};
+
+class C_handle_stop : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_stop(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->stop();
+  }
+};
+
+class C_handle_signal : public EventCallback {
+  AsyncConnectionRef conn;
+
+ public:
+  C_handle_signal(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->wakeup_stop();
+  }
+};
+
 
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
@@ -126,6 +168,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false), keepalive(false),
+    stop_lock("AsyncConnection::stop_lock"),
     got_bad_auth(false), authorizer(NULL),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
@@ -133,6 +176,10 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   write_handler.reset(new C_handle_write(this));
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
+  stop_handler.reset(new C_handle_stop(this));
+  signal_handler.reset(new C_handle_signal(this));
+  connect_handler.reset(new C_handle_connect(async_msgr, this));
+  accept_handler.reset(new C_handle_connect(async_msgr, this));
   memset(msgvec, 0, sizeof(msgvec));
 }
 
@@ -737,7 +784,8 @@ void AsyncConnection::process()
 
       case STATE_CLOSED:
         {
-          center->delete_file_event(sd, EVENT_READABLE);
+          if (sd > 0)
+            center->delete_file_event(sd, EVENT_READABLE);
           ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
           break;
         }
@@ -1095,7 +1143,7 @@ int AsyncConnection::_process_connection()
           session_security.reset();
         }
 
-        async_msgr->ms_deliver_handle_connect(this);
+        center->dispatch_event_external(connect_handler);
         async_msgr->ms_deliver_handle_fast_connect(this);
 
         // message may in queue between last _try_send and connection ready
@@ -1532,10 +1580,10 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   }
   if (existing->policy.lossy) {
     // disconnect from the Connection
-    async_msgr->ms_deliver_handle_reset(existing.get());
+    center->dispatch_event_external(EventCallbackRef(new C_handle_reset(async_msgr, existing)));
   } else {
     // queue a reset on the new connection, which we're dumping for the old
-    async_msgr->ms_deliver_handle_reset(this);
+    center->dispatch_event_external(reset_handler);
 
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
@@ -1583,7 +1631,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                                session_key, get_features()));
 
   // notify
-  async_msgr->ms_deliver_handle_accept(this);
+  center->dispatch_event_external(accept_handler);
   async_msgr->ms_deliver_handle_fast_accept(this);
 
   // ok!
@@ -1751,11 +1799,13 @@ void AsyncConnection::fault()
 {
   if (state == STATE_CLOSED) {
     ldout(async_msgr->cct, 10) << __func__ << " state is already STATE_CLOSED" << dendl;
+    center->dispatch_event_external(reset_handler);
     return ;
   }
 
   if (policy.lossy && state != STATE_CONNECTING) {
     ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
+    center->dispatch_event_external(reset_handler);
     _stop();
     return ;
   }
@@ -1818,21 +1868,21 @@ void AsyncConnection::was_session_reset()
   in_seq_acked = 0;
 }
 
-void AsyncConnection::_stop(bool external)
+void AsyncConnection::_stop()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
-  center->dispatch_event_external(reset_handler);
   shutdown_socket();
   discard_out_queue();
   outcoming_bl.clear();
-  if (policy.lossy)
-    was_session_reset();
   open_write = false;
   state = STATE_CLOSED;
   ::close(sd);
   sd = -1;
-  async_msgr->unregister_conn(peer_addr, external);
+  async_msgr->unregister_conn(peer_addr);
+  // Here we need to dispatch "signal" event, because we want to ensure signal
+  // it after all events called by this "_stop" has be done.
+  center->dispatch_event_external(signal_handler);
   put();
 }
 

@@ -106,6 +106,7 @@ public:
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
   static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
+  static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -114,7 +115,7 @@ public:
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT);
+  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT|STATE_BADFRAG);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
    STATE_IMPORTING
@@ -219,6 +220,8 @@ public:
 
   bool is_new() { return item_new.is_on_list(); }
   void mark_new(LogSegment *ls);
+
+  bool is_bad() { return state_test(STATE_BADFRAG); }
 
 public:
   typedef std::map<dentry_key_t, CDentry*> map_t;
@@ -360,6 +363,7 @@ private:
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 public:
   void touch_dentries_bottom();
+  void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 
 
@@ -497,7 +501,7 @@ protected:
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
-  void _committed(version_t v);
+  void _committed(int r, version_t v);
 public:
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);

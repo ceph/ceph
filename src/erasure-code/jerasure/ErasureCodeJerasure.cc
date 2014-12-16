@@ -298,13 +298,6 @@ int ErasureCodeJerasureCauchy::parse(const map<std::string,std::string> &paramet
 				     ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(parameters, ss);
-  if (w != 8 && w != 16 && w != 32) {
-    *ss << "Cauchy: w=" << w
-	<< " must be one of {8, 16, 32} : revert to " 
-        << DEFAULT_W << std::endl;
-    w = DEFAULT_W;
-    err = -EINVAL;
-  }
   err |= to_int("packetsize", parameters, &packetsize, DEFAULT_PACKETSIZE, ss);
   err |= to_bool("jerasure-per-chunk-alignment", parameters,
 		 &per_chunk_alignment, false, ss);

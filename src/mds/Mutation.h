@@ -224,6 +224,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
+    int slave_error;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
 
@@ -271,6 +272,7 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     filepath filepath2;
 
     More() : 
+      slave_error(0),
       has_journaled_slaves(false), slave_update_journaled(false),
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
