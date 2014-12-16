@@ -525,12 +525,13 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags = 0,
     bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const ghobject_t& oid);
-  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl,
-      bool replica = false);
+  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+	      const bufferlist& bl, uint32_t fadvise_flags = 0);
   int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size);
   int _clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& newoid,

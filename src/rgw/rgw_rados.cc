@@ -4584,7 +4584,7 @@ int RGWRados::clone_objs_impl(void *ctx, rgw_obj& dst_obj,
   ObjectWriteOperation op;
   if (truncate_dest) {
     op.remove();
-    op.set_op_flags(OP_FAILOK); // don't fail if object didn't exist
+    op.set_op_flags2((int)OP_FAILOK); // don't fail if object didn't exist
   }
 
   op.create(exclusive);

@@ -271,6 +271,19 @@ TEST_F(CReadOpsTest, Read) {
     rados_release_read_op(op);
   }
 
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    int rval;
+    rados_read_op_read(op, 0, len, buf, &bytes_read, &rval);
+    rados_read_op_set_flags(op, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
   remove_object();
 }
 

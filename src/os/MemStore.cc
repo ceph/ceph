@@ -302,6 +302,7 @@ int MemStore::read(
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags,
     bool allow_eio)
 {
   dout(10) << __func__ << " " << cid << " " << oid << " "
@@ -708,10 +709,10 @@ void MemStore::_do_transaction(Transaction& t)
 	ghobject_t oid = i.decode_oid();
 	uint64_t off = i.decode_length();
 	uint64_t len = i.decode_length();
-	bool replica = i.get_replica();
+	uint32_t fadvise_flags = i.get_fadvise_flags();
 	bufferlist bl;
 	i.decode_bl(bl);
-	r = _write(cid, oid, off, len, bl, replica);
+	r = _write(cid, oid, off, len, bl, fadvise_flags);
       }
       break;
       
@@ -1053,7 +1054,7 @@ int MemStore::_touch(coll_t cid, const ghobject_t& oid)
 
 int MemStore::_write(coll_t cid, const ghobject_t& oid,
 		     uint64_t offset, size_t len, const bufferlist& bl,
-		     bool replica)
+		     uint32_t fadvise_flags)
 {
   dout(10) << __func__ << " " << cid << " " << oid << " "
 	   << offset << "~" << len << dendl;

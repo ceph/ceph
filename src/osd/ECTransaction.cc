@@ -155,7 +155,8 @@ struct TransGenerator : public boost::static_visitor<void> {
 	sinfo.logical_to_prev_chunk_offset(
 	  offset),
 	enc_bl.length(),
-	enc_bl);
+	enc_bl,
+	op.fadvise_flags);
       i->second.setattr(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),

@@ -96,7 +96,7 @@ class Transaction {
           ghobject_t oid = i.decode_oid();
           i.decode_length();
           i.decode_length();
-          i.get_replica();
+          i.get_fadvise_flags();
           bufferlist bl;
           i.decode_bl(bl);
         }
