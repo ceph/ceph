@@ -94,9 +94,6 @@ class Transaction {
         {
           coll_t cid = i.get_cid(op->cid);
           ghobject_t oid = i.get_oid(op->oid);
-          uint64_t off = op->off;
-          uint64_t len = op->len;
-          uint32_t fadvise_flags = i.get_fadvise_flags();
           bufferlist bl;
           i.decode_bl(bl);
         }
