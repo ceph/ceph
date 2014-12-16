@@ -209,7 +209,7 @@ void RGW_SWIFT_Auth_Get::execute()
     tenant_path.append(g_conf->rgw_swift_tenant_name);
   }
 
-  s->cio->print("X-Storage-Url: %s/%s/v1%s\n", swift_url.c_str(),
+  s->cio->print("X-Storage-Url: %s/%s/v1%s\r\n", swift_url.c_str(),
 	        swift_prefix.c_str(), tenant_path.c_str());
 
   if ((ret = encode_token(s->cct, swift_key->id, swift_key->key, bl)) < 0)
@@ -219,8 +219,8 @@ void RGW_SWIFT_Auth_Get::execute()
     char buf[bl.length() * 2 + 1];
     buf_to_hex((const unsigned char *)bl.c_str(), bl.length(), buf);
 
-    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\n", buf);
-    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\n", buf);
+    s->cio->print("X-Storage-Token: AUTH_rgwtk%s\r\n", buf);
+    s->cio->print("X-Auth-Token: AUTH_rgwtk%s\r\n", buf);
   }
 
   ret = STATUS_NO_CONTENT;
