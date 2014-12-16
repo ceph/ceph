@@ -27,10 +27,17 @@ TEST(cls_rgw, test_implicit) /* test refcount using implicit referencing of newl
 
   /* add chains */
   string oid = "obj";
+  string oldtag = "oldtag";
+  string newtag = "newtag";
 
+
+  /* get on a missing object will fail */
+  librados::ObjectWriteOperation *op = new_op();
+  cls_refcount_get(*op, newtag, true);
+  ASSERT_EQ(-ENOENT, ioctx.operate(oid, op));
+  delete op;
 
   /* create object */
-
   ASSERT_EQ(0, ioctx.create(oid, true));
 
   /* read reference, should return a single wildcard entry */
@@ -46,11 +53,7 @@ TEST(cls_rgw, test_implicit) /* test refcount using implicit referencing of newl
   ASSERT_EQ(wildcard_tag, tag);
 
   /* take another reference, verify */
-
-  string oldtag = "oldtag";
-  string newtag = "newtag";
-
-  librados::ObjectWriteOperation *op = new_op();
+  op = new_op();
   cls_refcount_get(*op, newtag, true);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
@@ -101,6 +104,41 @@ TEST(cls_rgw, test_implicit) /* test refcount using implicit referencing of newl
   ASSERT_EQ(0, ioctx.operate(oid, op));
 
   ASSERT_EQ(-ENOENT, ioctx.stat(oid, NULL, NULL));
+
+  delete op;
+
+  /* remove pool */
+  ioctx.close();
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, rados));
+}
+
+
+TEST(cls_rgw, test_put_snap) {
+  librados::Rados rados;
+  librados::IoCtx ioctx;
+  string pool_name = get_temp_pool_name();
+
+  /* create pool */
+  ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+  ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+
+  bufferlist bl;
+  bl.append("hi there");
+  ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  ASSERT_EQ(0, ioctx.snap_create("snapfoo"));
+  ASSERT_EQ(0, ioctx.remove("foo"));
+
+  sleep(2);
+
+  ASSERT_EQ(0, ioctx.snap_create("snapbar"));
+
+  librados::ObjectWriteOperation *op = new_op();
+  op->create(false);
+  cls_refcount_put(*op, "notag", true);
+  ASSERT_EQ(-ENOENT, ioctx.operate("foo", op));
+
+  EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
+  EXPECT_EQ(0, ioctx.snap_remove("snapbar"));
 
   delete op;
 
