@@ -2156,11 +2156,12 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
     ictx->readahead.wait_for_pending();
-
-    if (ictx->object_cacher)
+    if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
-    else
+    } else {
       flush(ictx);
+      ictx->wait_for_pending_aio();
+    }
 
     if (ictx->parent) {
       close_image(ictx->parent);
