@@ -241,6 +241,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     if (write_acl.size()) {
       s->cio->print("X-Container-Write: %s\r\n", write_acl.c_str());
     }
+    if (!s->bucket_info.placement_rule.empty()) {
+      s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
+    }
   }
 }
 
@@ -350,6 +353,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   }
 
   location_constraint = store->region.api_name;
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
 }
@@ -437,6 +441,7 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
       return r;
     }
   }
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
 }

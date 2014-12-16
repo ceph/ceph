@@ -1253,6 +1253,16 @@ void RGWCreateBucket::execute()
     region_name = store->region.name;
   }
 
+  if (s->bucket_exists) {
+    string selected_placement_rule;
+    rgw_bucket bucket;
+    ret = store->select_bucket_placement(s->user, region_name, placement_rule, s->bucket_name_str, bucket, &selected_placement_rule);
+    if (selected_placement_rule != s->bucket_info.placement_rule) {
+      ret = -EEXIST;
+      return;
+    }
+  }
+
   policy.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
@@ -1905,6 +1915,13 @@ void RGWPutMetadata::execute()
   ret = get_obj_attrs(store, s, obj, orig_attrs, NULL, ptracker);
   if (ret < 0)
     return;
+
+  if (!s->object && !placement_rule.empty()) {
+    if (placement_rule != s->bucket_info.placement_rule) {
+      ret = -EEXIST;
+      return;
+    }
+  }
 
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
