@@ -2176,7 +2176,7 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     /* get the user info */
     if (rgw_get_user_info_by_access_key(store, auth_id, s->user) < 0) {
       dout(5) << "error reading user info, uid=" << auth_id << " can't authenticate" << dendl;
-      return -EPERM;
+      return -ERR_INVALID_ACCESS_KEY;
     }
 
     /* now verify signature */
