@@ -3,11 +3,11 @@ from StringIO import StringIO
 import json
 import logging
 import time
-from tasks.ceph import write_conf
 
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
+from tasks.ceph_manager import write_conf
 from tasks import ceph_manager
 
 
@@ -34,13 +34,22 @@ class Filesystem(object):
             raise RuntimeError("This task requires at least one MDS")
 
         first_mon = misc.get_first_mon(ctx, config)
-        (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
-        self.mon_manager = ceph_manager.CephManager(mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+        (self.mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+        self.mon_manager = ceph_manager.CephManager(self.mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
         self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
 
         client_list = list(misc.all_roles_of_type(self._ctx.cluster, 'client'))
         self.client_id = client_list[0]
         self.client_remote = list(misc.get_clients(ctx=ctx, roles=["client.{0}".format(self.client_id)]))[0][1]
+
+    def create(self):
+        pg_warn_min_per_osd = int(self.get_config('mon_pg_warn_min_per_osd'))
+        osd_count = len(list(misc.all_roles_of_type(self._ctx.cluster, 'osd')))
+        pgs_per_fs_pool = pg_warn_min_per_osd * osd_count
+
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', pgs_per_fs_pool.__str__()])
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
+        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
 
     def get_mds_hostnames(self):
         result = set()
@@ -51,7 +60,12 @@ class Filesystem(object):
         return list(result)
 
     def get_config(self, key):
-        return self.mds_asok(['config', 'get', key])[key]
+        """
+        Use the mon instead of the MDS asok, so that MDS doesn't have to be running
+        for us to query config.
+        """
+        service_name, service_id = misc.get_first_mon(self._ctx, self._config).split(".")
+        return self.json_asok(['config', 'get', key], service_name, service_id)[key]
 
     def set_ceph_conf(self, subsys, key, value):
         if subsys not in self._ctx.ceph.conf:
@@ -200,16 +214,20 @@ class Filesystem(object):
 
         return version
 
-    def mds_asok(self, command, mds_id=None):
-        if mds_id is None:
-            mds_id = self.get_lone_mds_id()
-        proc = self.mon_manager.admin_socket('mds', mds_id, command)
+    def json_asok(self, command, service_type, service_id):
+        proc = self.mon_manager.admin_socket(service_type, service_id, command)
         response_data = proc.stdout.getvalue()
-        log.info("mds_asok output: {0}".format(response_data))
+        log.info("_json_asok output: {0}".format(response_data))
         if response_data.strip():
             return json.loads(response_data)
         else:
             return None
+
+    def mds_asok(self, command, mds_id=None):
+        if mds_id is None:
+            mds_id = self.get_lone_mds_id()
+
+        return self.json_asok(command, 'mds', mds_id)
 
     def set_clients_block(self, blocked, mds_id=None):
         """
