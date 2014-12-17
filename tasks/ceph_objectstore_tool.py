@@ -1,5 +1,5 @@
 """
-ceph_objectstore_tool - Simple test of ceph_objectstore_tool utility
+ceph_objectstore_tool - Simple test of ceph-objectstore-tool utility
 """
 from cStringIO import StringIO
 import contextlib
@@ -268,7 +268,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
 
     # Test --op list and generate json for all objects
     log.info("Test --op list by generating json for all objects")
-    prefix = "sudo ceph_objectstore_tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
+    prefix = "sudo ceph-objectstore-tool --data-path {fpath} --journal-path {jpath} ".format(fpath=FSPATH, jpath=JPATH)
     for remote in osds.remotes.iterkeys():
         log.debug(remote)
         log.debug(osds.remotes[remote])
