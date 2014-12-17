@@ -142,7 +142,7 @@ instance name follows. For example::
 	host = ceph-gateway
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
 	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
-	log file = /var/log/radosgw/client.radosgw.{instance-name}.log
+	log file = /var/log/radosgw/client.radosgw.gateway.log
 
 .. note:: The ``host`` must be your machine hostname, not the FQDN. Make sure 
    that the name you use for the FastCGI socket is not the same as the one 
