@@ -787,7 +787,7 @@ CephFuse::Handle::~Handle()
 
 void CephFuse::Handle::finalize()
 {
-  client->ll_register_ino_invalidate_cb(NULL, NULL);
+  client->ll_register_callbacks(NULL);
 
   if (se)
     fuse_remove_signal_handlers(se);
@@ -873,23 +873,23 @@ int CephFuse::Handle::start()
 
   fuse_session_add_chan(se, ch);
 
-  /*
-   * this is broken:
-   *
-   * - the cb needs the request handle to be useful; we should get the
-   *   gids in the method here in fuse_ll.c and pass the gid list in,
-   *   not use a callback.
-   * - the callback mallocs the list but it is not free()'d
-   *
-   * so disable it for now...
-
-  client->ll_register_getgroups_cb(getgroups_cb, this);
-
-   */
-  client->ll_register_dentry_invalidate_cb(dentry_invalidate_cb, this);
-
-  if (client->cct->_conf->fuse_use_invalidate_cb)
-    client->ll_register_ino_invalidate_cb(ino_invalidate_cb, this);
+  struct client_callback_args args = {
+    handle: this,
+    ino_cb: client->cct->_conf->fuse_use_invalidate_cb ? ino_invalidate_cb : NULL,
+    dentry_cb: dentry_invalidate_cb,
+    /*
+     * this is broken:
+     *
+     * - the cb needs the request handle to be useful; we should get the
+     *   gids in the method here in fuse_ll.c and pass the gid list in,
+     *   not use a callback.
+     * - the callback mallocs the list but it is not free()'d
+     *
+     * so disable it for now...
+     getgroups_cb: getgroups_cb,
+     */
+  };
+  client->ll_register_callbacks(&args);
 
   return 0;
 }
