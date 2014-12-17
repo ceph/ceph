@@ -208,7 +208,7 @@ struct dir_result_t {
 
 class Client : public Dispatcher {
  public:
-  CephContext *cct;
+  using Dispatcher::cct;
 
   PerfCounters *logger;
 
