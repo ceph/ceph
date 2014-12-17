@@ -50,6 +50,9 @@ private:
   Messenger *messenger;
   PerfCounters *logger;
 
+  // OSDMap full status, used to generate ENOSPC on some operations
+  bool is_full;
+
 public:
   int failed_reconnects;
 
@@ -60,6 +63,7 @@ public:
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
     logger(0),
+    is_full(false),
     failed_reconnects(0),
     terminating_sessions(false) {
   }
@@ -73,6 +77,7 @@ public:
   // message handler
   void dispatch(Message *m);
 
+  void handle_osd_map();
 
   // -- sessions and recovery --
   utime_t  reconnect_start;

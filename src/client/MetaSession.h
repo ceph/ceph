@@ -62,6 +62,9 @@ struct MetaSession {
   const char *get_state_name() const;
 
   void dump(Formatter *f) const;
+
+  void enqueue_cap_release(inodeno_t ino, uint64_t cap_id, ceph_seq_t iseq,
+      ceph_seq_t mseq, epoch_t osd_barrier);
 };
 
 #endif

@@ -288,8 +288,7 @@ void Objecter::start()
 
   schedule_tick();
   if (osdmap->get_epoch() == 0) {
-    int r = _maybe_request_map();
-    assert (r == 0 || osdmap->get_epoch() > 0);
+    _maybe_request_map();
   }
 }
 
@@ -990,7 +989,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool was_pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool was_full = osdmap_full_flag();
+  bool was_full = _osdmap_full_flag();
   bool was_pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || was_full;
 
   list<LingerOp*> need_resend_linger;
@@ -1031,8 +1030,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  if (e >= m->get_oldest()) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch "
 			  << osdmap->get_epoch()+1 << dendl;
-	    int r = _maybe_request_map();
-            assert(r == 0);
+	    _maybe_request_map();
 	    break;
 	  }
 	  ldout(cct, 3) << "handle_osd_map missing epoch "
@@ -1044,7 +1042,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	}
 	logger->set(l_osdc_map_epoch, osdmap->get_epoch());
 
-	was_full = was_full || osdmap_full_flag();
+	was_full = was_full || _osdmap_full_flag();
 	_scan_requests(homeless_session, skipped_map, was_full,
 		       need_resend, need_resend_linger,
 		       need_resend_command);
@@ -1093,12 +1091,11 @@ void Objecter::handle_osd_map(MOSDMap *m)
   }
 
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || _osdmap_full_flag();
 
   // was/is paused?
-  if (was_pauserd || was_pausewr || pauserd || pausewr) {
-    int r = _maybe_request_map();
-    assert(r == 0);
+  if (was_pauserd || was_pausewr || pauserd || pausewr || osdmap->get_epoch() < epoch_barrier) {
+    _maybe_request_map();
   }
 
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
@@ -1175,8 +1172,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   monc->sub_got("osdmap", osdmap->get_epoch());
 
   if (!waiting_for_map.empty()) {
-    int r = _maybe_request_map();
-    assert(r == 0);
+    _maybe_request_map();
   }
 }
 
@@ -1678,17 +1674,16 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 void Objecter::maybe_request_map()
 {
   RWLock::RLocker rl(rwlock);
-  int r;
-  do {
-    r = _maybe_request_map();
-  } while (r == -EAGAIN);
+  _maybe_request_map();
 }
 
-int Objecter::_maybe_request_map()
+void Objecter::_maybe_request_map()
 {
   assert(rwlock.is_locked());
   int flag = 0;
-  if (osdmap_full_flag()) {
+  if (_osdmap_full_flag()
+      || osdmap->test_flag(CEPH_OSDMAP_PAUSERD)
+      || osdmap->test_flag(CEPH_OSDMAP_PAUSEWR)) {
     ldout(cct, 10) << "_maybe_request_map subscribing (continuous) to next osd map (FULL flag is set)" << dendl;
   } else {
     ldout(cct, 10) << "_maybe_request_map subscribing (onetime) to next osd map" << dendl;
@@ -1698,15 +1693,34 @@ int Objecter::_maybe_request_map()
   if (monc->sub_want("osdmap", epoch, flag)) {
     monc->renew_subs();
   }
-  return 0;
 }
 
 void Objecter::_wait_for_new_map(Context *c, epoch_t epoch, int err)
 {
   assert(rwlock.is_wlocked());
   waiting_for_map[epoch].push_back(pair<Context *, int>(c, err));
-  int r = _maybe_request_map();
-  assert(r == 0);
+  _maybe_request_map();
+}
+
+
+/**
+ * Use this together with wait_for_map: this is a pre-check to avoid
+ * allocating a Context for wait_for_map if we can see that we definitely
+ * already have the epoch.
+ *
+ * This does *not* replace the need to handle the return value of wait_for_map:
+ * just because we don't have it in this pre-check doesn't mean we won't
+ * have it when calling back into wait_for_map, since the objecter lock
+ * is dropped in between.
+ */
+bool Objecter::have_map(const epoch_t epoch)
+{
+  RWLock::RLocker rl(rwlock);
+  if (osdmap->get_epoch() >= epoch) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 bool Objecter::wait_for_map(epoch_t epoch, Context *c, int err)
@@ -1861,10 +1875,7 @@ void Objecter::tick()
       }
     }
     if (num_homeless_ops.read() || !toping.empty()) {
-      r = _maybe_request_map();
-      if (r == -EAGAIN) {
-        toping.clear();
-      }
+      _maybe_request_map();
     }
   } while (r == -EAGAIN);
 
@@ -2092,7 +2103,7 @@ ceph_tid_t Objecter::_op_submit(Op *op, RWLock::Context& lc)
     ldout(cct, 10) << " paused read " << op << " tid " << last_tid.read() << dendl;
     op->target.paused = true;
     _maybe_request_map();
-  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) && osdmap_full_flag()) {
+  } else if ((op->target.flags & CEPH_OSD_FLAG_WRITE) && _osdmap_full_flag()) {
     ldout(cct, 0) << " FULL, paused modify " << op << " tid " << last_tid.read() << dendl;
     op->target.paused = true;
     _maybe_request_map();
@@ -2140,7 +2151,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
   map<ceph_tid_t, Op*>::iterator p = s->ops.find(tid);
   if (p == s->ops.end()) {
-    ldout(cct, 10) << __func__ << " tid " << tid << " dne" << dendl;
+    ldout(cct, 10) << __func__ << " tid " << tid << " dne in session " << s->osd << dendl;
     return -ENOENT;
   }
 
@@ -2150,7 +2161,7 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     s->con->revoke_rx_buffer(tid);
   }
 
-  ldout(cct, 10) << __func__ << " tid " << tid << dendl;
+  ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd << dendl;
   Op *op = p->second;
   if (op->onack) {
     op->onack->complete(r);
@@ -2172,6 +2183,17 @@ int Objecter::op_cancel(ceph_tid_t tid, int r)
   int ret = 0;
 
   rwlock.get_write();
+  ret = _op_cancel(tid, r);
+  rwlock.unlock();
+
+  return ret;
+}
+
+int Objecter::_op_cancel(ceph_tid_t tid, int r)
+{
+  int ret = 0;
+
+  ldout(cct, 5) << __func__ << ": cancelling tid " << tid << " r=" << r << dendl;
 
 start:
 
@@ -2185,11 +2207,12 @@ start:
         /* oh no! raced, maybe tid moved to another session, restarting */
         goto start;
       }
-      rwlock.unlock();
       return ret;
     }
     s->lock.unlock();
   }
+
+  ldout(cct, 5) << __func__ << ": tid " << tid << " not found in live sessions" << dendl;
 
   // Handle case where the op is in homeless session
   homeless_session->lock.get_read();
@@ -2200,16 +2223,52 @@ start:
       /* oh no! raced, maybe tid moved to another session, restarting */
       goto start;
     } else {
-      rwlock.unlock();
       return ret;
     }
   } else {
     homeless_session->lock.unlock();
   }
 
-  rwlock.unlock();
+  ldout(cct, 5) << __func__ << ": tid " << tid << " not found in homeless session" << dendl;
 
   return ret;
+}
+
+/**
+ * Any write op which is in progress at the start of this call shall no longer
+ * be in progress when this call ends.  Operations started after the start
+ * of this call may still be in progress when this call ends.
+ *
+ * @return the latest possible epoch in which a cancelled op could have existed
+ */
+epoch_t Objecter::op_cancel_writes(int r)
+{
+  rwlock.get_write();
+
+  std::vector<ceph_tid_t> to_cancel;
+
+  for (map<int, OSDSession *>::iterator siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+    OSDSession *s = siter->second;
+    s->lock.get_read();
+    for (map<ceph_tid_t, Op*>::iterator op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
+      if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+        to_cancel.push_back(op_i->first);
+      }
+    }
+    s->lock.unlock();
+  }
+
+  for (std::vector<ceph_tid_t>::iterator titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
+    int cancel_result = _op_cancel(*titer, r);
+    // We hold rwlock across search and cancellation, so cancels should always succeed
+    assert(cancel_result == 0);
+  }
+
+  const epoch_t epoch = osdmap->get_epoch();
+
+  rwlock.unlock();
+
+  return epoch;
 }
 
 bool Objecter::is_pg_changed(
@@ -2233,21 +2292,30 @@ bool Objecter::is_pg_changed(
 bool Objecter::target_should_be_paused(op_target_t *t)
 {
   bool pauserd = osdmap->test_flag(CEPH_OSDMAP_PAUSERD);
-  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || osdmap_full_flag();
+  bool pausewr = osdmap->test_flag(CEPH_OSDMAP_PAUSEWR) || _osdmap_full_flag();
 
   return (t->flags & CEPH_OSD_FLAG_READ && pauserd) ||
-         (t->flags & CEPH_OSD_FLAG_WRITE && pausewr);
+         (t->flags & CEPH_OSD_FLAG_WRITE && pausewr) ||
+         (osdmap->get_epoch() < epoch_barrier);
 }
 
+/**
+ * Locking public accessor for _osdmap_full_flag
+ */
+bool Objecter::osdmap_full_flag() const
+{
+  RWLock::RLocker rl(rwlock);
+
+  return _osdmap_full_flag();
+}
 
 /**
  * Wrapper around osdmap->test_flag for special handling of the FULL flag.
  */
-bool Objecter::osdmap_full_flag() const
+bool Objecter::_osdmap_full_flag() const
 {
-  // Ignore the FULL flag if we are working on behalf of an MDS, in order to permit
-  // MDS journal writes for file deletions.
-  return osdmap->test_flag(CEPH_OSDMAP_FULL) && (messenger->get_myname().type() != entity_name_t::TYPE_MDS);
+  // Ignore the FULL flag if the caller has honor_osdmap_full
+  return osdmap->test_flag(CEPH_OSDMAP_FULL) && honor_osdmap_full;
 }
 
 
@@ -4251,8 +4319,7 @@ int Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
   if (!c->session->is_homeless()) {
     _send_command(c);
   } else {
-    int r = _maybe_request_map();
-    assert(r != -EAGAIN); /* because rwlock is already write-locked */
+    _maybe_request_map();
   }
   if (c->map_check_error)
     _send_command_map_check(c);
@@ -4427,5 +4494,24 @@ Objecter::~Objecter()
   assert(!tick_event);
   assert(!m_request_state_hook);
   assert(!logger);
+}
+
+/**
+ * Wait until this OSD map epoch is received before
+ * sending any more operations to OSDs.  Use this
+ * when it is known that the client can't trust
+ * anything from before this epoch (e.g. due to
+ * client blacklist at this epoch).
+ */
+void Objecter::set_epoch_barrier(epoch_t epoch)
+{
+  RWLock::WLocker wl(rwlock);
+
+  ldout(cct, 7) << __func__ << ": barrier " << epoch << " (was " << epoch_barrier
+                << ") current epoch " << osdmap->get_epoch() << dendl;
+  if (epoch >= epoch_barrier) {
+    epoch_barrier = epoch;
+    _maybe_request_map();
+  }
 }
 

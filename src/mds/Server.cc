@@ -1299,6 +1299,17 @@ void Server::handle_client_request(MClientRequest *req)
   return;
 }
 
+void Server::handle_osd_map()
+{
+  /* Note that we check the OSDMAP_FULL flag directly rather than
+   * using osdmap_full_flag(), because we want to know "is the flag set"
+   * rather than "does the flag apply to us?" */
+  const OSDMap *osdmap = mds->objecter->get_osdmap_read();
+  is_full = osdmap->test_flag(CEPH_OSDMAP_FULL);
+  dout(7) << __func__ << ": full = " << is_full << " epoch = " << osdmap->get_epoch() << dendl;
+  mds->objecter->put_osdmap_read();
+}
+
 void Server::dispatch_client_request(MDRequestRef& mdr)
 {
   MClientRequest *req = mdr->client_request;
@@ -1323,6 +1334,27 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     }
   }
   
+  if (is_full) {
+    if (req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
+        req->get_op() == CEPH_MDS_OP_SETDIRLAYOUT ||
+        req->get_op() == CEPH_MDS_OP_SETLAYOUT ||
+        req->get_op() == CEPH_MDS_OP_RMXATTR ||
+        req->get_op() == CEPH_MDS_OP_SETXATTR ||
+        req->get_op() == CEPH_MDS_OP_SETFILELOCK ||
+        req->get_op() == CEPH_MDS_OP_CREATE ||
+        req->get_op() == CEPH_MDS_OP_LINK ||
+        req->get_op() == CEPH_MDS_OP_RENAME ||
+        req->get_op() == CEPH_MDS_OP_SYMLINK ||
+        req->get_op() == CEPH_MDS_OP_MKSNAP) {
+
+      dout(20) << __func__ << ": full, responding ENOSPC to op " << ceph_mds_op_name(req->get_op()) << dendl;
+      respond_to_request(mdr, -ENOSPC);
+      return;
+    } else {
+      dout(20) << __func__ << ": full, permitting op " << ceph_mds_op_name(req->get_op()) << dendl;
+    }
+  }
+
   switch (req->get_op()) {
   case CEPH_MDS_OP_LOOKUPHASH:
   case CEPH_MDS_OP_LOOKUPINO:
@@ -3405,6 +3437,14 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   inode_t *pi = cur->get_projected_inode();
 
   uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+
+  // ENOSPC on growing file while full, but allow shrinks
+  if (is_full && req->head.args.setattr.size > old_size) {
+    dout(20) << __func__ << ": full, responding ENOSPC to setattr with larger size" << dendl;
+    respond_to_request(mdr, -ENOSPC);
+    return;
+  }
+
   bool truncating_smaller = false;
   if (mask & CEPH_SETATTR_SIZE) {
     truncating_smaller = req->head.args.setattr.size < old_size;

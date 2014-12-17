@@ -1319,7 +1319,7 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
     dout(7) << "finish_export_inode_caps telling client." << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, in->ino(), 0,
-				     cap->get_cap_id(), cap->get_mseq());
+				     cap->get_cap_id(), cap->get_mseq(), mds->get_osd_epoch_barrier());
 
     map<client_t,Capability::Import>::iterator q = peer_imported.find(it->first);
     assert(q != peer_imported.end());
