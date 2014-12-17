@@ -49,6 +49,7 @@ def get_distro_from_downburst():
                      u'debian': [u'6.0', u'7.0']}
     executable_cmd = find_executable('downburst')
     if not executable_cmd:
+        log.warn("Downburst not found!")
         log.info('Using default values for supported os_type/os_version')
         return default_table
     try:
@@ -56,6 +57,7 @@ def get_distro_from_downburst():
         downburst_data = json.loads(output)
         return downburst_data
     except (subprocess.CalledProcessError, OSError):
+        log.exception("Error calling downburst!")
         log.info('Using default values for supported os_type/os_version')
         return default_table
 
