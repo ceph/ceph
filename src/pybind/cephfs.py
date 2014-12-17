@@ -333,7 +333,7 @@ class LibCephFS(object):
                     self.cluster,
                     c_char_p(path),
                     c_char_p(name),
-                    c_void_p(value),
+                    c_char_p(value),
                     c_size_t(len(value)),
                     c_int(flags))
         if ret < 0:
