@@ -81,6 +81,8 @@ authentication keyring.
 	libcephfs <../../api/libcephfs-java/>
 	cephfs-journal-tool <cephfs-journal-tool>
 	File layouts <file-layouts>
+	Client eviction <eviction>
+	Handling full filesystems <full>
 	Troubleshooting <troubleshooting>
 
 .. raw:: html

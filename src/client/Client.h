@@ -255,6 +255,9 @@ public:
   Messenger *messenger;  
   client_t whoami;
 
+  void set_cap_epoch_barrier(epoch_t e);
+  epoch_t cap_epoch_barrier;
+
   // mds sessions
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
   list<Cond*> waiting_for_mdsmap;
@@ -399,7 +402,7 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
-  friend class C_Client_PutInode; // calls put_inode()
+  friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
@@ -437,6 +440,8 @@ protected:
   // force read-only
   void force_session_readonly(MetaSession *s);
 
+  void dump_status(Formatter *f);  // debug
+  
   // trace generation
   ofstream traceout;
 
@@ -475,6 +480,7 @@ protected:
 
   // messaging
   void handle_mds_map(class MMDSMap *m);
+  void handle_osd_map(class MOSDMap *m);
 
   void handle_lease(MClientLease *m);
 
@@ -542,7 +548,7 @@ protected:
    * 
    * @returns true if the data was already flushed, false otherwise.
    */
-  bool _flush(Inode *in, Context *c=NULL);
+  bool _flush(Inode *in, Context *c);
   void _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);

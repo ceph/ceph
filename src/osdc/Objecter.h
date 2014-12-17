@@ -1027,7 +1027,7 @@ public:
   void maybe_request_map();
 private:
 
-  int _maybe_request_map();
+  void _maybe_request_map();
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
@@ -1642,6 +1642,7 @@ public:
   };
   map<int,OSDSession*> osd_sessions;
 
+  bool osdmap_full_flag() const;
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
@@ -1684,7 +1685,7 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
-  bool osdmap_full_flag() const;
+  bool _osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, bool any_change=false);
@@ -1799,7 +1800,8 @@ public:
     mon_timeout(mon_timeout),
     osd_timeout(osd_timeout),
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
+    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+    epoch_barrier(0)
   { }
   ~Objecter();
 
@@ -1900,6 +1902,7 @@ public:
   int get_client_incarnation() const { return client_inc.read(); }
   void set_client_incarnation(int inc) { client_inc.set(inc); }
 
+  bool have_map(epoch_t epoch);
   /// wait for epoch; true if we already have it
   bool wait_for_map(epoch_t epoch, Context *c, int err=0);
   void _wait_for_new_map(Context *c, epoch_t epoch, int err=0);
@@ -1917,9 +1920,11 @@ public:
   /// cancel an in-progress request with the given return code
 private:
   int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int _op_cancel(ceph_tid_t tid, int r);
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  epoch_t op_cancel_writes(int r);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,
@@ -2494,6 +2499,11 @@ public:
 			 bool force_new);
 
   void blacklist_self(bool set);
+
+private:
+  epoch_t epoch_barrier;
+public:
+  void set_epoch_barrier(epoch_t epoch);
 };
 
 #endif
