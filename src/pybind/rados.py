@@ -196,11 +196,10 @@ class Rados(object):
 
         :raises: RadosStateError
         """
-        for a in args:
-            if self.state == a:
-                return
+        if self.state in args:
+           return
         raise RadosStateError("You cannot perform that operation on a \
-Rados object in state %s." % (self.state))
+Rados object in state %s." % self.state)
 
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
@@ -231,9 +230,9 @@ Rados object in state %s." % (self.state))
             raise TypeError('clustername must be a string or None')
         if rados_id and name:
             raise Error("Rados(): can't supply both rados_id and name")
-        if rados_id:
+        elif rados_id:
             name = 'client.' +  rados_id
-        if name is None:
+        elif name is None:
             name = 'client.admin'
         if clustername is None:
             clustername = 'ceph'
@@ -262,7 +261,7 @@ Rados object in state %s." % (self.state))
         Disconnects from the cluster.  Call this explicitly when a
         Rados.connect()ed object is no longer used.
         """
-        if (self.__dict__.has_key("state") and self.state != "shutdown"):
+        if hasattr(self, "state") and self.state != "shutdown":
             run_in_thread(self.librados.rados_shutdown, (self.cluster,))
             self.state = "shutdown"
 

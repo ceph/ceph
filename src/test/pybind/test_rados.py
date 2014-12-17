@@ -1,6 +1,6 @@
 from nose.tools import eq_ as eq, assert_raises
-from rados import (Rados, Error, Object, ObjectExists, ObjectNotFound,
-                   ObjectBusy,
+from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
+                   ObjectNotFound, ObjectBusy,
                    ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES)
 import time
 import threading
@@ -37,6 +37,55 @@ def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
         with conn.open_ioctx('rbd') as ioctx:
             pass
+
+
+class TestRadosStateError(object):
+    def _requires_configuring(self, rados):
+        assert_raises(RadosStateError, rados.connect)
+
+    def _requires_configuring_or_connected(self, rados):
+        assert_raises(RadosStateError, rados.conf_read_file)
+        assert_raises(RadosStateError, rados.conf_parse_argv, None)
+        assert_raises(RadosStateError, rados.conf_parse_env)
+        assert_raises(RadosStateError, rados.conf_get, 'opt')
+        assert_raises(RadosStateError, rados.conf_set, 'opt', 'val')
+        assert_raises(RadosStateError, rados.ping_monitor, 0)
+
+    def _requires_connected(self, rados):
+        assert_raises(RadosStateError, rados.pool_exists, 'foo')
+        assert_raises(RadosStateError, rados.pool_lookup, 'foo')
+        assert_raises(RadosStateError, rados.pool_reverse_lookup, 0)
+        assert_raises(RadosStateError, rados.create_pool, 'foo')
+        assert_raises(RadosStateError, rados.get_pool_base_tier, 0)
+        assert_raises(RadosStateError, rados.delete_pool, 'foo')
+        assert_raises(RadosStateError, rados.list_pools)
+        assert_raises(RadosStateError, rados.get_fsid)
+        assert_raises(RadosStateError, rados.open_ioctx, 'foo')
+        assert_raises(RadosStateError, rados.mon_command, '', '')
+        assert_raises(RadosStateError, rados.osd_command, 0, '', '')
+        assert_raises(RadosStateError, rados.pg_command, '', '', '')
+        assert_raises(RadosStateError, rados.wait_for_latest_osdmap)
+
+    def test_configuring(self):
+        rados = Rados(conffile='')
+        eq('configuring', rados.state)
+        self._requires_connected(rados)
+
+    def test_connected(self):
+        rados = Rados(conffile='')
+        with rados:
+            eq('connected', rados.state)
+            self._requires_configuring(rados)
+
+    def test_shutdown(self):
+        rados = Rados(conffile='')
+        with rados:
+            pass
+        eq('shutdown', rados.state)
+        self._requires_configuring(rados)
+        self._requires_configuring_or_connected(rados)
+        self._requires_connected(rados)
+
 
 class TestRados(object):
 
