@@ -1564,7 +1564,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       cerr << std::endl;
       cerr << "OSD requires sharding to be enabled" << std::endl;
       cerr << std::endl;
-      cerr << "If you wish to import, first do 'ceph_objectstore_tool...--op set-allow-sharded-objects'" << std::endl;
+      cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
     }
     return 1;
   }
@@ -2001,16 +2001,16 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "Positional syntax:" << std::endl;
     cerr << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> get-omaphdr" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> set-omaphdr [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> list-attrs" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (get|set)-bytes [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> get-omaphdr" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> set-omaphdr [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
     cerr << std::endl;
-    cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+    cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
@@ -2092,7 +2092,7 @@ int main(int argc, char **argv)
   // Handle completely different operation "import-rados"
   if (object == "import-rados") {
     if (vm.count("objcmd") == 0) {
-      cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+      cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
       exit(1);
     }
 
