@@ -37,6 +37,7 @@ use Pod::Usage();
 use FindBin;
 use lib $FindBin::Bin;
 use s3_utilities;
+use Net::Domain qw(hostfqdn);
 
 my $help;
 
@@ -51,10 +52,9 @@ my $mytestfilename1;
 my $logmsg;
 my $kruft;
 my $s3;
-my $domain   = "front.sepia.ceph.com";
-my $host     = get_hostname();
+my $hostdom  = $ENV{RGW_FQDN}||hostfqdn();
 my $port     = $ENV{RGW_PORT}||7280;
-our $hostname = "$host.$domain:$port";
+our $hostname = "$hostdom:$port";
 our $testfileloc;
 my $rgw_user = "qa_user";
 
