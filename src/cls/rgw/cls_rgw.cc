@@ -1211,13 +1211,13 @@ public:
       }
       olh_data_entry.epoch = candidate_epoch;
     } else {
-      olh_data_entry.epoch++;
+      if (olh_data_entry.epoch == 0) {
+        olh_data_entry.epoch = 2; /* versioned epoch should start with 2, 1 is reserved to converted plain entries */
+      } else {
+        olh_data_entry.epoch++;
+      }
     }
     return true;
-  }
-
-  void inc_epoch() {
-    olh_data_entry.epoch++;
   }
 
   uint64_t get_epoch() {
@@ -1281,7 +1281,7 @@ static int write_version_marker(cls_method_context_t hctx, cls_rgw_obj_key& key)
  * if we override these objects, we need to convert these to versioned entries -- ones that have
  * both data entry, and listing key. Their version is going to be empty though
  */
-static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_obj_key& key, uint64_t epoch, bool demote_current, bool instance_only)
+static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_obj_key& key, bool demote_current, bool instance_only)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -1297,7 +1297,7 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
       return ret;
     }
 
-    entry.versioned_epoch = epoch;
+    entry.versioned_epoch = 1; /* converted entries are always 1 */
     entry.flags |= RGW_BUCKET_DIRENT_FLAG_VER;
 
     if (demote_current) {
@@ -1439,12 +1439,11 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   } else {
     bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, olh.get_epoch(), true, instance_only);
+    ret = convert_plain_entry_to_versioned(hctx, key, true, instance_only);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
-    olh.inc_epoch(); /* need to increase epoch, otherwise entries are going to be in the wrong order */
     olh.set_tag(op.olh_tag);
   }
 
