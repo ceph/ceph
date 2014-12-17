@@ -73,6 +73,7 @@ class TestResultsEmail(object):
 
     def setup(self):
         config.results_ui_server = "http://example.com/"
+        config.archive_server = "http://qa-proxy.ceph.com/teuthology/"
         self.archive = FakeArchive()
         self.archive.setup()
         self.archive_base = self.archive.archive_base
