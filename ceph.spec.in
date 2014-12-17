@@ -761,7 +761,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_javadir}/libcephfs-test.jar
 
 %files libs-compat
-# We need an empty %files list for ceph-libs-compat, to tell rpmbuild to actually
+# We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
 
 %changelog
