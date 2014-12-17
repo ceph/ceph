@@ -73,26 +73,26 @@ public:
   bool is_temp() const {
     return pool == POOL_IS_TEMP;
   }
-  
+
   hobject_t() : snap(0), hash(0), max(false), pool(-1) {
     build_filestore_key_cache();
   }
 
   hobject_t(object_t oid, const string& key, snapid_t snap, uint64_t hash,
-	    int64_t pool, string nspace) :
-    oid(oid), snap(snap), hash(hash), max(false),
-    pool(pool), nspace(nspace),
-    key(oid.name == key ? string() : key) {
-        build_filestore_key_cache();
-    }
+	    int64_t pool, string nspace)
+    : oid(oid), snap(snap), hash(hash), max(false),
+      pool(pool), nspace(nspace),
+      key(oid.name == key ? string() : key) {
+    build_filestore_key_cache();
+  }
 
   hobject_t(const sobject_t &soid, const string &key, uint32_t hash,
-	    int64_t pool, string nspace) :
-    oid(soid.oid), snap(soid.snap), hash(hash), max(false),
-    pool(pool), nspace(nspace),
-    key(soid.oid.name == key ? string() : key) {
-        build_filestore_key_cache();
-    }
+	    int64_t pool, string nspace)
+    : oid(soid.oid), snap(soid.snap), hash(hash), max(false),
+      pool(pool), nspace(nspace),
+      key(soid.oid.name == key ? string() : key) {
+    build_filestore_key_cache();
+  }
 
   /// @return min hobject_t ret s.t. ret.hash == this->hash
   hobject_t get_boundary() const {
