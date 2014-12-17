@@ -1154,7 +1154,9 @@ def get_distro(ctx):
     Get the name of the distro that we are using (usually the os_type).
     """
     os_type = None
-    # first, try to get the os_type from the config of --os-type
+    # first, try to get the os_type from the config or --os-type
+    # note that if --os-type is passed it's assigned to config["os_type"]
+    # in teuthology.run.py
     try:
         os_type = ctx.config.get('os_type', ctx.os_type)
     except AttributeError:
