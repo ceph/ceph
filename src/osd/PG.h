@@ -1029,6 +1029,7 @@ public:
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
       active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
+      num_digest_updates_pending(0),
       state(INACTIVE),
       deep(false),
       seed(0)
@@ -1066,6 +1067,7 @@ public:
 
     // Objects who need digest updates
     map<hobject_t, pair<uint32_t,uint32_t> > missing_digest;
+    int num_digest_updates_pending;
 
     // chunky scrub
     hobject_t start, end;
@@ -1080,6 +1082,7 @@ public:
       BUILD_MAP,
       WAIT_REPLICAS,
       COMPARE_MAPS,
+      WAIT_DIGEST_UPDATES,
       FINISH,
     } state;
 
@@ -1112,6 +1115,7 @@ public:
         case BUILD_MAP: ret = "BUILD_MAP"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
         case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
+        case WAIT_DIGEST_UPDATES: ret = "WAIT_DIGEST_UPDATES"; break;
         case FINISH: ret = "FINISH"; break;
       }
       return ret;
@@ -1162,6 +1166,7 @@ public:
       missing.clear();
       authoritative.clear();
       missing_digest.clear();
+      num_digest_updates_pending = 0;
     }
 
   } scrubber;
