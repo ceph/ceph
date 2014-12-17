@@ -188,7 +188,7 @@ def main():
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
+    CFSD_PREFIX = "./ceph-objectstore-tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
     PROFNAME = "testecprofile"
 
     vstart(new=True)
@@ -404,11 +404,11 @@ def main():
     ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
 
     # Don't specify a data-path
-    cmd = "./ceph_objectstore_tool --journal-path dev/{osd}.journal --type memstore --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --journal-path dev/{osd}.journal --type memstore --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     # Don't specify a journal-path for filestore
-    cmd = "./ceph_objectstore_tool --type filestore --data-path dev/{osd} --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --type filestore --data-path dev/{osd} --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     # Test --op list and generate json for all objects
@@ -726,7 +726,7 @@ def main():
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                cmd = "./ceph_objectstore_tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:

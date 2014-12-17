@@ -1780,16 +1780,16 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "(requires --data, --journal (for filestore type) and --pgid to be specified)" << std::endl;
     cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-(attr|omap) <key> [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-omaphdr) [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get-omaphdr)" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> list-attrs" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (get|set)-bytes [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (set-(attr|omap) <key> [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (set-omaphdr) [file]" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> (get-omaphdr)" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
     cerr << std::endl;
-    cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+    cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
     exit(1);
 }
@@ -1858,7 +1858,7 @@ int main(int argc, char **argv)
   // Handle completely different operation "import-rados"
   if (object == "import-rados") {
     if (vm.count("objcmd") == 0) {
-      cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
+      cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
       exit(1);
     }
 
