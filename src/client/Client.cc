@@ -156,11 +156,13 @@ Client::Client(Messenger *m, MonClient *mc)
     m_command_hook(this),
     timer(m->cct, client_lock),
     callback_handle(NULL),
+    remount_cb(NULL),
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
     getgroups_cb(NULL),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
+    remount_finisher(m->cct),
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
@@ -449,6 +451,12 @@ void Client::shutdown()
     ldout(cct, 10) << "shutdown stopping dentry invalidator finisher" << dendl;
     async_dentry_invalidator.wait_for_empty();
     async_dentry_invalidator.stop();
+  }
+
+  if (remount_cb) {
+    ldout(cct, 10) << "shutdown stopping remount finisher" << dendl;
+    remount_finisher.wait_for_empty();
+    remount_finisher.stop();
   }
 
   objectcacher->stop();  // outside of client_lock! this does a join.
@@ -3228,18 +3236,22 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
+class C_Client_Remount : public Context  {
+private:
+  Client *client;
+public:
+  C_Client_Remount(Client *c) : client(c) {}
+  void finish(int r) {
+    client->remount_cb(client->callback_handle);
+  }
+};
+
 void Client::_invalidate_kernel_dcache()
 {
-  // notify kernel to invalidate top level directory entries. As a side effect,
-  // unused inodes underneath these entries get pruned.
-  if (dentry_invalidate_cb && root->dir) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
-    }
-  }
+  // Hacky:
+  // when remounting a file system, linux kernel trims all unused dentries in the file system
+  if (remount_cb)
+    remount_finisher.queue(new C_Client_Remount(this));
 }
 
 void Client::trim_caps(MetaSession *s, int max)
@@ -3271,14 +3283,7 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
-          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
-            // Only issue one of these per DN for inodes in root: handle
-            // others more efficiently by calling for root-child DNs at
-            // the end of this function.
-            _schedule_invalidate_dentry_callback(dn, true);
-          }
 	  trim_dentry(dn);
-
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
@@ -7072,6 +7077,7 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
 		 << " getgroups_cb" << args->getgroups_cb
+		 << " remount_cb " << args->remount_cb
 		 << dendl;
   callback_handle = args->handle;
   if (args->ino_cb) {
@@ -7081,6 +7087,10 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   if (args->dentry_cb) {
     dentry_invalidate_cb = args->dentry_cb;
     async_dentry_invalidator.start();
+  }
+  if (args->remount_cb) {
+    remount_cb = args->remount_cb;
+    remount_finisher.start();
   }
   getgroups_cb = args->getgroups_cb;
 }

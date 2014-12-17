@@ -124,6 +124,7 @@ typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off,
 
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
+typedef void (*client_remount_callback_t)(void *handle);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 
@@ -131,6 +132,7 @@ struct client_callback_args {
   void *handle;
   client_ino_callback_t ino_cb;
   client_dentry_callback_t dentry_cb;
+  client_remount_callback_t remount_cb;
   client_getgroups_callback_t getgroups_cb;
 };
 
@@ -221,12 +223,14 @@ class Client : public Dispatcher {
   SafeTimer timer;
 
   void *callback_handle;
+  client_remount_callback_t remount_cb;
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
   client_getgroups_callback_t getgroups_cb;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
+  Finisher remount_finisher;
   Finisher objecter_finisher;
 
   Context *tick_event;

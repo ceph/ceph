@@ -692,6 +692,16 @@ static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
 #endif
 }
 
+static void remount_cb(void *handle)
+{
+  // used for trimming kernel dcache. when remounting a file system, linux kernel
+  // trims all unused dentries in the file system
+  char cmd[1024];
+  CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
+  snprintf(cmd, sizeof(cmd), "mount -i -o remount %s", cfuse->mountpoint);
+  system(cmd);
+}
+
 static void do_init(void *data, fuse_conn_info *bar)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)data;
@@ -877,6 +887,7 @@ int CephFuse::Handle::start()
     handle: this,
     ino_cb: client->cct->_conf->fuse_use_invalidate_cb ? ino_invalidate_cb : NULL,
     dentry_cb: dentry_invalidate_cb,
+    remount_cb: remount_cb,
     /*
      * this is broken:
      *
