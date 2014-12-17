@@ -109,12 +109,13 @@ upgrade-sequence1:
    - print: "**** done ceph.restart all 1 mon/mds/osd"
 workload2:
    sequential:
-   - workunit:
-       clients:
-         client.0:
-           - rbd/import_export.sh
-       env:
-         RBD_CREATE_ARGS: --new-format
+#   removed to fix #10176
+#   - workunit:
+#       clients:
+#         client.0:
+#           - rbd/import_export.sh
+#       env:
+#         RBD_CREATE_ARGS: --new-format
    - workunit:
        clients:
          client.0:
