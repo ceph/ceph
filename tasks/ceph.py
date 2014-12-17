@@ -12,7 +12,8 @@ import os
 import json
 import time
 
-from ceph_manager import CephManager
+from ceph_manager import CephManager, write_conf, DEFAULT_CONF_PATH
+from tasks.cephfs.filesystem import Filesystem
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -20,7 +21,7 @@ import ceph_client as cclient
 from teuthology.orchestra.run import CommandFailedError
 from teuthology.orchestra.daemon import DaemonGroup
 
-DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+
 CEPH_ROLE_TYPES = ['mon', 'osd', 'mds', 'rgw']
 
 log = logging.getLogger(__name__)
@@ -145,28 +146,6 @@ def valgrind_post(ctx, config):
             raise valgrind_exception
 
 
-def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
-    conf_fp = StringIO()
-    ctx.ceph.conf.write(conf_fp)
-    conf_fp.seek(0)
-    writes = ctx.cluster.run(
-        args=[
-            'sudo', 'mkdir', '-p', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'chmod', '0755', '/etc/ceph', run.Raw('&&'),
-            'sudo', 'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            conf_path,
-            run.Raw('&&'),
-            'sudo', 'chmod', '0644', conf_path,
-        ],
-        stdin=run.PIPE,
-        wait=False)
-    log.warn("writes: ")
-    teuthology.feed_many_stdins_and_close(conf_fp, writes)
-    run.wait(writes)
-
-
 @contextlib.contextmanager
 def cephfs_setup(ctx, config):
     testdir = teuthology.get_testdir(ctx)
@@ -197,13 +176,8 @@ def cephfs_setup(ctx, config):
         if metadata_pool_exists:
             log.info("Metadata pool already exists, skipping")
         else:
-            mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'metadata', '256'])
-            mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', '256'])
-
-            # Use 'newfs' to work with either old or new Ceph, until the 'fs new'
-            # stuff is all landed.
-            mon_remote.run(args=['sudo', 'ceph', 'mds', 'newfs', '1', '2'])
-            # mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
+            ceph_fs = Filesystem(ctx, config)
+            ceph_fs.create()
 
         is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
