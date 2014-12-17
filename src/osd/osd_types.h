@@ -2502,7 +2502,7 @@ struct object_copy_data_t {
   map<string, bufferlist> attrs;
   bufferlist data;
   bufferlist omap_header;
-  map<string, bufferlist> omap;
+  bufferlist omap_data;
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
@@ -2515,11 +2515,11 @@ public:
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
   void decode_classic(bufferlist::iterator& bl);
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(object_copy_data_t)
+WRITE_CLASS_ENCODER_FEATURES(object_copy_data_t)
 
 /**
  * pg creation info
