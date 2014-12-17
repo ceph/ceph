@@ -922,35 +922,47 @@ def get_sha1_from_pkg_name(path):
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
-    This can be a branch, tag, or sha1 of ceph-client.git.
+    This can be a branch, tag, or sha1 of ceph-client.git or a local
+    kernel package.
 
-    To install the kernel from the master branch on all hosts::
-
-        kernel:
-        tasks:
-        - ceph:
-
-    To wait 5 minutes for hosts to reboot::
+    To install ceph-client.git branch (default: master)::
 
         kernel:
-          timeout: 300
-        tasks:
-        - ceph:
+          branch: testing
 
-    To specify different kernels for each client::
+    To install ceph-client.git tag::
 
         kernel:
-          client.0:
-            branch: foo
-          client.1:
-            tag: v3.0rc1
-          client.2:
-            sha1: db3540522e955c1ebb391f4f5324dff4f20ecd09
-        tasks:
-        - ceph:
+          tag: v3.18
 
-    You can specify a branch, tag, or sha1 for all roles
-    of a certain type (more specific roles override this)::
+    To install ceph-client.git sha1::
+
+        kernel:
+          sha1: 275dd19ea4e84c34f985ba097f9cddb539f54a50
+
+    To install local rpm (target should be an rpm system)::
+
+        kernel:
+          rpm: /path/to/appropriately-named.rpm
+
+    To install local deb (target should be a deb system)::
+
+        kernel:
+          deb: /path/to/appropriately-named.deb
+
+    For rpm: or deb: to work it should be able to figure out sha1 from
+    local kernel package basename, see get_sha1_from_pkg_name().  This
+    means that you can't for example install a local tag - package built
+    with upstream {rpm,deb}-pkg targets won't have a sha1 in its name.
+
+    If you want to schedule a run and use a local kernel package, you
+    have to copy the package over to a box teuthology workers are
+    running on and specify a path to the package on that box.
+
+    All of the above will install a specified kernel on all targets.
+    You can specify different kernels for each role or for all roles of
+    a certain type (more specific roles override less specific, see
+    normalize_config() for details)::
 
         kernel:
           client:
@@ -958,9 +970,14 @@ def task(ctx, config):
           osd:
             branch: btrfs_fixes
           client.1:
-            branch: more_specific_branch
+            branch: more_specific
           osd.3:
             branch: master
+
+    To wait 3 minutes for hosts to reboot (default: 300)::
+
+        kernel:
+          timeout: 180
 
     To enable kdb::
 
