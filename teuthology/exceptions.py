@@ -88,3 +88,12 @@ class VersionNotFoundError(Exception):
 
     def __str__(self):
         return "Failed to fetch package version from %s" % self.url
+
+
+class UnsupportedPackageTypeError(Exception):
+    def __init__(self, node):
+        self.node = node
+
+    def __str__(self):
+        return "os.package_type {pkg_type!r} on {node}".format(
+            node=self.node, pkg_type=self.node.os.package_type)

@@ -4,6 +4,7 @@ Kernel installation task
 from cStringIO import StringIO
 
 import logging
+import os
 import re
 import shlex
 import urllib2
@@ -12,6 +13,7 @@ import urlparse
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..config import config as teuth_config
+from ..exceptions import UnsupportedPackageTypeError
 
 log = logging.getLogger(__name__)
 
@@ -23,7 +25,7 @@ def normalize_config(ctx, config):
     specifies a different version for a specific role, this is
     unchanged.
 
-    For example, with 3 OSDs this::
+    For example, with 4 OSDs this::
 
          osd:
            tag: v3.0
@@ -56,7 +58,7 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb'],
+                                       'deb', 'rpm'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
@@ -151,7 +153,11 @@ def need_to_install(ctx, role, version):
                 cur_sha1 = cur_sha1[0:dloc]
             log.debug('extracting sha1, {ver} -> {sha1}'.format(
                       ver=cur_version, sha1=cur_sha1))
-            if cur_sha1.startswith(version):
+            # FIXME: The above will match things like ...-generic on Ubuntu
+            # distro kernels resulting in 'eneric' cur_sha1.
+            m = min(len(cur_sha1), len(version))
+            assert m >= 6, "cur_sha1 and/or version is too short, m = %d" % m
+            if cur_sha1[0:m] == version[0:m]:
                 log.debug('extracted sha1 matches, do not need to install')
                 ret = False
         else:
@@ -217,90 +223,96 @@ def install_firmware(ctx, config):
                 ],
             )
 
+def gitbuilder_pkg_name(remote):
+    if remote.os.package_type == 'rpm':
+        pkg_name = 'kernel.x86_64.rpm'
+    elif remote.os.package_type == 'deb':
+        pkg_name = 'linux-image.deb'
+    else:
+        raise UnsupportedPackageTypeError(remote)
+    return pkg_name
+
+def remote_pkg_path(remote):
+    """
+    This is where kernel packages are copied over (in case of local
+    packages) or downloaded to (in case of gitbuilder packages) and
+    then installed from.
+    """
+    return os.path.join('/tmp', gitbuilder_pkg_name(remote))
+
 def download_kernel(ctx, config):
     """
-    Download a Debian kernel and copy the assocated linux image.
+    Supply each remote with a kernel package:
+      - local kernels are copied over
+      - gitbuilder kernels are downloaded
+      - nothing is done for distro kernels
 
     :param ctx: Context
     :param config: Configuration
     """
     procs = {}
-    #Don't need to download distro kernels
     for role, src in config.iteritems():
+        if src == 'distro':
+            # don't need to download distro kernels
+            log.debug("src is distro, skipping download");
+            continue
+
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-	if src.find('distro') >= 0:
-            log.info('Installing newest kernel distro');
-            return
-        package_type = teuthology.get_system_type(role_remote)
         if src.find('/') >= 0:
-            # local deb
-            log.info('Copying kernel deb {path} to {role}...'.format(path=src,
-                                                                     role=role))
+            # local package - src is path
+            log.info('Copying kernel package {path} to {role}...'.format(
+                path=src, role=role))
             f = open(src, 'r')
             proc = role_remote.run(
                 args=[
                     'python', '-c',
                     'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                    '/tmp/linux-image.deb',
+                    remote_pkg_path(role_remote),
                     ],
                 wait=False,
                 stdin=f
                 )
             procs[role_remote.name] = proc
         else:
+            # gitbuilder package - src is sha1
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
+            package_type = role_remote.os.package_type
             if package_type == 'rpm':
-                kernelstring, kernel_url = get_version_from_rpm(role_remote, src)
-                unamestring = kernelstring.split('-')[1]
-                output, err_mess = StringIO(), StringIO()
-                role_remote.run(args=['sudo', 'yum', 'list', 'installed', 'kernel'], stdout=output, stderr=err_mess )
-                # Check if short (first 8 digits) sha1 is in uname output as expected
-                short_sha1 = src[0:7]
-                if short_sha1 in output.getvalue() or unamestring in output.getvalue():
-                    output.close()
-                    err_mess.close()
-                    continue
-                output.close()
-                err_mess.close()
-                proc = role_remote.run(
-                    args=[
-                        'sudo',
-                        'rpm',
-                        '-ivh',
-                        '--oldpackage',
-                        '--replacefiles',
-                        '--replacepkgs', 
-                        kernel_url
-                        ],
-                    wait=False
-                    )
-                procs[role_remote.name] = proc
-                continue
+                system_type, system_ver = teuthology.get_system_type(
+                    role_remote, distro=True, version=True)
+                if '.' in system_ver:
+                   system_ver = system_ver.split('.')[0]
+                ldist = '{system_type}{system_ver}'.format(
+                    system_type=system_type, system_ver=system_ver)
+                larch = 'x86_64'
+            elif package_type == 'deb':
+                ldist, larch = role_remote.os.codename, role_remote.arch
+            else:
+                raise UnsupportedPackageTypeError(role_remote)
 
-            larch, ldist = role_remote.arch, role_remote.os.codename
-            _, deb_url = teuthology.get_ceph_binary_url(
+            _, baseurl = teuthology.get_ceph_binary_url(
                 package='kernel',
                 sha1=src,
-                format='deb',
+                format=package_type,
                 flavor='basic',
                 arch=larch,
                 dist=ldist,
                 )
 
-            log.info('fetching kernel from {url}'.format(url=deb_url))
+            log.info("fetching, gitbuilder baseurl is %s", baseurl)
             proc = role_remote.run(
                 args=[
-                    'sudo', 'rm', '-f', '/tmp/linux-image.deb',
+                    'rm', '-f', remote_pkg_path(role_remote),
                     run.Raw('&&'),
                     'echo',
-                    'linux-image.deb',
+                    gitbuilder_pkg_name(role_remote),
                     run.Raw('|'),
                     'wget',
                     '-nv',
                     '-O',
-                    '/tmp/linux-image.deb',
-                    '--base={url}'.format(url=deb_url),
+                    remote_pkg_path(role_remote),
+                    '--base={url}'.format(url=baseurl),
                     '--input-file=-',
                     ],
                 wait=False)
@@ -351,46 +363,39 @@ def install_and_reboot(ctx, config):
             log.info('Installing distro kernel on {role}...'.format(role=role))
             install_kernel(role_remote)
             continue
+
         log.info('Installing kernel {src} on {role}...'.format(src=src,
                                                                role=role))
         system_type = teuthology.get_system_type(role_remote)
         if system_type == 'rpm':
-            install_kernel(role_remote, src)
+            proc = role_remote.run(
+                args=[
+                    'sudo',
+                    'rpm',
+                    '-ivh',
+                    '--oldpackage',
+                    '--replacefiles',
+                    '--replacepkgs',
+                    remote_pkg_path(role_remote),
+                ])
+            install_kernel(role_remote, remote_pkg_path(role_remote))
             continue
+
+        # TODO: Refactor this into install_kernel() so that it handles all
+        # cases for both rpm and deb packages.
         proc = role_remote.run(
             args=[
                 # install the kernel deb
                 'sudo',
                 'dpkg',
                 '-i',
-                '/tmp/linux-image.deb',
+                remote_pkg_path(role_remote),
                 ],
             )
 
         # collect kernel image name from the .deb
-        cmdout = StringIO()
-        proc = role_remote.run(
-            args=[
-                # extract the actual boot image name from the deb
-                'dpkg-deb',
-                '--fsys-tarfile',
-                '/tmp/linux-image.deb',
-                run.Raw('|'),
-                'tar',
-                '-t',
-                '-v',
-                '-f', '-',
-                '--wildcards',
-                '--',
-                './boot/vmlinuz-*',
-                run.Raw('|'),
-                'sed',
-                r'-e s;.*\./boot/vmlinuz-;;',
-            ],
-            stdout = cmdout,
-            )
-        kernel_title = cmdout.getvalue().rstrip()
-        cmdout.close()
+        kernel_title = get_image_version(role_remote,
+                                         remote_pkg_path(role_remote))
         log.info('searching for kernel {}'.format(kernel_title))
 
         if kernel_title.endswith("-highbank"):
@@ -474,7 +479,7 @@ def install_and_reboot(ctx, config):
                 'update-grub',
                 run.Raw('&&'),
                 'rm',
-                '/tmp/linux-image.deb',
+                remote_pkg_path(role_remote),
                 run.Raw('&&'),
                 'sudo',
                 'shutdown',
@@ -598,7 +603,7 @@ def need_to_install_distro(ctx, role):
 
     if system_type == 'deb':
         distribution = teuthology.get_system_type(role_remote, distro=True)
-        newest = get_version_from_pkg(role_remote, distribution)
+        newest = get_latest_image_version_deb(role_remote, distribution)
 
     output.close()
     err_mess.close()
@@ -607,73 +612,68 @@ def need_to_install_distro(ctx, role):
     log.info('Not newest distro kernel. Curent: {cur} Expected: {new}'.format(cur=current, new=newest))
     return True
 
-def get_version_from_rpm(remote, sha1):
+def maybe_generate_initrd_rpm(remote, path, version):
     """
-    Get Actual version string from kernel file RPM URL.
-    """
-    system_type, system_ver = teuthology.get_system_type(remote, distro=True, version=True)
-    if '.' in system_ver:
-       system_ver = system_ver.split('.')[0]
-    ldist = '{system_type}{system_ver}'.format(system_type=system_type, system_ver=system_ver)
-    _, rpm_url = teuthology.get_ceph_binary_url(
-        package='kernel',
-        sha1=sha1,
-        format='rpm',
-        flavor='basic',
-        arch='x86_64',
-        dist=ldist,
-        )
-    kernel_url = urlparse.urljoin(rpm_url, 'kernel.x86_64.rpm')
-    kerninfo, kern_err = StringIO(), StringIO()
-    remote.run(args=['rpm', '-qp', kernel_url ], stdout=kerninfo, stderr=kern_err)
-    kernelstring = ''
-    if '\n' in kerninfo.getvalue():
-        kernelstring = kerninfo.getvalue().split('\n')[0]
-    else:
-        kernelstring = kerninfo.getvalue()
-    return kernelstring, kernel_url
+    Generate initrd with mkinitrd if the hooks that should make it
+    happen on its own aren't there.
 
-def install_kernel(remote, sha1=None):
+    :param path: rpm package path
+    :param version: kernel version to generate initrd for
+                    e.g. 3.18.0-rc6-ceph-00562-g79a9fa5
     """
-    RPM: Find newest kernel on the machine and update grub to use kernel + reboot.
-    DEB: Find newest kernel. Parse grub.cfg to figure out the entryname/subentry.
-    then modify 01_ceph_kernel to have correct entry + updategrub + reboot.
+    proc = remote.run(
+        args=[
+            'rpm',
+            '--scripts',
+            '-qp',
+            path,
+        ],
+        stdout=StringIO())
+    out = proc.stdout.getvalue()
+    if 'bin/installkernel' in out or 'bin/kernel-install' in out:
+        return
+
+    log.info("No installkernel or kernel-install hook in %s, "
+             "will generate initrd for %s", path, version)
+    remote.run(
+        args=[
+            'sudo',
+            'mkinitrd',
+            '--allow-missing',
+            '-f', # overwrite existing initrd
+            '/boot/initramfs-' + version + '.img',
+            version,
+        ])
+
+def install_kernel(remote, path=None):
     """
-    if sha1:
-        short_sha1 = sha1[0:7]
-    else:
-        short_sha1 = None
+    A bit of misnomer perhaps - the actual kernel package is installed
+    elsewhere, this function deals with initrd and grub.  Currently the
+    following cases are handled:
+      - local, gitbuilder, distro for rpm packages
+      - distro for deb packages - see TODO in install_and_reboot()
+
+    TODO: reboots should be issued from install_and_reboot()
+
+    :param path: package path (for local and gitbuilder cases)
+    """
     system_type = teuthology.get_system_type(remote)
-    distribution = ''
     if system_type == 'rpm':
-        output, err_mess = StringIO(), StringIO()
-        kern_out, kern_err = StringIO(), StringIO()
-        if short_sha1:
-            kernelstring, kernel_url = get_version_from_rpm(remote, sha1)
-            remote.run(args=['rpm', '-q', 'kernel' ], stdout=output, stderr=err_mess )
-            if kernelstring in output.getvalue():
-                for kernel in output.getvalue().split('\n'):
-                    if kernelstring in kernel:
-                        remote.run(args=['rpm', '-ql', kernel ], stdout=kern_out, stderr=kern_err )
-                        for file in kern_out.getvalue().split('\n'):
-                            if 'vmlinuz' in file:
-                                newest = file.split('/boot/vmlinuz-')[1]
-                                log.info('Kernel Version: {version}'.format(version=newest)) 
-            else:
-                raise 'Something went wrong kernel file was installed but version is missing'
+        if path:
+            version = get_image_version(remote, path)
+            # This is either a gitbuilder or a local package and both of these
+            # could have been built with upstream rpm targets with specs that
+            # don't have a %post section at all, which means no initrd.
+            maybe_generate_initrd_rpm(remote, path, version)
         else:
-            remote.run(args=['rpm', '-q', 'kernel', '--last' ], stdout=output, stderr=err_mess )
-            newest=output.getvalue().split()[0].split('kernel-')[1]
-            log.info('Distro Kernel Version: {version}'.format(version=newest))
-        update_grub_rpm(remote, newest)
+            version = get_latest_image_version_rpm(remote)
+        update_grub_rpm(remote, version)
         remote.run( args=['sudo', 'shutdown', '-r', 'now'], wait=False )
-        output.close()
-        err_mess.close()
         return
 
     if system_type == 'deb':
         distribution = teuthology.get_system_type(remote, distro=True)
-        newversion = get_version_from_pkg(remote, distribution)
+        newversion = get_latest_image_version_deb(remote, distribution)
         if 'ubuntu' in distribution:
             grub2conf = teuthology.get_file(remote, '/boot/grub/grub.cfg', True)
             submenu = ''
@@ -811,8 +811,62 @@ def generate_legacy_grub_entry(remote, newversion):
         linenum += 1
     return newgrubconf
 
-def get_version_from_pkg(remote, ostype):
+def get_image_version(remote, path):
     """
+    Get kernel image version from (rpm or deb) package.
+
+    :param path: (rpm or deb) package path
+    """
+    if remote.os.package_type == 'rpm':
+        proc = remote.run(
+            args=[
+                'rpm',
+                '-qlp',
+                path
+            ],
+            stdout=StringIO())
+    elif remote.os.package_type == 'deb':
+        proc = remote.run(
+            args=[
+                'dpkg-deb',
+                '-c',
+                path
+            ],
+            stdout=StringIO())
+    else:
+        raise UnsupportedPackageTypeError(remote)
+
+    files = proc.stdout.getvalue()
+    for file in files.split('\n'):
+        if '/boot/vmlinuz-' in file:
+            version = file.split('/boot/vmlinuz-')[1]
+            break
+
+    log.debug("get_image_version: %s", version)
+    return version
+
+def get_latest_image_version_rpm(remote):
+    """
+    Get kernel image version of the newest kernel rpm package.
+    Used for distro case.
+    """
+    proc = remote.run(
+        args=[
+            'rpm',
+            '-q',
+            'kernel',
+            '--last', # order by install time
+        ], stdout=StringIO())
+    out = proc.stdout.getvalue()
+    version = out.split()[0].split('kernel-')[1]
+    log.debug("get_latest_image_version_rpm: %s", version)
+    return version
+
+def get_latest_image_version_deb(remote, ostype):
+    """
+    Get kernel image version of the newest kernel deb package.
+    Used for distro case.
+
     Round-about way to get the newest kernel uname -r compliant version string
     from the virtual package which is the newest kenel for debian/ubuntu.
     """
@@ -851,38 +905,66 @@ def get_version_from_pkg(remote, ostype):
     err_mess.close()
     return newest
 
+def get_sha1_from_pkg_name(path):
+    """
+    Get commit hash (min 7 max 40 chars) from (rpm or deb) package name.
+    Sample basenames of "make deb-pkg" and "make rpm-pkg" packages
+        linux-image-3.10.0-ceph-rhdeb-00050-g687d1a5f0083_3.10.0-ceph-rhdeb-00050-g687d1a5f0083-6_amd64.deb
+        kernel-3.10.0_ceph_rhrpm_00050_g687d1a5f0083-8.x86_64.rpm
+    Make sure kernel was built with CONFIG_LOCALVERSION_AUTO=y.
+
+    :param path: (rpm or deb) package path (only basename is used)
+    """
+    basename = os.path.basename(path)
+    match = re.search('\d+[-_]g([0-9a-f]{7,40})', basename)
+    sha1 = match.group(1) if match else None
+    log.debug("get_sha1_from_pkg_name: %s -> %s -> %s", path, basename, sha1)
+    return sha1
+
 def task(ctx, config):
     """
     Make sure the specified kernel is installed.
-    This can be a branch, tag, or sha1 of ceph-client.git.
+    This can be a branch, tag, or sha1 of ceph-client.git or a local
+    kernel package.
 
-    To install the kernel from the master branch on all hosts::
-
-        kernel:
-        tasks:
-        - ceph:
-
-    To wait 5 minutes for hosts to reboot::
+    To install ceph-client.git branch (default: master)::
 
         kernel:
-          timeout: 300
-        tasks:
-        - ceph:
+          branch: testing
 
-    To specify different kernels for each client::
+    To install ceph-client.git tag::
 
         kernel:
-          client.0:
-            branch: foo
-          client.1:
-            tag: v3.0rc1
-          client.2:
-            sha1: db3540522e955c1ebb391f4f5324dff4f20ecd09
-        tasks:
-        - ceph:
+          tag: v3.18
 
-    You can specify a branch, tag, or sha1 for all roles
-    of a certain type (more specific roles override this)::
+    To install ceph-client.git sha1::
+
+        kernel:
+          sha1: 275dd19ea4e84c34f985ba097f9cddb539f54a50
+
+    To install local rpm (target should be an rpm system)::
+
+        kernel:
+          rpm: /path/to/appropriately-named.rpm
+
+    To install local deb (target should be a deb system)::
+
+        kernel:
+          deb: /path/to/appropriately-named.deb
+
+    For rpm: or deb: to work it should be able to figure out sha1 from
+    local kernel package basename, see get_sha1_from_pkg_name().  This
+    means that you can't for example install a local tag - package built
+    with upstream {rpm,deb}-pkg targets won't have a sha1 in its name.
+
+    If you want to schedule a run and use a local kernel package, you
+    have to copy the package over to a box teuthology workers are
+    running on and specify a path to the package on that box.
+
+    All of the above will install a specified kernel on all targets.
+    You can specify different kernels for each role or for all roles of
+    a certain type (more specific roles override less specific, see
+    normalize_config() for details)::
 
         kernel:
           client:
@@ -890,9 +972,14 @@ def task(ctx, config):
           osd:
             branch: btrfs_fixes
           client.1:
-            branch: more_specific_branch
+            branch: more_specific
           osd.3:
             branch: master
+
+    To wait 3 minutes for hosts to reboot (default: 300)::
+
+        kernel:
+          timeout: 180
 
     To enable kdb::
 
@@ -913,22 +1000,23 @@ def task(ctx, config):
     validate_config(ctx, config)
     log.info('config %s' % config)
 
-    need_install = {}  # sha1 to dl, or path to deb
+    need_install = {}  # sha1 to dl, or path to rpm or deb
     need_version = {}  # utsrelease or sha1
     kdb = {}
     for role, role_config in config.iteritems():
-        if role_config.get('deb'):
-            path = role_config.get('deb')
-            match = re.search('\d+-g(\w{7})', path)
-            if match:
-                sha1 = match.group(1)
-                log.info('kernel deb sha1 appears to be %s', sha1)
-                if need_to_install(ctx, role, sha1):
-                    need_install[role] = path
-                    need_version[role] = sha1
-            else:
-                log.info('unable to extract sha1 from deb path, forcing install')
-                assert False
+        if role_config.get('rpm') or role_config.get('deb'):
+            # We only care about path - deb: vs rpm: is meaningless,
+            # rpm: just happens to be parsed first.  Nothing is stopping
+            # 'deb: /path/to/foo.rpm' and it will work provided remote's
+            # os.package_type is 'rpm' and vice versa.
+            path = role_config.get('rpm')
+            if not path:
+                path = role_config.get('deb')
+            sha1 = get_sha1_from_pkg_name(path)
+            assert sha1, "failed to extract commit hash from path %s" % path
+            if need_to_install(ctx, role, sha1):
+                need_install[role] = path
+                need_version[role] = sha1
         elif role_config.get('sha1') == 'distro':
             if need_to_install_distro(ctx, role):
                 need_install[role] = 'distro'
