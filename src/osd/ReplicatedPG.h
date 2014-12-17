@@ -160,7 +160,7 @@ public:
     map<string,bufferlist> attrs;
     bufferlist data;
     bufferlist omap_header;
-    map<string,bufferlist> omap;
+    bufferlist omap_data;
     int rval;
 
     object_copy_cursor_t temp_cursor;

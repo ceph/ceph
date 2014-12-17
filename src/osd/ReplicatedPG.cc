@@ -5834,10 +5834,11 @@ struct C_Copyfrom : public Context {
 struct C_CopyFrom_AsyncReadCb : public Context {
   OSDOp *osd_op;
   object_copy_data_t reply_obj;
+  uint64_t features;
   bool classic;
   size_t len;
-  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, bool classic) :
-    osd_op(osd_op), classic(classic), len(0) {}
+  C_CopyFrom_AsyncReadCb(OSDOp *osd_op, uint64_t features, bool classic) :
+    osd_op(osd_op), features(features), classic(classic), len(0) {}
   void finish(int r) {
     assert(len > 0);
     assert(len <= reply_obj.data.length());
@@ -5847,7 +5848,7 @@ struct C_CopyFrom_AsyncReadCb : public Context {
     if (classic) {
       reply_obj.encode_classic(osd_op->outdata);
     } else {
-      ::encode(reply_obj, osd_op->outdata);
+      ::encode(reply_obj, osd_op->outdata, features);
     }
   }
 };
@@ -5873,11 +5874,13 @@ int ReplicatedPG::fill_in_copy_get(
     return result;
   }
 
+  uint64_t features = ctx->op->get_req()->get_connection()->get_features();
+
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
   C_CopyFrom_AsyncReadCb *cb = NULL;
   if (pool.info.require_rollback()) {
-    cb = new C_CopyFrom_AsyncReadCb(&osd_op, classic);
+    cb = new C_CopyFrom_AsyncReadCb(&osd_op, features, classic);
   }
   object_copy_data_t &reply_obj = cb ? cb->reply_obj : _reply_obj;
   // size, mtime
@@ -5947,7 +5950,7 @@ int ReplicatedPG::fill_in_copy_get(
   }
 
   // omap
-  std::map<std::string,bufferlist>& out_omap = reply_obj.omap;
+  uint32_t omap_keys = 0;
   if (pool.info.require_rollback()) {
     cursor.omap_complete = true;
   } else {
@@ -5956,15 +5959,22 @@ int ReplicatedPG::fill_in_copy_get(
       if (cursor.omap_offset.empty()) {
 	osd->store->omap_get_header(coll, oi.soid, &reply_obj.omap_header);
       }
+      bufferlist omap_data;
       ObjectMap::ObjectMapIterator iter =
 	osd->store->get_omap_iterator(coll, oi.soid);
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
       for (; iter->valid(); iter->next()) {
-	out_omap.insert(make_pair(iter->key(), iter->value()));
+	++omap_keys;
+	::encode(iter->key(), omap_data);
+	::encode(iter->value(), omap_data);
 	left -= iter->key().length() + 4 + iter->value().length() + 4;
 	if (left <= 0)
 	  break;
+      }
+      if (omap_keys) {
+	::encode(omap_keys, reply_obj.omap_data);
+	reply_obj.omap_data.claim_append(omap_data);
       }
       if (iter->valid()) {
 	cursor.omap_offset = iter->key();
@@ -5979,14 +5989,15 @@ int ReplicatedPG::fill_in_copy_get(
 	   << " " << out_attrs.size() << " attrs"
 	   << " " << bl.length() << " bytes"
 	   << " " << reply_obj.omap_header.length() << " omap header bytes"
-	   << " " << out_omap.size() << " keys"
+	   << " " << reply_obj.omap_data.length() << " omap data bytes in "
+	   << omap_keys << " keys"
 	   << dendl;
   reply_obj.cursor = cursor;
   if (!async_read_started) {
     if (classic) {
       reply_obj.encode_classic(osd_op.outdata);
     } else {
-      ::encode(reply_obj, osd_op.outdata);
+      ::encode(reply_obj, osd_op.outdata, features);
     }
   }
   if (cb && !async_read_started) {
@@ -6064,7 +6075,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   }
   op.copy_get(&cop->cursor, get_copy_chunk_size(),
 	      &cop->results.object_size, &cop->results.mtime,
-	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap,
+	      &cop->attrs, &cop->data, &cop->omap_header, &cop->omap_data,
 	      &cop->results.snaps, &cop->results.snap_seq,
 	      &cop->results.flags,
 	      &cop->results.source_data_digest,
@@ -6103,10 +6114,10 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
 
-  if (cop->omap.size())
+  if (cop->omap_data.length())
     cop->results.has_omap = true;
 
-  if (r >= 0 && pool.info.require_rollback() && cop->omap.size()) {
+  if (r >= 0 && pool.info.require_rollback() && cop->omap_data.length()) {
     r = -EOPNOTSUPP;
   }
   cop->objecter_tid = 0;
@@ -6225,7 +6236,8 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
   dout(20) << __func__ << " " << cop
 	   << " " << cop->attrs.size() << " attrs"
 	   << " " << cop->data.length() << " bytes"
-	   << " " << cop->omap.size() << " keys"
+	   << " " << cop->omap_header.length() << " omap header bytes"
+	   << " " << cop->omap_data.length() << " omap data bytes"
 	   << dendl;
   if (!cop->temp_cursor.attr_complete) {
     t->touch(cop->results.temp_oid);
@@ -6280,22 +6292,22 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
 	  cop->omap_header);
 	cop->omap_header.clear();
       }
-      if (cop->omap.size()) {
-	for (map<string,bufferlist>::iterator p = cop->omap.begin();
-	     p != cop->omap.end(); ++p) {
-	  cop->results.omap_digest = ceph_crc32c(
-	    cop->results.omap_digest,
-	    (const unsigned char *)p->first.data(),
-	    p->first.length());
-	  cop->results.omap_digest = p->second.crc32c(cop->results.omap_digest);
-	}
+      if (cop->omap_data.length()) {
+	// don't checksum the key count prefix
+	bufferlist keys;
+	keys.substr_of(cop->omap_data, 4, cop->omap_data.length() - 4);
+	cop->results.omap_digest = keys.crc32c(cop->results.omap_digest);
+
+	map<string,bufferlist> omap;
+	bufferlist::iterator p = cop->omap_data.begin();
+	::decode(omap, p);
+	t->omap_setkeys(cop->results.temp_oid, omap);
+	cop->omap_data.clear();
       }
-      t->omap_setkeys(cop->results.temp_oid, cop->omap);
-      cop->omap.clear();
     }
   } else {
     assert(cop->omap_header.length() == 0);
-    assert(cop->omap.empty());
+    assert(cop->omap_data.length() == 0);
   }
   cop->temp_cursor = cop->cursor;
 }
