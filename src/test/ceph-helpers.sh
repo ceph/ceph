@@ -735,8 +735,12 @@ function get_num_active_clean() {
     expression+="contains(.,'clean') and "
     expression+="not(contains(.,'stale'))"
     expression+=")"
+    # xmlstarlet 1.3.0 (which is on Ubuntu precise)
+    # add extra new lines that must be ignored with
+    # grep -v '^$' 
     ceph --format xml pg dump pgs 2>/dev/null | \
-        xmlstarlet sel -t -m "//pg_stat/state[$expression]" -v . -n | wc -l
+        xmlstarlet sel -t -m "//pg_stat/state[$expression]" -v . -n | \
+        grep -v '^$' | wc -l
 }
 
 function test_get_num_active_clean() {
