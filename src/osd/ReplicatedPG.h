@@ -1281,9 +1281,11 @@ protected:
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end);
   virtual void _scrub(ScrubMap& map);
+  void _scrub_digest_updated();
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();
   object_stat_collection_t scrub_cstat;
+  friend class C_ScrubDigestUpdated;
 
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void apply_and_flush_repops(bool requeue);

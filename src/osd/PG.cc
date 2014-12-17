@@ -3743,8 +3743,9 @@ void PG::scrub(ThreadPool::TPHandle &handle)
  *  (4) Wait for writes to flush on the chunk
  *  (5) Wait for maps from replicas
  *  (6) Compare / repair all scrub maps
+ *  (7) Wait for digest updates to apply
  *
- * This logic is encoded in the very linear state machine:
+ * This logic is encoded in the mostly linear state machine:
  *
  *           +------------------+
  *  _________v__________        |
@@ -3781,6 +3782,12 @@ void PG::scrub(ThreadPool::TPHandle &handle)
  *  _________v__________    |   |
  * |                    |   |   |
  * |    COMPARE_MAPS    |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |WAIT_DIGEST_UPDATES |   |   |
  * |____________________|   |   |
  *           |   |          |   |
  *           |   +----------+   |
@@ -4002,8 +4009,21 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         // requeue the writes from the chunk that just finished
         requeue_ops(waiting_for_active);
 
-        if (scrubber.end < hobject_t::get_max()) {
-          // schedule another leg of the scrub
+	scrubber.state = PG::Scrubber::WAIT_DIGEST_UPDATES;
+
+	// fall-thru
+
+      case PG::Scrubber::WAIT_DIGEST_UPDATES:
+	if (scrubber.num_digest_updates_pending) {
+	  dout(10) << __func__ << " waiting on "
+		   << scrubber.num_digest_updates_pending
+		   << " digest updates" << dendl;
+	  done = true;
+	  break;
+	}
+
+	if (scrubber.end < hobject_t::get_max()) {
+	  // schedule another leg of the scrub
           scrubber.start = scrubber.end;
 
           scrubber.state = PG::Scrubber::NEW_CHUNK;
@@ -4013,7 +4033,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           scrubber.state = PG::Scrubber::FINISH;
         }
 
-        break;
+	break;
 
       case PG::Scrubber::FINISH:
         scrub_finish();

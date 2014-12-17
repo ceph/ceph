@@ -12290,6 +12290,22 @@ bool ReplicatedPG::_range_available_for_scrub(
   return true;
 }
 
+struct C_ScrubDigestUpdated : public Context {
+  ReplicatedPGRef pg;
+  C_ScrubDigestUpdated(ReplicatedPG *pg) : pg(pg) {}
+  void finish(int r) {
+    pg->_scrub_digest_updated();
+  }
+};
+
+void ReplicatedPG::_scrub_digest_updated()
+{
+  dout(20) << __func__ << dendl;
+  if (--scrubber.num_digest_updates_pending == 0) {
+    osd->scrub_wq.queue(this);
+  }
+}
+
 void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 {
   dout(10) << "_scrub" << dendl;
@@ -12516,7 +12532,9 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
       ctx->new_obs.oi.set_data_digest(p->second.first);
       ctx->new_obs.oi.set_omap_digest(p->second.second);
       finish_ctx(ctx, pg_log_entry_t::MODIFY, true, true);
+      ctx->on_finish = new C_ScrubDigestUpdated(this);
       simple_repop_submit(repop);
+      ++scrubber.num_digest_updates_pending;
     }
   }
   
