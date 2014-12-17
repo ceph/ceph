@@ -2536,7 +2536,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	      << " client." << client << " on " << *in << dendl;
 
       // this cap now follows a later snap (i.e. the one initiating this flush, or later)
-      cap->client_follows = MAX(follows, in->first) + 1;
+      cap->client_follows = MAX(snap, (snapid_t)(in->first + 1));
    
       // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
       // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
@@ -2860,7 +2860,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   }
 
   if (pi->client_ranges.count(client)) {
-    if (in->last == follows+1) {
+    if (in->last == snap) {
       dout(10) << "  removing client_range entirely" << dendl;
       pi->client_ranges.erase(client);
     } else {
