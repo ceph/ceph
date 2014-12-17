@@ -62,7 +62,7 @@ int ErasureCodeLrc::create_ruleset(const string &name,
   }
   ruleset = rno;
 
-  int steps = 3 + ruleset_steps.size();
+  int steps = 4 + ruleset_steps.size();
   int min_rep = 3;
   int max_rep = 30;
   int ret;
@@ -72,6 +72,8 @@ int ErasureCodeLrc::create_ruleset(const string &name,
   int step = 0;
 
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
+  assert(ret == 0);
+  ret = crush.set_rule_step(rno, step++, CRUSH_RULE_SET_CHOOSE_TRIES, 100, 0);
   assert(ret == 0);
   ret = crush.set_rule_step(rno, step++, CRUSH_RULE_TAKE, root, 0);
   assert(ret == 0);
