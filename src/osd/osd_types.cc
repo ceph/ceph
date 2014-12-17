@@ -3318,7 +3318,7 @@ void object_copy_data_t::encode_classic(bufferlist& bl) const
   ::encode(mtime, bl);
   ::encode(attrs, bl);
   ::encode(data, bl);
-  ::encode(omap, bl);
+  bl.append(omap_data);
   ::encode(cursor, bl);
 }
 
@@ -3328,21 +3328,44 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
   ::decode(mtime, bl);
   ::decode(attrs, bl);
   ::decode(data, bl);
-  ::decode(omap, bl);
+  {
+    map<string,bufferlist> omap;
+    ::decode(omap, bl);
+    omap_data.clear();
+    ::encode(omap, omap_data);
+  }
   ::decode(cursor, bl);
   flags = 0;
   data_digest = omap_digest = 0;
 }
 
-void object_copy_data_t::encode(bufferlist& bl) const
+void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(4, 1, bl);
+  if ((features & CEPH_FEATURE_OSD_OBJECT_DIGEST) == 0) {
+    ENCODE_START(4, 1, bl);
+    ::encode(size, bl);
+    ::encode(mtime, bl);
+    ::encode((__u32)0, bl);  // was category; no longer used
+    ::encode(attrs, bl);
+    ::encode(data, bl);
+    bl.append(omap_data);
+    ::encode(cursor, bl);
+    ::encode(omap_header, bl);
+    ::encode(snaps, bl);
+    ::encode(snap_seq, bl);
+    ::encode(flags, bl);
+    ::encode(data_digest, bl);
+    ::encode(omap_digest, bl);
+    ENCODE_FINISH(bl);
+    return;
+  }
+
+  ENCODE_START(5, 5, bl);
   ::encode(size, bl);
   ::encode(mtime, bl);
-  ::encode((__u32)0, bl);  // was category; no longer used
   ::encode(attrs, bl);
   ::encode(data, bl);
-  ::encode(omap, bl);
+  ::encode(omap_data, bl);
   ::encode(cursor, bl);
   ::encode(omap_header, bl);
   ::encode(snaps, bl);
@@ -3355,30 +3378,60 @@ void object_copy_data_t::encode(bufferlist& bl) const
 
 void object_copy_data_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START(4, bl);
-  ::decode(size, bl);
-  ::decode(mtime, bl);
-  {
-    string category;
-    ::decode(category, bl);  // no longer used
-  }
-  ::decode(attrs, bl);
-  ::decode(data, bl);
-  ::decode(omap, bl);
-  ::decode(cursor, bl);
-  if (struct_v >= 2)
-    ::decode(omap_header, bl);
-  if (struct_v >= 3) {
-    ::decode(snaps, bl);
-    ::decode(snap_seq, bl);
+  DECODE_START(5, bl);
+  if (struct_v < 5) {
+    // old
+    ::decode(size, bl);
+    ::decode(mtime, bl);
+    {
+      string category;
+      ::decode(category, bl);  // no longer used
+    }
+    ::decode(attrs, bl);
+    ::decode(data, bl);
+    {
+      map<string,bufferlist> omap;
+      ::decode(omap, bl);
+      omap_data.clear();
+      ::encode(omap, omap_data);
+    }
+    ::decode(cursor, bl);
+    if (struct_v >= 2)
+      ::decode(omap_header, bl);
+    if (struct_v >= 3) {
+      ::decode(snaps, bl);
+      ::decode(snap_seq, bl);
+    } else {
+      snaps.clear();
+      snap_seq = 0;
+    }
+    if (struct_v >= 4) {
+      ::decode(flags, bl);
+      ::decode(data_digest, bl);
+      ::decode(omap_digest, bl);
+    }
   } else {
-    snaps.clear();
-    snap_seq = 0;
-  }
-  if (struct_v >= 4) {
-    ::decode(flags, bl);
-    ::decode(data_digest, bl);
-    ::decode(omap_digest, bl);
+    // current
+    ::decode(size, bl);
+    ::decode(mtime, bl);
+    ::decode(attrs, bl);
+    ::decode(data, bl);
+    ::decode(omap_data, bl);
+    ::decode(cursor, bl);
+    if (struct_v >= 2)
+      ::decode(omap_header, bl);
+    if (struct_v >= 3) {
+      ::decode(snaps, bl);
+      ::decode(snap_seq, bl);
+    } else {
+      snaps.clear();
+      snap_seq = 0;
+    }
+    if (struct_v >= 4) {
+      ::decode(flags, bl);
+      ::decode(data_digest, bl);
+      ::decode(omap_digest, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -3405,7 +3458,9 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   bufferptr bp2("not", 3);
   bufferlist bl2;
   bl2.push_back(bp2);
-  o.back()->omap["why"] = bl2;
+  map<string,bufferlist> omap;
+  omap["why"] = bl2;
+  ::encode(omap, o.back()->omap_data);
   bufferptr databp("iamsomedatatocontain", 20);
   o.back()->data.push_back(databp);
   o.back()->omap_header.append("this is an omap header");
@@ -3425,7 +3480,7 @@ void object_copy_data_t::dump(Formatter *f) const
   f->dump_int("flags", flags);
   f->dump_unsigned("data_digest", data_digest);
   f->dump_unsigned("omap_digest", omap_digest);
-  f->dump_int("omap_size", omap.size());
+  f->dump_int("omap_data_length", omap_data.length());
   f->dump_int("omap_header_length", omap_header.length());
   f->dump_int("data_length", data.length());
   f->open_array_section("snaps");
