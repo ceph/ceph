@@ -56,10 +56,10 @@ def test_get_http_log_path():
 
 class TestHostnames(object):
     def setup(self):
-        self.old_lab_domain = config.lab_domain
+        config._conf = dict()
 
     def teardown(self):
-        config.lab_domain = self.old_lab_domain
+        config.load()
 
     def test_canonicalize_hostname(self):
         host_base = 'box1'
