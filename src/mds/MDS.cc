@@ -108,6 +108,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker, 
                      m->cct->_conf->osd_num_op_tracker_shard),
   finisher(cct),
+  osd_epoch_barrier(0),
   sessionmap(this),
   progress_thread(this),
   asok_hook(NULL)
@@ -223,16 +224,42 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
   if (!f)
     f = new_formatter("json-pretty");
   if (command == "status") {
+
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    const epoch_t osd_epoch = osdmap->get_epoch();
+    objecter->put_osdmap_read();
+
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << monc->get_fsid();
     f->dump_unsigned("whoami", whoami);
     f->dump_string("state", ceph_mds_state_name(get_state()));
     f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    f->dump_unsigned("osdmap_epoch", osd_epoch);
+    f->dump_unsigned("osdmap_epoch_barrier", get_osd_epoch_barrier());
     f->close_section(); // status
   } else if (command == "dump_ops_in_flight") {
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(f);
+  } else if (command == "osdmap barrier") {
+    int64_t target_epoch = 0;
+    bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
+
+    if (!got_val) {
+      ss << "no target epoch given";
+      return true;
+    }
+
+    mds_lock.Lock();
+    set_osd_epoch_barrier(target_epoch);
+    mds_lock.Unlock();
+
+    C_SaferCond cond;
+    bool already_got = objecter->wait_for_map(target_epoch, &cond);
+    if (!already_got) {
+      dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
+      cond.wait();
+    }
   } else if (command == "session ls") {
     mds_lock.Lock();
 
@@ -476,6 +503,11 @@ void MDS::set_up_admin_socket()
 				     "session evict name=client_id,type=CephString",
 				     asok_hook,
 				     "Evict a CephFS client");
+  assert(0 == r);
+  r = admin_socket->register_command("osdmap barrier",
+				     "osdmap barrier name=target_epoch,type=CephInt",
+				     asok_hook,
+				     "Wait until the MDS has this OSD map epoch");
   assert(0 == r);
   r = admin_socket->register_command("session ls",
 				     "session ls",
@@ -1638,6 +1670,16 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
 
+  if (is_active()) {
+    // Before going active, set OSD epoch barrier to latest (so that
+    // we don't risk handing out caps to clients with old OSD maps that
+    // might not include barriers from the previous incarnation of this MDS)
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    const epoch_t osd_epoch = osdmap->get_epoch();
+    objecter->put_osdmap_read();
+    set_osd_epoch_barrier(osd_epoch);
+  }
+
  out:
   beacon.notify_mdsmap(mdsmap);
 
@@ -2359,8 +2401,18 @@ bool MDS::handle_core_message(Message *m)
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-    if (is_active() && snapserver)
+
+    if (is_active() && snapserver) {
       snapserver->check_osd_map(true);
+    }
+
+    server->handle_osd_map();
+
+    // By default the objecter only requests OSDMap updates on use,
+    // we would like to always receive the latest maps in order to
+    // apply policy based on the FULL flag.
+    objecter->maybe_request_map();
+
     break;
 
   default:
@@ -2882,4 +2934,17 @@ void MDS::ProgressThread::shutdown()
   mds->mds_lock.Unlock();
   join();
   mds->mds_lock.Lock();
+}
+
+/**
+ * This is used whenever a RADOS operation has been cancelled
+ * or a RADOS client has been blacklisted, to cause the MDS and
+ * any clients to wait for this OSD epoch before using any new caps.
+ *
+ * See doc/cephfs/eviction
+ */
+void MDS::set_osd_epoch_barrier(epoch_t e)
+{
+  dout(4) << __func__ << ": epoch=" << e << dendl;
+  osd_epoch_barrier = e;
 }
