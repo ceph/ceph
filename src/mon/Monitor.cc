@@ -968,7 +968,7 @@ void Monitor::_reset()
 
   cancel_probe_timeout();
   timecheck_finish();
-  stop_health_tick_event();
+  cleanup_health_tick_event();
 
   leader_since = utime_t();
   if (!quorum.empty()) {

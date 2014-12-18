@@ -657,6 +657,12 @@ public:
   struct health_cache_t {
     health_status_t overall;
     utime_t last_update;
+    void reset() {
+      // health_status_t doesn't really have a NONE value and we're not
+      // okay with setting something else (say, HEALTH_ERR).  so just
+      // leave it be.
+      last_update = utime_t();
+    }
   } health_status_cache;
 
   struct C_HealthTick : public Context {
@@ -672,6 +678,10 @@ public:
   Context *health_tick_event;
 
   void do_health_to_clog();
+  void cleanup_health_tick_event() {
+    stop_health_tick_event();
+    health_status_cache.reset();
+  }
   void stop_health_tick_event();
   void start_health_tick_event();
 
