@@ -2165,6 +2165,17 @@ void Monitor::get_health(list<string>& status, bufferlist *detailbl,
 
   if (f)
     f->close_section();
+
+  utime_t next_clog_update = health_status_cache.last_update;
+  next_clog_update += cct->_conf->mon_health_to_clog_interval;
+
+  if (cct->_conf->mon_health_to_clog &&
+      ((health_status_cache.overall != overall) ||
+       (next_clog_update >= ceph_clock_now(g_ceph_context)))) {
+    clog->info() << joinify(status.begin(), status.end(), string("; "));
+    health_status_cache.last_update = ceph_clock_now(g_ceph_context);
+  }
+  health_status_cache.overall = overall;
 }
 
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
