@@ -2,7 +2,6 @@ import contextlib
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import run_tests, CephFSTestCase
 from tasks.cephfs.filesystem import Filesystem, ObjectNotFound
-from tasks.mds_client_limits import wait_until_true
 from teuthology.orchestra import run
 
 
@@ -86,7 +85,7 @@ class TestFlush(CephFSTestCase):
         self.assertEqual(flush_data['return_code'], 0)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace
-        wait_until_true(
+        self.wait_until_true(
             lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
             60)  # timeout is fairly long to allow for tick+rados latencies
 

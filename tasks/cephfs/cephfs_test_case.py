@@ -1,5 +1,6 @@
 import logging
 import unittest
+import time
 from teuthology.task import interactive
 
 
@@ -40,6 +41,42 @@ class CephFSTestCase(unittest.TestCase):
     def _session_by_id(self, session_ls):
         return dict([(s['id'], s) for s in session_ls])
 
+    def wait_until_equal(self, get_fn, expect_val, timeout, reject_fn=None):
+        period = 5
+        elapsed = 0
+        while True:
+            val = get_fn()
+            if val == expect_val:
+                return
+            elif reject_fn and reject_fn(val):
+                raise RuntimeError("wait_until_equal: forbidden value {0} seen".format(val))
+            else:
+                if elapsed >= timeout:
+                    raise RuntimeError("Timed out after {0} seconds waiting for {1} (currently {2})".format(
+                        elapsed, expect_val, val
+                    ))
+                else:
+                    log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
+                time.sleep(period)
+                elapsed += period
+
+        log.debug("wait_until_equal: success")
+
+    def wait_until_true(self, condition, timeout):
+        period = 5
+        elapsed = 0
+        while True:
+            if condition():
+                return
+            else:
+                if elapsed >= timeout:
+                    raise RuntimeError("Timed out after {0} seconds".format(elapsed))
+                else:
+                    log.debug("wait_until_true: waiting...")
+                time.sleep(period)
+                elapsed += period
+
+        log.debug("wait_until_true: success")
 
 class LogStream(object):
     def __init__(self):
