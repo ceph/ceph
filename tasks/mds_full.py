@@ -19,56 +19,17 @@ log = logging.getLogger(__name__)
 
 
 class TestClusterFull(CephFSTestCase):
-    # Environment references
-    mount_a = None
-    mount_b = None
-
     # Persist-between-tests constants
     pool_capacity = None
 
     def setUp(self):
-        # Unmount in order to start each test on a fresh mount, such
-        # that test_barrier can have a firm expectation of what OSD
-        # epoch the clients start with.
-        if self.mount_a.is_mounted():
-            self.mount_a.umount_wait()
-
-        if self.mount_b.is_mounted():
-            self.mount_b.umount_wait()
-
-        # To avoid any issues with e.g. unlink bugs, we destroy and recreate
-        # the filesystem rather than just doing a rm -rf of files
-        self.fs.mds_stop()
-        self.fs.mds_fail()
-        self.fs.delete()
-        self.fs.create()
-
-        # In case the previous filesystem had filled up the RADOS cluster, wait for that
-        # flag to pass.
-        osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
-        self.wait_until_true(lambda: not self.fs.is_full(),
-                             timeout=osd_mon_report_interval_max * 5)
-
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount_a.is_mounted():
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
-
-        if not self.mount_b.is_mounted():
-            self.mount_b.mount()
-            self.mount_b.wait_until_mounted()
+        super(TestClusterFull, self).setUp()
 
         if self.pool_capacity is None:
             # This is a hack to overcome weird fluctuations in the reported
             # `max_avail` attribute of pools that sometimes occurs in between
             # tests (reason as yet unclear, but this dodges the issue)
             TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-
-    def tearDown(self):
-        self.fs.clear_firewall()
-        self.mount_a.teardown()
-        self.mount_b.teardown()
 
     def test_barrier(self):
         """
