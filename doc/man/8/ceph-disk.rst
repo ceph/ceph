@@ -25,7 +25,7 @@ or ``udev``. It can also be triggered by other deployment utilities like ``Chef`
 ``Juju``, ``Puppet`` etc.
 
 It actually automates the multiple steps involved in manual creation and start
-of an OSD into 2 steps of preparing and activating the OSD by using the
+of an OSD into two steps of preparing and activating the OSD by using the
 subcommands ``prepare`` and ``activate``.
 
 Subcommands
@@ -64,7 +64,7 @@ Usage::
 
 	ceph-disk activate [PATH]
 
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 
 An additional option :option:`--activate-key` has to be used with this
 subcommand when a copy of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring``
@@ -75,6 +75,7 @@ Usage::
 	ceph-disk activate [PATH] [--activate-key PATH]
 
 Another option :option:`--mark-init` can also be used with this subcommand.
+``--mark-init`` provides init system to manage the OSD directory.
 
 activate-journal
 ----------------
@@ -86,10 +87,12 @@ Usage::
 
 	ceph-disk activate-journal [DEV]
 
-Here, [DEV] is the path to journal block device.
+Here, [DEV] is the path to a journal block device.
 
 Others options like :option:`--activate-key` and :option:`--mark-init` can also
 be used with this subcommand.
+
+``--mark-init`` provides init system to manage the OSD directory.
 
 Usage::
 
@@ -110,6 +113,8 @@ Usage::
 Others options like :option:`--activate-key` and :option:`--mark-init` can
 also be used with this subcommand.
 
+``--mark-init`` provides init system to manage the OSD directory.
+
 Usage::
 
 	ceph-disk activate-all [--activate-key PATH] [--mark-init INITSYSTEM]
@@ -127,7 +132,7 @@ Usage::
 suppress-activate
 -----------------
 
-Suppress activate on a device (prefix). Mark devices that you want to suppress
+Suppress activate on a device (prefix). Mark devices that you don't want to
 activate with a file like ``/var/lib/ceph/tmp/suppress-activate.sdb`` where the
 last bit is the sanitized device name (/dev/X without the /dev/ prefix). A
 function ``is_suppressed()`` checks for and  matches a prefix (/dev/). It means
@@ -137,18 +142,19 @@ Usage::
 
 	ceph-disk suppress-activate [PATH]
 
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 
 unsuppress-activate
 -------------------
 
-Stop suppressing activate on a device (prefix).
+Stop suppressing activate on a device (prefix). It is used to activate a device
+that was earlier kept deactivated using ``suppress-activate``.
 
 Usage::
 
 	ceph-disk unsuppress-activate [PATH]
 
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 
 zap
 ---
@@ -164,7 +170,7 @@ Usage::
 
 	ceph-disk zap [DEV]
 
-Here, [DEV] is path to block device.
+Here, [DEV] is path to a block device.
 
 Options
 =======
