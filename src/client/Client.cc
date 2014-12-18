@@ -793,14 +793,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->nlink = st->nlink;
     }
 
-    if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
-	st->xattrbl.length() &&
-	st->xattr_version > in->xattr_version) {
-      bufferlist::iterator p = st->xattrbl.begin();
-      ::decode(in->xattrs, p);
-      in->xattr_version = st->xattr_version;
-    }
-
     in->dirstat = st->dirstat;
     in->rstat = st->rstat;
 
@@ -822,6 +814,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   } else if (st->inline_version > in->inline_version) {
     in->inline_data = st->inline_data;
     in->inline_version = st->inline_version;
+  }
+
+  if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
+      st->xattrbl.length() &&
+      st->xattr_version > in->xattr_version) {
+    bufferlist::iterator p = st->xattrbl.begin();
+    ::decode(in->xattrs, p);
+    in->xattr_version = st->xattr_version;
   }
 
   // move me if/when version reflects fragtree changes.
