@@ -113,21 +113,21 @@ class MClientCaps : public Message {
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
-    peer.cap_id = 0;
+    memset(&peer, 0, sizeof(peer));
     inline_version = 0;
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      osd_epoch_barrier(oeb){
+      osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
     head.realm = realm;
     head.cap_id = id;
     head.migrate_seq = mseq;
-    peer.cap_id = 0;
+    memset(&peer, 0, sizeof(peer));
     inline_version = 0;
   }
 private:
