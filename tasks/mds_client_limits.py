@@ -62,7 +62,7 @@ class TestClientLimits(CephFSTestCase):
         cache_size = 200
         open_files = 250
 
-        self.fs.set_ceph_conf('mds', 'mds cache size', cache_size)
+        self.set_conf('mds', 'mds cache size', cache_size)
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
