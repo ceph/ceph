@@ -317,6 +317,7 @@ struct metadata_section {
   pg_log_t log;
   map<epoch_t,pg_interval_t> past_intervals;
   OSDMap osdmap;
+  bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
 
   metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
 		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals)
@@ -336,7 +337,9 @@ struct metadata_section {
     ::encode(info, bl);
     ::encode(log, bl);
     ::encode(past_intervals, bl);
-    osdmap.encode(bl);
+    // Equivalent to osdmap.encode(bl, features); but
+    // preserving exact layout for CRC checking.
+    bl.append(osdmap_bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -973,9 +976,8 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
-int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
+int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
-  bufferlist bl;
   bool found = store->read(
       META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (!found) {
@@ -990,7 +992,7 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
 
 int add_osdmap(ObjectStore *store, metadata_section &ms)
 {
-  return get_osdmap(store, ms.map_epoch, ms.osdmap);
+  return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
 }
 
 //Write super_header with its fixed 16 byte length
@@ -1478,7 +1480,8 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms, co
   // Pool verified to exist for call to get_pg_num().
   if (ms.osdmap.get_epoch() != 0) {
     OSDMap curmap;
-    int ret = get_osdmap(store, sb.current_epoch, curmap);
+    bufferlist map_bl;
+    int ret = get_osdmap(store, sb.current_epoch, curmap, map_bl);
     if (ret)
       return ret;
     spg_t parent(ms.info.pgid);
@@ -1684,7 +1687,8 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
 
   // Don't import if pool no longer exists
   OSDMap curmap;
-  ret = get_osdmap(store, sb.current_epoch, curmap);
+  bufferlist bl;
+  ret = get_osdmap(store, sb.current_epoch, curmap, bl);
   if (ret) {
     cerr << "Can't find local OSDMap" << std::endl;
     return ret;
@@ -2562,7 +2566,8 @@ int main(int argc, char **argv)
       goto out;
     }
     OSDMap curmap;
-    ret = get_osdmap(fs, superblock.current_epoch, curmap);
+    bufferlist bl;
+    ret = get_osdmap(fs, superblock.current_epoch, curmap, bl);
     if (ret) {
         cerr << "Can't find local OSDMap" << std::endl;
         goto out;
@@ -2603,7 +2608,7 @@ int main(int argc, char **argv)
 
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
     ObjectStore::Transaction t;
-    bufferlist bl;
+    bl.clear();
     ::encode(superblock, bl);
     t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
     r = fs->apply_transaction(t);
