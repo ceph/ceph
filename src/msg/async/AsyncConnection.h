@@ -17,6 +17,7 @@
 #ifndef CEPH_MSG_ASYNCCONNECTION_H
 #define CEPH_MSG_ASYNCCONNECTION_H
 
+#include <pthread.h>
 #include <list>
 #include <map>
 using namespace std;
@@ -108,8 +109,8 @@ class AsyncConnection : public Connection {
   ostream& _conn_prefix(std::ostream *_dout);
 
   bool is_connected() {
-    // FIXME?
-    return state != STATE_CLOSED;
+    Mutex::Locker l(lock);
+    return state >= STATE_OPEN && state <= STATE_OPEN_TAG_CLOSE;
   }
 
   // Only call when AsyncConnection first construct
@@ -140,11 +141,16 @@ class AsyncConnection : public Connection {
   //  \                                         signal
   // finished
   //
-  // Note: Don't call it from AsyncConnection
+  // The above flow only happen when the caller isn't the pthread own center,
+  // if the owner of center is self, it's safe to call _stop() directly;
   void mark_down() {
     Mutex::Locker l(stop_lock);
-    center->dispatch_event_external(stop_handler);
-    stop_cond.Wait(stop_lock);
+    if (center->get_owner() == pthread_self()) {
+      stop();
+    } else {
+      center->dispatch_event_external(stop_handler);
+      stop_cond.Wait(stop_lock);
+    }
   }
   void mark_disposable() {
     Mutex::Locker l(lock);
@@ -239,6 +245,7 @@ class AsyncConnection : public Connection {
   Messenger::Policy policy;
   map<int, list<Message*> > out_q;  // priority queue for outbound msgs
   list<Message*> sent;
+  list<Message*> local_messages;    // local deliver
   Mutex lock;
   utime_t backoff;         // backoff time
   bool open_write;
@@ -252,10 +259,12 @@ class AsyncConnection : public Connection {
   EventCallbackRef fast_accept_handler;
   EventCallbackRef stop_handler;
   EventCallbackRef signal_handler;
+  EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_LEN];
   Mutex stop_lock; // used to protect `mark_down_cond`
   Cond stop_cond;
+  set<uint64_t> register_time_events; // need to delete it if stop
 
   // Tis section are temp variables used by state transition
 
@@ -275,6 +284,12 @@ class AsyncConnection : public Connection {
   // Accepting state
   entity_addr_t socket_addr;
   CryptoKey session_key;
+  bool replacing;    // when replacing process happened, we will reply connect
+                     // side with RETRY tag and accept side will clear replaced
+                     // connection. So when connect side reissue connect_msg,
+                     // there won't exists conflicting connection so we use
+                     // "replacing" to skip RESETSESSION to avoid detect wrong
+                     // presentation
 
   // used only for local state, it will be overwrite when state transition
   bufferptr state_buffer;
@@ -289,6 +304,7 @@ class AsyncConnection : public Connection {
   // used by eventcallback
   void handle_write();
   void process();
+  void wakeup_from(uint64_t id);
   // Helper: only called by C_handle_stop
   void stop() {
     Mutex::Locker l(lock);
@@ -298,6 +314,7 @@ class AsyncConnection : public Connection {
     Mutex::Locker l(stop_lock);
     stop_cond.Signal();
   }
+  void local_deliver();
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;
