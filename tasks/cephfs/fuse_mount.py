@@ -87,6 +87,7 @@ class FuseMount(CephFSMount):
             )
         except CommandFailedError:
             # This happens if the mount directory doesn't exist
+            log.info('mount point does not exist: %s', self.mountpoint)
             return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')
@@ -113,7 +114,7 @@ class FuseMount(CephFSMount):
         # Now that we're mounted, set permissions so that the rest of the test will have
         # unrestricted access to the filesystem mount.
         self.client_remote.run(
-            args=['sudo', 'chmod', '1777', '{tdir}/mnt.{id}'.format(tdir=self.test_dir, id=self.client_id)], )
+            args=['sudo', 'chmod', '1777', self.mountpoint])
 
     def _mountpoint_exists(self):
         return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False).exitstatus == 0
@@ -223,11 +224,7 @@ class FuseMount(CephFSMount):
             ],
         )
 
-    def get_global_id(self):
-        """
-        Look up the CephFS client ID for this mount
-        """
-
+    def _admin_socket(self, args):
         pyscript = """
 import glob
 import re
@@ -254,6 +251,20 @@ print find_socket("{client_name}")
 
         # Query client ID from admin socket
         p = self.client_remote.run(
-            args=['sudo', 'ceph', '--admin-daemon', asok_path, 'mds_sessions'],
+            args=['sudo', 'ceph', '--admin-daemon', asok_path] + args,
             stdout=StringIO())
-        return json.loads(p.stdout.getvalue())['id']
+        return json.loads(p.stdout.getvalue())
+
+    def get_global_id(self):
+        """
+        Look up the CephFS client ID for this mount
+        """
+
+        return self._admin_socket(['mds_sessions'])['id']
+
+    def get_osd_epoch(self):
+        """
+        Return 2-tuple of osd_epoch, osd_epoch_barrier
+        """
+        status = self._admin_socket(['status'])
+        return status['osd_epoch'], status['osd_epoch_barrier']

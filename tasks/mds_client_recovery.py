@@ -9,7 +9,7 @@ import time
 import unittest
 from teuthology.orchestra import run
 
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from teuthology.task import interactive
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
@@ -37,10 +37,13 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.clear_firewall()
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
-        self.mount_a.mount()
-        self.mount_b.mount()
-        self.mount_a.wait_until_mounted()
-        self.mount_b.wait_until_mounted()
+        if not self.mount_a.is_mounted():
+            self.mount_a.mount()
+            self.mount_a.wait_until_mounted()
+
+        if not self.mount_b.is_mounted():
+            self.mount_b.mount()
+            self.mount_b.wait_until_mounted()
 
         self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
 
@@ -196,8 +199,8 @@ class TestClientRecovery(CephFSTestCase):
             cap_holder.stdin.close()
             try:
                 cap_holder.wait()
-            except CommandFailedError:
-                # We killed it, so it raises an error
+            except (CommandFailedError, ConnectionLostError):
+                # We killed it (and possibly its node), so it raises an error
                 pass
         finally:
             # teardown() doesn't quite handle this case cleanly, so help it out
@@ -247,8 +250,8 @@ class TestClientRecovery(CephFSTestCase):
             cap_holder.stdin.close()
             try:
                 cap_holder.wait()
-            except CommandFailedError:
-                # We killed it, so it raises an error
+            except (CommandFailedError, ConnectionLostError):
+                # We killed it (and possibly its node), so it raises an error
                 pass
         finally:
             self.mount_a.kill_cleanup()
@@ -402,8 +405,10 @@ def task(ctx, config):
     mount_b = ctx.mounts.values()[1]
 
     if not isinstance(mount_a, FuseMount) or not isinstance(mount_b, FuseMount):
-        # TODO: make kclient mount capable of all the same test tricks as ceph_fuse
-        raise RuntimeError("Require FUSE clients")
+        # kclient kill() power cycles nodes, so requires clients to each be on
+        # their own node
+        if mount_a.client_remote.hostname == mount_b.client_remote.hostname:
+            raise RuntimeError("kclient clients must be on separate nodes")
 
     # Check we have at least one remote client for use with network-dependent tests
     # =============================================================================
