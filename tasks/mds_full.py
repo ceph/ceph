@@ -18,45 +18,6 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
 log = logging.getLogger(__name__)
 
 
-def wait_until_equal(get_fn, expect_val, timeout, reject_fn=None):
-    period = 5
-    elapsed = 0
-    while True:
-        val = get_fn()
-        if val == expect_val:
-            return
-        elif reject_fn and reject_fn(val):
-            raise RuntimeError("wait_until_equal: forbidden value {0} seen".format(val))
-        else:
-            if elapsed >= timeout:
-                raise RuntimeError("Timed out after {0} seconds waiting for {1} (currently {2})".format(
-                    elapsed, expect_val, val
-                ))
-            else:
-                log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
-            time.sleep(period)
-            elapsed += period
-
-    log.debug("wait_until_equal: success")
-
-
-def wait_until_true(condition, timeout):
-    period = 5
-    elapsed = 0
-    while True:
-        if condition():
-            return
-        else:
-            if elapsed >= timeout:
-                raise RuntimeError("Timed out after {0} seconds".format(elapsed))
-            else:
-                log.debug("wait_until_true: waiting...")
-            time.sleep(period)
-            elapsed += period
-
-    log.debug("wait_until_true: success")
-
-
 class TestClusterFull(CephFSTestCase):
     # Environment references
     mount_a = None
@@ -85,8 +46,8 @@ class TestClusterFull(CephFSTestCase):
         # In case the previous filesystem had filled up the RADOS cluster, wait for that
         # flag to pass.
         osd_mon_report_interval_max = int(self.fs.get_config("osd_mon_report_interval_max", service_type='osd'))
-        wait_until_true(lambda: not self.fs.is_full(),
-                        timeout=osd_mon_report_interval_max * 5)
+        self.wait_until_true(lambda: not self.fs.is_full(),
+                             timeout=osd_mon_report_interval_max * 5)
 
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
@@ -168,8 +129,7 @@ class TestClusterFull(CephFSTestCase):
         # completes immediately, while the resulting OSD map update happens
         # asynchronously (it's an Objecter::_maybe_request_map) as a result
         # of seeing the new epoch barrier.
-
-        wait_until_equal(
+        self.wait_until_equal(
             lambda: self.mount_b.get_osd_epoch(),
             (new_epoch, new_epoch),
             30,
@@ -217,8 +177,8 @@ class TestClusterFull(CephFSTestCase):
             assert self.fs.is_full()
         else:
             log.info("Writing file B succeeded (full status will happen soon)")
-            wait_until_true(lambda: self.fs.is_full(),
-                            timeout=osd_mon_report_interval_max * 5)
+            self.wait_until_true(lambda: self.fs.is_full(),
+                                 timeout=osd_mon_report_interval_max * 5)
 
         # Attempting to write more data should give me ENOSPC
         with self.assertRaises(CommandFailedError) as ar:
@@ -229,7 +189,7 @@ class TestClusterFull(CephFSTestCase):
         # be applying the policy of rejecting non-deletion metadata operations
         # while in the full state.
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
-        wait_until_true(
+        self.wait_until_true(
             lambda: self.fs.mds_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
@@ -249,15 +209,15 @@ class TestClusterFull(CephFSTestCase):
             self.mount_a.run_shell(['rm', '-f', 'large_file_a'])
 
         # Here we are waiting for two things to happen:
-        #  * The MDS to purge the stray folder and execute object deletions
+        # * The MDS to purge the stray folder and execute object deletions
         #  * The OSDs to inform the mon that they are no longer full
-        wait_until_true(lambda: not self.fs.is_full(),
-                        timeout=osd_mon_report_interval_max * 5)
+        self.wait_until_true(lambda: not self.fs.is_full(),
+                             timeout=osd_mon_report_interval_max * 5)
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the free space policy
         osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
-        wait_until_true(
+        self.wait_until_true(
             lambda: self.fs.mds_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
 
