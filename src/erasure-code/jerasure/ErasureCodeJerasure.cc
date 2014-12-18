@@ -46,8 +46,10 @@ int ErasureCodeJerasure::create_ruleset(const string &name,
 					"indep", pg_pool_t::TYPE_ERASURE, ss);
   if (ruleid < 0)
     return ruleid;
-  else
+  else {
+    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
     return crush.get_rule_mask_ruleset(ruleid);
+  }
 }
 
 void ErasureCodeJerasure::init(const map<string,string> &parameters)
