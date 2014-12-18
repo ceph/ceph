@@ -2848,7 +2848,9 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
     meta.set_mtime = ut.sec();
   }
 
-  op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
+  if (state->is_olh) {
+    op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
+  }
   op.mtime(&meta.set_mtime);
 
   if (meta.data) {
@@ -5574,6 +5576,7 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
 
     state.attrset[RGW_ATTR_OLH_ID_TAG] = bl;
     state.olh_tag = olh_bl;
+    state.is_olh = true;
 
     bufferlist verbl;
     op.setxattr(RGW_ATTR_OLH_VER, verbl);
