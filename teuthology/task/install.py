@@ -437,17 +437,10 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
     base_url = "{start_of_url}/noarch/{rpm_name}".format(
         start_of_url=start_of_url, rpm_name=rpm_name)
-    err_mess = StringIO()
-    try:
-        # When this was one command with a pipe, it would sometimes
-        # fail with the message 'rpm: no packages given for install'
-        remote.run(args=['wget', base_url, ],)
-        remote.run(args=['sudo', 'rpm', '-i', rpm_name, ], stderr=err_mess, )
-    except Exception:
-        cmp_msg = 'package {pkg} is already installed'.format(
-            pkg=ceph_release)
-        if cmp_msg != err_mess.getvalue().strip():
-            raise
+    # When this was one command with a pipe, it would sometimes
+    # fail with the message 'rpm: no packages given for install'
+    remote.run(args=['wget', base_url, ],)
+    remote.run(args=['sudo', 'rpm', '-i', rpm_name, ],)
 
     remote.run(args=['rm', '-f', rpm_name])
 
