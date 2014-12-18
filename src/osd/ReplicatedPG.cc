@@ -8616,8 +8616,19 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
 	       << " is actually " << p.get_start() << "~" << bit.length()
 	       << dendl;
-      p.set_len(bit.length());
+      interval_set<uint64_t>::iterator save = p++;
+      if (bit.length() == 0)
+        out_op->data_included.erase(save);     //Remove this empty interval
+      else
+        save.set_len(bit.length());
+      // Remove any other intervals present
+      while (p != out_op->data_included.end()) {
+        interval_set<uint64_t>::iterator save = p++;
+        out_op->data_included.erase(save);
+      }
       new_progress.data_complete = true;
+      out_op->data.claim_append(bit);
+      break;
     }
     out_op->data.claim_append(bit);
   }
