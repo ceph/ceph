@@ -1078,7 +1078,6 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-ldout(s->cct, 0) << __FILE__ << ":" << __LINE__ << ": s->bucket_owner=" << s->bucket_owner.get_id() << " s->user.user_id=" << s->user.user_id << dendl;
   if (s->user.user_id.compare(s->bucket_owner.get_id()) != 0)
     return -EACCES;
 
