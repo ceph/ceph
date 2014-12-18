@@ -1400,7 +1400,7 @@ public:
     void invalidate_state();
 
     int prepare_atomic_modification(librados::ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                    const char *ifmatch, const char *ifnomatch);
+                                    const char *ifmatch, const char *ifnomatch, bool removal_op);
     int complete_atomic_modification();
 
   public:
