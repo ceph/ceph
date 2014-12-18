@@ -226,7 +226,7 @@ public:
   int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
                    bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
 
-  int delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, bool use_versioning, RGWObjVersionTracker *objv_tracker);
+  int delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_tracker);
 
   bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) {
     return cache.chain_cache_entry(cache_info_entries, chained_entry);
@@ -246,13 +246,13 @@ void RGWCache<T>::normalize_bucket_and_obj(rgw_bucket& src_bucket, const string&
 }
 
 template <class T>
-int RGWCache<T>::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj& obj, bool use_versioning, RGWObjVersionTracker *objv_tracker)
+int RGWCache<T>::delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.')
-    return T::delete_obj_impl(ctx, bucket_owner, obj, use_versioning, objv_tracker);
+    return T::delete_system_obj(obj, objv_tracker);
 
   string name = normal_name(obj);
   cache.remove(name);
@@ -260,7 +260,7 @@ int RGWCache<T>::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj&
   ObjectCacheInfo info;
   distribute_cache(name, obj, info, REMOVE_OBJ);
 
-  return T::delete_obj_impl(ctx, bucket_owner, obj, use_versioning, objv_tracker);
+  return T::delete_system_obj(obj, objv_tracker);
 }
 
 template <class T>

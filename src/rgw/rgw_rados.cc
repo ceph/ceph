@@ -4139,7 +4139,7 @@ int RGWRados::delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_tracker
     objv_tracker->prepare_op_for_write(&op);
   }
 
-  remove_rgw_head_obj(op);
+  op.remove();
   r = ref.ioctx.operate(ref.oid, &op);
   if (r < 0)
     return r;
