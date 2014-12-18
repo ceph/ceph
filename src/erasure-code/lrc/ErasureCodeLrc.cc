@@ -64,7 +64,7 @@ int ErasureCodeLrc::create_ruleset(const string &name,
 
   int steps = 4 + ruleset_steps.size();
   int min_rep = 3;
-  int max_rep = 30;
+  int max_rep = get_chunk_count();
   int ret;
   ret = crush.add_rule(steps, ruleset, pg_pool_t::TYPE_ERASURE,
 		  min_rep, max_rep, rno);
