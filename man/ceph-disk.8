@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH-DISK" "8" "December 17, 2014" "dev" "Ceph"
+.TH "CEPH-DISK" "8" "December 18, 2014" "dev" "Ceph"
 .SH NAME
 ceph-disk \- Ceph disk preparation and activation utility for OSD
 .
@@ -83,7 +83,7 @@ or \fBudev\fP\&. It can also be triggered by other deployment utilities like \fB
 \fBJuju\fP, \fBPuppet\fP etc.
 .sp
 It actually automates the multiple steps involved in manual creation and start
-of an OSD into 2 steps of preparing and activating the OSD by using the
+of an OSD into two steps of preparing and activating the OSD by using the
 subcommands \fBprepare\fP and \fBactivate\fP\&.
 .SH SUBCOMMANDS
 .SS prepare
@@ -132,7 +132,7 @@ ceph\-disk activate [PATH]
 .UNINDENT
 .UNINDENT
 .sp
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 .sp
 An additional option \fI\%--activate-key\fP has to be used with this
 subcommand when a copy of \fB/var/lib/ceph/bootstrap\-osd/{cluster}.keyring\fP
@@ -151,6 +151,7 @@ ceph\-disk activate [PATH] [\-\-activate\-key PATH]
 .UNINDENT
 .sp
 Another option \fI\%--mark-init\fP can also be used with this subcommand.
+\fB\-\-mark\-init\fP provides init system to manage the OSD directory.
 .SS activate\-journal
 .sp
 Activate an OSD via it\(aqs journal device. \fBudev\fP triggers
@@ -168,10 +169,12 @@ ceph\-disk activate\-journal [DEV]
 .UNINDENT
 .UNINDENT
 .sp
-Here, [DEV] is the path to journal block device.
+Here, [DEV] is the path to a journal block device.
 .sp
 Others options like \fI\%--activate-key\fP and \fI\%--mark-init\fP can also
 be used with this subcommand.
+.sp
+\fB\-\-mark\-init\fP provides init system to manage the OSD directory.
 .sp
 Usage:
 .INDENT 0.0
@@ -206,6 +209,8 @@ ceph\-disk activate\-all
 Others options like \fI\%--activate-key\fP and \fI\%--mark-init\fP can
 also be used with this subcommand.
 .sp
+\fB\-\-mark\-init\fP provides init system to manage the OSD directory.
+.sp
 Usage:
 .INDENT 0.0
 .INDENT 3.5
@@ -235,7 +240,7 @@ ceph\-disk list
 .UNINDENT
 .SS suppress\-activate
 .sp
-Suppress activate on a device (prefix). Mark devices that you want to suppress
+Suppress activate on a device (prefix). Mark devices that you don\(aqt want to
 activate with a file like \fB/var/lib/ceph/tmp/suppress\-activate.sdb\fP where the
 last bit is the sanitized device name (/dev/X without the /dev/ prefix). A
 function \fBis_suppressed()\fP checks for and  matches a prefix (/dev/). It means
@@ -253,10 +258,11 @@ ceph\-disk suppress\-activate [PATH]
 .UNINDENT
 .UNINDENT
 .sp
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 .SS unsuppress\-activate
 .sp
-Stop suppressing activate on a device (prefix).
+Stop suppressing activate on a device (prefix). It is used to activate a device
+that was earlier kept deactivated using \fBsuppress\-activate\fP\&.
 .sp
 Usage:
 .INDENT 0.0
@@ -270,7 +276,7 @@ ceph\-disk unsuppress\-activate [PATH]
 .UNINDENT
 .UNINDENT
 .sp
-Here, [PATH] is path to block device or directory.
+Here, [PATH] is path to a block device or a directory.
 .SS zap
 .sp
 Zap/erase/destroy a device\(aqs partition table and contents. It actually uses
@@ -292,7 +298,7 @@ ceph\-disk zap [DEV]
 .UNINDENT
 .UNINDENT
 .sp
-Here, [DEV] is path to block device.
+Here, [DEV] is path to a block device.
 .SH OPTIONS
 .INDENT 0.0
 .TP
