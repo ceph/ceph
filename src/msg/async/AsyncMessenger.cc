@@ -293,6 +293,7 @@ void *Worker::entry()
   ldout(cct, 10) << __func__ << " starting" << dendl;
   int r;
 
+  center.set_owner(pthread_self());
   while (!done) {
     ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
@@ -351,7 +352,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     processor(this, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), did_bind(false),
-    global_seq(0),
+    global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
@@ -470,7 +471,7 @@ void AsyncMessenger::wait()
 
     while (!conns.empty()) {
       AsyncConnectionRef p = conns.begin()->second;
-      _stop_conn(p);
+      p->mark_down();
     }
   }
   lock.Unlock();
@@ -575,21 +576,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   // local?
   if (my_inst.addr == dest_addr) {
     // local
-    ldout(cct, 20) << __func__ << " " << *m << " local" << dendl;
-    m->set_connection(local_connection.get());
-    m->set_recv_stamp(ceph_clock_now(cct));
-    ms_fast_preprocess(m);
-    if (ms_can_fast_dispatch(m)) {
-      ms_fast_dispatch(m);
-    } else {
-      if (m->get_priority() >= CEPH_MSG_PRIO_LOW) {
-        ms_fast_dispatch(m);
-      } else {
-        ms_deliver_dispatch(m);
-      }
-    }
-
-    return;
+    static_cast<AsyncConnection*>(local_connection.get())->send_message(m);
+    return ;
   }
 
   // remote, no existing connection.
@@ -601,6 +589,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
     m->put();
   } else {
     ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
+    con = create_connect(dest_addr, dest_type);
+    con->send_message(m);
   }
 }
 
@@ -634,7 +624,6 @@ void AsyncMessenger::mark_down_all()
     AsyncConnectionRef p = *q;
     ldout(cct, 5) << __func__ << " accepting_conn " << p << dendl;
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   accepting_conns.clear();
@@ -645,7 +634,6 @@ void AsyncMessenger::mark_down_all()
     ldout(cct, 5) << __func__ << " " << it->first << " " << p << dendl;
     conns.erase(it);
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   lock.Unlock();
@@ -657,8 +645,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   AsyncConnectionRef p = _lookup_conn(addr);
   if (p) {
     ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
-    _stop_conn(p);
-    p->get();
+    p->mark_down();
     ms_deliver_handle_reset(p.get());
   } else {
     ldout(cct, 1) << __func__ << " " << addr << " -- connection dne" << dendl;
