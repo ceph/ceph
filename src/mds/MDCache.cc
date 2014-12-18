@@ -7536,6 +7536,12 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       if (dn->lock.can_read(client) ||
 	  (dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
         dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
+	if (pdnvec) {
+	  if (depth == path.depth() - 1)
+	    pdnvec->push_back(dn);
+	  else
+	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
+	}
         return -ENOENT;
       } else {
         dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
