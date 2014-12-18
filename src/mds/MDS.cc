@@ -238,7 +238,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_unsigned("osdmap_epoch_barrier", get_osd_epoch_barrier());
     f->close_section(); // status
   } else {
-    if (whoami <= 0) {
+    if (whoami < 0) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
     } else if (command == "dump_ops_in_flight") {
