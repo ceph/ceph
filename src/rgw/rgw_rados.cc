@@ -4876,6 +4876,10 @@ int RGWRados::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read
     return r;
   }
   r = io_ctx->operate(oid, &op, NULL);
+  if (r < 0) {
+    ldout(cct, 20) << "rados->read r=" << r << dendl;
+    return r;
+  }
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   uint64_t op_ver = io_ctx->get_last_version();

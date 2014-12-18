@@ -218,8 +218,10 @@ public:
   int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
 
-  int get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj, bufferlist& bl, off_t ofs, off_t end,
-              rgw_cache_entry_info *cache_info);
+  int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
+                     RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
+                     bufferlist& bl, off_t ofs, off_t end,
+                     rgw_cache_entry_info *cache_info);
 
   int raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
                    bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
@@ -262,14 +264,16 @@ int RGWCache<T>::delete_obj_impl(void *ctx, const string& bucket_owner, rgw_obj&
 }
 
 template <class T>
-int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **handle, rgw_obj& obj, bufferlist& obl, off_t ofs, off_t end,
-                         rgw_cache_entry_info *cache_info)
+int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
+                     RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
+                     bufferlist& obl, off_t ofs, off_t end,
+                     rgw_cache_entry_info *cache_info)
 {
   rgw_bucket bucket;
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
   if (bucket.name[0] != '.' || ofs != 0)
-    return T::get_obj(ctx, objv_tracker, handle, obj, obl, ofs, end, cache_info);
+    return T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, cache_info);
 
   string name = normal_name(obj.bucket, oid);
 
@@ -294,7 +298,7 @@ int RGWCache<T>::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **h
       objv_tracker->read_version = info.version;
     return bl.length();
   }
-  int r = T::get_obj(ctx, objv_tracker, handle, obj, obl, ofs, end, cache_info);
+  int r = T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, cache_info);
   if (r < 0) {
     if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
       info.status = r;
