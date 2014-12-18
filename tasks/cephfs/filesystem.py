@@ -4,6 +4,7 @@ import json
 import logging
 import time
 import datetime
+import re
 
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra import run
@@ -288,6 +289,25 @@ class Filesystem(object):
 
         return self.json_asok(command, 'mds', mds_id)
 
+    def get_mds_map(self):
+        """
+        Return the MDS map, as a JSON-esque dict from 'mds dump'
+        """
+        return json.loads(self.mon_manager.raw_cluster_cmd('mds', 'dump', '--format=json-pretty'))
+
+    def get_mds_addr(self, mds_id):
+        """
+        Return the instance addr as a string, like "10.214.133.138:6807\/10825"
+        """
+        mds_map = self.get_mds_map()
+        for gid_string, mds_info in mds_map['info'].items():
+            # For some reason
+            if mds_info['name'] == mds_id:
+                return mds_info['addr']
+
+        log.warn(json.dumps(mds_map, indent=2))  # dump map for debugging
+        raise RuntimeError("MDS id '{0}' not found in MDS map".format(mds_id))
+
     def set_clients_block(self, blocked, mds_id=None):
         """
         Block (using iptables) client communications to this MDS.  Be careful: if
@@ -301,8 +321,16 @@ class Filesystem(object):
 
         def set_block(_mds_id):
             remote = self.mon_manager.find_remote('mds', _mds_id)
-            remote.run(args=["sudo", "iptables", da_flag, "OUTPUT", "-p", "tcp", "--sport", "6800:6900", "-j", "REJECT", "-m", "comment", "--comment", "teuthology"])
-            remote.run(args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", "6800:6900", "-j", "REJECT", "-m", "comment", "--comment", "teuthology"])
+
+            addr = self.get_mds_addr(_mds_id)
+            ip_str, port_str, inst_str = re.match("(.+):(.+)/(.+)", addr).groups()
+
+            remote.run(
+                args=["sudo", "iptables", da_flag, "OUTPUT", "-p", "tcp", "--sport", port_str, "-j", "REJECT", "-m",
+                      "comment", "--comment", "teuthology"])
+            remote.run(
+                args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
+                      "comment", "--comment", "teuthology"])
 
         self._one_or_all(mds_id, set_block)
 
