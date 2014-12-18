@@ -375,7 +375,7 @@ def cluster(ctx, config):
             '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
-            '--cap', 'mds', 'allow',
+            '--cap', 'mds', 'allow *',
             keyring_path,
             ],
         )
