@@ -68,6 +68,166 @@ TEST(CrushWrapper, get_immediate_parent) {
   delete c;
 }
 
+TEST(CrushWrapper, straw_zero) {
+  // zero weight items should have no effect on placement.
+
+  CrushWrapper *c = new CrushWrapper;
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int n = 5;
+  int items[n], weights[n];
+  for (int i=0; i <n; ++i) {
+    items[i] = i;
+    weights[i] = 0x10000 * (n-i-1);
+  }
+
+  c->set_max_devices(n);
+
+  string root_name0("root0");
+  int root0;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n, items, weights, &root0));
+  EXPECT_EQ(0, c->set_item_name(root0, root_name0));
+
+  string name0("rule0");
+  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(0, ruleset0);
+
+  string root_name1("root1");
+  int root1;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n-1, items, weights, &root1));
+  EXPECT_EQ(0, c->set_item_name(root1, root_name1));
+
+  string name1("rule1");
+  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(1, ruleset1);
+
+  vector<unsigned> reweight(n, 0x10000);
+  for (int i=0; i<10000; ++i) {
+    vector<int> out0, out1;
+    c->do_rule(ruleset0, i, out0, 1, reweight);
+    ASSERT_EQ(1u, out0.size());
+    c->do_rule(ruleset1, i, out1, 1, reweight);
+    ASSERT_EQ(1u, out1.size());
+    ASSERT_EQ(out0[0], out1[0]);
+    //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
+  }
+}
+
+TEST(CrushWrapper, straw_same) {
+  // items with the same weight should map about the same as items
+  // with very similar weights.
+  //
+  // give the 0 vector a paired stair pattern, with dup weights.  note
+  // that the original straw flaw does not appear when there are 2 of
+  // the initial weight, but it does when there is just 1.
+  //
+  // give the 1 vector a similar stair pattern, but make the same
+  // steps weights slightly different (no dups).  this works.
+  //
+  // compare the result and verify that the resulting mapping is
+  // almost identical.
+
+  CrushWrapper *c = new CrushWrapper;
+  const int ROOT_TYPE = 1;
+  c->set_type_name(ROOT_TYPE, "root");
+  const int OSD_TYPE = 0;
+  c->set_type_name(OSD_TYPE, "osd");
+
+  int n = 10;
+  int items[n], weights[n];
+  for (int i=0; i <n; ++i) {
+    items[i] = i;
+    weights[i] = 0x10000 * ((i+1)/2 + 1);
+  }
+
+  c->set_max_devices(n);
+
+  string root_name0("root0");
+  int root0;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n, items, weights, &root0));
+  EXPECT_EQ(0, c->set_item_name(root0, root_name0));
+
+  string name0("rule0");
+  int ruleset0 = c->add_simple_ruleset(name0, root_name0, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(0, ruleset0);
+
+  for (int i=0; i <n; ++i) {
+    items[i] = i;
+    weights[i] = 0x10000 * ((i+1)/2 + 1) + (i%2)*100;
+  }
+
+  string root_name1("root1");
+  int root1;
+  EXPECT_EQ(0, c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+			     ROOT_TYPE, n, items, weights, &root1));
+  EXPECT_EQ(0, c->set_item_name(root1, root_name1));
+
+  string name1("rule1");
+  int ruleset1 = c->add_simple_ruleset(name1, root_name1, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+  EXPECT_EQ(1, ruleset1);
+
+  if (0) {
+    crush_bucket_straw *sb0 = reinterpret_cast<crush_bucket_straw*>(c->get_crush_map()->buckets[-1-root0]);
+    crush_bucket_straw *sb1 = reinterpret_cast<crush_bucket_straw*>(c->get_crush_map()->buckets[-1-root1]);
+
+    for (int i=0; i<n; ++i) {
+      cout << i
+	   << "\t" << sb0->item_weights[i]
+	   << "\t" << sb1->item_weights[i]
+	   << "\t"
+	   << "\t" << sb0->straws[i]
+	   << "\t" << sb1->straws[i]
+	   << std::endl;
+    }
+  }
+
+  if (0) {
+    JSONFormatter jf(true);
+    jf.open_object_section("crush");
+    c->dump(&jf);
+    jf.close_section();
+    jf.flush(cout);
+  }
+
+  vector<int> sum0(n, 0), sum1(n, 0);
+  vector<unsigned> reweight(n, 0x10000);
+  int different = 0;
+  int max = 100000;
+  for (int i=0; i<max; ++i) {
+    vector<int> out0, out1;
+    c->do_rule(ruleset0, i, out0, 1, reweight);
+    ASSERT_EQ(1u, out0.size());
+    c->do_rule(ruleset1, i, out1, 1, reweight);
+    ASSERT_EQ(1u, out1.size());
+    sum0[out0[0]]++;
+    sum1[out1[0]]++;
+    if (out0[0] != out1[0])
+      different++;
+  }
+  for (int i=0; i<n; ++i) {
+    cout << i
+	 << "\t" << ((double)weights[i] / (double)weights[0])
+	 << "\t" << sum0[i] << "\t" << ((double)sum0[i]/(double)sum0[0])
+	 << "\t" << sum1[i] << "\t" << ((double)sum1[i]/(double)sum1[0])
+	 << std::endl;
+  }
+  double ratio = ((double)different / (double)max);
+  cout << different << " of " << max << " = "
+       << ratio
+       << " different" << std::endl;
+  ASSERT_LT(ratio, .001);
+}
+
 TEST(CrushWrapper, move_bucket) {
   CrushWrapper *c = new CrushWrapper;
 
