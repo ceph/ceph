@@ -2261,6 +2261,48 @@ TEST(BufferList, TestDirectAppend) {
   ASSERT_EQ(memcmp(bl.c_str(), correct, curpos), 0);
 }
 
+TEST(BufferList, TestCloneNonShareable) {
+  bufferlist bl;
+  std::string str = "sharetest";
+  bl.append(str.c_str(), 9);
+  bufferlist bl_share;
+  bl_share.share(bl);
+  bufferlist bl_noshare;
+  buffer::ptr unraw = buffer::create_unshareable(10);
+  unraw.copy_in(0, 9, str.c_str());
+  bl_noshare.append(unraw);
+  bufferlist bl_copied_share = bl_share;
+  bufferlist bl_copied_noshare = bl_noshare;
+
+  // assert shared bufferlist has same buffers
+  bufferlist::iterator iter_bl = bl.begin();
+  bufferlist::iterator iter_bl_share = bl_share.begin();
+  // ok, this considers ptr::off, but it's still a true assertion (and below)
+  ASSERT_TRUE(iter_bl.get_current_ptr().c_str() ==
+	      iter_bl_share.get_current_ptr().c_str());
+
+  // assert copy of shareable bufferlist has same buffers
+  iter_bl = bl.begin();
+  bufferlist::iterator iter_bl_copied_share = bl_copied_share.begin();
+  ASSERT_TRUE(iter_bl.get_current_ptr().c_str() ==
+	      iter_bl_copied_share.get_current_ptr().c_str());
+
+  // assert copy of non-shareable bufferlist has different buffers
+  bufferlist::iterator iter_bl_copied_noshare = bl_copied_noshare.begin();
+  ASSERT_FALSE(iter_bl.get_current_ptr().c_str() ==
+	       iter_bl_copied_noshare.get_current_ptr().c_str());
+
+  // assert that claim with CLAIM_ALLOW_NONSHAREABLE overrides safe-sharing
+  bufferlist bl_claim_noshare_override;
+  void* addr = bl_noshare.begin().get_current_ptr().c_str();
+  bl_claim_noshare_override.claim(bl_noshare,
+				  buffer::list::CLAIM_ALLOW_NONSHAREABLE);
+  bufferlist::iterator iter_bl_noshare_override =
+    bl_claim_noshare_override.begin();
+  ASSERT_TRUE(addr /* the original first segment of bl_noshare() */ ==
+	      iter_bl_noshare_override.get_current_ptr().c_str());
+}
+
 TEST(BufferList, TestCopyAll) {
   const static size_t BIG_SZ = 10737414;
   ceph::shared_ptr <unsigned char> big(
