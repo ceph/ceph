@@ -2836,7 +2836,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   bool is_olh = state->is_olh;
 
   bool reset_obj = (meta.flags & PUT_OBJ_CREATE) != 0;
-  r = target->prepare_atomic_modification(op, reset_obj, meta.ptag, meta.if_match, meta.if_nomatch);
+  r = target->prepare_atomic_modification(op, reset_obj, meta.ptag, meta.if_match, meta.if_nomatch, false);
   if (r < 0)
     return r;
 
@@ -4059,7 +4059,7 @@ int RGWRados::Object::Delete::delete_obj()
 
   ObjectWriteOperation op;
 
-  r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL);
+  r = target->prepare_atomic_modification(op, false, NULL, NULL, NULL, true);
   if (r < 0)
     return r;
 
@@ -4400,7 +4400,7 @@ void RGWRados::Object::invalidate_state()
 }
 
 int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
-                                                  const char *if_match, const char *if_nomatch)
+                                                  const char *if_match, const char *if_nomatch, bool removal_op)
 {
   int r = get_state(&state, false);
   if (r < 0)
@@ -4466,6 +4466,11 @@ int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool
     } else {
       op.create(true);
     }
+  }
+
+  if (removal_op) {
+    /* the object is being removed, no need to update its tag */
+    return 0;
   }
 
   if (ptag) {
