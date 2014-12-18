@@ -2051,6 +2051,7 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 void Monitor::stop_health_tick_event()
 {
   dout(15) << __func__ << dendl;
+
   if (health_tick_event) {
     timer.cancel_event(health_tick_event);
     health_tick_event = NULL;
@@ -2091,14 +2092,22 @@ void Monitor::do_health_to_clog()
   dout(25) << __func__ << " last_update " << health_status_cache.last_update
            << " next_update " << next_clog_update << dendl;
 
-  if (overall == health_status_cache.overall &&
-      next_clog_update > ceph_clock_now(cct))
-    goto out;
+  string summary = joinify(status.begin(), status.end(), string("; "));
 
-  clog->info() << joinify(status.begin(), status.end(), string("; "));
+  if (overall == health_status_cache.overall &&
+      !health_status_cache.summary.empty() &&
+      health_status_cache.summary == summary) {
+    // we got a dup!
+    // should we print anyway?
+    if (next_clog_update > ceph_clock_now(cct))
+      goto out;
+  }
+
+  clog->info() << summary;
 
   health_status_cache.overall = overall;
   health_status_cache.last_update = ceph_clock_now(cct);
+  health_status_cache.summary = summary;
 
 out:
   start_health_tick_event();

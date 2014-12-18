@@ -657,10 +657,13 @@ public:
   struct health_cache_t {
     health_status_t overall;
     utime_t last_update;
+    string summary;
+
     void reset() {
       // health_status_t doesn't really have a NONE value and we're not
       // okay with setting something else (say, HEALTH_ERR).  so just
       // leave it be.
+      summary.clear();
       last_update = utime_t();
     }
   } health_status_cache;
