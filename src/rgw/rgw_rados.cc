@@ -2417,6 +2417,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
     ret = put_linked_bucket_info(info, exclusive, 0, pep_objv, &attrs, true);
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
+      RGWObjVersionTracker instance_ver = info.objv_tracker;
       info.objv_tracker.clear();
       r = get_bucket_info(NULL, bucket.name, info, NULL, NULL);
       if (r < 0) {
@@ -2432,7 +2433,7 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
         /* remove bucket meta instance */
         string entry;
         get_bucket_instance_entry(bucket, entry);
-        r = rgw_bucket_instance_remove_entry(this, entry, &info.objv_tracker);
+        r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
         if (r < 0)
           return r;
 
