@@ -653,6 +653,13 @@ public:
   void handle_route(MRoute *m);
 
   /**
+   */
+  struct health_cache_t {
+    health_status_t overall;
+    utime_t last_update;
+  } health_status_cache;
+
+  /**
    * Generate health report
    *
    * @param status one-line status summary
