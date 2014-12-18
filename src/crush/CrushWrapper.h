@@ -87,6 +87,8 @@ public:
       crush_destroy(crush);
   }
 
+  crush_map *get_crush_map() { return crush; }
+
   /* building */
   void create() {
     if (crush)
@@ -120,15 +122,25 @@ public:
     crush->chooseleaf_descend_once = 1;
     crush->chooseleaf_vary_r = 1;
   }
+  void set_tunables_hammer() {
+    crush->choose_local_tries = 0;
+    crush->choose_local_fallback_tries = 0;
+    crush->choose_total_tries = 50;
+    crush->chooseleaf_descend_once = 1;
+    crush->chooseleaf_vary_r = 1;
+  }
 
   void set_tunables_legacy() {
     set_tunables_argonaut();
+    crush->straw_calc_version = 0;
   }
   void set_tunables_optimal() {
-    set_tunables_firefly();
+    set_tunables_hammer();
+    crush->straw_calc_version = 1;
   }
   void set_tunables_default() {
     set_tunables_bobtail();
+    crush->straw_calc_version = 1;
   }
 
   int get_choose_local_tries() const {
@@ -166,13 +178,21 @@ public:
     crush->chooseleaf_vary_r = n;
   }
 
+  int get_straw_calc_version() const {
+    return crush->straw_calc_version;
+  }
+  void set_straw_calc_version(int n) {
+    crush->straw_calc_version = n;
+  }
+
   bool has_argonaut_tunables() const {
     return
       crush->choose_local_tries == 2 &&
       crush->choose_local_fallback_tries == 5 &&
       crush->choose_total_tries == 19 &&
       crush->chooseleaf_descend_once == 0 &&
-      crush->chooseleaf_vary_r == 0;
+      crush->chooseleaf_vary_r == 0 &&
+      crush->straw_calc_version == 0;
   }
   bool has_bobtail_tunables() const {
     return
@@ -180,7 +200,8 @@ public:
       crush->choose_local_fallback_tries == 0 &&
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
-      crush->chooseleaf_vary_r == 0;
+      crush->chooseleaf_vary_r == 0 &&
+      crush->straw_calc_version == 0;
   }
   bool has_firefly_tunables() const {
     return
@@ -188,7 +209,17 @@ public:
       crush->choose_local_fallback_tries == 0 &&
       crush->choose_total_tries == 50 &&
       crush->chooseleaf_descend_once == 1 &&
-      crush->chooseleaf_vary_r == 1;
+      crush->chooseleaf_vary_r == 1 &&
+      crush->straw_calc_version == 0;
+  }
+  bool has_hammer_tunables() const {
+    return
+      crush->choose_local_tries == 0 &&
+      crush->choose_local_fallback_tries == 0 &&
+      crush->choose_total_tries == 50 &&
+      crush->chooseleaf_descend_once == 1 &&
+      crush->chooseleaf_vary_r == 1 &&
+      crush->straw_calc_version == 1;
   }
 
   bool has_optimal_tunables() const {
@@ -781,11 +812,11 @@ private:
 
     if (!IS_ERR(parent_bucket)) {
       // zero out the bucket weight
-      crush_bucket_adjust_item_weight(parent_bucket, item, 0);
+      crush_bucket_adjust_item_weight(crush, parent_bucket, item, 0);
       adjust_item_weight(cct, parent_bucket->id, parent_bucket->weight);
 
       // remove the bucket from the parent
-      crush_bucket_remove_item(parent_bucket, item);
+      crush_bucket_remove_item(crush, parent_bucket, item);
     } else if (PTR_ERR(parent_bucket) != -ENOENT) {
       return PTR_ERR(parent_bucket);
     }
@@ -865,7 +896,7 @@ public:
 		 int *items, int *weights, int *idout) {
     if (type == 0)
       return -EINVAL;
-    crush_bucket *b = crush_make_bucket(alg, hash, type, size, items, weights);
+    crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items, weights);
     assert(b);
     return crush_add_bucket(crush, bucketno, b, idout);
   }

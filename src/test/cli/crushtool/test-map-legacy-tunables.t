@@ -1,4 +1,4 @@
-  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-statistics --rule 0
+  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-mappings --show-statistics --rule 0
   rule 0 (data), x = 0..1023, numrep = 1..10
   CRUSH rule 0 x 0 [36]
   CRUSH rule 0 x 1 [876]
