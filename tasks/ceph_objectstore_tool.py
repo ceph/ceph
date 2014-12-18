@@ -276,33 +276,23 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
             if string.find(role, "osd.") != 0:
                 continue
             osdid = int(role.split('.')[1])
-            if osdid not in pgs:
-                continue
             log.info("process osd.{id} on {remote}".format(id=osdid, remote=remote))
-            for pg in pgs[osdid]:
-                cmd = (prefix + "--op list --pgid {pg}").format(id=osdid, pg=pg)
-                proc = remote.run(args=cmd.split(), check_status=False, stdout=StringIO())
-                # proc.wait()
-                if proc.exitstatus != 0:
-                    log.error("Bad exit status {ret} from --op list request".format(ret=proc.exitstatus))
-                    ERRORS += 1
-                else:
-                    data = proc.stdout.getvalue()
-                    if len(data):
-                        # This pg has some objects in it
+            cmd = (prefix + "--op list").format(id=osdid)
+            proc = remote.run(args=cmd.split(), check_status=False, stdout=StringIO())
+            if proc.exitstatus != 0:
+                log.error("Bad exit status {ret} from --op list request".format(ret=proc.exitstatus))
+                ERRORS += 1
+            else:
+                for pgline in proc.stdout.getvalue().splitlines():
+                    if not pgline:
+                        continue
+                    (pg, obj) = json.loads(pgline)
+                    name = obj['oid']
+                    if name in db:
                         pgswithobjects.add(pg)
-                        pglines = data.split('\n')
-                        # All copies of a pg are the same so we can overwrite
-                        objsinpg[pg] = []
-                        while(len(pglines)):
-                            # Drop any blank lines
-                            if (len(pglines[-1]) == 0):
-                                pglines.pop()
-                                continue
-                            objjson = pglines.pop()
-                            name = json.loads(objjson)['oid']
-                            objsinpg[pg].append(name)
-                            db[name].setdefault("pg2json", {})[pg] = objjson
+                        objsinpg.setdefault(pg, []).append(name)
+                        db[name].setdefault("pg2json",
+                                            {})[pg] = json.dumps(obj)
 
     log.info(db)
     log.info(pgswithobjects)
