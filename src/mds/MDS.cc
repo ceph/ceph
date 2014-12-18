@@ -237,105 +237,111 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->dump_unsigned("osdmap_epoch", osd_epoch);
     f->dump_unsigned("osdmap_epoch_barrier", get_osd_epoch_barrier());
     f->close_section(); // status
-  } else if (command == "dump_ops_in_flight") {
-    op_tracker.dump_ops_in_flight(f);
-  } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(f);
-  } else if (command == "osdmap barrier") {
-    int64_t target_epoch = 0;
-    bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
-
-    if (!got_val) {
-      ss << "no target epoch given";
-      return true;
-    }
-
-    mds_lock.Lock();
-    set_osd_epoch_barrier(target_epoch);
-    mds_lock.Unlock();
-
-    C_SaferCond cond;
-    bool already_got = objecter->wait_for_map(target_epoch, &cond);
-    if (!already_got) {
-      dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
-      cond.wait();
-    }
-  } else if (command == "session ls") {
-    mds_lock.Lock();
-
-    heartbeat_reset();
-
-    // Dump sessions, decorated with recovery/replay status
-    f->open_array_section("sessions");
-    const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-         p != session_map.end();
-         ++p)  {
-      if (!p->first.is_client()) {
-        continue;
+  } else {
+    if (whoami <= 0) {
+      dout(1) << "Can't run that command on an inactive MDS!" << dendl;
+      f->dump_string("error", "mds_not_active");
+    } else if (command == "dump_ops_in_flight") {
+      op_tracker.dump_ops_in_flight(f);
+    } else if (command == "dump_historic_ops") {
+      op_tracker.dump_historic_ops(f);
+    } else if (command == "osdmap barrier") {
+      int64_t target_epoch = 0;
+      bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
+      
+      if (!got_val) {
+	ss << "no target epoch given";
+	delete f;
+	return true;
       }
-
-      Session *s = p->second;
-
-      f->open_object_section("session");
-      f->dump_int("id", p->first.num());
-
-      f->dump_int("num_leases", s->leases.size());
-      f->dump_int("num_caps", s->caps.size());
-
-      f->dump_string("state", s->get_state_name());
-      f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
-      f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
-      f->dump_stream("inst") << s->info.inst;
-      f->open_object_section("client_metadata");
-      for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
-          i != s->info.client_metadata.end(); ++i) {
-        f->dump_string(i->first.c_str(), i->second);
+      
+      mds_lock.Lock();
+      set_osd_epoch_barrier(target_epoch);
+      mds_lock.Unlock();
+      
+      C_SaferCond cond;
+      bool already_got = objecter->wait_for_map(target_epoch, &cond);
+      if (!already_got) {
+	dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
+	cond.wait();
       }
-      f->close_section(); // client_metadata
-      f->close_section(); //session
-    }
-    f->close_section(); //sessions
-
-    mds_lock.Unlock();
-  } else if (command == "session evict") {
-    std::string client_id;
-    const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    assert(got_arg == true);
-
-    mds_lock.Lock();
-    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-							    strtol(client_id.c_str(), 0, 10)));
-    if (session) {
-      C_SaferCond on_safe;
-      server->kill_session(session, &on_safe);
-
+    } else if (command == "session ls") {
+      mds_lock.Lock();
+      
+      heartbeat_reset();
+      
+      // Dump sessions, decorated with recovery/replay status
+      f->open_array_section("sessions");
+      const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
+      for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+	   p != session_map.end();
+	   ++p)  {
+	if (!p->first.is_client()) {
+	  continue;
+	}
+	
+	Session *s = p->second;
+	
+	f->open_object_section("session");
+	f->dump_int("id", p->first.num());
+	
+	f->dump_int("num_leases", s->leases.size());
+	f->dump_int("num_caps", s->caps.size());
+	
+	f->dump_string("state", s->get_state_name());
+	f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
+	f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+	f->dump_stream("inst") << s->info.inst;
+	f->open_object_section("client_metadata");
+	for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
+	     i != s->info.client_metadata.end(); ++i) {
+	  f->dump_string(i->first.c_str(), i->second);
+	}
+	f->close_section(); // client_metadata
+	f->close_section(); //session
+      }
+      f->close_section(); //sessions
+      
       mds_lock.Unlock();
-      on_safe.wait();
-    } else {
-      dout(15) << "session " << session << " not in sessionmap!" << dendl;
+    } else if (command == "session evict") {
+      std::string client_id;
+      const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+      assert(got_arg == true);
+      
+      mds_lock.Lock();
+      Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							      strtol(client_id.c_str(), 0, 10)));
+      if (session) {
+	C_SaferCond on_safe;
+	server->kill_session(session, &on_safe);
+	
+	mds_lock.Unlock();
+	on_safe.wait();
+      } else {
+	dout(15) << "session " << session << " not in sessionmap!" << dendl;
+	mds_lock.Unlock();
+      }
+    } else if (command == "scrub_path") {
+      string path;
+      cmd_getval(g_ceph_context, cmdmap, "path", path);
+      command_scrub_path(f, path);
+    } else if (command == "flush_path") {
+      string path;
+      cmd_getval(g_ceph_context, cmdmap, "path", path);
+      command_flush_path(f, path);
+    } else if (command == "flush journal") {
+      command_flush_journal(f);
+    } else if (command == "force_readonly") {
+      mds_lock.Lock();
+      mdcache->force_readonly();
       mds_lock.Unlock();
     }
-  } else if (command == "scrub_path") {
-    string path;
-    cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_scrub_path(f, path);
-  } else if (command == "flush_path") {
-    string path;
-    cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_flush_path(f, path);
-  } else if (command == "flush journal") {
-    command_flush_journal(f);
-  } else if (command == "force_readonly") {
-    mds_lock.Lock();
-    mdcache->force_readonly();
-    mds_lock.Unlock();
   }
   f->flush(ss);
   delete f;
-
+  
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
-
+  
   return true;
 }
 
