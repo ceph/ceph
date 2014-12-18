@@ -487,18 +487,18 @@ int CrushTester::test()
           vector<int> out;
 
           if (use_crush) {
-            if (output_statistics)
-              err << "CRUSH"; // prepend CRUSH to placement output
+            if (output_mappings)
+	      err << "CRUSH"; // prepend CRUSH to placement output
             crush.do_rule(r, x, out, nr, weight);
           } else {
-            if (output_statistics)
-              err << "RNG"; // prepend RNG to placement output to denote simulation
+            if (output_mappings)
+	      err << "RNG"; // prepend RNG to placement output to denote simulation
             // test our new monte carlo placement generator
             random_placement(r, out, nr, weight);
           }
 
-          if (output_statistics)
-            err << " rule " << r << " x " << x << " " << out << std::endl;
+	  if (output_mappings)
+	    err << " rule " << r << " x " << x << " " << out << std::endl;
 
           if (output_data_file)
             write_integer_indexed_vector_data_string(tester_data.placement_information, x, out);
@@ -539,14 +539,14 @@ int CrushTester::test()
 
       if (output_statistics)
         for (unsigned i = 0; i < per.size(); i++) {
-          if (output_utilization && num_batches > 1){
+          if (output_utilization) {
             if (num_objects_expected[i] > 0 && per[i] > 0) {
               err << "  device " << i << ":\t"
                   << "\t" << " stored " << ": " << per[i]
                   << "\t" << " expected " << ": " << num_objects_expected[i]
                   << std::endl;
             }
-          } else if (output_utilization_all && num_batches > 1) {
+          } else if (output_utilization_all) {
             err << "  device " << i << ":\t"
                 << "\t" << " stored " << ": " << per[i]
                 << "\t" << " expected " << ": " << num_objects_expected[i]

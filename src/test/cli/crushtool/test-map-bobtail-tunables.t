@@ -1,4 +1,4 @@
-  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-statistics --rule 0 --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 --set-chooseleaf-descend-once 1
+  $ crushtool -i "$TESTDIR/test-map-a.crushmap" --test --show-mappings --show-statistics --rule 0 --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 --set-chooseleaf-descend-once 1
   crushtool successfully built or modified map.  Use '-o <file>' to write it out.
   rule 0 (data), x = 0..1023, numrep = 1..10
   CRUSH rule 0 x 0 [36]
