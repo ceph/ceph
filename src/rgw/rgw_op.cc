@@ -2711,6 +2711,8 @@ void RGWInitMultipart::execute()
     obj.set_in_extra_data(true);
 
     RGWRados::Object op_target(store, s->bucket_info, *(RGWObjectCtx *)s->obj_ctx, obj);
+    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+
     RGWRados::Object::Write obj_op(&op_target);
 
     obj_op.meta.owner = s->owner.get_id();
