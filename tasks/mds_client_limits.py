@@ -6,9 +6,7 @@ exceed the limits of how many caps/inodes they should hold.
 
 import contextlib
 import logging
-import time
 from unittest import SkipTest
-from teuthology.orchestra import run
 from teuthology.orchestra.run import CommandFailedError
 
 from tasks.cephfs.filesystem import Filesystem
@@ -28,82 +26,11 @@ CAP_RECALL_RATIO = 0.8
 CAP_RECALL_MIN = 100
 
 
-def wait_until_equal(get_fn, expect_val, timeout, reject_fn=None):
-    period = 5
-    elapsed = 0
-    while True:
-        val = get_fn()
-        if val == expect_val:
-            return
-        elif reject_fn and reject_fn(val):
-            raise RuntimeError("wait_until_equal: forbidden value {0} seen".format(val))
-        else:
-            if elapsed >= timeout:
-                raise RuntimeError("Timed out after {0} seconds waiting for {1} (currently {2})".format(
-                    elapsed, expect_val, val
-                ))
-            else:
-                log.debug("wait_until_equal: {0} != {1}, waiting...".format(val, expect_val))
-            time.sleep(period)
-            elapsed += period
-
-    log.debug("wait_until_equal: success")
-
-
-def wait_until_true(condition, timeout):
-    period = 5
-    elapsed = 0
-    while True:
-        if condition():
-            return
-        else:
-            if elapsed >= timeout:
-                raise RuntimeError("Timed out after {0} seconds".format(elapsed))
-            else:
-                log.debug("wait_until_equal: waiting...")
-            time.sleep(period)
-            elapsed += period
-
-    log.debug("wait_until_equal: success")
-
-
 class TestClientLimits(CephFSTestCase):
     # Environment references
-    mount_a = None
-    mount_b = None
     mds_session_timeout = None
     mds_reconnect_timeout = None
     ms_max_backoff = None
-
-    def __init__(self, *args, **kwargs):
-        super(TestClientLimits, self).__init__(*args, **kwargs)
-
-        self.configs_set = set()
-
-    def set_conf(self, subsys, key, value):
-        self.configs_set.add((subsys, key))
-        self.fs.set_ceph_conf(subsys, key, value)
-
-    def setUp(self):
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount_a.is_mounted():
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
-
-        if not self.mount_b.is_mounted():
-            self.mount_b.mount()
-            self.mount_b.wait_until_mounted()
-
-        self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
-
-    def tearDown(self):
-        self.fs.clear_firewall()
-        self.mount_a.teardown()
-        self.mount_b.teardown()
-
-        for subsys, key in self.configs_set:
-            self.fs.clear_ceph_conf(subsys, key)
 
     def wait_for_health(self, pattern, timeout):
         """
@@ -120,7 +47,7 @@ class TestClientLimits(CephFSTestCase):
             else:
                 raise RuntimeError("Unexpected health messages: {0}".format(summary_strings))
 
-        wait_until_true(seen_health_warning, timeout)
+        self.wait_until_true(seen_health_warning, timeout)
 
     def _test_client_pin(self, use_subdir):
         """
@@ -147,10 +74,10 @@ class TestClientLimits(CephFSTestCase):
         # `open_files` caps for the open files
         # 1 cap for root
         # 1 cap for subdir
-        wait_until_equal(lambda: self.get_session(mount_a_client_id)['num_caps'],
-                         open_files + (2 if use_subdir else 1),
-                         timeout=600,
-                         reject_fn=lambda x: x > open_files + 2)
+        self.wait_until_equal(lambda: self.get_session(mount_a_client_id)['num_caps'],
+                              open_files + (2 if use_subdir else 1),
+                              timeout=600,
+                              reject_fn=lambda x: x > open_files + 2)
 
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
@@ -169,7 +96,7 @@ class TestClientLimits(CephFSTestCase):
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the cache size and overall ratio
-        wait_until_equal(
+        self.wait_until_equal(
             lambda: self.get_session(mount_a_client_id)['num_caps'],
             int(cache_size * 0.8),
             timeout=600,

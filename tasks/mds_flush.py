@@ -2,36 +2,20 @@ import contextlib
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import run_tests, CephFSTestCase
 from tasks.cephfs.filesystem import Filesystem, ObjectNotFound
-from teuthology.orchestra import run
 
 
 ROOT_INO = 1
 
 
 class TestFlush(CephFSTestCase):
-    # Environment references
-    mount = None
-
-    def setUp(self):
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount.is_mounted():
-            self.mount.mount()
-            self.mount.wait_until_mounted()
-
-        self.mount.run_shell(["rm", "-rf", run.Raw("*")])
-
-    def tearDown(self):
-        self.mount.teardown()
-
     def test_flush(self):
-        self.mount.run_shell(["mkdir", "mydir"])
-        self.mount.run_shell(["touch", "mydir/alpha"])
-        dir_ino = self.mount.path_to_ino("mydir")
-        file_ino = self.mount.path_to_ino("mydir/alpha")
+        self.mount_a.run_shell(["mkdir", "mydir"])
+        self.mount_a.run_shell(["touch", "mydir/alpha"])
+        dir_ino = self.mount_a.path_to_ino("mydir")
+        file_ino = self.mount_a.path_to_ino("mydir/alpha")
 
         # Unmount the client so that it isn't still holding caps
-        self.mount.umount_wait()
+        self.mount_a.umount_wait()
 
         # Before flush, the dirfrag object does not exist
         with self.assertRaises(ObjectNotFound):
@@ -72,9 +56,9 @@ class TestFlush(CephFSTestCase):
                          ).strip())
 
         # Now for deletion!
-        self.mount.mount()
-        self.mount.wait_until_mounted()
-        self.mount.run_shell(["rm", "-rf", "mydir"])
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
         # We will count the deletions to detect completion
         # FIXME: let's add some MDS perf counters for strays so that we can monitor
@@ -113,7 +97,7 @@ def task(ctx, config):
 
     run_tests(ctx, config, TestFlush, {
         'fs': fs,
-        'mount': mount,
+        'mount_a': mount,
     })
 
     # Continue to any downstream tasks
