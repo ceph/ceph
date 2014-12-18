@@ -406,7 +406,7 @@ def _yum_fix_repo_priority(remote, project, uri):
             run.Raw(
                 '\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
             '-e',
-            run.Raw("'s;ref/[a-zA-Z0-9_]*/;{uri}/;g'".format(uri=uri)),
+            run.Raw("'s;ref/[a-zA-Z0-9_-]*/;{uri}/;g'".format(uri=uri)),
             '/etc/yum.repos.d/%s.repo' % project,
         ]
     )
