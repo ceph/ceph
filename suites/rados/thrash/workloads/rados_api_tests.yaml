@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug objecter: 20
+        rebug rados: 20
 tasks:
 - workunit:
     clients:
