@@ -36,7 +36,8 @@ librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
 			       int poolid,
 			       const char *pool_name, snapid_t s)
   : ref_cnt(0), client(c), poolid(poolid), pool_name(pool_name), snap_seq(s),
-    assert_ver(0), notify_timeout(c->cct->_conf->client_notify_timeout),
+    assert_ver(0), last_objver(0),
+    notify_timeout(c->cct->_conf->client_notify_timeout),
     oloc(poolid),
     aio_write_list_lock("librados::IoCtxImpl::aio_write_list_lock"),
     aio_write_seq(0), objecter(objecter)
