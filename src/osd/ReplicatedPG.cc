@@ -1801,44 +1801,75 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     } else if (op->may_write() || op->may_cache()) {
       do_proxy_write(op, missing_oid);
+
+      // Promote too?
+      switch (pool.info.min_write_recency_for_promote) {
+      case 0:
+        promote_object(obc, missing_oid, oloc, OpRequestRef());
+        break;
+      case 1:
+        // Check if in the current hit set
+        if (in_hit_set) {
+          promote_object(obc, missing_oid, oloc, OpRequestRef());
+        }
+        break;
+      default:
+        if (in_hit_set) {
+          promote_object(obc, missing_oid, oloc, OpRequestRef());
+        } else {
+          // Check if in other hit sets
+          map<time_t,HitSetRef>::iterator itor;
+          bool in_other_hit_sets = false;
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
+            if (itor->second->contains(missing_oid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          }
+          if (in_other_hit_sets) {
+            promote_object(obc, missing_oid, oloc, OpRequestRef());
+          }
+        }
+        break;
+      }
     } else {
       do_proxy_read(op, missing_oid);
-    }
 
-    // Avoid duplicate promotion
-    if (obc.get() && obc->is_blocked()) {
-      return true;
-    }
+      // Avoid duplicate promotion
+      if (obc.get() && obc->is_blocked()) {
+        return true;
+      }
 
-    // Promote too?
-    switch (pool.info.min_read_recency_for_promote) {
-    case 0:
-      promote_object(obc, missing_oid, oloc, OpRequestRef());
-      break;
-    case 1:
-      // Check if in the current hit set
-      if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
+      // Promote too?
+      switch (pool.info.min_read_recency_for_promote) {
+      case 0:
+        promote_object(obc, missing_oid, oloc, OpRequestRef());
+        break;
+      case 1:
+        // Check if in the current hit set
+        if (in_hit_set) {
+          promote_object(obc, missing_oid, oloc, OpRequestRef());
+        }
+        break;
+      default:
+        if (in_hit_set) {
+          promote_object(obc, missing_oid, oloc, OpRequestRef());
+        } else {
+          // Check if in other hit sets
+          map<time_t,HitSetRef>::iterator itor;
+          bool in_other_hit_sets = false;
+          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
+            if (itor->second->contains(missing_oid)) {
+              in_other_hit_sets = true;
+              break;
+            }
+          }
+          if (in_other_hit_sets) {
+            promote_object(obc, missing_oid, oloc, OpRequestRef());
+          }
+        }
+        break;
       }
-      break;
-    default:
-      if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
-      } else {
-	// Check if in other hit sets
-	map<time_t,HitSetRef>::iterator itor;
-	bool in_other_hit_sets = false;
-	for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-	  if (itor->second->contains(missing_oid)) {
-	    in_other_hit_sets = true;
-	    break;
-	  }
-	}
-	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, OpRequestRef());
-	}
-      }
-      break;
     }
     return true;
 
@@ -11760,7 +11791,9 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
 void ReplicatedPG::hit_set_in_memory_trim()
 {
   unsigned max = pool.info.hit_set_count;
-  unsigned max_in_memory = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
+  unsigned max_in_memory_read = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
+  unsigned max_in_memory_write = pool.info.min_write_recency_for_promote > 0 ? pool.info.min_write_recency_for_promote - 1 : 0;
+  unsigned max_in_memory = max_in_memory_read >= max_in_memory_write ? max_in_memory_read : max_in_memory_write;
 
   if (max_in_memory > max) {
     max_in_memory = max;
