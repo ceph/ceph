@@ -51,6 +51,35 @@ class Filesystem(object):
         self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'create', 'data', pgs_per_fs_pool.__str__()])
         self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'new', 'default', 'metadata', 'data'])
 
+    def delete(self):
+        self.mon_remote.run(args=['sudo', 'ceph', 'fs', 'rm', 'default', '--yes-i-really-mean-it'])
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+                                  'metadata', 'metadata', '--yes-i-really-really-mean-it'])
+        self.mon_remote.run(args=['sudo', 'ceph', 'osd', 'pool', 'delete',
+                                  'data', 'data', '--yes-i-really-really-mean-it'])
+
+    def _df(self):
+        return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
+
+    def get_data_pool_names(self):
+        fs_list = json.loads(self.mon_manager.raw_cluster_cmd("fs", "ls", "--format=json-pretty"))
+        assert len(fs_list) == 1  # we don't handle multiple filesystems yet
+        return fs_list[0]['data_pools']
+
+    def get_pool_df(self, pool_name):
+        """
+        Return a dict like:
+        {u'bytes_used': 0, u'max_avail': 83848701, u'objects': 0, u'kb_used': 0}
+        """
+        for pool_df in self._df()['pools']:
+            if pool_df['name'] == pool_name:
+                return pool_df['stats']
+
+        raise RuntimeError("Pool name '{0}' not found".format(pool_name))
+
+    def get_usage(self):
+        return self._df()['stats']['total_used_bytes']
+
     def get_mds_hostnames(self):
         result = set()
         for mds_id in self.mds_ids:
@@ -59,13 +88,15 @@ class Filesystem(object):
 
         return list(result)
 
-    def get_config(self, key):
+    def get_config(self, key, service_type=None):
         """
-        Use the mon instead of the MDS asok, so that MDS doesn't have to be running
-        for us to query config.
+        Get config from mon by default, or a specific service if caller asks for it
         """
-        service_name, service_id = misc.get_first_mon(self._ctx, self._config).split(".")
-        return self.json_asok(['config', 'get', key], service_name, service_id)[key]
+        if service_type is None:
+            service_type = 'mon'
+
+        service_id = sorted(misc.all_roles_of_type(self._ctx.cluster, service_type))[0]
+        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
 
     def set_ceph_conf(self, subsys, key, value):
         if subsys not in self._ctx.ceph.conf:
@@ -249,6 +280,10 @@ class Filesystem(object):
 
     def clear_firewall(self):
         clear_firewall(self._ctx)
+
+    def is_full(self):
+        flags = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
+        return 'full' in flags
 
     def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None):
         """
