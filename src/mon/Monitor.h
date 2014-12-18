@@ -659,6 +659,22 @@ public:
     utime_t last_update;
   } health_status_cache;
 
+  struct C_HealthTick : public Context {
+    Monitor *mon;
+    C_HealthTick(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      if (r < 0)
+        return;
+      mon->do_health_to_clog();
+    }
+  };
+
+  Context *health_tick_event;
+
+  void do_health_to_clog();
+  void stop_health_tick_event();
+  void start_health_tick_event();
+
   /**
    * Generate health report
    *
