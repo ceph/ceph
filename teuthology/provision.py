@@ -5,10 +5,9 @@ import tempfile
 import yaml
 
 from .config import config
-from .misc import decanonicalize_hostname
+from .misc import decanonicalize_hostname, get_distro, get_distro_version
 from .lockstatus import get_status
-from .misc import get_distro
-from .misc import get_distro_version
+
 
 log = logging.getLogger(__name__)
 

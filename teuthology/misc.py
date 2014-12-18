@@ -1153,16 +1153,29 @@ def get_distro(ctx):
     """
     Get the name of the distro that we are using (usually the os_type).
     """
+    os_type = None
+    # first, try to get the os_type from the config or --os-type
+    # FIXME: checking for ctx.os_type here should not be needed as
+    # ctx.os_type is assigned to ctx.config["os_type"] if provided
+    # in teuthology.run. We're gonna leave it here for now until we
+    # have the time to fully investigate and test it's removal.
     try:
         os_type = ctx.config.get('os_type', ctx.os_type)
     except AttributeError:
-        os_type = 'ubuntu'
+        pass
+    # next, look for an override in the downburst config for os_type
+    # FIXME: checking the downburst config for distro shouldn't be needed
+    # as it's only used in provision.create_if_vm and that function performs
+    # this check again while building the config for downburst. Leaving it
+    # here for now until we can fully investigate and test it's removal.
     try:
-        return ctx.config['downburst'].get('distro', os_type)
-    except KeyError:
-        return os_type
-    except AttributeError:
-        return ctx.os_type
+        os_type = ctx.config['downburst'].get('distro', os_type)
+    except (KeyError, AttributeError):
+        pass
+    if os_type is None:
+        # default to ubuntu if we can't find the os_type anywhere else
+        return "ubuntu"
+    return os_type
 
 
 def get_distro_version(ctx):

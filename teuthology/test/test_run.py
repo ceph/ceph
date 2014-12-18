@@ -194,3 +194,6 @@ class TestRun(object):
         # ensures that values missing in args are added with the correct value
         assert fake_ctx["owner"] == "the_owner"
         assert fake_ctx["machine_type"] == "machine_type"
+        # ensures os_type and os_version are property overwritten
+        assert fake_ctx["config"]["os_type"] == "os_type"
+        assert fake_ctx["config"]["os_version"] == "os_version"
