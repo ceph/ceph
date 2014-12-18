@@ -9865,9 +9865,11 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     hit_set_clear();
   }
 
+  // we don't trust the object_contexts cache anymore
+  object_contexts.clear();
+
   // requeue everything in the reverse order they should be
   // reexamined.
-
   clear_scrub_reserved();
   scrub_clear_state();
 
@@ -9955,9 +9957,6 @@ void ReplicatedPG::on_pool_change()
   }
   hit_set_setup();
   agent_setup();
-  if (get_role() !=0) {
-    object_contexts.clear();
-  }
 }
 
 // clear state.  called on recovery completion AND cancellation.
