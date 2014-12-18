@@ -4285,7 +4285,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     }
   }
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
+    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << string(s->obj_tag.c_str(), s->obj_tag.length()) << dendl;
   else
     ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
 
@@ -4300,7 +4300,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
   if (is_olh(s->attrset)) {
     s->is_olh = true;
 
-    ldout(cct, 20) << __func__ << ": setting s->olh_tag to " << s->olh_tag.c_str() << dendl;
+    ldout(cct, 20) << __func__ << ": setting s->olh_tag to " << string(s->olh_tag.c_str(), s->olh_tag.length()) << dendl;
 
     if (need_follow_olh) {
       return get_olh_target_state(*rctx, obj, s, state, objv_tracker);
