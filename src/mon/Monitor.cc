@@ -2046,6 +2046,9 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 
 void Monitor::get_health(list<string>& status, bufferlist *detailbl,
 			 Formatter *f)
+health_status_t Monitor::get_health(list<string>& status,
+                                    bufferlist *detailbl,
+                                    Formatter *f)
 {
   list<pair<health_status_t,string> > summary;
   list<pair<health_status_t,string> > detail;
@@ -2176,6 +2179,7 @@ void Monitor::get_health(list<string>& status, bufferlist *detailbl,
     health_status_cache.last_update = ceph_clock_now(g_ceph_context);
   }
   health_status_cache.overall = overall;
+  return overall;
 }
 
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
