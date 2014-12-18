@@ -29,8 +29,6 @@ class TestMDSAutoRepair(CephFSTestCase):
 
         # trim log segment as fast as possible
         self.set_conf('mds', 'mds cache size', 100)
-        self.set_conf('mds', 'mds log max segments', 2)
-        self.set_conf('mds', 'mds log events per segment', 1)
         self.set_conf('mds', 'mds verify backtrace', 1)
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
