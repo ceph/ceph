@@ -6111,6 +6111,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 		<< " but failed to encode full with correct crc; requesting"
 		<< dendl;
 	clog->warn() << "failed to encode map e" << e << " with expected crc\n";
+	delete o;
 	MMonGetOSDMap *req = new MMonGetOSDMap;
 	req->request_full(e, last);
 	monc->send_mon_message(req);
