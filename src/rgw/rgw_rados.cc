@@ -1094,12 +1094,10 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
   }
   head_obj.init(bucket, obj_str);
 
-  if (versioned_object) {
-    if (!version_id.empty()) {
-      head_obj.set_instance(version_id);
-    } else {
-      store->gen_rand_obj_instance_name(&head_obj);
-    }
+  if (!version_id.empty()) {
+    head_obj.set_instance(version_id);
+  } else if (versioned_object) {
+    store->gen_rand_obj_instance_name(&head_obj);
   }
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
@@ -2909,6 +2907,8 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   bool orig_exists = state->exists;
   uint64_t orig_size = state->size;
 
+  bool versioned_target = (meta.olh_epoch > 0 || !obj.get_instance().empty());
+
   index_tag = state->write_tag;
 
   RGWRados::Bucket bop(store, bucket);
@@ -2947,7 +2947,7 @@ int RGWRados::Object::Write::write_meta(uint64_t size,
   target->invalidate_state();
   state = NULL;
 
-  if (target->versioning_enabled() || is_olh) {
+  if (target->versioning_enabled() || is_olh || versioned_target) {
     r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch);
     if (r < 0) {
       return r;
@@ -3994,17 +3994,17 @@ int RGWRados::Object::Delete::delete_obj()
 {
   RGWRados *store = target->get_store();
   rgw_obj& obj = target->get_obj();
+  bool explicit_marker_version = (params.olh_epoch > 0 || !params.marker_version_id.empty());
 
-  if (params.versioning_status & BUCKET_VERSIONED) {
+  if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
     const string& instance = obj.get_instance();
-    if (instance.empty()) {
+    if (instance.empty() || explicit_marker_version) {
       rgw_obj marker = obj;
-      if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
-        if (params.marker_version_id.empty()) {
-          store->gen_rand_obj_instance_name(&marker);
-        } else {
-          marker.set_instance(params.marker_version_id);
-        }
+
+      if (!params.marker_version_id.empty()) {
+        marker.set_instance(params.marker_version_id);
+      } else if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
+        store->gen_rand_obj_instance_name(&marker);
       }
 
       result.version_id = marker.get_instance();
