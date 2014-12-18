@@ -1813,19 +1813,6 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return ret;
   }
 
-  CLS_LOG(20, "%s(): removing object", __func__);
-  ret = cls_cxx_remove(hctx);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_remove returned %d", __func__, ret);
-    return ret;
-  }
-
-  ret = cls_cxx_create(hctx, false);
-  if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): cls_cxx_create returned %d", __func__, ret);
-    return ret;
-  }
-
   map<string, bufferlist> new_attrs;
   for (list<string>::iterator iter = op.keep_attr_prefixes.begin();
        iter != op.keep_attr_prefixes.end(); ++iter) {
@@ -1839,16 +1826,39 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
         break;
       }
 
-      ret = cls_cxx_setxattr(hctx, attr.c_str(), &aiter->second);
-      CLS_LOG(20, "%s(): setting attr: %s", __func__, attr.c_str());
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, attr.c_str(), ret);
-        return ret;
-      }
+      new_attrs[attr] = aiter->second;
     }
   }
 
+  CLS_LOG(20, "%s(): removing object", __func__);
+  ret = cls_cxx_remove(hctx);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_remove returned %d", __func__, ret);
+    return ret;
+  }
 
+  if (new_attrs.empty()) {
+    /* no data to keep */
+    return 0;
+  }
+
+  ret = cls_cxx_create(hctx, false);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_create returned %d", __func__, ret);
+    return ret;
+  }
+
+  for (map<string, bufferlist>::iterator aiter = new_attrs.begin();
+       aiter != new_attrs.end(); ++aiter) {
+    const string& attr = aiter->first;
+
+    ret = cls_cxx_setxattr(hctx, attr.c_str(), &aiter->second);
+    CLS_LOG(20, "%s(): setting attr: %s", __func__, attr.c_str());
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: %s(): cls_cxx_setxattr (attr=%s) returned %d", __func__, attr.c_str(), ret);
+      return ret;
+    }
+  }
 
   return 0;
 }
