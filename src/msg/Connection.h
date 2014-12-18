@@ -92,6 +92,13 @@ public:
     return NULL;
   }
 
+  /**
+   * Used to judge whether this connection is ready to send. Usually, the
+   * implementation need to build a own shakehand or sesson then it can be
+   * ready to send.
+   *
+   * @return true if ready to send, or false otherwise
+   */
   virtual bool is_connected() = 0;
 
   Messenger *get_messenger() {

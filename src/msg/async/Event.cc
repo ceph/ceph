@@ -188,6 +188,28 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   return id;
 }
 
+// TODO: Ineffective implementation now!
+void EventCenter::delete_time_event(uint64_t id)
+{
+  ldout(cct, 10) << __func__ << " id=" << id << dendl;
+  if (id >= time_event_next_id)
+    return ;
+
+
+  for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+       it != time_events.end(); ++it) {
+    for (list<TimeEvent>::iterator j = it->second.begin();
+         j != it->second.end(); ++j) {
+      if (j->id == id) {
+        it->second.erase(j);
+        if (it->second.empty())
+          time_events.erase(it);
+        return ;
+      }
+    }
+  }
+}
+
 void EventCenter::wakeup()
 {
   ldout(cct, 1) << __func__ << dendl;
@@ -248,6 +270,8 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
+  // Must set owner before looping
+  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;

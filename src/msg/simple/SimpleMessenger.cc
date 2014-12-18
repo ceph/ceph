@@ -266,7 +266,19 @@ void SimpleMessenger::queue_reap(Pipe *pipe)
   lock.Unlock();
 }
 
-
+bool SimpleMessenger::is_connected(Connection *con)
+{
+  bool r = false;
+  if (con) {
+    Pipe *p = static_cast<Pipe *>(static_cast<PipeConnection*>(con)->get_pipe());
+    if (p) {
+      assert(p->msgr == this);
+      r = p->is_connected();
+      p->put();
+    }
+  }
+  return r;
+}
 
 int SimpleMessenger::bind(const entity_addr_t &bind_addr)
 {

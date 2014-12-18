@@ -409,6 +409,11 @@ public:
    * ready to be torn down.
    */
   void queue_reap(Pipe *pipe);
+
+  /**
+   * Used to get whether this connection ready to send
+   */
+  bool is_connected(Connection *con);
   /**
    * @} // SimpleMessenger Internals
    */

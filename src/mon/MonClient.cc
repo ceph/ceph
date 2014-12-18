@@ -116,7 +116,7 @@ int MonClient::get_monmap_privately()
   bool temp_msgr = false;
   Messenger* smessenger = NULL;
   if (!messenger) {
-    messenger = smessenger = Messenger::create(cct,
+    messenger = smessenger = Messenger::create(cct, cct->_conf->ms_type,
 					       entity_name_t::CLIENT(-1),
 					       "temp_mon_client", getpid());
     messenger->add_dispatcher_head(this);
@@ -218,7 +218,7 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 
   MonClientPinger *pinger = new MonClientPinger(cct, result_reply);
 
-  Messenger *smsgr = Messenger::create(cct,
+  Messenger *smsgr = Messenger::create(cct, cct->_conf->ms_type,
 				       entity_name_t::CLIENT(-1),
 				       "temp_ping_client", getpid());
   smsgr->add_dispatcher_head(pinger);

@@ -685,7 +685,7 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *messenger = Messenger::create(g_ceph_context,
+  Messenger *messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::MON(rank),
 					   "mon",
 					   0);

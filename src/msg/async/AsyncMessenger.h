@@ -293,6 +293,20 @@ private:
   // FIXME clear up
   set<AsyncConnectionRef> accepting_conns;
 
+  /**
+   * list of connection are closed which need to be clean up
+   *
+   * Because AsyncMessenger and AsyncConnection follow a lock rule that
+   * we can lock AsyncMesenger::lock firstly then lock AsyncConnection::lock
+   * but can't reversed. This rule is aimed to avoid dead lock.
+   * So if AsyncConnection want to unregister itself from AsyncMessenger,
+   * we pick up this idea that just queue itself to this set and do lazy
+   * deleted for AsyncConnection. "_lookup_conn" must ensure not return a
+   * AsyncConnection in this set.
+   */
+  Mutex deleted_lock;
+  set<AsyncConnectionRef> deleted_conns;
+
   /// internal cluster protocol version, if any, for talking to entities of the same type.
   int cluster_protocol;
 
@@ -305,16 +319,16 @@ private:
     if (p == conns.end())
       return NULL;
 
-    assert(p->second->is_connected());
-    return p->second;
-  }
-
-  void _stop_conn(AsyncConnectionRef c) {
-    assert(lock.is_locked());
-    if (c) {
-      c->mark_down();
-      conns.erase(c->peer_addr);
+    // lazy delete, see "deleted_conns"
+    Mutex::Locker l(deleted_lock);
+    if (deleted_conns.count(p->second)) {
+      deleted_conns.erase(p->second);
+      p->second->put();
+      conns.erase(p);
+      return NULL;
     }
+
+    return p->second;
   }
 
   void _init_local_connection() {
@@ -323,7 +337,6 @@ private:
     local_connection->peer_type = my_inst.name.type();
     ms_deliver_handle_fast_connect(local_connection.get());
   }
-
 
 public:
 
@@ -399,10 +412,12 @@ public:
 
   /**
    * Unregister connection from `conns`
+   *
+   * See "deleted_conns"
    */
-  void unregister_conn(const entity_addr_t &addr) {
-    Mutex::Locker l(lock);
-    conns.erase(addr);
+  void unregister_conn(AsyncConnectionRef conn) {
+    Mutex::Locker l(deleted_lock);
+    deleted_conns.insert(conn);
   }
   /**
    * @} // AsyncMessenger Internals
