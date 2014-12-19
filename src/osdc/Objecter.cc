@@ -770,6 +770,12 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       if (info->watch_context)
 	finisher->queue(new C_DoWatchError(info, -ENOTCONN));
     }
+  } else if (!info->is_watch) {
+    // notify completion; we can do this inline since we know the only user
+    // (librados) is safe to call in fast-dispatch context
+    assert(info->on_notify_finish);
+    info->notify_result_bl->claim(m->get_data());
+    info->on_notify_finish->complete(m->return_code);
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
   }
@@ -791,14 +797,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
   }
 
   // notify completion?
-  if (!info->is_watch) {
-    assert(info->on_notify_finish);
-    info->notify_result_bl->claim(m->get_data());
-    rwlock.put_read();
-    info->on_notify_finish->complete(m->return_code);
-    goto out;
-  }
-
   assert(info->is_watch);
   assert(info->watch_context);
   assert(m->opcode != CEPH_WATCH_EVENT_DISCONNECT);
