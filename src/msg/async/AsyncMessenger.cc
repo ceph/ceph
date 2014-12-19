@@ -351,7 +351,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   : SimplePolicyMessenger(cct, name,mname, _nonce),
     processor(this, _nonce),
     lock("AsyncMessenger::lock"),
-    nonce(_nonce), did_bind(false),
+    nonce(_nonce), need_addr(true), did_bind(false),
     global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
@@ -470,8 +470,12 @@ void AsyncMessenger::wait()
     ldout(cct, 10) << __func__ << ": closing connections" << dendl;
 
     while (!conns.empty()) {
-      AsyncConnectionRef p = conns.begin()->second;
+      ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator it = conns.begin();
+      AsyncConnectionRef p = it->second;
+      ldout(cct, 5) << __func__ << " " << it->first << " " << p << dendl;
+      conns.erase(it);
       p->mark_down();
+      ms_deliver_handle_reset(p.get());
     }
   }
   lock.Unlock();
@@ -688,11 +692,16 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   // this always goes from true -> false under the protection of the
   // mutex.  if it is already false, we need not retake the mutex at
   // all.
+  if (!need_addr)
+    return ;
   lock.Lock();
-  entity_addr_t t = peer_addr_for_me;
-  t.set_port(my_inst.addr.get_port());
-  my_inst.addr.addr = t.addr;
-  ldout(cct, 1) << __func__ << " learned my addr " << my_inst.addr << dendl;
-  _init_local_connection();
+  if (need_addr) {
+    need_addr = false;
+    entity_addr_t t = peer_addr_for_me;
+    t.set_port(my_inst.addr.get_port());
+    my_inst.addr.addr = t.addr;
+    ldout(cct, 1) << __func__ << " learned my addr " << my_inst.addr << dendl;
+    _init_local_connection();
+  }
   lock.Unlock();
 }
