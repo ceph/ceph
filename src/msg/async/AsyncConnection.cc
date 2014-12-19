@@ -1612,7 +1612,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     // Clean up output buffer
     existing->outcoming_bl.clear();
     existing->requeue_sent();
-    reply.connect_seq = existing->connect_seq + 1;
+    reply.connect_seq = connect.connect_seq + 1;
     if (_reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply) < 0)
       goto fail;
 
