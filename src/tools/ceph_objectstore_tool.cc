@@ -2021,12 +2021,18 @@ void usage(po::options_description &desc)
     exit(1);
 }
 
+bool ends_with(const string& check, const string& ending)
+{
+    return check.size() >= ending.size() && check.rfind(ending) == (check.size() - ending.size());
+}
+
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   ghobject_t ghobj;
-  bool pretty_format, human_readable;
+  bool human_readable;
+  Formatter *formatter;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -2043,10 +2049,8 @@ int main(int argc, char **argv)
      "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
-    ("pretty-format", po::value<bool>(&pretty_format)->default_value(true),
-     "Make json or xml output more readable")
-    ("format", po::value<string>(&format)->default_value("json"),
-     "Output format which may be xml or json")
+    ("format", po::value<string>(&format)->default_value("json-pretty"),
+     "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -2528,17 +2532,14 @@ int main(int argc, char **argv)
 
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.
-  human_readable = pretty_format;
-  if (op == "list") {
-    pretty_format = false;
+  human_readable = ends_with(format, "-pretty");
+  if (op == "list" && human_readable) {
+    // Remove -pretty from end of format which we know is there
+    format = format.substr(0, format.size() - strlen("-pretty"));
   }
 
-  Formatter *formatter;
-  if (format == "xml") {
-    formatter = new XMLFormatter(pretty_format);
-  } else if (format == "json") {
-    formatter = new JSONFormatter(pretty_format);
-  } else {
+  formatter = new_formatter(format);
+  if (formatter == NULL) {
     cerr << "unrecognized format: " << format << std::endl;
     ret = 1;
     goto out;
