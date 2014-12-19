@@ -635,7 +635,9 @@ check_PROGRAMS += unittest_readahead
 unittest_msgr_SOURCES = test/msgr/test_msgr.cc
 unittest_msgr_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-check_PROGRAMS += unittest_msgr
+# restore once http://tracker.ceph.com/issues/10383 is fixed
+#check_PROGRAMS += unittest_msgr
+bin_DEBUGPROGRAMS += unittest_msgr
 
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
