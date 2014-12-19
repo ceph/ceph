@@ -272,6 +272,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (version_id.empty()) {
         version_id = "null";
       }
+      if (s->system_request && iter->versioned_epoch > 0) {
+        s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+      }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
       dump_time(s, "LastModified", &mtime);

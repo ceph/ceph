@@ -1027,8 +1027,9 @@ struct RGWObjEnt {
   string content_type;
   string tag;
   uint32_t flags;
+  uint64_t versioned_epoch;
 
-  RGWObjEnt() : size(0), flags(0) {}
+  RGWObjEnt() : size(0), flags(0), versioned_epoch(0) {}
 
   void dump(Formatter *f) const;
 
