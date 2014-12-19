@@ -912,8 +912,9 @@ public:
 
 protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
+  void truncate_stray(CDentry *dn);
   void purge_stray(CDentry *dn);
-  void _purge_stray_purged(CDentry *dn, int r=0);
+  void _purge_stray_purged(CDentry *dn, bool only_head);
   void _purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *ls);
   void _purge_stray_logged_truncate(CDentry *dn, LogSegment *ls);
   friend struct C_MDC_RetryScanStray;
