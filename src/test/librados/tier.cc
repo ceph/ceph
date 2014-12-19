@@ -636,7 +636,24 @@ TEST_F(LibRadosTwoPoolsPP, Whiteout) {
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
   }
 
+  // delete a whiteout and verify it goes away
   ASSERT_EQ(-ENOENT, ioctx.remove("foo"));
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("bar", completion, &op,
+				   librados::OPERATION_IGNORE_CACHE));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
 
   // recreate an object and verify we can read it
   {
@@ -2763,7 +2780,24 @@ TEST_F(LibRadosTwoPoolsECPP, Whiteout) {
     ASSERT_TRUE(it == cache_ioctx.nobjects_end());
   }
 
+  // delete a whiteout and verify it goes away
   ASSERT_EQ(-ENOENT, ioctx.remove("foo"));
+  {
+    ObjectWriteOperation op;
+    op.remove();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, ioctx.aio_operate("bar", completion, &op,
+				   librados::OPERATION_IGNORE_CACHE));
+    completion->wait_for_safe();
+    ASSERT_EQ(0, completion->get_return_value());
+    completion->release();
+
+    NObjectIterator it = cache_ioctx.nobjects_begin();
+    ASSERT_TRUE(it != cache_ioctx.nobjects_end());
+    ASSERT_TRUE(it->get_oid() == string("foo"));
+    ++it;
+    ASSERT_TRUE(it == cache_ioctx.nobjects_end());
+  }
 
   // recreate an object and verify we can read it
   {

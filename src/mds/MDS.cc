@@ -108,6 +108,7 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   op_tracker(cct, m->cct->_conf->mds_enable_op_tracker, 
                      m->cct->_conf->osd_num_op_tracker_shard),
   finisher(cct),
+  osd_epoch_barrier(0),
   sessionmap(this),
   progress_thread(this),
   asok_hook(NULL)
@@ -126,10 +127,10 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
 
   mdsmap = new MDSMap;
 
-  objecter = new Objecter(m->cct, messenger, monc, 0, 0);
+  objecter = new Objecter(m->cct, messenger, monc, NULL, 0, 0);
   objecter->unset_honor_osdmap_full();
 
-  filer = new Filer(objecter);
+  filer = new Filer(objecter, &finisher);
 
   mdcache = new MDCache(this);
   mdlog = new MDLog(this);
@@ -217,89 +218,130 @@ public:
 bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 		    ostream& ss)
 {
-  dout(1) << "asok_command: " << command << dendl;
+  dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
   Formatter *f = new_formatter(format);
   if (!f)
     f = new_formatter("json-pretty");
   if (command == "status") {
+
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    const epoch_t osd_epoch = osdmap->get_epoch();
+    objecter->put_osdmap_read();
+
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << monc->get_fsid();
     f->dump_unsigned("whoami", whoami);
     f->dump_string("state", ceph_mds_state_name(get_state()));
     f->dump_unsigned("mdsmap_epoch", mdsmap->get_epoch());
+    f->dump_unsigned("osdmap_epoch", osd_epoch);
+    f->dump_unsigned("osdmap_epoch_barrier", get_osd_epoch_barrier());
     f->close_section(); // status
-  } else if (command == "dump_ops_in_flight") {
-    op_tracker.dump_ops_in_flight(f);
-  } else if (command == "dump_historic_ops") {
-    op_tracker.dump_historic_ops(f);
-  } else if (command == "session ls") {
-    mds_lock.Lock();
-
-    heartbeat_reset();
-
-    // Dump sessions, decorated with recovery/replay status
-    f->open_array_section("sessions");
-    const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-         p != session_map.end();
-         ++p)  {
-      if (!p->first.is_client()) {
-        continue;
+  } else {
+    if (whoami < 0) {
+      dout(1) << "Can't run that command on an inactive MDS!" << dendl;
+      f->dump_string("error", "mds_not_active");
+    } else if (command == "dump_ops_in_flight") {
+      op_tracker.dump_ops_in_flight(f);
+    } else if (command == "dump_historic_ops") {
+      op_tracker.dump_historic_ops(f);
+    } else if (command == "osdmap barrier") {
+      int64_t target_epoch = 0;
+      bool got_val = cmd_getval(g_ceph_context, cmdmap, "target_epoch", target_epoch);
+      
+      if (!got_val) {
+	ss << "no target epoch given";
+	delete f;
+	return true;
       }
-
-      Session *s = p->second;
-
-      f->open_object_section("session");
-      f->dump_int("id", p->first.num());
-
-      f->dump_int("num_leases", s->leases.size());
-      f->dump_int("num_caps", s->caps.size());
-
-      f->dump_string("state", s->get_state_name());
-      f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
-      f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
-      f->dump_stream("inst") << s->info.inst;
-      f->open_object_section("client_metadata");
-      for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
-          i != s->info.client_metadata.end(); ++i) {
-        f->dump_string(i->first.c_str(), i->second);
+      
+      mds_lock.Lock();
+      set_osd_epoch_barrier(target_epoch);
+      mds_lock.Unlock();
+      
+      C_SaferCond cond;
+      bool already_got = objecter->wait_for_map(target_epoch, &cond);
+      if (!already_got) {
+	dout(4) << __func__ << ": waiting for OSD epoch " << target_epoch << dendl;
+	cond.wait();
       }
-      f->close_section(); // client_metadata
-      f->close_section(); //session
-    }
-    f->close_section(); //sessions
-
-    mds_lock.Unlock();
-  } else if (command == "session evict") {
-    std::string client_id;
-    const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
-    assert(got_arg == true);
-
-    mds_lock.Lock();
-    Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-							    strtol(client_id.c_str(), 0, 10)));
-    if (session) {
-      C_SaferCond on_safe;
-      server->kill_session(session, &on_safe);
-
+    } else if (command == "session ls") {
+      mds_lock.Lock();
+      
+      heartbeat_reset();
+      
+      // Dump sessions, decorated with recovery/replay status
+      f->open_array_section("sessions");
+      const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
+      for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
+	   p != session_map.end();
+	   ++p)  {
+	if (!p->first.is_client()) {
+	  continue;
+	}
+	
+	Session *s = p->second;
+	
+	f->open_object_section("session");
+	f->dump_int("id", p->first.num());
+	
+	f->dump_int("num_leases", s->leases.size());
+	f->dump_int("num_caps", s->caps.size());
+	
+	f->dump_string("state", s->get_state_name());
+	f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
+	f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+	f->dump_stream("inst") << s->info.inst;
+	f->open_object_section("client_metadata");
+	for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
+	     i != s->info.client_metadata.end(); ++i) {
+	  f->dump_string(i->first.c_str(), i->second);
+	}
+	f->close_section(); // client_metadata
+	f->close_section(); //session
+      }
+      f->close_section(); //sessions
+      
       mds_lock.Unlock();
-      on_safe.wait();
-    } else {
-      dout(15) << "session " << session << " not in sessionmap!" << dendl;
+    } else if (command == "session evict") {
+      std::string client_id;
+      const bool got_arg = cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+      assert(got_arg == true);
+      
+      mds_lock.Lock();
+      Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
+							      strtol(client_id.c_str(), 0, 10)));
+      if (session) {
+	C_SaferCond on_safe;
+	server->kill_session(session, &on_safe);
+	
+	mds_lock.Unlock();
+	on_safe.wait();
+      } else {
+	dout(15) << "session " << session << " not in sessionmap!" << dendl;
+	mds_lock.Unlock();
+      }
+    } else if (command == "scrub_path") {
+      string path;
+      cmd_getval(g_ceph_context, cmdmap, "path", path);
+      command_scrub_path(f, path);
+    } else if (command == "flush_path") {
+      string path;
+      cmd_getval(g_ceph_context, cmdmap, "path", path);
+      command_flush_path(f, path);
+    } else if (command == "flush journal") {
+      command_flush_journal(f);
+    } else if (command == "force_readonly") {
+      mds_lock.Lock();
+      mdcache->force_readonly();
       mds_lock.Unlock();
     }
-  } else if (command == "scrub_path") {
-    string path;
-    cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_scrub_path(f, path);
-  } else if (command == "flush_path") {
-    string path;
-    cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_flush_path(f, path);
   }
   f->flush(ss);
   delete f;
+  
+  dout(1) << "asok_command: " << command << " (complete)" << dendl;
+  
   return true;
 }
 
@@ -325,6 +367,118 @@ void MDS::command_flush_path(Formatter *f, const string& path)
   f->open_object_section("results");
   f->dump_int("return_code", r);
   f->close_section(); // results
+}
+
+/**
+ * Wrapper around _command_flush_journal that
+ * handles serialization of result
+ */
+void MDS::command_flush_journal(Formatter *f)
+{
+  assert(f != NULL);
+
+  std::stringstream ss;
+  const int r = _command_flush_journal(&ss);
+  f->open_object_section("result");
+  f->dump_string("message", ss.str());
+  f->dump_int("return_code", r);
+  f->close_section();
+}
+
+/**
+ * Implementation of "flush journal" asok command.
+ *
+ * @param ss
+ * Optionally populate with a human readable string describing the
+ * reason for any unexpected return status.
+ */
+int MDS::_command_flush_journal(std::stringstream *ss)
+{
+  assert(ss != NULL);
+
+  Mutex::Locker l(mds_lock);
+
+  if (mdcache->is_readonly()) {
+    dout(5) << __func__ << ": read-only FS" << dendl;
+    return -EROFS;
+  }
+
+  // I need to seal off the current segment, and then mark all previous segments
+  // for expiry
+  mdlog->start_new_segment();
+  int r = 0;
+
+  // Flush initially so that all the segments older than our new one
+  // will be elegible for expiry
+  C_SaferCond mdlog_flushed;
+  mdlog->flush();
+  mdlog->wait_for_safe(new MDSInternalContextWrapper(this, &mdlog_flushed));
+  mds_lock.Unlock();
+  r = mdlog_flushed.wait();
+  mds_lock.Lock();
+  if (r != 0) {
+    *ss << "Error " << r << " (" << cpp_strerror(r) << ") while flushing journal";
+    return r;
+  }
+
+  // Put all the old log segments into expiring or expired state
+  dout(5) << __func__ << ": beginning segment expiry" << dendl;
+  r = mdlog->trim_all();
+  if (r != 0) {
+    *ss << "Error " << r << " (" << cpp_strerror(r) << ") while trimming log";
+    return r;
+  }
+
+  // Attach contexts to wait for all expiring segments to expire
+  MDSGatherBuilder expiry_gather(g_ceph_context);
+
+  std::list<C_SaferCond*> expired_ctxs;
+  const std::set<LogSegment*> &expiring_segments = mdlog->get_expiring_segments();
+  for (std::set<LogSegment*>::const_iterator i = expiring_segments.begin();
+       i != expiring_segments.end(); ++i) {
+    (*i)->wait_for_expiry(expiry_gather.new_sub());
+  }
+  dout(5) << __func__ << ": waiting for " << expiry_gather.num_subs_created()
+          << " segments to expire" << dendl;
+
+  if (expiry_gather.has_subs()) {
+    C_SaferCond cond;
+    expiry_gather.set_finisher(new MDSInternalContextWrapper(this, &cond));
+    expiry_gather.activate();
+
+    // Drop mds_lock to allow progress until expiry is complete
+    mds_lock.Unlock();
+    int r = cond.wait();
+    mds_lock.Lock();
+
+    assert(r == 0);  // MDLog is not allowed to raise errors via wait_for_expiry
+  }
+
+  dout(5) << __func__ << ": expiry complete, expire_pos/trim_pos is now " << std::hex <<
+    mdlog->get_journaler()->get_expire_pos() << "/" <<
+    mdlog->get_journaler()->get_trimmed_pos() << dendl;
+
+  // Now everyone I'm interested in is expired
+  mdlog->trim_expired_segments();
+
+  dout(5) << __func__ << ": trim complete, expire_pos/trim_pos is now " << std::hex <<
+    mdlog->get_journaler()->get_expire_pos() << "/" <<
+    mdlog->get_journaler()->get_trimmed_pos() << dendl;
+
+  // Flush the journal header so that readers will start from after the flushed region
+  C_SaferCond wrote_head;
+  mdlog->get_journaler()->write_head(&wrote_head);
+  mds_lock.Unlock();  // Drop lock to allow messenger dispatch progress
+  r = wrote_head.wait();
+  mds_lock.Lock();
+  if (r != 0) {
+      *ss << "Error " << r << " (" << cpp_strerror(r) << ") while writing header";
+      return r;
+  }
+
+  dout(5) << __func__ << ": write_head complete, all done!" << dendl;
+
+  return 0;
 }
 
 void MDS::set_up_admin_socket()
@@ -356,10 +510,25 @@ void MDS::set_up_admin_socket()
 				     asok_hook,
 				     "Evict a CephFS client");
   assert(0 == r);
+  r = admin_socket->register_command("osdmap barrier",
+				     "osdmap barrier name=target_epoch,type=CephInt",
+				     asok_hook,
+				     "Wait until the MDS has this OSD map epoch");
+  assert(0 == r);
   r = admin_socket->register_command("session ls",
 				     "session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
+  assert(0 == r);
+  r = admin_socket->register_command("flush journal",
+				     "flush journal",
+				     asok_hook,
+				     "Flush the journal to the backing store");
+  assert(0 == r);
+  r = admin_socket->register_command("force_readonly",
+				     "force_readonly",
+				     asok_hook,
+				     "Force MDS to read-only mode");
   assert(0 == r);
 }
 
@@ -370,6 +539,11 @@ void MDS::clean_up_admin_socket()
   admin_socket->unregister_command("dump_ops_in_flight");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
+  admin_socket->unregister_command("flush_path");
+  admin_socket->unregister_command("session evict");
+  admin_socket->unregister_command("session ls");
+  admin_socket->unregister_command("flush journal");
+  admin_socket->unregister_command("force_readonly");
   delete asok_hook;
   asok_hook = NULL;
 }
@@ -1502,6 +1676,16 @@ void MDS::handle_mds_map(MMDSMap *m)
     }
   }
 
+  if (is_active()) {
+    // Before going active, set OSD epoch barrier to latest (so that
+    // we don't risk handing out caps to clients with old OSD maps that
+    // might not include barriers from the previous incarnation of this MDS)
+    const OSDMap *osdmap = objecter->get_osdmap_read();
+    const epoch_t osd_epoch = osdmap->get_epoch();
+    objecter->put_osdmap_read();
+    set_osd_epoch_barrier(osd_epoch);
+  }
+
  out:
   beacon.notify_mdsmap(mdsmap);
 
@@ -2125,8 +2309,25 @@ void MDS::respawn()
   suicide();
 }
 
+void MDS::handle_write_error(int err)
+{
+  if (err == -EBLACKLISTED) {
+    derr << "we have been blacklisted (fenced), respawning..." << dendl;
+    respawn();
+    return;
+  }
 
-
+  if (g_conf->mds_action_on_write_error >= 2) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", suicide..." << dendl;
+    suicide();
+  } else if (g_conf->mds_action_on_write_error == 1) {
+    derr << "unhandled write error " << cpp_strerror(err) << ", force readonly..." << dendl;
+    mdcache->force_readonly();
+  } else {
+    // ignore;
+    derr << "unhandled write error " << cpp_strerror(err) << ", ignore..." << dendl;
+  }
+}
 
 bool MDS::ms_dispatch(Message *m)
 {
@@ -2206,8 +2407,18 @@ bool MDS::handle_core_message(Message *m)
     break;
   case CEPH_MSG_OSD_MAP:
     ALLOW_MESSAGES_FROM(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD);
-    if (is_active() && snapserver)
+
+    if (is_active() && snapserver) {
       snapserver->check_osd_map(true);
+    }
+
+    server->handle_osd_map();
+
+    // By default the objecter only requests OSDMap updates on use,
+    // we would like to always receive the latest maps in order to
+    // apply policy based on the FULL flag.
+    objecter->maybe_request_map();
+
     break;
 
   default:
@@ -2729,4 +2940,17 @@ void MDS::ProgressThread::shutdown()
   mds->mds_lock.Unlock();
   join();
   mds->mds_lock.Lock();
+}
+
+/**
+ * This is used whenever a RADOS operation has been cancelled
+ * or a RADOS client has been blacklisted, to cause the MDS and
+ * any clients to wait for this OSD epoch before using any new caps.
+ *
+ * See doc/cephfs/eviction
+ */
+void MDS::set_osd_epoch_barrier(epoch_t e)
+{
+  dout(4) << __func__ << ": epoch=" << e << dendl;
+  osd_epoch_barrier = e;
 }

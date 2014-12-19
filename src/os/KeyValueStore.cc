@@ -1224,10 +1224,10 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         ghobject_t oid = i.decode_oid();
         uint64_t off = i.decode_length();
         uint64_t len = i.decode_length();
-        bool replica = i.get_replica();
+        uint32_t fadvise_flags = i.get_fadvise_flags();
         bufferlist bl;
         i.decode_bl(bl);
-        r = _write(cid, oid, off, len, bl, t, replica);
+        r = _write(cid, oid, off, len, bl, t, fadvise_flags);
       }
       break;
 
@@ -1702,7 +1702,8 @@ int KeyValueStore::_generic_read(StripObjectMap::StripObjectHeaderRef header,
 
 
 int KeyValueStore::read(coll_t cid, const ghobject_t& oid, uint64_t offset,
-                        size_t len, bufferlist& bl, bool allow_eio)
+                        size_t len, bufferlist& bl, uint32_t op_flags,
+			bool allow_eio)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
            << len << dendl;
@@ -1875,7 +1876,7 @@ int KeyValueStore::_touch(coll_t cid, const ghobject_t& oid,
 int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
                                   uint64_t offset, size_t len,
                                   const bufferlist& bl, BufferTransaction &t,
-                                  bool replica)
+                                  uint32_t fadvise_flags)
 {
   if (len > bl.length())
     len = bl.length();
@@ -1959,7 +1960,7 @@ int KeyValueStore::_generic_write(StripObjectMap::StripObjectHeaderRef header,
 
 int KeyValueStore::_write(coll_t cid, const ghobject_t& oid,
                           uint64_t offset, size_t len, const bufferlist& bl,
-                          BufferTransaction &t, bool replica)
+                          BufferTransaction &t, uint32_t fadvise_flags)
 {
   dout(15) << __func__ << " " << cid << "/" << oid << " " << offset << "~"
            << len << dendl;
@@ -1974,7 +1975,7 @@ int KeyValueStore::_write(coll_t cid, const ghobject_t& oid,
     return r;
   }
 
-  return _generic_write(header, offset, len, bl, t, replica);
+  return _generic_write(header, offset, len, bl, t, fadvise_flags);
 }
 
 int KeyValueStore::_zero(coll_t cid, const ghobject_t& oid, uint64_t offset,
@@ -2268,12 +2269,16 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
     r = -EINVAL;
   }
 
-  assert(out.size());
-  bl.swap(out.begin()->second);
+  if (out.size()) {
+    bl.swap(out.begin()->second);
+    r = bl.length();
+  } else {
+    r = -ENODATA;
+  }
 
   dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
            << bl.length() << " = " << r << dendl;
-  return bl.length();
+  return r;
 }
 
 int KeyValueStore::collection_getattrs(coll_t cid,
@@ -2282,25 +2287,11 @@ int KeyValueStore::collection_getattrs(coll_t cid,
   dout(10) << __func__ << " " << cid.to_str() << dendl;
 
   map<string, bufferlist> out;
-  set<string> keys;
-  StripObjectMap::StripObjectHeaderRef header;
 
-  for (map<string, bufferptr>::iterator it = aset.begin();
-       it != aset.end(); ++it) {
-      keys.insert(it->first);
-  }
-
-  int r = backend->lookup_strip_header(get_coll_for_coll(),
-                                       make_ghobject_for_coll(cid), &header);
-  if (r < 0) {
-    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
-    return r;
-  }
-
-  r = backend->get_values_with_header(header, COLLECTION_ATTR, keys, &out);
+  int r = backend->get(get_coll_for_coll(), make_ghobject_for_coll(cid),
+                       COLLECTION_ATTR, &out);
   if (r < 0) {
     dout(10) << __func__ << " could not get keys" << dendl;
-    r = -EINVAL;
     goto out;
   }
 

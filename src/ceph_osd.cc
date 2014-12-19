@@ -369,22 +369,22 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
   }
 
-  Messenger *ms_public = Messenger::create(g_ceph_context,
+  Messenger *ms_public = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::OSD(whoami), "client",
 					   getpid());
-  Messenger *ms_cluster = Messenger::create(g_ceph_context,
+  Messenger *ms_cluster = Messenger::create(g_ceph_context, g_conf->ms_type,
 					    entity_name_t::OSD(whoami), "cluster",
 					    getpid());
-  Messenger *ms_hbclient = Messenger::create(g_ceph_context,
+  Messenger *ms_hbclient = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "hbclient",
 					     getpid());
-  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context,
+  Messenger *ms_hb_back_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						   entity_name_t::OSD(whoami), "hb_back_server",
 						   getpid());
-  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context,
+  Messenger *ms_hb_front_server = Messenger::create(g_ceph_context, g_conf->ms_type,
 						    entity_name_t::OSD(whoami), "hb_front_server",
 						    getpid());
-  Messenger *ms_objecter = Messenger::create(g_ceph_context,
+  Messenger *ms_objecter = Messenger::create(g_ceph_context, g_conf->ms_type,
 					     entity_name_t::OSD(whoami), "ms_objecter",
 					     getpid());
   ms_cluster->set_cluster_protocol(CEPH_OSD_PROTOCOL);
@@ -413,6 +413,12 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MSG_AUTH |
     CEPH_FEATURE_OSD_ERASURE_CODES;
 
+  uint64_t osd_required =
+    CEPH_FEATURE_UID |
+    CEPH_FEATURE_PGID64 |
+    CEPH_FEATURE_OSDENC |
+    CEPH_FEATURE_OSD_SNAPMAPPER;
+
   ms_public->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
   ms_public->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 				   client_byte_throttler.get(),
@@ -430,9 +436,7 @@ int main(int argc, const char **argv)
   ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0,0));
   ms_cluster->set_policy(entity_name_t::TYPE_OSD,
 			 Messenger::Policy::lossless_peer(supported,
-							  CEPH_FEATURE_UID |
-							  CEPH_FEATURE_PGID64 |
-							  CEPH_FEATURE_OSDENC));
+							  osd_required));
   ms_cluster->set_policy(entity_name_t::TYPE_CLIENT,
 			 Messenger::Policy::stateless_server(0, 0));
 
@@ -501,9 +505,6 @@ int main(int argc, const char **argv)
 	 << TEXT_NORMAL << dendl;
     return 1;
   }
-
-  // Now close the standard file descriptors
-  global_init_shutdown_stderr(g_ceph_context);
 
   ms_public->start();
   ms_hbclient->start();

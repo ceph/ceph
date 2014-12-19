@@ -1443,7 +1443,13 @@ int main(int argc, char **argv)
       cerr << "could not create user: " << err_msg << std::endl;
       return -ret;
     }
-
+    if (!subuser.empty()) {
+      ret = user.subusers.add(user_op, &err_msg);
+      if (ret < 0) {
+        cerr << "could not create subuser: " << err_msg << std::endl;
+        return -ret;
+      }
+    }
     break;
   case OPT_USER_RM:
     ret = user.remove(user_op, &err_msg);

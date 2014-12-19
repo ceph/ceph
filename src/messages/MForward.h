@@ -29,8 +29,9 @@ struct MForward : public Message {
   entity_inst_t client;
   MonCap client_caps;
   uint64_t con_features;
+  EntityName entity_name;
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
   MForward() : Message(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
@@ -62,6 +63,7 @@ public:
     ::encode(client_caps, payload, features);
     encode_message(msg, features, payload);
     ::encode(con_features, payload);
+    ::encode(entity_name, payload);
   }
 
   void decode_payload() {
@@ -74,6 +76,14 @@ public:
       ::decode(con_features, p);
     } else {
       con_features = 0;
+    }
+    if (header.version >= 3) {
+      ::decode(entity_name, p);
+    } else {
+      // we are able to know the entity type, obtaining it from the
+      // entity_name_t on 'client', but we have no idea about the
+      // entity name, so we'll just use a friendly '?' instead.
+      entity_name.set(client.name.type(), "?");
     }
 
   }

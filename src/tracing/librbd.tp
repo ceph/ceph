@@ -1,5 +1,6 @@
 #include "tracing/tracing-common.h"
 #include "include/rbd/librbd.h"
+#include "include/int_types.h"
 
 TRACEPOINT_EVENT(librbd, read_enter,
     TP_ARGS(
@@ -19,6 +20,25 @@ TRACEPOINT_EVENT(librbd, read_enter,
     )
 )
 
+TRACEPOINT_EVENT(librbd, read2_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        uint64_t, offset,
+        uint64_t, length,
+	int, op_flags),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer(int, op_flags, op_flags)
+    )
+)
 TRACEPOINT_EVENT(librbd, read_exit,
     TP_ARGS(
         ssize_t, retval),
@@ -97,6 +117,28 @@ TRACEPOINT_EVENT(librbd, write_enter,
         ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
     )
 )
+
+TRACEPOINT_EVENT(librbd, write2_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        uint64_t, off,
+        size_t, len,
+        const char*, buf,
+	int, op_flags),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_integer(uint64_t, off, off)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+        ctf_integer(int, op_flags, op_flags)
+    )
+)
+
 
 TRACEPOINT_EVENT(librbd, write_exit,
     TP_ARGS(
@@ -303,6 +345,29 @@ TRACEPOINT_EVENT(librbd, aio_write_enter,
     )
 )
 
+TRACEPOINT_EVENT(librbd, aio_write2_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        uint64_t, off,
+        size_t, len,
+        const char*, buf,
+        const void*, completion,
+	int, op_flags),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_integer(uint64_t, off, off)
+        ctf_integer(size_t, len, len)
+        ceph_ctf_sequence(unsigned char, buf, buf, size_t, len)
+        ctf_integer_hex(const void*, completion, completion)
+        ctf_integer(int, op_flags, op_flags)
+    )
+)
 TRACEPOINT_EVENT(librbd, aio_write_exit,
     TP_ARGS(
         int, retval),
@@ -331,6 +396,30 @@ TRACEPOINT_EVENT(librbd, aio_read_enter,
         ctf_integer_hex(const void*, completion, completion)
     )
 )
+
+TRACEPOINT_EVENT(librbd, aio_read2_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        const char*, snap_name,
+        char, read_only,
+        uint64_t, offset,
+        uint64_t, length,
+        const char*, buf,
+        const void*, completion,
+	int, op_flags),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_string(snap_name, snap_name)
+        ctf_integer(char, read_only, read_only)
+        ctf_integer(uint64_t, offset, offset)
+        ctf_integer(uint64_t, length, length)
+        ctf_integer_hex(const void*, completion, completion)
+        ctf_integer(int, op_flags, op_flags)
+    )
+)
+
 
 TRACEPOINT_EVENT(librbd, aio_read_exit,
     TP_ARGS(

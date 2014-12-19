@@ -14,6 +14,7 @@
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+#include <boost/scoped_ptr.hpp>
 
 #include <stdlib.h>
 
@@ -55,6 +56,7 @@ enum {
 
 //#define INTERNAL_TEST
 //#define INTERNAL_TEST2
+//#define INTERNAL_TEST3
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
@@ -343,6 +345,170 @@ struct metadata_section {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
     }
     DECODE_FINISH(bl);
+  }
+};
+
+struct action_on_object_t {
+  virtual ~action_on_object_t() {}
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) = 0;
+};
+
+int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
+{
+  unsigned LIST_AT_A_TIME = 100;
+  int r;
+  ghobject_t next;
+  while (!next.is_max()) {
+    vector<ghobject_t> list;
+    r = store->collection_list_partial(
+				       coll,
+				       next,
+				       LIST_AT_A_TIME,
+				       LIST_AT_A_TIME,
+				       0,
+				       &list,
+				       &next);
+    if (r < 0) {
+      cerr << "Error listing collection: " << coll << ", "
+	   << cpp_strerror(r) << std::endl;
+      return r;
+    }
+    for (vector<ghobject_t>::iterator obj = list.begin();
+	 obj != list.end();
+	 ++obj) {
+      bufferlist attr;
+      r = store->getattr(coll, *obj, OI_ATTR, attr);
+      if (r < 0) {
+	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+      object_info_t oi;
+      bufferlist::iterator bp = attr.begin();
+      try {
+	::decode(oi, bp);
+      } catch (...) {
+	r = -EINVAL;
+	cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+      r = action.call(store, coll, *obj, oi);
+      if (r < 0)
+	return r;
+    }
+  }
+  return 0;
+}
+
+int action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
+{
+  int r = _action_on_all_objects_in_pg(store, coll, action, debug);
+  store->sync_and_flush();
+  return r;
+}
+
+int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
+{
+  unsigned scanned = 0;
+  int r = 0;
+  vector<coll_t> colls_to_check;
+  vector<coll_t> candidates;
+  r = store->list_collections(candidates);
+  if (r < 0) {
+    cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  for (vector<coll_t>::iterator i = candidates.begin();
+       i != candidates.end();
+       ++i) {
+    spg_t pgid;
+    snapid_t snap;
+    if (i->is_pg(pgid, snap)) {
+      colls_to_check.push_back(*i);
+    }
+  }
+
+  if (debug)
+    cerr << colls_to_check.size() << " pgs to scan" << std::endl;
+  for (vector<coll_t>::iterator i = colls_to_check.begin();
+       i != colls_to_check.end();
+       ++i, ++scanned) {
+    if (debug)
+      cerr << "Scanning " << *i << ", " << scanned << "/"
+	   << colls_to_check.size() << " completed" << std::endl;
+    r = _action_on_all_objects_in_pg(store, *i, action, debug);
+    if (r < 0)
+      return r;
+  }
+  return 0;
+}
+
+int action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool debug)
+{
+  int r = _action_on_all_objects(store, action, debug);
+  store->sync_and_flush();
+  return r;
+}
+
+struct pgid_object_list {
+  list<pair<coll_t, ghobject_t> > _objects;
+
+  void insert(coll_t coll, ghobject_t &ghobj) {
+    _objects.push_back(make_pair(coll, ghobj));
+  }
+
+  void dump(Formatter *f, bool human_readable) const {
+    if (!human_readable)
+      f->open_array_section("pgid_objects");
+    for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
+	 i != _objects.end();
+	 i++) {
+      if (i != _objects.begin() && human_readable) {
+        f->flush(cout);
+        cout << std::endl;
+      }
+      f->open_array_section("pgid_object");
+      string pgid = i->first.c_str();
+      std::size_t pos = pgid.find("_");
+      if (pos == string::npos)
+        f->dump_string("pgid", pgid);
+      else
+        f->dump_string("pgid", pgid.substr(0, pos));
+      f->open_object_section("ghobject");
+      i->second.dump(f);
+      f->close_section();
+      f->close_section();
+    }
+    if (!human_readable)
+      f->close_section();
+  }
+};
+
+struct lookup_ghobject : public action_on_object_t {
+  pgid_object_list _objects;
+  const string _name;
+
+  lookup_ghobject(const string& name) : _name(name) { }
+
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (_name.length() == 0 || ghobj.hobj.oid.name == _name)
+      _objects.insert(coll, ghobj);
+    return 0;
+  }
+
+  int size() const {
+    return _objects._objects.size();
+  }
+
+  pair<coll_t, ghobject_t> pop() {
+     pair<coll_t, ghobject_t> front = _objects._objects.front();
+     _objects._objects.pop_front();
+     return front;
+  }
+
+  void dump(Formatter *f, bool human_readable) const {
+    _objects.dump(f, human_readable);
   }
 };
 
@@ -648,7 +814,7 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
   if (ret < 0)
     return ret;
 
-  cout << "Read " << obj << std::endl;
+  cerr << "Read " << obj << std::endl;
 
   total = st.st_size;
   if (debug)
@@ -761,6 +927,21 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
+int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
+{
+  bufferlist bl;
+  bool found = store->read(
+      META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
+  if (!found) {
+    cerr << "Can't find OSDMap for pg epoch " << e << std::endl;
+    return ENOENT;
+  }
+  osdmap.decode(bl);
+  if (debug)
+    cerr << osdmap << std::endl;
+  return 0;
+}
+
 //Write super_header with its fixed 16 byte length
 void write_super()
 {
@@ -791,7 +972,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cout << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << std::endl;
 
   int ret = get_log(fs, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -800,6 +981,10 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   write_super();
 
   pg_begin pgb(pgid, superblock);
+  // Special case: If replicated pg don't require the importing OSD to have shard feature
+  if (pgid.is_no_shard()) {
+    pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+  }
   ret = write_section(TYPE_PG_BEGIN, pgb, file_fd);
   if (ret)
     return ret;
@@ -1359,9 +1544,23 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   if (debug) {
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
+
+  // Special case: Old export has SHARDS incompat feature on replicated pg, remove it
+  if (pgid.is_no_shard())
+    pgb.superblock.compat_features.incompat.remove(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+
   if (sb.compat_features.compare(pgb.superblock.compat_features) == -1) {
-    cerr << "Export has incompatible features set "
-      << pgb.superblock.compat_features << std::endl;
+    CompatSet unsupported = sb.compat_features.unsupported(pgb.superblock.compat_features);
+
+    cerr << "Export has incompatible features set " << unsupported << std::endl;
+
+    // If shards setting the issue, then inform user what they can do about it.
+    if (unsupported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << std::endl;
+      cerr << "OSD requires sharding to be enabled" << std::endl;
+      cerr << std::endl;
+      cerr << "If you wish to import, first do 'ceph_objectstore_tool...--op set-allow-sharded-objects'" << std::endl;
+    }
     return 1;
   }
 
@@ -1431,25 +1630,22 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   return 0;
 }
 
-int do_list(ObjectStore *store, coll_t coll, Formatter *formatter)
+int do_list(ObjectStore *store, string pgidstr, string object, Formatter *formatter, bool debug, bool human_readable)
 {
-  ghobject_t next;
-  while (!next.is_max()) {
-    vector<ghobject_t> objects;
-    int r = store->collection_list_partial(coll, next, 200, 300, 0,
-      &objects, &next);
-    if (r < 0)
-      return r;
-    for (vector<ghobject_t>::iterator i = objects.begin();
-	 i != objects.end(); ++i) {
-
-      formatter->open_object_section("list");
-      i->dump(formatter);
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
-    }
+  int r;
+  lookup_ghobject lookup(object);
+  if (pgidstr.length() > 0) {
+    spg_t pgid;
+    pgid.parse(pgidstr.c_str());
+    r = action_on_all_objects_in_pg(store, coll_t(pgid), lookup, debug);
+  } else {
+    r = action_on_all_objects(store, lookup, debug);
   }
+  if (r)
+    return r;
+  lookup.dump(formatter, human_readable);
+  formatter->flush(cout);
+  cout << std::endl;
   return 0;
 }
 
@@ -1772,6 +1968,35 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
+struct do_list_lost : public action_on_object_t {
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (oi.is_lost())
+      cout << coll << "/" << ghobj << " is lost" << std::endl;
+    return 0;
+  }
+};
+
+struct do_fix_lost : public action_on_object_t {
+  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
+    if (oi.is_lost()) {
+      cout << coll << "/" << ghobj << " is lost, fixing" << std::endl;
+      oi.clear_flag(object_info_t::FLAG_LOST);
+      bufferlist bl;
+      ::encode(oi, bl);
+      ObjectStore::Transaction t;
+      t.setattr(coll, ghobj, OI_ATTR, bl);
+      int r = store->apply_transaction(t);
+      if (r < 0) {
+	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
+	     << ", "
+	     << cpp_strerror(r) << std::endl;
+	return r;
+      }
+    }
+    return 0;
+  }
+};
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -1779,26 +2004,33 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "Positional syntax:" << std::endl;
     cerr << std::endl;
-    cerr << "(requires --data, --journal (for filestore type) and --pgid to be specified)" << std::endl;
-    cerr << "(optional [file] argument will read stdin or write stdout if not specified or if '-' specified)" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|set)-bytes [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-(attr|omap) <key> [file]" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (set-omaphdr) [file]" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
-    cerr << "ceph_objectstore_tool ... <object> (get-omaphdr)" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> get-omaphdr" << std::endl;
+    cerr << "ceph_objectstore_tool ... <object> set-omaphdr [file]" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> list-attrs" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> list-omap" << std::endl;
     cerr << "ceph_objectstore_tool ... <object> remove" << std::endl;
     cerr << std::endl;
     cerr << "ceph_objectstore_tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
+    cerr << "<object> can be a JSON object description as displayed" << std::endl;
+    cerr << "by --op list." << std::endl;
+    cerr << "<object> can be an object name which will be looked up in all" << std::endl;
+    cerr << "the OSD's PGs." << std::endl;
+    cerr << std::endl;
+    cerr << "The optional [file] argument will read stdin or write stdout" << std::endl;
+    cerr << "if not specified or if '-' specified." << std::endl;
     exit(1);
 }
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type;
+  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
+  spg_t pgid;
   ghobject_t ghobj;
+  bool pretty_format, human_readable;
 
   po::options_description desc("Allowed options");
   desc.add_options()
@@ -1810,11 +2042,15 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, list-lost, fix-lost")
+     "PG id, mandatory except for import, list-lost, fix-lost, list-pgs, set-allow-sharded-objects")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
+    ("pretty-format", po::value<bool>(&pretty_format)->default_value(true),
+     "Make json or xml output more readable")
+    ("format", po::value<string>(&format)->default_value("json"),
+     "Output format which may be xml or json")
     ("debug", "Enable diagnostic output to stderr")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -1822,8 +2058,8 @@ int main(int argc, char **argv)
 
   po::options_description positional("Positional options");
   positional.add_options()
-    ("object", po::value<string>(&object), "ghobject in json")
-    ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove]")
+    ("object", po::value<string>(&object), "object name or ghobject in json")
+    ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
     ("test-align", po::value<uint64_t>(&testalign)->default_value(0), "hidden align option for testing")
@@ -1905,7 +2141,7 @@ int main(int argc, char **argv)
     cerr << "Must provide --journal-path" << std::endl;
     usage(desc);
   }
-  if (vm.count("object") && !vm.count("objcmd")) {
+  if (op != "list" && vm.count("object") && !vm.count("objcmd")) {
     cerr << "Invalid syntax, missing command" << std::endl;
     usage(desc);
   }
@@ -1913,35 +2149,17 @@ int main(int argc, char **argv)
     cerr << "Must provide --op or object command..." << std::endl;
     usage(desc);
   }
-  if (vm.count("op") && vm.count("object")) {
+  if (op != "list" && vm.count("op") && vm.count("object")) {
     cerr << "Can't specify both --op and object command syntax" << std::endl;
     usage(desc);
   }
-  if (op != "import" && op != "list-lost" && op != "fix-lost"
-      && op != "list-pgs" && !vm.count("pgid")) {
-    cerr << "Must provide pgid" << std::endl;
-    usage(desc);
-  }
-
-  if (vm.count("object")) {
-    json_spirit::Value v;
-    try {
-      if (!json_spirit::read(object, v))
-        throw std::runtime_error("bad json");
-      ghobj.decode(v);
-    } catch (std::runtime_error& e) {
-      cerr << "error parsing offset: " << e.what() << std::endl;
-      exit(1);
-    }
-  }
-
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
   if (op == "export") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (outistty) {
-        cerr << "stdout is a tty and no --file option specified" << std::endl;
+        cerr << "stdout is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDOUT_FILENO;
@@ -1949,9 +2167,9 @@ int main(int argc, char **argv)
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
   } else if (op == "import") {
-    if (!vm.count("file")) {
+    if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
-        cerr << "stdin is a tty and no --file option specified" << std::endl;
+        cerr << "stdin is a tty and no --file filename specified" << std::endl;
         exit(1);
       }
       file_fd = STDIN_FILENO;
@@ -1972,11 +2190,6 @@ int main(int argc, char **argv)
 
   if (dpath.length() == 0) {
     cerr << "Invalid params" << std::endl;
-    return 1;
-  }
-
-  if (op == "import" && pgidstr.length()) {
-    cerr << "--pgid option invalid with import" << std::endl;
     return 1;
   }
 
@@ -2034,12 +2247,6 @@ int main(int argc, char **argv)
     if (!S_ISDIR(st.st_mode)) {
       invalid_filestore_path(dpath);
     }
-  }
-
-  spg_t pgid;
-  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
-    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    return 1;
   }
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
@@ -2101,6 +2308,166 @@ int main(int argc, char **argv)
     goto out;
   }
 
+  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
+    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
+    return 1;
+  }
+
+  if (op == "import" && pgidstr.length()) {
+    cerr << "--pgid option invalid with import" << std::endl;
+    return 1;
+  }
+
+  if (op != "list" && vm.count("object")) {
+    json_spirit::Value v;
+    try {
+      if (!json_spirit::read(object, v)) {
+	lookup_ghobject lookup(object);
+	if (action_on_all_objects(fs, lookup, debug)) {
+	  throw std::runtime_error("Internal error");
+	} else {
+	  if (lookup.size() != 1) {
+	    stringstream ss;
+	    if (lookup.size() == 0)
+	      ss << objcmd << ": " << cpp_strerror(ENOENT);
+	    else
+	      ss << "expected a single object named '" << object
+		 << "' but got " << lookup.size() << " instead";
+	    throw std::runtime_error(ss.str());
+	  }
+	  pair<coll_t, ghobject_t> found = lookup.pop();
+	  pgidstr = found.first.to_str();
+	  pgid.parse(pgidstr.c_str());
+	  ghobj = found.second;
+	}
+      } else {
+	stringstream ss;
+	if (pgidstr.length() == 0 && v.type() != json_spirit::array_type) {
+	  ss << "object '" << object
+	     << "' must be a JSON array but is of type "
+	     << v.type() << " instead";
+	  throw std::runtime_error(ss.str());
+	}
+	if (v.type() == json_spirit::array_type) {
+	  json_spirit::Array array = v.get_array();
+	  vector<json_spirit::Value>::iterator i = array.begin();
+	  if (i->type() != json_spirit::str_type) {
+	    ss << "object '" << object
+	       << "' must be a JSON array with the first element a string but "
+	       << "found type " << v.type() << " instead";
+	    throw std::runtime_error(ss.str());
+	  }
+	  string object_pgidstr = i->get_str();
+	  spg_t object_pgid;
+	  object_pgid.parse(object_pgidstr.c_str());
+	  if (pgidstr.length() > 0) {
+	    if (object_pgid != pgid) {
+	      ss << "object '" << object
+		 << "' has a pgid different from the --pgid="
+		 << pgidstr << " option";
+	      throw std::runtime_error(ss.str());
+	    }
+	  } else {
+	    pgidstr = object_pgidstr;
+	    pgid = object_pgid;
+	  }
+	  i++;
+	  v = *i;
+	}
+	try {
+	  ghobj.decode(v);
+	} catch (std::runtime_error& e) {
+	  ss << "Decode object json error: " << e.what();
+	  throw std::runtime_error(ss.str());
+	}
+      }
+    } catch (std::runtime_error& e) {
+      cerr << e.what() << std::endl;
+      ret = 1;
+      goto out;
+    }
+  }
+
+  if (op != "list" && op != "import" && op != "list-lost" && op != "fix-lost"
+      && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
+      (pgidstr.length() == 0)) {
+    cerr << "Must provide pgid" << std::endl;
+    usage(desc);
+  }
+
+  if (op == "set-allow-sharded-objects") {
+    // This could only happen if we backport changes to an older release
+    if (!supported.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS)) {
+      cerr << "Can't enable sharded objects in this release" << std::endl;
+      ret = 1;
+      goto out;
+    }
+    if (superblock.compat_features.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SHARDS) &&
+        fs_sharded_objects) {
+      cerr << "Sharded objects already fully enabled" << std::endl;
+      ret = 0;
+      goto out;
+    }
+    OSDMap curmap;
+    ret = get_osdmap(fs, superblock.current_epoch, curmap);
+    if (ret) {
+        cerr << "Can't find local OSDMap" << std::endl;
+        goto out;
+    }
+
+    // Based on OSDMonitor::check_cluster_features()
+    // XXX: The up state of osds in the last map isn't
+    // as important from a non-running osd.  I'm using
+    // get_all_osds() instead.  An osd which was never
+    // upgraded and never removed would be flagged here.
+    stringstream unsupported_ss;
+    int unsupported_count = 0;
+    uint64_t features = CEPH_FEATURE_OSD_ERASURE_CODES;
+    set<int32_t> all_osds;
+    curmap.get_all_osds(all_osds);
+    for (set<int32_t>::iterator it = all_osds.begin();
+         it != all_osds.end(); ++it) {
+        const osd_xinfo_t &xi = curmap.get_xinfo(*it);
+#ifdef INTERNAL_TEST3
+        // Force one of the OSDs to not have support for erasure codes
+        if (unsupported_count == 0)
+            ((osd_xinfo_t &)xi).features &= ~features;
+#endif
+        if ((xi.features & features) != features) {
+            if (unsupported_count > 0)
+                unsupported_ss << ", ";
+            unsupported_ss << "osd." << *it;
+            unsupported_count ++;
+        }
+    }
+
+    if (unsupported_count > 0) {
+        cerr << "ERASURE_CODES feature unsupported by: "
+           << unsupported_ss.str() << std::endl;
+        ret = 1;
+        goto out;
+    }
+
+    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    ::encode(superblock, bl);
+    t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+    r = fs->apply_transaction(t);
+    if (r < 0) {
+      cerr << "Error writing OSD superblock: " << cpp_strerror(r) << std::endl;
+      ret = 1;
+      goto out;
+    }
+
+    fs->set_allow_sharded_objects();
+
+    cout << "Enabled on-disk sharded objects" << std::endl;
+
+    ret = 0;
+    goto out;
+  }
+
   // If there was a crash as an OSD was transitioning to sharded objects
   // and hadn't completed a set_allow_sharded_objects().
   // This utility does not want to attempt to finish that transition.
@@ -2111,6 +2478,8 @@ int main(int argc, char **argv)
       cerr << "FileStore sharded but OSD not set, Corruption?" << std::endl;
     else
       cerr << "Found incomplete transition to sharded objects" << std::endl;
+    cerr << std::endl;
+    cerr << "Use --op set-allow-sharded-objects to repair" << std::endl;
     ret = EINVAL;
     goto out;
   }
@@ -2149,100 +2518,42 @@ int main(int argc, char **argv)
   }
 
   if (op == "list-lost" || op == "fix-lost") {
-    unsigned LIST_AT_A_TIME = 100;
-    unsigned scanned = 0;
-    int r = 0;
-    vector<coll_t> colls_to_check;
-    if (pgidstr.length()) {
-      colls_to_check.push_back(coll_t(pgid));
-    } else {
-      vector<coll_t> candidates;
-      r = fs->list_collections(candidates);
-      if (r < 0) {
-        cerr << "Error listing collections: " << cpp_strerror(r) << std::endl;
-        goto UMOUNT;
-      }
-      for (vector<coll_t>::iterator i = candidates.begin();
-           i != candidates.end();
-           ++i) {
-        spg_t pgid;
-        snapid_t snap;
-        if (i->is_pg(pgid, snap)) {
-          colls_to_check.push_back(*i);
-        }
-      }
-    }
+    boost::scoped_ptr<action_on_object_t> action;
+    if (op == "list-lost")
+      action.reset(new do_list_lost());
+    if (op == "fix-lost")
+      action.reset(new do_fix_lost());
+    if (pgidstr.length())
+      ret = action_on_all_objects_in_pg(fs, coll_t(pgid), *action, debug);
+    else
+      ret = action_on_all_objects(fs, *action, debug);
+    goto out;
+  }
 
-    cout << colls_to_check.size() << " pgs to scan" << std::endl;
-    for (vector<coll_t>::iterator i = colls_to_check.begin();
-         i != colls_to_check.end();
-         ++i, ++scanned) {
-      cout << "Scanning " << *i << ", " << scanned << "/"
-           << colls_to_check.size() << " completed" << std::endl;
-      ghobject_t next;
-      while (!next.is_max()) {
-        vector<ghobject_t> list;
-        r = fs->collection_list_partial(
-          *i,
-          next,
-          LIST_AT_A_TIME,
-          LIST_AT_A_TIME,
-          CEPH_NOSNAP,
-          &list,
-          &next);
-        if (r < 0) {
-          cerr << "Error listing collection: " << *i << ", "
-               << cpp_strerror(r) << std::endl;
-          goto UMOUNT;
-        }
-        for (vector<ghobject_t>::iterator obj = list.begin();
-             obj != list.end();
-             ++obj) {
-          bufferlist attr;
-          r = fs->getattr(*i, *obj, OI_ATTR, attr);
-          if (r < 0) {
-            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
-                 << cpp_strerror(r) << std::endl;
-            goto UMOUNT;
-          }
-          object_info_t oi;
-          bufferlist::iterator bp = attr.begin();
-          try {
-            ::decode(oi, bp);
-          } catch (...) {
-            r = -EINVAL;
-            cerr << "Error getting attr on : " << make_pair(*i, *obj) << ", "
-                 << cpp_strerror(r) << std::endl;
-            goto UMOUNT;
-          }
-          if (oi.is_lost()) {
-            if (op == "list-lost") {
-              cout << *i << "/" << *obj << " is lost" << std::endl;
-            }
-            if (op == "fix-lost") {
-              cout << *i << "/" << *obj << " is lost, fixing" << std::endl;
-              oi.clear_flag(object_info_t::FLAG_LOST);
-              bufferlist bl2;
-              ::encode(oi, bl2);
-              ObjectStore::Transaction t;
-              t.setattr(*i, *obj, OI_ATTR, bl2);
-              r = fs->apply_transaction(t);
-              if (r < 0) {
-                cerr << "Error getting fixing attr on : " << make_pair(*i, *obj)
-                     << ", "
-                     << cpp_strerror(r) << std::endl;
-                goto UMOUNT;
-              }
-            }
-          }
-        }
-      }
-    }
-    cout << "Completed" << std::endl;
+  // Special list handling.  Treating pretty_format as human readable,
+  // with one object per line and not an enclosing array.
+  human_readable = pretty_format;
+  if (op == "list") {
+    pretty_format = false;
+  }
 
-   UMOUNT:
-    fs->sync_and_flush();
-    ret = r;
+  Formatter *formatter;
+  if (format == "xml") {
+    formatter = new XMLFormatter(pretty_format);
+  } else if (format == "json") {
+    formatter = new JSONFormatter(pretty_format);
+  } else {
+    cerr << "unrecognized format: " << format << std::endl;
+    ret = 1;
+    goto out;
+  }
+
+  if (op == "list") {
+    r = do_list(fs, pgidstr, object, formatter, debug, human_readable);
+    if (r) {
+      cerr << "do_list failed with " << r << std::endl;
+      ret = 1;
+    }
     goto out;
   }
 
@@ -2456,17 +2767,6 @@ int main(int argc, char **argv)
       usage(desc);
     }
 
-    if (op == "list") {
-      Formatter *formatter = new JSONFormatter(false);
-      r = do_list(fs, coll, formatter);
-      if (r) {
-        cerr << "do_list failed with " << r << std::endl;
-        ret = 1;
-      }
-      goto out;
-    }
-
-    Formatter *formatter = new JSONFormatter(true);
     bufferlist bl;
     map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
     if (debug)
@@ -2490,8 +2790,8 @@ int main(int argc, char **argv)
 
     if (op == "export") {
       ret = do_export(fs, coll, pgid, info, map_epoch, struct_ver, superblock, past_intervals);
-      if (ret == 0 && file_fd != STDOUT_FILENO)
-        cout << "Export successful" << std::endl;
+      if (ret == 0)
+        cerr << "Export successful" << std::endl;
     } else if (op == "info") {
       formatter->open_object_section("info");
       info.dump(formatter);

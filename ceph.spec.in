@@ -499,6 +499,8 @@ fi
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
+%{_mandir}/man8/ceph-deploy.8*
+%{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
 %{_mandir}/man8/ceph-osd.8*
@@ -743,10 +745,10 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-kvstore-tool
 %{_mandir}/man8/rbd-replay.8*
 %{_mandir}/man8/rbd-replay-many.8*
+%{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
 %if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
-%{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay-prep
 %endif
 
@@ -760,7 +762,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_javadir}/libcephfs-test.jar
 
 %files libs-compat
-# We need an empty %files list for ceph-libs-compat, to tell rpmbuild to actually
+# We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
 
 %changelog

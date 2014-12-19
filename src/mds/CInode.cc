@@ -904,8 +904,7 @@ struct C_IO_Inode_Stored : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    assert(r == 0);
-    in->_stored(version, fin);
+    in->_stored(r, version, fin);
   }
 };
 
@@ -943,9 +942,17 @@ void CInode::store(MDSInternalContextBase *fin)
 				 NULL, newfin);
 }
 
-void CInode::_stored(version_t v, Context *fin)
+void CInode::_stored(int r, version_t v, Context *fin)
 {
-  dout(10) << "_stored " << v << " " << *this << dendl;
+  if (r < 0) {
+    dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
+    mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
+				<< " errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    return;
+  }
+
+  dout(10) << "_stored " << v << " on " << *this << dendl;
   if (v == get_projected_version())
     mark_clean();
 
@@ -1062,8 +1069,7 @@ struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    assert(r == 0);
-    in->_stored_backtrace(version, fin);
+    in->_stored_backtrace(r, version, fin);
   }
 };
 
@@ -1130,9 +1136,17 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   gather.activate();
 }
 
-void CInode::_stored_backtrace(version_t v, Context *fin)
+void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
-  dout(10) << "_stored_backtrace" << dendl;
+  if (r < 0) {
+    dout(1) << "store backtrace error " << r << " v " << v << dendl;
+    mdcache->mds->clog->error() << "failed to store backtrace on dir ino "
+				<< ino() << " object, errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    return;
+  }
+
+  dout(10) << "_stored_backtrace v " << v <<  dendl;
 
   auth_unpin(this);
   if (v == inode.backtrace_version)
@@ -1174,6 +1188,33 @@ void CInode::clear_dirty_parent()
     state_clear(STATE_DIRTYPOOL);
     put(PIN_DIRTYPARENT);
     item_dirty_parent.remove_myself();
+  }
+}
+
+void CInode::verify_diri_backtrace(bufferlist &bl, int err)
+{
+  if (is_base() || is_dirty_parent())
+    return;
+
+  dout(10) << "verify_diri_backtrace" << dendl;
+
+  if (err == 0) {
+    inode_backtrace_t backtrace;
+    ::decode(backtrace, bl);
+    CDentry *pdn = get_parent_dn();
+    if (backtrace.ancestors.empty() ||
+	backtrace.ancestors[0].dname != pdn->name ||
+	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
+      err = -EINVAL;
+  }
+
+  if (err) {
+    MDS *mds = mdcache->mds;
+    mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
+    assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
+
+    _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
+    mds->mdlog->flush();
   }
 }
 
@@ -2477,6 +2518,8 @@ void CInode::decode_snap(bufferlist::iterator& p)
 
 client_t CInode::calc_ideal_loner()
 {
+  if (mdcache->is_readonly())
+    return -1;
   if (!mds_caps_wanted.empty())
     return -1;
   

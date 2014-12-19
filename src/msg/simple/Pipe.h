@@ -140,6 +140,11 @@ class DispatchQueue;
       return static_cast<Pipe*>(RefCountedObject::get());
     }
 
+    bool is_connected() {
+      Mutex::Locker l(pipe_lock);
+      return state == STATE_OPEN;
+    }
+
     char *recv_buf;
     int recv_max_prefetch;
     int recv_ofs;
@@ -197,6 +202,7 @@ class DispatchQueue;
 
     bool reader_running, reader_needs_join;
     bool reader_dispatching; /// reader thread is dispatching without pipe_lock
+    bool notify_on_dispatch_done; /// something wants a signal when dispatch done
     bool writer_running;
 
     map<int, list<Message*> > out_q;  // priority queue for outbound msgs

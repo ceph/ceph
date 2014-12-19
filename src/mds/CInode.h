@@ -544,7 +544,7 @@ public:
   void mark_clean();
 
   void store(MDSInternalContextBase *fin);
-  void _stored(version_t cv, Context *fin);
+  void _stored(int r, version_t cv, Context *fin);
   /**
    * Flush a CInode to disk. This includes the backtrace, the parent
    * directory's link, and the Inode object itself (if a base directory).
@@ -559,10 +559,11 @@ public:
 
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(MDSInternalContextBase *fin, int op_prio=-1);
-  void _stored_backtrace(version_t v, Context *fin);
+  void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, bufferlist *backtrace);
   void _mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
+  void verify_diri_backtrace(bufferlist &bl, int err);
   bool is_dirty_parent() { return state_test(STATE_DIRTYPARENT); }
   bool is_dirty_pool() { return state_test(STATE_DIRTYPOOL); }
 

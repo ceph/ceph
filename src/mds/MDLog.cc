@@ -84,7 +84,8 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
   void finish(int r) {
     MDS *mds = get_mds();
-
+    // assume journal is reliable, so don't choose action based on
+    // g_conf->mds_action_on_write_error.
     if (r == -EBLACKLISTED) {
       derr << "we have been blacklisted (fenced), respawning..." << dendl;
       mds->respawn();
@@ -101,9 +102,9 @@ class C_MDL_WriteError : public MDSIOContextBase {
 
 void MDLog::write_head(MDSInternalContextBase *c) 
 {
-  MDSIOContext *fin = NULL;
+  C_OnFinisher *fin = NULL;
   if (c != NULL) {
-    fin = new C_IO_Wrapper(mds, c);
+    fin = new C_OnFinisher(new C_IO_Wrapper(mds, c), &(mds->finisher));
   }
   journaler->write_head(fin);
 }
@@ -489,6 +490,11 @@ void MDLog::trim(int m)
   if (m >= 0)
     max_events = m;
 
+  if (mds->mdcache->is_readonly()) {
+    dout(10) << "trim, ignoring read-only FS" <<  dendl;
+    return;
+  }
+
   submit_mutex.Lock();
 
   // trim!
@@ -561,6 +567,76 @@ void MDLog::trim(int m)
   _trim_expired_segments();
 }
 
+class C_MaybeExpiredSegment : public MDSInternalContext {
+  MDLog *mdlog;
+  LogSegment *ls;
+  int op_prio;
+  public:
+  C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) :
+    MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
+  void finish(int res) {
+    if (res < 0)
+      mdlog->mds->handle_write_error(res);
+    mdlog->_maybe_expired(ls, op_prio);
+  }
+};
+
+/**
+ * Like ::trim, but instead of trimming to max_segments, trim all but the latest
+ * segment.
+ */
+int MDLog::trim_all()
+{
+  submit_mutex.Lock();
+
+  dout(10) << __func__ << ": "
+	   << segments.size()
+           << "/" << expiring_segments.size()
+           << "/" << expired_segments.size() << dendl;
+
+  uint64_t safe_pos = journaler->get_write_safe_pos();
+  uint64_t last_seq = 0;
+  if (!segments.empty())
+    last_seq = get_last_segment_seq();
+
+  map<uint64_t,LogSegment*>::iterator p = segments.begin();
+  while (p != segments.end() &&
+	 p->first < last_seq && p->second->end <= safe_pos) {
+    LogSegment *ls = p->second;
+    ++p;
+
+    // Caller should have flushed journaler before calling this
+    if (pending_events.count(ls->seq)) {
+      dout(5) << __func__ << ": segment " << ls->seq << " has pending events" << dendl;
+      submit_mutex.Unlock();
+      return -EAGAIN;
+    }
+
+    if (expiring_segments.count(ls)) {
+      dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
+	      << ", " << ls->num_events << " events" << dendl;
+    } else if (expired_segments.count(ls)) {
+      dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
+	      << ", " << ls->num_events << " events" << dendl;
+    } else {
+      assert(expiring_segments.count(ls) == 0);
+      expiring_segments.insert(ls);
+      expiring_events += ls->num_events;
+      submit_mutex.Unlock();
+
+      uint64_t next_seq = ls->seq + 1;
+      try_expire(ls, CEPH_MSG_PRIO_DEFAULT);
+
+      submit_mutex.Lock();
+      p = segments.lower_bound(next_seq);
+    }
+  }
+
+  _trim_expired_segments();
+
+  return 0;
+}
+
 
 void MDLog::try_expire(LogSegment *ls, int op_prio)
 {
@@ -587,6 +663,11 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
 
 void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
 {
+  if (mds->mdcache->is_readonly()) {
+    dout(10) << "_maybe_expired, ignoring read-only FS" <<  dendl;
+    return;
+  }
+
   dout(10) << "_maybe_expired segment " << ls->seq << "/" << ls->offset
 	   << ", " << ls->num_events << " events" << dendl;
   try_expire(ls, op_prio);
@@ -607,14 +688,15 @@ void MDLog::_trim_expired_segments()
     }
     
     dout(10) << "_trim_expired_segments trimming expired "
-	     << ls->seq << "/" << ls->offset << dendl;
+	     << ls->seq << "/0x" << std::hex << ls->offset << std::dec << dendl;
     expired_events -= ls->num_events;
     expired_segments.erase(ls);
     num_events -= ls->num_events;
       
     // this was the oldest segment, adjust expire pos
-    if (journaler->get_expire_pos() < ls->offset)
-      journaler->set_expire_pos(ls->offset);
+    if (journaler->get_expire_pos() < ls->end) {
+      journaler->set_expire_pos(ls->end);
+    }
     
     logger->set(l_mdl_expos, ls->offset);
     logger->inc(l_mdl_segtrm);
@@ -631,6 +713,12 @@ void MDLog::_trim_expired_segments()
     journaler->write_head(0);
 }
 
+void MDLog::trim_expired_segments()
+{
+  submit_mutex.Lock();
+  _trim_expired_segments();
+}
+
 void MDLog::_expired(LogSegment *ls)
 {
   assert(submit_mutex.is_locked_by_me());
@@ -645,6 +733,13 @@ void MDLog::_expired(LogSegment *ls)
     // expired.
     expired_segments.insert(ls);
     expired_events += ls->num_events;
+
+    // Trigger all waiters
+    for (std::list<MDSInternalContextBase*>::iterator i = ls->expiry_waiters.begin();
+        i != ls->expiry_waiters.end(); ++i) {
+      (*i)->complete(0);
+    }
+    ls->expiry_waiters.clear();
     
     logger->inc(l_mdl_evex, ls->num_events);
     logger->inc(l_mdl_segex);

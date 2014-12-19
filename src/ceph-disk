@@ -29,6 +29,7 @@ import stat
 import sys
 import tempfile
 import uuid
+import time
 
 """
 Prepare:
@@ -791,11 +792,13 @@ def get_or_create_dmcrypt_key(
     # make a new key
     try:
         if not os.path.exists(key_dir):
-            os.makedirs(key_dir)
+            os.makedirs(key_dir, stat.S_IRUSR|stat.S_IWUSR|stat.S_IXUSR)
         with file('/dev/urandom', 'rb') as i:
             key = i.read(256)
-            with file(path, 'wb') as key_file:
-                key_file.write(key)
+            fd = os.open(path, os.O_WRONLY|os.O_CREAT,
+                         stat.S_IRUSR|stat.S_IWUSR)
+            assert os.write(fd, key) == len(key)
+            os.close(fd)
         return path
     except:
         raise Error('unable to read or create dm-crypt key', path)
@@ -900,17 +903,25 @@ def unmount(
     """
     Unmount and removes the given mount point.
     """
-    try:
-        LOG.debug('Unmounting %s', path)
-        command_check_call(
-            [
-                '/bin/umount',
-                '--',
-                path,
-                ],
-            )
-    except subprocess.CalledProcessError as e:
-        raise UnmountError(e)
+    retries = 0
+    while True:
+        try:
+            LOG.debug('Unmounting %s', path)
+            command_check_call(
+                [
+                    '/bin/umount',
+                    '--',
+                    path,
+                    ],
+                )
+            break
+        except subprocess.CalledProcessError as e:
+            # on failure, retry 3 times with incremental backoff
+            if retries == 3:
+                raise UnmountError(e)
+            else:
+                time.sleep(0.5 + retries * 1.0)
+                retries += 1
 
     os.rmdir(path)
 
@@ -936,7 +947,7 @@ def get_free_partition_index(dev):
                 ],
             )
     except subprocess.CalledProcessError as e:
-        print 'cannot read partition index; assume it isn\'t present\n (Error: %s)' % e
+        LOG.info('cannot read partition index; assume it isn\'t present\n (Error: %s)' % e)
         return 1
 
     if not lines:
@@ -968,6 +979,35 @@ def get_free_partition_index(dev):
     return num
 
 
+def update_partition(action, dev, description):
+     # try to make sure the kernel refreshes the table.  note
+     # that if this gets ebusy, we are probably racing with
+     # udev because it already updated it.. ignore failure here.
+
+     # On RHEL and CentOS distros, calling partprobe forces a reboot of the
+     # server. Since we are not resizing partitons so we rely on calling
+     # partx
+     if platform_distro().startswith(('centos', 'red', 'scientific')):
+         LOG.info('calling partx on %s device %s', description, dev)
+         LOG.info('re-reading known partitions will display errors')
+         command(
+             [
+                 'partx',
+                 action,
+                 dev,
+             ],
+         )
+
+     else:
+         LOG.debug('Calling partprobe on %s device %s', description, dev)
+         command(
+             [
+                 'partprobe',
+                 dev,
+             ],
+         )
+
+
 def zap(dev):
     """
     Destroy the partition table and content of a given disk.
@@ -993,6 +1033,9 @@ def zap(dev):
                 dev,
             ],
         )
+
+        update_partition('-d', dev, 'zapped')
+
     except subprocess.CalledProcessError as e:
         raise Error(e)
 
@@ -1013,12 +1056,32 @@ def prepare_journal_dev(
         if get_partition_type(journal) == JOURNAL_UUID:
             LOG.debug('Journal %s was previously prepared with ceph-disk. Reusing it.', journal)
             reusing_partition = True
-            base = get_partition_base(journal)
-            part = journal.replace(base,'')
-            journal = base # needed for later
+            # Read and reuse the partition uuid from this journal's previous life.
+            # We reuse the uuid instead of changing it because udev does not reliably
+            # notice changes to an existing partition's GUID.
+            # See http://tracker.ceph.com/issues/10146
+            journal_uuid = get_partition_uuid(journal)
+            LOG.debug('Reusing journal with uuid %s', journal_uuid)
         else:
             LOG.warning('Journal %s was not prepared with ceph-disk. Symlinking directly.', journal)
             return (journal, None, None)
+
+    journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
+        journal_uuid=journal_uuid,
+        )
+
+    journal_dmcrypt = None
+    if journal_dm_keypath:
+        journal_dmcrypt = journal_symlink
+        journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
+
+    if reusing_partition:
+        # confirm that the journal_symlink exists. It should since this was an active journal
+        # in the past. Continuing otherwise would be futile.
+        assert os.path.exists(journal_symlink)
+        return (journal_symlink, journal_dmcrypt, journal_uuid)
+
+    # From here on we are creating a new journal device, not reusing.
 
     ptype = JOURNAL_UUID
     if journal_dm_keypath:
@@ -1026,7 +1089,7 @@ def prepare_journal_dev(
 
     # it is a whole disk.  create a partition!
     num = None
-    if journal == data and not reusing_partition:
+    if journal == data:
         # we're sharing the disk between osd data and journal;
         # make journal be partition number 2, so it's pretty
         num = 2
@@ -1034,9 +1097,6 @@ def prepare_journal_dev(
             num=num,
             size=journal_size,
             )
-    elif reusing_partition:
-        num = int(part)
-        journal_part = '' # not used in this case
     else:
         # sgdisk has no way for me to say "whatever is the next
         # free index number" when setting type guids etc, so we
@@ -1051,10 +1111,7 @@ def prepare_journal_dev(
             )
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
 
-    if reusing_partition:
-        dev_size = get_dev_size(base+part)
-    else:
-        dev_size = get_dev_size(journal)
+    dev_size = get_dev_size(journal)
 
     if journal_size > dev_size:
         LOG.error('refusing to create journal on %s' % journal)
@@ -1064,7 +1121,9 @@ def prepare_journal_dev(
         )
 
     try:
-        sgdisk_call = [
+        LOG.debug('Creating journal partition num %d size %d on %s', num, journal_size, journal)
+        command_check_call(
+            [
                 'sgdisk',
                 '--new={part}'.format(part=journal_part),
                 '--change-name={num}:ceph journal'.format(num=num),
@@ -1079,41 +1138,10 @@ def prepare_journal_dev(
                 '--mbrtogpt',
                 '--',
                 journal,
-            ]
-        if reusing_partition:
-            action= 'Reusing'
-            del sgdisk_call[1] # don't add --new when reusing
-        else:
-            action = 'Creating'
-        LOG.debug('%s journal partition num %d size %d on %s', action, num, journal_size, journal)
-        command_check_call(sgdisk_call)
+                ]
+            )
 
-        # try to make sure the kernel refreshes the table.  note
-        # that if this gets ebusy, we are probably racing with
-        # udev because it already updated it.. ignore failure here.
-
-        # On RHEL and CentOS distros, calling partprobe forces a reboot of the
-        # server. Since we are not resizing partitons so we rely on calling
-        # partx
-        if platform_distro().startswith(('centos', 'red', 'scientific')):
-            LOG.info('calling partx on prepared device %s', journal)
-            LOG.info('re-reading known partitions will display errors')
-            command(
-                [
-                    'partx',
-                    '-a',
-                    journal,
-                    ],
-                )
-
-        else:
-            LOG.debug('Calling partprobe on prepared device %s', journal)
-            command(
-                [
-                    'partprobe',
-                    journal,
-                    ],
-                )
+        update_partition('-a', journal, 'prepared')
 
         # wait for udev event queue to clear
         command(
@@ -1123,21 +1151,15 @@ def prepare_journal_dev(
                 ],
             )
 
-        journal_symlink = '/dev/disk/by-partuuid/{journal_uuid}'.format(
-            journal_uuid=journal_uuid,
-            )
-
-        journal_dmcrypt = None
-        if journal_dm_keypath:
-            journal_dmcrypt = journal_symlink
-            journal_symlink = '/dev/mapper/{uuid}'.format(uuid=journal_uuid)
-
         LOG.debug('Journal is GPT partition %s', journal_symlink)
+
+        # udev should have created the symlink by now. If not, abort.
+        assert os.path.exists(journal_symlink)
+
         return (journal_symlink, journal_dmcrypt, journal_uuid)
 
     except subprocess.CalledProcessError as e:
         raise Error(e)
-
 
 def prepare_journal_file(
     journal):
@@ -1299,12 +1321,7 @@ def prepare_dev(
                     data,
                 ],
             )
-            command(
-                [
-                    'partprobe',
-                    data,
-                    ],
-                )
+            update_partition('-a', data, 'created')
             command(
                 [
                     # wait for udev event queue to clear
@@ -1521,33 +1538,7 @@ def main_prepare(args):
         prepare_lock.release()  # noqa
 
         if stat.S_ISBLK(dmode):
-            # try to make sure the kernel refreshes the table.  note
-            # that if this gets ebusy, we are probably racing with
-            # udev because it already updated it.. ignore failure here.
-
-            # On RHEL and CentOS distros, calling partprobe forces a reboot of
-            # the server. Since we are not resizing partitons so we rely on
-            # calling partx
-            if platform_distro().startswith(('centos', 'red', 'scientific')):
-                LOG.info('calling partx on prepared device %s', args.data)
-                LOG.info('re-reading known partitions will display errors')
-
-                command(
-                    [
-                        'partx',
-                        '-a',
-                        args.data,
-                        ],
-                    )
-
-            else:
-                LOG.debug('Calling partprobe on prepared device %s', args.data)
-                command(
-                    [
-                        'partprobe',
-                        args.data,
-                        ],
-                    )
+            update_partition('-a', args.data, 'prepared')
 
     except Error as e:
         if journal_dm_keypath:
@@ -1635,6 +1626,12 @@ def auth_key(
         else:
             raise
 
+def get_mount_point(cluster, osd_id):
+    parent = STATEDIR + '/osd'
+    return os.path.join(
+        parent,
+        '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
+    )
 
 def move_mount(
     dev,
@@ -1645,11 +1642,7 @@ def move_mount(
     mount_options,
     ):
     LOG.debug('Moving mount to final location...')
-    parent = STATEDIR + '/osd'
-    osd_data = os.path.join(
-        parent,
-        '{cluster}-{osd_id}'.format(cluster=cluster, osd_id=osd_id),
-        )
+    osd_data = get_mount_point(cluster, osd_id)
     maybe_mkdir(osd_data)
 
     # pick best-of-breed mount options based on fs type
@@ -1827,10 +1820,8 @@ def mount_activate(
                 parent_dev = os.stat(STATEDIR + '/osd').st_dev
                 if dst_dev != parent_dev:
                     other = True
-                elif os.listdir((STATEDIR + '/osd/{cluster}-{osd_id}').format(
-                        cluster=cluster,
-                        osd_id=osd_id,
-                        )):
+                elif os.listdir(get_mount_point(cluster, osd_id)):
+                    LOG.info(get_mount_point(cluster, osd_id) + " is not empty, won't override")
                     other = True
 
         except OSError:
@@ -2038,6 +2029,7 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
+            osd_data = get_mount_point(cluster, osd_id)
 
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
@@ -2045,20 +2037,21 @@ def main_activate(args):
                 activate_key_template=args.activate_key_template,
                 init=args.mark_init,
                 )
-
-            if args.mark_init == 'none':
-                command_check_call(
-                    [
-                        'ceph-osd',
-                        '--cluster={cluster}'.format(cluster=cluster),
-                        '--id={osd_id}'.format(osd_id=osd_id),
-                        '--osd-data={path}'.format(path=args.path),
-                        '--osd-journal={path}/journal'.format(path=args.path),
-                    ],
-                )
+            osd_data = args.path
 
         else:
             raise Error('%s is not a directory or block device' % args.path)
+
+        if args.mark_init == 'none':
+            command_check_call(
+                [
+                    'ceph-osd',
+                    '--cluster={cluster}'.format(cluster=cluster),
+                    '--id={osd_id}'.format(osd_id=osd_id),
+                    '--osd-data={path}'.format(path=osd_data),
+                    '--osd-journal={path}/journal'.format(path=osd_data),
+                ],
+            )
 
         if args.mark_init not in (None, 'none' ):
 
@@ -2292,7 +2285,10 @@ def get_partition_type(part):
 
 
 def get_partition_uuid(dev):
-    (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
+    if 'loop' in dev or 'cciss' in dev:
+        (base, partnum) = re.match('(.*\d+)p(\d+)', dev).group(1, 2)
+    else:
+        (base, partnum) = re.match('(\D+)(\d+)', dev).group(1, 2)
     out, _ = command(['sgdisk', '-i', partnum, base])
     for line in out.splitlines():
         m = re.match('Partition unique GUID: (\S+)', line)

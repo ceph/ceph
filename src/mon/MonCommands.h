@@ -448,6 +448,9 @@ COMMAND("osd crush unlink " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"unlink <name> from crush map (everywhere, or just at <ancestor>)", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush reweight-all",
+	"recalculate the weights for the tree to ensure they sum correctly",
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush reweight " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=weight,type=CephFloat,range=0.0", \
@@ -459,8 +462,17 @@ COMMAND("osd crush reweight-subtree " \
 	"change all leaf items beneath <name> to <weight> in crush map", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush tunables " \
-	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|optimal|default", \
+	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|hammer|optimal|default", \
 	"set crush tunables values to <profile>", "osd", "rw", "cli,rest")
+COMMAND("osd crush set-tunable "				    \
+	"name=tunable,type=CephChoices,strings=straw_calc_version " \
+	"name=value,type=CephInt",
+	"set crush tunable <tunable> to <value>",
+	"osd", "rw", "cli,rest")
+COMMAND("osd crush get-tunable "			      \
+	"name=tunable,type=CephChoices,strings=straw_calc_version",
+	"get crush tunable <tunable>",
+	"osd", "rw", "cli,rest")
 COMMAND("osd crush show-tunables", \
 	"show current crush tunables", "osd", "r", "cli,rest")
 COMMAND("osd crush rule create-simple " \
@@ -500,10 +512,10 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")

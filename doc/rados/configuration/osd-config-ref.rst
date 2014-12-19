@@ -91,6 +91,7 @@ that Ceph uses the entire partition for the journal.
 
 
 .. index:: OSD; file system
+
 File System Settings
 ====================
 Ceph builds and mounts file systems which are used for Ceph OSDs.

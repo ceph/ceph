@@ -88,13 +88,28 @@ static void set_op_flags(::ObjectOperation *o, int flags)
     rados_flags |= CEPH_OSD_OP_FLAG_EXCL;
   if (flags & LIBRADOS_OP_FLAG_FAILOK)
     rados_flags |= CEPH_OSD_OP_FLAG_FAILOK;
+  if (flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)
+    rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_RANDOM;
+  if (flags & LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL)
+    rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
+  if (flags & LIBRADOS_OP_FLAG_FADVISE_WILLNEED)
+    rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_WILLNEED;
+  if (flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
+    rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
   o->set_last_op_flags(rados_flags);
 }
 
+//deprcated
 void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
   ::set_op_flags(o, (int)flags);
+}
+
+void librados::ObjectOperation::set_op_flags2(int flags)
+{
+  ::ObjectOperation *o = (::ObjectOperation *)impl;
+  ::set_op_flags(o, flags);
 }
 
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
@@ -314,10 +329,11 @@ void librados::ObjectWriteOperation::create(bool exclusive)
   o->create(exclusive);
 }
 
-void librados::ObjectWriteOperation::create(bool exclusive, const std::string& category)
+void librados::ObjectWriteOperation::create(bool exclusive,
+					    const std::string& category) // unused
 {
   ::ObjectOperation *o = (::ObjectOperation *)impl;
-  o->create(exclusive, category);
+  o->create(exclusive);
 }
 
 void librados::ObjectWriteOperation::write(uint64_t off, const bufferlist& bl)
@@ -476,6 +492,11 @@ void librados::ObjectWriteOperation::set_alloc_hint(
 
 librados::WatchCtx::
 ~WatchCtx()
+{
+}
+
+librados::WatchCtx2::
+~WatchCtx2()
 {
 }
 
@@ -647,6 +668,7 @@ librados::NObjectIterator::~NObjectIterator()
 librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
 {
   if (rhs.impl == NULL) {
+    delete impl;
     impl = NULL;
     return;
   }
@@ -656,6 +678,11 @@ librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
 
 librados::NObjectIterator& librados::NObjectIterator::operator=(const librados::NObjectIterator &rhs)
 {
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
   if (impl == NULL)
     impl = new NObjectIteratorImpl();
   *impl = *(rhs.impl);
@@ -1015,10 +1042,11 @@ int librados::IoCtx::create(const std::string& oid, bool exclusive)
   return io_ctx_impl->create(obj, exclusive);
 }
 
-int librados::IoCtx::create(const std::string& oid, bool exclusive, const std::string& category)
+int librados::IoCtx::create(const std::string& oid, bool exclusive,
+			    const std::string& category) // unused
 {
   object_t obj(oid);
-  return io_ctx_impl->create(obj, exclusive, category);
+  return io_ctx_impl->create(obj, exclusive);
 }
 
 int librados::IoCtx::write(const std::string& oid, bufferlist& bl, size_t len, uint64_t off)
@@ -1650,20 +1678,50 @@ int librados::IoCtx::watch(const string& oid, uint64_t ver, uint64_t *cookie,
 			   librados::WatchCtx *ctx)
 {
   object_t obj(oid);
-  return io_ctx_impl->watch(obj, ver, cookie, ctx);
+  return io_ctx_impl->watch(obj, cookie, ctx, NULL);
+}
+
+int librados::IoCtx::watch2(const string& oid, uint64_t *cookie,
+			    librados::WatchCtx2 *ctx2)
+{
+  object_t obj(oid);
+  return io_ctx_impl->watch(obj, cookie, NULL, ctx2);
 }
 
 int librados::IoCtx::unwatch(const string& oid, uint64_t handle)
 {
-  uint64_t cookie = handle;
   object_t obj(oid);
-  return io_ctx_impl->unwatch(obj, cookie);
+  return io_ctx_impl->unwatch(handle);
+}
+
+int librados::IoCtx::unwatch2(uint64_t handle)
+{
+  return io_ctx_impl->unwatch(handle);
+}
+
+int librados::IoCtx::watch_check(uint64_t handle)
+{
+  return io_ctx_impl->watch_check(handle);
 }
 
 int librados::IoCtx::notify(const string& oid, uint64_t ver, bufferlist& bl)
 {
   object_t obj(oid);
-  return io_ctx_impl->notify(obj, ver, bl);
+  return io_ctx_impl->notify(obj, bl, 0, NULL, NULL, NULL);
+}
+
+int librados::IoCtx::notify2(const string& oid, bufferlist& bl,
+			     uint64_t timeout_ms, bufferlist *preplybl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->notify(obj, bl, timeout_ms, preplybl, NULL, NULL);
+}
+
+void librados::IoCtx::notify_ack(const std::string& o,
+				 uint64_t notify_id, uint64_t handle,
+				 bufferlist& bl)
+{
+  io_ctx_impl->notify_ack(o, notify_id, handle, bl);
 }
 
 int librados::IoCtx::list_watchers(const std::string& oid,
@@ -1958,67 +2016,52 @@ void librados::Rados::test_blacklist_self(bool set)
   client->blacklist_self(set);
 }
 
-int librados::Rados::get_pool_stats(std::list<string>& v, std::map<string, stats_map>& result)
-{
-  string category;
-  return get_pool_stats(v, category, result);
-}
-
-int librados::Rados::get_pool_stats(std::list<string>& v, string& category,
-				    std::map<string, stats_map>& result)
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    stats_map& result)
 {
   map<string,::pool_stat_t> rawresult;
   int r = client->get_pool_stats(v, rawresult);
-  if (r < 0)
-    return r;
   for (map<string,::pool_stat_t>::iterator p = rawresult.begin();
        p != rawresult.end();
        ++p) {
-    stats_map& c = result[p->first];
-
-    string cat;
-    vector<string> cats;
-
-    if (!category.size()) {
-      cats.push_back(cat);
-      map<string,object_stat_sum_t>::iterator iter;
-      for (iter = p->second.stats.cat_sum.begin(); iter != p->second.stats.cat_sum.end(); ++iter) {
-        cats.push_back(iter->first);
-      }
-    } else {
-      cats.push_back(category);
-    }
-
-    vector<string>::iterator cat_iter;
-    for (cat_iter = cats.begin(); cat_iter != cats.end(); ++cat_iter) {
-      string& cur_category = *cat_iter;
-      object_stat_sum_t *sum;
-
-      if (!cur_category.size()) {
-         sum = &p->second.stats.sum;
-      } else {
-        map<string,object_stat_sum_t>::iterator iter = p->second.stats.cat_sum.find(cur_category);
-        if (iter == p->second.stats.cat_sum.end())
-          continue;
-        sum = &iter->second;
-      }
-
-      pool_stat_t& pv = c[cur_category];
-      pv.num_kb = SHIFT_ROUND_UP(sum->num_bytes, 10);
-      pv.num_bytes = sum->num_bytes;
-      pv.num_objects = sum->num_objects;
-      pv.num_object_clones = sum->num_object_clones;
-      pv.num_object_copies = sum->num_object_copies;
-      pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
-      pv.num_objects_unfound = sum->num_objects_unfound;
-      pv.num_objects_degraded = sum->num_objects_degraded;
-      pv.num_rd = sum->num_rd;
-      pv.num_rd_kb = sum->num_rd_kb;
-      pv.num_wr = sum->num_wr;
-      pv.num_wr_kb = sum->num_wr_kb;
-    }
+    pool_stat_t& pv = result[p->first];
+    object_stat_sum_t *sum = &p->second.stats.sum;
+    pv.num_kb = SHIFT_ROUND_UP(sum->num_bytes, 10);
+    pv.num_bytes = sum->num_bytes;
+    pv.num_objects = sum->num_objects;
+    pv.num_object_clones = sum->num_object_clones;
+    pv.num_object_copies = sum->num_object_copies;
+    pv.num_objects_missing_on_primary = sum->num_objects_missing_on_primary;
+    pv.num_objects_unfound = sum->num_objects_unfound;
+    pv.num_objects_degraded = sum->num_objects_degraded;
+    pv.num_rd = sum->num_rd;
+    pv.num_rd_kb = sum->num_rd_kb;
+    pv.num_wr = sum->num_wr;
+    pv.num_wr_kb = sum->num_wr_kb;
   }
   return r;
+}
+
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    std::map<string, stats_map>& result)
+{
+  stats_map m;
+  int r = get_pool_stats(v, m);
+  if (r < 0)
+    return r;
+  for (map<string,pool_stat_t>::iterator p = m.begin();
+       p != m.end();
+       ++p) {
+    result[p->first][string()] = p->second;
+  }
+  return r;
+}
+
+int librados::Rados::get_pool_stats(std::list<string>& v,
+				    string& category, // unused
+				    std::map<string, stats_map>& result)
+{
+  return -EOPNOTSUPP;
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)
@@ -3736,31 +3779,91 @@ struct C_WatchCB : public librados::WatchCtx {
   }
 };
 
-int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver, uint64_t *handle,
-                rados_watchcb_t watchcb, void *arg)
+extern "C" int rados_watch(rados_ioctx_t io, const char *o, uint64_t ver,
+			   uint64_t *handle,
+			   rados_watchcb_t watchcb, void *arg)
 {
   tracepoint(librados, rados_watch_enter, io, o, ver, watchcb, arg);
   uint64_t *cookie = handle;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   object_t oid(o);
   C_WatchCB *wc = new C_WatchCB(watchcb, arg);
-  int retval = ctx->watch(oid, ver, cookie, wc);
+  int retval = ctx->watch(oid, cookie, wc, NULL);
   tracepoint(librados, rados_watch_exit, retval, *handle);
   return retval;
 }
 
-int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
+struct C_WatchCB2 : public librados::WatchCtx2 {
+  rados_watchcb2_t wcb;
+  rados_watcherrcb_t errcb;
+  void *arg;
+  C_WatchCB2(rados_watchcb2_t _wcb,
+	     rados_watcherrcb_t _errcb,
+	     void *_arg) : wcb(_wcb), errcb(_errcb), arg(_arg) {}
+  void handle_notify(uint64_t notify_id,
+		     uint64_t cookie,
+		     uint64_t notifier_gid,
+		     bufferlist& bl) {
+    wcb(arg, notify_id, cookie, notifier_gid, bl.c_str(), bl.length());
+  }
+  void handle_error(uint64_t cookie, int err) {
+    if (errcb)
+      errcb(arg, cookie, err);
+  }
+};
+
+extern "C" int rados_watch2(rados_ioctx_t io, const char *o, uint64_t *handle,
+			    rados_watchcb2_t watchcb,
+			    rados_watcherrcb_t watcherrcb,
+			    void *arg)
+{
+  tracepoint(librados, rados_watch2_enter, io, o, handle, watchcb, arg);
+  int ret;
+  if (!watchcb || !o || !handle) {
+    ret = -EINVAL;
+  } else {
+    uint64_t *cookie = handle;
+    librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+    object_t oid(o);
+    C_WatchCB2 *wc = new C_WatchCB2(watchcb, watcherrcb, arg);
+    ret = ctx->watch(oid, cookie, NULL, wc);
+  }
+  tracepoint(librados, rados_watch_exit, ret, handle ? *handle : 0);
+  return ret;
+}
+
+extern "C" int rados_unwatch(rados_ioctx_t io, const char *o, uint64_t handle)
 {
   tracepoint(librados, rados_unwatch_enter, io, o, handle);
   uint64_t cookie = handle;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  object_t oid(o);
-  int retval = ctx->unwatch(oid, cookie);
+  int retval = ctx->unwatch(cookie);
   tracepoint(librados, rados_unwatch_exit, retval);
   return retval;
 }
 
-int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf, int buf_len)
+extern "C" int rados_unwatch2(rados_ioctx_t io, uint64_t handle)
+{
+  tracepoint(librados, rados_unwatch2_enter, io, handle);
+  uint64_t cookie = handle;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int retval = ctx->unwatch(cookie);
+  tracepoint(librados, rados_unwatch2_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_watch_check(rados_ioctx_t io, uint64_t handle)
+{
+  tracepoint(librados, rados_watch_check_enter, io, handle);
+  uint64_t cookie = handle;
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  int retval = ctx->watch_check(cookie);
+  tracepoint(librados, rados_watch_check_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_notify(rados_ioctx_t io, const char *o,
+			    uint64_t ver, const char *buf, int buf_len)
 {
   tracepoint(librados, rados_notify_enter, io, o, ver, buf, buf_len);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -3771,8 +3874,47 @@ int rados_notify(rados_ioctx_t io, const char *o, uint64_t ver, const char *buf,
     memcpy(p.c_str(), buf, buf_len);
     bl.push_back(p);
   }
-  int retval = ctx->notify(oid, ver, bl);
+  int retval = ctx->notify(oid, bl, 0, NULL, NULL, NULL);
   tracepoint(librados, rados_notify_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_notify2(rados_ioctx_t io, const char *o,
+			     const char *buf, int buf_len,
+			     uint64_t timeout_ms,
+			     char **reply_buffer,
+			     size_t *reply_buffer_len)
+{
+  tracepoint(librados, rados_notify2_enter, io, o, buf, buf_len, timeout_ms);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  if (buf) {
+    bufferptr p = buffer::create(buf_len);
+    memcpy(p.c_str(), buf, buf_len);
+    bl.push_back(p);
+  }
+  int ret = ctx->notify(oid, bl, timeout_ms, NULL, reply_buffer, reply_buffer_len);
+  tracepoint(librados, rados_notify2_exit, ret);
+  return ret;
+}
+
+extern "C" int rados_notify_ack(rados_ioctx_t io, const char *o,
+				uint64_t notify_id, uint64_t handle,
+				const char *buf, int buf_len)
+{
+  tracepoint(librados, rados_notify_ack_enter, io, o, notify_id, handle, buf, buf_len);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  object_t oid(o);
+  bufferlist bl;
+  if (buf) {
+    bufferptr p = buffer::create(buf_len);
+    memcpy(p.c_str(), buf, buf_len);
+    bl.push_back(p);
+  }
+  ctx->notify_ack(oid, notify_id, handle, bl);
+  int retval = 0;
+  tracepoint(librados, rados_notify_ack_exit, retval);
   return retval;
 }
 
@@ -4002,15 +4144,11 @@ extern "C" void rados_write_op_rmxattr(rados_write_op_t write_op,
 
 extern "C" void rados_write_op_create(rados_write_op_t write_op,
                                       int exclusive,
-				      const char* category)
+				      const char* category) // unused
 {
-  tracepoint(librados, rados_write_op_create_enter, write_op, exclusive, category);
+  tracepoint(librados, rados_write_op_create_enter, write_op, exclusive);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
-  if(category) {
-    oo->create(exclusive, category);
-  } else {
-    oo->create(!!exclusive);
-  }
+  oo->create(!!exclusive);
   tracepoint(librados, rados_write_op_create_exit);
 }
 
@@ -4507,6 +4645,7 @@ librados::ListObject::ListObject(librados::ListObjectImpl *i): impl(i)
 librados::ListObject::ListObject(const ListObject& rhs)
 {
   if (rhs.impl == NULL) {
+    delete impl;
     impl = NULL;
     return;
   }
@@ -4516,6 +4655,11 @@ librados::ListObject::ListObject(const ListObject& rhs)
 
 librados::ListObject& librados::ListObject::operator=(const ListObject& rhs)
 {
+  if (rhs.impl == NULL) {
+    delete impl;
+    impl = NULL;
+    return *this;
+  }
   if (impl == NULL)
     impl = new ListObjectImpl();
   *impl = *(rhs.impl);

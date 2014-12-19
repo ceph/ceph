@@ -287,6 +287,7 @@ inline void decode(T &o, bufferlist& bl)
 #include <vector>
 #include <string>
 #include <boost/optional.hpp>
+#include <boost/tuple/tuple.hpp>
 
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
@@ -294,7 +295,6 @@ inline void decode(T &o, bufferlist& bl)
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
 
-#include "triple.h"
 
 // boost optional
 template<typename T>
@@ -318,6 +318,22 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
   }
 }
 
+//triple tuple
+template<class A, class B, class C>
+inline void encode(const boost::tuple<A, B, C> &t, bufferlist& bl)
+{
+  encode(boost::get<0>(t), bl);
+  encode(boost::get<1>(t), bl);
+  encode(boost::get<2>(t), bl);
+}
+template<class A, class B, class C>
+inline void decode(boost::tuple<A, B, C> &t, bufferlist::iterator &bp)
+{
+  decode(boost::get<0>(t), bp);
+  decode(boost::get<1>(t), bp);
+  decode(boost::get<2>(t), bp);
+}
+
 // pair
 template<class A, class B>
 inline void encode(const std::pair<A,B> &p, bufferlist &bl, uint64_t features)
@@ -337,23 +353,6 @@ inline void decode(std::pair<A,B> &pa, bufferlist::iterator &p)
   decode(pa.first, p);
   decode(pa.second, p);
 }
-
-// triple
-template<class A, class B, class C>
-inline void encode(const triple<A,B,C> &t, bufferlist &bl)
-{
-  encode(t.first, bl);
-  encode(t.second, bl);
-  encode(t.third, bl);
-}
-template<class A, class B, class C>
-inline void decode(triple<A,B,C> &t, bufferlist::iterator &p)
-{
-  decode(t.first, p);
-  decode(t.second, p);
-  decode(t.third, p);
-}
-
 
 // list
 template<class T>
@@ -437,6 +436,28 @@ inline void encode(const std::set<T>& s, bufferlist& bl)
 }
 template<class T>
 inline void decode(std::set<T>& s, bufferlist::iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  s.clear();
+  while (n--) {
+    T v;
+    decode(v, p);
+    s.insert(v);
+  }
+}
+
+// multiset
+template<class T>
+inline void encode(const std::multiset<T>& s, bufferlist& bl)
+{
+  __u32 n = (__u32)(s.size());
+  encode(n, bl);
+  for (typename std::multiset<T>::const_iterator p = s.begin(); p != s.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode(std::multiset<T>& s, bufferlist::iterator& p)
 {
   __u32 n;
   decode(n, p);

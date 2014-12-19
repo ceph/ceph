@@ -144,4 +144,18 @@ directories do not have layouts set:
     $ getfattr -n ceph.file.layout dir/childdir/grandchild
     # file: dir/childdir/grandchild
     ceph.file.layout="stripe_unit=4194304 stripe_count=4 object_size=4194304 pool=cephfs_data"
+
     
+Adding a data pool to the MDS
+---------------------------------
+
+Before you can use a pool with CephFS you have to add it to the Metadata Servers.
+
+.. code-block:: bash
+
+    $ ceph mds add_data_pool cephfs_data_ssd
+    # Pool should now show up
+    $ ceph fs ls
+    .... data pools: [cephfs_data cephfs_data_ssd ]
+
+Make sure that your cephx keys allows the client to access this new pool.

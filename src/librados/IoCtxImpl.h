@@ -47,11 +47,10 @@ struct librados::IoCtxImpl {
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
-  Mutex *lock;
   Objecter *objecter;
 
   IoCtxImpl();
-  IoCtxImpl(RadosClient *c, Objecter *objecter, Mutex *client_lock,
+  IoCtxImpl(RadosClient *c, Objecter *objecter,
 	    int poolid, const char *pool_name, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
@@ -66,7 +65,6 @@ struct librados::IoCtxImpl {
     last_objver = rhs.last_objver;
     notify_timeout = rhs.notify_timeout;
     oloc = rhs.oloc;
-    lock = rhs.lock;
     objecter = rhs.objecter;
   }
 
@@ -115,7 +113,6 @@ struct librados::IoCtxImpl {
   int list(Objecter::ListContext *context, int max_entries);
   uint32_t list_seek(Objecter::ListContext *context, uint32_t pos);
   int create(const object_t& oid, bool exclusive);
-  int create(const object_t& oid, bool exclusive, const std::string& category);
   int write(const object_t& oid, bufferlist& bl, size_t len, uint64_t off);
   int append(const object_t& oid, bufferlist& bl, size_t len);
   int write_full(const object_t& oid, bufferlist& bl);
@@ -198,12 +195,14 @@ struct librados::IoCtxImpl {
 		  bufferlist *pbl);
 
   void set_sync_op_version(version_t ver);
-  int watch(const object_t& oid, uint64_t ver, uint64_t *cookie, librados::WatchCtx *ctx);
-  int unwatch(const object_t& oid, uint64_t cookie);
-  int notify(const object_t& oid, uint64_t ver, bufferlist& bl);
-  int _notify_ack(
-    const object_t& oid, uint64_t notify_id, uint64_t ver,
-    uint64_t cookie);
+  int watch(const object_t& oid, uint64_t *cookie, librados::WatchCtx *ctx,
+	    librados::WatchCtx2 *ctx2);
+  int watch_check(uint64_t cookie);
+  int unwatch(uint64_t cookie);
+  int notify(const object_t& oid, bufferlist& bl, uint64_t timeout_ms,
+	     bufferlist *preplybl, char **preply_buf, size_t *preply_buf_len);
+  int notify_ack(const object_t& oid, uint64_t notify_id, uint64_t cookie,
+		 bufferlist& bl);
 
   int set_alloc_hint(const object_t& oid,
                      uint64_t expected_object_size,
@@ -216,49 +215,4 @@ struct librados::IoCtxImpl {
 
 };
 
-namespace librados {
-
-  /**
-   * watch/notify info
-   *
-   * Capture state about a watch or an in-progress notify
-   */
-struct WatchNotifyInfo : public RefCountedWaitObject {
-  IoCtxImpl *io_ctx_impl;  // parent
-  const object_t oid;      // the object
-  uint64_t linger_id;      // we use this to unlinger when we are done
-  uint64_t cookie;         // callback cookie
-
-  // watcher
-  librados::WatchCtx *watch_ctx;
-
-  // notify that we initiated
-  Mutex *notify_lock;
-  Cond *notify_cond;
-  bool *notify_done;
-  int *notify_rval;
-
-  WatchNotifyInfo(IoCtxImpl *io_ctx_impl_,
-		  const object_t& _oc)
-    : io_ctx_impl(io_ctx_impl_),
-      oid(_oc),
-      linger_id(0),
-      cookie(0),
-      watch_ctx(NULL),
-      notify_lock(NULL),
-      notify_cond(NULL),
-      notify_done(NULL),
-      notify_rval(NULL) {
-    io_ctx_impl->get();
-  }
-
-  ~WatchNotifyInfo() {
-    io_ctx_impl->put();
-  }
-
-  void notify(Mutex *lock, uint8_t opcode, uint64_t ver, uint64_t notify_id,
-	      bufferlist& payload,
-	      int return_code);
-};
-}
 #endif

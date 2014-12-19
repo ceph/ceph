@@ -29,6 +29,7 @@ void usage()
   cout << "   --export-crush <file>   write osdmap's crush map to <file>" << std::endl;
   cout << "   --import-crush <file>   replace osdmap's crush map with <file>" << std::endl;
   cout << "   --test-map-pgs [--pool <poolid>] map all pgs" << std::endl;
+  cout << "   --test-map-pgs-dump [--pool <poolid>] map all pgs" << std::endl;
   cout << "   --mark-up-in            mark osds up and in (but do not persist)" << std::endl;
   cout << "   --clear-temp            clear pg_temp and primary_temp" << std::endl;
   cout << "   --test-random           do random placements" << std::endl;
@@ -69,6 +70,7 @@ int main(int argc, const char **argv)
   bool mark_up_in = false;
   bool clear_temp = false;
   bool test_map_pgs = false;
+  bool test_map_pgs_dump = false;
   bool test_random = false;
 
   std::string val;
@@ -98,6 +100,8 @@ int main(int argc, const char **argv)
       clear_temp = true;
     } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
       test_map_pgs = true;
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)NULL)) {
+      test_map_pgs_dump = true;
     } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
       test_random = true;
     } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
@@ -307,7 +311,7 @@ int main(int argc, const char **argv)
          << ") acting (" << acting << ", p" << acting_primary << ")"
          << std::endl;
   }
-  if (test_map_pgs) {
+  if (test_map_pgs || test_map_pgs_dump) {
     if (pool != -1 && !osdmap.have_pg_pool(pool)) {
       cerr << "There is no pool " << pool << std::endl;
       exit(1);
@@ -341,6 +345,9 @@ int main(int argc, const char **argv)
 	  osdmap.pg_to_acting_osds(pgid, &osds, &primary);
 	}
 	size[osds.size()]++;
+
+	if (test_map_pgs_dump)
+	  cout << pgid << "\t" << osds << "\t" << primary << std::endl;
 
 	for (unsigned i=0; i<osds.size(); i++) {
 	  //cout << " rep " << i << " on " << osds[i] << std::endl;
@@ -446,7 +453,7 @@ int main(int argc, const char **argv)
   if (!print && !print_json && !tree && !modified && 
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
-      !test_map_pgs) {
+      !test_map_pgs && !test_map_pgs_dump) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
@@ -463,7 +470,7 @@ int main(int argc, const char **argv)
 
   if (modified) {
     bl.clear();
-    osdmap.encode(bl);
+    osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
 
     // write it out
     cout << me << ": writing epoch " << osdmap.get_epoch()

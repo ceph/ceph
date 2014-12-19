@@ -37,9 +37,12 @@
 #endif
 #endif
 
+#include <pthread.h>
+
 #include "include/Context.h"
 #include "include/unordered_map.h"
 #include "common/WorkQueue.h"
+#include "net_handler.h"
 
 #define EVENT_NONE 0
 #define EVENT_READABLE 1
@@ -110,6 +113,8 @@ class EventCenter {
   time_t last_time; // last time process time event
   int notify_receive_fd;
   int notify_send_fd;
+  NetHandler net;
+  pthread_t owner;
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
@@ -124,15 +129,19 @@ class EventCenter {
     cct(c), nevent(0),
     lock("AsyncMessenger::lock"),
     driver(NULL), time_event_next_id(0),
-    notify_receive_fd(-1), notify_send_fd(-1) {
+    notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0) {
     last_time = time(NULL);
   }
   ~EventCenter();
   int init(int nevent);
+  void set_owner(pthread_t p) { owner = p; }
+  pthread_t get_owner() { return owner; }
+
   // Used by internal thread
   int create_file_event(int fd, int mask, EventCallbackRef ctxt);
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
+  void delete_time_event(uint64_t id);
   int process_events(int timeout_microseconds);
   void wakeup();
 

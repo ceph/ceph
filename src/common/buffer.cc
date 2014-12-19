@@ -19,6 +19,7 @@
 #include "common/safe_io.h"
 #include "common/simple_spin.h"
 #include "common/strtol.h"
+#include "common/likely.h"
 #include "include/atomic.h"
 #include "common/Mutex.h"
 #include "include/types.h"
@@ -160,6 +161,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
     bool is_n_page_sized() {
       return (len & ~CEPH_PAGE_MASK) == 0;
+    }
+    virtual bool is_shareable() {
+      // true if safe to reference/share the existing buffer copy
+      // false if it is not safe to share the buffer, e.g., due to special
+      // and/or registered memory that is scarce
+      return true;
     }
     bool get_crc(const pair<size_t, size_t> &fromto,
 		 pair<uint32_t, uint32_t> *crc) const {
@@ -328,7 +335,7 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
     ~raw_pipe() {
       if (data)
-	delete data;
+	free(data);
       close_pipe(pipefds);
       dec_total_alloc(len);
       bdout << "raw_pipe " << this << " free " << (void *)data << " "
@@ -492,6 +499,27 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   };
 
+  class buffer::raw_unshareable : public buffer::raw {
+  public:
+    raw_unshareable(unsigned l) : raw(l) {
+      if (len)
+	data = new char[len];
+      else
+	data = 0;
+    }
+    raw_unshareable(unsigned l, char *b) : raw(b, l) {
+    }
+    raw* clone_empty() {
+      return new raw_char(len);
+    }
+    bool is_shareable() {
+      return false; // !shareable, will force make_shareable()
+    }
+    ~raw_unshareable() {
+      delete[] data;
+    }
+  };
+
   class buffer::raw_static : public buffer::raw {
   public:
     raw_static(const char *d, unsigned l) : raw((char*)d, l) { }
@@ -547,6 +575,10 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 #endif
   }
 
+  buffer::raw* buffer::create_unshareable(unsigned len) {
+    return new raw_unshareable(len);
+  }
+
   buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
   {
     r->nref.inc();
@@ -600,6 +632,18 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
   buffer::raw *buffer::ptr::clone()
   {
     return _raw->clone();
+  }
+
+  buffer::ptr& buffer::ptr::make_shareable() {
+    if (_raw && !_raw->is_shareable()) {
+      buffer::raw *tr = _raw;
+      _raw = tr->clone();
+      _raw->nref.set(1);
+      if (unlikely(tr->nref.dec() == 0)) {
+        delete tr;
+      }
+    }
+    return *this;
   }
 
   void buffer::ptr::swap(ptr& other)
@@ -1119,10 +1163,16 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
 
 void buffer::list::rebuild_aligned(unsigned align)
 {
+  rebuild_aligned_size_and_memory(align, align);
+}
+
+void buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
+						   unsigned align_memory)
+{
   std::list<ptr>::iterator p = _buffers.begin();
   while (p != _buffers.end()) {
     // keep anything that's already align and sized aligned
-    if (p->is_aligned(align) && p->is_n_align_sized(align)) {
+    if (p->is_aligned(align_memory) && p->is_n_align_sized(align_size)) {
       /*cout << " segment " << (void*)p->c_str()
 	     << " offset " << ((unsigned long)p->c_str() & (align - 1))
 	     << " length " << p->length()
@@ -1146,11 +1196,11 @@ void buffer::list::rebuild_aligned(unsigned align)
       unaligned.push_back(*p);
       _buffers.erase(p++);
     } while (p != _buffers.end() &&
-	     (!p->is_aligned(align) ||
-	      !p->is_n_align_sized(align) ||
-	      (offset & (align-1))));
-    if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align))) {
-      ptr nb(buffer::create_aligned(unaligned._len, align));
+	     (!p->is_aligned(align_memory) ||
+	      !p->is_n_align_sized(align_size) ||
+	      (offset % align_size)));
+    if (!(unaligned.is_contiguous() && unaligned._buffers.front().is_aligned(align_memory))) {
+      ptr nb(buffer::create_aligned(unaligned._len, align_memory));
       unaligned.rebuild(nb);
       _memcopy_count += unaligned._len;
     }
@@ -1164,27 +1214,31 @@ void buffer::list::rebuild_page_aligned()
 }
 
   // sort-of-like-assignment-op
-  void buffer::list::claim(list& bl)
+  void buffer::list::claim(list& bl, unsigned int flags)
   {
     // free my buffers
     clear();
-    claim_append(bl);
+    claim_append(bl, flags);
   }
 
-  void buffer::list::claim_append(list& bl)
+  void buffer::list::claim_append(list& bl, unsigned int flags)
   {
     // steal the other guy's buffers
     _len += bl._len;
-    _buffers.splice( _buffers.end(), bl._buffers );
+    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
+      bl.make_shareable();
+    _buffers.splice(_buffers.end(), bl._buffers );
     bl._len = 0;
     bl.last_p = bl.begin();
   }
 
-  void buffer::list::claim_prepend(list& bl)
+  void buffer::list::claim_prepend(list& bl, unsigned int flags)
   {
     // steal the other guy's buffers
     _len += bl._len;
-    _buffers.splice( _buffers.begin(), bl._buffers );
+    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
+      bl.make_shareable();
+    _buffers.splice(_buffers.begin(), bl._buffers );
     bl._len = 0;
     bl.last_p = bl.begin();
   }
@@ -1360,6 +1414,10 @@ void buffer::list::rebuild_page_aligned()
   {
     if (orig_off + len > length())
       throw end_of_buffer();
+
+    if (len == 0) {
+      return 0;
+    }
 
     unsigned off = orig_off;
     std::list<ptr>::iterator curbuf = _buffers.begin();

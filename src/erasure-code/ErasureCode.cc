@@ -66,21 +66,14 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   unsigned int k = get_data_chunk_count();
   unsigned int m = get_chunk_count() - k;
   unsigned blocksize = get_chunk_size(raw.length());
-  unsigned pad_len = blocksize * k - raw.length();
   unsigned padded_chunks = k - raw.length() / blocksize;
   bufferlist prepared = raw;
-
-  if (!prepared.is_aligned(SIMD_ALIGN)) {
-    // splice padded chunks off to make the rebuild faster
-    if (padded_chunks)
-      prepared.splice((k - padded_chunks) * blocksize,
-                      padded_chunks * blocksize - pad_len);
-    prepared.rebuild_aligned(SIMD_ALIGN);
-  }
 
   for (unsigned int i = 0; i < k - padded_chunks; i++) {
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, i * blocksize, blocksize);
+    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
+    assert(chunk.is_contiguous());
   }
   if (padded_chunks) {
     unsigned remainder = raw.length() - (k - padded_chunks) * blocksize;

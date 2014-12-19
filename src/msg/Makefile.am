@@ -20,7 +20,8 @@ libmsg_la_SOURCES += \
 	msg/async/AsyncConnection.cc \
 	msg/async/AsyncMessenger.cc \
 	msg/async/Event.cc \
-	msg/async/net_handler.cc
+	msg/async/net_handler.cc \
+	msg/async/EventSelect.cc
 
 if LINUX
 libmsg_la_SOURCES += msg/async/EventEpoll.cc
@@ -44,6 +45,8 @@ noinst_HEADERS += \
 	msg/async/AsyncConnection.h \
 	msg/async/AsyncMessenger.h \
 	msg/async/Event.h \
+	msg/async/EventEpoll.h \
+	msg/async/EventSelect.h \
 	msg/async/net_handler.h
 
 if LINUX

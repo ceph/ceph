@@ -14,83 +14,113 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-
-source test/mon/mon-test-helpers.sh
-source test/osd/osd-test-helpers.sh
+source test/ceph-helpers.sh
 
 function run() {
     local dir=$1
+    shift
 
     export CEPH_MON="127.0.0.1:7107"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
+    local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
+    for func in $funcs ; do
+        $func $dir || return 1
+    done
+}
+
+function add_something() {
+    local dir=$1
+    local poolname=$2
+
+    wait_for_clean || return 1
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
+    local payload=ABCDEF
+    echo $payload > $dir/ORIGINAL
+    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
+}
+
+#
+# Corrupt one copy of a replicated pool
+#
+function TEST_corrupt_and_repair_replicated() {
+    local dir=$1
+    local poolname=rbd
+
     setup $dir || return 1
-    run_mon $dir a --public-addr $CEPH_MON || return 1
-    for id in $(seq 0 3) ; do
-        run_osd $dir $id || return 1
-    done
-    FUNCTIONS=${FUNCTIONS:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
-    for TEST_function in $FUNCTIONS ; do
-        if ! $TEST_function $dir ; then
-            cat $dir/a/log
-            return 1
-        fi
-    done
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+
+    add_something $dir $poolname
+    corrupt_and_repair_one $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
+    # Reproduces http://tracker.ceph.com/issues/8914
+    corrupt_and_repair_one $dir $poolname $(get_primary $poolname SOMETHING) || return 1
+
     teardown $dir || return 1
 }
 
-# 
-# 1) add an object 
-# 2) remove the corresponding file from the primary OSD
+#
+# 1) add an object
+# 2) remove the corresponding file from a designated OSD
 # 3) repair the PG
+# 4) check that the file has been restored in the designated OSD
 #
-# Reproduces http://tracker.ceph.com/issues/8914
-#
-function TEST_bug_8914() {
+function corrupt_and_repair_one() {
     local dir=$1
-    local poolname=rbd
+    local poolname=$2
+    local osd=$3
+
+    #
+    # 1) remove the corresponding file from the OSD
+    #
+    objectstore_tool $dir $osd SOMETHING remove || return 1
+    #
+    # 2) repair the PG
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    repair $pg
+    #
+    # 3) The file must be back
+    #
+    objectstore_tool $dir $osd SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+}
+    wait_for_clean || return 1
+
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
     local payload=ABCDEF
-
-    ./ceph osd set noscrub || return 1
-    ./ceph osd set nodeep-scrub || return 1
-
     echo $payload > $dir/ORIGINAL
     #
-    # 1) add an object 
+    # 1) add an object
     #
-    ./rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
-    local -a osds=($(get_osds $poolname SOMETHING))
-    local file=$(find $dir/${osds[$first]} -name '*SOMETHING*')
-    local -i tries=0
-    while [ ! -f $file -a $tries -lt 100 ] ; do
-        let tries++
-        sleep 1
-    done
-    grep --quiet --recursive --text $payload $file || return 1
+    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
     #
-    # 2) remove the corresponding file from the primary OSD
+    # 2) remove the corresponding file from the OSD
     #
-    rm $file
+    objectstore_tool $dir $osd SOMETHING remove || return 1
     #
     # 3) repair the PG
     #
     local pg=$(get_pg $poolname SOMETHING)
-    ./ceph pg repair $pg
-    local -i tries=0
-    while [ ! -f $file -a $tries -lt 100 ] ; do
-        let tries++
-        sleep 1
-    done
+    repair $pg
     #
     # The file must be back
     #
-    test -f $file || return 1
+    objectstore_tool $dir $osd SOMETHING list-attrs || return 1
 }
 
-main osd-scrub-repair
+main osd-scrub-repair "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && test/osd/osd-scrub-repair.sh"
+# compile-command: "cd ../.. ; make -j4 && \
+#    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_primary_replicated"
 # End:

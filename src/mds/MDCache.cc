@@ -174,6 +174,7 @@ MDCache::MDCache(MDS *m) :
   migrator = new Migrator(mds, this);
   root = NULL;
   myin = NULL;
+  readonly = false;
 
   stray_index = 0;
   for (int i = 0; i < NUM_STRAY; ++i) {
@@ -415,6 +416,8 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
   CDir *mydir = my->get_or_open_dirfrag(this, frag_t());
   adjust_subtree_auth(mydir, mds->whoami);   
 
+  LogSegment *ls = mds->mdlog->get_current_segment();
+
   // stray dir
   for (int i = 0; i < NUM_STRAY; ++i) {
     CInode *stray = create_system_inode(MDS_INO_STRAY(mds->whoami, i), S_IFDIR);
@@ -430,8 +433,10 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     mydir->fnode.fragstat.nsubdirs++;
     // save them
     straydir->mark_complete();
-    straydir->mark_dirty(straydir->pre_dirty(), mds->mdlog->get_current_segment());
+    straydir->mark_dirty(straydir->pre_dirty(), ls);
     straydir->commit(0, gather->new_sub());
+    stray->_mark_dirty_parent(ls, true);
+    stray->store_backtrace(gather->new_sub());
   }
 
   CInode *journal = create_system_inode(MDS_INO_LOG_OFFSET + mds->whoami, S_IFREG);
@@ -451,7 +456,7 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
 
 
   mydir->mark_complete();
-  mydir->mark_dirty(mydir->pre_dirty(), mds->mdlog->get_current_segment());
+  mydir->mark_dirty(mydir->pre_dirty(), ls);
   mydir->commit(0, gather->new_sub());
 
   myin->store(gather->new_sub());
@@ -4857,7 +4862,8 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
-				       cap_exports[p->first][q->first].cap_id, 0);
+				       cap_exports[p->first][q->first].cap_id, 0,
+                                       mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq, from, 0);
       mds->send_message_client_counted(m, session);
 
@@ -5335,7 +5341,7 @@ void MDCache::export_remaining_imported_caps()
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
 	// mark client caps stale.
-	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0);
+	MClientCaps *stale = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0, mds->get_osd_epoch_barrier());
 	stale->set_cap_peer(0, 0, 0, -1, 0);
 	mds->send_message_client_counted(stale, q->first);
       }
@@ -5394,7 +5400,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					realm->inode->ino(),
 					cap->get_cap_id(), cap->get_last_seq(),
 					cap->pending(), cap->wanted(), 0,
-					cap->get_mseq());
+					cap->get_mseq(), mds->get_osd_epoch_barrier());
     in->encode_cap_message(reap, cap);
     realm->build_snap_trace(reap->snapbl);
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
@@ -7916,7 +7922,7 @@ MDSInternalContextBase* MDCache::_open_ino_get_waiter(inodeno_t ino, MMDSOpenIno
 
 void MDCache::_open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int ret)
 {
-  dout(10) << "_open_ino_trvserse_dir ino " << ino << " ret " << ret << dendl;
+  dout(10) << __func__ << ": ino " << ino << " ret " << ret << dendl;
 
   CInode *in = get_inode(ino);
   if (in) {
@@ -8928,10 +8934,6 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
       dout(20) << " caps | leases" << dendl;
       return;  // wait
     }
-    if (!in->dirfrags.empty()) {
-      dout(20) << " open dirfrags" << dendl;
-      return;  // wait for dirs to close/trim
-    }
     if (dn->state_test(CDentry::STATE_PURGING)) {
       dout(20) << " already purging" << dendl;
       return;  // already purging
@@ -8952,8 +8954,11 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
     if (delay) {
       if (!dn->item_stray.is_on_list())
 	delayed_eval_stray.push_back(&dn->item_stray);
-    } else
+    } else {
+      if (in->is_dir())
+	in->close_dirfrags();
       purge_stray(dn);
+    }
   }
   else if (in->inode.nlink >= 1) {
     // trivial reintegrate?
@@ -8973,6 +8978,16 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
     }
   } else {
     // wait for next use.
+  }
+}
+
+void MDCache::try_remove_dentries_for_stray(CInode* diri) {
+  assert(diri->inode.nlink == 0);
+  if (diri->has_dirfrags()) {
+    list<CDir*> ls;
+    diri->get_nested_dirfrags(ls);
+    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p)
+      (*p)->try_remove_dentries_for_stray();
   }
 }
 
@@ -10501,6 +10516,10 @@ public:
 
 bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
 {
+  if (is_readonly()) {
+    dout(7) << "can_fragment: read-only FS, no fragmenting for now" << dendl;
+    return false;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "can_fragment: cluster degraded, no fragmenting for now" << dendl;
     return false;
@@ -10523,6 +10542,10 @@ bool MDCache::can_fragment(CInode *diri, list<CDir*>& dirs)
     }
     if (!dir->is_auth()) {
       dout(7) << "can_fragment: not auth on " << *dir << dendl;
+      return false;
+    }
+    if (dir->is_bad()) {
+      dout(7) << "can_fragment: bad dirfrag " << *dir << dendl;
       return false;
     }
     if (dir->is_frozen() ||
@@ -11328,6 +11351,29 @@ void MDCache::rollback_uncommitted_fragments()
   }
 }
 
+void MDCache::force_readonly()
+{
+  if (is_readonly())
+    return;
+
+  dout(1) << "force file system read-only" << dendl;
+  mds->clog->warn() << "force file system read-only\n";
+
+  set_readonly();
+
+  mds->server->force_clients_readonly();
+
+  // revoke write caps
+  for (ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+       p != inode_map.end();
+       ++p) {
+    CInode *in = p->second;
+    if (in->is_head())
+      mds->locker->eval(in, CEPH_CAP_LOCKS);
+  }
+
+  mds->mdlog->flush();
+}
 
 
 // ==============================================================
@@ -11626,6 +11672,11 @@ void MDCache::scrub_dentry_work(MDRequestRef& mdr)
 
 void MDCache::flush_dentry(const string& path, Context *fin)
 {
+  if (is_readonly()) {
+    dout(10) << __func__ << ": read-only FS" << dendl;
+    fin->complete(-EROFS);
+    return;
+  }
   dout(10) << "flush_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FLUSH);
   filepath fp(path.c_str());

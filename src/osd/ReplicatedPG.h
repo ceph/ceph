@@ -115,7 +115,6 @@ public:
      * other accesses to the object (in order to complete the copy).
      */
     PGBackend::PGTransaction *final_tx;
-    string category; ///< The copy source's category
     version_t user_version; ///< The copy source's user version
     bool should_requeue;  ///< op should be requeued on cancel
     vector<snapid_t> snaps;  ///< src's snaps (if clone)
@@ -439,17 +438,28 @@ public:
     bool user_modify;     // user-visible modification
     bool undirty;         // user explicitly un-dirtying this object
     bool cache_evict;     ///< true if this is a cache eviction
+    bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
 
     // side effects
-    list<watch_info_t> watch_connects;
-    list<watch_info_t> watch_disconnects;
+    list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
+    struct watch_disconnect_t {
+      uint64_t cookie;
+      entity_name_t name;
+      bool send_disconnect;
+      watch_disconnect_t(uint64_t c, entity_name_t n, bool sd)
+	: cookie(c), name(n), send_disconnect(sd) {}
+    };
+    list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon
     list<notify_info_t> notifies;
     struct NotifyAck {
       boost::optional<uint64_t> watch_cookie;
       uint64_t notify_id;
+      bufferlist reply_bl;
       NotifyAck(uint64_t notify_id) : notify_id(notify_id) {}
-      NotifyAck(uint64_t notify_id, uint64_t cookie)
-	: watch_cookie(cookie), notify_id(notify_id) {}
+      NotifyAck(uint64_t notify_id, uint64_t cookie, bufferlist& rbl)
+	: watch_cookie(cookie), notify_id(notify_id) {
+	reply_bl.claim(rbl);
+      }
     };
     list<NotifyAck> notify_acks;
     
@@ -512,8 +522,8 @@ public:
       pending_attrs.clear();
     }
 
-    // pending async reads <off, len> -> <outbl, outr>
-    list<pair<pair<uint64_t, uint64_t>,
+    // pending async reads <off, len, op_flags> -> <outbl, outr>
+    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 	      pair<bufferlist*, Context*> > > pending_async_reads;
     int async_read_result;
     unsigned inflightreads;
@@ -536,14 +546,18 @@ public:
     bool release_snapset_obc;
 
     OpContext(OpRequestRef _op, osd_reqid_t _reqid, vector<OSDOp>& _ops,
-	      ObjectState *_obs, SnapSetContext *_ssc,
+	      ObjectContextRef& obc,
 	      ReplicatedPG *_pg) :
-      op(_op), reqid(_reqid), ops(_ops), obs(_obs), snapset(0),
-      new_obs(_obs->oi, _obs->exists),
+      op(_op), reqid(_reqid), ops(_ops),
+      obs(&obc->obs),
+      snapset(0),
+      new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
+      ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
+      obc(obc),
       data_off(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
@@ -553,9 +567,9 @@ public:
       lock_to_release(NONE),
       on_finish(NULL),
       release_snapset_obc(false) {
-      if (_ssc) {
-	new_snapset = _ssc->snapset;
-	snapset = &_ssc->snapset;
+      if (obc->ssc) {
+	new_snapset = obc->ssc->snapset;
+	snapset = &obc->ssc->snapset;
       }
     }
     void reset_obs(ObjectContextRef obc) {
@@ -570,7 +584,7 @@ public:
       assert(lock_to_release == NONE);
       if (reply)
 	reply->put();
-      for (list<pair<pair<uint64_t, uint64_t>,
+      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
 		     pair<bufferlist*, Context*> > >::iterator i =
 	     pending_async_reads.begin();
 	   i != pending_async_reads.end();
@@ -1045,8 +1059,8 @@ protected:
   void log_op_stats(OpContext *ctx);
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
-				   SnapSet& ss, interval_set<uint64_t>& modified,
-				   uint64_t offset, uint64_t length, bool count_bytes);
+				   interval_set<uint64_t>& modified, uint64_t offset,
+				   uint64_t length, bool count_bytes);
   void add_interval_usage(interval_set<uint64_t>& s, object_stat_sum_t& st);
 
   /**
@@ -1297,7 +1311,7 @@ public:
   int do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op);
   int do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op, bufferlist& bl);
 
-  void do_osd_op_effects(OpContext *ctx);
+  void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
   hobject_t earliest_backfill() const;
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;

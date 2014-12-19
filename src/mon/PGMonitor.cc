@@ -1105,9 +1105,17 @@ void PGMonitor::map_pg_creates()
        ++p) {
     pg_t pgid = *p;
     pg_t on = pgid;
-    pg_stat_t& s = pg_map.pg_stat[pgid];
-    if (s.parent_split_bits)
-      on = s.parent;
+    pg_stat_t *s = NULL;
+    ceph::unordered_map<pg_t,pg_stat_t>::iterator q = pg_map.pg_stat.find(pgid);
+    if (q == pg_map.pg_stat.end()) {
+      s = &pg_map.pg_stat[pgid];
+    } else {
+      s = &q->second;
+      pg_map.stat_pg_sub(pgid, *s, true);
+    }
+
+    if (s->parent_split_bits)
+      on = s->parent;
 
     vector<int> up, acting;
     int up_primary, acting_primary;
@@ -1118,22 +1126,23 @@ void PGMonitor::map_pg_creates()
       &acting,
       &acting_primary);
 
-    if (s.acting_primary != -1) {
-      pg_map.creating_pgs_by_osd[s.acting_primary].erase(pgid);
-      if (pg_map.creating_pgs_by_osd[s.acting_primary].size() == 0)
-        pg_map.creating_pgs_by_osd.erase(s.acting_primary);
+    if (s->acting_primary != -1) {
+      pg_map.creating_pgs_by_osd[s->acting_primary].erase(pgid);
+      if (pg_map.creating_pgs_by_osd[s->acting_primary].size() == 0)
+        pg_map.creating_pgs_by_osd.erase(s->acting_primary);
     }
-    s.up = up;
-    s.up_primary = up_primary;
-    s.acting = acting;
-    s.acting_primary = acting_primary;
+    s->up = up;
+    s->up_primary = up_primary;
+    s->acting = acting;
+    s->acting_primary = acting_primary;
+    pg_map.stat_pg_add(pgid, *s, true);
 
     // don't send creates for localized pgs
     if (pgid.preferred() >= 0)
       continue;
 
     // don't send creates for splits
-    if (s.parent_split_bits)
+    if (s->parent_split_bits)
       continue;
 
     if (acting_primary != -1) {
@@ -1375,28 +1384,6 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     else
       tbl << TextTable::endrow;
 
-    if (verbose) {
-      if (f)
-        f->open_array_section("categories");
-
-      for (map<string,object_stat_sum_t>::iterator it = stat.stats.cat_sum.begin();
-          it != stat.stats.cat_sum.end(); ++it) {
-        if (f) {
-          f->open_object_section(it->first.c_str());
-        } else {
-          tbl << ""
-              << ""
-              << it->first;
-        }
-        dump_object_stat_sum(tbl, f, it->second, avail, verbose);
-        if (f)
-          f->close_section(); // category name
-        else
-          tbl << TextTable::endrow;
-      }
-      if (f)
-        f->close_section(); // categories
-    }
     if (f)
       f->close_section(); // pool
   }
@@ -1499,8 +1486,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
 
   if (prefix == "pg stat") {
     if (f) {
-      f->open_object_section("pg_map");
-      pg_map.dump(f.get());
+      f->open_object_section("pg_summary");
+      pg_map.print_oneline_summary(f.get(), NULL);
       f->close_section();
       f->flush(ds);
     } else {
@@ -2077,11 +2064,22 @@ void PGMonitor::get_health(list<pair<health_status_t,string> >& summary,
 
   // pg skew
   int num_in = mon->osdmon()->osdmap.get_num_in_osds();
+  int sum_pg_up = MAX(pg_map.pg_sum.up, static_cast<int32_t>(pg_map.pg_stat.size()));
   if (num_in && g_conf->mon_pg_warn_min_per_osd > 0) {
-    int per = pg_map.pg_stat.size() / num_in;
+    int per = sum_pg_up / num_in;
     if (per < g_conf->mon_pg_warn_min_per_osd) {
       ostringstream ss;
-      ss << "too few pgs per osd (" << per << " < min " << g_conf->mon_pg_warn_min_per_osd << ")";
+      ss << "too few PGs per OSD (" << per << " < min " << g_conf->mon_pg_warn_min_per_osd << ")";
+      summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+      if (detail)
+	detail->push_back(make_pair(HEALTH_WARN, ss.str()));
+    }
+  }
+  if (num_in && g_conf->mon_pg_warn_max_per_osd > 0) {
+    int per = sum_pg_up / num_in;
+    if (per > g_conf->mon_pg_warn_max_per_osd) {
+      ostringstream ss;
+      ss << "too many PGs per OSD (" << per << " > max " << g_conf->mon_pg_warn_max_per_osd << ")";
       summary.push_back(make_pair(HEALTH_WARN, ss.str()));
       if (detail)
 	detail->push_back(make_pair(HEALTH_WARN, ss.str()));

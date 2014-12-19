@@ -732,6 +732,10 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
   assert(dir->is_auth());
   assert(dest != mds->get_nodeid());
    
+  if (mds->mdcache->is_readonly()) {
+    dout(7) << "read-only FS, no exports for now" << dendl;
+    return;
+  }
   if (mds->mdsmap->is_degraded()) {
     dout(7) << "cluster degraded, no exports for now" << dendl;
     return;
@@ -1319,7 +1323,7 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
     dout(7) << "finish_export_inode_caps telling client." << it->first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, in->ino(), 0,
-				     cap->get_cap_id(), cap->get_mseq());
+				     cap->get_cap_id(), cap->get_mseq(), mds->get_osd_epoch_barrier());
 
     map<client_t,Capability::Import>::iterator q = peer_imported.find(it->first);
     assert(q != peer_imported.end());
@@ -2141,7 +2145,8 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
   dout(7) << " all ready, noting auth and freezing import region" << dendl;
 
   bool success = true;
-  if (dir->get_inode()->filelock.can_wrlock(-1) &&
+  if (!mds->mdcache->is_readonly() &&
+      dir->get_inode()->filelock.can_wrlock(-1) &&
       dir->get_inode()->nestlock.can_wrlock(-1)) {
     it->second.mut = MutationRef(new MutationImpl);
     // force some locks.  hacky.

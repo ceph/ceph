@@ -215,7 +215,12 @@ class MDS : public Dispatcher, public md_config_obs_t {
 
   ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
+  epoch_t osd_epoch_barrier;
+
  public:
+  void set_osd_epoch_barrier(epoch_t e);
+  epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
+
   void wait_for_active(MDSInternalContextBase *c) { 
     waiting_for_active.push_back(c); 
   }
@@ -378,6 +383,10 @@ private:
   void check_ops_in_flight(); // send off any slow ops to monitor
   void command_scrub_path(Formatter *f, const string& path);
   void command_flush_path(Formatter *f, const string& path);
+  void command_flush_journal(Formatter *f);
+ private:
+  int _command_flush_journal(std::stringstream *ss);
+ public:
     // config observer bits
   virtual const char** get_tracked_conf_keys() const;
   virtual void handle_conf_change(const struct md_config_t *conf,
@@ -437,6 +446,7 @@ private:
 
   void suicide();
   void respawn();
+  void handle_write_error(int err);
 
   void tick();
   

@@ -2430,19 +2430,16 @@ void Monitor::handle_command(MMonCommand *m)
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
       << "from='" << session->inst << "' "
-      << "entity='" << session->auth_handler->get_entity_name()
-      << "' cmd=" << m->cmd << ":  access denied";
+      << "entity='" << session->entity_name << "' "
+      << "cmd=" << m->cmd << ":  access denied";
     reply_command(m, -EACCES, "access denied", 0);
     return;
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
     << "from='" << session->inst << "' "
-    << "entity='"
-    << (session->auth_handler ?
-        stringify(session->auth_handler->get_entity_name())
-        : "forwarded-request")
-    << "' cmd=" << m->cmd << ": dispatch";
+    << "entity='" << session->entity_name << "' "
+    << "cmd=" << m->cmd << ": dispatch";
 
   if (module == "mds" || module == "fs") {
     mdsmon()->dispatch(m);
@@ -2748,6 +2745,11 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
 				     rr->con_features,
 				     rr->session->caps);
     forward->set_priority(req->get_priority());
+    if (session->auth_handler) {
+      forward->entity_name = session->entity_name;
+    } else if (req->get_source().is_mon()) {
+      forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
+    }
     messenger->send_message(forward, monmap->get_inst(mon));
   } else {
     dout(10) << "forward_request no session for request " << *req << dendl;
@@ -2781,6 +2783,9 @@ void Monitor::handle_forward(MForward *m)
 
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
+    s->entity_name = m->entity_name;
+    dout(10) << " entity name '" << s->entity_name << "' type "
+             << s->entity_name.get_type() << dendl;
     s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
@@ -3038,7 +3043,6 @@ void Monitor::_ms_dispatch(Message *m)
   ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
   MonCap caps;
-  EntityName entity_name;
   bool src_is_mon;
 
   // regardless of who we are or who the sender is, the message must
@@ -3109,7 +3113,7 @@ void Monitor::_ms_dispatch(Message *m)
 
   if (s) {
     if (s->auth_handler) {
-      entity_name = s->auth_handler->get_entity_name();
+      s->entity_name = s->auth_handler->get_entity_name();
     }
     dout(20) << " caps " << s->caps.get_str() << dendl;
   }
@@ -3169,6 +3173,7 @@ void Monitor::dispatch(MonSession *s, Message *m, const bool src_is_mon)
   switch (m->get_type()) {
 
     // OSDs
+    case CEPH_MSG_MON_GET_OSDMAP:
     case MSG_OSD_MARK_ME_DOWN:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:

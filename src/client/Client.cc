@@ -44,11 +44,11 @@ using namespace std;
 #include "messages/MClientRequestForward.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientCaps.h"
-#include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 #include "messages/MCommandReply.h"
 #include "messages/MClientQuota.h"
+#include "messages/MOSDMap.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -130,6 +130,8 @@ bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
     m_client->dump_cache(f);
   else if (command == "kick_stale_sessions")
     m_client->_kick_stale_sessions();
+  else if (command == "status")
+    m_client->dump_status(f);
   else
     assert(0 == "bad command registered");
   m_client->client_lock.Unlock();
@@ -202,7 +204,7 @@ Client::Client(Messenger *m, MonClient *mc)
 
   // osd interfaces
   mdsmap = new MDSMap;
-  objecter = new Objecter(cct, messenger, monclient,
+  objecter = new Objecter(cct, messenger, monclient, NULL,
 			  0, 0);
   objecter->set_client_incarnation(0);  // client always 0, for now.
   writeback_handler = new ObjecterWriteback(objecter, &objecter_finisher,
@@ -217,7 +219,7 @@ Client::Client(Messenger *m, MonClient *mc)
 				  cct->_conf->client_oc_max_dirty_age,
 				  true);
   objecter_finisher.start();
-  filer = new Filer(objecter);
+  filer = new Filer(objecter, &objecter_finisher);
 }
 
 
@@ -357,6 +359,35 @@ void Client::dump_cache(Formatter *f)
     f->close_section();
 }
 
+void Client::dump_status(Formatter *f)
+{
+  assert(client_lock.is_locked_by_me());
+
+  ldout(cct, 1) << __func__ << dendl;
+
+  const OSDMap *osdmap = objecter->get_osdmap_read();
+  const epoch_t osd_epoch = osdmap->get_epoch();
+  objecter->put_osdmap_read();
+
+  if (f) {
+    f->open_object_section("metadata");
+    {
+      for (std::map<std::string, std::string>::const_iterator i = metadata.begin();
+           i != metadata.end(); ++i) {
+        f->dump_string(i->first.c_str(), i->second);
+      }
+    }
+    f->close_section();
+
+    f->dump_int("dentry_count", lru.lru_get_size());
+    f->dump_int("dentry_pinned_count", lru.lru_get_num_pinned());
+    f->dump_int("inode_count", inode_map.size());
+    f->dump_int("mds_epoch", mdsmap->get_epoch());
+    f->dump_int("osd_epoch", osd_epoch);
+    f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
+  }
+}
+
 int Client::init()
 {
   client_lock.Lock();
@@ -433,6 +464,14 @@ int Client::init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+  ret = admin_socket->register_command("status",
+				       "status",
+				       &m_command_hook,
+				       "show overall client status");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+	       << cpp_strerror(-ret) << dendl;
+  }
 
   populate_metadata();
 
@@ -451,6 +490,7 @@ void Client::shutdown()
   admin_socket->unregister_command("mds_sessions");
   admin_socket->unregister_command("dump_cache");
   admin_socket->unregister_command("kick_stale_sessions");
+  admin_socket->unregister_command("status");
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
@@ -556,7 +596,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
   if (s->caps.size() > 0)
-    _invalidate_kernel_dcache();
+    _invalidate_kernel_dcache(s);
 }
 
 void Client::trim_dentry(Dentry *dn)
@@ -1774,6 +1814,10 @@ void Client::handle_client_session(MClientSession *m)
     session->con->send_message(new MClientSession(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
+  case CEPH_SESSION_FORCE_RO:
+    force_session_readonly(session);
+    break;
+
   default:
     assert(0);
   }
@@ -2001,9 +2045,46 @@ void Client::handle_client_reply(MClientReply *reply)
     mount_cond.Signal();
 }
 
+void Client::handle_osd_map(MOSDMap *m)
+{
+  if (objecter->osdmap_full_flag()) {
+    ldout(cct, 1) << __func__ << ": FULL: cancelling outstanding operations" << dendl;
+    // Cancel all outstanding ops with -ENOSPC: it is necessary to do this rather than blocking,
+    // because otherwise when we fill up we potentially lock caps forever on files with
+    // dirty pages, and we need to be able to release those caps to the MDS so that it can
+    // delete files and free up space.
+    epoch_t cancelled_epoch = objecter->op_cancel_writes(-ENOSPC);
+
+    // For all inodes with a pending flush write op (i.e. one of the ones we
+    // will cancel), we've got to purge_set their data from ObjectCacher
+    // so that it doesn't re-issue the write in response to the ENOSPC error.
+    // Fortunately since we're cancelling *everything*, we don't need to know
+    // which ops belong to which ObjectSet, we can just blow all the un-flushed
+    // cached data away and mark any dirty inodes' async_err field with -ENOSPC
+    // (i.e. we only need to know which inodes had outstanding ops, not the exact
+    // op-to-inode relation)
+    for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
+         i != inode_map.end(); i++)
+    {
+      Inode *inode = i->second;
+      if (inode->oset.dirty_or_tx) {
+        ldout(cct, 4) << __func__ << ": FULL: inode 0x" << std::hex << i->first << std::dec
+          << " has dirty objects, purging and setting ENOSPC" << dendl;
+        objectcacher->purge_set(&inode->oset);
+        inode->async_err = -ENOSPC;
+      }
+    }
+
+    set_cap_epoch_barrier(cancelled_epoch);
+  }
+
+  m->put();
+}
+
 
 // ------------------------
 // incoming messages
+
 
 bool Client::ms_dispatch(Message *m)
 {
@@ -2024,7 +2105,7 @@ bool Client::ms_dispatch(Message *m)
     break;
 
   case CEPH_MSG_OSD_MAP:
-    m->put();
+    handle_osd_map(static_cast<MOSDMap*>(m));
     break;
 
     // requests
@@ -2173,6 +2254,8 @@ void Client::send_reconnect(MetaSession *session)
 
   // trim unused caps to reduce MDS's cache rejoin time
   trim_cache_for_reconnect(session);
+
+  session->readonly = false;
 
   if (session->release) {
     session->release->put();
@@ -2362,6 +2445,13 @@ void Client::put_inode(Inode *in, int n)
         put_inode(in);
       }
     }
+
+    if (!in->oset.objects.empty()) {
+      ldout(cct, 0) << __func__ << ": leftover objects on inode 0x"
+        << std::hex << in->ino << std::dec << dendl;
+      assert(in->oset.objects.empty());
+    }
+
     delete in->fcntl_locks;
     delete in->flock_locks;
     delete in;
@@ -2576,6 +2666,10 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
       }
       ldout(cct, 10) << "waiting for caps need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
     }
+
+    if ((need & CEPH_CAP_FILE_WR) && in->auth_cap &&
+	in->auth_cap->session->readonly)
+      return -EROFS;
     
     wait_on_list(in->waitfor_caps);
   }
@@ -2661,7 +2755,8 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 				   cap->implemented,
 				   want,
 				   flush,
-				   cap->mseq);
+				   cap->mseq,
+                                   cap_epoch_barrier);
   m->head.issue_seq = cap->issue_seq;
   m->set_tid(flush_tid);
 
@@ -2911,7 +3006,8 @@ void Client::flush_snaps(Inode *in, bool all_again, CapSnap *again)
     in->auth_cap->session->flushing_capsnaps.push_back(&capsnap->flushing_item);
 
     capsnap->flush_tid = ++in->last_flush_tid;
-    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq);
+    MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
+        cap_epoch_barrier);
     m->set_client_tid(capsnap->flush_tid);
     m->head.snap_follows = p->first;
 
@@ -3055,36 +3151,25 @@ void Client::_release(Inode *in)
   }
 }
 
-
-class C_Client_PutInode : public Context {
-  Client *client;
-  Inode *in;
-public:
-  C_Client_PutInode(Client *c, Inode *i) : client(c), in(i) {
-    in->get();
-  }
-  void finish(int) {
-    // I am used via ObjectCacher, which is responsible for taking
-    // the client lock before calling me back.
-    assert(client->client_lock.is_locked_by_me());
-    client->put_inode(in);
-  }
-};
-
 bool Client::_flush(Inode *in, Context *onfinish)
 {
   ldout(cct, 10) << "_flush " << *in << dendl;
 
   if (!in->oset.dirty_or_tx) {
     ldout(cct, 10) << " nothing to flush" << dendl;
-    if (onfinish)
-      onfinish->complete(0);
+    onfinish->complete(0);
     return true;
   }
 
-  if (!onfinish) {
-    onfinish = new C_Client_PutInode(this, in);
+  if (objecter->osdmap_full_flag()) {
+    ldout(cct, 1) << __func__ << ": FULL, purging for ENOSPC" << dendl;
+    objectcacher->purge_set(&in->oset);
+    if (onfinish) {
+      onfinish->complete(-ENOSPC);
+    }
+    return true;
   }
+
   return objectcacher->flush_set(&in->oset, onfinish);
 }
 
@@ -3244,14 +3329,12 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   ldout(cct, 10) << "remove_cap mds." << mds << " on " << *in << dendl;
   
   if (queue_release) {
-    if (!session->release)
-      session->release = new MClientCapRelease;
-    ceph_mds_cap_item i;
-    i.ino = in->ino;
-    i.cap_id = cap->cap_id;
-    i.seq = cap->issue_seq;
-    i.migrate_seq = cap->mseq;
-    session->release->caps.push_back(i);
+    session->enqueue_cap_release(
+      in->ino,
+      cap->cap_id,
+      cap->issue_seq,
+      cap->mseq,
+      cap_epoch_barrier);
   }
 
   if (in->auth_cap == cap) {
@@ -3312,16 +3395,19 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-void Client::_invalidate_kernel_dcache()
+void Client::_invalidate_kernel_dcache(MetaSession *s)
 {
-  // notify kernel to invalidate top level directory entries. As a side effect,
-  // unused inodes underneath these entries get pruned.
-  if (dentry_invalidate_cb && root->dir) {
-    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
-	 p != root->dir->dentries.end();
-	 ++p) {
-      if (p->second->inode)
-	_schedule_invalidate_dentry_callback(p->second, false);
+  if (!dentry_invalidate_cb)
+    return;
+
+  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
+    Inode *in = (*p)->inode;
+    if (in->dn_set.empty())
+      continue;
+    for (set<Dentry*>::iterator q = in->dn_set.begin();
+	 q != in->dn_set.end();
+	 ++q) {
+      _schedule_invalidate_dentry_callback(*q, false);
     }
   }
 }
@@ -3355,14 +3441,8 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
-          if (dn->dir->parent_inode->ino == MDS_INO_ROOT) {
-            // Only issue one of these per DN for inodes in root: handle
-            // others more efficiently by calling for root-child DNs at
-            // the end of this function.
-            _schedule_invalidate_dentry_callback(dn, true);
-          }
+	  _schedule_invalidate_dentry_callback(dn, false);
 	  trim_dentry(dn);
-
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
 	  all = false;
@@ -3383,9 +3463,16 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+}
 
-  if (s->caps.size() > max)
-    _invalidate_kernel_dcache();
+void Client::force_session_readonly(MetaSession *s)
+{
+  s->readonly = true;
+  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
+    Inode *in = (*p)->inode;
+    if (in->caps_wanted() & CEPH_CAP_FILE_WR)
+      signal_cond_list(in->waitfor_caps);
+  }
 }
 
 void Client::mark_caps_dirty(Inode *in, int caps)
@@ -3787,6 +3874,17 @@ void Client::handle_caps(MClientCaps *m)
     m->put();
     return;
   }
+
+  if (m->osd_epoch_barrier && !objecter->have_map(m->osd_epoch_barrier)) {
+    // Pause RADOS operations until we see the required epoch
+    objecter->set_epoch_barrier(m->osd_epoch_barrier);
+  }
+
+  if (m->osd_epoch_barrier > cap_epoch_barrier) {
+    // Record the barrier so that we will transmit it to MDS when releasing
+    set_cap_epoch_barrier(m->osd_epoch_barrier);
+  }
+
   got_mds_push(session);
 
   m->clear_payload();  // for if/when we send back to MDS
@@ -3798,14 +3896,12 @@ void Client::handle_caps(MClientCaps *m)
   if (!in) {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
       ldout(cct, 5) << "handle_caps don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
-      if (!session->release)
-	session->release = new MClientCapRelease;
-      ceph_mds_cap_item i;
-      i.ino = m->get_ino();
-      i.cap_id = m->get_cap_id();
-      i.seq = m->get_seq();
-      i.migrate_seq = m->get_mseq();
-      session->release->caps.push_back(i);
+      session->enqueue_cap_release(
+        m->get_ino(),
+        m->get_cap_id(),
+        m->get_seq(),
+        m->get_mseq(),
+        cap_epoch_barrier);
     } else {
       ldout(cct, 5) << "handle_caps don't have vino " << vino << ", dropping" << dendl;
     }
@@ -4051,6 +4147,34 @@ void Client::_invalidate_inode_parents(Inode *in)
   }
 }
 
+/**
+ * For asynchronous flushes, check for errors from the IO and
+ * update the inode if necessary
+ */
+class C_Client_FlushComplete : public Context {
+  private:
+  Client *client;
+  Inode *inode;
+
+  public:
+  C_Client_FlushComplete(Client *c, Inode *in) : client(c), inode(in)
+  {
+    inode->get();
+  }
+
+  void finish(int r) {
+    assert(client->client_lock.is_locked_by_me());
+    if (r != 0) {
+      client_t const whoami = client->whoami;  // For the benefit of ldout prefix
+      ldout(client->cct, 1) << "I/O error from flush on inode " << inode
+        << " 0x" << std::hex << inode->ino << std::dec
+        << ": " << r << "(" << cpp_strerror(r) << ")" << dendl;
+      inode->async_err = r;
+    }
+    client->put_inode(inode);
+  }
+};
+
 void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
 {
   mds_rank_t mds = session->mds_num;
@@ -4118,9 +4242,8 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     cap->issued = new_caps;
     cap->implemented |= new_caps;
 
-    
-    if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER) &&
-	!_flush(in)) {
+    if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
+        && !_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
     } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
       _release(in);
@@ -4504,8 +4627,9 @@ void Client::unmount()
   while (!fd_map.empty()) {
     Fh *fh = fd_map.begin()->second;
     fd_map.erase(fd_map.begin());
-    ldout(cct, 0) << " destroying lost open file " << fh << " on " << *fh->inode << dendl;
-    _release_fh(fh);
+    int release_err = _release_fh(fh);
+    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *fh->inode << "(async_err = " << release_err << ")" << dendl;
+
   }
 
   _ll_drop_pins();
@@ -4531,7 +4655,7 @@ void Client::unmount()
       if (!in->caps.empty()) {
 	in->get();
 	_release(in);
-	_flush(in);
+	_flush(in, new C_Client_FlushComplete(this, in));
 	put_inode(in);
       }
     }
@@ -6406,7 +6530,7 @@ int Client::_release_fh(Fh *f)
 
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
-      _flush(in);
+      _flush(in, new C_Client_FlushComplete(this, in));
       // release clean pages too, if we dont want RDCACHE
       if (in->cap_refs[CEPH_CAP_FILE_CACHE] == 0 &&
 	  !(in->caps_wanted() & CEPH_CAP_FILE_CACHE) &&
@@ -6422,10 +6546,19 @@ int Client::_release_fh(Fh *f)
 
   _release_filelocks(f);
 
+  // Finally, read any async err (i.e. from flushes) from the inode
+  int err = in->async_err;
+  if (err != 0) {
+    ldout(cct, 1) << "_release_fh " << f << " on inode " << *in << " caught async_err = "
+                  << cpp_strerror(err) << dendl;
+  } else {
+    ldout(cct, 10) << "_release_fh " << f << " on inode " << *in << " no async_err state" << dendl;
+  }
+
   put_inode(in);
   delete f;
 
-  return 0;
+  return err;
 }
 
 int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp, int uid, int gid)
@@ -6483,10 +6616,10 @@ int Client::close(int fd)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
-  _release_fh(fh);
+  int err = _release_fh(fh);
   fd_map.erase(fd);
   ldout(cct, 3) << "close exit(" << fd << ")" << dendl;
-  return 0;
+  return err;
 }
 
 
@@ -6955,12 +7088,8 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
-  {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    bool full = osdmap->test_flag(CEPH_OSDMAP_FULL);
-    objecter->put_osdmap_read();
-    if (full)
-      return -ENOSPC;
+  if (objecter->osdmap_full_flag()) {
+    return -ENOSPC;
   }
 
   //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
@@ -7164,8 +7293,16 @@ done:
 
 int Client::_flush(Fh *f)
 {
-  // no-op, for now.  hrm.
-  return 0;
+  Inode *in = f->inode;
+  int err = in->async_err;
+  if (err != 0) {
+    ldout(cct, 1) << __func__ << ": " << f << " on inode " << *in << " caught async_err = "
+                  << cpp_strerror(err) << dendl;
+  } else {
+    ldout(cct, 10) << __func__ << ": " << f << " on inode " << *in << " no async_err state" << dendl;
+  }
+
+  return err;
 }
 
 int Client::truncate(const char *relpath, loff_t length) 
@@ -7267,6 +7404,13 @@ int Client::_fsync(Fh *f, bool syncdataonly)
     ldout(cct, 1) << "ino " << in->ino << " failed to commit to disk! "
 		  << cpp_strerror(-r) << dendl;
   }
+
+  if (in->async_err) {
+    ldout(cct, 1) << "ino " << in->ino << " marked with error from background flush! "
+		  << cpp_strerror(in->async_err) << dendl;
+    r = in->async_err;
+  }
+
   return r;
 }
 
@@ -9390,7 +9534,8 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
     r = check_permissions(in, flags, uid, gid);
     if (r < 0) {
       if (fhp && *fhp) {
-	_release_fh(*fhp);
+	int release_r = _release_fh(*fhp);
+        assert(release_r == 0);  // during create, no async data ops should have happened
       }
       goto out;
     }
@@ -9630,13 +9775,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((mode & FALLOC_FL_PUNCH_HOLE) && !(mode & FALLOC_FL_KEEP_SIZE))
     return -EOPNOTSUPP;
 
-  {
-    const OSDMap *osdmap = objecter->get_osdmap_read();
-    bool full = osdmap->test_flag(CEPH_OSDMAP_FULL);
-    objecter->put_osdmap_read();
-    if (full && !(mode & FALLOC_FL_PUNCH_HOLE))
-      return -ENOSPC;
-  }
+  if (objecter->osdmap_full_flag() && !(mode & FALLOC_FL_PUNCH_HOLE))
+    return -ENOSPC;
 
   Inode *in = fh->inode;
 
@@ -9799,8 +9939,7 @@ int Client::ll_release(Fh *fh)
   tout(cct) << "ll_release (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
-  _release_fh(fh);
-  return 0;
+  return _release_fh(fh);
 }
 
 int Client::ll_getlk(Fh *fh, struct flock *fl, uint64_t owner)
@@ -10295,5 +10434,18 @@ void Client::clear_filer_flags(int flags)
   Mutex::Locker l(client_lock);
   assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
   objecter->clear_global_op_flag(flags);
+}
+
+/**
+ * This is included in cap release messages, to cause
+ * the MDS to wait until this OSD map epoch.  It is necessary
+ * in corner cases where we cancel RADOS ops, so that
+ * nobody else tries to do IO to the same objects in
+ * the same epoch as the cancelled ops.
+ */
+void Client::set_cap_epoch_barrier(epoch_t e)
+{
+  ldout(cct, 5) << __func__ << " epoch = " << e << dendl;
+  cap_epoch_barrier = e;
 }
 

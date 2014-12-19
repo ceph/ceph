@@ -31,6 +31,7 @@
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_keyvaluestore
+
 const string GenericObjectMap::GLOBAL_STATE_KEY = "HEADER";
 
 const string GenericObjectMap::USER_PREFIX = "_SEQ_";
@@ -43,6 +44,7 @@ const string GenericObjectMap::PARENT_KEY = "_PARENT_HEADER_";
 // so use "!" to separated
 const string GenericObjectMap::GHOBJECT_KEY_SEP_S = "!";
 const char GenericObjectMap::GHOBJECT_KEY_SEP_C = '!';
+const char GenericObjectMap::GHOBJECT_KEY_ENDING = 0xFF;
 
 // ============== GenericObjectMap Key Function =================
 
@@ -112,7 +114,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   char *end = t + sizeof(buf);
 
   // make field ordering match with hobject_t compare operations
-  snprintf(t, end - t, "%.*X", (int)(sizeof(oid.hobj.hash)*2),
+  snprintf(t, end - t, "%.*X", (int)(sizeof(oid.hobj.get_hash())*2),
            (uint32_t)oid.get_filestore_key_u32());
   full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
@@ -147,7 +149,7 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
 
     t = buf;
     end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.generation);
+    t += snprintf(t, end - t, "%016llx", (long long unsigned)oid.generation);
     full_name += string(buf);
 
     full_name.append(GHOBJECT_KEY_SEP_S);
@@ -157,6 +159,8 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
     t += snprintf(t, end - t, "%x", (int)oid.shard_id);
     full_name += string(buf);
   }
+
+  full_name.append(1, GHOBJECT_KEY_ENDING);
 
   return full_name;
 }
@@ -220,7 +224,10 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     return false;
 
   current = ++end;
-  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
+  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C && *end != GHOBJECT_KEY_ENDING; ++end) ;
+  if (end == long_name.end())
+    return false;
+
   string snap_str(current, end);
   if (snap_str == "head")
     snap = CEPH_NOSNAP;
@@ -231,18 +238,18 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
 
   // Optional generation/shard_id
   string genstring, shardstring;
-  if (end != long_name.end()) {
+  if (*end != GHOBJECT_KEY_ENDING) {
     current = ++end;
     for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (end == long_name.end())
+    if (*end != GHOBJECT_KEY_SEP_C)
       return false;
     genstring = string(current, end);
 
     generation = (gen_t)strtoull(genstring.c_str(), NULL, 16);
 
     current = ++end;
-    for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (end != long_name.end())
+    for ( ; end != long_name.end() && *end != GHOBJECT_KEY_ENDING; ++end) ;
+    if (end == long_name.end())
       return false;
     shardstring = string(current, end);
 
@@ -253,7 +260,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     (*out) = ghobject_t(hobject_t(name, key, snap, hash, (int64_t)pool, ns),
                         generation, shard_id);
     // restore reversed hash. see calculate_key
-    out->hobj.hash = out->get_filestore_key();
+    out->hobj.set_hash(out->get_filestore_key());
   }
 
   if (out_coll)

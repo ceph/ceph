@@ -78,7 +78,7 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    msg = Messenger::create(cct, entity_name_t::CLIENT(-1),
+    msg = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0);
     assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0,0));

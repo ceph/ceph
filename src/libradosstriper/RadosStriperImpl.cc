@@ -542,7 +542,7 @@ int libradosstriper::RadosStriperImpl::stat(const std::string& soid, uint64_t *p
   std::string err;
   // this intermediate string allows to add a null terminator before calling strtol
   std::string strsize(bl.c_str(), bl.length());
-  *psize = strict_strtol(strsize.c_str(), 10, &err);
+  *psize = strict_strtoll(strsize.c_str(), 10, &err);
   if (!err.empty()) {
     lderr(cct()) << XATTR_SIZE << " : " << err << dendl;
     return -EINVAL;
@@ -573,7 +573,7 @@ int libradosstriper::RadosStriperImpl::remove(const std::string& soid)
       std::string err;
       // this intermediate string allows to add a null terminator before calling strtol
       std::string strsize(bl2.c_str(), bl2.length());
-      uint64_t size = strict_strtol(strsize.c_str(), 10, &err);
+      uint64_t size = strict_strtoll(strsize.c_str(), 10, &err);
       if (!err.empty()) {
         lderr(cct()) << XATTR_SIZE << " : " << err << dendl;
         
@@ -613,20 +613,20 @@ int libradosstriper::RadosStriperImpl::trunc(const std::string& soid, uint64_t s
   std::string firstObjOid = getObjectId(soid, 0);
   try {
     RadosExclusiveLock lock(&m_ioCtx, firstObjOid);
+    // load layout and size
+    ceph_file_layout layout;
+    uint64_t original_size;
+    int rc = internal_get_layout_and_size(firstObjOid, &layout, &original_size);
+    if (rc) return rc;
+    if (size < original_size) {
+      rc = truncate(soid, original_size, size, layout);
+    } else if (size > original_size) {
+      rc = grow(soid, original_size, size, layout);
+    }
+    return rc;
   } catch (ErrorCode &e) {
     return e.m_code;
   }
-  // load layout and size
-  ceph_file_layout layout;
-  uint64_t original_size;
-  int rc = internal_get_layout_and_size(firstObjOid, &layout, &original_size);
-  if (rc) return rc;
-  if (size < original_size) {
-    rc = truncate(soid, original_size, size, layout);
-  } else if (size > original_size) {
-    rc = grow(soid, original_size, size, layout);
-  }
-  return rc;
 }
 
 ///////////////////////// private helpers /////////////////////////////

@@ -10,7 +10,7 @@ int ceph_arch_neon = 0;
 #include <elf.h>
 #include <link.h> // ElfW macro
 
-#if __arm__
+#if __arm__ || __aarch64__
 #include <asm/hwcap.h>
 #endif // __arm__
 
@@ -22,7 +22,7 @@ static unsigned long get_auxval(unsigned long type)
 	if (f) {
 		ElfW(auxv_t) entry;
 		while ((read = fread(&entry, sizeof(entry), 1, f)) > 0) {
-			if (read != sizeof(entry))
+			if (read != 1)
 				break;
 			if (entry.a_type == type) {
 				result = entry.a_un.a_val;
@@ -41,10 +41,12 @@ static unsigned long get_hwcap(void)
 
 #endif // __linux__
 
-int ceph_arch_neon_probe(void)
+int ceph_arch_arm_probe(void)
 {
 #if __arm__ && __linux__
 	ceph_arch_neon = (get_hwcap() & HWCAP_NEON) == HWCAP_NEON;
+#elif __aarch64__ && __linux__
+	ceph_arch_neon = (get_hwcap() & HWCAP_ASIMD) == HWCAP_ASIMD;
 #else
 	if (0)
 		get_hwcap();  // make compiler shut up

@@ -56,9 +56,15 @@
 # include <assert.h>
 #endif
 
+#if __GNUC__ >= 4
+  #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
+#else
+  #define CEPH_BUFFER_API
+#endif
+
 namespace ceph {
 
-class buffer {
+class CEPH_BUFFER_API buffer {
   /*
    * exceptions
    */
@@ -130,6 +136,7 @@ private:
   class raw_hack_aligned;
   class raw_char;
   class raw_pipe;
+  class raw_unshareable; // diagnostic, unshareable char buffer
 
   friend std::ostream& operator<<(std::ostream& out, const raw &r);
 
@@ -147,11 +154,12 @@ public:
   static raw* create_aligned(unsigned len, unsigned align);
   static raw* create_page_aligned(unsigned len);
   static raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
+  static raw* create_unshareable(unsigned len);
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
-  class ptr {
+  class CEPH_BUFFER_API ptr {
     raw *_raw;
     unsigned _off, _len;
 
@@ -168,11 +176,12 @@ public:
     ~ptr() {
       release();
     }
-    
+
     bool have_raw() const { return _raw ? true:false; }
 
     raw *clone();
     void swap(ptr& other);
+    ptr& make_shareable();
 
     // misc
     bool at_buffer_head() const { return _off == 0; }
@@ -184,7 +193,7 @@ public:
     bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
     bool is_n_align_sized(unsigned align) const
     {
-      return (length() & (align-1)) == 0;
+      return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
 
@@ -237,7 +246,7 @@ public:
    * list - the useful bit!
    */
 
-  class list {
+  class CEPH_BUFFER_API list {
     // my private bits
     std::list<ptr> _buffers;
     unsigned _len;
@@ -245,7 +254,7 @@ public:
     ptr append_buffer;  // where i put small appends.
 
   public:
-    class iterator {
+    class CEPH_BUFFER_API iterator {
       list *bl;
       std::list<ptr> *ls; // meh.. just here to avoid an extra pointer dereference..
       unsigned off;  // in bl
@@ -297,6 +306,8 @@ public:
       iterator& operator++();
       ptr get_current_ptr();
 
+      list& get_bl() { return *bl; }
+
       // copy data out.
       // note that these all _append_ to dest!
       void copy(unsigned len, char *dest);
@@ -323,12 +334,15 @@ public:
       append_buffer.set_length(0);   // unused, so far.
     }
     ~list() {}
-    
-    list(const list& other) : _buffers(other._buffers), _len(other._len), _memcopy_count(other._memcopy_count),last_p(this) { }
+    list(const list& other) : _buffers(other._buffers), _len(other._len),
+			      _memcopy_count(other._memcopy_count), last_p(this) {
+      make_shareable();
+    }
     list& operator= (const list& other) {
       if (this != &other) {
         _buffers = other._buffers;
         _len = other._len;
+	make_shareable();
       }
       return *this;
     }
@@ -394,12 +408,37 @@ public:
     void rebuild();
     void rebuild(ptr& nb);
     void rebuild_aligned(unsigned align);
+    void rebuild_aligned_size_and_memory(unsigned align_size,
+					 unsigned align_memory);
     void rebuild_page_aligned();
 
-    // sort-of-like-assignment-op
-    void claim(list& bl);
-    void claim_append(list& bl);
-    void claim_prepend(list& bl);
+    // assignment-op with move semantics
+    const static unsigned int CLAIM_DEFAULT = 0;
+    const static unsigned int CLAIM_ALLOW_NONSHAREABLE = 1;
+
+    void claim(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
+    void claim_prepend(list& bl, unsigned int flags = CLAIM_DEFAULT);
+
+    // clone non-shareable buffers (make shareable)
+    void make_shareable() {
+      std::list<buffer::ptr>::iterator pb;
+      for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
+        (void) pb->make_shareable();
+      }
+    }
+
+    // copy with explicit volatile-sharing semantics
+    void share(const list& bl)
+    {
+      if (this != &bl) {
+        clear();
+        std::list<buffer::ptr>::const_iterator pb;
+        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
+          push_back(*pb);
+        }
+      }
+    }
 
     iterator begin() {
       return iterator(this, 0);

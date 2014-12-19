@@ -527,7 +527,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   m_filestore_max_sync_interval(g_conf->filestore_max_sync_interval),
   m_filestore_min_sync_interval(g_conf->filestore_min_sync_interval),
   m_filestore_fail_eio(g_conf->filestore_fail_eio),
-  m_filestore_replica_fadvise(g_conf->filestore_replica_fadvise),
+  m_filestore_fadvise(g_conf->filestore_fadvise),
   do_update(do_update),
   m_journal_dio(g_conf->journal_dio),
   m_journal_aio(g_conf->journal_aio),
@@ -707,12 +707,6 @@ void FileStore::create_backend(long f_type)
 
   case XFS_SUPER_MAGIC:
     // wbthrottle is constructed with fs(WBThrottle::XFS)
-    if (m_filestore_replica_fadvise) {
-      dout(1) << " disabling 'filestore replica fadvise' due to known issues with fadvise(DONTNEED) on xfs" << dendl;
-      g_conf->set_val("filestore_replica_fadvise", "false");
-      g_conf->apply_changes(NULL);
-      assert(m_filestore_replica_fadvise == false);
-    }
     break;
 #endif
   }
@@ -1808,7 +1802,9 @@ void FileStore::_finish_op(OpSequencer *osr)
   if (o->onreadable) {
     op_finisher.queue(o->onreadable);
   }
-  op_finisher.queue(to_queue);
+  if (!to_queue.empty()) {
+    op_finisher.queue(to_queue);
+  }
   delete o;
 }
 
@@ -1958,7 +1954,9 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
     dout(10) << " queueing ondisk " << ondisk << dendl;
     ondisk_finisher.queue(ondisk);
   }
-  ondisk_finisher.queue(to_queue);
+  if (!to_queue.empty()) {
+    ondisk_finisher.queue(to_queue);
+  }
 }
 
 int FileStore::_do_transactions(
@@ -2276,12 +2274,12 @@ unsigned FileStore::_do_transaction(
 	ghobject_t oid = i.decode_oid();
 	uint64_t off = i.decode_length();
 	uint64_t len = i.decode_length();
-	bool replica = i.get_replica();
+	uint32_t fadvise_flags = i.get_fadvise_flags();
 	bufferlist bl;
 	i.decode_bl(bl);
         tracepoint(objectstore, write_enter, osr_name, off, len);
 	if (_check_replay_guard(cid, oid, spos) > 0)
-	  r = _write(cid, oid, off, len, bl, replica);
+	  r = _write(cid, oid, off, len, bl, fadvise_flags);
         tracepoint(objectstore, write_exit, r);
       }
       break;
@@ -2487,8 +2485,6 @@ unsigned FileStore::_do_transaction(
         tracepoint(objectstore, coll_add_enter);
 	r = _collection_add(ncid, ocid, oid, spos);
         tracepoint(objectstore, coll_add_exit, r);
-	if (r == -ENOENT && i.tolerate_collection_add_enoent())
-	  r = 0;
 	spos.op++;
 	if (r < 0)
 	  break;
@@ -2670,10 +2666,6 @@ unsigned FileStore::_do_transaction(
 	// -ENOENT is normally okay
 	// ...including on a replayed OP_RMCOLL with checkpoint mode
 	ok = true;
-      if (r == -ENOENT && (
-	  op == Transaction::OP_COLL_ADD &&
-	  i.tolerate_collection_add_enoent()))
-	ok = true; // Hack for upgrade from snapcolls to snapmapper
       if (r == -ENODATA)
 	ok = true;
 
@@ -2797,6 +2789,7 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
+  uint32_t op_flags,
   bool allow_eio)
 {
   int got;
@@ -2820,6 +2813,13 @@ int FileStore::read(
     len = st.st_size;
   }
 
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_RANDOM)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_RANDOM);
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_SEQUENTIAL);
+#endif
+
   bufferptr bptr(len);  // prealloc space for entire read
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
@@ -2830,6 +2830,13 @@ int FileStore::read(
   }
   bptr.set_length(got);   // properly size the buffer
   bl.push_back(bptr);   // put it in the target bufferlist
+
+#ifdef HAVE_POSIX_FADVISE
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED)
+    posix_fadvise(**fd, offset, len, POSIX_FADV_DONTNEED);
+  if (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_RANDOM | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL))
+    posix_fadvise(**fd, offset, len, POSIX_FADV_NORMAL);
+#endif
 
   if (m_filestore_sloppy_crc && (!replaying || backend->can_checkpoint())) {
     ostringstream ss;
@@ -2972,7 +2979,7 @@ int FileStore::_touch(coll_t cid, const ghobject_t& oid)
 
 int FileStore::_write(coll_t cid, const ghobject_t& oid,
                      uint64_t offset, size_t len,
-                     const bufferlist& bl, bool replica)
+                     const bufferlist& bl, uint32_t fadvise_flags)
 {
   dout(15) << "write " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int r;
@@ -3016,7 +3023,8 @@ int FileStore::_write(coll_t cid, const ghobject_t& oid,
   // flush?
   if (!replaying &&
       g_conf->filestore_wbthrottle_enable)
-    wbthrottle.queue_wb(fd, oid, offset, len, replica);
+    wbthrottle.queue_wb(fd, oid, offset, len,
+			  fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   lfn_close(fd);
 
  out:
@@ -3106,10 +3114,6 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
       r = -errno;
       goto out3;
     }
-    r = ::ftruncate(**n, st.st_size);
-    if (r < 0) {
-      goto out3;
-    }
 
     dout(20) << "objectmap clone" << dendl;
     r = object_map->clone(oldoid, newoid, &spos);
@@ -3189,6 +3193,7 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
     extent->fe_logical = srcoff;
   }
 
+  int64_t written = 0;
   uint64_t i = 0;
 
   while (i < fiemap->fm_mapped_extents) {
@@ -3262,18 +3267,38 @@ int FileStore::_do_sparse_copy_range(int from, int to, uint64_t srcoff, uint64_t
         op += (r-op);
       }
       if (r < 0)
-        break;
+        goto out;
       pos += r;
     }
+    written += end;
     i++;
     extent++;
   }
 
-  if (r >= 0 && m_filestore_sloppy_crc) {
-    int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
-    assert(rc >= 0);
+  if (r >= 0) {
+    if (m_filestore_sloppy_crc) {
+      int rc = backend->_crc_update_clone_range(from, to, srcoff, len, dstoff);
+      assert(rc >= 0);
+    }
+    struct stat st;
+    r = ::fstat(to, &st);
+    if (r < 0) {
+      r = -errno;
+      derr << __func__ << ": fstat error at " << to << " " << cpp_strerror(r) << dendl;
+      goto out;
+    }
+    if (st.st_size < (int)(dstoff + len)) {
+      r = ::ftruncate(to, dstoff + len);
+      if (r < 0) {
+        r = -errno;
+        derr << __func__ << ": ftruncate error at " << dstoff+len << " " << cpp_strerror(r) << dendl;
+        goto out;
+      }
+    }
+    r = written;
   }
 
+ out:
   dout(20) << __func__ << " " << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
   return r;
 }
@@ -3368,10 +3393,15 @@ int FileStore::_clone_range(coll_t cid, const ghobject_t& oldoid, const ghobject
     goto out;
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
+  if (r < 0) {
+    r = -errno;
+    goto out3;
+  }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
 
+ out3:
   lfn_close(n);
  out:
   lfn_close(o);
@@ -5204,7 +5234,7 @@ const char** FileStore::get_tracked_conf_keys() const
     "filestore_dump_file",
     "filestore_kill_at",
     "filestore_fail_eio",
-    "filestore_replica_fadvise",
+    "filestore_fadvise",
     "filestore_sloppy_crc",
     "filestore_sloppy_crc_block_size",
     "filestore_max_alloc_hint_size",
@@ -5238,7 +5268,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_sloppy_crc") ||
       changed.count("filestore_sloppy_crc_block_size") ||
       changed.count("filestore_max_alloc_hint_size") ||
-      changed.count("filestore_replica_fadvise")) {
+      changed.count("filestore_fadvise")) {
     Mutex::Locker l(lock);
     m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
     m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
@@ -5248,7 +5278,7 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
     m_filestore_queue_committing_max_bytes = conf->filestore_queue_committing_max_bytes;
     m_filestore_kill_at.set(conf->filestore_kill_at);
     m_filestore_fail_eio = conf->filestore_fail_eio;
-    m_filestore_replica_fadvise = conf->filestore_replica_fadvise;
+    m_filestore_fadvise = conf->filestore_fadvise;
     m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
     m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
     m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;

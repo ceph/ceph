@@ -23,7 +23,6 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
-#include "common/RefCountedObj.h"
 #include "common/PrioritizedQueue.h"
 
 class CephContext;
@@ -50,7 +49,7 @@ class DispatchQueue {
     bool is_code() const {
       return type != -1;
     }
-    int get_code () {
+    int get_code () const {
       assert(is_code());
       return type;
     }
@@ -66,7 +65,7 @@ class DispatchQueue {
     
   CephContext *cct;
   SimpleMessenger *msgr;
-  Mutex lock;
+  mutable Mutex lock;
   Cond cond;
 
   PrioritizedQueue<QueueItem, uint64_t> mqueue;
@@ -128,9 +127,9 @@ class DispatchQueue {
   void local_delivery(Message *m, int priority);
   void run_local_delivery();
 
-  double get_max_age(utime_t now);
+  double get_max_age(utime_t now) const;
 
-  int get_queue_len() {
+  int get_queue_len() const {
     Mutex::Locker l(lock);
     return mqueue.length();
   }
@@ -176,7 +175,7 @@ class DispatchQueue {
     cond.Signal();
   }
 
-  bool can_fast_dispatch(Message *m);
+  bool can_fast_dispatch(Message *m) const;
   void fast_dispatch(Message *m);
   void fast_preprocess(Message *m);
   void enqueue(Message *m, int priority, uint64_t id);
@@ -189,11 +188,11 @@ class DispatchQueue {
   void entry();
   void wait();
   void shutdown();
-  bool is_started() {return dispatch_thread.is_started();}
+  bool is_started() const {return dispatch_thread.is_started();}
 
   DispatchQueue(CephContext *cct, SimpleMessenger *msgr)
     : cct(cct), msgr(msgr),
-      lock("SimpleMessenger::DispatchQeueu::lock"), 
+      lock("SimpleMessenger::DispatchQueue::lock"),
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
 	     cct->_conf->ms_pq_min_cost),
       next_pipe_id(1),

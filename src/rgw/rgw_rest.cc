@@ -247,7 +247,7 @@ void dump_content_length(struct req_state *s, uint64_t len)
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
-  r = s->cio->print("Accept-Ranges: %s\n", "bytes");
+  r = s->cio->print("Accept-Ranges: %s\r\n", "bytes");
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -257,9 +257,9 @@ void dump_etag(struct req_state *s, const char *etag)
 {
   int r;
   if (s->prot_flags & RGW_REST_SWIFT)
-    r = s->cio->print("etag: %s\n", etag);
+    r = s->cio->print("etag: %s\r\n", etag);
   else
-    r = s->cio->print("ETag: \"%s\"\n", etag);
+    r = s->cio->print("ETag: \"%s\"\r\n", etag);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -268,7 +268,7 @@ void dump_etag(struct req_state *s, const char *etag)
 void dump_pair(struct req_state *s, const char *key, const char *value)
 {
   if ( (strlen(key) > 0) && (strlen(value) > 0))
-    s->cio->print("%s: %s\n", key, value);
+    s->cio->print("%s: %s\r\n", key, value);
 }
 
 void dump_bucket_from_state(struct req_state *s)
@@ -276,14 +276,8 @@ void dump_bucket_from_state(struct req_state *s)
   int expose_bucket = g_conf->rgw_expose_bucket;
   if (expose_bucket) {
     if (!s->bucket_name_str.empty())
-      s->cio->print("Bucket: \"%s\"\n", s->bucket_name_str.c_str());
+      s->cio->print("Bucket: \"%s\"\r\n", s->bucket_name_str.c_str());
   }
-}
-
-void dump_object_from_state(struct req_state *s)
-{
-  if (!s->object_str.empty())
-    s->cio->print("Key: \"%s\"\n", s->object_str.c_str());
 }
 
 void dump_uri_from_state(struct req_state *s)
@@ -299,12 +293,12 @@ void dump_uri_from_state(struct req_state *s)
       location += "/";
       if (!s->object_str.empty()) {
         location += s->object_str;
-        s->cio->print("Location: %s\n", location.c_str());
+        s->cio->print("Location: %s\r\n", location.c_str());
       }
     }
   }
   else {
-    s->cio->print("Location: \"%s\"\n", s->info.request_uri.c_str());
+    s->cio->print("Location: \"%s\"\r\n", s->info.request_uri.c_str());
   }
 }
 
@@ -313,7 +307,7 @@ void dump_redirect(struct req_state *s, const string& redirect)
   if (redirect.empty())
     return;
 
-  s->cio->print("Location: %s\n", redirect.c_str());
+  s->cio->print("Location: %s\r\n", redirect.c_str());
 }
 
 static void dump_time_header(struct req_state *s, const char *name, time_t t)
@@ -328,7 +322,7 @@ static void dump_time_header(struct req_state *s, const char *name, time_t t)
   if (strftime(timestr, sizeof(timestr), "%a, %d %b %Y %H:%M:%S %Z", tmp) == 0)
     return;
 
-  int r = s->cio->print("%s: %s\n", name, timestr);
+  int r = s->cio->print("%s: %s\r\n", name, timestr);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -344,7 +338,7 @@ void dump_epoch_header(struct req_state *s, const char *name, time_t t)
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)t);
 
-  int r = s->cio->print("%s: %s\n", name, buf);
+  int r = s->cio->print("%s: %s\r\n", name, buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -377,16 +371,16 @@ void dump_owner(struct req_state *s, string& id, string& name, const char *secti
 void dump_access_control(struct req_state *s, const char *origin, const char *meth,
                          const char *hdr, const char *exp_hdr, uint32_t max_age) {
   if (origin && (origin[0] != '\0')) {
-    s->cio->print("Access-Control-Allow-Origin: %s\n", origin);
+    s->cio->print("Access-Control-Allow-Origin: %s\r\n", origin);
     if (meth && (meth[0] != '\0'))
-      s->cio->print("Access-Control-Allow-Methods: %s\n", meth);
+      s->cio->print("Access-Control-Allow-Methods: %s\r\n", meth);
     if (hdr && (hdr[0] != '\0'))
-      s->cio->print("Access-Control-Allow-Headers: %s\n", hdr);
+      s->cio->print("Access-Control-Allow-Headers: %s\r\n", hdr);
     if (exp_hdr && (exp_hdr[0] != '\0')) {
-      s->cio->print("Access-Control-Expose-Headers: %s\n", exp_hdr);
+      s->cio->print("Access-Control-Expose-Headers: %s\r\n", exp_hdr);
     }
     if (max_age != CORS_MAX_AGE_INVALID) {
-      s->cio->print("Access-Control-Max-Age: %d\n", max_age);
+      s->cio->print("Access-Control-Max-Age: %d\r\n", max_age);
     }
   }
 }
@@ -470,6 +464,21 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
   set_req_state_err(s, err_no);
   dump_errno(s);
   dump_bucket_from_state(s);
+  if (err_no == -ERR_PERMANENT_REDIRECT && !s->region_endpoint.empty()) {
+    string dest_uri = s->region_endpoint;
+    /*
+     * reqest_uri is always start with slash, so we need to remove
+     * the unnecessary slash at the end of dest_uri.
+     */
+    if (dest_uri[dest_uri.size() - 1] == '/') {
+      dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+    }
+    dest_uri += s->info.request_uri;
+    dest_uri += "?";
+    dest_uri += s->info.request_params;
+
+    dump_redirect(s, dest_uri);
+  }
   end_header(s, op);
   rgw_flush_formatter_and_reset(s, s->formatter);
   perfcounter->inc(l_rgw_failed_req);
@@ -486,7 +495,7 @@ void dump_range(struct req_state *s, uint64_t ofs, uint64_t end, uint64_t total)
 
   /* dumping range into temp buffer first, as libfcgi will fail to digest %lld */
   snprintf(range_buf, sizeof(range_buf), "%lld-%lld/%lld", (long long)ofs, (long long)end, (long long)total);
-  int r = s->cio->print("Content-Range: bytes %s\n", range_buf);
+  int r = s->cio->print("Content-Range: bytes %s\r\n", range_buf);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }

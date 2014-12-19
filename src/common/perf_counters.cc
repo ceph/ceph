@@ -74,6 +74,34 @@ void PerfCountersCollection::clear()
   }
 }
 
+bool PerfCountersCollection::reset(const std::string &name)
+{
+  bool result = false;
+  Mutex::Locker lck(m_lock);
+  perf_counters_set_t::iterator i = m_loggers.begin();
+  perf_counters_set_t::iterator i_end = m_loggers.end();
+
+  if (!strcmp(name.c_str(), "all"))  {
+    while (i != i_end) {
+      (*i)->reset();
+      i++;
+    }
+    result = true;
+  } else {
+    while (i != i_end) {
+      if (!name.compare((*i)->get_name())) {
+	(*i)->reset();
+	result = true;
+	break;
+      }
+      i++;
+    }
+  }
+
+  return result;
+}
+
+
 void PerfCountersCollection::dump_formatted(Formatter *f, bool schema)
 {
   Mutex::Locker lck(m_lock);
@@ -139,7 +167,6 @@ void PerfCounters::set(int idx, uint64_t amt)
   perf_counter_data_any_d& data(m_data[idx - m_lower_bound - 1]);
   if (!(data.type & PERFCOUNTER_U64))
     return;
-  data.u64.set(amt);
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
     data.avgcount.inc();
     data.u64.set(amt);
@@ -224,6 +251,17 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ms(int idx) const
     return make_pair(0, 0);
   pair<uint64_t,uint64_t> a = data.read_avg();
   return make_pair(a.second, a.first / 1000000ull);
+}
+
+void PerfCounters::reset()
+{
+  perf_counter_data_vec_t::iterator d = m_data.begin();
+  perf_counter_data_vec_t::iterator d_end = m_data.end();
+
+  while (d != d_end) {
+    d->reset();
+    d++;
+  }
 }
 
 void PerfCounters::dump_formatted(Formatter *f, bool schema)

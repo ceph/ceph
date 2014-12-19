@@ -1,6 +1,6 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
-	url = git://ceph.com/git/ceph-object-corpus.git
+	url = git://github.com/ceph/ceph-object-corpus.git
 [submodule "src/libs3"]
 	path = src/libs3
 	url = git://github.com/ceph/libs3.git
@@ -14,7 +14,7 @@
 [submodule "src/erasure-code/jerasure/gf-complete"]
 	path = src/erasure-code/jerasure/gf-complete
 	url = https://github.com/ceph/gf-complete.git
-	branch = v1-ceph
+	branch = v2-ceph
 [submodule "src/rocksdb"]
 	path = src/rocksdb
 	url = git://github.com/ceph/rocksdb

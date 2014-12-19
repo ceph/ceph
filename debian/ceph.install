@@ -24,6 +24,8 @@ usr/share/doc/ceph/sample.ceph.conf
 usr/share/doc/ceph/sample.fetch_config
 usr/share/man/man8/ceph-clsinfo.8
 usr/share/man/man8/ceph-debugpack.8
+usr/share/man/man8/ceph-deploy.8
+usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-mon.8
 usr/share/man/man8/ceph-osd.8
 usr/share/man/man8/ceph-run.8

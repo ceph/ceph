@@ -42,6 +42,7 @@ static ostream& _prefix(std::ostream *_dout, Worker *w) {
   return *_dout << "--";
 }
 
+
 class C_handle_accept : public EventCallback {
   AsyncConnectionRef conn;
   int fd;
@@ -282,22 +283,23 @@ void Processor::stop()
 
 void Worker::stop()
 {
-  ldout(msgr->cct, 10) << __func__ << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   done = true;
   center.wakeup();
 }
 
 void *Worker::entry()
 {
-  ldout(msgr->cct, 10) << __func__ << " starting" << dendl;
+  ldout(cct, 10) << __func__ << " starting" << dendl;
   int r;
 
+  center.set_owner(pthread_self());
   while (!done) {
-    ldout(msgr->cct, 20) << __func__ << " calling event process" << dendl;
+    ldout(cct, 20) << __func__ << " calling event process" << dendl;
 
     r = center.process_events(30000000);
     if (r < 0) {
-      ldout(msgr->cct,20) << __func__ << " process events failed: "
+      ldout(cct, 20) << __func__ << " process events failed: "
                           << cpp_strerror(errno) << dendl;
       // TODO do something?
     }
@@ -306,6 +308,40 @@ void *Worker::entry()
   return 0;
 }
 
+
+/*******************
+ * WorkerPool
+ *******************/
+const string WorkerPool::name = "AsyncMessenger::WorkerPool";
+
+WorkerPool::WorkerPool(CephContext *c): cct(c), seq(0), started(false)
+{
+  for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
+    Worker *w = new Worker(cct);
+    workers.push_back(w);
+  }
+}
+
+WorkerPool::~WorkerPool()
+{
+  for (uint64_t i = 0; i < workers.size(); ++i) {
+    workers[i]->stop();
+    workers[i]->join();
+    delete workers[i];
+  }
+}
+
+void WorkerPool::start()
+{
+  if (!started) {
+    for (uint64_t i = 0; i < workers.size(); ++i) {
+      workers[i]->create();
+    }
+    started = true;
+  }
+}
+
+
 /*******************
  * AsyncMessenger
  */
@@ -313,19 +349,15 @@ void *Worker::entry()
 AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
                                string mname, uint64_t _nonce)
   : SimplePolicyMessenger(cct, name,mname, _nonce),
-    conn_id(0),
     processor(this, _nonce),
     lock("AsyncMessenger::lock"),
     nonce(_nonce), did_bind(false),
-    global_seq(0),
+    global_seq(0), deleted_lock("AsyncMessenger::deleted_lock"),
     cluster_protocol(0), stopped(true)
 {
   ceph_spin_init(&global_seq_lock);
-  for (int i = 0; i < cct->_conf->ms_async_op_threads; ++i) {
-    Worker *w = new Worker(this, cct);
-    workers.push_back(w);
-  }
-  local_connection = new AsyncConnection(cct, this, &workers[0]->center);
+  cct->lookup_or_create_singleton_object<WorkerPool>(pool, WorkerPool::name);
+  local_connection = new AsyncConnection(cct, this, &pool->get_worker()->center);
   init_local_connection();
 }
 
@@ -349,15 +381,15 @@ void AsyncMessenger::ready()
 
 int AsyncMessenger::shutdown()
 {
-  ldout(cct,10) << __func__ << "shutdown " << get_myaddr() << dendl;
-  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
-    (*it)->stop();
+  ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
   mark_down_all();
 
   // break ref cycles on the loopback connection
   processor.stop();
   local_connection->set_priv(NULL);
+  lock.Lock();
   stop_cond.Signal();
+  lock.Unlock();
   stopped = true;
   return 0;
 }
@@ -386,11 +418,6 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
 {
   ldout(cct,1) << __func__ << " rebind avoid " << avoid_ports << dendl;
   assert(did_bind);
-  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it) {
-    (*it)->stop();
-    if ((*it)->is_started())
-      (*it)->join();
-  }
 
   processor.stop();
   mark_down_all();
@@ -413,9 +440,7 @@ int AsyncMessenger::start()
     my_inst.addr.nonce = nonce;
     _init_local_connection();
   }
-
-  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
-    (*it)->create();
+  pool->start();
 
   lock.Unlock();
   return 0;
@@ -431,8 +456,6 @@ void AsyncMessenger::wait()
   if (!stopped)
     stop_cond.Wait(lock);
 
-  for (vector<Worker*>::iterator it = workers.begin(); it != workers.end(); ++it)
-    (*it)->join();
   lock.Unlock();
 
   // done!  clean up.
@@ -441,14 +464,14 @@ void AsyncMessenger::wait()
   did_bind = false;
   ldout(cct,20) << __func__ << ": stopped processor thread" << dendl;
 
-  // close all pipes
+  // close all connections
   lock.Lock();
   {
-    ldout(cct, 10) << __func__ << ": closing pipes" << dendl;
+    ldout(cct, 10) << __func__ << ": closing connections" << dendl;
 
     while (!conns.empty()) {
       AsyncConnectionRef p = conns.begin()->second;
-      _stop_conn(p);
+      p->mark_down();
     }
   }
   lock.Unlock();
@@ -461,11 +484,10 @@ void AsyncMessenger::wait()
 AsyncConnectionRef AsyncMessenger::add_accept(int sd)
 {
   lock.Lock();
-  Worker *w = workers[conn_id % workers.size()];
+  Worker *w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
   w->center.dispatch_event_external(EventCallbackRef(new C_handle_accept(conn, sd)));
   accepting_conns.insert(conn);
-  conn_id++;
   lock.Unlock();
   return conn;
 }
@@ -479,12 +501,11 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
                  << ", creating connection and registering" << dendl;
 
   // create connection
-  Worker *w = workers[conn_id % workers.size()];
+  Worker *w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
   conn->connect(addr, type);
   assert(!conns.count(addr));
   conns[addr] = conn;
-  conn_id++;
 
   return conn;
 }
@@ -555,24 +576,11 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   // local?
   if (my_inst.addr == dest_addr) {
     // local
-    ldout(cct, 20) << __func__ << " " << *m << " local" << dendl;
-    m->set_connection(local_connection.get());
-    m->set_recv_stamp(ceph_clock_now(cct));
-    ms_fast_preprocess(m);
-    if (ms_can_fast_dispatch(m)) {
-      ms_fast_dispatch(m);
-    } else {
-      if (m->get_priority() >= CEPH_MSG_PRIO_LOW) {
-        ms_fast_dispatch(m);
-      } else {
-        ms_deliver_dispatch(m);
-      }
-    }
-
-    return;
+    static_cast<AsyncConnection*>(local_connection.get())->send_message(m);
+    return ;
   }
 
-  // remote, no existing pipe.
+  // remote, no existing connection.
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
     ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addr
@@ -580,7 +588,9 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
                    << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
   } else {
-    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new pipe." << dendl;
+    ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
+    con = create_connect(dest_addr, dest_type);
+    con->send_message(m);
   }
 }
 
@@ -614,7 +624,6 @@ void AsyncMessenger::mark_down_all()
     AsyncConnectionRef p = *q;
     ldout(cct, 5) << __func__ << " accepting_conn " << p << dendl;
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   accepting_conns.clear();
@@ -625,7 +634,6 @@ void AsyncMessenger::mark_down_all()
     ldout(cct, 5) << __func__ << " " << it->first << " " << p << dendl;
     conns.erase(it);
     p->mark_down();
-    p->get();
     ms_deliver_handle_reset(p.get());
   }
   lock.Unlock();
@@ -637,11 +645,10 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
   AsyncConnectionRef p = _lookup_conn(addr);
   if (p) {
     ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
-    _stop_conn(p);
-    p->get();
+    p->mark_down();
     ms_deliver_handle_reset(p.get());
   } else {
-    ldout(cct, 1) << __func__ << " " << addr << " -- pipe dne" << dendl;
+    ldout(cct, 1) << __func__ << " " << addr << " -- connection dne" << dendl;
   }
   lock.Unlock();
 }

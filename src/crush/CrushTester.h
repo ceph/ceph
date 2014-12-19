@@ -27,6 +27,7 @@ class CrushTester {
   bool output_utilization;
   bool output_utilization_all;
   bool output_statistics;
+  bool output_mappings;
   bool output_bad_mappings;
   bool output_choose_tries;
 
@@ -176,6 +177,7 @@ public:
       output_utilization(false),
       output_utilization_all(false),
       output_statistics(false),
+      output_mappings(false),
       output_bad_mappings(false),
       output_choose_tries(false),
       output_data_file(false),
@@ -224,6 +226,13 @@ public:
   }
   bool get_output_statistics() const {
     return output_statistics;
+  }
+
+  void set_output_mappings(bool b) {
+    output_mappings = b;
+  }
+  bool get_output_mappings() const {
+    return output_mappings;
   }
 
   void set_output_bad_mappings(bool b) {

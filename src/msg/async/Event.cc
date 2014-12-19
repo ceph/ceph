@@ -38,6 +38,9 @@ class C_handle_notify : public EventCallback {
  public:
   C_handle_notify() {}
   void do_request(int fd_or_id) {
+    char c[100];
+    int r = read(fd_or_id, c, 100);
+    assert(r > 0);
   }
 };
 
@@ -74,6 +77,11 @@ int EventCenter::init(int n)
 
   notify_receive_fd = fds[0];
   notify_send_fd = fds[1];
+  r = net.set_nonblock(notify_receive_fd);
+  if (r < 0) {
+    return -1;
+  }
+
   file_events = static_cast<FileEvent *>(malloc(sizeof(FileEvent)*n));
   memset(file_events, 0, sizeof(FileEvent)*n);
 
@@ -180,6 +188,28 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   return id;
 }
 
+// TODO: Ineffective implementation now!
+void EventCenter::delete_time_event(uint64_t id)
+{
+  ldout(cct, 10) << __func__ << " id=" << id << dendl;
+  if (id >= time_event_next_id)
+    return ;
+
+
+  for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+       it != time_events.end(); ++it) {
+    for (list<TimeEvent>::iterator j = it->second.begin();
+         j != it->second.end(); ++j) {
+      if (j->id == id) {
+        it->second.erase(j);
+        if (it->second.empty())
+          time_events.erase(it);
+        return ;
+      }
+    }
+  }
+}
+
 void EventCenter::wakeup()
 {
   ldout(cct, 1) << __func__ << dendl;
@@ -240,6 +270,8 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
+  // Must set owner before looping
+  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;

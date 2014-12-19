@@ -1,6 +1,8 @@
 AUTOMAKE_OPTIONS = gnu
 
 dist_man_MANS = \
+	ceph-deploy.8 \
+	ceph-disk.8 \
 	ceph-osd.8 \
 	ceph-mds.8 \
 	ceph-mon.8 \

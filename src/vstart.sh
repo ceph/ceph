@@ -281,7 +281,7 @@ test -d gmon && $SUDO rm -rf gmon/*
 
 
 # figure machine's ip
-HOSTNAME=`hostname`
+HOSTNAME=`hostname -s`
 if [ -n "$ip" ]; then
     IP="$ip"
 else
@@ -340,6 +340,7 @@ if [ "$start_mon" -eq 1 ]; then
         osd pool default min size = 1
         osd failsafe full ratio = .99
         mon osd full ratio = .99
+        mon data avail warn = 10
         mon data avail crit = 1
         osd pool default erasure code directory = .libs
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd

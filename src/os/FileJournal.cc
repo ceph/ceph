@@ -85,6 +85,7 @@ int FileJournal::_open(bool forwrite, bool create)
   if (ret) {
     ret = errno;
     derr << "FileJournal::_open: unable to fstat journal: " << cpp_strerror(ret) << dendl;
+    ret = -ret;
     goto out_fd;
   }
 
@@ -109,6 +110,7 @@ int FileJournal::_open(bool forwrite, bool create)
     if (ret < 0) {
       ret = errno;
       derr << "FileJournal::_open: unable to setup io_context " << cpp_strerror(ret) << dendl;
+      ret = -ret;
       goto out_fd;
     }
   }
@@ -154,6 +156,10 @@ int FileJournal::_open_block_device()
   /* block devices have to write in blocks of CEPH_PAGE_SIZE */
   block_size = CEPH_PAGE_SIZE;
 
+  if (g_conf->journal_discard) {
+    discard = block_device_support_discard(fn.c_str());
+    dout(10) << fn << " support discard: " << (int)discard << dendl;
+  }
   _check_disk_write_cache();
   return 0;
 }
@@ -325,7 +331,7 @@ int FileJournal::check()
   int ret;
 
   ret = _open(false, false);
-  if (ret < 0)
+  if (ret)
     goto done;
 
   ret = read_header();
@@ -358,7 +364,7 @@ int FileJournal::create()
   dout(2) << "create " << fn << " fsid " << fsid << dendl;
 
   ret = _open(true, true);
-  if (ret < 0)
+  if (ret)
     goto done;
 
   // write empty header
@@ -435,7 +441,7 @@ done:
 int FileJournal::peek_fsid(uuid_d& fsid)
 {
   int r = _open(false, false);
-  if (r < 0)
+  if (r)
     return r;
   r = read_header();
   if (r < 0)
@@ -451,7 +457,7 @@ int FileJournal::open(uint64_t fs_op_seq)
   uint64_t next_seq = fs_op_seq + 1;
 
   int err = _open(false);
-  if (err < 0) 
+  if (err)
     return err;
 
   // assume writeable, unless...
@@ -561,10 +567,14 @@ void FileJournal::close()
 
 int FileJournal::dump(ostream& out)
 {
-  dout(10) << "dump" << dendl;
-  _open(false, false);
+  int err = 0;
 
-  int err = read_header();
+  dout(10) << "dump" << dendl;
+  err = _open(false, false);
+  if (err)
+    return err;
+
+  err = read_header();
   if (err < 0)
     return err;
 
@@ -905,7 +915,7 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
     bufferptr bp = buffer::create_static(pre_pad, zero_buf);
     bl.push_back(bp);
   }
-  bl.claim_append(ebl);
+  bl.claim_append(ebl, buffer::list::CLAIM_ALLOW_NONSHAREABLE); // potential zero-copy
 
   if (h.post_pad) {
     bufferptr bp = buffer::create_static(post_pad, zero_buf);
@@ -1462,8 +1472,9 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
     completions.push_back(
       completion_item(
 	seq, oncommit, ceph_clock_now(g_ceph_context), osd_op));
+    if (writeq.empty())
+      writeq_cond.Signal();
     writeq.push_back(write_item(seq, e, alignment, osd_op));
-    writeq_cond.Signal();
   }
 }
 
@@ -1519,6 +1530,23 @@ void FileJournal::commit_start(uint64_t seq)
   }
 }
 
+/*
+ *send discard command to joural block deivce
+ */
+void FileJournal::do_discard(int64_t offset, int64_t end)
+{
+  dout(10) << __func__ << "trim(" << offset << ", " << end << dendl;
+
+  offset = ROUND_UP_TO(offset, block_size);
+  if (offset >= end)
+    return;
+  end = ROUND_UP_TO(end - block_size, block_size);
+  assert(end >= offset);
+  if (offset < end)
+    if (block_device_discard(fd, offset, end - offset) < 0)
+	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+}
+
 void FileJournal::committed_thru(uint64_t seq)
 {
   Mutex::Locker locker(write_lock);
@@ -1551,6 +1579,8 @@ void FileJournal::committed_thru(uint64_t seq)
   while (!journalq.empty() && journalq.front().first <= seq) {
     journalq.pop_front();
   }
+
+  int64_t old_start = header.start;
   if (!journalq.empty()) {
     header.start = journalq.front().second;
     header.start_seq = journalq.front().first;
@@ -1558,6 +1588,17 @@ void FileJournal::committed_thru(uint64_t seq)
     header.start = write_pos;
     header.start_seq = seq + 1;
   }
+
+  if (discard) {
+    dout(10) << __func__  << " will trim (" << old_start << ", " << header.start << ")" << dendl;
+    if (old_start < header.start)
+      do_discard(old_start, header.start - 1);
+    else {
+      do_discard(old_start, header.max_size - 1);
+      do_discard(get_top(), header.start - 1);
+    }
+  }
+
   must_write_header = true;
   print_header();
 

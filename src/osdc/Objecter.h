@@ -37,12 +37,14 @@ class Messenger;
 class OSDMap;
 class MonClient;
 class Message;
+class Finisher;
 
 class MPoolOpReply;
 
 class MGetPoolStatsReply;
 class MStatfsReply;
 class MCommandReply;
+class MWatchNotify;
 
 class PerfCounters;
 
@@ -169,14 +171,6 @@ struct ObjectOperation {
     osd_op.indata.append(method, osd_op.op.cls.method_len);
     osd_op.indata.append(indata);
   }
-  void add_watch(int op, uint64_t cookie, uint64_t ver, uint8_t flag, bufferlist& inbl) {
-    OSDOp& osd_op = add_op(op);
-    osd_op.op.op = op;
-    osd_op.op.watch.cookie = cookie;
-    osd_op.op.watch.ver = ver;
-    osd_op.op.watch.flag = flag;
-    osd_op.indata.append(inbl);
-  }
   void add_pgls(int op, uint64_t count, collection_list_handle_t cookie, epoch_t start_epoch) {
     OSDOp& osd_op = add_op(op);
     osd_op.op.op = op;
@@ -226,11 +220,6 @@ struct ObjectOperation {
   void create(bool excl) {
     OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
     o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
-  }
-  void create(bool excl, const string& category) {
-    OSDOp& o = add_op(CEPH_OSD_OP_CREATE);
-    o.op.flags = (excl ? CEPH_OSD_OP_FLAG_EXCL : 0);
-    ::encode(category, o.indata);
   }
 
   struct C_ObjectOperation_stat : public Context {
@@ -629,7 +618,6 @@ struct ObjectOperation {
     object_copy_cursor_t *cursor;
     uint64_t *out_size;
     utime_t *out_mtime;
-    string *out_category;
     std::map<std::string,bufferlist> *out_attrs;
     bufferlist *out_data, *out_omap_header;
     std::map<std::string,bufferlist> *out_omap;
@@ -639,7 +627,6 @@ struct ObjectOperation {
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
 			      utime_t *m,
-			      string *cat,
 			      std::map<std::string,bufferlist> *a,
 			      bufferlist *d, bufferlist *oh,
 			      std::map<std::string,bufferlist> *o,
@@ -647,7 +634,7 @@ struct ObjectOperation {
 			      snapid_t *osnap_seq,
 			      int *r)
       : cursor(c),
-	out_size(s), out_mtime(m), out_category(cat),
+	out_size(s), out_mtime(m),
 	out_attrs(a), out_data(d), out_omap_header(oh),
 	out_omap(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	prval(r) {}
@@ -662,8 +649,6 @@ struct ObjectOperation {
 	  *out_size = copy_reply.size;
 	if (out_mtime)
 	  *out_mtime = copy_reply.mtime;
-	if (out_category)
-	  *out_category = copy_reply.category;
 	if (out_attrs)
 	  *out_attrs = copy_reply.attrs;
 	if (out_data)
@@ -688,7 +673,6 @@ struct ObjectOperation {
 		uint64_t max,
 		uint64_t *out_size,
 		utime_t *out_mtime,
-		string *out_category,
 		std::map<std::string,bufferlist> *out_attrs,
 		bufferlist *out_data,
 		bufferlist *out_omap_header,
@@ -703,7 +687,7 @@ struct ObjectOperation {
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
-      new C_ObjectOperation_copyget(cursor, out_size, out_mtime, out_category,
+      new C_ObjectOperation_copyget(cursor, out_size, out_mtime,
                                     out_attrs, out_data, out_omap_header,
 				    out_omap, out_snaps, out_snap_seq, prval);
     out_bl[p] = &h->bl;
@@ -863,20 +847,26 @@ struct ObjectOperation {
   }
 
   // watch/notify
-  void watch(uint64_t cookie, uint64_t ver, bool set) {
-    bufferlist inbl;
-    add_watch(CEPH_OSD_OP_WATCH, cookie, ver, (set ? 1 : 0), inbl);
+  void watch(uint64_t cookie, __u8 op) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_WATCH);
+    osd_op.op.watch.cookie = cookie;
+    osd_op.op.watch.op = op;
   }
 
-  void notify(uint64_t cookie, uint64_t ver, bufferlist& inbl) {
-    add_watch(CEPH_OSD_OP_NOTIFY, cookie, ver, 1, inbl); 
+  void notify(uint64_t cookie, bufferlist& inbl) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY);
+    osd_op.op.notify.cookie = cookie;
+    osd_op.indata.append(inbl);
   }
 
-  void notify_ack(uint64_t notify_id, uint64_t ver, uint64_t cookie) {
+  void notify_ack(uint64_t notify_id, uint64_t cookie,
+		  bufferlist& reply_bl) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY_ACK);
     bufferlist bl;
     ::encode(notify_id, bl);
     ::encode(cookie, bl);
-    add_watch(CEPH_OSD_OP_NOTIFY_ACK, notify_id, ver, 0, bl);
+    ::encode(reply_bl, bl);
+    osd_op.indata.append(bl);
   }
 
   void list_watchers(list<obj_watch_t> *out,
@@ -909,8 +899,8 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
   void assert_src_version(const object_t& srcoid, snapid_t srcsnapid, uint64_t ver) {
-    bufferlist bl;
-    add_watch(CEPH_OSD_OP_ASSERT_SRC_VERSION, 0, ver, 0, bl);
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_ASSERT_SRC_VERSION);
+    osd_op.op.assert_ver.ver = ver;
     ops.rbegin()->soid = sobject_t(srcoid, srcsnapid);
   }
 
@@ -1013,6 +1003,7 @@ public:
 public:
   Messenger *messenger;
   MonClient *monc;
+  Finisher *finisher;
 private:
   OSDMap    *osdmap;
 public:
@@ -1036,7 +1027,7 @@ public:
   void maybe_request_map();
 private:
 
-  int _maybe_request_map();
+  void _maybe_request_map();
 
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
@@ -1456,6 +1447,16 @@ public:
 
   // -- lingering ops --
 
+  struct WatchContext {
+    // this simply mirrors librados WatchCtx2
+    virtual void handle_notify(uint64_t notify_id,
+			       uint64_t cookie,
+			       uint64_t notifier_id,
+			       bufferlist& bl) = 0;
+    virtual void handle_error(uint64_t cookie, int err) = 0;
+    virtual ~WatchContext() {}
+  };
+
   struct LingerOp : public RefCountedObject {
     uint64_t linger_id;
 
@@ -1470,44 +1471,84 @@ public:
     bufferlist *poutbl;
     version_t *pobjver;
 
+    bool is_watch;
+    utime_t watch_valid_thru; ///< send time for last acked ping
+    int last_error;  ///< error from last failed ping|reconnect, if any
+    RWLock watch_lock;
+
+    // queue of pending async operations, with the timestamp of
+    // when they were queued.
+    list<utime_t> watch_pending_async;
+
+    uint32_t register_gen;
     bool registered;
     bool canceled;
     Context *on_reg_ack, *on_reg_commit;
 
+    // we trigger these from an async finisher
+    Context *on_notify_finish;
+    bufferlist *notify_result_bl;
+
+    WatchContext *watch_context;
+
     OSDSession *session;
 
     ceph_tid_t register_tid;
+    ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
+
+    void _queued_async() {
+      assert(watch_lock.is_locked());
+      watch_pending_async.push_back(ceph_clock_now(NULL));
+    }
+    void finished_async() {
+      RWLock::WLocker l(watch_lock);
+      assert(!watch_pending_async.empty());
+      watch_pending_async.pop_front();
+    }
 
     LingerOp() : linger_id(0),
 		 target(object_t(), object_locator_t(), 0),
 		 snap(CEPH_NOSNAP),
 		 poutbl(NULL), pobjver(NULL),
+		 is_watch(false),
+		 last_error(0),
+		 watch_lock("Objecter::LingerOp::watch_lock"),
+		 register_gen(0),
 		 registered(false),
 		 canceled(false),
 		 on_reg_ack(NULL), on_reg_commit(NULL),
+		 on_notify_finish(NULL),
+		 notify_result_bl(NULL),
+		 watch_context(NULL),
 		 session(NULL),
 		 register_tid(0),
+		 ping_tid(0),
 		 map_dne_bound(0) {}
 
     // no copy!
     const LingerOp &operator=(const LingerOp& r);
     LingerOp(const LingerOp& o);
+
+    uint64_t get_cookie() {
+      return reinterpret_cast<uint64_t>(this);
+    }
+
   private:
     ~LingerOp() {}
   };
 
-  struct C_Linger_Ack : public Context {
+  struct C_Linger_Register : public Context {
     Objecter *objecter;
     LingerOp *info;
-    C_Linger_Ack(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+    C_Linger_Register(Objecter *o, LingerOp *l) : objecter(o), info(l) {
       info->get();
     }
-    ~C_Linger_Ack() {
+    ~C_Linger_Register() {
       info->put();
     }
     void finish(int r) {
-      objecter->_linger_ack(info, r);
+      objecter->_linger_register(info, r);
     }
   };
   
@@ -1522,6 +1563,37 @@ public:
     }
     void finish(int r) {
       objecter->_linger_commit(info, r);
+    }
+  };
+
+  struct C_Linger_Reconnect : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    C_Linger_Reconnect(Objecter *o, LingerOp *l) : objecter(o), info(l) {
+      info->get();
+    }
+    ~C_Linger_Reconnect() {
+      info->put();
+    }
+    void finish(int r) {
+      objecter->_linger_reconnect(info, r);
+    }
+  };
+
+  struct C_Linger_Ping : public Context {
+    Objecter *objecter;
+    LingerOp *info;
+    utime_t sent;
+    uint32_t register_gen;
+    C_Linger_Ping(Objecter *o, LingerOp *l)
+      : objecter(o), info(l), register_gen(info->register_gen) {
+      info->get();
+    }
+    ~C_Linger_Ping() {
+      info->put();
+    }
+    void finish(int r) {
+      objecter->_linger_ping(info, r, sent, register_gen);
     }
   };
 
@@ -1570,9 +1642,12 @@ public:
   };
   map<int,OSDSession*> osd_sessions;
 
+  bool osdmap_full_flag() const;
 
  private:
   map<uint64_t, LingerOp*>  linger_ops;
+  // we use this just to confirm a cookie is valid before dereferencing the ptr
+  set<LingerOp*>            linger_ops_set;
 
   map<ceph_tid_t,PoolStatOp*>    poolstat_ops;
   map<ceph_tid_t,StatfsOp*>      statfs_ops;
@@ -1593,6 +1668,7 @@ public:
 
   MOSDOp *_prepare_osd_op(Op *op);
   void _send_op(Op *op, MOSDOp *m = NULL);
+  void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void finish_op(OSDSession *session, ceph_tid_t tid);
   void _finish_op(Op *op);
@@ -1609,7 +1685,7 @@ public:
     RECALC_OP_TARGET_OSD_DNE,
     RECALC_OP_TARGET_OSD_DOWN,
   };
-  bool osdmap_full_flag() const;
+  bool _osdmap_full_flag() const;
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, bool any_change=false);
@@ -1630,8 +1706,12 @@ public:
 
   void _linger_submit(LingerOp *info);
   void _send_linger(LingerOp *info);
-  void _linger_ack(LingerOp *info, int r);
+  void _linger_register(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
+  void _linger_reconnect(LingerOp *info, int r);
+  void _send_linger_ping(LingerOp *info);
+  void _linger_ping(LingerOp *info, int r, utime_t sent, uint32_t register_gen);
+  int _normalize_watch_error(int r);
 
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
@@ -1696,10 +1776,11 @@ public:
 
  public:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
+	   Finisher *fin,
 	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct),
-    messenger(m), monc(mc),
+    messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap),
     cct(cct_),
     initialized(0),
@@ -1719,7 +1800,8 @@ public:
     mon_timeout(mon_timeout),
     osd_timeout(osd_timeout),
     op_throttle_bytes(cct, "objecter_bytes", cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops)
+    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+    epoch_barrier(0)
   { }
   ~Objecter();
 
@@ -1767,6 +1849,7 @@ public:
   bool ms_can_fast_dispatch(Message *m) const {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OPREPLY:
+    case CEPH_MSG_WATCH_NOTIFY:
       return true;
     default:
       return false;
@@ -1777,6 +1860,7 @@ public:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map();
 
@@ -1818,6 +1902,7 @@ public:
   int get_client_incarnation() const { return client_inc.read(); }
   void set_client_incarnation(int inc) { client_inc.set(inc); }
 
+  bool have_map(epoch_t epoch);
   /// wait for epoch; true if we already have it
   bool wait_for_map(epoch_t epoch, Context *c, int err=0);
   void _wait_for_new_map(Context *c, epoch_t epoch, int err=0);
@@ -1835,9 +1920,11 @@ public:
   /// cancel an in-progress request with the given return code
 private:
   int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int _op_cancel(ceph_tid_t tid, int r);
   friend class C_CancelOp;
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  epoch_t op_cancel_writes(int r);
 
   // commands
   int osd_command(int osd, vector<string>& cmd,
@@ -1929,19 +2016,27 @@ public:
     }
     return op_submit(o, ctx_budget);
   }
-  ceph_tid_t linger_mutate(const object_t& oid, const object_locator_t& oloc,
-		      ObjectOperation& op,
-		      const SnapContext& snapc, utime_t mtime,
-		      bufferlist& inbl, int flags,
-		      Context *onack, Context *onfinish,
-		      version_t *objver);
-  ceph_tid_t linger_read(const object_t& oid, const object_locator_t& oloc,
-		    ObjectOperation& op,
-		    snapid_t snap, bufferlist& inbl, bufferlist *poutbl, int flags,
-		    Context *onack,
-		    version_t *objver);
-  void unregister_linger(uint64_t linger_id);
-  void _unregister_linger(uint64_t linger_id);
+
+  // caller owns a ref
+  LingerOp *linger_register(const object_t& oid, const object_locator_t& oloc,
+			    int flags);
+  ceph_tid_t linger_watch(LingerOp *info,
+			  ObjectOperation& op,
+			  const SnapContext& snapc, utime_t mtime,
+			  bufferlist& inbl,
+			  Context *onfinish,
+			  version_t *objver);
+  ceph_tid_t linger_notify(LingerOp *info,
+			   ObjectOperation& op,
+			   snapid_t snap, bufferlist& inbl,
+			   bufferlist *poutbl,
+			   Context *onack,
+			   version_t *objver);
+  int linger_check(LingerOp *info);
+  void linger_cancel(LingerOp *info);  // releases a reference
+  void _linger_cancel(LingerOp *info);
+
+  void _do_watch_notify(LingerOp *info, MWatchNotify *m);
 
   /**
    * set up initial ops in the op vector, and allocate a final op slot.
@@ -2404,6 +2499,11 @@ public:
 			 bool force_new);
 
   void blacklist_self(bool set);
+
+private:
+  epoch_t epoch_barrier;
+public:
+  void set_epoch_barrier(epoch_t epoch);
 };
 
 #endif
