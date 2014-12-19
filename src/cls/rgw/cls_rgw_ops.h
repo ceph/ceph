@@ -289,6 +289,31 @@ struct rgw_cls_trim_olh_log_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_trim_olh_log_op)
 
+struct rgw_cls_bucket_clear_olh_op {
+  cls_rgw_obj_key key;
+  string olh_tag;
+
+  rgw_cls_bucket_clear_olh_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(key, bl);
+    ::encode(olh_tag, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(key, bl);
+    ::decode(olh_tag, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static void generate_test_instances(list<rgw_cls_bucket_clear_olh_op *>& o);
+  void dump(Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_clear_olh_op)
+
 struct rgw_cls_list_op
 {
   cls_rgw_obj_key start_obj;

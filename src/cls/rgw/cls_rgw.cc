@@ -33,6 +33,7 @@ cls_method_handle_t h_rgw_bucket_link_olh;
 cls_method_handle_t h_rgw_bucket_unlink_instance_op;
 cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
+cls_method_handle_t h_rgw_bucket_clear_olh;
 cls_method_handle_t h_rgw_obj_remove;
 cls_method_handle_t h_rgw_bi_get_op;
 cls_method_handle_t h_rgw_bi_put_op;
@@ -1257,6 +1258,12 @@ public:
     olh_data_entry.exists = exists;
   }
 
+  bool pending_removal() { return olh_data_entry.pending_removal; }
+
+  void set_pending_removal(bool pending_removal) {
+    olh_data_entry.pending_removal = pending_removal;
+  }
+
   const string& get_tag() { return olh_data_entry.tag; }
   void set_tag(const string& tag) {
     olh_data_entry.tag = tag;
@@ -1420,8 +1427,12 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   if (olh_found) {
     const string& olh_tag = olh.get_tag();
     if (op.olh_tag != olh_tag) {
-      CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
-      return -ECANCELED;
+      if (!olh.pending_removal()) {
+        CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+        return -ECANCELED;
+      }
+      /* if pending removal, this is a new olh instance */
+      olh.set_tag(op.olh_tag);
     }
     if (olh.exists()) {
       rgw_bucket_olh_entry& olh_entry = olh.get_entry();
@@ -1436,6 +1447,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
         }
       }
     }
+    olh.set_pending_removal(false);
   } else {
     bool instance_only = (op.key.instance.empty() && op.delete_marker);
     cls_rgw_obj_key key(op.key.name);
@@ -1556,6 +1568,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       olh.update(next_key, false);
       olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
       olh.set_exists(false);
+      olh.set_pending_removal(true);
     }
   }
 
@@ -1674,6 +1687,71 @@ static int rgw_bucket_trim_olh_log(cls_method_context_t hctx, bufferlist *in, bu
   ret = write_entry(hctx, olh_data_entry, olh_data_key);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: write_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  return 0;
+}
+
+static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_bucket_clear_olh_op op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: rgw_bucket_clear_olh(): failed to decode request\n");
+    return -EINVAL;
+  }
+
+  if (!op.key.instance.empty()) {
+    CLS_LOG(1, "bad key passed in (non empty instance)");
+    return -EINVAL;
+  }
+
+  /* read olh entry */
+  struct rgw_bucket_olh_entry olh_data_entry;
+  string olh_data_key;
+  encode_olh_data_key(op.key, &olh_data_key);
+  int ret = read_index_entry(hctx, olh_data_key, &olh_data_entry);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: read_index_entry() olh_key=%s ret=%d", olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  if (olh_data_entry.tag != op.olh_tag) {
+    CLS_LOG(1, "NOTICE: %s(): olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+    return -ECANCELED;
+  }
+
+  ret = cls_cxx_map_remove_key(hctx, olh_data_key);
+  if (ret < 0) {
+    CLS_LOG(1, "NOTICE: %s(): can't remove key %s ret=%d", __func__, olh_data_key.c_str(), ret);
+    return ret;
+  }
+
+  rgw_bucket_dir_entry plain_entry;
+
+  /* read plain entry, make sure it's a versioned place holder */
+  ret = read_index_entry(hctx, op.key.name, &plain_entry);
+  if (ret == -ENOENT) {
+    /* we're done, no entry existing */
+    return 0;
+  }
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: read_index_entry key=%s ret=%d", op.key.name.c_str(), ret);
+    return ret;
+  }
+
+  if ((plain_entry.flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0) {
+    /* it's not a version marker, don't remove it */
+    return 0;
+  }
+
+  ret = cls_cxx_map_remove_key(hctx, op.key.name);
+  if (ret < 0) {
+    CLS_LOG(1, "NOTICE: %s(): can't remove key %s ret=%d", __func__, op.key.name.c_str(), ret);
     return ret;
   }
 
@@ -2916,6 +2994,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_unlink_instance", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_unlink_instance, &h_rgw_bucket_unlink_instance_op);
   cls_register_cxx_method(h_class, "bucket_read_olh_log", CLS_METHOD_RD, rgw_bucket_read_olh_log, &h_rgw_bucket_read_olh_log);
   cls_register_cxx_method(h_class, "bucket_trim_olh_log", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_trim_olh_log, &h_rgw_bucket_trim_olh_log);
+  cls_register_cxx_method(h_class, "bucket_clear_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
 

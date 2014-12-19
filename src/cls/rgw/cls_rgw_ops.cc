@@ -247,6 +247,23 @@ void rgw_cls_trim_olh_log_op::dump(Formatter *f) const
   ::encode_json("olh_tag", olh_tag, f);
 }
 
+void rgw_cls_bucket_clear_olh_op::generate_test_instances(list<rgw_cls_bucket_clear_olh_op *>& o)
+{
+
+  rgw_cls_bucket_clear_olh_op *op = new rgw_cls_bucket_clear_olh_op;
+  op->key.name = "key.name";
+  op->olh_tag = "olh_tag";
+
+  o.push_back(op);
+  o.push_back(new rgw_cls_bucket_clear_olh_op);
+}
+
+void rgw_cls_bucket_clear_olh_op::dump(Formatter *f) const
+{
+  ::encode_json("key", key, f);
+  ::encode_json("olh_tag", olh_tag, f);
+}
+
 void rgw_cls_list_op::generate_test_instances(list<rgw_cls_list_op*>& o)
 {
   rgw_cls_list_op *op = new rgw_cls_list_op;
