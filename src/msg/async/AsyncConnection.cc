@@ -187,7 +187,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false), keepalive(false),
     stop_lock("AsyncConnection::stop_lock"),
-    got_bad_auth(false), authorizer(NULL), replacing(false),
+    got_bad_auth(false), authorizer(NULL), replacing(false), stopping(0),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -975,6 +975,11 @@ int AsyncConnection::_process_connection()
         }
 
         ldout(async_msgr->cct, 20) << __func__ << " connect peer addr for me is " << peer_addr_for_me << dendl;
+        // TODO: it's tricky that exit loop if exist AsyncMessenger waiting for
+        // mark_down. Otherwise, it will be deadlock while
+        // AsyncMessenger::mark_down_all already hold lock.
+        if (stopping.read())
+          break;
         async_msgr->learned_addr(peer_addr_for_me);
         ::encode(async_msgr->get_myaddr(), myaddrbl);
         r = _try_send(myaddrbl);
