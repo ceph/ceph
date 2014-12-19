@@ -86,12 +86,11 @@ public:
     {
       if (i.is_symlink())
 	symlink = sym;
-      if (i.is_dir()) {
+      if (i.is_dir())
 	dirfragtree = dft;
-	snapbl = sbl;
-      }
       if (oi)
 	old_inodes = *oi;
+      snapbl = sbl;
     }
     fullbit(bufferlist::iterator &p) {
       decode(p);
