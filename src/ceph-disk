@@ -552,7 +552,7 @@ def verify_not_in_use(dev, check_partitions=False):
         raise Error('Device is mounted', dev)
     holders = is_held(dev)
     if holders:
-        raise Error('Device is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
+        raise Error('Device %s is in use by a device-mapper mapping (dm-crypt?)' % dev, ','.join(holders))
 
     if check_partitions and not is_partition(dev):
         basename = get_dev_name(os.path.realpath(dev))
