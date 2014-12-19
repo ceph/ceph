@@ -45,6 +45,7 @@ class MExportDirFinish;
 
 class MExportCaps;
 class MExportCapsAck;
+class MGatherCaps;
 
 class EImportStart;
 
@@ -282,6 +283,8 @@ public:
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
   void export_finish(CDir *dir);
+
+  void handle_gather_caps(MGatherCaps *m);
 
   friend class C_MDC_ExportFreeze;
   friend class C_MDS_ExportFinishLogged;
