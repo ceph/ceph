@@ -1,19 +1,5 @@
-v0.90
+v0.91
 -----
-
-* Previously, the formatted output of 'ceph pg stat -f ...' was a full
-  pg dump that included all metadata about all PGs in the system.  It
-  is now a concise summary of high-level PG stats, just like the
-  unformatted 'ceph pg stat' command.
-
-
-
-
-* All JSON dumps of floating point values were incorrecting surrounding the
-  value with quotes.  These quotes have been removed.  Any consumer of structured
-  JSON output that was consuming the floating point values was previously having
-  to interpret the quoted string and will most likely need to be fixed to take
-  the unquoted number.
 
 * The 'category' field for objects has been removed.  This was originally added
   to track PG stat summations over different categories of objects for use by
@@ -44,3 +30,5 @@ v0.90
   a bogus value (for example, when rados_watch() returns an error and
   handle is not defined).
 
+v0.92
+-----
