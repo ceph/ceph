@@ -6401,7 +6401,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (destdnl->is_primary()) {
       if (destdn->is_auth()) {
 	// project snaprealm, too
-	if (oldin->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first)
+	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > destdn->first)
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
 	straydn->first = MAX(oldin->first, next_dest_snap);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
@@ -6447,7 +6447,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     }
   } else if (srcdnl->is_primary()) {
     // project snap parent update?
-    if (destdn->is_auth() &&
+    if (destdn->is_auth() && src_realm != dest_realm &&
         (srci->snaprealm || src_realm->get_newest_seq() + 1 > srcdn->first))
       srci->project_past_snaprealm_parent(dest_realm);
     
