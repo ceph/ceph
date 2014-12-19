@@ -29,6 +29,7 @@
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
+#include "osd/PG.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -307,7 +308,8 @@ struct omap_section {
 };
 
 struct metadata_section {
-  __u8 struct_ver;
+  // struct_ver is the on-disk version of original pg
+  __u8 struct_ver;  // for reference
   epoch_t map_epoch;
   pg_info_t info;
   pg_log_t log;
@@ -376,6 +378,8 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
     for (vector<ghobject_t>::iterator obj = list.begin();
 	 obj != list.end();
 	 ++obj) {
+      if (obj->is_pgmeta())
+	continue;
       bufferlist attr;
       r = store->getattr(coll, *obj, OI_ATTR, attr);
       if (r < 0) {
@@ -513,7 +517,8 @@ struct lookup_ghobject : public action_on_object_t {
 };
 
 hobject_t infos_oid = OSD::make_infos_oid();
-hobject_t biginfo_oid, log_oid;
+ghobject_t log_oid;
+hobject_t biginfo_oid;
 
 int file_fd = fd_none;
 bool debug = false;
@@ -595,13 +600,18 @@ static void invalid_filestore_path(string &path)
   exit(1);
 }
 
-int get_log(ObjectStore *fs, coll_t coll, spg_t pgid, const pg_info_t &info,
+int get_log(ObjectStore *fs, __u8 struct_ver,
+   coll_t coll, spg_t pgid, const pg_info_t &info,
    PGLog::IndexedLog &log, pg_missing_t &missing)
 {
   map<eversion_t, hobject_t> divergent_priors;
   try {
     ostringstream oss;
-    PGLog::read_log(fs, coll, log_oid, info, divergent_priors, log, missing, oss);
+    assert(struct_ver > 0);
+    PGLog::read_log(fs, coll,
+		    struct_ver >= 8 ? coll : META_COLL,
+		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
+		    info, divergent_priors, log, missing, oss);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -684,9 +694,8 @@ int finish_remove_pgs(ObjectStore *store)
 
     uint64_t seq;
     coll_t coll(pgid);
-    char val;
     if (it->is_removal(&seq, &pgid) ||
-	store->collection_getattr(coll, "remove", &val, 1) == 1) {
+	PG::_has_removal_flag(store, pgid)) {
       cout << "finish_remove_pgs removing " << *it
 	   << " pgid is " << pgid << std::endl;
       remove_coll(store, *it);
@@ -698,28 +707,60 @@ int finish_remove_pgs(ObjectStore *store)
   return 0;
 }
 
-int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
-{
-  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-  if (store->collection_exists(coll_t(r_pgid))) {
-    cout << " marking collection for removal" << std::endl;
+int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t)
+{
+  pg_info_t info(pgid);
+  coll_t coll(pgid);
+  ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
+
+  bufferlist bl;
+  PG::peek_map_epoch(fs, pgid, &bl);
+  map<epoch_t,pg_interval_t> past_intervals;
+  __u8 struct_v;
+  int r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
+  if (r < 0) {
+    cerr << __func__ << " error on read_info " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+  if (struct_v < 8) {
+    // old xattr
+    cout << "setting legacy 'remove' xattr flag" << std::endl;
     bufferlist one;
     one.append('1');
-    rmt->collection_setattr(coll_t(r_pgid), "remove", one);
+    t->collection_setattr(coll, "remove", one);
+    cout << "remove " << META_COLL << " " << log_oid.hobj.oid << std::endl;
+    t->remove(META_COLL, log_oid);
+    cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
+    t->remove(META_COLL, biginfo_oid);
   } else {
-    delete rmt;
-    return ENOENT;
+    // new omap key
+    cout << "setting '_remove' omap key" << std::endl;
+    map<string,bufferlist> values;
+    ::encode((char)1, values["_remove"]);
+    t->omap_setkeys(coll, pgmeta_oid, values);
   }
-
-  cout << "remove " << META_COLL << " " << log_oid.oid << std::endl;
-  rmt->remove(META_COLL, log_oid);
-  cout << "remove " << META_COLL << " " << biginfo_oid.oid << std::endl;
-  rmt->remove(META_COLL, biginfo_oid);
-
-  store->apply_transaction(*rmt);
-
   return 0;
+}
+
+#pragma GCC diagnostic pop
+
+int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
+{
+  if (!store->collection_exists(coll_t(r_pgid)))
+    return -ENOENT;
+
+  cout << " marking collection for removal" << std::endl;
+  ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
+  int r = mark_pg_for_removal(store, r_pgid, rmt);
+  if (r < 0) {
+    delete rmt;
+    return r;
+  }
+  store->apply_transaction(*rmt);
+  return r;
 }
 
 int header::get_header()
@@ -762,36 +803,30 @@ int footer::get_footer()
 }
 
 int write_info(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
+    map<epoch_t,pg_interval_t> &past_intervals)
 {
   //Empty for this
-  interval_set<snapid_t> snap_collections; // obsolete
   coll_t coll(info.pgid);
-
+  ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
   int ret = PG::_write_info(t, epoch,
     info, coll,
     past_intervals,
-    snap_collections,
-    infos_oid,
-    struct_ver,
-    true, true);
+    pgmeta_oid,
+    true);
   if (ret < 0) ret = -ret;
   if (ret) cerr << "Failed to write info" << std::endl;
   return ret;
 }
 
-void write_log(ObjectStore::Transaction &t, pg_log_t &log)
-{
-  map<eversion_t, hobject_t> divergent_priors;
-  PGLog::write_log(t, log, log_oid, divergent_priors);
-}
-
 int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
-    pg_log_t &log, __u8 struct_ver, map<epoch_t,pg_interval_t> &past_intervals)
+    pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals)
 {
-  int ret = write_info(t, epoch, info, struct_ver, past_intervals);
-  if (ret) return ret;
-  write_log(t, log);
+  int ret = write_info(t, epoch, info, past_intervals);
+  if (ret)
+    return ret;
+  map<eversion_t, hobject_t> divergent_priors;
+  coll_t coll(info.pgid);
+  PGLog::write_log(t, log, coll, info.pgid.make_pgmeta_oid(), divergent_priors);
   return 0;
 }
 
@@ -919,6 +954,9 @@ int export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (i->is_pgmeta()) {
+	continue;
+      }
       r = export_file(store, coll, *i);
       if (r < 0)
         return r;
@@ -974,7 +1012,7 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
 
   cerr << "Exporting " << pgid << std::endl;
 
-  int ret = get_log(fs, coll, pgid, info, log, missing);
+  int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
       return ret;
 
@@ -1378,7 +1416,7 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   cout << std::endl;
 #endif
 
-  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.struct_ver, ms.past_intervals);
+  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
   if (ret) return ret;
 
   store->apply_transaction(*t);
@@ -1564,6 +1602,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return 1;
   }
 
+  ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
   log_oid = OSD::make_pg_log_oid(pgid);
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
@@ -1574,12 +1613,15 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return 1;
   }
 
-  // mark this coll for removal until we are done
-  bufferlist one;
-  one.append('1');
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  t->create_collection(coll);
-  t->collection_setattr(coll, "remove", one);
+  PG::_create(*t, pgid);
+  PG::_init(*t, pgid, NULL);
+
+  // mark this coll for removal until we're done
+  map<string,bufferlist> values;
+  ::encode((char)1, values["_remove"]);
+  t->omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
+
   store->apply_transaction(*t);
   delete t;
 
@@ -1621,9 +1663,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   }
 
   // done, clear removal flag
-  cout << "done, clearing remove flag" << std::endl;
+  cout << "done, clearing removal flag flag" << std::endl;
   t = new ObjectStore::Transaction;
-  t->collection_rmattr(coll, "remove");
+  set<string> remove;
+  remove.insert("_remove");
+  t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
   store->apply_transaction(*t);
   delete t;
 
@@ -2768,20 +2812,22 @@ int main(int argc, char **argv)
     }
 
     bufferlist bl;
-    map_epoch = PG::peek_map_epoch(fs, coll, infos_oid, &bl);
+    map_epoch = PG::peek_map_epoch(fs, pgid, &bl);
     if (debug)
       cerr << "map_epoch " << map_epoch << std::endl;
 
     pg_info_t info(pgid);
     map<epoch_t,pg_interval_t> past_intervals;
-    hobject_t biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
-    interval_set<snapid_t> snap_collections;
-
     __u8 struct_ver;
-    r = PG::read_info(fs, coll, bl, info, past_intervals, biginfo_oid,
-      infos_oid, snap_collections, struct_ver);
+    r = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
+		      struct_ver);
     if (r < 0) {
       cerr << "read_info error " << cpp_strerror(-r) << std::endl;
+      ret = 1;
+      goto out;
+    }
+    if (struct_ver < PG::compat_struct_v) {
+      cerr << "PG is too old to upgrade, use older Ceph version" << std::endl;
       ret = 1;
       goto out;
     }
@@ -2801,7 +2847,7 @@ int main(int argc, char **argv)
     } else if (op == "log") {
       PGLog::IndexedLog log;
       pg_missing_t missing;
-      ret = get_log(fs, coll, pgid, info, log, missing);
+      ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
       if (ret > 0)
           goto out;
 
@@ -2819,10 +2865,18 @@ int main(int argc, char **argv)
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
+      if (struct_ver != PG::cur_struct_v) {
+        cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
+          << " (pg)  != " << (int)PG::cur_struct_v << " (tool)"
+          << std::endl;
+        ret = 1;
+        goto out;
+      }
+
       cout << "Remove past-intervals " << past_intervals << std::endl;
 
       past_intervals.clear();
-      ret = write_info(*t, map_epoch, info, struct_ver, past_intervals);
+      ret = write_info(*t, map_epoch, info, past_intervals);
 
       if (ret == 0) {
         fs->apply_transaction(*t);

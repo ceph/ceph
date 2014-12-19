@@ -218,22 +218,28 @@ public:
 
 class AttrGenerator : public RandGenerator {
   uint64_t max_len;
+  uint64_t big_max_len;
 public:
-  AttrGenerator(uint64_t max_len) : max_len(max_len) {}
+  AttrGenerator(uint64_t max_len, uint64_t big_max_len)
+    : max_len(max_len), big_max_len(big_max_len) {}
   void get_ranges_map(
     const ContDesc &cont, map<uint64_t, uint64_t> &out) {
     out.insert(pair<uint64_t, uint64_t>(0, get_length(cont)));
   }
   uint64_t get_length(const ContDesc &in) {
     RandWrap rand(in.seqnum);
-    return (rand() % max_len);
+    // make some attrs big
+    if (in.seqnum & 3)
+      return (rand() % max_len);
+    else
+      return (rand() % big_max_len);
   }
   bufferlist gen_bl(const ContDesc &in) {
     bufferlist bl;
     for (iterator i = get_iterator(in); !i.end(); ++i) {
       bl.append(*i);
     }
-    assert(bl.length() < max_len);
+    assert(bl.length() < big_max_len);
     return bl;
   }
 };

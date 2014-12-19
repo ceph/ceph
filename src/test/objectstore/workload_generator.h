@@ -103,7 +103,7 @@ class WorkloadGenerator : public TestObjectStoreState {
       coll_t coll, hobject_t obj, C_StatState *stat);
   void do_setattr_object(ObjectStore::Transaction *t,
       coll_t coll, hobject_t obj, C_StatState *stat);
-  void do_setattr_collection(ObjectStore::Transaction *t, coll_t coll,
+  void do_pgmeta_omap_set(ObjectStore::Transaction *t, spg_t pgid, coll_t coll,
       C_StatState *stat);
   void do_append_log(ObjectStore::Transaction *t, coll_entry_t *entry,
       C_StatState *stat);

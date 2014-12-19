@@ -56,6 +56,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER CompatSet::Feature(10, "snapmapper")
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
 #define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
+#define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 
 
 /// max recovery priority for MBackfillReserve
@@ -434,6 +435,11 @@ struct spg_t {
   bool is_no_shard() const {
     return shard == shard_id_t::NO_SHARD;
   }
+
+  ghobject_t make_pgmeta_oid() const {
+    return ghobject_t::make_pgmeta(pgid.pool(), pgid.ps(), shard);
+  }
+
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(pgid, bl);
@@ -3297,7 +3303,6 @@ struct ScrubMap {
   WRITE_CLASS_ENCODER(object)
 
   map<hobject_t,object> objects;
-  map<string,bufferptr> attrs;
   eversion_t valid_through;
   eversion_t incr_since;
 

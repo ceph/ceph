@@ -4401,7 +4401,6 @@ uint64_t PushOp::cost(CephContext *cct) const
 void ScrubMap::merge_incr(const ScrubMap &l)
 {
   assert(valid_through == l.incr_since);
-  attrs = l.attrs;
   valid_through = l.valid_through;
 
   for (map<hobject_t,object>::const_iterator p = l.objects.begin();
@@ -4422,7 +4421,7 @@ void ScrubMap::encode(bufferlist& bl) const
 {
   ENCODE_START(3, 2, bl);
   ::encode(objects, bl);
-  ::encode(attrs, bl);
+  ::encode((__u32)0, bl); // used to be attrs; now deprecated
   bufferlist old_logbl;  // not used
   ::encode(old_logbl, bl);
   ::encode(valid_through, bl);
@@ -4434,7 +4433,10 @@ void ScrubMap::decode(bufferlist::iterator& bl, int64_t pool)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(objects, bl);
-  ::decode(attrs, bl);
+  {
+    map<string,string> attrs;  // deprecated
+    ::decode(attrs, bl);
+  }
   bufferlist old_logbl;   // not used
   ::decode(old_logbl, bl);
   ::decode(valid_through, bl);
@@ -4460,14 +4462,6 @@ void ScrubMap::dump(Formatter *f) const
 {
   f->dump_stream("valid_through") << valid_through;
   f->dump_stream("incremental_since") << incr_since;
-  f->open_array_section("attrs");
-  for (map<string,bufferptr>::const_iterator p = attrs.begin(); p != attrs.end(); ++p) {
-    f->open_object_section("attr");
-    f->dump_string("name", p->first);
-    f->dump_int("length", p->second.length());
-    f->close_section();
-  }
-  f->close_section();
   f->open_array_section("objects");
   for (map<hobject_t,object>::const_iterator p = objects.begin(); p != objects.end(); ++p) {
     f->open_object_section("object");
@@ -4487,8 +4481,6 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
   o.push_back(new ScrubMap);
   o.back()->valid_through = eversion_t(1, 2);
   o.back()->incr_since = eversion_t(3, 4);
-  o.back()->attrs["foo"] = buffer::copy("foo", 3);
-  o.back()->attrs["bar"] = buffer::copy("barval", 6);
   list<object*> obj;
   object::generate_test_instances(obj);
   o.back()->objects[hobject_t(object_t("foo"), "fookey", 123, 456, 0, "")] = *obj.back();

@@ -410,51 +410,6 @@ bool MemStore::collection_exists(coll_t cid)
   return coll_map.count(cid);
 }
 
-int MemStore::collection_getattr(coll_t cid, const char *name,
-				 void *value, size_t size)
-{
-  dout(10) << __func__ << " " << cid << " " << name << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker lc(c->lock);
-
-  if (!c->xattr.count(name))
-    return -ENODATA;
-  bufferlist bl;
-  bl.append(c->xattr[name]);
-  size_t l = MIN(size, bl.length());
-  bl.copy(0, size, (char *)value);
-  return l;
-}
-
-int MemStore::collection_getattr(coll_t cid, const char *name, bufferlist& bl)
-{
-  dout(10) << __func__ << " " << cid << " " << name << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-
-  if (!c->xattr.count(name))
-    return -ENODATA;
-  bl.clear();
-  bl.append(c->xattr[name]);
-  return bl.length();
-}
-
-int MemStore::collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
-{
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
-
-  aset = c->xattr;
-  return 0;
-}
-
 bool MemStore::collection_empty(coll_t cid)
 {
   dout(10) << __func__ << " " << cid << dendl;
@@ -900,7 +855,7 @@ void MemStore::_do_transaction(Transaction& t)
 	string name = i.decode_attrname();
 	bufferlist bl;
 	i.decode_bl(bl);
-	r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length());
+	assert(0 == "not implemented");
       }
       break;
 
@@ -908,7 +863,7 @@ void MemStore::_do_transaction(Transaction& t)
       {
 	coll_t cid = i.decode_cid();
 	string name = i.decode_attrname();
-	r = _collection_rmattr(cid, name.c_str());
+	assert(0 == "not implemented");
       }
       break;
 
@@ -1459,49 +1414,6 @@ int MemStore::_collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
   if (&(*c) != &(*oc))
     oc->lock.put_write();
   return r;
-}
-
-int MemStore::_collection_setattr(coll_t cid, const char *name,
-				  const void *value, size_t size)
-{
-  dout(10) << __func__ << " " << cid << " " << name << dendl;
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
-  if (cp == coll_map.end())
-    return -ENOENT;
-  RWLock::WLocker l(cp->second->lock);
-
-  cp->second->xattr[name] = bufferptr((const char *)value, size);
-  return 0;
-}
-
-int MemStore::_collection_setattrs(coll_t cid, map<string,bufferptr> &aset)
-{
-  dout(10) << __func__ << " " << cid << dendl;
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
-  if (cp == coll_map.end())
-    return -ENOENT;
-  RWLock::WLocker l(cp->second->lock);
-
-  for (map<string,bufferptr>::const_iterator p = aset.begin();
-       p != aset.end();
-       ++p) {
-    cp->second->xattr[p->first] = p->second;
-  }
-  return 0;
-}
-
-int MemStore::_collection_rmattr(coll_t cid, const char *name)
-{
-  dout(10) << __func__ << " " << cid << " " << name << dendl;
-  ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
-  if (cp == coll_map.end())
-    return -ENOENT;
-  RWLock::WLocker l(cp->second->lock);
-
-  if (cp->second->xattr.count(name) == 0)
-    return -ENODATA;
-  cp->second->xattr.erase(name);
-  return 0;
 }
 
 int MemStore::_split_collection(coll_t cid, uint32_t bits, uint32_t match,

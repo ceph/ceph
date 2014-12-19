@@ -358,8 +358,6 @@ public:
 
   static void clear_info_log(
     spg_t pgid,
-    const hobject_t &infos_oid,
-    const hobject_t &log_oid,
     ObjectStore::Transaction *t);
 
   void trim(
@@ -543,14 +541,17 @@ public:
 		 pg_info_t &info, LogEntryHandler *rollbacker,
 		 bool &dirty_info, bool &dirty_big_info);
 
-  void write_log(ObjectStore::Transaction& t, const hobject_t &log_oid);
+  void write_log(ObjectStore::Transaction& t, const coll_t& coll,
+		 const ghobject_t &log_oid);
 
   static void write_log(ObjectStore::Transaction& t, pg_log_t &log,
-    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
+    const coll_t& coll,
+    const ghobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors);
 
   static void _write_log(
     ObjectStore::Transaction& t, pg_log_t &log,
-    const hobject_t &log_oid, map<eversion_t, hobject_t> &divergent_priors,
+    const coll_t& coll, const ghobject_t &log_oid,
+    map<eversion_t, hobject_t> &divergent_priors,
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
@@ -560,28 +561,22 @@ public:
     set<string> *log_keys_debug
     );
 
-  bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  void read_log(ObjectStore *store, coll_t pg_coll,
+		coll_t log_coll, ghobject_t log_oid,
 		const pg_info_t &info, ostringstream &oss) {
     return read_log(
-      store, coll, log_oid, info, divergent_priors,
+      store, pg_coll, log_coll, log_oid, info, divergent_priors,
       log, missing, oss,
       (pg_log_debug ? &log_keys_debug : 0));
   }
 
-  /// return true if the log should be rewritten
-  static bool read_log(ObjectStore *store, coll_t coll, hobject_t log_oid,
+  static void read_log(ObjectStore *store, coll_t pg_coll,
+    coll_t log_coll, ghobject_t log_oid,
     const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
     IndexedLog &log,
     pg_missing_t &missing, ostringstream &oss,
     set<string> *log_keys_debug = 0
     );
-
-protected:
-  static void read_log_old(ObjectStore *store, coll_t coll, hobject_t log_oid,
-			   const pg_info_t &info, map<eversion_t, hobject_t> &divergent_priors,
-			   IndexedLog &log,
-			   pg_missing_t &missing, ostringstream &oss,
-			   set<string> *log_keys_debug);
 };
   
 #endif // CEPH_PG_LOG_H

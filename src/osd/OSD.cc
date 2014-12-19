@@ -165,6 +165,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGMETA);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -183,7 +184,6 @@ OSDService::OSDService(OSD *osd) :
   whoami(osd->whoami), store(osd->store),
   log_client(osd->log_client), clog(osd->clog),
   pg_recovery_stats(osd->pg_recovery_stats),
-  infos_oid(OSD::make_infos_oid()),
   cluster_messenger(osd->cluster_messenger),
   client_messenger(osd->client_messenger),
   logger(osd->logger),
@@ -1816,16 +1816,6 @@ int OSD::init()
       goto out;
   }
 
-  // make sure info object exists
-  if (!store->exists(META_COLL, service.infos_oid)) {
-    dout(10) << "init creating/touching infos object" << dendl;
-    ObjectStore::Transaction t;
-    t.touch(META_COLL, service.infos_oid);
-    r = store->apply_transaction(t);
-    if (r < 0)
-      goto out;
-  }
-
   // make sure snap mapper object exists
   if (!store->exists(META_COLL, OSD::make_snapmapper_oid())) {
     dout(10) << "init creating/touching snapmapper object" << dendl;
@@ -2508,11 +2498,9 @@ PG* OSD::_make_pg(
 
   // create
   PG *pg;
-  hobject_t logoid = make_pg_log_oid(pgid);
-  hobject_t infooid = make_pg_biginfo_oid(pgid);
   if (createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_REPLICATED ||
       createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_ERASURE)
-    pg = new ReplicatedPG(&service, createmap, pool, pgid, logoid, infooid);
+    pg = new ReplicatedPG(&service, createmap, pool, pgid);
   else 
     assert(0);
 
@@ -2734,11 +2722,11 @@ void OSD::load_pgs()
     spg_t pgid;
     snapid_t snap;
     uint64_t seq;
-    char val;
 
     if (it->is_temp(pgid) ||
 	it->is_removal(&seq, &pgid) ||
-	store->collection_getattr(*it, "remove", &val, 1) > 0) {
+	(it->is_pg(pgid, snap) &&
+	 PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, *it);
       continue;
@@ -2785,7 +2773,7 @@ void OSD::load_pgs()
 
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     bufferlist bl;
-    epoch_t map_epoch = PG::peek_map_epoch(store, coll_t(pgid), service.infos_oid, &bl);
+    epoch_t map_epoch = PG::peek_map_epoch(store, pgid, &bl);
 
     PG *pg = _open_lock_pg(map_epoch == 0 ? osdmap : service.get_map(map_epoch), pgid);
     // there can be no waiters here, so we don't call wake_pg_waiters
@@ -2794,6 +2782,11 @@ void OSD::load_pgs()
     pg->read_state(store, bl);
 
     if (pg->must_upgrade()) {
+      if (!pg->can_upgrade()) {
+	derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
+	     << " an older version first." << dendl;
+	assert(0 == "PG too old to upgrade");
+      }
       if (!has_upgraded) {
 	derr << "PGs are upgrading" << dendl;
 	has_upgraded = true;
@@ -2815,15 +2808,6 @@ void OSD::load_pgs()
 	  store->apply_transaction(t);
 	}
       }
-    }
-
-    if (!pg->snap_collections.empty()) {
-      pg->snap_collections.clear();
-      pg->dirty_big_info = true;
-      pg->dirty_info = true;
-      ObjectStore::Transaction t;
-      pg->write_if_dirty(t);
-      store->apply_transaction(t);
     }
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
@@ -2852,6 +2836,19 @@ void OSD::load_pgs()
   {
     RWLock::RLocker l(pg_map_lock);
     dout(0) << "load_pgs opened " << pg_map.size() << " pgs" << dendl;
+  }
+
+  // clean up old infos object?
+  if (has_upgraded && store->exists(META_COLL, OSD::make_infos_oid())) {
+    dout(1) << __func__ << " removing legacy infos object" << dendl;
+    ObjectStore::Transaction t;
+    t.remove(META_COLL, OSD::make_infos_oid());
+    int r = store->apply_transaction(t);
+    if (r != 0) {
+      derr << __func__ << ": apply_transaction returned "
+	   << cpp_strerror(r) << dendl;
+      assert(0);
+    }
   }
   
   build_past_intervals_parallel();
@@ -3072,19 +3069,8 @@ void OSD::handle_pg_peering_evt(
     switch (result) {
     case RES_NONE: {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-      coll_t cid(pgid);
-
-      // ok, create the pg locally using provided Info and History
-      rctx.transaction->create_collection(cid);
-
-      // Give a hint to the PG collection
-      bufferlist hint;
-      uint32_t pg_num = pp->get_pg_num();
-      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
-      ::encode(pg_num, hint);
-      ::encode(expected_num_objects_pg, hint);
-      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
-      rctx.transaction->collection_hint(cid, hint_type, hint);
+      PG::_create(*rctx.transaction, pgid);
+      PG::_init(*rctx.transaction, pgid, pp);
 
       PG *pg = _create_lock_pg(
 	get_map(epoch),
@@ -4091,6 +4077,8 @@ bool remove_dir(
     for (vector<ghobject_t>::iterator i = olist.begin();
 	 i != olist.end();
 	 ++i, ++num) {
+      if (i->is_pgmeta())
+	continue;
       OSDriver::OSTransaction _t(osdriver->get_transaction(t));
       int r = mapper->remove_oid(i->hobj, &_t);
       if (r != 0 && r != -ENOENT) {
@@ -4157,11 +4145,7 @@ void OSD::RemoveWQ::_process(
     return;
 
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  PGLog::clear_info_log(
-    pg->info.pgid,
-    OSD::make_infos_oid(),
-    pg->log_oid,
-    t);
+  PGLog::clear_info_log(pg->info.pgid, t);
 
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
@@ -6807,6 +6791,7 @@ void OSD::split_pgs(
       *i,
       split_bits,
       i->ps(),
+      &child->pool.info,
       rctx->transaction);
     parent->split_into(
       i->pgid,
@@ -6966,19 +6951,10 @@ void OSD::handle_pg_create(OpRequestRef op)
     PG *pg = NULL;
     if (can_create_pg(pgid)) {
       const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
+      PG::_create(*rctx.transaction, pgid);
+      PG::_init(*rctx.transaction, pgid, pp);
+
       pg_interval_map_t pi;
-      coll_t cid(pgid);
-      rctx.transaction->create_collection(cid);
-
-      // Give a hint to the PG collection
-      bufferlist hint;
-      uint32_t pg_num = pp->get_pg_num();
-      uint64_t expected_num_objects_pg = pp->expected_num_objects / pg_num;
-      ::encode(pg_num, hint);
-      ::encode(expected_num_objects_pg, hint);
-      uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
-      rctx.transaction->collection_hint(cid, hint_type, hint);
-
       pg = _create_lock_pg(
 	osdmap, pgid, true, false, false,
 	0, creating_pgs[pgid].acting, whoami,
