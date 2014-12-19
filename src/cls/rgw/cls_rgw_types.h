@@ -419,8 +419,9 @@ struct rgw_bucket_olh_entry {
   map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > pending_log;
   string tag;
   bool exists;
+  bool pending_removal;
 
-  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false) {}
+  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -430,6 +431,7 @@ struct rgw_bucket_olh_entry {
     ::encode(pending_log, bl);
     ::encode(tag, bl);
     ::encode(exists, bl);
+    ::encode(pending_removal, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -440,6 +442,7 @@ struct rgw_bucket_olh_entry {
     ::decode(pending_log, bl);
     ::decode(tag, bl);
     ::decode(exists, bl);
+    ::decode(pending_removal, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
