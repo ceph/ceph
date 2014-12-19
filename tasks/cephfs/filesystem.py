@@ -19,6 +19,7 @@ log = logging.getLogger(__name__)
 
 
 DAEMON_WAIT_TIMEOUT = 120
+ROOT_INO = 1
 
 
 class ObjectNotFound(Exception):
