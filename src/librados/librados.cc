@@ -1867,6 +1867,13 @@ librados::config_t librados::Rados::cct()
   return (config_t)client->cct;
 }
 
+int librados::Rados::watch_flush()
+{
+  if (!client)
+    return -EINVAL;
+  return client->watch_flush();
+}
+
 void librados::Rados::shutdown()
 {
   if (!client)
@@ -3915,6 +3922,15 @@ extern "C" int rados_notify_ack(rados_ioctx_t io, const char *o,
   ctx->notify_ack(oid, notify_id, handle, bl);
   int retval = 0;
   tracepoint(librados, rados_notify_ack_exit, retval);
+  return retval;
+}
+
+extern "C" int rados_watch_flush(rados_t cluster)
+{
+  tracepoint(librados, rados_watch_flush_enter, cluster);
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  int retval = client->watch_flush();
+  tracepoint(librados, rados_watch_flush_exit, retval);
   return retval;
 }
 
