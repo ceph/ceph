@@ -490,9 +490,11 @@ void Objecter::_linger_commit(LingerOp *info, int r)
 }
 
 struct C_DoWatchError : public Context {
+  Objecter *objecter;
   Objecter::LingerOp *info;
   int err;
-  C_DoWatchError(Objecter::LingerOp *i, int r) : info(i), err(r) {
+  C_DoWatchError(Objecter *o, Objecter::LingerOp *i, int r)
+    : objecter(o), info(i), err(r) {
     info->get();
     info->_queued_async();
   }
@@ -500,6 +502,7 @@ struct C_DoWatchError : public Context {
     info->watch_context->handle_error(info->get_cookie(), err);
     info->finished_async();
     info->put();
+    objecter->_linger_callback_finish();
   }
 };
 
@@ -522,8 +525,10 @@ void Objecter::_linger_reconnect(LingerOp *info, int r)
     if (!info->last_error) {
       r = _normalize_watch_error(r);
       info->last_error = r;
-      if (info->watch_context)
-	finisher->queue(new C_DoWatchError(info, r));
+      if (info->watch_context) {
+	finisher->queue(new C_DoWatchError(this, info, r));
+	_linger_callback_queue();
+      }
     }
     info->watch_lock.put_write();
   }
@@ -584,8 +589,10 @@ void Objecter::_linger_ping(LingerOp *info, int r, utime_t sent,
     } else if (r < 0 && !info->last_error) {
       r = _normalize_watch_error(r);
       info->last_error = r;
-      if (info->watch_context)
-	finisher->queue(new C_DoWatchError(info, r));
+      if (info->watch_context) {
+	finisher->queue(new C_DoWatchError(this, info, r));
+	_linger_callback_queue();
+      }
     }
   } else {
     ldout(cct, 20) << " ignoring old gen" << dendl;
@@ -767,8 +774,10 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
   if (m->opcode == CEPH_WATCH_EVENT_DISCONNECT) {
     if (!info->last_error) {
       info->last_error = -ENOTCONN;
-      if (info->watch_context)
-	finisher->queue(new C_DoWatchError(info, -ENOTCONN));
+      if (info->watch_context) {
+	finisher->queue(new C_DoWatchError(this, info, -ENOTCONN));
+	_linger_callback_queue();
+      }
     }
   } else if (!info->is_watch) {
     // notify completion; we can do this inline since we know the only user
@@ -778,6 +787,7 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     info->on_notify_finish->complete(m->return_code);
   } else {
     finisher->queue(new C_DoWatchNotify(this, info, m));
+    _linger_callback_queue();
   }
 }
 
@@ -786,10 +796,7 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
   rwlock.get_read();
-  if (!initialized.read()) {
-    rwlock.put_read();
-    goto out;
-  }
+  assert(initialized.read());
 
   if (info->canceled) {
     rwlock.put_read();
@@ -814,6 +821,7 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
   info->finished_async();
   info->put();
   m->put();
+  _linger_callback_finish();
 }
 
 bool Objecter::ms_dispatch(Message *m)
