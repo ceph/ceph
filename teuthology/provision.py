@@ -56,6 +56,11 @@ def create_if_vm(ctx, machine_name):
         distro = lcnfg.get('distro', os_type.lower())
         distroversion = lcnfg.get('distroversion', os_version)
 
+        log.info("Provisioning a {distro} {distroversion} vps".format(
+            distro=distro,
+            distroversion=distroversion
+        ))
+
         file_info = {}
         file_info['disk-size'] = lcnfg.get('disk-size', '100G')
         file_info['ram'] = lcnfg.get('ram', '1.9G')

@@ -65,8 +65,12 @@ def lock_machines(ctx, config):
     new machines.  This is not called if the one has teuthology-locked
     machines and placed those keys in the Targets section of a yaml file.
     """
-    os_type = misc.get_distro(ctx)
-    os_version = misc.get_distro_version(ctx)
+    # It's OK for os_type and os_version to be None here.  If we're trying
+    # to lock a bare metal machine, we'll take whatever is available.  If
+    # we want a vps, defaults will be provided by misc.get_distro and
+    # misc.get_distro_version in provision.create_if_vm
+    os_type = ctx.config.get("os_type")
+    os_version = ctx.config.get("os_version")
     arch = ctx.config.get('arch')
     log.info('Locking machines...')
     assert isinstance(config[0], int), 'config[0] must be an integer'
