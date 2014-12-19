@@ -27,8 +27,8 @@ mkdir quota-test
 cd quota-test
 
 # bytes
-setfattr . -n ceph.quota.max_bytes -v 100000000  # 100m
-expect_false write_file big 1000     # 1g
+setfattr . -n ceph.quota.max_bytes -v 10000000  # 10m
+expect_false write_file big 100     # 100m
 expect_false write_file second 10
 setfattr . -n ceph.quota.max_bytes -v 0
 dd if=/dev/zero of=third bs=1M count=10
@@ -59,9 +59,9 @@ setfattr bytes -n ceph.quota.max_bytes -v 10000000   #10m
 setfattr bytes/files -n ceph.quota.max_files -v 5
 dd if=/dev/zero of=bytes/files/1 bs=1M count=4
 dd if=/dev/zero of=bytes/files/2 bs=1M count=4
-expect_false write_file bytes/files/3 1000
-expect_false write_file bytes/files/4 1000
-expect_false write_file bytes/files/5 1000
+expect_false write_file bytes/files/3 100
+expect_false write_file bytes/files/4 100
+expect_false write_file bytes/files/5 100
 stat --printf="%n %s\n" bytes/files/1 #4M
 stat --printf="%n %s\n" bytes/files/2 #4M
 stat --printf="%n %s\n" bytes/files/3 #bigger than 2M
