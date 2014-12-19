@@ -48,6 +48,7 @@ using namespace std;
 #include "messages/MClientSnap.h"
 #include "messages/MCommandReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MClientQuota.h"
 
 #include "messages/MGenericMessage.h"
 
@@ -265,10 +266,16 @@ void Client::tear_down_cache()
   assert(lru.lru_get_size() == 0);
 
   // close root ino
-  assert(inode_map.size() <= 1);
-  if (root && inode_map.size() == 1) {
+  assert(inode_map.size() <= 1 + root_parents.size());
+  if (root && inode_map.size() == 1 + root_parents.size()) {
     delete root;
     root = 0;
+    root_ancestor = 0;
+    while (!root_parents.empty()) {
+      Inode *in = root_parents.begin()->second;
+      root_parents.erase(root_parents.begin());
+      delete in;
+    }
     inode_map.clear();
   }
 
@@ -548,10 +555,16 @@ void Client::trim_cache()
   }
 
   // hose root?
-  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1) {
+  if (lru.lru_get_size() == 0 && root && root->get_num_ref() == 0 && inode_map.size() == 1 + root_parents.size()) {
     ldout(cct, 15) << "trim_cache trimmed root " << root << dendl;
     delete root;
     root = 0;
+    root_ancestor = 0;
+    while (!root_parents.empty()) {
+      Inode *in = root_parents.begin()->second;
+      root_parents.erase(root_parents.begin());
+      delete in;
+    }
     inode_map.clear();
   }
 }
@@ -724,8 +737,13 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     inode_map[st->vino] = in;
     if (!root) {
       root = in;
+      root_ancestor = in;
       cwd = root;
       cwd->get();
+    } else if (!mounted) {
+      root_parents[root_ancestor] = in;
+      root_ancestor = in;
+      in->get();
     }
 
     // immutable bits
@@ -783,6 +801,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->dir_layout = st->dir_layout;
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
     }
+
+    if (st->quota.is_enable() ^ in->quota.is_enable())
+      invalidate_quota_tree(in);
+    in->quota = st->quota;
 
     in->layout = st->layout;
 
@@ -2110,6 +2132,10 @@ bool Client::ms_dispatch(Message *m)
       return false;
     }
     break;
+  case CEPH_MSG_CLIENT_QUOTA:
+    handle_quota(static_cast<MClientQuota*>(m));
+    break;
+
   default:
     return false;
   }
@@ -2404,13 +2430,21 @@ void Client::put_inode(Inode *in, int n)
     ldout(cct, 10) << "put_inode deleting " << *in << dendl;
     bool unclean = objectcacher->release_set(&in->oset);
     assert(!unclean);
+    put_qtree(in);
     if (in->snapdir_parent)
       put_inode(in->snapdir_parent);
     inode_map.erase(in->vino());
     in->cap_item.remove_myself();
     in->snaprealm_item.remove_myself();
-    if (in == root)
+    if (in == root) {
       root = 0;
+      root_ancestor = 0;
+      while (!root_parents.empty()) {
+        Inode *in = root_parents.begin()->second;
+        root_parents.erase(root_parents.begin());
+        put_inode(in);
+      }
+    }
 
     if (!in->oset.objects.empty()) {
       ldout(cct, 0) << __func__ << ": leftover objects on inode 0x"
@@ -2500,6 +2534,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   // unlink from inode
   if (in) {
+    invalidate_quota_tree(in);
     if (in->is_dir()) {
       if (in->dir)
 	dn->put(); // dir -> dn pin
@@ -3801,6 +3836,36 @@ void Client::handle_snap(MClientSnap *m)
   m->put();
 }
 
+void Client::handle_quota(MClientQuota *m)
+{
+  mds_rank_t mds = mds_rank_t(m->get_source().num());
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
+  if (!session) {
+    m->put();
+    return;
+  }
+
+  got_mds_push(session);
+
+  ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
+
+  Inode *in = NULL;
+  vinodeno_t vino(m->ino, CEPH_NOSNAP);
+  if (inode_map.count(vino))
+    in = inode_map[vino];
+
+  if (!in)
+    goto done;
+
+  if (in->quota.is_enable() ^ m->quota.is_enable())
+    invalidate_quota_tree(in);
+  in->quota = m->quota;
+  in->rstat = m->rstat;
+
+done:
+  m->put();
+}
+
 void Client::handle_caps(MClientCaps *m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
@@ -4481,27 +4546,35 @@ int Client::mount(const std::string &mount_root)
     return r;
   }
 
-  mounted = true;
-
   tick(); // start tick
   
   ldout(cct, 2) << "mounted: have mdsmap " << mdsmap->get_epoch() << dendl;
 
   // hack: get+pin root inode.
   //  fuse assumes it's always there.
-  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
   filepath fp(CEPH_INO_ROOT);
   if (!mount_root.empty())
     fp = filepath(mount_root.c_str());
-  req->set_filepath(fp);
-  req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
-  int res = make_request(req, -1, -1);
-  ldout(cct, 10) << "root getattr result=" << res << dendl;
-  if (res < 0)
-    return res;
+  while (true) {
+    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
+    req->set_filepath(fp);
+    req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+    int res = make_request(req, -1, -1);
+    ldout(cct, 10) << "root getattr result=" << res << dendl;
+    if (res < 0)
+      return res;
 
+    if (fp.depth())
+      fp.pop_dentry();
+    else
+      break;
+  }
+
+  assert(root_ancestor->is_root());
   assert(root);
   _ll_get(root);
+
+  mounted = true;
 
   // trace?
   if (!cct->_conf->client_trace.empty()) {
@@ -5201,6 +5274,11 @@ int Client::_setattr(Inode *in, struct stat *attr, int mask, int uid, int gid,
 
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if ((mask & CEPH_SETATTR_SIZE) &&
+      (unsigned long)attr->st_size > in->size &&
+      is_quota_bytes_exceeded(in, (unsigned long)attr->st_size - in->size)) {
+    return -EDQUOT;
   }
   // make the change locally?
 
@@ -7023,6 +7101,11 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
+  // check quota
+  uint64_t endoff = offset + size;
+  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size))
+    return -EDQUOT;
+
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -7059,7 +7142,6 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf)
 
   utime_t lat;
   uint64_t totalwritten;
-  uint64_t endoff = offset + size;
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, endoff);
   if (r < 0)
@@ -7169,9 +7251,13 @@ success:
     in->size = totalwritten + offset;
     mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-    if ((in->size << 1) >= in->max_size &&
-	(in->reported_size << 1) < in->max_size)
-      check_caps(in, false);
+    if (is_quota_bytes_approaching(in)) {
+      check_caps(in, true);
+    } else {
+      if ((in->size << 1) >= in->max_size &&
+          (in->reported_size << 1) < in->max_size)
+        check_caps(in, false);
+    }
 
     ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
   } else {
@@ -8431,6 +8517,26 @@ int Client::ll_removexattr(Inode *in, const char *name, int uid, int gid)
   return _removexattr(in, name, uid, gid);
 }
 
+bool Client::_vxattrcb_quota_exists(Inode *in)
+{
+  return in->quota.is_enable();
+}
+size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size,
+                  "max_bytes=%ld max_files=%ld",
+                  in->quota.max_bytes,
+                  in->quota.max_files);
+}
+size_t Client::_vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%ld", in->quota.max_bytes);
+}
+size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%ld", in->quota.max_files);
+}
+
 bool Client::_vxattrcb_layout_exists(Inode *in)
 {
   char *p = (char *)&in->layout;
@@ -8532,6 +8638,14 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   hidden: true,							\
   exists_cb: &Client::_vxattrcb_layout_exists,			\
 }
+#define XATTR_QUOTA_FIELD(_type, _name)		                \
+{								\
+  name: CEPH_XATTR_NAME(_type, _name),			        \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
+  readonly: false,						\
+  hidden: true,							\
+  exists_cb: &Client::_vxattrcb_quota_exists,			\
+}
 
 const Client::VXattr Client::_dir_vxattrs[] = {
   {
@@ -8553,6 +8667,15 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH(dir, rsubdirs),
   XATTR_NAME_CEPH(dir, rbytes),
   XATTR_NAME_CEPH(dir, rctime),
+  {
+    name: "ceph.quota",
+    getxattr_cb: &Client::_vxattrcb_quota,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_quota_exists,
+  },
+  XATTR_QUOTA_FIELD(quota, max_bytes),
+  XATTR_QUOTA_FIELD(quota, max_files),
   { name: "" }     /* Required table terminator */
 };
 
@@ -8640,6 +8763,9 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
@@ -8711,6 +8837,9 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     return -ENAMETOOLONG;
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   int cmode = ceph_flags_to_mode(flags);
@@ -8794,6 +8923,9 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, int uid, int gid,
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -EROFS;
   }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
+  }
   MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ?
 				     CEPH_MDS_OP_MKSNAP : CEPH_MDS_OP_MKDIR);
 
@@ -8863,6 +8995,9 @@ int Client::_symlink(Inode *dir, const char *name, const char *target, int uid,
 
   if (dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
@@ -9042,6 +9177,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
       todir->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+  if (cct->_conf->client_quota &&
+      fromdir != todir &&
+      (fromdir->quota.is_enable() ||
+       todir->quota.is_enable() ||
+       get_quota_root(fromdir) != get_quota_root(todir))) {
+    return -EXDEV;
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_RENAME);
 
@@ -9133,6 +9275,9 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, int uid, int gid, 
 
   if (in->snapid != CEPH_NOSNAP || dir->snapid != CEPH_NOSNAP) {
     return -EROFS;
+  }
+  if (is_quota_files_exceeded(dir)) {
+    return -EDQUOT;
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
@@ -9641,6 +9786,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if ((fh->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
+  uint64_t size = offset + length;
+  if (!(mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)) &&
+      size > in->size &&
+      is_quota_bytes_exceeded(in, size - in->size)) {
+    return -EDQUOT;
+  }
+
   int have;
   int r = get_caps(in, CEPH_CAP_FILE_WR, CEPH_CAP_FILE_BUFFER, &have, -1);
   if (r < 0)
@@ -9716,9 +9868,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->mtime = ceph_clock_now(cct);
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
-      if ((in->size << 1) >= in->max_size &&
-          (in->reported_size << 1) < in->max_size)
-        check_caps(in, false);
+      if (is_quota_bytes_approaching(in)) {
+        check_caps(in, true);
+      } else {
+        if ((in->size << 1) >= in->max_size &&
+            (in->reported_size << 1) < in->max_size)
+          check_caps(in, false);
+      }
     }
   }
 
@@ -10120,6 +10276,149 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
     return true;
   *authorizer = monclient->auth->build_authorizer(dest_type);
   return true;
+}
+
+void Client::put_qtree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    qtree->invalidate();
+    in->qtree = NULL;
+  }
+}
+
+void Client::invalidate_quota_tree(Inode *in)
+{
+  QuotaTree *qtree = in->qtree;
+  if (qtree) {
+    ldout(cct, 10) << "invalidate quota tree node " << *in << dendl;
+    if (qtree->parent_ref()) {
+      assert(in->is_dir());
+      ldout(cct, 15) << "invalidate quota tree ancestor " << *in << dendl;
+      Inode *ancestor = qtree->ancestor()->in();
+      if (ancestor)
+        put_qtree(ancestor);
+    }
+    put_qtree(in);
+  }
+}
+
+Inode *Client::get_quota_root(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return NULL;
+
+  QuotaTree *ancestor = NULL;
+  QuotaTree *parent = NULL;
+
+  vector<Inode*> inode_list;
+  while (in) {
+    if (in->qtree && in->qtree->ancestor()->in()) {
+      ancestor = in->qtree->ancestor();
+      parent = in->qtree;
+      break;
+    }
+
+    inode_list.push_back(in);
+
+    if (!in->dn_set.empty())
+      in = in->get_first_parent()->dir->parent_inode;
+    else if (root_parents.count(in))
+      in = root_parents[in];
+    else
+      in = NULL;
+  }
+
+  if (!in) {
+    assert(!parent && !ancestor);
+    assert(root_ancestor->qtree == NULL);
+    root_ancestor->qtree = ancestor = new QuotaTree(root_ancestor);
+    ancestor->set_ancestor(ancestor);
+    parent = ancestor;
+  }
+  assert(parent && ancestor);
+
+  for (vector<Inode*>::reverse_iterator iter = inode_list.rbegin();
+       iter != inode_list.rend(); ++iter) {
+    Inode *cur = *iter;
+
+    if (!cur->qtree)
+      cur->qtree = new QuotaTree(cur);
+
+    cur->qtree->set_parent(parent);
+    if (parent->in()->quota.is_enable())
+      ancestor = parent;
+    cur->qtree->set_ancestor(ancestor);
+
+    ldout(cct, 20) << "link quota tree " << cur->ino
+                   << " to parent (" << parent->in()->ino << ")"
+                   << " ancestor (" << ancestor->in()->ino << ")" << dendl;
+
+    parent = cur->qtree;
+    if (cur->quota.is_enable())
+      ancestor = cur->qtree;
+  }
+
+  return ancestor->in();
+}
+
+bool Client::is_quota_files_exceeded(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_files && rstat->rsize() >= quota->max_files)
+      return true;
+
+    in = get_quota_root(in);
+  }
+  return false;
+}
+
+bool Client::is_quota_bytes_exceeded(Inode *in, uint64_t new_bytes)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_bytes && (rstat->rbytes + new_bytes) > quota->max_bytes)
+      return true;
+
+    in = get_quota_root(in);
+  }
+  return false;
+}
+
+bool Client::is_quota_bytes_approaching(Inode *in)
+{
+  if (!cct->_conf->client_quota)
+    return false;
+
+  while (in != root_ancestor) {
+    quota_info_t *quota = &in->quota;
+    nest_info_t *rstat = &in->rstat;
+
+    if (quota->max_bytes) {
+      if (rstat->rbytes >= quota->max_bytes)
+        return true;
+
+      assert(in->size >= in->reported_size);
+      uint64_t space = quota->max_bytes - rstat->rbytes;
+      uint64_t size = in->size - in->reported_size;
+      if ((space >> 4) < size)
+        return true;
+    }
+
+    in = get_quota_root(in);
+  }
+  return false;
 }
 
 void Client::set_filer_flags(int flags)

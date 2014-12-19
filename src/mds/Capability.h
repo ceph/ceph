@@ -229,7 +229,9 @@ public:
   snapid_t client_follows;
   version_t client_xattr_version;
   version_t client_inline_version;
-  
+  int64_t last_rbytes;
+  int64_t last_rsize;
+
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
   xlist<Capability*>::item item_revoking_caps;
@@ -246,6 +248,7 @@ public:
     suppress(0), state(0),
     client_follows(0), client_xattr_version(0),
     client_inline_version(0),
+    last_rbytes(0), last_rsize(0),
     item_session_caps(this), item_snaprealm_caps(this),
     item_revoking_caps(this), item_client_revoking_caps(this) {
     g_num_cap++;
