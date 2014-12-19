@@ -1905,6 +1905,7 @@ void AsyncConnection::_stop()
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (sd > 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+  async_msgr->unregister_conn(this);
   shutdown_socket();
   discard_out_queue();
   open_write = false;
@@ -1915,7 +1916,6 @@ void AsyncConnection::_stop()
   for (set<uint64_t>::iterator it = register_time_events.begin();
        it != register_time_events.end(); ++it)
     center->delete_time_event(*it);
-  async_msgr->unregister_conn(this);
   // Here we need to dispatch "signal" event, because we want to ensure signal
   // it after all events called by this "_stop" has be done.
   center->dispatch_event_external(signal_handler);
