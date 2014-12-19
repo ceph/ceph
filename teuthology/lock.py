@@ -74,6 +74,10 @@ def vps_version_or_type_valid(machine_type, os_type, os_version):
     """
     if not machine_type == 'vps':
         return True
+    if os_type is None or os_version is None:
+        # we'll use the defaults provided by provision.create_if_vm
+        # later on during provisioning
+        return True
     valid_os_and_version = get_distro_from_downburst()
     if os_type not in valid_os_and_version:
         log.error("os-type '%s' is invalid", os_type)
