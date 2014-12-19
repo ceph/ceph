@@ -258,6 +258,23 @@ void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const
   op.exec("rgw", "bucket_trim_olh_log", in);
 }
 
+int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
+{
+  bufferlist in, out;
+  struct rgw_cls_bucket_clear_olh_op call;
+  call.key = olh;
+  call.olh_tag = olh_tag;
+  ::encode(call, in);
+  librados::ObjectWriteOperation op;
+  int op_ret;
+  op.exec("rgw", "bucket_clear_olh", in, &out, &op_ret);
+  int r = io_ctx.operate(oid, &op);
+  if (r < 0) {
+    return r;
+  }
+  return op_ret;
+}
+
 int cls_rgw_bucket_check_index_op(IoCtx& io_ctx, string& oid,
 				  rgw_bucket_dir_header *existing_header,
 				  rgw_bucket_dir_header *calculated_header)

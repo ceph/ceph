@@ -5747,6 +5747,36 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
   return 0;
 }
 
+int RGWRados::bucket_index_clear_olh(RGWObjState& state, rgw_obj& obj_instance)
+{
+  rgw_rados_ref ref;
+  rgw_bucket bucket;
+  int r = get_obj_ref(obj_instance, &ref, &bucket);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::IoCtx index_ctx;
+  string oid;
+
+  int ret = open_bucket_index(bucket, index_ctx, oid);
+  if (ret < 0) {
+    return ret;
+  }
+
+  string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
+
+  cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
+
+  ret = cls_rgw_clear_olh(index_ctx, oid, key, olh_tag);
+  if (ret < 0) {
+    ldout(cct, 5) << "cls_rgw_clear_olh() returned ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucketInfo& bucket_info, rgw_obj& obj,
                             bufferlist& olh_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                             uint64_t *plast_ver)
@@ -5769,6 +5799,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
   cls_rgw_obj_key key;
   bool delete_marker = false;
   list<cls_rgw_obj_key> remove_instances;
+  bool need_to_remove = false;
 
   for (iter = log.begin(); iter != log.end(); ++iter) {
     vector<rgw_bucket_olh_log_entry>::iterator viter = iter->second.begin();
@@ -5783,14 +5814,13 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
         break;
       case CLS_RGW_OLH_OP_LINK_OLH:
         need_to_link = true;
+        need_to_remove = false;
         key = entry.key;
         delete_marker = entry.delete_marker;
         break;
       case CLS_RGW_OLH_OP_UNLINK_OLH:
-        /* treat this as linking into a delete marker */
-        need_to_link = true;
-        key = entry.key;
-        delete_marker = true;
+        need_to_remove = true;
+        need_to_link = false;
         break;
       default:
         ldout(cct, 0) << "ERROR: apply_olh_log: invalid op: " << (int)entry.op << dendl;
@@ -5809,7 +5839,9 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
     return r;
   }
 
-  if (need_to_link) {
+  if (need_to_remove) {
+    op.remove();
+  } else if (need_to_link) {
     rgw_obj target(bucket, key.name);
     target.set_instance(key.instance);
     RGWOLHInfo info;
@@ -5835,6 +5867,9 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
 
   /* update olh object */
   r = ref.ioctx.operate(ref.oid, &op);
+  if (need_to_remove && (r == -ENOENT || r == -ECANCELED)) {
+    r = 0;
+  }
   if (r < 0) {
     ldout(cct, 0) << "ERROR: could not apply olh update, r=" << r << dendl;
     return r;
@@ -5843,8 +5878,18 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
   r = bucket_index_trim_olh_log(state, obj, last_ver);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
+    return r;
   }
-  return r;
+
+  if (need_to_remove) {
+    r = bucket_index_clear_olh(state, obj);
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
+      return r;
+    }
+  }
+
+  return 0;
 }
 
 /*

@@ -232,6 +232,7 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("pending_log", pending_log, f);
   encode_json("tag", tag, f);
   encode_json("exists", exists, f);
+  encode_json("pending_removal", pending_removal, f);
 }
 
 void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
