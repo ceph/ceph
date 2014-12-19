@@ -20,10 +20,12 @@ test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 
 [ -z "$CEPH_BIN" ] && CEPH_BIN=.
 
+MYUID=$(id -u)
+
 do_killall() {
-    pg=`pgrep -f ceph-run.*$1`
+    pg=`pgrep -u $MYUID -f ceph-run.*$1`
     [ -n "$pg" ] && kill $pg
-    $SUDO killall $1
+    $SUDO killall -u $MYUID $1
 }
 
 usage="usage: $0 [all] [mon] [mds] [osd]\n"
@@ -75,16 +77,16 @@ if [ $stop_all -eq 1 ]; then
 
     for p in ceph-mon ceph-mds ceph-osd radosgw lt-radosgw apache2 ; do
         for try in 0 1 1 1 1 ; do
-            if ! pkill $p ; then
+            if ! pkill -u $MYUID $p ; then
                 break
             fi
             sleep $try
         done
     done
 
-    pkill -f valgrind.bin.\*ceph-mon
-    $SUDO pkill -f valgrind.bin.\*ceph-osd
-    pkill -f valgrind.bin.\*ceph-mds
+    pkill -u $MYUID -f valgrind.bin.\*ceph-mon
+    $SUDO pkill -u $MYUID -f valgrind.bin.\*ceph-osd
+    pkill -u $MYUID -f valgrind.bin.\*ceph-mds
 else
     [ $stop_mon -eq 1 ] && do_killall ceph-mon
     [ $stop_mds -eq 1 ] && do_killall ceph-mds
