@@ -159,7 +159,6 @@ private:
   Mutex lock;
   bool force_sync;
   Cond sync_cond;
-  uint64_t sync_epoch;
 
   Mutex sync_entry_timeo_lock;
   SafeTimer timer;
