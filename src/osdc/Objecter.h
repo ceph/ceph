@@ -1648,6 +1648,9 @@ public:
   map<uint64_t, LingerOp*>  linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
   set<LingerOp*>            linger_ops_set;
+  int num_linger_callbacks;
+  Mutex linger_callback_lock;
+  Cond linger_callback_cond;
 
   map<ceph_tid_t,PoolStatOp*>    poolstat_ops;
   map<ceph_tid_t,StatfsOp*>      statfs_ops;
@@ -1713,6 +1716,25 @@ public:
   void _linger_ping(LingerOp *info, int r, utime_t sent, uint32_t register_gen);
   int _normalize_watch_error(int r);
 
+  void _linger_callback_queue() {
+    Mutex::Locker l(linger_callback_lock);
+    ++num_linger_callbacks;
+  }
+  void _linger_callback_finish() {
+    Mutex::Locker l(linger_callback_lock);
+    if (--num_linger_callbacks == 0)
+      linger_callback_cond.SignalAll();
+    assert(num_linger_callbacks >= 0);
+  }
+  friend class C_DoWatchError;
+public:
+  void linger_callback_flush() {
+    Mutex::Locker l(linger_callback_lock);
+    while (num_linger_callbacks > 0)
+      linger_callback_cond.Wait(linger_callback_lock);
+  }
+
+private:
   void _check_op_pool_dne(Op *op, bool session_locked);
   void _send_op_map_check(Op *op);
   void _op_cancel_map_check(Op *op);
@@ -1795,6 +1817,8 @@ public:
     timer(cct, timer_lock, false),
     logger(NULL), tick_event(NULL),
     m_request_state_hook(NULL),
+    num_linger_callbacks(0),
+    linger_callback_lock("Objecter::linger_callback_lock"),
     num_homeless_ops(0),
     homeless_session(new OSDSession(cct, -1)),
     mon_timeout(mon_timeout),
