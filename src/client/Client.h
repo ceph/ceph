@@ -136,9 +136,19 @@ typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off,
 
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
+typedef void (*client_remount_callback_t)(void *handle);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
+
+struct client_callback_args {
+  void *handle;
+  client_ino_callback_t ino_cb;
+  client_dentry_callback_t dentry_cb;
+  client_switch_interrupt_callback_t switch_intr_cb;
+  client_remount_callback_t remount_cb;
+  client_getgroups_callback_t getgroups_cb;
+};
 
 // ========================================================
 // client interface
@@ -226,20 +236,17 @@ class Client : public Dispatcher {
 
   SafeTimer timer;
 
+  void *callback_handle;
   client_switch_interrupt_callback_t switch_interrupt_cb;
-
+  client_remount_callback_t remount_cb;
   client_ino_callback_t ino_invalidate_cb;
-  void *ino_invalidate_cb_handle;
-
   client_dentry_callback_t dentry_invalidate_cb;
-  void *dentry_invalidate_cb_handle;
-
   client_getgroups_callback_t getgroups_cb;
-  void *getgroups_cb_handle;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
   Finisher interrupt_finisher;
+  Finisher remount_finisher;
   Finisher objecter_finisher;
 
   Context *tick_event;
@@ -434,7 +441,7 @@ protected:
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
   void trim_caps(MetaSession *s, int max);
-  void _invalidate_kernel_dcache(MetaSession *s);
+  void _invalidate_kernel_dcache();
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
@@ -946,10 +953,7 @@ public:
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
 
-  void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
-  void ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle);
-  void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
-  void ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb);
+  void ll_register_callbacks(struct client_callback_args *args);
 };
 
 #endif
