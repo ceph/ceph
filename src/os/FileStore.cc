@@ -504,7 +504,7 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   index_manager(do_update),
   ondisk_finisher(g_ceph_context),
   lock("FileStore::lock"),
-  force_sync(false), sync_epoch(0),
+  force_sync(false), 
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
@@ -3483,10 +3483,7 @@ void FileStore::sync_entry()
 
       logger->set(l_os_committing, 1);
 
-      // make flusher stop flushing previously queued stuff
-      sync_epoch++;
-
-      dout(15) << "sync_entry committing " << cp << " sync_epoch " << sync_epoch << dendl;
+      dout(15) << "sync_entry committing " << cp << dendl;
       stringstream errstream;
       if (g_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
