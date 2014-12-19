@@ -139,6 +139,7 @@ class CephFSTestCase(unittest.TestCase):
 
         log.debug("wait_until_true: success")
 
+
 class LogStream(object):
     def __init__(self):
         self.buffer = ""
@@ -195,6 +196,15 @@ def run_tests(ctx, config, test_klass, params):
         result_class = InteractiveFailureResult
     else:
         result_class = unittest.TextTestResult
+
+    # Unmount all clients not involved
+    for mount in ctx.mounts.values():
+        if mount is not params.get('mount_a') and mount is not params.get('mount_b'):
+            if mount.is_mounted():
+                log.info("Unmounting unneeded client {0}".format(mount.client_id))
+                mount.umount_wait()
+
+    # Execute!
     result = unittest.TextTestRunner(
         stream=LogStream(),
         resultclass=result_class,
