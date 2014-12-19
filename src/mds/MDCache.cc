@@ -85,11 +85,13 @@
 #include "messages/MClientRequest.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientQuota.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
 #include "messages/MMDSFragmentNotify.h"
 
+#include "messages/MGatherCaps.h"
 
 #include "InoTable.h"
 
@@ -1859,6 +1861,66 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
+void MDCache::broadcast_quota_to_client(CInode *in)
+{
+  if (!in->is_auth() || in->is_frozen())
+    return;
+
+  inode_t *i = in->get_projected_inode();
+
+  if (!i->quota.is_enable())
+    return;
+
+  for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
+       it != in->client_caps.end();
+       ++it) {
+    Session *session = mds->get_session(it->first);
+    if (!session || !session->connection ||
+        !session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA))
+      continue;
+
+    Capability *cap = it->second;
+    if (cap->last_rbytes == i->rstat.rbytes &&
+        cap->last_rsize == i->rstat.rsize())
+      continue;
+
+    if (i->quota.max_files > 0) {
+      if (i->rstat.rsize() >= i->quota.max_files)
+        goto update;
+
+      if ((abs(cap->last_rsize - i->quota.max_files) >> 4) <
+          abs(cap->last_rsize - i->rstat.rsize()))
+        goto update;
+    }
+
+    if (i->quota.max_bytes > 0) {
+      if (i->rstat.rbytes > i->quota.max_bytes - (i->quota.max_bytes >> 3))
+        goto update;
+
+      if ((abs(cap->last_rbytes - i->quota.max_bytes) >> 4) <
+          abs(cap->last_rbytes - i->rstat.rbytes))
+        goto update;
+    }
+
+    continue;
+
+update:
+    cap->last_rsize = i->rstat.rsize();
+    cap->last_rbytes = i->rstat.rbytes;
+
+    MClientQuota *msg = new MClientQuota();
+    msg->ino = in->ino();
+    msg->rstat = i->rstat;
+    msg->quota = i->quota;
+    mds->send_message_client_counted(msg, session->connection);
+  }
+  for (map<const mds_rank_t, unsigned>::iterator it = in->replicas_begin();
+       it != in->replicas_end(); ++it) {
+    MGatherCaps *msg = new MGatherCaps;
+    msg->ino = in->ino();
+    mds->send_message_mds(msg, it->first);
+  }
+}
 
 /*
  * NOTE: we _have_ to delay the scatter if we are called during a
@@ -2153,6 +2215,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     }
 
     parent->check_rstats();
+    broadcast_quota_to_client(pin);
     // next parent!
     cur = pin;
     parent = parentdn->get_dir();
