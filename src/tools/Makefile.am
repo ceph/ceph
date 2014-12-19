@@ -16,7 +16,7 @@ ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_
 if LINUX
 ceph_objectstore_tool_LDADD += -ldl
 endif # LINUX
-bin_PROGRAMS += ceph_objectstore_tool
+bin_PROGRAMS += ceph-objectstore-tool
 
 monmaptool_SOURCES = tools/monmaptool.cc
 monmaptool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)

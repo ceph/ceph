@@ -647,17 +647,17 @@ function test_get_not_primary() {
 #######################################################################
 
 ##
-# Run ceph_objectstore_tool against the OSD **id** using the data path
+# Run ceph-objectstore-tool against the OSD **id** using the data path
 # **dir**. The OSD is killed with TERM prior to running
-# ceph_objectstore_tool because access to the data path is
+# ceph-objectstore-tool because access to the data path is
 # exclusive. The OSD is restarted after the command completes. The
 # objectstore_tool returns after all PG are active+clean again.
 #
 # @param dir the data path of the OSD
 # @param id the OSD id
-# @param ... arguments to ceph_objectstore_tool
-# @param STDIN the input of ceph_objectstore_tool
-# @param STDOUT the output of ceph_objectstore_tool
+# @param ... arguments to ceph-objectstore-tool
+# @param STDIN the input of ceph-objectstore-tool
+# @param STDOUT the output of ceph-objectstore-tool
 # @return 0 on success, 1 on error
 #
 function objectstore_tool() {
@@ -668,7 +668,7 @@ function objectstore_tool() {
     local osd_data=$dir/$id
 
     kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
-    ceph_objectstore_tool \
+    ceph-objectstore-tool \
         --data-path $osd_data \
         --journal-path $osd_data/journal \
         "$@" || return 1
