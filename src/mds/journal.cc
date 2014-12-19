@@ -397,7 +397,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(7, 5, bl);
   ::encode(dn, bl);
   ::encode(dnfirst, bl);
   ::encode(dnlast, bl);
@@ -417,11 +417,13 @@ void EMetaBlob::fullbit::encode(bufferlist& bl) const {
     ::encode(true, bl);
     ::encode(old_inodes, bl);
   }
+  if (!inode.is_dir())
+    ::encode(snapbl, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(dn, bl);
   ::decode(dnfirst, bl);
   ::decode(dnlast, bl);
@@ -457,6 +459,10 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
     if (old_inodes_present) {
       ::decode(old_inodes, bl);
     }
+  }
+  if (!inode.is_dir()) {
+    if (struct_v >= 7)
+      ::decode(snapbl, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -538,17 +544,16 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 	}
       }
     }
-
-    /*
-     * we can do this before linking hte inode bc the split_at would
-     * be a no-op.. we have no children (namely open snaprealms) to
-     * divy up 
-     */
-    in->decode_snap_blob(snapbl);  
   } else if (in->inode.is_symlink()) {
     in->symlink = symlink;
   }
   in->old_inodes = old_inodes;
+  /*
+   * we can do this before linking hte inode bc the split_at would
+   * be a no-op.. we have no children (namely open snaprealms) to
+   * divy up
+   */
+  in->decode_snap_blob(snapbl);
 }
 
 // EMetaBlob::remotebit
