@@ -465,7 +465,7 @@ def main(argv):
     osd = OSDS[0]
 
     # retrieve all objects from all PGs
-    cmd = (CFSD_PREFIX + "--op list --pretty-format=false").format(osd=osd)
+    cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
     logging.debug(cmd);
     tmpfd = open(TMPFILE, "a")
     logging.debug(cmd)
@@ -479,7 +479,7 @@ def main(argv):
     (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
 
     # retrieve all objects in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --pretty-format=false").format(osd=osd, pg=pgid)
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
     logging.debug(cmd);
     tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
@@ -498,7 +498,7 @@ def main(argv):
         ERRORS += 1
 
     # retrieve all objects with a given name in a given PG
-    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --pretty-format=false").format(osd=osd, pg=pgid, object=jsondict['oid'])
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
     logging.debug(cmd);
     tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
