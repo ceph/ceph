@@ -1282,8 +1282,7 @@ protected:
 
 public:
   ReplicatedPG(OSDService *o, OSDMapRef curmap,
-	       const PGPool &_pool, spg_t p, const hobject_t& oid,
-	       const hobject_t& ioid);
+	       const PGPool &_pool, spg_t p);
   ~ReplicatedPG() {}
 
   int do_command(cmdmap_t cmdmap, ostream& ss, bufferlist& idata,
@@ -1327,14 +1326,16 @@ public:
     spg_t child,
     int split_bits,
     int seed,
+    const pg_pool_t *pool,
     ObjectStore::Transaction *t) {
     coll_t target = coll_t(child);
-    t->create_collection(target);
+    PG::_create(*t, child);
     t->split_collection(
       coll,
       split_bits,
       seed,
       target);
+    PG::_init(*t, child, pool);
     pgbackend->split_colls(child, split_bits, seed, t);
   }
 private:

@@ -44,6 +44,7 @@ function run_osd() {
     ceph_args+=" --osd-pool-default-erasure-code-directory=.libs"
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
+    ceph_args+=" --debug-filestore=20"
     ceph_args+=" --log-file=$dir/osd-\$id.log"
     ceph_args+=" --pid-file=$dir/osd-\$id.pid"
     ceph_args+=" "

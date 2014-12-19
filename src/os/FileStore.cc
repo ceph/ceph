@@ -437,8 +437,10 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 {
   Index index;
   int r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(25) << __func__ << " get_index failed " << cpp_strerror(r) << dendl;
     return r;
+  }
 
   assert(NULL != index.index);
   RWLock::WLocker l((index.index)->access_lock);
@@ -463,6 +465,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	} else {
 	  assert(!m_filestore_fail_eio || r != -EIO);
 	}
+	dout(25) << __func__ << " stat failed " << cpp_strerror(r) << dendl;
 	return r;
       } else if (st.st_nlink == 1) {
 	force_clear_omap = true;
@@ -473,6 +476,7 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	       << " in cid " << cid << dendl;
       r = object_map->clear(o, &spos);
       if (r < 0 && r != -ENOENT) {
+	dout(25) << __func__ << " omap clear failed " << cpp_strerror(r) << dendl;
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
@@ -489,7 +493,12 @@ int FileStore::lfn_unlink(coll_t cid, const ghobject_t& o,
 	object_map->sync(&o, &spos);
     }
   }
-  return index->unlink(o);
+  r = index->unlink(o);
+  if (r < 0) {
+    dout(25) << __func__ << " index unlink failed " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
 }
 
 FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbits_t flags, const char *name, bool do_update) :
@@ -1167,8 +1176,15 @@ int FileStore::upgrade()
   if (r == 1)
     return 0;
 
-  derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
-  return -EINVAL;
+  if (version < 3) {
+    derr << "ObjectStore is old at version " << version << ".  Please upgrade to firefly v0.80.x, convert your store, and then upgrade."  << dendl;
+    return -EINVAL;
+  }
+
+  // nothing necessary in FileStore for v3 -> v4 upgrade; we just need to
+  // open up DBObjectMap with the do_upgrade flag, which we already did.
+  update_version_stamp();
+  return 0;
 }
 
 int FileStore::read_op_seq(uint64_t *seq)
@@ -1255,17 +1271,19 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
-    if (do_update) {
+    if (do_update || (int)version_stamp < g_conf->filestore_update_to) {
       derr << "FileStore::mount : stale version stamp detected: "
 	   << version_stamp 
 	   << ". Proceeding, do_update "
 	   << "is set, performing disk format upgrade."
 	   << dendl;
+      do_update = true;
     } else {
       ret = -EINVAL;
       derr << "FileStore::mount : stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
 	   << "OSD, or set filestore_update_to to " << target_version
+	   << " (currently " << g_conf->filestore_update_to << ")"
 	   << dendl;
       goto close_fsid_fd;
     }
@@ -4977,16 +4995,22 @@ int FileStore::_omap_setkeys(coll_t cid, const ghobject_t &hoid,
   dout(15) << __func__ << " " << cid << "/" << hoid << dendl;
   Index index;
   int r = get_index(cid, &index);
-  if (r < 0)
+  if (r < 0) {
+    dout(20) << __func__ << " get_index got " << cpp_strerror(r) << dendl;
     return r;
+  }
   {
     assert(NULL != index.index);
     RWLock::RLocker l((index.index)->access_lock);
     r = lfn_find(hoid, index);
-    if (r < 0)
+    if (r < 0) {
+      dout(20) << __func__ << " lfn_find got " << cpp_strerror(r) << dendl;
       return r;
+    }
   }
-  return object_map->set_keys(hoid, aset, &spos);
+  r = object_map->set_keys(hoid, aset, &spos);
+  dout(20) << __func__ << " " << cid << "/" << hoid << " = " << r << dendl;
+  return r;
 }
 
 int FileStore::_omap_rmkeys(coll_t cid, const ghobject_t &hoid,
@@ -5069,8 +5093,6 @@ int FileStore::_split_collection(coll_t cid,
     int dstcmp = _check_replay_guard(dest, spos);
     if (dstcmp < 0)
       return 0;
-    if (dstcmp > 0 && !collection_empty(dest))
-      return -ENOTEMPTY;
 
     int srccmp = _check_replay_guard(cid, spos);
     if (srccmp < 0)
