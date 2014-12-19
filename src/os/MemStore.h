@@ -227,10 +227,6 @@ private:
   int _collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid);
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 			      coll_t cid, const ghobject_t& o);
-  int _collection_setattr(coll_t cid, const char *name, const void *value,
-			  size_t size);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
-  int _collection_rmattr(coll_t cid, const char *name);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest);
 
   int _save();
@@ -301,10 +297,6 @@ public:
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
-  int collection_getattr(coll_t cid, const char *name,
-			 void *value, size_t size);
-  int collection_getattr(coll_t cid, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   bool collection_empty(coll_t c);
   int collection_list(coll_t cid, vector<ghobject_t>& o);
   int collection_list_partial(coll_t cid, ghobject_t start,

@@ -137,6 +137,9 @@ int PGBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
+      if (i->is_pgmeta()) {
+	continue;
+      }
       if (i->is_no_gen()) {
 	ls->push_back(i->hobj);
       }
@@ -166,6 +169,9 @@ int PGBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
+    if (i->is_pgmeta()) {
+      continue;
+    }
     if (i->is_no_gen()) {
       ls->push_back(i->hobj);
     } else if (gen_obs) {

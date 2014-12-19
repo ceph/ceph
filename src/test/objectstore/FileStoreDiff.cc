@@ -258,13 +258,13 @@ bool FileStoreDiff::diff_coll_attrs(FileStore *a_store, FileStore *b_store, coll
   int err;
   std::map<std::string, bufferptr> b_coll_attrs, a_coll_attrs;
   err = b_store->collection_getattrs(coll, b_coll_attrs);
-  if (err < 0) {
+  if (err < 0 && err != -EOPNOTSUPP) {
     dout(0) << "diff_attrs getattrs on verify coll " << coll.to_str()
         << "returns " << err << dendl;
     ret = true;
   }
   err = a_store->collection_getattrs(coll, a_coll_attrs);
-  if (err < 0) {
+  if (err < 0 && err != -EOPNOTSUPP) {
     dout(0) << "diff_attrs getattrs on A coll " << coll.to_str()
               << "returns " << err << dendl;
     ret = true;
