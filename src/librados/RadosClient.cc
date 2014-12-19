@@ -308,6 +308,14 @@ void librados::RadosClient::shutdown()
   ldout(cct, 1) << "shutdown" << dendl;
 }
 
+int librados::RadosClient::watch_flush()
+{
+  ldout(cct, 10) << __func__ << " enter" << dendl;
+  objecter->linger_callback_flush();
+  ldout(cct, 10) << __func__ << " exit" << dendl;
+  return 0;
+}
+
 uint64_t librados::RadosClient::get_instance_id()
 {
   return instance_id;
