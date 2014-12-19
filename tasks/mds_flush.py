@@ -1,10 +1,7 @@
 import contextlib
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import run_tests, CephFSTestCase
-from tasks.cephfs.filesystem import Filesystem, ObjectNotFound
-
-
-ROOT_INO = 1
+from tasks.cephfs.filesystem import Filesystem, ObjectNotFound, ROOT_INO
 
 
 class TestFlush(CephFSTestCase):
