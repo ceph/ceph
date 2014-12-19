@@ -81,6 +81,8 @@ public:
   int connect();
   void shutdown();
 
+  int watch_flush();
+
   uint64_t get_instance_id();
 
   int wait_for_latest_osdmap();
