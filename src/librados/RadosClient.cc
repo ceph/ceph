@@ -282,6 +282,9 @@ int librados::RadosClient::connect()
 
 void librados::RadosClient::shutdown()
 {
+  // make sure watch callbacks are flushed
+  watch_flush();
+
   lock.Lock();
   if (state == DISCONNECTED) {
     lock.Unlock();
