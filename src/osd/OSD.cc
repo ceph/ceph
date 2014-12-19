@@ -6106,7 +6106,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	injected_failure = true;
       }
 
-      if (o->get_crc() != inc.full_crc || injected_failure) {
+      if ((inc.have_crc && o->get_crc() != inc.full_crc) || injected_failure) {
 	dout(2) << "got incremental " << e
 		<< " but failed to encode full with correct crc; requesting"
 		<< dendl;
