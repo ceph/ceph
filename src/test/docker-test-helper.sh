@@ -49,7 +49,18 @@ function setup_container() {
     local opts="$3"
 
     local image=$(get_image_name $os_type $os_version)
-    if ! docker images $image | grep --quiet "^$image " ; then
+    local build=true
+    if docker images $image | grep --quiet "^$image " ; then
+        eval touch --date=$(docker inspect $image | jq '.[0].Created') $image
+        found=$(find -L test/$os_type/* -newer $image)
+        rm $image
+        if test -n "$found" ; then
+            docker rmi $image
+        else
+            build=false
+        fi
+    fi
+    if $build ; then
         # 
         # In the dockerfile,
         # replace environment variables %%FOO%% with their content
