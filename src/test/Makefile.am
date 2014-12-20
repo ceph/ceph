@@ -257,6 +257,12 @@ check_SCRIPTS += \
 endif
 
 EXTRA_DIST += \
+	$(srcdir)/test/ubuntu/Dockerfile.in \
+	$(srcdir)/test/ubuntu/install-deps.sh \
+	$(srcdir)/test/ubuntu/debian \
+	$(srcdir)/test/centos/Dockerfile.in \
+	$(srcdir)/test/centos/install-deps.sh \
+	$(srcdir)/test/centos/ceph.spec.in \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
 	$(srcdir)/test/osd/osd-test-helpers.sh \
         $(srcdir)/test/coverage.sh \

@@ -52,12 +52,15 @@ function setup_container() {
     if ! docker images $image | grep --quiet "^$image " ; then
         # 
         # In the dockerfile,
-        # replace environment variables %%FOO%% with their content except
+        # replace environment variables %%FOO%% with their content
         #
-        cat test/$os_type.dockerfile | \
-            os_version=$os_version user_id=$(id -u) \
-            perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' | \
-            docker $opts build --tag=$image -
+        rm -fr dockerfile
+        cp --dereference --recursive test/$os_type dockerfile
+        os_version=$os_version user_id=$(id -u) \
+            perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
+            dockerfile/Dockerfile.in > dockerfile/Dockerfile
+        docker $opts build --rm=true --tag=$image dockerfile
+        rm -fr dockerfile
     fi
 }
 
