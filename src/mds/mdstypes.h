@@ -265,6 +265,8 @@ struct quota_info_t
   int64_t max_bytes;
   int64_t max_files;
  
+  quota_info_t() : max_bytes(0), max_files(0) {}
+
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(max_bytes, bl);
