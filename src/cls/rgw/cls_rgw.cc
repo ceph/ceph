@@ -35,6 +35,7 @@ cls_method_handle_t h_rgw_bucket_read_olh_log;
 cls_method_handle_t h_rgw_bucket_trim_olh_log;
 cls_method_handle_t h_rgw_bucket_clear_olh;
 cls_method_handle_t h_rgw_obj_remove;
+cls_method_handle_t h_rgw_obj_check_attrs_prefix;
 cls_method_handle_t h_rgw_bi_get_op;
 cls_method_handle_t h_rgw_bi_put_op;
 cls_method_handle_t h_rgw_bi_list_op;
@@ -1941,6 +1942,49 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+static int rgw_obj_check_attrs_prefix(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  // decode request
+  rgw_cls_obj_check_attrs_prefix op;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(op, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  if (op.check_prefix.empty()) {
+    return -EINVAL;
+  }
+
+  map<string, bufferlist> attrset;
+  int ret = cls_cxx_getxattrs(hctx, &attrset);
+  if (ret < 0 && ret != -ENOENT) {
+    CLS_LOG(0, "ERROR: %s(): cls_cxx_getxattrs() returned %d", __func__, ret);
+    return ret;
+  }
+
+  bool exist = false;
+
+  for (map<string, bufferlist>::iterator aiter = attrset.lower_bound(op.check_prefix);
+       aiter != attrset.end(); ++aiter) {
+    const string& attr = aiter->first;
+
+    if (attr.substr(0, op.check_prefix.size()) > op.check_prefix) {
+      break;
+    }
+
+    exist = true;
+  }
+
+  if (exist == op.fail_if_exist) {
+    return -ECANCELED;
+  }
+
+  return 0;
+}
+
 static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   // decode request
@@ -2997,6 +3041,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "bucket_clear_olh", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bucket_clear_olh, &h_rgw_bucket_clear_olh);
 
   cls_register_cxx_method(h_class, "obj_remove", CLS_METHOD_RD | CLS_METHOD_WR, rgw_obj_remove, &h_rgw_obj_remove);
+  cls_register_cxx_method(h_class, "obj_check_attrs_prefix", CLS_METHOD_RD, rgw_obj_check_attrs_prefix, &h_rgw_obj_check_attrs_prefix);
 
   cls_register_cxx_method(h_class, "bi_get", CLS_METHOD_RD, rgw_bi_get_op, &h_rgw_bi_get_op);
   cls_register_cxx_method(h_class, "bi_put", CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
