@@ -15,9 +15,13 @@ DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
 
+if test $(id -u) != 0 ; then
+    SUDO=sudo
+fi
+
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
-        sudo apt-get install -y dpkg-dev
+        $SUDO apt-get install -y dpkg-dev
         touch $DIR/status
         packages=$(dpkg-checkbuilddeps --admindir=$DIR debian/control 2>&1 | \
             perl -p -e 's/.*Unmet build dependencies: *//;' \
@@ -29,19 +33,19 @@ Ubuntu|Debian|Devuan)
                 packages=$(echo $packages | perl -pe 's/\w*babeltrace\w*//g')
                 ;;
         esac
-        sudo apt-get install -y $packages
+        $SUDO apt-get install -y $packages
         ;;
 CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
         case $(lsb_release -si) in
             SUSE*)
-                sudo zypper -y yum-utils
+                $SUDO zypper -y yum-utils
                 ;;
             *)
-                sudo yum install -y yum-utils
+                $SUDO yum install -y yum-utils
                 ;;
         esac
         sed -e 's/@//g' < ceph.spec.in > $DIR/ceph.spec
-        sudo yum-builddep -y $DIR/ceph.spec
+        $SUDO yum-builddep -y $DIR/ceph.spec
         ;;
 *)
         echo "$(lsb_release -si) is unknown, dependencies will have to be installed manually."
