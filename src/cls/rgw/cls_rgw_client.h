@@ -32,6 +32,7 @@ int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
                     rgw_bucket_dir *dir, bool *is_truncated);
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes);
+void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist);
 
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,

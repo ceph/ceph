@@ -3986,6 +3986,11 @@ void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)
   cls_rgw_remove_obj(op, prefixes);
 }
 
+void RGWRados::cls_obj_check_prefix_exist(ObjectOperation& op, const string& prefix, bool fail_if_exist)
+{
+  cls_rgw_obj_check_attrs_prefix(op, prefix, fail_if_exist);
+}
+
 
 /**
  * Delete an object.
@@ -5839,9 +5844,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
     return r;
   }
 
-  if (need_to_remove) {
-    op.remove();
-  } else if (need_to_link) {
+  if (need_to_link) {
     rgw_obj target(bucket, key.name);
     target.set_instance(key.instance);
     RGWOLHInfo info;
@@ -5867,7 +5870,7 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
 
   /* update olh object */
   r = ref.ioctx.operate(ref.oid, &op);
-  if (need_to_remove && (r == -ENOENT || r == -ECANCELED)) {
+  if (r == -ECANCELED) {
     r = 0;
   }
   if (r < 0) {
@@ -5882,6 +5885,18 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
   }
 
   if (need_to_remove) {
+    ObjectWriteOperation rm_op;
+
+    rm_op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
+    rm_op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_GT, last_ver);
+    cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
+    rm_op.remove();
+
+    r = ref.ioctx.operate(ref.oid, &rm_op);
+    if (r == -ECANCELED) {
+      return 0; /* someone else won this race */
+    }
+
     r = bucket_index_clear_olh(state, obj);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;

@@ -415,6 +415,28 @@ struct rgw_cls_obj_remove_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_obj_remove_op)
 
+struct rgw_cls_obj_check_attrs_prefix {
+  string check_prefix;
+  bool fail_if_exist;
+
+  rgw_cls_obj_check_attrs_prefix() : fail_if_exist(false) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(check_prefix, bl);
+    ::encode(fail_if_exist, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(check_prefix, bl);
+    ::decode(fail_if_exist, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_obj_check_attrs_prefix)
+
 struct rgw_cls_usage_log_add_op {
   rgw_usage_log_info info;
 
