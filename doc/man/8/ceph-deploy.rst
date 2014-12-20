@@ -115,7 +115,7 @@ Here, [HOST] is/are the host node(s) where Ceph is to be installed.
 An option ``--release`` is used to install a release known as CODENAME
 (default: firefly).
 
-Other options like :option:`--testing`, :option:`--dev`,:option:`--adjust-repos`,
+Other options like :option:`--testing`, :option:`--dev`, :option:`--adjust-repos`,
 :option:`--no-adjust-repos`, :option:`--repo`, :option:`--local-mirror`,
 :option:`--repo-url` and :option:`--gpg-url` can also be used with this command.
 
