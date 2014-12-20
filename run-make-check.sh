@@ -54,7 +54,7 @@ function maybe_enable_docker() {
 }
 
 function run() {
-    sudo $(which apt-get yum zypper 2>/dev/null) install ccache
+    sudo $(which apt-get yum zypper 2>/dev/null) install -y ccache jq
     sudo modprobe rbd
 
     if test -f ./install-deps.sh ; then
