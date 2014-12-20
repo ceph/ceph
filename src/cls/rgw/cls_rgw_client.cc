@@ -103,6 +103,16 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_at
   o.exec("rgw", "obj_remove", in);
 }
 
+void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist)
+{
+  bufferlist in;
+  struct rgw_cls_obj_check_attrs_prefix call;
+  call.check_prefix = prefix;
+  call.fail_if_exist = fail_if_exist;
+  ::encode(call, in);
+  o.exec("rgw", "obj_check_attrs_prefix", in);
+}
+
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
                    BIIndexType index_type, cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry)

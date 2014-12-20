@@ -255,6 +255,9 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
     case CLS_RGW_OLH_OP_LINK_OLH:
       op_str = "link_olh";
       break;
+    case CLS_RGW_OLH_OP_UNLINK_OLH:
+      op_str = "unlink_olh";
+      break;
     case CLS_RGW_OLH_OP_REMOVE_INSTANCE:
       op_str = "remove_instance";
       break;
