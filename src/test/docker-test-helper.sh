@@ -21,43 +21,35 @@ function get_image_name() {
     echo ceph-$os_type-$os_version
 }
 
-function compile_ubuntu() {
-    cat <<EOF
-set -ex
-if ! test -f config.status ; then
-   ./autogen.sh
-   ./configure --disable-static --with-debug CC='ccache gcc' CXX='ccache g++' CFLAGS="-Wall -g" CXXFLAGS="-Wall -g"
-fi
-make -j4
-EOF
-}
-
-function compile_centos() {
-    cat <<EOF
-set -ex
-if ! test -f config.status ; then
-   ./autogen.sh
-   ./configure --disable-static --with-debug CC='ccache gcc' CXX='ccache g++' CFLAGS="-Wall -g" CXXFLAGS="-Wall -g"
-fi
-make -j4
-EOF
-}
-
 function setup_container() {
     local os_type=$1
     local os_version=$2
     local opts="$3"
 
     local image=$(get_image_name $os_type $os_version)
-    if ! docker images $image | grep --quiet "^$image " ; then
+    local build=true
+    if docker images $image | grep --quiet "^$image " ; then
+        eval touch --date=$(docker inspect $image | jq '.[0].Created') $image
+        found=$(find -L test/$os_type/* -newer $image)
+        rm $image
+        if test -n "$found" ; then
+            docker rmi $image
+        else
+            build=false
+        fi
+    fi
+    if $build ; then
         # 
         # In the dockerfile,
-        # replace environment variables %%FOO%% with their content except
+        # replace environment variables %%FOO%% with their content
         #
-        cat test/$os_type.dockerfile | \
-            os_version=$os_version user_id=$(id -u) \
-            perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' | \
-            docker $opts build --tag=$image -
+        rm -fr dockerfile
+        cp --dereference --recursive test/$os_type dockerfile
+        os_version=$os_version user_id=$(id -u) \
+            perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
+            dockerfile/Dockerfile.in > dockerfile/Dockerfile
+        docker $opts build --rm=true --tag=$image dockerfile
+        rm -fr dockerfile
     fi
 }
 
@@ -78,12 +70,12 @@ function get_downstream() {
 function setup_downstream() {
     local os_type=$1
     local os_version=$2
+    local ref=$3
 
     local image=$(get_image_name $os_type $os_version)
     local upstream=$(get_upstream)
     local dir=$(dirname $upstream)
     local downstream=$(get_downstream $os_type $os_version)
-    local commit=$(git rev-parse HEAD)
     
     (
         cd $dir
@@ -102,7 +94,7 @@ function setup_downstream() {
             done
         fi
         cd $downstream
-        git reset --hard $commit || return 1
+        git reset --hard $ref || return 1
         git submodule sync || return 1
         git submodule update --init || return 1
     )
@@ -113,6 +105,8 @@ function run_in_docker() {
     shift
     local os_version=$1
     shift
+    local ref=$1
+    shift
     local dev=$1
     shift
     local user=$1
@@ -121,7 +115,7 @@ function run_in_docker() {
     shift
     local script=$1
 
-    setup_downstream $os_type $os_version || return 1
+    setup_downstream $os_type $os_version $ref || return 1
     setup_container $os_type $os_version "$opts" || return 1
     local downstream=$(get_downstream $os_type $os_version)
     local image=$(get_image_name $os_type $os_version)
@@ -144,17 +138,10 @@ function run_in_docker() {
     cmd+=" --volume $downstream:$downstream"
     cmd+=" --volume $upstream:$upstream"
     local status=0
-    if test "$script" = "bash" ; then
+    if test "$script" = "SHELL" ; then
         $cmd --tty --interactive --workdir $downstream $user $dev $image bash
-    elif test "$script" = "compile" ; then
-        local compile=$downstream/compile.$$
-        compile_$os_type > $compile
-        if ! $cmd --workdir $downstream $user $image bash $compile ; then
-            status=1
-        fi
-        rm $compile
     else
-        if ! $cmd --workdir $downstream/src $user $dev $image "$@" ; then
+        if ! $cmd --workdir $downstream $user $dev $image "$@" ; then
             status=1
         fi
     fi
@@ -193,10 +180,11 @@ $0 [options] command args ...
                           (defaults to ubuntu)
    [--os-version version] docker image tag (centos6 for centos, 12.04 for ubuntu, etc.)
                           (defaults to 14.04)
+   [--ref gitref]         git reset --hard gitref before running the command
+                          (defaults to git rev-parse HEAD)
    [--all types+versions] list of docker image repositories and tags
 
    [--shell]              run an interactive shell in the container
-   [--compile]            run ./autogen.sh && ./configure && make in the specified types+versions
    [--remove-all]         remove the container and the image for the specified types+versions
 
    [--dev]                run the container with --volume /dev:/dev
@@ -260,13 +248,13 @@ The --os-type and --os-version must be exactly as displayed by docker images:
 The --os-type value can be any string in the REPOSITORY column, the --os-version
 can be any string in the TAG column.
 
-The --shell, --compile and --remove actions are mutually exclusive.
-
-Compile in centos7
-docker-test.sh --os-type centos --os-version centos7 --compile
+The --shell and --remove actions are mutually exclusive.
 
 Run make check in centos7
 docker-test.sh --os-type centos --os-version centos7 -- make check
+
+Run make check on a giant
+docker-test.sh --ref giant -- make check
 
 Run a test as root with access to the host /dev for losetup to work
 docker-test.sh --user root --dev -- make TESTS=test/ceph-disk-root.sh check
@@ -286,7 +274,7 @@ function main_docker() {
     fi
 
     local temp
-    temp=$(getopt -o scdht:v:u:o:a: --long remove-all,verbose,shell,compile,dev,help,os-type:,os-version:,user:,opts:,all: -n $0 -- "$@") || return 1
+    temp=$(getopt -o scdht:v:u:o:a:r: --long remove-all,verbose,shell,dev,help,os-type:,os-version:,user:,opts:,all:,ref: -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
 
@@ -295,10 +283,11 @@ function main_docker() {
     local all
     local remove=false
     local shell=false
-    local compile=false
     local dev=false
     local user=$USER
     local opts
+    local ref=$(git rev-parse HEAD)
+
     while true ; do
 	case "$1" in
             --remove-all)
@@ -312,10 +301,6 @@ function main_docker() {
                 ;;
             -s|--shell)
                 shell=true
-                shift
-                ;;
-            -c|--compile)
-                compile=true
                 shift
                 ;;
             -d|--dev)
@@ -346,6 +331,10 @@ function main_docker() {
                 all="$2"
                 shift 2
                 ;;
+	    -r|--ref) 
+                ref="$2"
+                shift 2
+                ;;
 	    --)
                 shift
                 break
@@ -369,11 +358,9 @@ function main_docker() {
             if $remove ; then
                 remove_all $os_type $os_version || return 1
             elif $shell ; then
-                run_in_docker $os_type $os_version $dev $user "$opts" bash || return 1
-            elif $compile ; then
-                run_in_docker $os_type $os_version $dev $user "$opts" compile || return 1
+                run_in_docker $os_type $os_version $ref $dev $user "$opts" SHELL || return 1
             else
-                run_in_docker $os_type $os_version $dev $user "$opts" "$@" || return 1
+                run_in_docker $os_type $os_version $ref $dev $user "$opts" "$@" || return 1
             fi
         done
     done

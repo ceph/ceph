@@ -248,19 +248,33 @@ check_SCRIPTS += \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
-	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh
 
-if ENABLE_DOCKER
-check_SCRIPTS += \
-	test/ceph-disk-root.sh
+if ENABLE_ROOT_MAKE_CHECK
+check_SCRIPTS += test/ceph-disk-root.sh
+else
+check_SCRIPTS += test/ceph-disk.sh
 endif
 
 EXTRA_DIST += \
+	$(srcdir)/test/ubuntu/Dockerfile.in \
+	$(srcdir)/test/ubuntu/install-deps.sh \
+	$(srcdir)/test/ubuntu/debian \
+	$(srcdir)/test/centos/Dockerfile.in \
+	$(srcdir)/test/centos/install-deps.sh \
+	$(srcdir)/test/centos/ceph.spec.in \
 	$(srcdir)/test/mon/mon-test-helpers.sh \
 	$(srcdir)/test/osd/osd-test-helpers.sh \
         $(srcdir)/test/coverage.sh \
 	$(patsubst %,$(srcdir)/%,$(check_SCRIPTS))
+
+docker-check:
+	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
+	$(srcdir)/test/container-make-check-centos-centos7.sh
+
+EXTRA_DIST += \
+	$(srcdir)/test/container-make-check-ubuntu-14.04.sh
+	$(srcdir)/test/container-make-check-centos-centos7.sh
 
 # target to build but not run the unit tests
 unittests:: $(check_PROGRAMS)

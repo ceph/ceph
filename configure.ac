@@ -276,6 +276,12 @@ else
     AC_MSG_FAILURE([no suitable crypto library found])
 fi
 
+AC_ARG_ENABLE([root-make-check],
+            [AS_HELP_STRING([--enable-root-make-check], [enable make check tests that require root privileges])],
+            [],
+            [enable_root_make_check=no])
+AM_CONDITIONAL(ENABLE_ROOT_MAKE_CHECK, test "x$enable_root_make_check" != xno)
+
 # profiler?
 AC_ARG_WITH([profiler],
             [AS_HELP_STRING([--with-profiler], [build extra profiler binaries])],
@@ -312,12 +318,6 @@ AC_ARG_WITH([debug],
 AM_CONDITIONAL(WITH_DEBUG, test "$with_debug" = "yes")
 
 AC_DEFINE([DEBUG_GATHER], [1], [Define if you want C_Gather debugging])
-
-AC_ARG_ENABLE([docker],
-            [AS_HELP_STRING([--enable-docker], [enable docker based functional tests])],
-            [],
-            [enable_docker=no])
-AM_CONDITIONAL(ENABLE_DOCKER, test "x$enable_docker" != xno)
 
 # code coverage?
 AC_ARG_ENABLE([coverage],
