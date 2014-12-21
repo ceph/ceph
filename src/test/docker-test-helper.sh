@@ -139,7 +139,7 @@ function run_in_docker() {
     if test "$script" = "bash" ; then
         $cmd --tty --interactive --workdir $downstream $user $dev $image bash
     else
-        if ! $cmd --workdir $downstream/src $user $dev $image "$@" ; then
+        if ! $cmd --workdir $downstream $user $dev $image "$@" ; then
             status=1
         fi
     fi
