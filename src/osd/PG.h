@@ -431,7 +431,7 @@ public:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item recovery_item, scrub_item, scrub_finalize_item, snap_trim_item, stat_queue_item;
+  xlist<PG*>::item recovery_item, scrub_item, snap_trim_item, stat_queue_item;
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
@@ -1029,8 +1029,10 @@ public:
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
       active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
+      num_digest_updates_pending(0),
       state(INACTIVE),
-      deep(false)
+      deep(false),
+      seed(0)
     {
     }
 
@@ -1059,10 +1061,13 @@ public:
     // Maps from objects with errors to missing/inconsistent peers
     map<hobject_t, set<pg_shard_t> > missing;
     map<hobject_t, set<pg_shard_t> > inconsistent;
-    map<hobject_t, set<pg_shard_t> > inconsistent_snapcolls;
 
     // Map from object with errors to good peer
     map<hobject_t, pair<ScrubMap::object, pg_shard_t> > authoritative;
+
+    // Objects who need digest updates
+    map<hobject_t, pair<uint32_t,uint32_t> > missing_digest;
+    int num_digest_updates_pending;
 
     // chunky scrub
     hobject_t start, end;
@@ -1077,11 +1082,13 @@ public:
       BUILD_MAP,
       WAIT_REPLICAS,
       COMPARE_MAPS,
+      WAIT_DIGEST_UPDATES,
       FINISH,
     } state;
 
     // deep scrub
     bool deep;
+    uint32_t seed;
 
     list<Context*> callbacks;
     void add_callback(Context *context) {
@@ -1108,6 +1115,7 @@ public:
         case BUILD_MAP: ret = "BUILD_MAP"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
         case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
+        case WAIT_DIGEST_UPDATES: ret = "WAIT_DIGEST_UPDATES"; break;
         case FINISH: ret = "FINISH"; break;
       }
       return ret;
@@ -1152,10 +1160,13 @@ public:
       deep_errors = 0;
       fixed = 0;
       deep = false;
+      seed = 0;
       run_callbacks();
       inconsistent.clear();
       missing.clear();
       authoritative.clear();
+      missing_digest.clear();
+      num_digest_updates_pending = 0;
     }
 
   } scrubber;
@@ -1170,28 +1181,22 @@ public:
     pg_shard_t ok_peer);
 
   void scrub(ThreadPool::TPHandle &handle);
-  void classic_scrub(ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);
   void scrub_compare_maps();
   void scrub_process_inconsistent();
-  void scrub_finalize();
   void scrub_finish();
   void scrub_clear_state();
-  bool scrub_gather_replica_maps();
   void _scan_snaps(ScrubMap &map);
   void _scan_rollback_obs(
     const vector<ghobject_t> &rollback_obs,
     ThreadPool::TPHandle &handle);
-  void _request_scrub_map_classic(pg_shard_t replica, eversion_t version);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
-                          hobject_t start, hobject_t end, bool deep);
+                          hobject_t start, hobject_t end, bool deep,
+			  uint32_t seed);
   int build_scrub_map_chunk(
     ScrubMap &map,
-    hobject_t start, hobject_t end, bool deep,
+    hobject_t start, hobject_t end, bool deep, uint32_t seed,
     ThreadPool::TPHandle &handle);
-  void build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle);
-  void build_inc_scrub_map(
-    ScrubMap &map, eversion_t v, ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
    * a false return value obliges the implementer to requeue scrub when the

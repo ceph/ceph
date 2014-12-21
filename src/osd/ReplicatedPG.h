@@ -123,10 +123,24 @@ public:
     bool mirror_snapset;
     map<string, bufferlist> attrs; ///< src user attrs
     bool has_omap;
-    CopyResults() : object_size(0), started_temp_obj(false),
-		    final_tx(NULL), user_version(0), 
-		    should_requeue(false), mirror_snapset(false),
-		    has_omap(false) {}
+    uint32_t flags;    // object_copy_data_t::FLAG_*
+    uint32_t source_data_digest, source_omap_digest;
+    uint32_t data_digest, omap_digest;
+    bool is_data_digest() {
+      return flags & object_copy_data_t::FLAG_DATA_DIGEST;
+    }
+    bool is_omap_digest() {
+      return flags & object_copy_data_t::FLAG_OMAP_DIGEST;
+    }
+    CopyResults()
+      : object_size(0), started_temp_obj(false),
+	final_tx(NULL), user_version(0),
+	should_requeue(false), mirror_snapset(false),
+	has_omap(false),
+	flags(0),
+	source_data_digest(-1), source_omap_digest(-1),
+	data_digest(-1), omap_digest(-1)
+    {}
   };
 
   struct CopyOp {
@@ -146,7 +160,7 @@ public:
     map<string,bufferlist> attrs;
     bufferlist data;
     bufferlist omap_header;
-    map<string,bufferlist> omap;
+    bufferlist omap_data;
     int rval;
 
     object_copy_cursor_t temp_cursor;
@@ -1052,7 +1066,8 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true);
+  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true,
+		  bool scrub_ok=false);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
@@ -1266,9 +1281,11 @@ protected:
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end);
   virtual void _scrub(ScrubMap& map);
+  void _scrub_digest_updated();
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();
   object_stat_collection_t scrub_cstat;
+  friend class C_ScrubDigestUpdated;
 
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void apply_and_flush_repops(bool requeue);

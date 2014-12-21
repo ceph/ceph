@@ -2490,29 +2490,36 @@ WRITE_CLASS_ENCODER(object_copy_cursor_t)
  * based on the contents of the cursor.
  */
 struct object_copy_data_t {
+  enum {
+    FLAG_DATA_DIGEST = 1<<0,
+    FLAG_OMAP_DIGEST = 1<<1,
+  };
   object_copy_cursor_t cursor;
   uint64_t size;
   utime_t mtime;
+  uint32_t data_digest, omap_digest;
+  uint32_t flags;
   map<string, bufferlist> attrs;
   bufferlist data;
   bufferlist omap_header;
-  map<string, bufferlist> omap;
+  bufferlist omap_data;
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
   ///< latest snap seq for the object (if head)
   snapid_t snap_seq;
 public:
-  object_copy_data_t() : size((uint64_t)-1) {}
+  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
+			 omap_digest(-1), flags(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
   void decode_classic(bufferlist::iterator& bl);
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(object_copy_data_t)
+WRITE_CLASS_ENCODER_FEATURES(object_copy_data_t)
 
 /**
  * pg creation info
@@ -2748,6 +2755,8 @@ struct object_info_t {
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
     FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
     FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
+    FLAG_DATA_DIGEST = 1 << 4,  // has data crc
+    FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -2766,6 +2775,10 @@ struct object_info_t {
       s += "|uses_tmap";
     if (flags & FLAG_OMAP)
       s += "|omap";
+    if (flags & FLAG_DATA_DIGEST)
+      s += "|data_digest";
+    if (flags & FLAG_OMAP_DIGEST)
+      s += "|omap_digest";
     if (s.length())
       return s.substr(1);
     return s;
@@ -2780,6 +2793,10 @@ struct object_info_t {
   uint64_t truncate_seq, truncate_size;
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
+  // opportunistic checksums; may or may not be present
+  __u32 data_digest;  ///< data crc32c
+  __u32 omap_digest;  ///< omap crc32c
 
   void copy_user_bits(const object_info_t& other);
 
@@ -2807,6 +2824,33 @@ struct object_info_t {
   bool is_omap() const {
     return test_flag(FLAG_OMAP);
   }
+  bool is_data_digest() const {
+    return test_flag(FLAG_DATA_DIGEST);
+  }
+  bool is_omap_digest() const {
+    return test_flag(FLAG_OMAP_DIGEST);
+  }
+
+  void set_data_digest(__u32 d) {
+    set_flag(FLAG_DATA_DIGEST);
+    data_digest = d;
+  }
+  void set_omap_digest(__u32 d) {
+    set_flag(FLAG_OMAP_DIGEST);
+    omap_digest = d;
+  }
+  void clear_data_digest() {
+    clear_flag(FLAG_DATA_DIGEST);
+    data_digest = -1;
+  }
+  void clear_omap_digest() {
+    clear_flag(FLAG_OMAP_DIGEST);
+    omap_digest = -1;
+  }
+  void new_object() {
+    set_data_digest(-1);
+    set_omap_digest(-1);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -2819,13 +2863,16 @@ struct object_info_t {
 
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0)
+      truncate_seq(0), truncate_size(0),
+      data_digest(-1), omap_digest(-1)
   {}
 
   object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0) {}
+      truncate_seq(0), truncate_size(0),
+      data_digest(-1), omap_digest(-1)
+  {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);
@@ -3281,11 +3328,11 @@ struct ScrubMap {
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
-    __u32 digest;
+    __u32 digest;              ///< data crc32c
     bool digest_present;
     uint32_t nlinks;
     set<snapid_t> snapcolls;
-    __u32 omap_digest;
+    __u32 omap_digest;         ///< omap crc32c
     bool omap_digest_present;
     bool read_error;
 
