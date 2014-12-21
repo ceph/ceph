@@ -21,28 +21,6 @@ function get_image_name() {
     echo ceph-$os_type-$os_version
 }
 
-function compile_ubuntu() {
-    cat <<EOF
-set -ex
-if ! test -f config.status ; then
-   ./autogen.sh
-   ./configure --disable-static --with-debug CC='ccache gcc' CXX='ccache g++' CFLAGS="-Wall -g" CXXFLAGS="-Wall -g"
-fi
-make -j4
-EOF
-}
-
-function compile_centos() {
-    cat <<EOF
-set -ex
-if ! test -f config.status ; then
-   ./autogen.sh
-   ./configure --disable-static --with-debug CC='ccache gcc' CXX='ccache g++' CFLAGS="-Wall -g" CXXFLAGS="-Wall -g"
-fi
-make -j4
-EOF
-}
-
 function setup_container() {
     local os_type=$1
     local os_version=$2
@@ -160,13 +138,6 @@ function run_in_docker() {
     local status=0
     if test "$script" = "bash" ; then
         $cmd --tty --interactive --workdir $downstream $user $dev $image bash
-    elif test "$script" = "compile" ; then
-        local compile=$downstream/compile.$$
-        compile_$os_type > $compile
-        if ! $cmd --workdir $downstream $user $image bash $compile ; then
-            status=1
-        fi
-        rm $compile
     else
         if ! $cmd --workdir $downstream/src $user $dev $image "$@" ; then
             status=1
@@ -210,7 +181,6 @@ $0 [options] command args ...
    [--all types+versions] list of docker image repositories and tags
 
    [--shell]              run an interactive shell in the container
-   [--compile]            run ./autogen.sh && ./configure && make in the specified types+versions
    [--remove-all]         remove the container and the image for the specified types+versions
 
    [--dev]                run the container with --volume /dev:/dev
@@ -274,10 +244,7 @@ The --os-type and --os-version must be exactly as displayed by docker images:
 The --os-type value can be any string in the REPOSITORY column, the --os-version
 can be any string in the TAG column.
 
-The --shell, --compile and --remove actions are mutually exclusive.
-
-Compile in centos7
-docker-test.sh --os-type centos --os-version centos7 --compile
+The --shell and --remove actions are mutually exclusive.
 
 Run make check in centos7
 docker-test.sh --os-type centos --os-version centos7 -- make check
@@ -300,7 +267,7 @@ function main_docker() {
     fi
 
     local temp
-    temp=$(getopt -o scdht:v:u:o:a: --long remove-all,verbose,shell,compile,dev,help,os-type:,os-version:,user:,opts:,all: -n $0 -- "$@") || return 1
+    temp=$(getopt -o scdht:v:u:o:a: --long remove-all,verbose,shell,dev,help,os-type:,os-version:,user:,opts:,all: -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
 
@@ -309,7 +276,6 @@ function main_docker() {
     local all
     local remove=false
     local shell=false
-    local compile=false
     local dev=false
     local user=$USER
     local opts
@@ -326,10 +292,6 @@ function main_docker() {
                 ;;
             -s|--shell)
                 shell=true
-                shift
-                ;;
-            -c|--compile)
-                compile=true
                 shift
                 ;;
             -d|--dev)
@@ -384,8 +346,6 @@ function main_docker() {
                 remove_all $os_type $os_version || return 1
             elif $shell ; then
                 run_in_docker $os_type $os_version $dev $user "$opts" bash || return 1
-            elif $compile ; then
-                run_in_docker $os_type $os_version $dev $user "$opts" compile || return 1
             else
                 run_in_docker $os_type $os_version $dev $user "$opts" "$@" || return 1
             fi
