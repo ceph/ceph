@@ -20,7 +20,6 @@
 #
 FROM centos:%%os_version%%
 
-RUN useradd -M --uid %%user_id%% %%USER%%
 COPY install-deps.sh ceph.spec.in /root/
 # http://jperrin.github.io/centos/2014/09/25/centos-docker-and-systemd/
 RUN yum -y swap -- remove fakesystemd -- install systemd systemd-libs
@@ -39,5 +38,6 @@ RUN rpm -ivh epel-release-7-5.noarch.rpm
 # build dependencies
 RUN cd /root ; ./install-deps.sh
 # development tools
-RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq
+RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq sudo
+RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
