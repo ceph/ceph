@@ -20,7 +20,6 @@
 #
 FROM ubuntu:%%os_version%%
 
-RUN useradd -M --uid %%user_id%% %%USER%%
 COPY install-deps.sh /root/
 RUN mkdir /root/debian
 COPY debian /root/debian/
@@ -29,4 +28,4 @@ RUN apt-get update
 RUN cd /root ; ./install-deps.sh
 # development tools
 RUN apt-get install -y ccache valgrind gdb python-virtualenv gdisk kpartx hdparm jq
-
+RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
