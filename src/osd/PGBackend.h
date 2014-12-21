@@ -585,21 +585,27 @@
 
    virtual bool scrub_supported() { return false; }
    void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
    enum scrub_error_type be_compare_scrub_objects(
+     pg_shard_t auth_shard,
      const ScrubMap::object &auth,
+     const object_info_t& auth_oi,
+     bool okseed,
      const ScrubMap::object &candidate,
      ostream &errorstream);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
-     const map<pg_shard_t,ScrubMap*> &maps);
+     const map<pg_shard_t,ScrubMap*> &maps,
+     bool okseed,
+     object_info_t *auth_oi);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
+     bool okseed,   ///< true if scrub digests have same seed our oi digests
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
      map<hobject_t, pg_shard_t> &authoritative,
-     map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+     map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
      const vector<int> &acting,
@@ -608,6 +614,7 @@
      uint64_t logical_size) { assert(0); return 0; }
    virtual void be_deep_scrub(
      const hobject_t &poid,
+     uint32_t seed,
      ScrubMap::object &o,
      ThreadPool::TPHandle &handle) { assert(0); }
 
