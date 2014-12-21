@@ -42,26 +42,15 @@ function get_processors() {
     fi
 }
 
-#
-# Return true if the working tree is after the commit that
-# enabled docker based tests
-#
-function maybe_enable_docker() {
-    local commit=e038b1266b8d427308ab9e498d93a47bd8e3053a
-    if git rev-list HEAD | grep --quiet $commit ; then
-        echo --enable-docker
-    fi
-}
-
 function run() {
-    sudo $(which apt-get yum zypper 2>/dev/null) install ccache
+    sudo $(which apt-get yum zypper 2>/dev/null) install -y ccache jq
     sudo modprobe rbd
 
     if test -f ./install-deps.sh ; then
 	$DRY_RUN ./install-deps.sh || return 1
     fi
     $DRY_RUN ./autogen.sh || return 1
-    $DRY_RUN ./configure $(maybe_enable_docker) --disable-static --with-radosgw --with-debug \
+    $DRY_RUN ./configure "$@" --disable-static --with-radosgw --with-debug --without-lttng \
         CC="ccache gcc" CXX="ccache g++" CFLAGS="-Wall -g" CXXFLAGS="-Wall -g" || return 1
     $DRY_RUN make -j$(get_processors) || return 1
     $DRY_RUN make $(maybe_parallel_make_check) check || return 1
@@ -69,7 +58,7 @@ function run() {
 }
 
 function main() {
-    if run ; then
+    if run "$@" ; then
         echo "make check: successful run on $(git rev-parse HEAD)"
         return 0
     else
@@ -82,4 +71,4 @@ function main() {
     fi
 }
 
-main
+main "$@"
