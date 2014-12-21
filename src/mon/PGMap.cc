@@ -1208,17 +1208,25 @@ void PGMap::print_summary(Formatter *f, ostream *out) const
   if (f)
     f->open_array_section("pgs_by_state");
 
+  // list is descending numeric order (by count)
+  multimap<int,int> state_by_count;  // count -> state
   for (ceph::unordered_map<int,int>::const_iterator p = num_pg_by_state.begin();
        p != num_pg_by_state.end();
        ++p) {
+    state_by_count.insert(make_pair(p->second, p->first));
+  }
+  for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+       p != state_by_count.rend();
+       ++p) {
     if (f) {
       f->open_object_section("pgs_by_state_element");
-      f->dump_string("state_name", pg_state_string(p->first));
-      f->dump_unsigned("count", p->second);
+      f->dump_string("state_name", pg_state_string(p->second));
+      f->dump_unsigned("count", p->first);
       f->close_section();
     } else {
       ss.setf(std::ios::right);
-      ss << "             " << std::setw(7) << p->second << " " << pg_state_string(p->first) << "\n";
+      ss << "             " << std::setw(7) << p->first
+	 << " " << pg_state_string(p->second) << "\n";
       ss.unsetf(std::ios::right);
     }
   }
