@@ -24,7 +24,7 @@
 
 struct MOSDRepScrub : public Message {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
   spg_t pgid;             // PG to scrub
@@ -35,23 +35,16 @@ struct MOSDRepScrub : public Message {
   hobject_t start;       // lower bound of scrub, inclusive
   hobject_t end;         // upper bound of scrub, exclusive
   bool deep;             // true if scrub should be deep
+  uint32_t seed;         // seed value for digest calculation
 
-  MOSDRepScrub() : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-      chunky(false),
-      deep(false) { }
-
-  MOSDRepScrub(spg_t pgid, eversion_t scrub_from, eversion_t scrub_to,
-	       epoch_t map_epoch)
+  MOSDRepScrub()
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
-      pgid(pgid),
-      scrub_from(scrub_from),
-      scrub_to(scrub_to),
-      map_epoch(map_epoch),
       chunky(false),
-      deep(false) { }
+      deep(false),
+      seed(0) { }
 
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch,
-               hobject_t start, hobject_t end, bool deep)
+               hobject_t start, hobject_t end, bool deep, uint32_t seed)
     : Message(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
@@ -59,7 +52,8 @@ struct MOSDRepScrub : public Message {
       chunky(true),
       start(start),
       end(end),
-      deep(deep) { }
+      deep(deep),
+      seed(seed) { }
 
 
 private:
@@ -73,6 +67,7 @@ public:
         << ",epoch:" << map_epoch << ",start:" << start << ",end:" << end
         << ",chunky:" << chunky
         << ",deep:" << deep
+	<< ",seed:" << seed
         << ",version:" << header.version;
     out << ")";
   }
@@ -87,6 +82,7 @@ public:
     ::encode(end, payload);
     ::encode(deep, payload);
     ::encode(pgid.shard, payload);
+    ::encode(seed, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -113,6 +109,11 @@ public:
       ::decode(pgid.shard, p);
     } else {
       pgid.shard = shard_id_t::NO_SHARD;
+    }
+    if (header.version >= 6) {
+      ::decode(seed, p);
+    } else {
+      seed = 0;
     }
   }
 };

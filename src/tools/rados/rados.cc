@@ -282,93 +282,12 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   return ret;
 }
 
-static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
+static int do_copy(IoCtx& io_ctx, const char *objname,
+		   IoCtx& target_ctx, const char *target_obj)
 {
-  string oid(objname);
-  bufferlist outdata;
-  librados::ObjectReadOperation read_op;
-  string start_after;
-
-#define COPY_CHUNK_SIZE (4 * 1024 * 1024)
-  read_op.read(0, COPY_CHUNK_SIZE, &outdata, NULL);
-
-  map<std::string, bufferlist> attrset;
-  read_op.getxattrs(&attrset, NULL);
-
-  bufferlist omap_header;
-  read_op.omap_get_header(&omap_header, NULL);
-
-#define OMAP_CHUNK 1000
-  map<string, bufferlist> omap;
-  read_op.omap_get_vals(start_after, OMAP_CHUNK, &omap, NULL);
-
-  bufferlist opbl;
-  int ret = io_ctx.operate(oid, &read_op, &opbl);
-  if (ret < 0) {
-    return ret;
-  }
-
-  librados::ObjectWriteOperation write_op;
-  string target_oid(target_obj);
-
-  /* reset dest if exists */
-  write_op.create(false);
-  write_op.remove();
-
-  write_op.write_full(outdata);
-  write_op.omap_set_header(omap_header);
-
-  map<std::string, bufferlist>::iterator iter;
-  for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
-    write_op.setxattr(iter->first.c_str(), iter->second);
-  }
-  if (!omap.empty()) {
-    write_op.omap_set(omap);
-  }
-  ret = target_ctx.operate(target_oid, &write_op);
-  if (ret < 0) {
-    return ret;
-  }
-
-  uint64_t off = 0;
-
-  while (outdata.length() == COPY_CHUNK_SIZE) {
-    off += outdata.length();
-    outdata.clear();
-    ret = io_ctx.read(oid, outdata, COPY_CHUNK_SIZE, off); 
-    if (ret < 0)
-      goto err;
-
-    ret = target_ctx.write(target_oid, outdata, outdata.length(), off);
-    if (ret < 0)
-      goto err;
-  }
-
-  /* iterate through source omap and update target. This is not atomic */
-  while (omap.size() == OMAP_CHUNK) {
-    /* now start_after should point at the last entry */    
-    map<string, bufferlist>::iterator iter = omap.end();
-    --iter;
-    start_after = iter->first;
-
-    omap.clear();
-    ret = io_ctx.omap_get_vals(oid, start_after, OMAP_CHUNK, &omap);
-    if (ret < 0)
-      goto err;
-
-    if (omap.empty())
-      break;
-
-    ret = target_ctx.omap_set(target_oid, omap);
-    if (ret < 0)
-      goto err;
-  }
-
-  return 0;
-
-err:
-  target_ctx.remove(target_oid);
-  return ret;
+  ObjectWriteOperation op;
+  op.copy_from(objname, io_ctx, 0);
+  return target_ctx.operate(target_obj, &op);
 }
 
 static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
