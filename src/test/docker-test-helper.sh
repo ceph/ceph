@@ -136,7 +136,7 @@ function run_in_docker() {
     cmd+=" --volume $downstream:$downstream"
     cmd+=" --volume $upstream:$upstream"
     local status=0
-    if test "$script" = "bash" ; then
+    if test "$script" = "SHELL" ; then
         $cmd --tty --interactive --workdir $downstream $user $dev $image bash
     else
         if ! $cmd --workdir $downstream $user $dev $image "$@" ; then
@@ -345,7 +345,7 @@ function main_docker() {
             if $remove ; then
                 remove_all $os_type $os_version || return 1
             elif $shell ; then
-                run_in_docker $os_type $os_version $dev $user "$opts" bash || return 1
+                run_in_docker $os_type $os_version $dev $user "$opts" SHELL || return 1
             else
                 run_in_docker $os_type $os_version $dev $user "$opts" "$@" || return 1
             fi
