@@ -58,7 +58,7 @@ function run() {
 }
 
 function main() {
-    if run ; then
+    if run "$@" ; then
         echo "make check: successful run on $(git rev-parse HEAD)"
         return 0
     else
@@ -71,4 +71,4 @@ function main() {
     fi
 }
 
-main
+main "$@"
