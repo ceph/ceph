@@ -70,12 +70,12 @@ function get_downstream() {
 function setup_downstream() {
     local os_type=$1
     local os_version=$2
+    local ref=$3
 
     local image=$(get_image_name $os_type $os_version)
     local upstream=$(get_upstream)
     local dir=$(dirname $upstream)
     local downstream=$(get_downstream $os_type $os_version)
-    local commit=$(git rev-parse HEAD)
     
     (
         cd $dir
@@ -94,7 +94,7 @@ function setup_downstream() {
             done
         fi
         cd $downstream
-        git reset --hard $commit || return 1
+        git reset --hard $ref || return 1
         git submodule sync || return 1
         git submodule update --init || return 1
     )
@@ -105,6 +105,8 @@ function run_in_docker() {
     shift
     local os_version=$1
     shift
+    local ref=$1
+    shift
     local dev=$1
     shift
     local user=$1
@@ -113,7 +115,7 @@ function run_in_docker() {
     shift
     local script=$1
 
-    setup_downstream $os_type $os_version || return 1
+    setup_downstream $os_type $os_version $ref || return 1
     setup_container $os_type $os_version "$opts" || return 1
     local downstream=$(get_downstream $os_type $os_version)
     local image=$(get_image_name $os_type $os_version)
@@ -178,6 +180,8 @@ $0 [options] command args ...
                           (defaults to ubuntu)
    [--os-version version] docker image tag (centos6 for centos, 12.04 for ubuntu, etc.)
                           (defaults to 14.04)
+   [--ref gitref]         git reset --hard gitref before running the command
+                          (defaults to git rev-parse HEAD)
    [--all types+versions] list of docker image repositories and tags
 
    [--shell]              run an interactive shell in the container
@@ -249,6 +253,9 @@ The --shell and --remove actions are mutually exclusive.
 Run make check in centos7
 docker-test.sh --os-type centos --os-version centos7 -- make check
 
+Run make check on a giant
+docker-test.sh --ref giant -- make check
+
 Run a test as root with access to the host /dev for losetup to work
 docker-test.sh --user root --dev -- make TESTS=test/ceph-disk-root.sh check
 
@@ -267,7 +274,7 @@ function main_docker() {
     fi
 
     local temp
-    temp=$(getopt -o scdht:v:u:o:a: --long remove-all,verbose,shell,dev,help,os-type:,os-version:,user:,opts:,all: -n $0 -- "$@") || return 1
+    temp=$(getopt -o scdht:v:u:o:a:r: --long remove-all,verbose,shell,dev,help,os-type:,os-version:,user:,opts:,all:,ref: -n $0 -- "$@") || return 1
 
     eval set -- "$temp"
 
@@ -279,6 +286,8 @@ function main_docker() {
     local dev=false
     local user=$USER
     local opts
+    local ref=$(git rev-parse HEAD)
+
     while true ; do
 	case "$1" in
             --remove-all)
@@ -322,6 +331,10 @@ function main_docker() {
                 all="$2"
                 shift 2
                 ;;
+	    -r|--ref) 
+                ref="$2"
+                shift 2
+                ;;
 	    --)
                 shift
                 break
@@ -345,9 +358,9 @@ function main_docker() {
             if $remove ; then
                 remove_all $os_type $os_version || return 1
             elif $shell ; then
-                run_in_docker $os_type $os_version $dev $user "$opts" SHELL || return 1
+                run_in_docker $os_type $os_version $ref $dev $user "$opts" SHELL || return 1
             else
-                run_in_docker $os_type $os_version $dev $user "$opts" "$@" || return 1
+                run_in_docker $os_type $os_version $ref $dev $user "$opts" "$@" || return 1
             fi
         done
     done
