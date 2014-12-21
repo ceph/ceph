@@ -14,12 +14,10 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-source test/docker-test-helper.sh
-
-supported='([ubuntu]="14.04" [centos]="centos7")'
-main_docker "$@" --all "$supported" --compile
-main_docker "$@" --all "$supported" --user root --dev test/ceph-disk.sh test_activate_dev
+set -e
+sudo test/ceph-disk.sh test_activate_dev
+test/ceph-disk.sh
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && test/osd/ceph-disk-root.sh"
+# compile-command: "cd ../.. ; make -j4 && test/ceph-disk-root.sh"
 # End:

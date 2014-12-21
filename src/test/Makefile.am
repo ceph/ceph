@@ -248,12 +248,12 @@ check_SCRIPTS += \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
-	test/ceph-disk.sh \
 	test/mon/mon-handle-forward.sh
 
-if ENABLE_DOCKER
-check_SCRIPTS += \
-	test/ceph-disk-root.sh
+if ENABLE_ROOT_MAKE_CHECK
+check_SCRIPTS += test/ceph-disk-root.sh
+else
+check_SCRIPTS += test/ceph-disk.sh
 endif
 
 EXTRA_DIST += \
