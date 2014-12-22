@@ -695,9 +695,9 @@ int finish_remove_pgs(ObjectStore *store)
     }
 
     uint64_t seq;
-    coll_t coll(pgid);
-    if (it->is_removal(&seq, &pgid) ||
-	PG::_has_removal_flag(store, pgid)) {
+    snapid_t snap;
+    if (it->is_removal(&seq, &pgid) || (it->is_pg(pgid, snap) &&
+	PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs removing " << *it
 	   << " pgid is " << pgid << std::endl;
       remove_coll(store, *it);
