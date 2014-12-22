@@ -1909,7 +1909,7 @@ void CDir::_omap_commit(int op_prio)
 
     if (dn->last != CEPH_NOSNAP &&
 	snaps && try_trim_snap_dentry(dn, *snaps)) {
-      dout(10) << " rm " << dn->name << " " << *dn << dendl;
+      dout(10) << " rm " << key << dendl;
       write_size += key.length();
       to_remove.insert(key);
       continue;
