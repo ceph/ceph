@@ -282,6 +282,9 @@ int librados::RadosClient::connect()
 
 void librados::RadosClient::shutdown()
 {
+  // make sure watch callbacks are flushed
+  watch_flush();
+
   lock.Lock();
   if (state == DISCONNECTED) {
     lock.Unlock();
@@ -306,6 +309,14 @@ void librados::RadosClient::shutdown()
     messenger->wait();
   }
   ldout(cct, 1) << "shutdown" << dendl;
+}
+
+int librados::RadosClient::watch_flush()
+{
+  ldout(cct, 10) << __func__ << " enter" << dendl;
+  objecter->linger_callback_flush();
+  ldout(cct, 10) << __func__ << " exit" << dendl;
+  return 0;
 }
 
 uint64_t librados::RadosClient::get_instance_id()

@@ -500,6 +500,7 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
   ASSERT_GT(rados_watch_check(ioctx, handle), 0);
 
   rados_unwatch2(ioctx, handle);
+  rados_watch_flush(cluster);
 }
 
 TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
@@ -521,10 +522,15 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2Timeout) {
   ASSERT_EQ(watches.size(), 1u);
   ASSERT_EQ(0u, notify_cookies.size());
   bufferlist bl2, bl_reply;
+  std::cout << " trying..." << std::endl;
   ASSERT_EQ(-ETIMEDOUT, ioctx.notify2(notify_oid, bl2, 1000 /* 1s */,
 				      &bl_reply));
+  std::cout << " timed out" << std::endl;
   ASSERT_GT(ioctx.watch_check(handle), 0);
   ioctx.unwatch2(handle);
+  std::cout << " flushing" << std::endl;
+  cluster.watch_flush();
+  std::cout << " flushed" << std::endl;
 }
 
 // --

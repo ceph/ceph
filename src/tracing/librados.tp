@@ -2344,6 +2344,22 @@ TRACEPOINT_EVENT(librados, rados_notify_ack_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_watch_flush_enter,
+    TP_ARGS(
+        rados_t, cluster),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_watch_flush_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_set_alloc_hint_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx,
