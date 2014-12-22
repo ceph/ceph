@@ -1001,7 +1001,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_status() = 0;
   virtual void begin_response() = 0;
-  virtual void send_partial_response(pair<string,int>& result) = 0;
+  virtual void send_partial_response(pair<rgw_obj_key, int>& result) = 0;
   virtual void end_response() = 0;
   virtual const string name() { return "multi_object_delete"; }
   virtual RGWOpType get_type() { return RGW_OP_DELETE_MULTI_OBJ; }
