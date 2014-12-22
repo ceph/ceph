@@ -145,6 +145,24 @@ TEST_F(LibRadosSnapshotsPP, SnapGetNamePP) {
   EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
 }
 
+TEST_F(LibRadosSnapshotsPP, SnapCreateRemovePP) {
+  // reproduces http://tracker.ceph.com/issues/10262
+  bufferlist bl;
+  bl.append("foo");
+  ASSERT_EQ(0, ioctx.write("foo", bl, bl.length(), 0));
+  ASSERT_EQ(0, ioctx.snap_create("snapfoo"));
+  ASSERT_EQ(0, ioctx.remove("foo"));
+  ASSERT_EQ(0, ioctx.snap_create("snapbar"));
+
+  librados::ObjectWriteOperation *op = new librados::ObjectWriteOperation();
+  op->create(false);
+  op->remove();
+  ASSERT_EQ(0, ioctx.operate("foo", op));
+
+  EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
+  EXPECT_EQ(0, ioctx.snap_remove("snapbar"));
+}
+
 TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
