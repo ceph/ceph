@@ -29,8 +29,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "ceph_test_objectstore_state "
 
-const coll_t TestObjectStoreState::META_COLL("meta");
-const coll_t TestObjectStoreState::TEMP_COLL("temp");
+const coll_t TestObjectStoreState::META_COLL;
 
 void TestObjectStoreState::init(int colls, int objs)
 {
@@ -40,7 +39,6 @@ void TestObjectStoreState::init(int colls, int objs)
   t = new ObjectStore::Transaction;
 
   t->create_collection(META_COLL);
-  t->create_collection(TEMP_COLL);
   m_store->apply_transaction(*t);
 
   wait_for_ready();

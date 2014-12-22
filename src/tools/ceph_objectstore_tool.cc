@@ -39,7 +39,7 @@
 namespace po = boost::program_options;
 using namespace std;
 
-static coll_t META_COLL("meta");
+static coll_t META_COLL;
 
 enum {
     TYPE_NONE = 0,

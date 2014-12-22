@@ -96,7 +96,7 @@ protected:
 
 class TestHASH_INDEX_TAG : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG) {
+  TestHASH_INDEX_TAG() : TestWrapLFNIndex(coll_t(), "PATH", CollectionIndex::HASH_INDEX_TAG) {
   }
 };
 
@@ -114,7 +114,7 @@ TEST_F(TestHASH_INDEX_TAG, generate_and_parse_name) {
 
 class TestHASH_INDEX_TAG_2 : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HASH_INDEX_TAG_2) {
+  TestHASH_INDEX_TAG_2() : TestWrapLFNIndex(coll_t(), "PATH", CollectionIndex::HASH_INDEX_TAG_2) {
   }
 };
 
@@ -137,7 +137,7 @@ TEST_F(TestHASH_INDEX_TAG_2, generate_and_parse_name) {
 
 class TestHOBJECT_WITH_POOL : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
+  TestHOBJECT_WITH_POOL() : TestWrapLFNIndex(coll_t(), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 };
 
@@ -181,7 +181,7 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
 
 class TestLFNIndex : public TestWrapLFNIndex, public ::testing::Test {
 public:
-  TestLFNIndex() : TestWrapLFNIndex(coll_t("ABC"), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
+  TestLFNIndex() : TestWrapLFNIndex(coll_t(), "PATH", CollectionIndex::HOBJECT_WITH_POOL) {
   }
 
   virtual void SetUp() {
