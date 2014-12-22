@@ -141,6 +141,12 @@ private:
   int get_index(coll_t c, Index *index);
   int init_index(coll_t c);
 
+  void _kludge_temp_object_collection(coll_t& cid, ghobject_t& oid) {
+    if (oid.hobj.pool < -1)
+      cid = cid.get_temp();
+  }
+  void init_temp_collections();
+
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;
   
@@ -598,6 +604,7 @@ public:
 
   // collections
   int list_collections(vector<coll_t>& ls);
+  int list_collections(vector<coll_t>& ls, bool include_temp);
   int collection_version_current(coll_t c, uint32_t *version);
   int collection_stat(coll_t c, struct stat *st);
   bool collection_exists(coll_t c);

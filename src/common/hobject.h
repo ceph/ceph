@@ -322,6 +322,10 @@ public:
     return shard_id == shard_id_t::NO_SHARD;
   }
 
+  void set_shard(shard_id_t s) {
+    shard_id = s;
+  }
+
   // maximum sorted value.
   static ghobject_t get_max() {
     ghobject_t h;
