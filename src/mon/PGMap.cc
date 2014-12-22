@@ -1272,12 +1272,16 @@ void PGMap::print_oneline_summary(Formatter *f, ostream *out) const
   std::stringstream ss;
 
   if (f)
-    f->open_object_section("num_pg_by_state");
+    f->open_array_section("num_pg_by_state");
   for (ceph::unordered_map<int,int>::const_iterator p = num_pg_by_state.begin();
        p != num_pg_by_state.end();
        ++p) {
-    if (f)
-      f->dump_unsigned(pg_state_string(p->first).c_str(), p->second);
+    if (f) {
+      f->open_object_section("state");
+      f->dump_string("name", pg_state_string(p->first));
+      f->dump_unsigned("num", p->second);
+      f->close_section();
+    }
     if (p != num_pg_by_state.begin())
       ss << ", ";
     ss << p->second << " " << pg_state_string(p->first);
