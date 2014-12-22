@@ -113,18 +113,31 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   char *t = buf;
   char *end = t + sizeof(buf);
 
-  // make field ordering match with hobject_t compare operations
+  // make field ordering match with ghobject_t compare operations
+  t = buf;
+  end = t + sizeof(buf);
+  if (oid.shard_id == shard_id_t::NO_SHARD) {
+    // otherwise ff will sort *after* 0, not before.
+    full_name += "--";
+  } else {
+    t += snprintf(t, end - t, "%02x", (int)oid.shard_id);
+    full_name += string(buf);
+  }
+  full_name.append(GHOBJECT_KEY_SEP_S);
+
+  t = buf;
+  t += snprintf(t, end - t, "%016llx",
+		(long long)(oid.hobj.pool + 0x8000000000000000));
+  full_name += string(buf);
+  full_name.append(GHOBJECT_KEY_SEP_S);
+
+  t = buf;
   snprintf(t, end - t, "%.*X", (int)(sizeof(oid.hobj.get_hash())*2),
            (uint32_t)oid.get_filestore_key_u32());
   full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
 
   append_escaped(oid.hobj.nspace, &full_name);
-  full_name.append(GHOBJECT_KEY_SEP_S);
-
-  t = buf;
-  t += snprintf(t, end - t, "%lld", (long long)oid.hobj.pool);
-  full_name += string(buf);
   full_name.append(GHOBJECT_KEY_SEP_S);
 
   append_escaped(oid.hobj.get_key(), &full_name);
@@ -151,13 +164,6 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
     end = t + sizeof(buf);
     t += snprintf(t, end - t, "%016llx", (long long unsigned)oid.generation);
     full_name += string(buf);
-
-    full_name.append(GHOBJECT_KEY_SEP_S);
-
-    t = buf;
-    end = t + sizeof(buf);
-    t += snprintf(t, end - t, "%x", (int)oid.shard_id);
-    full_name += string(buf);
   }
 
   full_name.append(1, GHOBJECT_KEY_ENDING);
@@ -174,7 +180,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   string ns;
   uint32_t hash;
   snapid_t snap;
-  uint64_t pool;
+  int64_t pool;
   gen_t generation = ghobject_t::NO_GEN;
   shard_id_t shard_id = shard_id_t::NO_SHARD;
 
@@ -184,6 +190,24 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   for (end = current; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
   if (!append_unescaped(current, end, &coll))
     return false;
+
+  current = ++end;
+  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
+  if (end == long_name.end())
+    return false;
+  string shardstring = string(current, end);
+  if (shardstring == "--")
+    shard_id = shard_id_t::NO_SHARD;
+  else
+    shard_id = (shard_id_t)strtoul(shardstring.c_str(), NULL, 16);
+
+  current = ++end;
+  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
+  if (end == long_name.end())
+    return false;
+  string pstring(current, end);
+  pool = strtoull(pstring.c_str(), NULL, 16);
+  pool -= 0x8000000000000000;
 
   current = ++end;
   for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
@@ -203,16 +227,6 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
   if (end == long_name.end())
     return false;
-  string pstring(current, end);
-  if (pstring == "none")
-    pool = (uint64_t)-1;
-  else
-    pool = strtoull(pstring.c_str(), NULL, 16);
-
-  current = ++end;
-  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-  if (end == long_name.end())
-    return false;
   if (!append_unescaped(current, end, &key))
     return false;
 
@@ -224,10 +238,10 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     return false;
 
   current = ++end;
-  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C && *end != GHOBJECT_KEY_ENDING; ++end) ;
+  for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C &&
+	  *end != GHOBJECT_KEY_ENDING; ++end) ;
   if (end == long_name.end())
     return false;
-
   string snap_str(current, end);
   if (snap_str == "head")
     snap = CEPH_NOSNAP;
@@ -237,23 +251,14 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     snap = strtoull(snap_str.c_str(), NULL, 16);
 
   // Optional generation/shard_id
-  string genstring, shardstring;
-  if (*end != GHOBJECT_KEY_ENDING) {
-    current = ++end;
-    for ( ; end != long_name.end() && *end != GHOBJECT_KEY_SEP_C; ++end) ;
-    if (*end != GHOBJECT_KEY_SEP_C)
-      return false;
-    genstring = string(current, end);
-
-    generation = (gen_t)strtoull(genstring.c_str(), NULL, 16);
-
+  string genstring;
+  if (*end == GHOBJECT_KEY_SEP_C) {
     current = ++end;
     for ( ; end != long_name.end() && *end != GHOBJECT_KEY_ENDING; ++end) ;
-    if (end == long_name.end())
+    if (end != long_name.end())
       return false;
-    shardstring = string(current, end);
-
-    shard_id = (shard_id_t)strtoul(shardstring.c_str(), NULL, 16);
+    genstring = string(current, end);
+    generation = (gen_t)strtoull(genstring.c_str(), NULL, 16);
   }
 
   if (out) {
@@ -1054,11 +1059,10 @@ int GenericObjectMap::list_objects(const coll_t &cid, ghobject_t start, int max,
 {
   // FIXME
   Mutex::Locker l(header_lock);
-
   if (start.is_max())
       return 0;
 
-  if (start.hobj.is_min()) {
+  if (start.is_min()) {
     vector<ghobject_t> oids;
 
     KeyValueDB::Iterator iter = db->get_iterator(GHOBJECT_TO_SEQ_PREFIX);
