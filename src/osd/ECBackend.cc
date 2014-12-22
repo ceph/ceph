@@ -1809,6 +1809,6 @@ void ECBackend::be_deep_scrub(
     o.digest_present = true;
   }
 
-  o.omap_digest = 0;
+  o.omap_digest = seed;
   o.omap_digest_present = true;
 }
