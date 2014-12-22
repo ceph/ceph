@@ -332,6 +332,9 @@ public:
   bool is_max() const {
     return max;
   }
+  bool is_min() const {
+    return *this == ghobject_t();
+  }
 
   void swap(ghobject_t &o) {
     ghobject_t temp(o);
