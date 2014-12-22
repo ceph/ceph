@@ -91,31 +91,8 @@ function corrupt_and_repair_one() {
     objectstore_tool $dir $osd SOMETHING list-attrs || return 1
     rados --pool $poolname get SOMETHING $dir/COPY || return 1
     diff $dir/ORIGINAL $dir/COPY || return 1
-}
+
     wait_for_clean || return 1
-
-    ceph osd set noscrub || return 1
-    ceph osd set nodeep-scrub || return 1
-
-    local payload=ABCDEF
-    echo $payload > $dir/ORIGINAL
-    #
-    # 1) add an object
-    #
-    rados --pool $poolname put SOMETHING $dir/ORIGINAL || return 1
-    #
-    # 2) remove the corresponding file from the OSD
-    #
-    objectstore_tool $dir $osd SOMETHING remove || return 1
-    #
-    # 3) repair the PG
-    #
-    local pg=$(get_pg $poolname SOMETHING)
-    repair $pg
-    #
-    # The file must be back
-    #
-    objectstore_tool $dir $osd SOMETHING list-attrs || return 1
 }
 
 main osd-scrub-repair "$@"
