@@ -159,16 +159,16 @@ Client::Client(Messenger *m, MonClient *mc)
     logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
+    callback_handle(NULL),
     switch_interrupt_cb(NULL),
+    remount_cb(NULL),
     ino_invalidate_cb(NULL),
-    ino_invalidate_cb_handle(NULL),
     dentry_invalidate_cb(NULL),
-    dentry_invalidate_cb_handle(NULL),
     getgroups_cb(NULL),
-    getgroups_cb_handle(NULL),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
+    remount_finisher(m->cct),
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
@@ -510,6 +510,12 @@ void Client::shutdown()
     interrupt_finisher.stop();
   }
 
+  if (remount_cb) {
+    ldout(cct, 10) << "shutdown stopping remount finisher" << dendl;
+    remount_finisher.wait_for_empty();
+    remount_finisher.stop();
+  }
+
   objectcacher->stop();  // outside of client_lock! this does a join.
 
   client_lock.Lock();
@@ -596,7 +602,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
   if (s->caps.size() > 0)
-    _invalidate_kernel_dcache(s);
+    _invalidate_kernel_dcache();
 }
 
 void Client::trim_dentry(Dentry *dn)
@@ -3099,7 +3105,7 @@ public:
 void Client::_async_invalidate(Inode *in, int64_t off, int64_t len, bool keep_caps)
 {
   ldout(cct, 10) << "_async_invalidate " << off << "~" << len << (keep_caps ? " keep_caps" : "") << dendl;
-  ino_invalidate_cb(ino_invalidate_cb_handle, in->vino(), off, len);
+  ino_invalidate_cb(callback_handle, in->vino(), off, len);
 
   client_lock.Lock();
   if (!keep_caps)
@@ -3395,21 +3401,22 @@ void Client::remove_session_caps(MetaSession *s)
   sync_cond.Signal();
 }
 
-void Client::_invalidate_kernel_dcache(MetaSession *s)
-{
-  if (!dentry_invalidate_cb)
-    return;
-
-  for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
-    Inode *in = (*p)->inode;
-    if (in->dn_set.empty())
-      continue;
-    for (set<Dentry*>::iterator q = in->dn_set.begin();
-	 q != in->dn_set.end();
-	 ++q) {
-      _schedule_invalidate_dentry_callback(*q, false);
-    }
+class C_Client_Remount : public Context  {
+private:
+  Client *client;
+public:
+  C_Client_Remount(Client *c) : client(c) {}
+  void finish(int r) {
+    client->remount_cb(client->callback_handle);
   }
+};
+
+void Client::_invalidate_kernel_dcache()
+{
+  // Hacky:
+  // when remounting a file system, linux kernel trims all unused dentries in the file system
+  if (remount_cb)
+    remount_finisher.queue(new C_Client_Remount(this));
 }
 
 void Client::trim_caps(MetaSession *s, int max)
@@ -3441,7 +3448,6 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
-	  _schedule_invalidate_dentry_callback(dn, false);
 	  trim_dentry(dn);
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
@@ -3463,6 +3469,9 @@ void Client::trim_caps(MetaSession *s, int max)
     }
   }
   s->s_cap_iterator = NULL;
+
+  if (s->caps.size() > max)
+    _invalidate_kernel_dcache();
 }
 
 void Client::force_session_readonly(MetaSession *s)
@@ -4126,7 +4135,7 @@ void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string&
 {
   ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
 		 << " in dir " << dirino << dendl;
-  dentry_invalidate_cb(dentry_invalidate_cb_handle, dirino, ino, name);
+  dentry_invalidate_cb(callback_handle, dirino, ino, name);
 }
 
 void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
@@ -4291,7 +4300,7 @@ int Client::check_permissions(Inode *in, int flags, int uid, int gid)
   gid_t *sgids = NULL;
   int sgid_count = 0;
   if (getgroups_cb) {
-    sgid_count = getgroups_cb(getgroups_cb_handle, uid, &sgids);
+    sgid_count = getgroups_cb(callback_handle, uid, &sgids);
     if (sgid_count < 0) {
       ldout(cct, 3) << "getgroups failed!" << dendl;
       return sgid_count;
@@ -7823,43 +7832,36 @@ int Client::ll_statfs(Inode *in, struct statvfs *stbuf)
   return statfs(0, stbuf);
 }
 
-void Client::ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle)
+void Client::ll_register_callbacks(struct client_callback_args *args)
 {
-  Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_ino_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
-  if (cb == NULL)
+  if (!args)
     return;
-  ino_invalidate_cb = cb;
-  ino_invalidate_cb_handle = handle;
-  async_ino_invalidator.start();
-}
-
-void Client::ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle)
-{
   Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_dentry_invalidate_cb cb " << (void*)cb << " p " << (void*)handle << dendl;
-  if (cb == NULL)
-    return;
-  dentry_invalidate_cb = cb;
-  dentry_invalidate_cb_handle = handle;
-  async_dentry_invalidator.start();
-}
-
-void Client::ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb)
-{
-  Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_switch_interrupt_cb cb " << (void*)cb << dendl;
-  if (cb == NULL)
-    return;
-  switch_interrupt_cb = cb;
-  interrupt_finisher.start();
-}
-
-void Client::ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle)
-{
-  Mutex::Locker l(client_lock);
-  getgroups_cb = cb;
-  getgroups_cb_handle = handle;
+  ldout(cct, 10) << "ll_register_callbacks cb " << args->handle
+		 << " invalidate_ino_cb " << args->ino_cb
+		 << " invalidate_dentry_cb " << args->dentry_cb
+		 << " getgroups_cb" << args->getgroups_cb
+		 << " switch_interrupt_cb " << args->switch_intr_cb
+		 << " remount_cb " << args->remount_cb
+		 << dendl;
+  callback_handle = args->handle;
+  if (args->ino_cb) {
+    ino_invalidate_cb = args->ino_cb;
+    async_ino_invalidator.start();
+  }
+  if (args->dentry_cb) {
+    dentry_invalidate_cb = args->dentry_cb;
+    async_dentry_invalidator.start();
+  }
+  if (args->switch_intr_cb) {
+    switch_interrupt_cb = args->switch_intr_cb;
+    interrupt_finisher.start();
+  }
+  if (args->remount_cb) {
+    remount_cb = args->remount_cb;
+    remount_finisher.start();
+  }
+  getgroups_cb = args->getgroups_cb;
 }
 
 int Client::_sync_fs()
