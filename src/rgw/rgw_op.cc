@@ -3233,9 +3233,9 @@ void RGWDeleteMultiObj::pre_exec()
 void RGWDeleteMultiObj::execute()
 {
   RGWMultiDelDelete *multi_delete;
-  vector<string>::iterator iter;
+  vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
-  pair<string,int> result;
+  pair<rgw_obj_key, int> result;
   int num_processed = 0;
   RGWObjectCtx *obj_ctx = (RGWObjectCtx *)s->obj_ctx;
 
@@ -3277,7 +3277,7 @@ void RGWDeleteMultiObj::execute()
         iter != multi_delete->objects.end() && num_processed < max_to_delete;
         ++iter, num_processed++) {
 
-    rgw_obj obj(bucket,(*iter));
+    rgw_obj obj(bucket, *iter);
 
     obj_ctx->set_atomic(obj);
     ret = store->delete_obj(*obj_ctx, s->bucket_info, obj, s->bucket_info.versioning_status());
