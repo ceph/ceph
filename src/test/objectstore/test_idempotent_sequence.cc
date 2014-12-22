@@ -109,7 +109,7 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
     return err;
   }
 
-  coll_t txn_coll("meta");
+  coll_t txn_coll;
   hobject_t txn_object(sobject_t("txn", CEPH_NOSNAP));
   bufferlist bl;
   store->read(txn_coll, txn_object, 0, 100, bl);

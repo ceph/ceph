@@ -56,7 +56,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-static coll_t META_COLL("meta");
+static coll_t META_COLL;
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log() can
 // easily skip them

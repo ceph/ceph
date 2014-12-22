@@ -40,7 +40,7 @@
 namespace po = boost::program_options;
 using namespace std;
 
-static coll_t META_COLL("meta");
+static coll_t META_COLL;
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
