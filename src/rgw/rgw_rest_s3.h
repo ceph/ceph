@@ -284,7 +284,7 @@ public:
 
   void send_status();
   void begin_response();
-  void send_partial_response(pair<string,int>& result);
+  void send_partial_response(pair<rgw_obj_key, int>& result);
   void end_response();
 };
 
