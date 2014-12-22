@@ -4001,11 +4001,17 @@ void RGWRados::cls_obj_check_prefix_exist(ObjectOperation& op, const string& pre
 int RGWRados::Object::Delete::delete_obj()
 {
   RGWRados *store = target->get_store();
-  rgw_obj& obj = target->get_obj();
+  rgw_obj& src_obj = target->get_obj();
+  const string& instance = src_obj.get_instance();
+  rgw_obj obj = src_obj;
+
+  if (instance == "null") {
+    obj.clear_instance();
+  }
+
   bool explicit_marker_version = (params.olh_epoch > 0 || !params.marker_version_id.empty());
 
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
-    const string& instance = obj.get_instance();
     if (instance.empty() || explicit_marker_version) {
       rgw_obj marker = obj;
 
@@ -4029,8 +4035,8 @@ int RGWRados::Object::Delete::delete_obj()
         return r;
       }
     } else {
-
       rgw_bucket_dir_entry dirent;
+
       int r = store->bi_get_instance(obj, &dirent);
       if (r < 0) {
         return r;
@@ -4044,10 +4050,6 @@ int RGWRados::Object::Delete::delete_obj()
     }
 
     return 0;
-  }
-
-  if (obj.get_instance() == "null") {
-    obj.clear_instance();
   }
 
   rgw_rados_ref ref;
