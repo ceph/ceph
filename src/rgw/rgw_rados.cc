@@ -5941,8 +5941,10 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
   RGWObjState *state = NULL;
 
   int ret = 0;
+  int i;
 
-  do {
+#define MAX_ECANCELED_RETRY 100
+  for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
     if (ret == -ECANCELED) {
       obj_ctx.invalidate(olh_obj);
     }
@@ -5969,7 +5971,15 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
       ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
       continue;
     }
-  } while (ret == -ECANCELED);
+    if (ret != -ECANCELED) {
+      break;
+    }
+  }
+
+  if (i == MAX_ECANCELED_RETRY) {
+    ldout(cct, 0) << "ERROR: exceeded max ECANCELED retries, aborting (EIO)" << dendl;
+    return -EIO;
+  }
 
   if (ret < 0) {
     return ret;
@@ -5989,8 +5999,9 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
   RGWObjState *state = NULL;
 
   int ret = 0;
+  int i;
 
-  do {
+  for (i = 0; i < MAX_ECANCELED_RETRY; i++) {
     if (ret == -ECANCELED) {
       obj_ctx.invalidate(olh_obj);
     }
@@ -6016,7 +6027,15 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
       ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
       continue;
     }
-  } while (ret == -ECANCELED);
+    if (ret != -ECANCELED) {
+      break;
+    }
+  }
+
+  if (i == MAX_ECANCELED_RETRY) {
+    ldout(cct, 0) << "ERROR: exceeded max ECANCELED retries, aborting (EIO)" << dendl;
+    return -EIO;
+  }
 
   if (ret < 0) {
     return ret;
