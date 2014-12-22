@@ -177,7 +177,7 @@ int main(int argc, char **argv)
   }
   {
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(string("meta")));
+    t.create_collection(coll_t());
     fs.apply_transaction(t);
   }
 

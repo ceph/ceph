@@ -48,7 +48,7 @@ void TestFileStoreBackend::write(
   if (write_infos) {
     bufferlist bl2;
     for (uint64_t j = 0; j < 128; ++j) bl2.append(0);
-    coll_t meta("meta");
+    coll_t meta;
     hobject_t info(sobject_t(string("info_")+coll_str, 0));
     t->write(meta, info, 0, bl2.length(), bl2);
   }
