@@ -511,6 +511,17 @@ public:
     return str != rhs.str;
   }
 
+  // get a TEMP collection that corresponds to the current collection,
+  // which we presume is a pg collection.
+  coll_t get_temp() {
+    spg_t pgid;
+    snapid_t snap;
+    bool foo = is_pg(pgid, snap);
+    assert(foo);
+    assert(snap == CEPH_NOSNAP);
+    return coll_t(str.substr(0, str.length() - 4) + "TEMP");
+  }
+
   void dump(Formatter *f) const;
   static void generate_test_instances(list<coll_t*>& o);
 

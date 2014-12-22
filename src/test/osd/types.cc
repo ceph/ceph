@@ -1292,6 +1292,20 @@ TEST(shard_id_t, iostream) {
     ASSERT_EQ(out.str(), "0,1,2");
 }
 
+TEST(coll_t, temp) {
+  spg_t pgid;
+  coll_t foo(pgid);
+  ASSERT_EQ(foo.to_str(), string("0.0_head"));
+
+  coll_t temp = foo.get_temp();
+  ASSERT_EQ(temp.to_str(), string("0.0_TEMP"));
+
+  spg_t pgid2;
+  ASSERT_TRUE(temp.is_temp());
+  ASSERT_TRUE(temp.is_temp(pgid2));
+  ASSERT_EQ(pgid, pgid2);
+}
+
 /*
  * Local Variables:
  * compile-command: "cd ../.. ;
