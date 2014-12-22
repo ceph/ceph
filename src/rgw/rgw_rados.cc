@@ -4029,15 +4029,13 @@ int RGWRados::Object::Delete::delete_obj()
         return r;
       }
     } else {
+
       rgw_bucket_dir_entry dirent;
       int r = store->bi_get_instance(obj, &dirent);
-      if (r < 0 && r != -ENOENT) {
+      if (r < 0) {
         return r;
       }
-      bool exists = (r == 0);
-      if (exists) {
-        result.delete_marker = dirent.is_delete_marker();
-      }
+      result.delete_marker = dirent.is_delete_marker();
       r = store->unlink_obj_instance(target->get_ctx(), target->get_bucket_info(), obj, params.olh_epoch);
       if (r < 0) {
         return r;
