@@ -545,6 +545,14 @@ ostream& operator<<(ostream& out, const pg_t &pg)
 
 // -- coll_t --
 
+bool coll_t::is_temp() const
+{
+  if (str.length() > 5 &&
+      strncmp(str.c_str() + str.length() - 5, "_TEMP", 5) == 0)
+    return true;
+  return false;
+}
+
 bool coll_t::is_temp(spg_t& pgid) const
 {
   const char *cstr(str.c_str());

@@ -504,9 +504,13 @@ public:
     return str < rhs.str;
   }
 
+  bool is_meta() const {
+    return str == string("meta");
+  }
   bool is_pg_prefix(spg_t& pgid) const;
   bool is_pg(spg_t& pgid, snapid_t& snap) const;
   bool is_temp(spg_t& pgid) const;
+  bool is_temp() const;
   bool is_removal(uint64_t *seq, spg_t *pgid) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
