@@ -3,7 +3,10 @@ from StringIO import StringIO
 import json
 import logging
 import time
+import datetime
 
+from teuthology.exceptions import CommandFailedError
+from teuthology.orchestra import run
 from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
@@ -15,6 +18,14 @@ log = logging.getLogger(__name__)
 
 
 DAEMON_WAIT_TIMEOUT = 120
+
+
+class ObjectNotFound(Exception):
+    def __init__(self, object_name):
+        self._object_name = object_name
+
+    def __str__(self):
+        return "Object not found: '{0}'".format(self._object_name)
 
 
 class Filesystem(object):
@@ -61,10 +72,27 @@ class Filesystem(object):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
-    def get_data_pool_names(self):
+    def _fs_ls(self):
         fs_list = json.loads(self.mon_manager.raw_cluster_cmd("fs", "ls", "--format=json-pretty"))
         assert len(fs_list) == 1  # we don't handle multiple filesystems yet
-        return fs_list[0]['data_pools']
+        return fs_list[0]
+
+    def get_data_pool_name(self):
+        """
+        Return the name of the data pool if there is only one, else raise exception -- call
+        this in tests where there will only be one data pool.
+        """
+        names = self.get_data_pool_names()
+        if len(names) > 1:
+            raise RuntimeError("Multiple data pools found")
+        else:
+            return names[0]
+
+    def get_data_pool_names(self):
+        return self._fs_ls()['data_pools']
+
+    def get_metadata_pool_name(self):
+        return self._fs_ls()['metadata_pool']
 
     def get_pool_df(self, pool_name):
         """
@@ -318,3 +346,87 @@ class Filesystem(object):
             else:
                 time.sleep(1)
                 elapsed += 1
+
+    def read_backtrace(self, ino_no):
+        """
+        Read the backtrace from the data pool, return a dict in the format
+        given by inode_backtrace_t::dump, which is something like:
+
+        ::
+
+            rados -p cephfs_data getxattr 10000000002.00000000 parent > out.bin
+            ceph-dencoder type inode_backtrace_t import out.bin decode dump_json
+
+            { "ino": 1099511627778,
+              "ancestors": [
+                    { "dirino": 1,
+                      "dname": "blah",
+                      "version": 11}],
+              "pool": 1,
+              "old_pools": []}
+
+        """
+        mds_id = self.mds_ids[0]
+        remote = self.mds_daemons[mds_id].remote
+
+        obj_name = "{0:x}.00000000".format(ino_no)
+
+        temp_file = "/tmp/{0}_{1}".format(obj_name, datetime.datetime.now().isoformat())
+
+        args = [
+            "rados", "-p", self.get_data_pool_name(), "getxattr", obj_name, "parent",
+            run.Raw(">"), temp_file
+        ]
+        try:
+            remote.run(
+                args=args,
+                stdout=StringIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(obj_name)
+
+        p = remote.run(
+            args=["ceph-dencoder", "type", "inode_backtrace_t", "import", temp_file, "decode", "dump_json"],
+            stdout=StringIO()
+        )
+
+        return json.loads(p.stdout.getvalue().strip())
+
+    def list_dirfrag(self, dir_ino):
+        """
+        Read the named object and return the list of omap keys
+
+        :return a list of 0 or more strings
+        """
+
+        dirfrag_obj_name = "{0:x}.00000000".format(dir_ino)
+
+        # Doesn't matter which MDS we use to run rados commands, they all
+        # have access to the pools
+        mds_id = self.mds_ids[0]
+        remote = self.mds_daemons[mds_id].remote
+
+        # NB we could alternatively use librados pybindings for this, but it's a one-liner
+        # using the `rados` CLI
+        args = ["rados", "-p", self.get_metadata_pool_name(), "listomapkeys", dirfrag_obj_name]
+        try:
+            p = remote.run(
+                args=args,
+                stdout=StringIO())
+        except CommandFailedError as e:
+            log.error(e.__str__())
+            raise ObjectNotFound(dirfrag_obj_name)
+
+        key_list_str = p.stdout.getvalue().strip()
+        return key_list_str.split("\n") if key_list_str else []
+
+    def journal_tool(self, args):
+        """
+        Invoke cephfs-journal-tool with the passed arguments, and return its stdout
+        """
+        mds_id = self.mds_ids[0]
+        remote = self.mds_daemons[mds_id].remote
+
+        return remote.run(
+            args=['cephfs-journal-tool'] + args,
+            stdout=StringIO()).stdout.getvalue().strip()
