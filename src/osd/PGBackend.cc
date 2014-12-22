@@ -390,10 +390,10 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-      errorstream << "data_digest " << candidate.digest
+      errorstream << "data_digest 0x" << std::hex << candidate.digest
 		  << " != "
 		  << (auth_oi.is_data_digest() && okseed ? "known" : "best guess")
-		  << " data_digest " << auth.digest
+		  << " data_digest 0x" << auth.digest << std::dec
 		  << " from auth shard " << auth_shard;
     }
   }
@@ -402,10 +402,10 @@ enum scrub_error_type PGBackend::be_compare_scrub_objects(
       if (error != CLEAN)
         errorstream << ", ";
       error = DEEP_ERROR;
-      errorstream << "omap_digest " << candidate.omap_digest
+      errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		  << " != "
 		  << (auth_oi.is_omap_digest() && okseed ? "known" : "best guess")
-		  << " omap_digest " << auth.omap_digest
+		  << " omap_digest 0x" << auth.omap_digest << std::dec
 		  << " from auth shard " << auth_shard;
     }
   }
@@ -504,23 +504,25 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       // invalid object info, probably corrupt
       continue;
     }
-    if (okseed && oi.is_data_digest() && i->second.digest_present &&
-	oi.data_digest != i->second.digest) {
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", data digest mismatch "
-	       << i->second.digest << " != " << oi.data_digest
-	       << dendl;
-      continue;
-    }
-    if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
-	oi.omap_digest != i->second.omap_digest) {
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", omap digest mismatch "
-	       << i->second.omap_digest << " != " << oi.omap_digest
-	       << dendl;
-      continue;
+    if (parent->get_pool().is_replicated()) {
+      if (okseed && oi.is_data_digest() && i->second.digest_present &&
+	  oi.data_digest != i->second.digest) {
+	dout(10) << __func__ << ": rejecting osd " << j->first
+		 << " for obj " << obj
+		 << ", data digest mismatch 0x" << std::hex
+		 << i->second.digest << " != 0x" << oi.data_digest
+		 << std::dec << dendl;
+	continue;
+      }
+      if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
+	  oi.omap_digest != i->second.omap_digest) {
+	dout(10) << __func__ << ": rejecting osd " << j->first
+		 << " for obj " << obj
+		 << ", omap digest mismatch 0x" << std::hex
+		 << i->second.omap_digest << " != 0x" << oi.omap_digest
+		 << std::dec << dendl;
+	continue;
+      }
     }
     dout(10) << __func__ << ": selecting osd " << j->first
 	     << " for obj " << obj
