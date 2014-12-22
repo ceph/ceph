@@ -566,8 +566,9 @@ void PGBackend::be_compare_scrubmaps(
       // Something is better than nothing
       // TODO: something is NOT better than nothing, do something like
       // unfound_lost if no valid copies can be found, or just mark unfound
-      auth = j;
-      dout(10) << __func__ << ": selecting osd " << j->first
+      map<pg_shard_t, ScrubMap *>::const_iterator fallback = maps.begin();
+      auth = fallback;
+      dout(10) << __func__ << ": selecting osd " << fallback->first
 	       << " for obj " << *k
 	       << ", something is better than nothing, FIXME"
 	       << dendl;
