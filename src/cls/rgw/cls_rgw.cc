@@ -1575,6 +1575,12 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
 
   if (!obj.is_delete_marker()) {
     olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+  } else {
+    /* this is a delete marker, it's our responsibility to remove its instance entry */
+    ret = obj.unlink();
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   ret = obj.unlink_list_entry();
