@@ -41,7 +41,7 @@ void TestFileStoreBackend::write(
   ObjectStore::Sequencer *osr = &(osrs.find(coll_str)->second);
 
 
-  coll_t c(coll_str);
+  coll_t c(coll_t::make_string_coll(coll_str));
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
   t->write(c, h, offset, bl.length(), bl);
 
@@ -70,7 +70,7 @@ void TestFileStoreBackend::read(
   size_t sep = oid.find("/");
   assert(sep != string::npos);
   assert(sep + 1 < oid.size());
-  coll_t c(oid.substr(0, sep));
+  coll_t c(coll_t::make_string_coll(oid.substr(0, sep)));
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
   os->read(c, h, offset, length, *bl);
   finisher.queue(on_complete);
