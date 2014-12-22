@@ -2474,7 +2474,7 @@ unsigned FileStore::_do_transaction(
         Transaction::Op *op2 = i.decode_op();
         coll_t ocid2 = i.get_cid(op2->cid);
         ghobject_t oid2 = i.get_oid(op2->oid);
-        assert(op->op == Transaction::OP_COLL_REMOVE);
+        assert(op2->op == Transaction::OP_COLL_REMOVE);
         assert(ocid2 == ocid);
         assert(oid2 == oid);
 
