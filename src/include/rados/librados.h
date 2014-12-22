@@ -393,6 +393,10 @@ CEPH_RADOS_API int rados_connect(rados_t cluster);
  * completed. To do that, you must call rados_aio_flush() on all open
  * io contexts.
  *
+ * @warning We implicitly call rados_watch_flush() on shutdown.  If
+ * there are watches being used, this should be done explicitly before
+ * destroying the relevant IoCtx.  We do it here as a safety measure.
+ *
  * @post the cluster handle cannot be used again
  *
  * @param cluster the cluster to shutdown
@@ -631,6 +635,12 @@ CEPH_RADOS_API int rados_ioctx_create(rados_t cluster, const char *pool_name,
  * @warning This does not guarantee any asynchronous
  * writes have completed. You must call rados_aio_flush()
  * on the io context before destroying it to do that.
+ *
+ * @warning If this ioctx is used by rados_watch, the caller needs to
+ * be sure that all registered watches are disconnected via
+ * rados_unwatch() and that rados_watch_flush() is called.  This
+ * ensures that a racing watch callback does not make use of a
+ * destroyed ioctx.
  *
  * @param io the io context to dispose of
  */
