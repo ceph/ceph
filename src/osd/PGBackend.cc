@@ -504,23 +504,25 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       // invalid object info, probably corrupt
       continue;
     }
-    if (okseed && oi.is_data_digest() && i->second.digest_present &&
-	oi.data_digest != i->second.digest) {
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", data digest mismatch 0x" << std::hex
-	       << i->second.digest << " != 0x" << oi.data_digest
-	       << std::dec << dendl;
-      continue;
-    }
-    if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
+    if (parent->get_pool().is_replicated()) {
+      if (okseed && oi.is_data_digest() && i->second.digest_present &&
+	  oi.data_digest != i->second.digest) {
+	dout(10) << __func__ << ": rejecting osd " << j->first
+		 << " for obj " << obj
+		 << ", data digest mismatch 0x" << std::hex
+		 << i->second.digest << " != 0x" << oi.data_digest
+		 << std::dec << dendl;
+	continue;
+      }
+      if (okseed && oi.is_omap_digest() && i->second.omap_digest_present &&
 	  oi.omap_digest != i->second.omap_digest) {
-      dout(10) << __func__ << ": rejecting osd " << j->first
-	       << " for obj " << obj
-	       << ", omap digest mismatch 0x" << std::hex
-	       << i->second.omap_digest << " != 0x" << oi.omap_digest
-	       << std::dec << dendl;
-      continue;
+	dout(10) << __func__ << ": rejecting osd " << j->first
+		 << " for obj " << obj
+		 << ", omap digest mismatch 0x" << std::hex
+		 << i->second.omap_digest << " != 0x" << oi.omap_digest
+		 << std::dec << dendl;
+	continue;
+      }
     }
     dout(10) << __func__ << ": selecting osd " << j->first
 	     << " for obj " << obj
