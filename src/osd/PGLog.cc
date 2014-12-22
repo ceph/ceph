@@ -22,7 +22,7 @@
 
 #define dout_subsys ceph_subsys_osd
 
-static coll_t META_COLL("meta");
+static coll_t META_COLL;
 
 //////////////////// PGLog::IndexedLog ////////////////////
 

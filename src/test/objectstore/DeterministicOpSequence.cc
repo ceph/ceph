@@ -39,7 +39,6 @@ DeterministicOpSequence::DeterministicOpSequence(ObjectStore *store,
     txn(0),
     m_osr("OSR")
 {
-  txn_coll = coll_t("meta");
   txn_object = hobject_t(sobject_t("txn", CEPH_NOSNAP));
 
   if (!status.empty())
