@@ -305,11 +305,11 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
     return out << "GHMIN";
   if (o.is_max())
     return out << "GHMAX";
+  if (o.shard_id != shard_id_t::NO_SHARD)
+    out << o.shard_id << ":";
   out << o.hobj;
-  if (o.generation != ghobject_t::NO_GEN ||
-      o.shard_id != shard_id_t::NO_SHARD) {
-    assert(o.shard_id != shard_id_t::NO_SHARD);
-    out << "/" << o.generation << "/" << (unsigned)(o.shard_id);
+  if (o.generation != ghobject_t::NO_GEN) {
+    out << "/" << (unsigned)(o.generation);
   }
   return out;
 }
