@@ -487,6 +487,7 @@ public:
 	largest_data_off = other.largest_data_off;
 	largest_data_off_in_tbl = tbl.length() + other.largest_data_off_in_tbl;
       }
+      fadvise_flags |= other.fadvise_flags;
       tbl.append(other.tbl);
       on_applied.splice(on_applied.end(), other.on_applied);
       on_commit.splice(on_commit.end(), other.on_commit);
