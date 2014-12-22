@@ -590,6 +590,10 @@ namespace librados
    * rados.ioctx_create("my_pool", p);
    * p->stat(&stats);
    * ... etc ...
+   *
+   * NOTE: be sure to call watch_flush() prior to destroying any IoCtx
+   * that is used for watch events to ensure that racing callbacks
+   * have completed.
    */
   class CEPH_RADOS_API IoCtx
   {
