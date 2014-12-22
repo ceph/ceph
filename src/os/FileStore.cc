@@ -2649,13 +2649,7 @@ unsigned FileStore::_do_transaction(
       break;
     case Transaction::OP_SPLIT_COLLECTION:
       {
-        coll_t cid = i.get_cid(op->cid);
-        uint32_t bits = op->split_bits;
-        uint32_t rem = op->split_rem;
-        coll_t dest = i.get_cid(op->dest_cid);
-        tracepoint(objectstore, split_coll_enter, osr_name);
-        r = _split_collection_create(cid, bits, rem, dest, spos);
-        tracepoint(objectstore, split_coll_exit, r);
+	assert(0 == "not legacy journal; upgrade to firefly first");
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -4860,22 +4854,6 @@ int FileStore::_create_collection(
   return 0;
 }
 
-// DEPRECATED -- remove with _split_collection_create
-int FileStore::_create_collection(coll_t c) 
-{
-  char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
-  dout(15) << "create_collection " << fn << dendl;
-  int r = ::mkdir(fn, 0755);
-  if (r < 0)
-    r = -errno;
-  dout(10) << "create_collection " << fn << " = " << r << dendl;
-
-  if (r < 0)
-    return r;
-  return init_index(c);
-}
-
 int FileStore::_destroy_collection(coll_t c) 
 {
   {
@@ -5246,52 +5224,6 @@ int FileStore::_split_collection(coll_t cid,
       objects.clear();
     }
   }
-  return r;
-}
-
-// DEPRECATED: remove once we are sure there won't be any such transactions
-// replayed
-int FileStore::_split_collection_create(coll_t cid,
-					uint32_t bits,
-					uint32_t rem,
-					coll_t dest,
-					const SequencerPosition &spos)
-{
-  dout(15) << __func__ << " " << cid << " bits: " << bits << dendl;
-  int r = _create_collection(dest);
-  if (r < 0 && !(r == -EEXIST && replaying))
-    return r;
-
-  int dstcmp = _check_replay_guard(cid, spos);
-  if (dstcmp < 0)
-    return 0;
-
-  int srccmp = _check_replay_guard(dest, spos);
-  if (srccmp < 0)
-    return 0;
-
-  _set_replay_guard(cid, spos, true);
-  _set_replay_guard(dest, spos, true);
-
-  Index from;
-  r = get_index(cid, &from);
-
-  Index to;
-  if (!r) 
-    r = get_index(dest, &to);
-
-  if (!r) {
-    assert(NULL != from.index);
-    RWLock::WLocker l1((from.index)->access_lock);
-
-    assert(NULL != to.index);
-    RWLock::WLocker l2((to.index)->access_lock);
- 
-    r = from->split(rem, bits, to.index);
-  }
-
-  _close_replay_guard(cid, spos);
-  _close_replay_guard(dest, spos);
   return r;
 }
 
