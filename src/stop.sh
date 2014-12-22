@@ -21,11 +21,12 @@ test -d dev/osd0/. && test -e dev/sudo && SUDO="sudo"
 [ -z "$CEPH_BIN" ] && CEPH_BIN=.
 
 MYUID=$(id -u)
+MYNAME=$(id -nu)
 
 do_killall() {
     pg=`pgrep -u $MYUID -f ceph-run.*$1`
     [ -n "$pg" ] && kill $pg
-    $SUDO killall -u $MYUID $1
+    $SUDO killall -u $MYNAME $1
 }
 
 usage="usage: $0 [all] [mon] [mds] [osd]\n"
