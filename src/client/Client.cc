@@ -172,6 +172,7 @@ Client::Client(Messenger *m, MonClient *mc)
     objecter_finisher(m->cct),
     tick_event(NULL),
     monclient(mc), messenger(m), whoami(m->get_myname().num()),
+    cap_epoch_barrier(0),
     initialized(false), authenticated(false),
     mounted(false), unmounting(false),
     local_osd(-1), local_osd_epoch(0),
