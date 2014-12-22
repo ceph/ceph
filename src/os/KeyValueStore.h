@@ -225,10 +225,10 @@ class KeyValueStore : public ObjectStore,
   // A special coll used by store collection info, each obj in this coll
   // represent a coll_t
   static bool is_coll_obj(coll_t c) {
-    return c == coll_t("COLLECTIONS");
+    return c == coll_t::make_string_coll("COLLECTIONS");
   }
   static coll_t get_coll_for_coll() {
-    return coll_t("COLLECTIONS");
+    return coll_t::make_string_coll("COLLECTIONS");
   }
   static ghobject_t make_ghobject_for_coll(const coll_t &col) {
     return ghobject_t(hobject_t(sobject_t(col.to_str(), CEPH_NOSNAP)));

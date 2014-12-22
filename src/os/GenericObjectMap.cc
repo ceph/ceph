@@ -264,7 +264,7 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
   }
 
   if (out_coll)
-    *out_coll = coll_t(coll);
+    *out_coll = coll_t::make_string_coll(coll);
 
   return true;
 }

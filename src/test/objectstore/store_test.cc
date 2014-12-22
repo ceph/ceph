@@ -394,7 +394,7 @@ TEST_P(StoreTest, SimpleCloneTest) {
 
 TEST_P(StoreTest, SimpleCloneRangeTest) {
   int r;
-  coll_t cid = coll_t("coll");
+  coll_t cid;
   {
     ObjectStore::Transaction t;
     t.create_collection(cid);
@@ -403,6 +403,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(r, 0);
   }
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  hoid.hobj.pool = -1;
   bufferlist small, newdata;
   small.append("small");
   {
@@ -413,6 +414,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(r, 0);
   }
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
   {
     ObjectStore::Transaction t;
     t.clone_range(cid, hoid, hoid2, 10, 5, 0);
