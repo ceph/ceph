@@ -95,6 +95,37 @@ function corrupt_and_repair_one() {
     wait_for_clean || return 1
 }
 
+function TEST_corrupt_and_repair_erasure_coded() {
+    local dir=$1
+    local poolname=ecpool
+    local payload=ABCDEF
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    run_osd $dir 2 || return 1
+    run_osd $dir 3 || return 1
+    wait_for_clean || return 1
+
+    ceph osd erasure-code-profile set myprofile \
+        k=2 m=2 ruleset-failure-domain=osd || return 1
+    ceph osd pool create $poolname 1 1 erasure myprofile \
+        || return 1
+
+    add_something $dir $poolname
+
+    local primary=$(get_primary $poolname SOMETHING)
+    local -a osds=($(get_osds $poolname SOMETHING | sed -e "s/$primary//"))
+    local not_primary_first=${osds[0]}
+    local not_primary_second=${osds[1]}
+
+    # Reproduces http://tracker.ceph.com/issues/10409
+    corrupt_and_repair_one $dir $poolname $not_primary_first || return 1
+
+    teardown $dir || return 1
+}
+
 main osd-scrub-repair "$@"
 
 # Local Variables:
