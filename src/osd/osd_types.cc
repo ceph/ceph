@@ -4673,8 +4673,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
       }
       if (op.op.xattr.value_len)
 	out << " (" << op.op.xattr.value_len << ")";
-      if (op.op.op == CEPH_OSD_OP_CMPXATTR)
-	out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
+      out << " op " << (int)op.op.xattr.cmp_op << " mode " << (int)op.op.xattr.cmp_mode;
       break;
     }
   }
