@@ -947,8 +947,8 @@ void ObjectStore::Transaction::generate_test_instances(list<ObjectStore::Transac
   o.push_back(t);
   
   t = new Transaction;
-  coll_t c("foocoll");
-  coll_t c2("foocoll2");
+  coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
+  coll_t c2(spg_t(pg_t(4,5), shard_id_t::NO_SHARD));
   ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
   ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
   ghobject_t o3(hobject_t("obj3", "", 123, 456, -1, ""));
