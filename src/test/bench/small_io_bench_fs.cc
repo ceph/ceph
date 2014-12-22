@@ -172,7 +172,7 @@ int main(int argc, char **argv)
     coll << "collection_" << num;
     std::cout << "collection " << coll.str() << std::endl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t(coll.str()));
+    t.create_collection(coll_t::make_string_coll(coll.str()));
     fs.apply_transaction(t);
   }
   {
