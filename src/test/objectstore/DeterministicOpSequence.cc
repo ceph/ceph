@@ -433,9 +433,8 @@ bool DeterministicOpSequence::do_coll_create(rngen_t& gen)
     int pg_id = pg_range(gen);
     if (pg_created.count(pg_id) > 0)
       continue;
-    char buf[100];
-    snprintf(buf, 100, "%d.%x_head", pool_id, pg_id);
-    _do_coll_create(coll_t(buf), (uint32_t) pg_num, (uint64_t) num_objs);
+    _do_coll_create(coll_t(spg_t(pg_t(pg_id,pool_id),shard_id_t::NO_SHARD)),
+		    (uint32_t) pg_num, (uint64_t) num_objs);
     pg_created.insert(pg_id);
   }
   return true;
