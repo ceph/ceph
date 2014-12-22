@@ -4511,7 +4511,7 @@ int FileStore::list_collections(vector<coll_t>& ls)
 	 (de->d_name[1] == '.' &&
 	  de->d_name[2] == '\0')))
       continue;
-    ls.push_back(coll_t(de->d_name));
+    ls.push_back(coll_t::make_string_collection(de->d_name));
   }
 
   if (r > 0) {
