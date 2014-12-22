@@ -138,10 +138,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   boost::uniform_int<> folders_range(5, 256);
   uint64_t expected_num_objs = (uint64_t)objs_per_folder * (uint64_t)folders_range(rng);
 
-  char buf[100];
-  snprintf(buf, 100, "1.%x_head", pg_id);
-
-  coll_t cid(buf);
+  coll_t cid(spg_t(pg_t(pg_id, 1), shard_id_t::NO_SHARD));
   int r;
   {
     // Create a collection along with a hint
@@ -300,7 +297,7 @@ TEST_P(StoreTest, Sort) {
 
 TEST_P(StoreTest, MultipoolListTest) {
   int r;
-  coll_t cid = coll_t("coll");
+  coll_t cid = coll_t(spg_t(pg_t(1, 1), shard_id_t::NO_SHARD));
   {
     ObjectStore::Transaction t;
     t.create_collection(cid);
@@ -1110,7 +1107,7 @@ TEST_P(StoreTest, Synthetic) {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
-  coll_t cid("synthetic_1");
+  coll_t cid(spg_t(pg_t(1,0), shard_id_t::NO_SHARD));
 
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
   test_obj.init();
@@ -1148,7 +1145,7 @@ TEST_P(StoreTest, AttrSynthetic) {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen;
   gen_type rng(time(NULL));
-  coll_t cid("synthetic_2");
+  coll_t cid(spg_t(pg_t(4,0),shard_id_t::NO_SHARD));
 
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, &osr, cid);
   test_obj.init();
@@ -1566,8 +1563,8 @@ void colsplittest(
   unsigned num_objects,
   unsigned common_suffix_size
   ) {
-  coll_t cid("from");
-  coll_t tid("to");
+  coll_t cid(spg_t(pg_t(1,2),shard_id_t::NO_SHARD));
+  coll_t tid(spg_t(pg_t(3,2),shard_id_t::NO_SHARD));
   int r = 0;
   {
     ObjectStore::Transaction t;
@@ -1710,9 +1707,8 @@ TEST_P(StoreTest, TwoHash) {
 }
 
 TEST_P(StoreTest, MoveRename) {
-  coll_t temp_cid("mytemp");
+  coll_t cid(spg_t(pg_t(212,0),shard_id_t::NO_SHARD));
   hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
-  coll_t cid("dest");
   hobject_t oid("dest_oid", "", CEPH_NOSNAP, 0, 0, "");
   int r;
   {
@@ -1779,9 +1775,9 @@ TEST_P(StoreTest, MoveRename) {
 TEST_P(StoreTest, BigRGWObjectName) {
   store->set_allow_sharded_objects();
   store->sync_and_flush();
-  coll_t temp_cid("mytemp");
+  coll_t cid(spg_t(pg_t(1,2),shard_id_t::NO_SHARD));
+  coll_t temp_cid = cid.get_temp();
   hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
-  coll_t cid("dest");
   ghobject_t oid(
     hobject_t(
       "default.4106.50_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
