@@ -30,5 +30,10 @@ v0.91
   a bogus value (for example, when rados_watch() returns an error and
   handle is not defined).
 
+* The structure of the formatted 'pg stat' command is changed for the
+  portion that counts states by name to avoid using the '+' character
+  (which appears in state names) as part of the XML token (it is not
+  legal).
+
 v0.92
 -----
