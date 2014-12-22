@@ -3350,8 +3350,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    uint32_t crc = osd_op.outdata.crc32c(-1);
 	    if (oi.data_digest != crc) {
 	      osd->clog->error() << info.pgid << std::hex
-				 << " full-object read crc " << crc
-				 << " != expected " << oi.data_digest
+				 << " full-object read crc 0x" << crc
+				 << " != expected 0x" << oi.data_digest
 				 << std::dec << " on " << soid;
 	      // FIXME fall back to replica or something?
 	      if (g_conf->osd_read_eio_on_bad_digest)
