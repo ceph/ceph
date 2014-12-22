@@ -2568,7 +2568,7 @@ int KeyValueStore::list_collections(vector<coll_t>& ls)
 
   for (vector<ghobject_t>::const_iterator iter = oids.begin();
        iter != oids.end(); ++iter) {
-    ls.push_back(coll_t(iter->hobj.oid.name));
+    ls.push_back(coll_t::make_string_coll(iter->hobj.oid.name));
   }
 
   return 0;
