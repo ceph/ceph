@@ -1826,12 +1826,13 @@ void RGWDeleteMultiObj_ObjStore_S3::begin_response()
   rgw_flush_formatter(s, s->formatter);
 }
 
-void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& result)
+void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<rgw_obj_key, int>& result)
 {
   if (!result.first.empty()) {
     if (result.second == 0 && !quiet) {
       s->formatter->open_object_section("Deleted");
-      s->formatter->dump_string("Key", result.first);
+      s->formatter->dump_string("Key", result.first.name);
+      s->formatter->dump_string("VersionId", result.first.instance);
       s->formatter->close_section();
     } else if (result.second < 0) {
       struct rgw_http_errors r;
@@ -1842,7 +1843,8 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(pair<string,int>& resu
       err_no = -(result.second);
       rgw_get_errno_s3(&r, err_no);
 
-      s->formatter->dump_string("Key", result.first);
+      s->formatter->dump_string("Key", result.first.name);
+      s->formatter->dump_string("VersionId", result.first.instance);
       s->formatter->dump_int("Code", r.http_ret);
       s->formatter->dump_string("Message", r.s3_code);
       s->formatter->close_section();

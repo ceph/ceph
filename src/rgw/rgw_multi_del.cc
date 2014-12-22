@@ -18,6 +18,7 @@ using namespace std;
 bool RGWMultiDelObject::xml_end(const char *el)
 {
   RGWMultiDelKey *key_obj = static_cast<RGWMultiDelKey *>(find_first("Key"));
+  RGWMultiDelVersionId *vid = static_cast<RGWMultiDelVersionId *>(find_first("VersionId"));
 
   if (!key_obj)
     return false;
@@ -27,6 +28,10 @@ bool RGWMultiDelObject::xml_end(const char *el)
     return false;
 
   key = s;
+
+  if (vid) {
+    version_id = vid->get_data();
+  }
 
   return true;
 }
@@ -41,8 +46,10 @@ bool RGWMultiDelDelete::xml_end(const char *el) {
   XMLObjIter iter = find("Object");
   RGWMultiDelObject *object = static_cast<RGWMultiDelObject *>(iter.get_next());
   while (object) {
-    string key = object->get_key();
-    objects.push_back(key);
+    const string& key = object->get_key();
+    const string& instance = object->get_version_id();
+    rgw_obj_key k(key, instance);
+    objects.push_back(k);
     object = static_cast<RGWMultiDelObject *>(iter.get_next());
   }
   return true;
@@ -58,8 +65,8 @@ XMLObj *RGWMultiDelXMLParser::alloc_obj(const char *el) {
     obj = new RGWMultiDelObject ();
   } else if (strcmp(el, "Key") == 0) {
     obj = new RGWMultiDelKey();
-  } else if (strcmp(el, "VersionID") == 0) {
-    /*do nothing*/
+  } else if (strcmp(el, "VersionId") == 0) {
+    obj = new RGWMultiDelVersionId();
   }
 
   return obj;
