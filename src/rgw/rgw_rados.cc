@@ -4207,6 +4207,12 @@ static bool is_olh(map<string, bufferlist>& attrs)
   return (iter != attrs.end());
 }
 
+static bool has_olh_tag(map<string, bufferlist>& attrs)
+{
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_ID_TAG);
+  return (iter != attrs.end());
+}
+
 int RGWRados::get_olh_target_state(RGWObjectCtx& obj_ctx, rgw_obj& obj, RGWObjState *olh_state,
                                    RGWObjState **target_state, RGWObjVersionTracker *objv_tracker)
 {
@@ -5531,7 +5537,11 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
 
   assert(olh_obj.get_instance().empty());
 
-  bool curr_olh = is_olh(state.attrset);
+  bool has_tag = (state.exists && has_olh_tag(state.attrset));
+
+  if (!state.exists) {
+    op.create(true);
+  }
 
   /*
    * 3 possible cases: olh object doesn't exist, it exists as an olh, it exists as a regular object.
@@ -5543,17 +5553,12 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
    * Need to generate separate olh and obj tags, as olh can be colocated with object data. obj_tag
    * is used for object data instance, olh_tag for olh instance.
    */
-  if (state.exists) {
+  if (has_tag) {
     /* guard against racing writes */
     bucket_index_guard_olh_op(state, op);
   }
 
-  if (!state.exists || !curr_olh) {
-    /* need to generate a new object & olh tags */
-    if (!state.exists) {
-      op.create(true);
-    }
-
+  if (!has_tag) {
     /* obj tag */
     string obj_tag;
     int ret = gen_rand_alphanumeric_lower(cct, &obj_tag, 32);
