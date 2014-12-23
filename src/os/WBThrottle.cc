@@ -135,10 +135,7 @@ bool WBThrottle::get_next_should_flush(
 {
   assert(lock.is_locked());
   assert(next);
-  while (!stopping &&
-         cur_ios < io_limits.first &&
-         pending_wbs.size() < fd_limits.first &&
-         cur_size < size_limits.first)
+  while (!stopping && !beyond_limit())
          cond.Wait(lock);
   if (stopping)
     return false;
@@ -212,9 +209,7 @@ void WBThrottle::queue_wb(
 
   wbiter->second.first.add(nocache, len, 1);
   insert_object(hoid);
-  if (!(cur_ios < io_limits.first &&
-      pending_wbs.size() < fd_limits.first &&
-      cur_size < size_limits.first))
+  if (beyond_limit())
     cond.Signal();
 }
 
@@ -267,10 +262,7 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
 void WBThrottle::throttle()
 {
   Mutex::Locker l(lock);
-  while (!stopping && !(
-	   cur_ios < io_limits.second &&
-	   pending_wbs.size() < fd_limits.second &&
-	   cur_size < size_limits.second)) {
+  while (!stopping && beyond_limit()) {
     cond.Wait(lock);
   }
 }
