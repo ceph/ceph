@@ -589,6 +589,7 @@ class CephManager:
             args=ceph_args,
             stdout=StringIO(),
             )
+        log.debug('raw stdout "%s"', proc.stdout.getvalue())
         return proc.stdout.getvalue()
 
     def raw_cluster_cmd_result(self, *args):
