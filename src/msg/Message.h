@@ -173,6 +173,8 @@
 #define MSG_CRC_DATA           1
 #define MSG_CRC_HEADER         2
 
+// Xio Testing
+#define MSG_DATA_PING		  0x602
 
 // ======================================================
 
