@@ -3235,7 +3235,6 @@ void RGWDeleteMultiObj::execute()
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
-  pair<rgw_obj_key, int> result;
   int num_processed = 0;
   RGWObjectCtx *obj_ctx = (RGWObjectCtx *)s->obj_ctx;
 
@@ -3276,17 +3275,23 @@ void RGWDeleteMultiObj::execute()
   for (iter = multi_delete->objects.begin();
         iter != multi_delete->objects.end() && num_processed < max_to_delete;
         ++iter, num_processed++) {
-
     rgw_obj obj(bucket, *iter);
 
     obj_ctx->set_atomic(obj);
-    ret = store->delete_obj(*obj_ctx, s->bucket_info, obj, s->bucket_info.versioning_status());
+
+    RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, obj);
+    RGWRados::Object::Delete del_op(&del_target);
+
+    del_op.params.bucket_owner = s->bucket_owner.get_id();
+    del_op.params.versioning_status = s->bucket_info.versioning_status();
+    del_op.params.obj_owner = s->owner;
+
+    ret = del_op.delete_obj();
     if (ret == -ENOENT) {
       ret = 0;
     }
-    result = make_pair(*iter, ret);
 
-    send_partial_response(result);
+    send_partial_response(*iter, del_op.result.delete_marker, del_op.result.version_id, ret);
   }
 
   /*  set the return code to zero, errors at this point will be
