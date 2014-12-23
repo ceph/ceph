@@ -6,19 +6,27 @@
 
 #include "msg/simple/SimpleMessenger.h"
 #include "msg/async/AsyncMessenger.h"
+#ifdef HAVE_XIO
+#include "msg/xio/XioMessenger.h"
+#endif
 
 Messenger *Messenger::create(CephContext *cct, const string &type,
-                             entity_name_t name, string lname,
-                             uint64_t nonce)
+			     entity_name_t name, string lname,
+			     uint64_t nonce)
 {
   int r = -1;
   if (type == "random")
-    r = rand() % 2;
+    r = rand() % 2; // random does not include xio
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce);
   else if ((r == 1 || type == "async") &&
 	   cct->check_experimental_feature_enabled("ms-type-async"))
     return new AsyncMessenger(cct, name, lname, nonce);
+#ifdef HAVE_XIO
+  else if ((type == "xio") &&
+	   cct->check_experimental_feature_enabled("ms-type-xio"))
+    return new XioMessenger(cct, name, lname, nonce);
+#endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return NULL;
 }

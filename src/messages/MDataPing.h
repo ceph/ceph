@@ -15,16 +15,19 @@
 #ifndef CEPH_MDATAPING_H
 #define CEPH_MDATAPING_H
 
-#if defined(HAVE_XIO)
-
 #include "msg/Message.h"
 #include "messages/MPing.h"
+#if defined(HAVE_XIO)
 extern "C" {
 #include "libxio.h"
 }
+#endif /* HAVE_XIO */
+
+#if !defined(HAVE_XIO)
+struct xio_mempool_obj {};
+#endif
 
 typedef void (*mdata_hook_func)(struct xio_mempool_obj *mp);
-
 
 class MDataPing : public Message {
 
@@ -88,5 +91,4 @@ public:
   }
 };
 
-#endif /* HAVE_XIO */
 #endif /* CEPH_MDATAPING_H */

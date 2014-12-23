@@ -59,8 +59,6 @@ execute_process(
   OUTPUT_VARIABLE PYTHON_INSTDIR
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-include_directories(".")
-
 if(${WITH_TCMALLOC})
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-builtin-malloc -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free")
   set(TCMALLOC_LIBS tcmalloc)
@@ -218,6 +216,7 @@ set(libcommon_files
   common/ceph_json.cc
   common/ipaddr.cc
   common/pick_address.cc
+  common/address_helper.cc
   common/linux_version.c
   osdc/Striper.cc
   osdc/Objecter.cc
