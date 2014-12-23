@@ -47,6 +47,7 @@ protected:
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
+  uint32_t magic;
 
 public:
   /**
@@ -127,7 +128,7 @@ public:
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
-      cct(cct_),
+      magic(0), cct(cct_),
       crcflags(get_default_crc_flags(cct->_conf))
   {
     my_inst.name = w;
@@ -167,6 +168,10 @@ public:
    * set messenger's instance
    */
   void set_myinst(entity_inst_t i) { my_inst = i; }
+
+  uint32_t get_magic() { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
+
   /**
    * Retrieve the Messenger's address.
    *
@@ -178,7 +183,7 @@ protected:
   /**
    * set messenger's address
    */
-  void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
+  virtual void set_myaddr(const entity_addr_t& a) { my_inst.addr = a; }
 public:
   /**
    * Retrieve the Messenger's name.

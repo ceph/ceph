@@ -1,4 +1,5 @@
 include test/erasure-code/Makefile.am
+include test/messenger/Makefile.am
 
 ## Unknown/other tests
 
