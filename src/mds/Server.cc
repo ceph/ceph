@@ -1152,13 +1152,15 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
   //assert((bool)dn == (bool)dentry_wanted);  // not true for snapshot lookups
 
   // realm
-  SnapRealm *realm = 0;
-  if (in)
-    realm = in->find_snaprealm();
-  else
-    realm = dn->get_dir()->get_inode()->find_snaprealm();
-  reply->snapbl = realm->get_snap_trace();
-  dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+  if (snapid == CEPH_NOSNAP) {
+    SnapRealm *realm;
+    if (in)
+      realm = in->find_snaprealm();
+    else
+      realm = dn->get_dir()->get_inode()->find_snaprealm();
+    reply->snapbl = realm->get_snap_trace();
+    dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
+  }
 
   // dir + dentry?
   if (dn) {
