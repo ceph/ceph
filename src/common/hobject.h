@@ -326,6 +326,7 @@ public:
   static ghobject_t get_max() {
     ghobject_t h;
     h.max = true;
+    h.hobj = hobject_t::get_max();  // so that is_max() => hobj.is_max()
     return h;
   }
   bool is_max() const {
