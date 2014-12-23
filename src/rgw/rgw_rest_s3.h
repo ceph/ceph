@@ -284,7 +284,8 @@ public:
 
   void send_status();
   void begin_response();
-  void send_partial_response(pair<rgw_obj_key, int>& result);
+  void send_partial_response(rgw_obj_key& key, bool delete_marker,
+                             const string& marker_version_id, int ret);
   void end_response();
 };
 
