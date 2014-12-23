@@ -8498,6 +8498,9 @@ void OSD::set_disk_tp_priority()
 	   << " class " << cct->_conf->osd_disk_thread_ioprio_class
 	   << " priority " << cct->_conf->osd_disk_thread_ioprio_priority
 	   << dendl;
+  if (cct->_conf->osd_disk_thread_ioprio_class.empty() ||
+      cct->_conf->osd_disk_thread_ioprio_priority < 0)
+    return;
   int cls =
     ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
   if (cls < 0)
