@@ -109,21 +109,21 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   int family;
   switch (bind_addr.get_family()) {
-  case AF_INET:
-  case AF_INET6:
-    family = bind_addr.get_family();
-    break;
+    case AF_INET:
+    case AF_INET6:
+      family = bind_addr.get_family();
+      break;
 
-  default:
-    // bind_addr is empty
-    family = conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
+    default:
+      // bind_addr is empty
+      family = conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
   }
 
   /* socket creation */
   listen_sd = ::socket(family, SOCK_STREAM, 0);
   if (listen_sd < 0) {
     lderr(msgr->cct) << __func__ << " unable to create socket: "
-                     << cpp_strerror(errno) << dendl;
+        << cpp_strerror(errno) << dendl;
     return -errno;
   }
 
@@ -133,42 +133,62 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
 
   /* bind to port */
   int rc = -1;
-  if (listen_addr.get_port()) {
-    // specific port
+  int r = -1;
 
-    // reuse addr+port when possible
-    int on = 1;
-    rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    if (rc < 0) {
-      lderr(msgr->cct) << __func__ << " unable to setsockopt: "
-                       << cpp_strerror(errno) << dendl;
-      return -errno;
+  for (int i = 0; i < conf->ms_bind_retry_count; i++) {
+    if (i > 0) {
+      lderr(msgr->cct) << __func__ << " was unable to bind. Trying again in "
+                       << conf->ms_bind_retry_delay << " seconds " << dendl;
+      sleep(conf->ms_bind_retry_delay);
     }
 
-    rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
-    if (rc < 0) {
-      lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr.ss_addr()
-                       << ": " << cpp_strerror(errno) << dendl;
-      return -errno;
-    }
-  } else {
-    // try a range of ports
-    for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
-      if (avoid_ports.count(port))
+    if (listen_addr.get_port()) {
+      // specific port
+      // reuse addr+port when possible
+      int on = 1;
+      rc = ::setsockopt(listen_sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+      if (rc < 0) {
+        lderr(msgr->cct) << __func__ << " unable to setsockopt: " << cpp_strerror(errno) << dendl;
+        r = -errno;
         continue;
-      listen_addr.set_port(port);
+      }
+
       rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
-      if (rc == 0)
-        break;
+      if (rc < 0) {
+        lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr.ss_addr()
+                         << ": " << cpp_strerror(errno) << dendl;
+        r = -errno;
+        continue;
+      }
+    } else {
+      // try a range of ports
+      for (int port = msgr->cct->_conf->ms_bind_port_min; port <= msgr->cct->_conf->ms_bind_port_max; port++) {
+        if (avoid_ports.count(port))
+          continue;
+
+        listen_addr.set_port(port);
+        rc = ::bind(listen_sd, (struct sockaddr *) &listen_addr.ss_addr(), listen_addr.addr_size());
+        if (rc == 0)
+          break;
+      }
+      if (rc < 0) {
+        lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr.ss_addr()
+                         << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
+                         << "-" << msgr->cct->_conf->ms_bind_port_max << ": "
+                         << cpp_strerror(errno) << dendl;
+        r = -errno;
+        continue;
+      }
+      ldout(msgr->cct, 10) << __func__ << " bound on random port " << listen_addr << dendl;
     }
-    if (rc < 0) {
-      lderr(msgr->cct) << __func__ << " unable to bind to " << listen_addr.ss_addr()
-                       << " on any port in range " << msgr->cct->_conf->ms_bind_port_min
-                       << "-" << msgr->cct->_conf->ms_bind_port_max
-                       << ": " << cpp_strerror(errno) << dendl;
-      return -errno;
-    }
-    ldout(msgr->cct,10) << __func__ << " bound on random port " << listen_addr << dendl;
+    if (rc == 0)
+      break;
+  }
+  // It seems that binding completely failed, return with that exit status
+  if (rc < 0) {
+    lderr(msgr->cct) << __func__ << " was unable to bind after " << conf->ms_bind_retry_count
+                     << " attempts: " << cpp_strerror(errno) << dendl;
+    return r;
   }
 
   // what port did we get?
@@ -187,7 +207,7 @@ int Processor::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   if (rc < 0) {
     rc = -errno;
     lderr(msgr->cct) << __func__ << " unable to listen on " << listen_addr
-                     << ": " << cpp_strerror(rc) << dendl;
+        << ": " << cpp_strerror(rc) << dendl;
     return rc;
   }
 
@@ -257,7 +277,7 @@ void Processor::accept()
       break;
     } else {
       ldout(msgr->cct, 0) << __func__ << " no incoming connection?  sd = " << sd
-                          << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+          << " errno " << errno << " " << cpp_strerror(errno) << dendl;
     }
   }
 }
@@ -317,7 +337,7 @@ void *Worker::entry()
 
       if (sched_setaffinity(0, sizeof(cpuset), &cpuset) < 0) {
         ldout(cct, 0) << __func__ << " sched_setaffinity failed: "
-                      << cpp_strerror(errno) << dendl;
+            << cpp_strerror(errno) << dendl;
       }
       /* guaranteed to take effect immediately */
       sched_yield();
@@ -332,7 +352,7 @@ void *Worker::entry()
     int r = center.process_events(30000000);
     if (r < 0) {
       ldout(cct, 20) << __func__ << " process events failed: "
-                          << cpp_strerror(errno) << dendl;
+          << cpp_strerror(errno) << dendl;
       // TODO do something?
     }
   }
@@ -539,7 +559,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
   assert(addr != my_inst.addr);
 
   ldout(cct, 10) << __func__ << " " << addr
-                 << ", creating connection and registering" << dendl;
+      << ", creating connection and registering" << dendl;
 
   // create connection
   Worker *w = pool->get_worker();
@@ -578,12 +598,12 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
   ldout(cct, 1) << __func__ << "--> " << dest.name << " "
-                << dest.addr << " -- " << *m << " -- ?+"
-                << m->get_data().length() << " " << m << dendl;
+      << dest.addr << " -- " << *m << " -- ?+"
+      << m->get_data().length() << " " << m << dendl;
 
   if (dest.addr == entity_addr_t()) {
     ldout(cct,0) << __func__ <<  " message " << *m
-                 << " with empty dest " << dest.addr << dendl;
+        << " with empty dest " << dest.addr << dendl;
     m->put();
     return -EINVAL;
   }
@@ -625,8 +645,8 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   const Policy& policy = get_policy(dest_type);
   if (policy.server) {
     ldout(cct, 20) << __func__ << " " << *m << " remote, " << dest_addr
-                   << ", lossy server for target type "
-                   << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
+        << ", lossy server for target type "
+        << ceph_entity_type_name(dest_type) << ", no session, dropping." << dendl;
     m->put();
   } else {
     ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
@@ -714,15 +734,15 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect)
     // public
     if (connect) {
       switch (peer_type) {
-      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
-      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
-      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
       }
     } else {
       switch (my_type) {
-      case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
-      case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
-      case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_OSD: return CEPH_OSDC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_MDS: return CEPH_MDSC_PROTOCOL;
+        case CEPH_ENTITY_TYPE_MON: return CEPH_MONC_PROTOCOL;
       }
     }
   }
