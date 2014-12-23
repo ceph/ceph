@@ -355,7 +355,7 @@ void SnapRealm::split_at(SnapRealm *child)
   dout(10) << "split_at " << *child 
 	   << " on " << *child->inode << dendl;
 
-  if (!child->inode->is_dir()) {
+  if (inode->is_mdsdir() || !child->inode->is_dir()) {
     // it's not a dir.
     if (child->inode->containing_realm) {
       //  - no open children.
