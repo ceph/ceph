@@ -1096,6 +1096,7 @@ TEST(LibCephFS, GetOsdCrushLocation) {
     }
   }
 
+  ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
 
