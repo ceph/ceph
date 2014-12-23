@@ -383,7 +383,7 @@ def task(ctx, config):
     - An outer ceph_fuse task with at least two clients
     - That the clients are on a separate host to the MDS
     """
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
 
     # Pick out the clients we will use from the configuration
     # =======================================================

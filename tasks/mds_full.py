@@ -337,7 +337,7 @@ class TestClusterFull(CephFSTestCase):
 
 @contextlib.contextmanager
 def task(ctx, config):
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
 
     # Pick out the clients we will use from the configuration
     # =======================================================

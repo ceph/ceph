@@ -106,7 +106,7 @@ class TestMDSAutoRepair(CephFSTestCase):
 
 @contextlib.contextmanager
 def task(ctx, config):
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
     mount_a = ctx.mounts.values()[0]
 
     # Stash references on ctx so that we can easily debug in interactive mode
