@@ -1499,8 +1499,8 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     }
 
     ldout(async_msgr->cct, 0) << __func__ << "accept connect_seq " << connect.connect_seq
-                        << " vs existing " << existing->connect_seq
-                        << " state " << existing->state << dendl;
+                              << " vs existing " << existing->connect_seq
+                              << " state " << existing->state << dendl;
 
     if (connect.connect_seq == 0 && existing->connect_seq > 0) {
       ldout(async_msgr->cct,0) << __func__ << " accept peer reset, then tried to connect to us, replacing" << dendl;
