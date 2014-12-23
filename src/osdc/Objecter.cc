@@ -1615,7 +1615,10 @@ void Objecter::finish_op(Op *op)
 
   ops.erase(op->tid);
   logger->set(l_osdc_op_active, ops.size());
-  assert(check_latest_map_ops.find(op->tid) == check_latest_map_ops.end());
+
+  // our reply may have raced with pool deletion resulting in a map
+  // check in flight.
+  op_cancel_map_check(op);
 
   if (op->ontimeout)
     timer.cancel_event(op->ontimeout);
