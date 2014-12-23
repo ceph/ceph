@@ -2785,7 +2785,7 @@ void PG::append_log(
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(META_COLL, log_oid, keys);
+  // t.omap_setkeys(META_COLL, log_oid, keys);  extra pg_log transaction here
 
   pg_log.trim(&handler, trim_to, info);
 

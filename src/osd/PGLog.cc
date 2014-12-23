@@ -774,6 +774,7 @@ void PGLog::_write_log(
     keys[p->get_key_name()].claim(bl);
   }
 
+  //pg_log transaction will be correctly inserted here.
   for (list<pg_log_entry_t>::reverse_iterator p = log.log.rbegin();
        p != log.log.rend() &&
 	 (p->version >= dirty_from || p->version >= writeout_from) &&
