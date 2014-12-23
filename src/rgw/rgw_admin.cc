@@ -979,7 +979,7 @@ int main(int argc, char **argv)
       pool_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
       object = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object-version", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
       object_version = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
       client_id = val;
