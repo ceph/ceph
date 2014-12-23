@@ -28,6 +28,7 @@
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
+#include "librados/RadosWhereis.h"
 #include "librados/ListObjectImpl.h"
 #include <cls/lock/cls_lock_client.h>
 
@@ -2112,6 +2113,13 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
   assert(r == 0);
   return new AioCompletion(c);
+}
+
+int
+librados::Rados::whereis(IoCtx &ioctx, const std::string &oid, std::vector<whereis_t> &locations)
+{
+  RadosWhereis locator(ioctx);
+  return locator.whereis(oid, locations);
 }
 
 librados::ObjectOperation::ObjectOperation()
