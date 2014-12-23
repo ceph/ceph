@@ -453,12 +453,12 @@ inline ostream& operator<<(ostream &oss, health_status_t status) {
 #endif
 
 struct shard_id_t {
-  uint8_t id;
+  int8_t id;
 
   shard_id_t() : id(0) {}
-  explicit shard_id_t(uint8_t _id) : id(_id) {}
+  explicit shard_id_t(int8_t _id) : id(_id) {}
 
-  operator uint8_t() const { return id; }
+  operator int8_t() const { return id; }
 
   const static shard_id_t NO_SHARD;
 
