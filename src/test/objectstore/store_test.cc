@@ -171,7 +171,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   boost::uniform_int<> folders_range(5, 256);
   uint64_t expected_num_objs = (uint64_t)objs_per_folder * (uint64_t)folders_range(rng);
 
-  coll_t cid(spg_t(pg_t(pg_id, 1), shard_id_t::NO_SHARD));
+  coll_t cid(spg_t(pg_t(pg_id, 15), shard_id_t::NO_SHARD));
   int r;
   {
     // Create a collection along with a hint
@@ -266,6 +266,7 @@ TEST_P(StoreTest, SimpleListTest) {
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
 		      ghobject_t::NO_GEN, shard_id_t(1));
+      hoid.hobj.pool = 1;
       all.insert(hoid);
       t.touch(cid, hoid);
       cerr << "Creating object " << hoid << std::endl;
@@ -1215,7 +1216,7 @@ TEST_P(StoreTest, AttrSynthetic) {
 }
 
 TEST_P(StoreTest, HashCollisionTest) {
-  coll_t cid(spg_t(pg_t(1,0),shard_id_t::NO_SHARD));
+  coll_t cid(spg_t(pg_t(11,0),shard_id_t::NO_SHARD));
   int r;
   {
     ObjectStore::Transaction t;
@@ -1296,7 +1297,7 @@ TEST_P(StoreTest, HashCollisionTest) {
 }
 
 TEST_P(StoreTest, ScrubTest) {
-  coll_t cid;
+  coll_t cid(spg_t(pg_t(111,0),shard_id_t(1)));
   int r;
   {
     ObjectStore::Transaction t;
@@ -1312,7 +1313,8 @@ TEST_P(StoreTest, ScrubTest) {
     if (!(i % 5)) {
       cerr << "Object " << i << std::endl;
     }
-    ghobject_t hoid(hobject_t(string(buf) + base, string(), CEPH_NOSNAP, i, 0, ""));
+    ghobject_t hoid(hobject_t(string(buf) + base, string(), CEPH_NOSNAP, i, 0, ""),
+		    ghobject_t::NO_GEN, shard_id_t(1));
     {
       ObjectStore::Transaction t;
       t.touch(cid, hoid);
@@ -1322,11 +1324,12 @@ TEST_P(StoreTest, ScrubTest) {
     created.insert(hoid);
   }
 
-  // Add same hobject_t but different generation or shard_id
+  // Add same hobject_t but different generation
   {
-    ghobject_t hoid1(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""));
-    ghobject_t hoid2(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)1, (shard_id_t)0);
-    ghobject_t hoid3(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)2, (shard_id_t)0);
+    ghobject_t hoid1(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""),
+		     ghobject_t::NO_GEN, shard_id_t(1));
+    ghobject_t hoid2(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)1, shard_id_t(1));
+    ghobject_t hoid3(hobject_t("same-object", string(), CEPH_NOSNAP, 0, 0, ""), (gen_t)2, shard_id_t(1));
     ObjectStore::Transaction t;
     t.touch(cid, hoid1);
     t.touch(cid, hoid2);
@@ -1598,7 +1601,7 @@ void colsplittest(
   unsigned num_objects,
   unsigned common_suffix_size
   ) {
-  coll_t cid(spg_t(pg_t(1,2),shard_id_t::NO_SHARD));
+  coll_t cid(spg_t(pg_t(5,2),shard_id_t::NO_SHARD));
   coll_t tid(spg_t(pg_t(3,2),shard_id_t::NO_SHARD));
   int r = 0;
   {
@@ -1692,6 +1695,7 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
+    o.hobj.pool = -1;
     if (i < 8) {
       o.hobj.set_hash((i << 16) | 0xA1);
       t.touch(cid, o);
@@ -1705,6 +1709,7 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
+    o.hobj.pool = -1;
     o.hobj.set_hash((i << 16) | 0xA1);
     t.remove(cid, o);
     r = store->apply_transaction(t);
@@ -1715,12 +1720,14 @@ TEST_P(StoreTest, TwoHash) {
     ObjectStore::Transaction t;
     ghobject_t o;
     o.hobj.set_hash((i << 16) | 0xA1);
+    o.hobj.pool = -1;
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, false);
   }
   {
     ghobject_t o;
     o.hobj.set_hash(0xA1);
+    o.hobj.pool = -1;
     bool exists = store->exists(cid, o);
     ASSERT_EQ(exists, true);
   }
@@ -1729,6 +1736,7 @@ TEST_P(StoreTest, TwoHash) {
     ObjectStore::Transaction t;
     ghobject_t o;
     o.hobj.set_hash((i << 16) | 0xA1);
+    o.hobj.pool = -1;
     t.remove(cid, o);
     o.hobj.set_hash((i << 16) | 0xB1);
     t.remove(cid, o);
@@ -1761,24 +1769,23 @@ TEST_P(StoreTest, MoveRename) {
   omap["omap_key"].append("omap value");
   {
     ObjectStore::Transaction t;
-    t.create_collection(temp_cid);
-    t.touch(temp_cid, temp_oid);
-    t.write(temp_cid, temp_oid, 0, data.length(), data);
-    t.setattr(temp_cid, temp_oid, "attr", attr);
-    t.omap_setkeys(temp_cid, temp_oid, omap);
+    t.touch(cid, temp_oid);
+    t.write(cid, temp_oid, 0, data.length(), data);
+    t.setattr(cid, temp_oid, "attr", attr);
+    t.omap_setkeys(cid, temp_oid, omap);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
-  ASSERT_TRUE(store->exists(temp_cid, temp_oid));
+  ASSERT_TRUE(store->exists(cid, temp_oid));
   {
     ObjectStore::Transaction t;
     t.remove(cid, oid);
-    t.collection_move_rename(temp_cid, temp_oid, cid, oid);
+    t.collection_move_rename(cid, temp_oid, cid, oid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
   ASSERT_TRUE(store->exists(cid, oid));
-  ASSERT_FALSE(store->exists(temp_cid, temp_oid));
+  ASSERT_FALSE(store->exists(cid, temp_oid));
   {
     bufferlist newdata;
     r = store->read(cid, oid, 0, 1000, newdata);
@@ -1801,7 +1808,6 @@ TEST_P(StoreTest, MoveRename) {
     ObjectStore::Transaction t;
     t.remove(cid, oid);
     t.remove_collection(cid);
-    t.remove_collection(temp_cid);
     r = store->apply_transaction(t);
     ASSERT_EQ(r, 0);
   }
@@ -1811,7 +1817,6 @@ TEST_P(StoreTest, BigRGWObjectName) {
   store->set_allow_sharded_objects();
   store->sync_and_flush();
   coll_t cid(spg_t(pg_t(1,2),shard_id_t::NO_SHARD));
-  coll_t temp_cid = cid.get_temp();
   hobject_t temp_oid("tmp_oid", "", CEPH_NOSNAP, 0, 0, "");
   ghobject_t oid(
     hobject_t(
