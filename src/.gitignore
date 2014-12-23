@@ -89,3 +89,4 @@ Makefile
 /leveldb
 /mkcephfs
 /.ceph_port
+/store_test_temp_dir
