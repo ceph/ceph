@@ -212,7 +212,10 @@ void WBThrottle::queue_wb(
 
   wbiter->second.first.add(nocache, len, 1);
   insert_object(hoid);
-  cond.Signal();
+  if (!(cur_ios < io_limits.first &&
+      pending_wbs.size() < fd_limits.first &&
+      cur_size < size_limits.first))
+    cond.Signal();
 }
 
 void WBThrottle::clear()
