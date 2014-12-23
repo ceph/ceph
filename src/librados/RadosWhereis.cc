@@ -58,15 +58,6 @@ librados::whereis::resolve()
 // -----------------------------------------------------------------------------
 
 int
-librados::Rados::whereis(IoCtx &ioctx, const std::string &oid, std::vector<whereis_t> &locations)
-{
-  RadosWhereis locator(ioctx);
-  return locator.whereis(oid, locations);
-}
-
-// -----------------------------------------------------------------------------
-
-int
 librados::RadosWhereis::whereis(const std::string &oname,
                                 std::vector<librados::whereis_t> &locations
                                 )
@@ -116,29 +107,3 @@ librados::RadosWhereis::whereis(const std::string &oname,
   ctx->objecter->put_osdmap_read();
   return 0;
 }
-
-void
-librados::RadosWhereis::dump(librados::whereis_t &location, bool reversedns, Formatter* formatter)
-{
-  if (reversedns)
-    location.resolve();
-
-  if (!formatter)
-    return;
-
-  formatter->dump_int("osd-id", location.osd_id);
-  formatter->dump_int("pg-seed", location.pg_seed);
-  formatter->dump_string("ip", location.ip_string);
-  formatter->dump_string("state", location.osd_state);
-
-  if (reversedns) {
-    std::vector<std::string>::const_iterator it;
-    for (it = location.host_names.begin(); it != location.host_names.end(); ++it) {
-      formatter->open_array_section("host");
-      formatter->dump_string("name", it->c_str());
-      formatter->close_section();
-    }
-  }
-}
-
-

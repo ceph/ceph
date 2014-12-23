@@ -1108,7 +1108,8 @@ namespace librados
     int cluster_fsid(std::string *fsid);
 
     //  'whereis' of objects
-    static int whereis(IoCtx &ioctx, const std::string &oid, std::vector<whereis_t> &locations);
+    static int whereis(IoCtx &ioctx, const std::string &oid,
+                       std::vector<whereis_t> &locations);
 
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();

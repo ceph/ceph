@@ -206,6 +206,31 @@ static void usage_exit()
 }
 
 
+static void
+whereis_dump(librados::whereis_t &location, bool reversedns, Formatter* formatter)
+{
+  if (reversedns)
+    location.resolve();
+
+  if (!formatter)
+    return;
+
+  formatter->dump_int("osd-id", location.osd_id);
+  formatter->dump_int("pg-seed", location.pg_seed);
+  formatter->dump_string("ip", location.ip_string);
+  formatter->dump_string("state", location.osd_state);
+
+  if (reversedns) {
+    std::vector<std::string>::const_iterator it;
+    for (it = location.host_names.begin(); it != location.host_names.end(); ++it) {
+      formatter->open_array_section("host");
+      formatter->dump_string("name", it->c_str());
+      formatter->close_section();
+    }
+  }
+}
+
+
 template <typename I, typename T>
 static int rados_sistrtoll(I &i, T *val) {
   std::string err;
@@ -2028,7 +2053,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	std::vector<librados::whereis_t>::iterator it;
 
 	for (it=locations.begin(); it!=locations.end(); ++it) {
-	  librados::RadosWhereis::dump(*it, reverse_dns, formatter);
+	  whereis_dump(*it, reverse_dns, formatter);
 	}
 	formatter->flush(cout);
       }
