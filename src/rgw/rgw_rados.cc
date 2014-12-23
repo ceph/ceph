@@ -5962,23 +5962,20 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
     ret = olh_init_modification(*state, olh_obj, &op_tag);
     if (ret < 0) {
       ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
-      continue;
+      if (ret == -ECANCELED) {
+        continue;
+      }
+      return ret;
     }
-
     ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta, olh_epoch);
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
-      continue;
+      if (ret == -ECANCELED) {
+        continue;
+      }
+      return ret;
     }
-
-    ret = update_olh(obj_ctx, state, bucket_info, olh_obj);
-    if (ret < 0) {
-      ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
-      continue;
-    }
-    if (ret != -ECANCELED) {
-      break;
-    }
+    break;
   }
 
   if (i == MAX_ECANCELED_RETRY) {
@@ -5986,7 +5983,12 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
     return -EIO;
   }
 
+  ret = update_olh(obj_ctx, state, bucket_info, olh_obj);
+  if (ret == -ECANCELED) { /* already did what we needed, no need to retry, raced with another user */
+    ret = 0;
+  }
   if (ret < 0) {
+    ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
     return ret;
   }
 
@@ -6018,23 +6020,21 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
     ret = olh_init_modification(*state, olh_obj, &op_tag);
     if (ret < 0) {
       ldout(cct, 20) << "olh_init_modification() target_obj=" << target_obj << " returned " << ret << dendl;
-      continue;
+      if (ret == -ECANCELED) {
+        continue;
+      }
+      return ret;
     }
 
     ret = bucket_index_unlink_instance(target_obj, op_tag, olh_epoch);
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " returned " << ret << dendl;
-      continue;
+      if (ret == -ECANCELED) {
+        continue;
+      }
+      return ret;
     }
-
-    ret = update_olh(obj_ctx, state, bucket_info, olh_obj);
-    if (ret < 0) {
-      ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
-      continue;
-    }
-    if (ret != -ECANCELED) {
-      break;
-    }
+    break;
   }
 
   if (i == MAX_ECANCELED_RETRY) {
@@ -6042,7 +6042,12 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
     return -EIO;
   }
 
+  ret = update_olh(obj_ctx, state, bucket_info, olh_obj);
+  if (ret == -ECANCELED) { /* already did what we needed, no need to retry, raced with another user */
+    return 0;
+  }
   if (ret < 0) {
+    ldout(cct, 20) << "update_olh() target_obj=" << target_obj << " returned " << ret << dendl;
     return ret;
   }
 
