@@ -38,15 +38,14 @@ class Filesystem(object):
      * Assume a single filesystem+cluster
      * Assume a single MDS
     """
-    def __init__(self, ctx, config):
+    def __init__(self, ctx):
         self._ctx = ctx
-        self._config = config
 
         self.mds_ids = list(misc.all_roles_of_type(ctx.cluster, 'mds'))
         if len(self.mds_ids) == 0:
             raise RuntimeError("This task requires at least one MDS")
 
-        first_mon = misc.get_first_mon(ctx, config)
+        first_mon = misc.get_first_mon(ctx, None)
         (self.mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
         self.mon_manager = ceph_manager.CephManager(self.mon_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
         self.mds_daemons = dict([(mds_id, self._ctx.daemons.get_daemon('mds', mds_id)) for mds_id in self.mds_ids])
