@@ -108,6 +108,7 @@ public:
       return *this;
     hobject_t ret;
     ret.set_hash(hash);
+    ret.pool = pool;
     return ret;
   }
 
@@ -298,6 +299,8 @@ public:
       return *this;
     ghobject_t ret;
     ret.hobj.set_hash(hobj.hash);
+    ret.shard_id = shard_id;
+    ret.hobj.pool = hobj.pool;
     return ret;
   }
   filestore_hobject_key_t get_filestore_key_u32() const {
