@@ -180,6 +180,8 @@
 
 // abstract Message class
 
+namespace bi = boost::intrusive;
+
 class Message : public RefCountedObject {
 protected:
   ceph_msg_header  header;      // headerelope
@@ -203,6 +205,8 @@ protected:
 
   uint32_t magic;
 
+  bi::list_member_hook<> dispatch_q;
+
 public:
   class CompletionHook : public Context {
   protected:
@@ -214,6 +218,11 @@ public:
     virtual void finish(int r) = 0;
     virtual ~CompletionHook() {}
   };
+
+  typedef bi::list< Message,
+		    bi::member_hook< Message,
+				     bi::list_member_hook<>,
+				     &Message::dispatch_q > > Queue;
 
 protected:
   CompletionHook* completion_hook; // owned by Messenger
