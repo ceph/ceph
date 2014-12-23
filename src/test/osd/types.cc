@@ -20,6 +20,7 @@
 #include "osd/OSDMap.h"
 #include "gtest/gtest.h"
 #include "common/Thread.h"
+#include "include/stringify.h"
 
 #include <sstream>
 
@@ -1290,6 +1291,23 @@ TEST(shard_id_t, iostream) {
     ostringstream out;
     out << shards;
     ASSERT_EQ(out.str(), "0,1,2");
+
+    shard_id_t noshard = shard_id_t::NO_SHARD;
+    shard_id_t zero(0);
+    ASSERT_GT(zero, noshard);
+}
+
+TEST(spg_t, parse) {
+  spg_t a(pg_t(1,2), shard_id_t::NO_SHARD);
+  spg_t aa, bb;
+  spg_t b(pg_t(3,2), shard_id_t(2));
+  std::string s = stringify(a);
+  ASSERT_TRUE(aa.parse(s.c_str()));
+  ASSERT_EQ(a, aa);
+
+  s = stringify(b);
+  ASSERT_TRUE(bb.parse(s.c_str()));
+  ASSERT_EQ(b, bb);
 }
 
 TEST(coll_t, temp) {
@@ -1304,6 +1322,15 @@ TEST(coll_t, temp) {
   ASSERT_TRUE(temp.is_temp());
   ASSERT_TRUE(temp.is_temp(pgid2));
   ASSERT_EQ(pgid, pgid2);
+}
+
+TEST(ghobject_t, cmp) {
+  ghobject_t min;
+  ghobject_t sep;
+  sep.set_shard(shard_id_t(1));
+  sep.hobj.pool = -1;
+  cout << min << " < " << sep << std::endl;
+  ASSERT_LT(min, sep);
 }
 
 /*
