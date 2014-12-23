@@ -3002,7 +3002,7 @@ void OSD::build_past_intervals_parallel()
 {
   map<PG*,pistate> pis;
 
-  // calculate untion of map range
+  // calculate junction of map range
   epoch_t end_epoch = superblock.oldest_map;
   epoch_t cur_epoch = superblock.newest_map;
   {
@@ -3013,7 +3013,7 @@ void OSD::build_past_intervals_parallel()
       PG *pg = i->second;
 
       epoch_t start, end;
-      if (!pg->_calc_past_interval_range(&start, &end))
+      if (!pg->_calc_past_interval_range(&start, &end, superblock.oldest_map))
         continue;
 
       dout(10) << pg->info.pgid << " needs " << start << "-" << end << dendl;
