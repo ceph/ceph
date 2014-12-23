@@ -1,10 +1,12 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(Ceph)
-set(VERSION "0.88")
+set(VERSION "0.90")
 
-# Tweak policies (this one disables "missing" dependency warning)
-cmake_policy(SET CMP0046 OLD)
+if (NOT (CMAKE_MAJOR_VERSION LESS 3))
+  # Tweak policies (this one disables "missing" dependency warning)
+  cmake_policy(SET CMP0046 OLD)
+endif(NOT (CMAKE_MAJOR_VERSION LESS 3))
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
@@ -12,6 +14,7 @@ include_directories(
   ${PROJECT_BINARY_DIR}/src/include
   ${OFED_PREFIX}/include
   ${LEVELDB_PREFIX}/include
+  ${PROJECT_SOURCE_DIR}/src
 )
 
 link_directories(
