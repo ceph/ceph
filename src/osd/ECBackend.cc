@@ -809,6 +809,7 @@ void ECBackend::handle_sub_write(
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
+  localt->set_use_tbl(op.t.get_use_tbl());
   if (!op.temp_added.empty()) {
     get_temp_coll(localt);
     add_temp_objs(op.temp_added);
