@@ -92,9 +92,10 @@ int EventCenter::init(int n)
 
 EventCenter::~EventCenter()
 {
-  if (driver)
-    delete driver;
+  delete driver;
 
+  if (file_events)
+    free(file_events);
   if (notify_receive_fd > 0)
     ::close(notify_receive_fd);
   if (notify_send_fd > 0)
