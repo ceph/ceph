@@ -3693,6 +3693,10 @@ void Client::put_snap_realm(SnapRealm *realm)
 		 << " " << realm->nref << " -> " << (realm->nref - 1) << dendl;
   if (--realm->nref == 0) {
     snap_realms.erase(realm->ino);
+    if (realm->pparent) {
+      realm->pparent->pchildren.erase(realm);
+      put_snap_realm(realm->pparent);
+    }
     delete realm;
   }
 }
