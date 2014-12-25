@@ -1,6 +1,6 @@
-from nose.tools import eq_ as eq, assert_raises
+from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
-                   ObjectNotFound, ObjectBusy,
+                   ObjectNotFound, ObjectBusy, requires, opt,
                    ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES)
 import time
 import threading
@@ -37,6 +37,36 @@ def test_ioctx_context_manager():
     with Rados(conffile='', rados_id='admin') as conn:
         with conn.open_ioctx('rbd') as ioctx:
             pass
+
+class TestRequires(object):
+    @requires(('foo', str), ('bar', int), ('baz', int))
+    def _method_plain(self, foo, bar, baz):
+        ok(isinstance(foo, str))
+        ok(isinstance(bar, int))
+        ok(isinstance(baz, int))
+        return (foo, bar, baz)
+
+    def test_method_plain(self):
+        assert_raises(TypeError, self._method_plain, 42, 42, 42)
+        assert_raises(TypeError, self._method_plain, '42', '42', '42')
+        assert_raises(TypeError, self._method_plain, foo='42', bar='42', baz='42')
+        eq(self._method_plain('42', 42, 42), ('42', 42, 42))
+        eq(self._method_plain(foo='42', bar=42, baz=42), ('42', 42, 42))
+
+    @requires(('opt_foo', opt(str)), ('opt_bar', opt(int)), ('baz', int))
+    def _method_with_opt_arg(self, foo, bar, baz):
+        ok(isinstance(foo, str) or foo is None)
+        ok(isinstance(bar, int) or bar is None)
+        ok(isinstance(baz, int))
+        return (foo, bar, baz)
+
+    def test_method_with_opt_args(self):
+        assert_raises(TypeError, self._method_with_opt_arg, 42, 42, 42)
+        assert_raises(TypeError, self._method_with_opt_arg, '42', '42', 42)
+        assert_raises(TypeError, self._method_with_opt_arg, None, None, None)
+        eq(self._method_with_opt_arg(None, 42, 42), (None, 42, 42))
+        eq(self._method_with_opt_arg('42', None, 42), ('42', None, 42))
+        eq(self._method_with_opt_arg(None, None, 42), (None, None, 42))
 
 
 class TestRadosStateError(object):
