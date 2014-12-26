@@ -1201,7 +1201,7 @@ void CInode::clear_dirty_parent()
 
 void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 {
-  if (is_base() || is_dirty_parent())
+  if (is_base() || is_dirty_parent() || !is_auth())
     return;
 
   dout(10) << "verify_diri_backtrace" << dendl;
