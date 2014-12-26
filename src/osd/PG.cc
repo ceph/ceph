@@ -3090,6 +3090,10 @@ void PG::update_snap_map(
  */
 void PG::filter_snapc(vector<snapid_t> &snaps)
 {
+  //nothing needs to trim, we can return immediately
+  if(snap_trimq.empty() && info.purged_snaps.empty())
+    return;
+
   bool filtering = false;
   vector<snapid_t> newsnaps;
   for (vector<snapid_t>::iterator p = snaps.begin();
