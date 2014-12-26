@@ -1563,7 +1563,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     dnl = dn->get_projected_linkage();
   assert(!dnl->is_null());
 
-  if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
+  if (dnl->is_primary()) {
     // multiversion inode.
     CInode *in = dnl->get_inode();
 
