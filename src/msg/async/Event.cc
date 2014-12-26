@@ -92,9 +92,10 @@ int EventCenter::init(int n)
 
 EventCenter::~EventCenter()
 {
-  if (driver)
-    delete driver;
+  delete driver;
 
+  if (file_events)
+    free(file_events);
   if (notify_receive_fd > 0)
     ::close(notify_receive_fd);
   if (notify_send_fd > 0)
@@ -119,6 +120,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
       lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
       return -errno;
     }
+    memset(file_events+sizeof(FileEvent)*nevent, 0, sizeof(FileEvent)*(new_size-nevent));
     file_events = new_events;
     nevent = new_size;
   }
