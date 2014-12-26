@@ -271,14 +271,35 @@ To enable SSL for RPM-based systems, execute the following steps:
 
 	sudo yum install mod_ssl openssl
 
-#. Ensure the SSL module is enabled.
+#. Generate private key. ::
 
-#. Generate a certificate and copy it to the appropriate locations. ::
+	openssl genrsa -out ca.key 2048
+
+#. Generate CSR. ::
+
+	openssl req -new -key ca.key -out ca.csr
+
+#. Generate a certificate. ::
 
 	openssl x509 -req -days 365 -in ca.csr -signkey ca.key -out ca.crt
+
+#. Copy the files to appropriate locations. ::
+
 	cp ca.crt /etc/pki/tls/certs
 	cp ca.key /etc/pki/tls/private/ca.key
 	cp ca.csr /etc/pki/tls/private/ca.csr
+
+#. Update the Apache SSL configuration file ``/etc/httpd/conf.d/ssl.conf``.
+
+	Give the correct location of ``SSLCertificateFile``. ::
+
+		SSLCertificateFile /etc/pki/tls/certs/ca.crt
+
+	Give the correct location of ``SSLCertificateKeyFile``. ::
+
+		SSLCertificateKeyFile /etc/pki/tls/private/ca.key
+
+	Save the changes.
 
 #. Restart Apache. ::
 
