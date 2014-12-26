@@ -1078,6 +1078,10 @@ void FileJournal::do_write(bufferlist& bl)
 #else
     ::fdatasync(fd);
 #endif
+#ifdef HAVE_POSIX_FADVISE
+    if (g_conf->filestore_fadvise)
+      posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+#endif
   }
 
   utime_t lat = ceph_clock_now(g_ceph_context) - from;    
