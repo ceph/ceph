@@ -128,6 +128,7 @@ class EventCenter {
   EventCenter(CephContext *c):
     cct(c), nevent(0),
     lock("AsyncMessenger::lock"),
+    file_events(NULL),
     driver(NULL), time_event_next_id(0),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0) {
     last_time = time(NULL);
