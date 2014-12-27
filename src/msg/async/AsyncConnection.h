@@ -18,6 +18,7 @@
 #define CEPH_MSG_ASYNCCONNECTION_H
 
 #include <pthread.h>
+#include <climits>
 #include <list>
 #include <map>
 using namespace std;
@@ -42,7 +43,6 @@ class AsyncMessenger;
  * sequence, try to reconnect peer endpoint.
  */
 class AsyncConnection : public Connection {
-  const static uint64_t IOV_LEN = 1024;
 
   int read_bulk(int fd, char *buf, int len);
   int do_sendmsg(struct msghdr &msg, int len, bool more);
@@ -262,7 +262,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef signal_handler;
   EventCallbackRef local_deliver_handler;
   bool keepalive;
-  struct iovec msgvec[IOV_LEN];
+  struct iovec msgvec[IOV_MAX];
   Mutex stop_lock; // used to protect `mark_down_cond`
   Cond stop_cond;
   set<uint64_t> register_time_events; // need to delete it if stop
