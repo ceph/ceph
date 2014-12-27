@@ -302,7 +302,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   int r = 0;
-  uint64_t sended = 0;
+  uint64_t sent = 0;
   list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
   uint64_t left_pbrs = outcoming_bl.buffers().size();
   while (left_pbrs) {
@@ -327,7 +327,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
       return r;
 
     // "r" is the remaining length
-    sended += msglen - r;
+    sent += msglen - r;
     if (r > 0) {
       ldout(async_msgr->cct, 5) << __func__ << " remaining " << r
                           << " needed to be sent, creating event for writing"
@@ -338,14 +338,14 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   // trim already sent for outcoming_bl
-  if (sended) {
+  if (sent) {
     bufferlist bl;
-    if (sended < outcoming_bl.length())
-      outcoming_bl.splice(sended, outcoming_bl.length()-sended, &bl);
+    if (sent < outcoming_bl.length())
+      outcoming_bl.splice(sent, outcoming_bl.length()-sent, &bl);
     bl.swap(outcoming_bl);
   }
 
-  ldout(async_msgr->cct, 20) << __func__ << " send bytes " << sended
+  ldout(async_msgr->cct, 20) << __func__ << " sent bytes " << sent
                              << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
