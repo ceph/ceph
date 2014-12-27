@@ -238,23 +238,24 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
     if (r == 0) {
       ldout(async_msgr->cct, 10) << __func__ << " sendmsg got r==0!" << dendl;
     } else if (r < 0) {
-      if (errno == EAGAIN || errno == EINTR) {
-        r = len;
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN) {
+        break;
       } else {
         ldout(async_msgr->cct, 1) << __func__ << " sendmsg error: " << cpp_strerror(errno) << dendl;
+        return r;
       }
-
-      return r;
     }
 
     len -= r;
     if (len == 0) break;
 
-    // hrmph.  trim r bytes off the front of our message.
+    // hrmph. drain r bytes from the front of our message.
     ldout(async_msgr->cct, 20) << __func__ << " short write did " << r << ", still have " << len << dendl;
     while (r > 0) {
       if (msg.msg_iov[0].iov_len <= (size_t)r) {
-        // lose this whole item
+        // drain this whole item
         r -= msg.msg_iov[0].iov_len;
         msg.msg_iov++;
         msg.msg_iovlen--;
@@ -265,7 +266,7 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
       }
     }
   }
-  return 0;
+  return len;
 }
 
 // return the remaining bytes, it may larger than the length of ptr
