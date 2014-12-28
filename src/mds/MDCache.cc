@@ -1842,7 +1842,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 	first = p->second.first;
 	if (first > last) {
 	  dout(10) << " oldest old_inode is [" << first << "," << p->first << "], done." << dendl;
-	  assert(p == pin->old_inodes.begin());
+	  //assert(p == pin->old_inodes.begin());
 	  break;
 	}
 	if (p->first > last) {
