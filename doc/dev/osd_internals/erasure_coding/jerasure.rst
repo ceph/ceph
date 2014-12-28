@@ -26,8 +26,8 @@ implementation. It is a wrapper around the code found at
 and `https://github.com/ceph/gf-complete
 <https://github.com/ceph/gf-complete>`_ , pinned to the latest stable
 version in *.gitmodules*. These repositories are copies of the
-upstream repositories `https://bitbucket.org/jimplank/jerasure
-<https://bitbucket.org/jimplank/jerasure>`_ and
-`https://bitbucket.org/jimplank/gf-complete
-<https://bitbucket.org/jimplank/gf-complete>`_ . The difference
+upstream repositories `http://jerasure.org/jerasure/jerasure
+<http://jerasure.org/jerasure/jerasure>`_ and
+`http://jerasure.org/jerasure/gf-complete
+<http://jerasure.org/jerasure/gf-complete>`_ . The difference
 between the two, if any, should match pull requests against upstream.
