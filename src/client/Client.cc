@@ -9236,12 +9236,16 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  req->set_dentry(de);
   Inode *in;
   res = _lookup(dir, name, &in);
   if (res < 0)
     goto fail;
-  req->set_inode(in);
+  if (req->get_op() == CEPH_MDS_OP_RMDIR) {
+    req->set_dentry(de);
+    req->set_inode(in);
+  } else {
+    unlink(de, true, true);
+  }
 
   res = make_request(req, uid, gid);
 
