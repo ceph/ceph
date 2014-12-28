@@ -845,12 +845,14 @@ TEST(CrushWrapper, dump_rules) {
 
   // no ruleset by default
   {
+    std::ostringstream oss;
     Formatter *f = new_formatter("json-pretty");
     c->dump_rules(f);
     stringstream ss;
     f->flush(ss);
+    oss << '\n';
     delete f;
-    EXPECT_EQ("", ss.str());
+    EXPECT_EQ(oss.str(), ss.str());
   }
 
   string name("NAME");
