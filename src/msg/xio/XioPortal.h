@@ -203,7 +203,7 @@ public:
 			XioSubmit::Queue& send_q) {
     // XXX gather all already-dequeued outgoing messages for xcon
     // and push them in FIFO order to front of the input queue,
-    // having first marked the connection as flow-controlled
+    // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
     XioSubmit *xs;
     requeue_q.push_back(*xmsg);
@@ -260,18 +260,18 @@ public:
 	    switch (xs->type) {
 	    case XioSubmit::OUTGOING_MSG: /* it was an outgoing 1-way */
 	      xmsg = static_cast<XioMsg*>(xs);
-	      if (unlikely(!xs->xcon->conn))
+	      if (unlikely(!xcon->conn || !xcon->is_connected()))
 		code = ENOTCONN;
 	      else {
-                /* XXX guard Accelio send queue (should be safe to rely
-                 * on Accelio's check on below, but this assures that
-                 * all chained xio_msg are accounted) */
-                xio_qdepth_high = xcon->xio_qdepth_high_mark();
-                if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
-                              xio_qdepth_high)) {
-                  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
-                  goto restart;
-                }
+		/* XXX guard Accelio send queue (should be safe to rely
+		 * on Accelio's check on below, but this assures that
+		 * all chained xio_msg are accounted) */
+		xio_qdepth_high = xcon->xio_qdepth_high_mark();
+		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
+			     xio_qdepth_high)) {
+		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  goto restart;
+		}
 
 		msg = &xmsg->req_0.msg;
 		code = xio_send_msg(xcon->conn, msg);
@@ -280,6 +280,9 @@ public:
 		  print_xio_msg_hdr(msgr->cct, "xio_send_msg", xmsg->hdr, msg);
 		  print_ceph_msg(msgr->cct, "xio_send_msg", xmsg->m);
 		}
+		/* get the right Accelio's errno code */
+		if (unlikely(code))
+		  code = xio_errno();
 	      } /* !ENOTCONN */
 	      if (unlikely(code)) {
 		switch (code) {
@@ -291,12 +294,12 @@ public:
 		  break;
 		default:
 		  q_iter = send_q.erase(q_iter);
-		  xs->xcon->msg_send_fail(xmsg, code);
+		  xcon->msg_send_fail(xmsg, code);
 		  continue;
 		  break;
 		};
 	      } else {
-		xs->xcon->send.set(msg->timestamp); // need atomic?
+		xcon->send.set(msg->timestamp); // need atomic?
 		xcon->send_ctr += xmsg->hdr.msg_cnt; // only inc if cb promised
 	      }
 	      break;
