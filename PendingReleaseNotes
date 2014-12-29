@@ -37,3 +37,11 @@ v0.91
 
 v0.92
 -----
+
+* The experiemental 'keyvaluestore-dev' OSD backend has been renamed
+  'keyvaluestore' (for simplicity) and marked as experimental.  To
+  enable this untested feature and acknowledge that you understand
+  that it is untested and may destroy data, you need to add the
+  following to your ceph.conf::
+
+    enable experimental unrecoverable data corrupting featuers = keyvaluestore
