@@ -456,6 +456,8 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
     if ((send_ctr <= uint32_t(xio_qdepth_low_mark())) &&
 	(1 /* XXX memory <= memory low-water mark */))  {
       cstate.state_up_ready(XioConnection::CState::OP_FLAG_NONE);
+      ldout(msgr->cct,2) << "on_msg_delivered xcon: " << xmsg->xcon <<
+        " session: " << session << " up_ready from flow_controlled" << dendl;
     }
   }
 
@@ -466,7 +468,8 @@ int XioConnection::on_ow_msg_send_complete(struct xio_session *session,
 
 void XioConnection::msg_send_fail(XioMsg *xmsg, int code)
 {
-  ldout(msgr->cct,4) << "xio_send_msg FAILED " << &xmsg->req_0.msg << " code=" << code <<
+  ldout(msgr->cct,2) << "xio_send_msg FAILED xcon: " << this <<
+    " xmsg: " << &xmsg->req_0.msg << " code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
   /* return refs taken for each xio_msg */
   xmsg->put_msg_refs();
@@ -474,7 +477,8 @@ void XioConnection::msg_send_fail(XioMsg *xmsg, int code)
 
 void XioConnection::msg_release_fail(struct xio_msg *msg, int code)
 {
-  ldout(msgr->cct,4) << "xio_release_msg FAILED " << msg <<  "code=" << code <<
+  ldout(msgr->cct,2) << "xio_release_msg FAILED xcon: " << this <<
+    " xmsg: " << msg <<  "code=" << code <<
     " (" << xio_strerror(code) << ")" << dendl;
 } /* msg_release_fail */
 
