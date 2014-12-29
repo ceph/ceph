@@ -18,6 +18,7 @@
 #include <iostream>
 #include <stdint.h>
 #include <string>
+#include <set>
 
 #include "include/buffer.h"
 #include "include/atomic.h"
@@ -30,6 +31,7 @@ class PerfCountersCollection;
 class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
+class CephContextObs;
 class CryptoNone;
 class CryptoAES;
 class CryptoHandler;
@@ -123,6 +125,9 @@ public:
    */
   CryptoHandler *get_crypto_handler(int type);
 
+  /// check if experimental feature is enable, and emit appropriate warnings
+  bool check_experimental_feature_enabled(std::string feature);
+
 private:
   CephContext(const CephContext &rhs);
   CephContext &operator=(const CephContext &rhs);
@@ -160,6 +165,13 @@ private:
   // crypto
   CryptoNone *_crypto_none;
   CryptoAES *_crypto_aes;
+
+  // experimental
+  CephContextObs *_cct_obs;
+  ceph_spinlock_t _feature_lock;
+  std::set<std::string> _experimental_features;
+
+  friend class CephContextObs;
 };
 
 #endif
