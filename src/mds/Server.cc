@@ -5962,6 +5962,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     return;
   }
 
+  /* project_past_snaprealm_parent() will do this job
+   *
   // moving between snaprealms?
   if (srcdnl->is_primary() && srci->is_multiversion() && !srci->snaprealm) {
     SnapRealm *srcrealm = srci->find_snaprealm();
@@ -5974,6 +5976,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
       return;
     }
   }
+  */
 
   assert(g_conf->mds_kill_rename_at != 1);
 
