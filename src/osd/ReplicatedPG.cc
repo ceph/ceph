@@ -28,6 +28,8 @@
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDClientSubOp.h"
+#include "messages/MOSDClientSubOpReply.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGInfo.h"
@@ -7334,7 +7336,63 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->op);
   repop->ctx->op_t = NULL;
 }
+
+template<typename T, int MSGTYPE>
+Message * ReplicatedBackend::generate_subop(
+  const hobject_t &soid,
+  const eversion_t &at_version,
+  ceph_tid_t tid,
+  osd_reqid_t reqid,
+  eversion_t pg_trim_to,
+  eversion_t pg_trim_rollback_to,
+  hobject_t new_temp_oid,
+  hobject_t discard_temp_oid,
+  vector<pg_log_entry_t> &log_entries,
+  boost::optional<pg_hit_set_history_t> &hset_hist,
+  InProgressOp *op,
+  ObjectStore::Transaction *op_t,
+  pg_shard_t peer,
+  const pg_info_t &pinfo)
+{
+  int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
+  assert(MSGTYPE == MSG_OSD_SUBOP || MSGTYPE == MSG_OSD_CLIENT_SUBOP);
+  // forward the write/update/whatever
+  T *wr = new T(
+    reqid, parent->whoami_shard(),
+    spg_t(get_info().pgid.pgid, peer.shard),
+    soid, acks_wanted,
+    get_osdmap()->get_epoch(),
+    tid, at_version);
+  
+  // ship resulting transaction, log entries, and pg_stats
+  if (!parent->should_send_op(peer, soid)) {
+    dout(10) << "issue_repop shipping empty opt to osd." << peer
+	     <<", object " << soid
+	     << " beyond MAX(last_backfill_started "
+	     << ", pinfo.last_backfill "
+	     << pinfo.last_backfill << ")" << dendl;
+    ObjectStore::Transaction t;
+    ::encode(t, wr->get_data());
+  } else {
+    ::encode(*op_t, wr->get_data());
+  }
+
+  ::encode(log_entries, wr->logbl);
+
+  if (pinfo.is_incomplete())
+    wr->pg_stats = pinfo.stats;  // reflects backfill progress
+  else
+    wr->pg_stats = get_info().stats;
     
+  wr->pg_trim_to = pg_trim_to;
+  wr->pg_trim_rollback_to = pg_trim_rollback_to;
+
+  wr->new_temp_oid = new_temp_oid;
+  wr->discard_temp_oid = discard_temp_oid;
+  wr->updated_hit_set_history = hset_hist;
+  return wr;
+}
+
 void ReplicatedBackend::issue_op(
   const hobject_t &soid,
   const eversion_t &at_version,
@@ -7349,7 +7407,6 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
 {
-  int acks_wanted = CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK;
 
   if (parent->get_actingbackfill_shards().size() > 1) {
     ostringstream ss;
@@ -7367,41 +7424,44 @@ void ReplicatedBackend::issue_op(
     pg_shard_t peer = *i;
     const pg_info_t &pinfo = parent->get_shard_info().find(peer)->second;
 
-    // forward the write/update/whatever
-    MOSDSubOp *wr = new MOSDSubOp(
-      reqid, parent->whoami_shard(),
-      spg_t(get_info().pgid.pgid, i->shard),
-      soid,
-      acks_wanted,
-      get_osdmap()->get_epoch(),
-      tid, at_version);
-
-    // ship resulting transaction, log entries, and pg_stats
-    if (!parent->should_send_op(peer, soid)) {
-      dout(10) << "issue_repop shipping empty opt to osd." << peer
-	       <<", object " << soid
-	       << " beyond MAX(last_backfill_started "
-	       << ", pinfo.last_backfill "
-	       << pinfo.last_backfill << ")" << dendl;
-      ObjectStore::Transaction t;
-      ::encode(t, wr->get_data());
+    Message *wr;
+    PG *pg = dynamic_cast<ReplicatedPG*>(parent);
+    assert(pg);
+    uint64_t min_features = pg->get_min_peer_features();
+    if (!(min_features & CEPH_FEATURE_OSD_CLIENTSUBOP)) {
+      dout(20) << "Talking to old version of OSD, doesn't support ClientSubOp, fall back to SubOp" << dendl;
+      wr = generate_subop<MOSDSubOp, MSG_OSD_SUBOP>(
+	    soid,
+	    at_version,
+	    tid,
+	    reqid,
+	    pg_trim_to,
+	    pg_trim_rollback_to,
+	    new_temp_oid,
+	    discard_temp_oid,
+	    log_entries,
+	    hset_hist,
+	    op,
+	    op_t,
+	    peer,
+	    pinfo);
     } else {
-      ::encode(*op_t, wr->get_data());
+      wr = generate_subop<MOSDClientSubOp, MSG_OSD_CLIENT_SUBOP>(
+	    soid,
+	    at_version,
+	    tid,
+	    reqid,
+	    pg_trim_to,
+	    pg_trim_rollback_to,
+	    new_temp_oid,
+	    discard_temp_oid,
+	    log_entries,
+	    hset_hist,
+	    op,
+	    op_t,
+	    peer,
+	    pinfo);
     }
-
-    ::encode(log_entries, wr->logbl);
-
-    if (pinfo.is_incomplete())
-      wr->pg_stats = pinfo.stats;  // reflects backfill progress
-    else
-      wr->pg_stats = get_info().stats;
-    
-    wr->pg_trim_to = pg_trim_to;
-    wr->pg_trim_rollback_to = pg_trim_rollback_to;
-
-    wr->new_temp_oid = new_temp_oid;
-    wr->discard_temp_oid = discard_temp_oid;
-    wr->updated_hit_set_history = hset_hist;
 
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());
@@ -8112,21 +8172,29 @@ void ReplicatedPG::put_snapset_context(SnapSetContext *ssc)
 }
 
 // sub op modify
+void ReplicatedBackend::sub_op_modify(OpRequestRef op) {
+  Message *m = op->get_req();
+  int msg_type = m->get_type();
+  if (msg_type == MSG_OSD_SUBOP) {
+    sub_op_modify_impl<MOSDSubOp, MSG_OSD_SUBOP>(op);
+  } else if (msg_type == MSG_OSD_CLIENT_SUBOP) {
+    sub_op_modify_impl<MOSDClientSubOp, MSG_OSD_CLIENT_SUBOP>(op);
+  } else {
+    assert(0);
+  }
+}
 
-void ReplicatedBackend::sub_op_modify(OpRequestRef op)
+template<typename T, int MSGTYPE>
+void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 {
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
+  T *m = static_cast<T *>(op->get_req());
+  int msg_type = m->get_type();
+  assert(MSGTYPE == msg_type);
+  assert(msg_type == MSG_OSD_SUBOP || msg_type == MSG_OSD_CLIENT_SUBOP);
 
   const hobject_t& soid = m->poid;
 
-  const char *opname;
-  if (m->ops.size())
-    opname = ceph_osd_op_name(m->ops[0].op.op);
-  else
-    opname = "trans";
-
-  dout(10) << "sub_op_modify " << opname 
+  dout(10) << "sub_op_modify trans" 
            << " " << soid 
            << " v " << m->version
 	   << (m->logbl.length() ? " (transaction)" : " (parallel exec")
@@ -8173,6 +8241,8 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
+  
+  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
   if (!rm->opt.empty()) {
@@ -8213,20 +8283,37 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 
   dout(10) << "sub_op_modify_applied on " << rm << " op "
 	   << *rm->op->get_req() << dendl;
-  MOSDSubOp *m = static_cast<MOSDSubOp*>(rm->op->get_req());
-  assert(m->get_type() == MSG_OSD_SUBOP);
-  
+  Message *m = rm->op->get_req();
+
+  Message *ack;
+  eversion_t version;
+
   if (!rm->committed) {
+    if (m->get_type() == MSG_OSD_SUBOP) {
+      // doesn't have CLIENT SUBOP feature ,use Subop
+      MOSDSubOp *req = static_cast<MOSDSubOp*>(m);
+      version = req->version;
+
+      ack = new MOSDSubOpReply(
+	req, parent->whoami_shard(),
+	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    } else if (m->get_type() == MSG_OSD_CLIENT_SUBOP) {
+      MOSDClientSubOp *req = static_cast<MOSDClientSubOp*>(m);
+      version = req->version;
+      ack = new MOSDClientSubOpReply(
+	static_cast<MOSDClientSubOp*>(m), parent->whoami_shard(),
+	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    }
+    else {
+      assert(0);
+    }
     // send ack to acker only if we haven't sent a commit already
-    MOSDSubOpReply *ack = new MOSDSubOpReply(
-      m, parent->whoami_shard(),
-      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
   
-  parent->op_applied(m->version);
+  parent->op_applied(version);
 }
 
 void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
@@ -8241,11 +8328,29 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   
   assert(get_osdmap()->is_up(rm->ackerosd));
   get_parent()->update_last_complete_ondisk(rm->last_complete);
-  MOSDSubOpReply *commit = new MOSDSubOpReply(
-    static_cast<MOSDSubOp*>(rm->op->get_req()),
-    get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
-  commit->set_last_complete_ondisk(rm->last_complete);
+
+  Message *m = rm->op->get_req();
+  Message *commit;
+  if (m->get_type() == MSG_OSD_SUBOP) {
+    // doesn't have CLIENT SUBOP feature ,use Subop
+    MOSDSubOpReply  *reply = new MOSDSubOpReply(
+      static_cast<MOSDSubOp*>(m),
+      get_parent()->whoami_shard(),
+      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+    reply->set_last_complete_ondisk(rm->last_complete);
+    commit = reply;
+  } else if (m->get_type() == MSG_OSD_CLIENT_SUBOP) {
+    MOSDClientSubOpReply *reply = new MOSDClientSubOpReply(
+      static_cast<MOSDClientSubOp*>(m),
+      get_parent()->whoami_shard(),
+      0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
+    reply->set_last_complete_ondisk(rm->last_complete);
+    commit = reply;
+  }
+  else {
+    assert(0);
+  }
+
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, commit, get_osdmap()->get_epoch());
