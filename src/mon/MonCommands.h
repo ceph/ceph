@@ -227,6 +227,7 @@ COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
 	"send a command to a specific daemon", "mon", "rw", "cli,rest")
+COMMAND("version", "show mon daemon version", "mon", "r", "cli,rest")
 
 /*
  * MDS commands (MDSMonitor.cc)
