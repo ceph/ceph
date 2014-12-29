@@ -369,12 +369,15 @@ int main(int argc, char **argv) {
       v = st.get(map_type, "last_committed");
     }
 
-    int fd = ::open(outpath.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
-    if (fd < 0) {
-      std::cerr << "error opening output file: "
-                << cpp_strerror(errno) << std::endl;
-      err = EINVAL;
-      goto done;
+    int fd = STDOUT_FILENO;
+    if (!outpath.empty()){
+      fd = ::open(outpath.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
+      if (fd < 0) {
+        std::cerr << "error opening output file: "
+          << cpp_strerror(errno) << std::endl;
+        err = EINVAL;
+        goto done;
+      }
     }
 
     bufferlist bl;
@@ -391,6 +394,12 @@ int main(int argc, char **argv) {
       goto done;
     }
     bl.write_fd(fd);
+
+    if (!outpath.empty()) {
+      std::cout << "wrote " << map_type
+                << " version " << v << " to " << outpath
+                << std::endl;
+    }
   } else if (cmd == "dump-paxos") {
     unsigned dstart = 0;
     unsigned dstop = ~0;
