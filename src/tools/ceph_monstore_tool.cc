@@ -426,7 +426,8 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    for (version_t v = dstart; v <= dstop; ++v) {
+    version_t v = dstart;
+    for (; v <= dstop; ++v) {
       bufferlist bl;
       st.get("paxos", v, bl);
       if (bl.length() == 0)
@@ -438,6 +439,9 @@ int main(int argc, char **argv) {
       tx->dump(&f);
       f.flush(cout);
     }
+
+    std::cout << "dumped " << v << " paxos versions" << std::endl;
+
   } else if (cmd == "dump-trace") {
     unsigned dstart = 0;
     unsigned dstop = ~0;
