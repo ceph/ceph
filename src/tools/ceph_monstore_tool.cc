@@ -351,21 +351,11 @@ int main(int argc, char **argv) {
     po::positional_options_description op_positional;
     op_positional.add("map-type", 1);
 
-    // op_desc_all will aggregate all visible and hidden options for parsing.
-    // when we call 'usage()' we just pass 'op_desc', as that's the description
-    // holding the visible options.
-    po::options_description op_desc_all;
-    op_desc_all.add(op_desc).add(hidden_op_desc);
-
     po::variables_map op_vm;
-    try {
-      po::parsed_options op_parsed = po::command_line_parser(subcmds).
-        options(op_desc_all).positional(op_positional).run();
-      po::store(op_parsed, op_vm);
-      po::notify(op_vm);
-    } catch (po::error &e) {
-      std::cerr << "error: " << e.what() << std::endl;
-      err = EINVAL;
+    int r = parse_cmd_args(&op_desc, &hidden_op_desc, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      err = -r;
       goto done;
     }
 
@@ -388,7 +378,7 @@ int main(int argc, char **argv) {
     }
 
     bufferlist bl;
-    int r = 0;
+    r = 0;
     if (map_type == "osdmap") {
       r = st.get(map_type, st.combine_strings("full", v), bl);
     } else {
@@ -414,14 +404,10 @@ int main(int argc, char **argv) {
       ;
 
     po::variables_map op_vm;
-    try {
-      po::parsed_options op_parsed = po::command_line_parser(subcmds).
-        options(op_desc).run();
-      po::store(op_parsed, op_vm);
-      po::notify(op_vm);
-    } catch (po::error &e) {
-      std::cerr << "error: " << e.what() << std::endl;
-      err = EINVAL;
+    int r = parse_cmd_args(&op_desc, NULL, NULL,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      err = -r;
       goto done;
     }
 
@@ -468,21 +454,11 @@ int main(int argc, char **argv) {
     po::positional_options_description op_positional;
     op_positional.add("out", 1);
 
-    // op_desc_all will aggregate all visible and hidden options for parsing.
-    // when we call 'usage()' we just pass 'op_desc', as that's the description
-    // holding the visible options.
-    po::options_description op_desc_all;
-    op_desc_all.add(op_desc).add(hidden_op_desc);
-
     po::variables_map op_vm;
-    try {
-      po::parsed_options op_parsed = po::command_line_parser(subcmds).
-        options(op_desc_all).positional(op_positional).run();
-      po::store(op_parsed, op_vm);
-      po::notify(op_vm);
-    } catch (po::error &e) {
-      std::cerr << "error: " << e.what() << std::endl;
-      err = EINVAL;
+    int r = parse_cmd_args(&op_desc, &hidden_op_desc, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      err = -r;
       goto done;
     }
 
