@@ -61,6 +61,8 @@ OPTION(mon_cluster_log_file, OPT_STR,
     "default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log")
 OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
+OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
+
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 1)
 SUBSYS(context, 0, 1)
