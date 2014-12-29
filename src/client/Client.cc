@@ -10381,7 +10381,7 @@ bool Client::is_quota_files_exceeded(Inode *in)
   return false;
 }
 
-bool Client::is_quota_bytes_exceeded(Inode *in, uint64_t new_bytes)
+bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes)
 {
   if (!cct->_conf->client_quota)
     return false;
