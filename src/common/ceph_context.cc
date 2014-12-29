@@ -155,6 +155,55 @@ public:
 };
 
 
+// cct config watcher
+class CephContextObs : public md_config_obs_t {
+  CephContext *cct;
+
+public:
+  CephContextObs(CephContext *cct) : cct(cct) {}
+
+  const char** get_tracked_conf_keys() const {
+    static const char *KEYS[] = {
+      "enable_experimental_unrecoverable_data_corrupting_features",
+      NULL
+    };
+    return KEYS;
+  }
+
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set <std::string> &changed) {
+    ceph_spin_lock(&cct->_feature_lock);
+    get_str_set(conf->enable_experimental_unrecoverable_data_corrupting_features,
+		cct->_experimental_features);
+    ceph_spin_unlock(&cct->_feature_lock);
+  }
+};
+
+bool CephContext::check_experimental_feature_enabled(std::string feat)
+{
+  ceph_spin_lock(&_feature_lock);
+  bool enabled = _experimental_features.count(feat);
+  ceph_spin_unlock(&_feature_lock);
+
+  if (enabled) {
+    lderr(this) << "WARNING: experimental feature '" << feat << "' is enabled" << dendl;
+    lderr(this) << "Please be aware that this feature is experimental, untested," << dendl;
+    lderr(this) << "unsupported, and may result in data corruption, data loss," << dendl;
+    lderr(this) << "and/or irreparable damage to your cluster.  Do not use" << dendl;
+    lderr(this) << "feature with important data." << dendl;
+  } else {
+    lderr(this) << "*** experimental feature '" << feat << "' is not enabled ***" << dendl;
+    lderr(this) << "This feature is marked as experimental, which means it" << dendl;
+    lderr(this) << " - is untested" << dendl;
+    lderr(this) << " - is unsupported" << dendl;
+    lderr(this) << " - may corrupt your data" << dendl;
+    lderr(this) << " - may break your cluster is an unrecoverable fashion" << dendl;
+    lderr(this) << "To enable this feature, add this to your ceph.conf:" << dendl;
+    lderr(this) << "  enable experimental unrecoverable data corrupting features = " << feat << dendl;
+  }
+  return enabled;
+}
+
 // perfcounter hooks
 
 class CephContextHook : public AdminSocketHook {
@@ -311,12 +360,16 @@ CephContext::CephContext(uint32_t module_type_)
 {
   ceph_spin_init(&_service_thread_lock);
   ceph_spin_init(&_associated_objs_lock);
+  ceph_spin_init(&_feature_lock);
 
   _log = new ceph::log::Log(&_conf->subsys);
   _log->start();
 
   _log_obs = new LogObs(_log);
   _conf->add_observer(_log_obs);
+
+  _cct_obs = new CephContextObs(this);
+  _conf->add_observer(_cct_obs);
 
   _perf_counters_collection = new PerfCountersCollection(this);
   _admin_socket = new AdminSocket(this);
@@ -385,6 +438,10 @@ CephContext::~CephContext()
   delete _log_obs;
   _log_obs = NULL;
 
+  _conf->remove_observer(_cct_obs);
+  delete _cct_obs;
+  _cct_obs = NULL;
+
   _log->stop();
   delete _log;
   _log = NULL;
@@ -392,6 +449,7 @@ CephContext::~CephContext()
   delete _conf;
   ceph_spin_destroy(&_service_thread_lock);
   ceph_spin_destroy(&_associated_objs_lock);
+  ceph_spin_destroy(&_feature_lock);
 
   delete _crypto_none;
   delete _crypto_aes;
