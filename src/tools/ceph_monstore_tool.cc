@@ -95,6 +95,61 @@ public:
 };
 
 
+int parse_cmd_args(
+    po::options_description *desc, /// < visible options description
+    po::options_description *hidden_desc, /// < hidden options description
+    po::positional_options_description *positional, /// < positional args
+    vector<string> &cmd_args, /// < arguments to be parsed
+    po::variables_map *vm /// > post-parsing variable map
+    )
+{
+  // desc_all will aggregate all visible and hidden options for parsing.
+  //
+  // From boost's program_options point of view, there is absolutely no
+  // distinction between 'desc' and 'hidden_desc'.  This is a distinction
+  // that is only useful to us:  'desc' is whatever we are willing to show
+  // on 'usage()', whereas 'hidden_desc' refers to parameters we wish to
+  // take advantage of but do not wish to show on 'usage()'.
+  //
+  // For example, consider that program_options matches positional arguments
+  // (specified via 'positional') against the paramenters defined on a
+  // given 'po::options_description' class.  This is performed below,
+  // supplying both the description and the positional arguments to the
+  // parser.  However, we do not want the parameters that are mapped to
+  // positional arguments to be shown on usage, as that makes for ugly and
+  // confusing usage messages.  Therefore we dissociate the options'
+  // description that is to be used as an aid to the user from those options
+  // that are nothing but useful for internal purposes (i.e., mapping options
+  // to positional arguments).  We still need to aggregate them before parsing
+  // and that's what 'desc_all' is all about.
+  //
+
+  assert(desc != NULL);
+
+  po::options_description desc_all;
+  desc_all.add(*desc);
+  if (hidden_desc != NULL)
+    desc_all.add(*hidden_desc);
+
+  try {
+    po::command_line_parser parser = po::command_line_parser(cmd_args).
+      options(desc_all);
+
+    if (positional) {
+      parser = parser.positional(*positional);
+    }
+
+    po::parsed_options parsed = parser.run();
+    po::store(parsed, *vm);
+    po::notify(*vm);
+  } catch (po::error &e) {
+    std::cerr << "error: " << e.what() << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+
 /**
  * usage: ceph-monstore-tool <store-path> <command> [options]
  *
