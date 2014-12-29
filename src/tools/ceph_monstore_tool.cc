@@ -426,6 +426,14 @@ int main(int argc, char **argv) {
       goto done;
     }
 
+    if (dstart > dstop) {
+      std::cerr << "error: 'start' version (value: " << dstart << ") "
+                << " is greater than 'end' version (value: " << dstop << ")"
+                << std::endl;
+      err = EINVAL;
+      goto done;
+    }
+
     version_t v = dstart;
     for (; v <= dstop; ++v) {
       bufferlist bl;
@@ -483,6 +491,14 @@ int main(int argc, char **argv) {
 
     if (outpath.empty()) {
       usage(argv[0], op_desc);
+      err = EINVAL;
+      goto done;
+    }
+
+    if (dstart > dstop) {
+      std::cerr << "error: 'start' version (value: " << dstart << ") "
+                << " is greater than 'stop' version (value: " << dstop << ")"
+                << std::endl;
       err = EINVAL;
       goto done;
     }
