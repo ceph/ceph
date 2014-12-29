@@ -14,7 +14,8 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
     r = rand() % 2;
   if (r == 0 || type == "simple")
     return new SimpleMessenger(cct, name, lname, nonce);
-  else if (r == 1 || type == "async")
+  else if ((r == 1 || type == "async") &&
+	   cct->check_experimental_feature_enabled("ms-type-async"))
     return new AsyncMessenger(cct, name, lname, nonce);
   lderr(cct) << "unrecognized ms_type '" << cct->_conf->ms_type << "'" << dendl;
   return NULL;
