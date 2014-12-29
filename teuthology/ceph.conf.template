@@ -37,6 +37,8 @@
 	osd open classes on start = true
         osd debug pg log writeout = true
 
+	osd deep scrub update digest min age = 30
+
 
 [mon]
 	debug ms = 1
