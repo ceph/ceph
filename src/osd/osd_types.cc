@@ -3318,7 +3318,10 @@ void object_copy_data_t::encode_classic(bufferlist& bl) const
   ::encode(mtime, bl);
   ::encode(attrs, bl);
   ::encode(data, bl);
-  bl.append(omap_data);
+  if (omap_data.length())
+    bl.append(omap_data);
+  else
+    ::encode((__u32)0, bl);
   ::encode(cursor, bl);
 }
 
@@ -3332,7 +3335,8 @@ void object_copy_data_t::decode_classic(bufferlist::iterator& bl)
     map<string,bufferlist> omap;
     ::decode(omap, bl);
     omap_data.clear();
-    ::encode(omap, omap_data);
+    if (!omap.empty())
+      ::encode(omap, omap_data);
   }
   ::decode(cursor, bl);
   flags = 0;
@@ -3348,7 +3352,10 @@ void object_copy_data_t::encode(bufferlist& bl, uint64_t features) const
     ::encode((__u32)0, bl);  // was category; no longer used
     ::encode(attrs, bl);
     ::encode(data, bl);
-    bl.append(omap_data);
+    if (omap_data.length())
+      bl.append(omap_data);
+    else
+      ::encode((__u32)0, bl);
     ::encode(cursor, bl);
     ::encode(omap_header, bl);
     ::encode(snaps, bl);
@@ -3393,7 +3400,8 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
       map<string,bufferlist> omap;
       ::decode(omap, bl);
       omap_data.clear();
-      ::encode(omap, omap_data);
+      if (!omap.empty())
+	::encode(omap, omap_data);
     }
     ::decode(cursor, bl);
     if (struct_v >= 2)
