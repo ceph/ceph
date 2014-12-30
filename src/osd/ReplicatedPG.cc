@@ -4328,7 +4328,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  << ctx->op->get_req()->get_connection()->get_peer_addr() << dendl;
 
 	watch_info_t w(cookie, cct->_conf->osd_client_watch_timeout,
-	  ctx->op->get_req()->get_connection()->get_peer_addr());
+		       ctx->op->get_req()->get_connection()->get_peer_addr(),
+		       ctx->at_version);
 	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
 	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
 	  if (oi.watchers.count(make_pair(cookie, entity))) {
