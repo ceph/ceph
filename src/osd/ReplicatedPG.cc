@@ -4332,11 +4332,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		       ctx->at_version);
 	if (op.watch.op == CEPH_OSD_WATCH_OP_WATCH ||
 	    op.watch.op == CEPH_OSD_WATCH_OP_LEGACY_WATCH) {
-	  if (oi.watchers.count(make_pair(cookie, entity))) {
-	    dout(10) << " found existing watch " << w << " by " << entity << dendl;
+	  pair<uint64_t,entity_name_t> key(cookie, entity);
+	  // NOTE: if the previous registration is not stable we will
+	  // simply re-register.  This is a bit of extra work but is
+	  // much simpler than trying to delay out side-effects and
+	  // ack until it is stable.
+	  bool had = oi.watchers.count(key);
+	  if (had && oi.watchers[key].registered <= last_update_ondisk) {
+	    dout(10) << " found existing watch " << w << " by " << entity
+		     << dendl;
 	  } else {
-	    dout(10) << " registered new watch " << w << " by " << entity << dendl;
-	    oi.watchers[make_pair(cookie, entity)] = w;
+	    if (had)
+	      dout(10) << " re-registered watch " << w << " by " << entity
+		       << dendl;
+	    else
+	      dout(10) << " registered new watch " << w << " by " << entity
+		       << dendl;
+	    oi.watchers[key] = w;
 	    t->nop();  // make sure update the object_info on disk!
 	  }
 	  bool will_ping = (op.watch.op == CEPH_OSD_WATCH_OP_WATCH);
