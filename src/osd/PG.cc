@@ -4827,9 +4827,12 @@ ostream& operator<<(ostream& out, const PG& pg)
 	<< "/" << pg.past_intervals.size();
   }
 
-  if (pg.is_active() &&
-      pg.last_update_ondisk != pg.info.last_update)
-    out << " luod=" << pg.last_update_ondisk;
+  if (pg.is_active()) {
+    if (pg.last_update_ondisk != pg.info.last_update)
+      out << " luod=" << pg.last_update_ondisk;
+    if (pg.last_update_applied != pg.info.last_update)
+      out << " lua=" << pg.last_update_applied;
+  }
 
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
