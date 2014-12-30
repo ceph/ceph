@@ -1324,6 +1324,22 @@ function test_osd_bench()
   ceph tell osd.0 bench 104857600 2097152
 }
 
+function test_mon_tell()
+{
+  ceph tell mon.a version
+  ceph tell mon.b version
+  expect_false ceph tell mon.foo version
+
+  sleep 1
+
+  ceph_watch_start debug
+  ceph tell mon.a version
+  ceph_watch_wait 'mon.0 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+
+  ceph_watch_start debug
+  ceph tell mon.b version
+  ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+}
 
 #
 # New tests should be added to the TESTS array below
@@ -1358,6 +1374,7 @@ MON_TESTS+=" mon_osd_tiered_pool_set"
 MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
+MON_TESTS+=" mon_tell"
 
 OSD_TESTS+=" osd_bench"
 
