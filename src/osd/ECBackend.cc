@@ -245,18 +245,23 @@ void ECBackend::handle_recovery_push(
 {
   bool oneshot = op.before_progress.first && op.after_progress.data_complete;
   coll_t tcoll = oneshot ? coll : get_temp_coll(m->t);
+  ghobject_t tobj;
+  if (oneshot) {
+    tobj = ghobject_t(op.soid, ghobject_t::NO_GEN,
+		      get_parent()->whoami_shard().shard);
+  } else {
+    tobj = ghobject_t(get_parent()->get_temp_recovery_object(op.version,
+							     op.soid.snap));
+    if (op.before_progress.first) {
+      dout(10) << __func__ << ": Adding oid "
+	       << tobj.hobj << " in the temp collection" << dendl;
+      add_temp_obj(tobj.hobj);
+    }
+  }
+
   if (op.before_progress.first) {
-    get_parent()->on_local_recover_start(
-      op.soid,
-      m->t);
-    m->t->remove(
-      get_temp_coll(m->t),
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
-    m->t->touch(
-      tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+    m->t->remove(tcoll, tobj);
+    m->t->touch(tcoll, tobj);
   }
 
   if (!op.data_included.empty()) {
@@ -266,8 +271,7 @@ void ECBackend::handle_recovery_push(
 
     m->t->write(
       tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      tobj,
       start,
       op.data.length(),
       op.data);
@@ -276,22 +280,22 @@ void ECBackend::handle_recovery_push(
   }
 
   if (op.before_progress.first) {
-    if (!oneshot)
-      add_temp_obj(op.soid);
     assert(op.attrset.count(string("_")));
     m->t->setattrs(
       tcoll,
-      ghobject_t(
-	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      tobj,
       op.attrset);
   }
 
   if (op.after_progress.data_complete && !oneshot) {
-    clear_temp_obj(op.soid);
-    m->t->collection_move(
-      coll,
-      tcoll,
-      ghobject_t(
+    dout(10) << __func__ << ": Removing oid "
+	     << tobj.hobj << " from the temp collection" << dendl;
+    clear_temp_obj(tobj.hobj);
+    m->t->remove(coll, ghobject_t(
+	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
+    m->t->collection_move_rename(
+      tcoll, tobj,
+      coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   }
   if (op.after_progress.data_complete) {
