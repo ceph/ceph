@@ -155,6 +155,37 @@ function expect_config_value()
   fi
 }
 
+function ceph_watch_start()
+{
+    local whatch_opt=--watch
+
+    if [ -n "$1" ]; then
+	whatch_opt=--watch-$1
+    fi
+
+    CEPH_WATCH_FILE=${TMPDIR}/CEPH_WATCH_$$
+    ceph $whatch_opt > $CEPH_WATCH_FILE &
+    CEPH_WATCH_PID=$!
+}
+
+function ceph_watch_wait()
+{
+    local regexp=$1
+    local timeout=30
+
+    if [ -n "$2" ]; then
+	timeout=$2
+    fi
+
+    for i in `seq ${timeout}`; do
+	sleep 1
+	grep -q "$regexp" $CEPH_WATCH_FILE && break
+    done
+
+    kill $CEPH_WATCH_PID
+    grep "$regexp" $CEPH_WATCH_FILE
+}
+
 function test_mon_injectargs()
 {
   CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
@@ -495,19 +526,11 @@ function test_mon_misc()
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
 
-  ceph -w > $TMPDIR/$$ &
-  wpid="$!"
+  ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
-  sleep 3
-  if ! grep "$mymsg" $TMPDIR/$$; then
-    # in case it is very slow (mon thrashing or something)
-    sleep 30
-    grep "$mymsg" $TMPDIR/$$
-  fi
-  kill $wpid
+  ceph_watch_wait "$mymsg"
 }
-
 
 function check_mds_active()
 {
