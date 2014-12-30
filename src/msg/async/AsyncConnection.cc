@@ -183,11 +183,11 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 }
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c)
-  : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), out_seq(0), in_seq(0), in_seq_acked(0),
-    state(STATE_NONE), state_after_send(0), sd(-1),
+  : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), peer_global_seq(0),
+    out_seq(0), in_seq(0), in_seq_acked(0), state(STATE_NONE), state_after_send(0), sd(-1),
     lock("AsyncConnection::lock"), open_write(false), keepalive(false),
     stop_lock("AsyncConnection::stop_lock"),
-    got_bad_auth(false), authorizer(NULL), replacing(false),
+    got_bad_auth(false), authorizer(NULL), replacing(false), stopping(0),
     state_buffer(4096), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -975,6 +975,11 @@ int AsyncConnection::_process_connection()
         }
 
         ldout(async_msgr->cct, 20) << __func__ << " connect peer addr for me is " << peer_addr_for_me << dendl;
+        // TODO: it's tricky that exit loop if exist AsyncMessenger waiting for
+        // mark_down. Otherwise, it will be deadlock while
+        // AsyncMessenger::mark_down_all already hold lock.
+        if (stopping.read())
+          break;
         async_msgr->learned_addr(peer_addr_for_me);
         ::encode(async_msgr->get_myaddr(), myaddrbl);
         r = _try_send(myaddrbl);
@@ -1494,8 +1499,8 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     }
 
     ldout(async_msgr->cct, 0) << __func__ << "accept connect_seq " << connect.connect_seq
-                        << " vs existing " << existing->connect_seq
-                        << " state " << existing->state << dendl;
+                              << " vs existing " << existing->connect_seq
+                              << " state " << existing->state << dendl;
 
     if (connect.connect_seq == 0 && existing->connect_seq > 0) {
       ldout(async_msgr->cct,0) << __func__ << " accept peer reset, then tried to connect to us, replacing" << dendl;
@@ -1612,7 +1617,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     // Clean up output buffer
     existing->outcoming_bl.clear();
     existing->requeue_sent();
-    reply.connect_seq = existing->connect_seq + 1;
+    reply.connect_seq = connect.connect_seq + 1;
     if (_reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply) < 0)
       goto fail;
 
@@ -1905,6 +1910,7 @@ void AsyncConnection::_stop()
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (sd > 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+  async_msgr->unregister_conn(this);
   shutdown_socket();
   discard_out_queue();
   open_write = false;
@@ -1915,7 +1921,6 @@ void AsyncConnection::_stop()
   for (set<uint64_t>::iterator it = register_time_events.begin();
        it != register_time_events.end(); ++it)
     center->delete_time_event(*it);
-  async_msgr->unregister_conn(this);
   // Here we need to dispatch "signal" event, because we want to ensure signal
   // it after all events called by this "_stop" has be done.
   center->dispatch_event_external(signal_handler);
