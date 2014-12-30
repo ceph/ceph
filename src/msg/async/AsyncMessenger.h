@@ -261,6 +261,10 @@ private:
   /// approximately unique ID set by the Constructor for use in entity_addr_t
   uint64_t nonce;
 
+  /// true, specifying we haven't learned our addr; set false when we find it.
+  // maybe this should be protected by the lock?
+  bool need_addr;
+
   /**
    *  The following aren't lock-protected since you shouldn't be able to race
    *  the only writers.

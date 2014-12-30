@@ -33,7 +33,7 @@
 #if GTEST_HAS_PARAM_TEST
 
 #define CHECK_AND_WAIT_TRUE(expr) do {  \
-  int n = 10;                           \
+  int n = 50;                           \
   while (--n) {                         \
     if (expr)                           \
       break;                            \
@@ -203,8 +203,8 @@ TEST_P(MessengerTest, SimpleTest) {
   MPing *m = new MPing();
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -223,8 +223,8 @@ TEST_P(MessengerTest, SimpleTest) {
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -248,8 +248,8 @@ TEST_P(MessengerTest, SimpleTest) {
   conn = client_msgr->get_loopback_connection();
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -273,8 +273,8 @@ TEST_P(MessengerTest, NameAddrTest) {
   MPing *m = new MPing();
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -334,8 +334,8 @@ TEST_P(MessengerTest, FeatureTest) {
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -368,8 +368,8 @@ TEST_P(MessengerTest, StatefulTest) {
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -384,8 +384,8 @@ TEST_P(MessengerTest, StatefulTest) {
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -410,9 +410,9 @@ TEST_P(MessengerTest, StatefulTest) {
   ASSERT_TRUE(conn->is_connected());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
-    ASSERT_TRUE(conn->is_connected());
     ASSERT_EQ(conn->send_message(m), 0);
+    ASSERT_TRUE(conn->is_connected());
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -450,8 +450,8 @@ TEST_P(MessengerTest, StatelessTest) {
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -463,8 +463,8 @@ TEST_P(MessengerTest, StatelessTest) {
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -482,8 +482,8 @@ TEST_P(MessengerTest, StatelessTest) {
   conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -516,8 +516,8 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
   {
     m = new MPing();
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
@@ -535,8 +535,8 @@ TEST_P(MessengerTest, ClientStandbyTest) {
     conn->send_keepalive();
     CHECK_AND_WAIT_TRUE(conn->is_connected());
     ASSERT_TRUE(conn->is_connected());
-    Mutex::Locker l(cli_dispatcher.lock);
     ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;

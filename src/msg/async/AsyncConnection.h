@@ -148,6 +148,7 @@ class AsyncConnection : public Connection {
     if (center->get_owner() == pthread_self()) {
       stop();
     } else {
+      stopping.set(1);
       center->dispatch_event_external(stop_handler);
       stop_cond.Wait(stop_lock);
     }
@@ -290,6 +291,7 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
+  atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
   bufferptr state_buffer;
