@@ -581,10 +581,11 @@ int main(int argc, char **argv) {
   argv_to_vec(argc, (const char **)argv, args);
 
   global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val("auth_cluster_required", "none");
   g_ceph_context->_conf->set_val("auth_service_required", "none");
   g_ceph_context->_conf->set_val("auth_client_required", "none");
+  g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
+  common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
