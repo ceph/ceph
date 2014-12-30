@@ -1696,21 +1696,26 @@ void ReplicatedBackend::submit_push_data(
   ObjectStore::Transaction *t)
 {
   coll_t target_coll;
+  hobject_t target_oid;
   if (first && complete) {
     target_coll = coll;
+    target_oid = recovery_info.soid;
   } else {
-    dout(10) << __func__ << ": Creating oid "
-	     << recovery_info.soid << " in the temp collection" << dendl;
-    add_temp_obj(recovery_info.soid);
     target_coll = get_temp_coll(t);
+    target_oid = get_parent()->get_temp_recovery_object(recovery_info.version,
+							recovery_info.soid.snap);
+    if (first) {
+      dout(10) << __func__ << ": Adding oid "
+	       << target_oid << " in the temp collection" << dendl;
+      add_temp_obj(target_oid);
+    }
   }
 
   if (first) {
-    get_parent()->on_local_recover_start(recovery_info.soid, t);
-    t->remove(get_temp_coll(t), recovery_info.soid);
-    t->touch(target_coll, recovery_info.soid);
-    t->truncate(target_coll, recovery_info.soid, recovery_info.size);
-    t->omap_setheader(target_coll, recovery_info.soid, omap_header);
+    t->remove(target_coll, target_oid);
+    t->touch(target_coll, target_oid);
+    t->truncate(target_coll, target_oid, recovery_info.size);
+    t->omap_setheader(target_coll, target_oid, omap_header);
   }
   uint64_t off = 0;
   for (interval_set<uint64_t>::const_iterator p = intervals_included.begin();
@@ -1718,22 +1723,21 @@ void ReplicatedBackend::submit_push_data(
        ++p) {
     bufferlist bit;
     bit.substr_of(data_included, off, p.get_len());
-    t->write(target_coll, recovery_info.soid,
+    t->write(target_coll, target_oid,
 	     p.get_start(), p.get_len(), bit);
     off += p.get_len();
   }
 
-  t->omap_setkeys(target_coll, recovery_info.soid,
-		  omap_entries);
-  t->setattrs(target_coll, recovery_info.soid,
-	      attrs);
+  t->omap_setkeys(target_coll, target_oid, omap_entries);
+  t->setattrs(target_coll, target_oid, attrs);
 
   if (complete) {
     if (!first) {
       dout(10) << __func__ << ": Removing oid "
-	       << recovery_info.soid << " from the temp collection" << dendl;
-      clear_temp_obj(recovery_info.soid);
-      t->collection_move(coll, target_coll, recovery_info.soid);
+	       << target_oid << " from the temp collection" << dendl;
+      clear_temp_obj(target_oid);
+      t->remove(coll, recovery_info.soid);
+      t->collection_move_rename(target_coll, target_oid, coll, recovery_info.soid);
     }
 
     submit_push_complete(recovery_info, t);

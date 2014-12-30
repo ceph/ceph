@@ -267,9 +267,6 @@ public:
   }
 
   /// Listener methods
-  void on_local_recover_start(
-    const hobject_t &oid,
-    ObjectStore::Transaction *t);
   void on_local_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
@@ -1430,6 +1427,8 @@ private:
   uint64_t temp_seq; ///< last id for naming temp objects
   coll_t get_temp_coll(ObjectStore::Transaction *t);
   hobject_t generate_temp_object();  ///< generate a new temp object name
+  /// generate a new temp object name (for recovery)
+  hobject_t get_temp_recovery_object(eversion_t version, snapid_t snap);
 public:
   void get_colls(list<coll_t> *out) {
     out->push_back(coll);

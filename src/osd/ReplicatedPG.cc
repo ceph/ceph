@@ -175,15 +175,6 @@ public:
 // ======================
 // PGBackend::Listener
 
-
-void ReplicatedPG::on_local_recover_start(
-  const hobject_t &oid,
-  ObjectStore::Transaction *t)
-{
-  pg_log.revise_have(oid, eversion_t());
-  remove_snap_mapped_object(*t, oid);
-}
-
 void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
   const object_stat_sum_t &stat_diff,
@@ -193,7 +184,9 @@ void ReplicatedPG::on_local_recover(
   )
 {
   dout(10) << __func__ << ": " << hoid << dendl;
+
   ObjectRecoveryInfo recovery_info(_recovery_info);
+  clear_object_snap_mapping(t, hoid);
   if (recovery_info.soid.snap < CEPH_NOSNAP) {
     assert(recovery_info.oi.snaps.size());
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
@@ -5657,6 +5650,19 @@ hobject_t ReplicatedPG::generate_temp_object()
   return hoid;
 }
 
+hobject_t ReplicatedPG::get_temp_recovery_object(eversion_t version, snapid_t snap)
+{
+  ostringstream ss;
+  ss << "temp_recovering_" << info.pgid  // (note this includes the shardid)
+     << "_" << version
+     << "_" << info.history.same_interval_since
+     << "_" << snap;
+  // pgid + version + interval + snapid is unique, and short
+  hobject_t hoid = hobject_t::make_temp(ss.str());
+  dout(20) << __func__ << " " << hoid << dendl;
+  return hoid;
+}
+
 int ReplicatedPG::prepare_transaction(OpContext *ctx)
 {
   assert(!ctx->ops.empty());
@@ -8326,6 +8332,7 @@ void ReplicatedPG::send_remove_op(
 
   osd->send_message_osd_cluster(peer.osd, subop, get_osdmap()->get_epoch());
 }
+
 
 void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 {
