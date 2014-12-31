@@ -2013,7 +2013,9 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     if (in->is_multiversion() && snaps && !in->snaprealm)
       in->purge_stale_snap_data(*snaps);
 
+    in->encode_snap_blob(in->snap_blob);
     in->encode_bare(bl);
+    in->snap_blob.clear();
   }
 }
 
