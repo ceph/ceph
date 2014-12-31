@@ -66,6 +66,7 @@ struct SnapRealm {
   }
 
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
   bool open_parents(MDSInternalContextBase *retryorfinish) {
     if (!_open_parents(retryorfinish))
       return false;
