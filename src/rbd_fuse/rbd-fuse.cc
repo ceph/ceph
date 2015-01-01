@@ -58,7 +58,8 @@ struct rbd_openimage {
 #define MAX_RBD_IMAGES		128
 struct rbd_openimage opentbl[MAX_RBD_IMAGES];
 
-struct rbd_options rbd_options = {"/etc/ceph/ceph.conf", "rbd", NULL};
+struct rbd_options rbd_options = {(char*) "/etc/ceph/ceph.conf", (char*) "rbd",
+				  NULL};
 
 #define rbdsize(fd)	opentbl[fd].rbd_stat.rbd_info.size
 #define rbdblksize(fd)	opentbl[fd].rbd_stat.rbd_info.obj_size
@@ -103,7 +104,7 @@ enumerate_images(struct rbd_image_data *data)
 	ret = rbd_list(ioctx, ibuf, &ibuf_len);
 	if (ret == -ERANGE) {
 		assert(ibuf_len > 0);
-		ibuf = malloc(ibuf_len);
+		ibuf = (char*) malloc(ibuf_len);
 		if (!ibuf) {
 			simple_err("Failed to get ibuf", -ENOMEM);
 			return;
@@ -127,7 +128,7 @@ enumerate_images(struct rbd_image_data *data)
 		    ((strlen(mount_image_name) > 0) &&
 		    (strcmp(ip, mount_image_name) == 0))) {
 			fprintf(stderr, "%s, ", ip);
-			im = malloc(sizeof(*im));
+			im = (rbd_image*) malloc(sizeof(*im));
 			im->image_name = ip;
 			im->next = *head;
 			*head = im;
@@ -228,6 +229,8 @@ static int count_images(void)
 	iter_images(&count, count_images_cb);
 	return count;
 }
+
+extern "C" {
 
 static int rbdfs_getattr(const char *path, struct stat *stbuf)
 {
@@ -439,7 +442,7 @@ struct rbdfs_readdir_info {
 
 static void rbdfs_readdir_cb(void *_info, const char *name)
 {
-	struct rbdfs_readdir_info *info = _info;
+	struct rbdfs_readdir_info *info = (struct rbdfs_readdir_info*) _info;
 
 	info->filler(info->buf, name, NULL, 0);
 }
@@ -570,10 +573,10 @@ struct rbdfuse_attr {
 	char *attrname;
 	uint64_t *attrvalp;
 } attrs[] = {
-	{ "user.rbdfuse.imagesize", &imagesize },
-	{ "user.rbdfuse.imageorder", &imageorder },
-	{ "user.rbdfuse.imagefeatures", &imagefeatures },
-	{ NULL, NULL }
+    { (char*) "user.rbdfuse.imagesize", &imagesize },
+    { (char*) "user.rbdfuse.imageorder", &imageorder },
+    { (char*) "user.rbdfuse.imagefeatures", &imagefeatures },
+    { NULL, NULL }
 };
 
 int
@@ -636,25 +639,44 @@ rbdfs_listxattr(const char *path, char *list, size_t len)
 	return required_len;
 }
 
-static struct fuse_operations rbdfs_oper = {
-	.create		= rbdfs_create,
-	.fsync		= rbdfs_fsync,
-	.getattr	= rbdfs_getattr,
-	.getxattr	= rbdfs_getxattr,
-	.init		= rbdfs_init,
-	.listxattr	= rbdfs_listxattr,
-	.open		= rbdfs_open,
-	.opendir	= rbdfs_opendir,
-	.read		= rbdfs_read,
-	.readdir	= rbdfs_readdir,
-	.releasedir	= rbdfs_releasedir,
-	.setxattr	= rbdfs_setxattr,
-	.statfs		= rbdfs_statfs,
-	.truncate	= rbdfs_truncate,
-	.unlink		= rbdfs_unlink,
-	.utime		= rbdfs_utime,
-	.write		= rbdfs_write,
+const static struct fuse_operations rbdfs_oper = {
+  getattr:    rbdfs_getattr,
+  readlink:   0,
+  getdir:     0,
+  mknod:      0,
+  mkdir:      0,
+  unlink:     rbdfs_unlink,
+  rmdir:      0,
+  symlink:    0,
+  rename:     0,
+  link:       0,
+  chmod:      0,
+  chown:      0,
+  truncate:   rbdfs_truncate,
+  utime:      rbdfs_utime,
+  open:	      rbdfs_open,
+  read:	      rbdfs_read,
+  write:      rbdfs_write,
+  statfs:     rbdfs_statfs,
+  flush:      0,
+  release:    0,
+  fsync:      rbdfs_fsync,
+  setxattr:   rbdfs_setxattr,
+  getxattr:   rbdfs_getxattr,
+  listxattr:  rbdfs_listxattr,
+  removexattr: 0,
+  opendir:    rbdfs_opendir,
+  readdir:    rbdfs_readdir,
+  releasedir: rbdfs_releasedir,
+  fsyncdir:   0,
+  init:	      rbdfs_init,
+  destroy:    0,
+  access:     0,
+  create:     rbdfs_create,
+  /* skip unimplemented */
 };
+
+} /* extern "C" */
 
 enum {
 	KEY_HELP,
@@ -730,7 +752,7 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 		rbd_options.pool_name = strdup(arg+2);
 		return 0;
 	}
-    
+
 	if (key == KEY_RBD_IMAGENAME) {
 		if (rbd_options.image_name!= NULL) {
 			free(rbd_options.image_name);
