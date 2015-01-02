@@ -356,11 +356,10 @@ struct action_on_object_t {
 int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   unsigned LIST_AT_A_TIME = 100;
-  int r;
   ghobject_t next;
   while (!next.is_max()) {
     vector<ghobject_t> list;
-    r = store->collection_list_partial(
+    int r = store->collection_list_partial(
 				       coll,
 				       next,
 				       LIST_AT_A_TIME,
