@@ -84,7 +84,7 @@ bool PerfCountersCollection::reset(const std::string &name)
   if (!strcmp(name.c_str(), "all"))  {
     while (i != i_end) {
       (*i)->reset();
-      i++;
+      ++i;
     }
     result = true;
   } else {
@@ -94,7 +94,7 @@ bool PerfCountersCollection::reset(const std::string &name)
 	result = true;
 	break;
       }
-      i++;
+      ++i;
     }
   }
 
@@ -260,7 +260,7 @@ void PerfCounters::reset()
 
   while (d != d_end) {
     d->reset();
-    d++;
+    ++d;
   }
 }
 
