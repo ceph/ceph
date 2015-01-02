@@ -1,4 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -154,6 +155,10 @@ int ObjBencher::aio_bench(
   int operation, int secondsToRun,
   int maxObjectsToCreate,
   int concurrentios, int op_size, bool cleanup, const char* run_name) {
+
+  if (concurrentios <= 0) 
+    return -EINVAL;
+
   int object_size = op_size;
   int num_objects = 0;
   int r = 0;
@@ -286,6 +291,9 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* obje
 
 int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
 			    int concurrentios, const string& run_name_meta) {
+  if (concurrentios <= 0) 
+    return -EINVAL;
+
   if (maxObjectsToCreate > 0 && concurrentios > maxObjectsToCreate)
     concurrentios = maxObjectsToCreate;
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
@@ -484,6 +492,10 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
 
 int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid) {
   lock_cond lc(&lock);
+
+  if (concurrentios <= 0) 
+    return -EINVAL;
+
   std::vector<string> name(concurrentios);
   std::string newName;
   bufferlist* contents[concurrentios];
@@ -668,6 +680,10 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurrentios, int pid)
 {
   lock_cond lc(&lock);
+
+  if (concurrentios <= 0) 
+    return -EINVAL;
+ 
   std::vector<string> name(concurrentios);
   std::string newName;
   bufferlist* contents[concurrentios];
@@ -883,6 +899,10 @@ int ObjBencher::clean_up(const char* prefix, int concurrentios, const char* run_
 
 int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
   lock_cond lc(&lock);
+  
+  if (concurrentios <= 0) 
+    return -EINVAL;
+
   std::vector<string> name(concurrentios);
   std::string newName;
   int r = 0;
@@ -1043,6 +1063,10 @@ bool ObjBencher::more_objects_matching_prefix(const std::string& prefix, std::li
 
 int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
   lock_cond lc(&lock);
+
+  if (concurrentios <= 0) 
+    return -EINVAL;
+
   std::vector<string> name(concurrentios);
   std::string newName;
   int r = 0;
