@@ -459,6 +459,7 @@ fi
 %{_bindir}/librados-config
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs-journal-tool
+%{_bindir}/cephfs-table-tool
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph_mon_store_converter

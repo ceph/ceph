@@ -71,6 +71,13 @@ cephfs_journal_tool_SOURCES = \
 cephfs_journal_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += cephfs-journal-tool
 
+cephfs_table_tool_SOURCES = \
+	tools/cephfs/cephfs-table-tool.cc \
+	tools/cephfs/TableTool.cc \
+	tools/cephfs/MDSUtility.cc
+cephfs_table_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += cephfs-table-tool
+
 if WITH_REST_BENCH
 rest_bench_SOURCES = tools/rest_bench.cc
 rest_bench_SOURCES += common/obj_bencher.cc # needs cleanup so it can go in libcommon.la
@@ -105,6 +112,7 @@ noinst_HEADERS += \
 	tools/cephfs/EventOutput.h \
 	tools/cephfs/Resetter.h \
 	tools/cephfs/Dumper.h \
+	tools/cephfs/TableTool.h \
 	tools/cephfs/MDSUtility.h \
 	tools/rados/rados_sync.h
 
