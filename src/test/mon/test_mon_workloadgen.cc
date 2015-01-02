@@ -342,14 +342,14 @@ class OSDStub : public TestStub
   };
 
 
-  OSDStub(int whoami, CephContext *cct)
+  OSDStub(int _whoami, CephContext *cct)
     : TestStub(cct, "osd"),
       auth_handler_registry(new AuthAuthorizeHandlerRegistry(
 				  cct,
 				  cct->_conf->auth_cluster_required.length() ?
 				  cct->_conf->auth_cluster_required :
 				  cct->_conf->auth_supported)),
-      whoami(whoami),
+      whoami(_whoami),
       gen(whoami),
       mon_osd_rng(STUB_MON_OSD_FIRST, STUB_MON_OSD_LAST)
   {
