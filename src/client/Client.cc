@@ -2070,7 +2070,7 @@ void Client::handle_osd_map(MOSDMap *m)
     // (i.e. we only need to know which inodes had outstanding ops, not the exact
     // op-to-inode relation)
     for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
-         i != inode_map.end(); i++)
+         i != inode_map.end(); ++i)
     {
       Inode *inode = i->second;
       if (inode->oset.dirty_or_tx) {
