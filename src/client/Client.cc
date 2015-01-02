@@ -3858,20 +3858,19 @@ void Client::handle_quota(MClientQuota *m)
 
   ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
 
-  Inode *in = NULL;
   vinodeno_t vino(m->ino, CEPH_NOSNAP);
-  if (inode_map.count(vino))
+  if (inode_map.count(vino)) {
+    Inode *in = NULL;
     in = inode_map[vino];
 
-  if (!in)
-    goto done;
+    if (in) {
+      if (in->quota.is_enable() ^ m->quota.is_enable())
+	invalidate_quota_tree(in);
+      in->quota = m->quota;
+      in->rstat = m->rstat;
+    }
+  }
 
-  if (in->quota.is_enable() ^ m->quota.is_enable())
-    invalidate_quota_tree(in);
-  in->quota = m->quota;
-  in->rstat = m->rstat;
-
-done:
   m->put();
 }
 
