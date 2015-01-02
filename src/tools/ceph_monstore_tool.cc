@@ -365,7 +365,7 @@ int main(int argc, char **argv) {
       goto done;
     }
 
-    if (v <= 0) {
+    if (v == 0) {
       v = st.get(map_type, "last_committed");
     }
 
