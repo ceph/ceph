@@ -2257,7 +2257,7 @@ int KeyValueStore::collection_getattr(coll_t c, const char *name,
     r = -EINVAL;
   }
 
-  if (out.size()) {
+  if (!out.empty()) {
     bl.swap(out.begin()->second);
     r = bl.length();
   } else {
