@@ -42,15 +42,18 @@ if MYDIR.endswith('src') and \
 
     py_binary = os.environ.get("PYTHON", "python")
     MYLIBPATH = os.path.join(MYDIR, '.libs')
+    execv_cmd = ['python']
+    if 'CEPH_DBG' in os.environ:
+        execv_cmd += ['-mpdb']
     if lib_path_var in os.environ:
         if MYLIBPATH not in os.environ[lib_path_var]:
             os.environ[lib_path_var] += ':' + MYLIBPATH
             print >> sys.stderr, DEVMODEMSG
-            os.execvp(py_binary, ['python'] + sys.argv)
+            os.execvp(py_binary, execv_cmd + sys.argv)
     else:
         os.environ[lib_path_var] = MYLIBPATH
         print >> sys.stderr, DEVMODEMSG
-        os.execvp(py_binary, ['python'] + sys.argv)
+        os.execvp(py_binary, execv_cmd + sys.argv)
     sys.path.insert(0, os.path.join(MYDIR, 'pybind'))
     if os.environ.has_key('PATH') and MYDIR not in os.environ['PATH']:
         os.environ['PATH'] += ':' + MYDIR
