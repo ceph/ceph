@@ -461,7 +461,7 @@ struct pgid_object_list {
       f->open_array_section("pgid_objects");
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
-	 i++) {
+	 ++i) {
       if (i != _objects.begin() && human_readable) {
         f->flush(cout);
         cout << std::endl;
@@ -2365,7 +2365,7 @@ int main(int argc, char **argv)
 	    pgidstr = object_pgidstr;
 	    pgid = object_pgid;
 	  }
-	  i++;
+	  ++i;
 	  v = *i;
 	}
 	try {
