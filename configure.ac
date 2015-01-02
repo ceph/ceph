@@ -87,35 +87,38 @@ AC_SUBST(AM_CXXFLAGS)
 AM_CXXFLAGS="${AM_CXXFLAGS}"
 
 # Check for yasm
-if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
-   echo 'we have a modern and working yasm'
-   if test `arch` = "x86_64" ; then
-      echo 'we are x86_64'
-      arch_x32=0
-      AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
-        #if defined(__x86_64__) && defined(__ILP32__)
-        #error x32
-        #endif]])], [], [arch_x32=1])
-      if test $arch_x32 -eq 0 ; then
-         echo 'we are not x32'
-         AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
-         with_good_yasm=yes
-
-         if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
-            echo 'yasm can also build the isa-l stuff'
-            AC_DEFINE([HAVE_BETTER_YASM_ELF64], [1], [yasm can also build the isa-l])
-	    with_better_yasm=yes
-         else
-            echo "yasm doesn't build the isa-l stuff"
-	 fi
-      else
-         echo 'we are x32; no yasm for you'
-      fi
-   else
-      echo 'we are not x86_64 && !x32'
-   fi
-else
-   echo 'we do not have a modern/working yasm'
+AC_CHECK_PROG(YASM_CHECK, yasm, yes)
+if test x"$YASM_CHECK" = x"yes"; then
+  if yasm -f elf64 src/common/crc32c_intel_fast_asm.S -o /dev/null; then
+     echo 'we have a modern and working yasm'
+     if test `arch` = "x86_64" ; then
+        echo 'we are x86_64'
+        arch_x32=0
+        AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
+          #if defined(__x86_64__) && defined(__ILP32__)
+          #error x32
+          #endif]])], [], [arch_x32=1])
+        if test $arch_x32 -eq 0 ; then
+           echo 'we are not x32'
+           AC_DEFINE([HAVE_GOOD_YASM_ELF64], [1], [we have a recent yasm and are x86_64])
+           with_good_yasm=yes
+  
+           if yasm -f elf64 -i src/ceph/src/ceph/src/erasure-code/isa/isa-l/include/ src/erasure-code/isa/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm.s -o /dev/null 2> /dev/null ; then
+              echo 'yasm can also build the isa-l stuff'
+              AC_DEFINE([HAVE_BETTER_YASM_ELF64], [1], [yasm can also build the isa-l])
+  	    with_better_yasm=yes
+           else
+              echo "yasm doesn't build the isa-l stuff"
+  	 fi
+        else
+           echo 'we are x32; no yasm for you'
+        fi
+     else
+        echo 'we are not x86_64 && !x32'
+     fi
+  else
+     echo 'we do not have a modern/working yasm'
+  fi
 fi
 AM_CONDITIONAL(WITH_GOOD_YASM_ELF64, test "$with_good_yasm" = "yes")
 AM_CONDITIONAL(WITH_BETTER_YASM_ELF64, test "$with_better_yasm" = "yes")
@@ -293,11 +296,11 @@ AC_ARG_WITH([profiler],
             [with_profiler=no])
 AS_IF([test "x$with_profiler" = xyes],
 	    [AC_CHECK_LIB([profiler], [ProfilerFlush], [],
-	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])]),
-             AC_LANG_PUSH([C++]),
+	        	  [AC_MSG_FAILURE([--with-profiler was given but libprofiler (libgoogle-perftools-dev on debian) not found])])
+             AC_LANG_PUSH([C++])
              AC_CHECK_HEADERS([gperftools/heap-profiler.h \
                gperftools/malloc_extension.h \
-               gperftools/profiler.h]),
+               gperftools/profiler.h])
              AC_LANG_POP([C++])
             ],
 	    [])
