@@ -161,6 +161,8 @@ TEST_F(LibRadosSnapshotsPP, SnapCreateRemovePP) {
 
   EXPECT_EQ(0, ioctx.snap_remove("snapfoo"));
   EXPECT_EQ(0, ioctx.snap_remove("snapbar"));
+
+  delete op;
 }
 
 TEST_F(LibRadosSnapshotsSelfManaged, Snap) {
