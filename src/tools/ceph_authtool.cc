@@ -55,15 +55,9 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  bool gen_key = false;
-  bool gen_print_key = false;
   std::string add_key;
-  bool list = false;
-  bool print_key = false;
-  bool create_keyring = false;
   std::string caps_fn;
   std::string import_keyring;
-  bool set_auid = false;
   uint64_t auid = CEPH_AUTH_UID_DEFAULT;
   map<string,bufferlist> caps;
   std::string fn;
@@ -71,7 +65,15 @@ int main(int argc, const char **argv)
   try {
     global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
   	      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+
+    bool gen_key = false;
+    bool gen_print_key = false;
+    bool list = false;
+    bool print_key = false;
+    bool create_keyring = false;
+    bool set_auid = false;
     std::vector<const char*>::iterator i;
+
     for (i = args.begin(); i != args.end(); ) {
       std::string val;
       if (ceph_argparse_double_dash(args, i)) {
