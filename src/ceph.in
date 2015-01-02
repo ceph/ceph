@@ -425,7 +425,12 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 if interactive_input in ['q', 'quit', 'Q']:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(interactive_input.split())[2]
-                target = find_cmd_target(cmdargs)
+                try:
+                    target = find_cmd_target(cmdargs)
+                except Exception as e:
+                    print >> sys.stderr, \
+                            'error handling command target: {0}'.format(e)
+                    return 1
                 valid_dict = validate_command(sigdict, cmdargs, verbose)
                 if valid_dict:
                     if parsed_args.output_format:
@@ -753,7 +758,12 @@ def main():
     if parsed_args.status:
         childargs.insert(0, 'status')
 
-    target = find_cmd_target(childargs)
+    try:
+        target = find_cmd_target(childargs)
+    except Exception as e:
+        print >> sys.stderr, \
+                'error handling command target: {0}'.format(e)
+        return 1
 
     # Repulsive hack to handle tell: lop off 'tell' and target
     # and validate the rest of the command.  'target' is already
