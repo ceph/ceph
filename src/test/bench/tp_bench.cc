@@ -99,8 +99,8 @@ class PassAlong : public ThreadPool::WorkQueue<unsigned> {
   void _clear() { q.clear(); }
   bool _empty() { return q.empty(); }
 public:
-  PassAlong(ThreadPool *tp, Queueable *next) :
-    ThreadPool::WorkQueue<unsigned>("TestQueue", 100, 100, tp), next(next) {}
+  PassAlong(ThreadPool *tp, Queueable *_next) :
+    ThreadPool::WorkQueue<unsigned>("TestQueue", 100, 100, tp), next(_next) {}
 };
 
 int main(int argc, char **argv)
