@@ -414,6 +414,9 @@ struct spg_t {
     return pgid.preferred();
   }
   bool parse(const char *s);
+  bool parse(const std::string& s) {
+    return parse(s.c_str());
+  }
   bool is_split(unsigned old_pg_num, unsigned new_pg_num,
 		set<spg_t> *pchildren) const {
     set<pg_t> _children;
@@ -496,6 +499,21 @@ public:
 
   const std::string& to_str() const {
     return str;
+  }
+  bool parse(const std::string& s) {
+    if (s == "meta") {
+      str = s;
+      return true;
+    }
+    if (s.find("_head") == s.length() - 5 ||
+	s.find("_TEMP") == s.length() - 5) {
+      spg_t pgid;
+      if (pgid.parse(s.substr(0, s.length() - 5))) {
+	str = s;
+	return true;
+      }
+    }
+    return false;
   }
 
   const char* c_str() const {

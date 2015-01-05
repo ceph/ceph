@@ -1310,6 +1310,20 @@ TEST(spg_t, parse) {
   ASSERT_EQ(b, bb);
 }
 
+TEST(coll_t, parse) {
+  coll_t a;
+  ASSERT_TRUE(a.parse("meta"));
+  ASSERT_TRUE(a.parse("1.2_head"));
+  ASSERT_TRUE(a.parse("1.2_TEMP"));
+  ASSERT_TRUE(a.parse("1.2s3_head"));
+  ASSERT_TRUE(a.parse("1.2s3_TEMP"));
+  ASSERT_TRUE(a.parse("1.2s0_head"));
+  ASSERT_FALSE(a.parse("foo"));
+  ASSERT_FALSE(a.parse("1.2_food"));
+  ASSERT_FALSE(a.parse("1.2_temp"));
+  ASSERT_FALSE(a.parse(""));
+}
+
 TEST(coll_t, temp) {
   spg_t pgid;
   coll_t foo(pgid);
