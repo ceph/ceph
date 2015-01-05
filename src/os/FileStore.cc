@@ -4596,7 +4596,11 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
 	 (de->d_name[1] == '.' &&
 	  de->d_name[2] == '\0')))
       continue;
-    coll_t cid(coll_t::make_string_coll(de->d_name));
+    coll_t cid;
+    if (!cid.parse(de->d_name)) {
+      derr << "ignoging invalid collection '" << de->d_name << "'" << dendl;
+      continue;
+    }
     if (!cid.is_temp() || include_temp)
       ls.push_back(cid);
   }
