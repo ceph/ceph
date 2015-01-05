@@ -168,11 +168,10 @@ int main(int argc, char **argv)
   }
 
   for (uint64_t num = 0; num < vm["num-colls"].as<unsigned>(); ++num) {
-    stringstream coll;
-    coll << "collection_" << num;
-    std::cout << "collection " << coll.str() << std::endl;
+    spg_t pgid(pg_t(num, 0), shard_id_t::NO_SHARD);
+    std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
-    t.create_collection(coll_t::make_string_coll(coll.str()));
+    t.create_collection(coll_t(pgid));
     fs.apply_transaction(t);
   }
   {
@@ -189,10 +188,10 @@ int main(int argc, char **argv)
     set<string> objects;
     for (uint64_t num = 0; num < vm["num-objects"].as<unsigned>(); ++num) {
       unsigned col_num = num % vm["num-colls"].as<unsigned>();
-      stringstream coll, obj;
-      coll << "collection_" << col_num;
+      spg_t pgid(pg_t(col_num, 0), shard_id_t::NO_SHARD);
+      stringstream obj;
       obj << "obj_" << num << "_bencher_" << (i - benchers.begin());
-      objects.insert(coll.str() + string("/") + obj.str());
+      objects.insert(coll_t(pgid).to_str() + string("/") + obj.str());
     }
     Distribution<
       boost::tuple<string, uint64_t, uint64_t, Bencher::OpType> > *gen = 0;

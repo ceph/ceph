@@ -34,15 +34,17 @@ void TestFileStoreBackend::write(
   size_t sep = oid.find("/");
   assert(sep != string::npos);
   assert(sep + 1 < oid.size());
-  string coll_str(oid.substr(0, sep));
+  coll_t c;
+  bool valid_coll = c.parse(oid.substr(0, sep));
+  assert(valid_coll);
+  string coll_str = c.to_str();
 
   if (!osrs.count(coll_str))
     osrs.insert(make_pair(coll_str, ObjectStore::Sequencer(coll_str)));
   ObjectStore::Sequencer *osr = &(osrs.find(coll_str)->second);
 
-
-  coll_t c(coll_t::make_string_coll(coll_str));
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
+  h.pool = 0;
   t->write(c, h, offset, bl.length(), bl);
 
   if (write_infos) {
@@ -70,8 +72,11 @@ void TestFileStoreBackend::read(
   size_t sep = oid.find("/");
   assert(sep != string::npos);
   assert(sep + 1 < oid.size());
-  coll_t c(coll_t::make_string_coll(oid.substr(0, sep)));
+  coll_t c;
+  bool valid_coll = c.parse(oid.substr(0, sep));
+  assert(valid_coll);
   hobject_t h(sobject_t(oid.substr(sep+1), 0));
+  h.pool = 0;
   os->read(c, h, offset, length, *bl);
   finisher.queue(on_complete);
 }
