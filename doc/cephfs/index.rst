@@ -84,6 +84,7 @@ authentication keyring.
 	Client eviction <eviction>
 	Handling full filesystems <full>
 	Troubleshooting <troubleshooting>
+	Disaster recovery <disaster-recovery>
 
 .. raw:: html
 
