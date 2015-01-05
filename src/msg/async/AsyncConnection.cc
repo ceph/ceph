@@ -238,23 +238,24 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
     if (r == 0) {
       ldout(async_msgr->cct, 10) << __func__ << " sendmsg got r==0!" << dendl;
     } else if (r < 0) {
-      if (errno == EAGAIN || errno == EINTR) {
-        r = len;
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN) {
+        break;
       } else {
         ldout(async_msgr->cct, 1) << __func__ << " sendmsg error: " << cpp_strerror(errno) << dendl;
+        return r;
       }
-
-      return r;
     }
 
     len -= r;
     if (len == 0) break;
 
-    // hrmph.  trim r bytes off the front of our message.
+    // hrmph. drain r bytes from the front of our message.
     ldout(async_msgr->cct, 20) << __func__ << " short write did " << r << ", still have " << len << dendl;
     while (r > 0) {
       if (msg.msg_iov[0].iov_len <= (size_t)r) {
-        // lose this whole item
+        // drain this whole item
         r -= msg.msg_iov[0].iov_len;
         msg.msg_iov++;
         msg.msg_iovlen--;
@@ -265,7 +266,7 @@ int AsyncConnection::do_sendmsg(struct msghdr &msg, int len, bool more)
       }
     }
   }
-  return 0;
+  return len;
 }
 
 // return the remaining bytes, it may larger than the length of ptr
@@ -301,12 +302,12 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   int r = 0;
-  uint64_t sended = 0;
+  uint64_t sent = 0;
   list<bufferptr>::const_iterator pb = outcoming_bl.buffers().begin();
   uint64_t left_pbrs = outcoming_bl.buffers().size();
   while (left_pbrs) {
     struct msghdr msg;
-    uint64_t size = MIN(left_pbrs, IOV_LEN);
+    uint64_t size = MIN(left_pbrs, sizeof(msgvec));
     left_pbrs -= size;
     memset(&msg, 0, sizeof(msg));
     msg.msg_iovlen = 0;
@@ -326,7 +327,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
       return r;
 
     // "r" is the remaining length
-    sended += msglen - r;
+    sent += msglen - r;
     if (r > 0) {
       ldout(async_msgr->cct, 5) << __func__ << " remaining " << r
                           << " needed to be sent, creating event for writing"
@@ -337,14 +338,14 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   }
 
   // trim already sent for outcoming_bl
-  if (sended) {
+  if (sent) {
     bufferlist bl;
-    if (sended < outcoming_bl.length())
-      outcoming_bl.splice(sended, outcoming_bl.length()-sended, &bl);
+    if (sent < outcoming_bl.length())
+      outcoming_bl.splice(sent, outcoming_bl.length()-sent, &bl);
     bl.swap(outcoming_bl);
   }
 
-  ldout(async_msgr->cct, 20) << __func__ << " send bytes " << sended
+  ldout(async_msgr->cct, 20) << __func__ << " sent bytes " << sent
                              << " remaining bytes " << outcoming_bl.length() << dendl;
 
   if (!open_write && is_queued()) {
