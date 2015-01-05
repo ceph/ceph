@@ -1877,7 +1877,8 @@ TEST(BufferList, read_file) {
   ::unlink("testfile");
   EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
   EXPECT_EQ(0, ::system("echo ABC > testfile ; chmod 0 testfile"));
-  EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
+  if (getuid() != 0)
+    EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
   EXPECT_EQ(0, ::system("chmod +r testfile"));
   EXPECT_EQ(0, bl.read_file("testfile", &error));
   ::unlink("testfile");
