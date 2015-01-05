@@ -430,12 +430,12 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    inode_t *pi = in->get_projected_inode();
+    const inode_t *pi = in->get_projected_inode();
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
     bufferlist snapbl;
-    sr_t *sr = in->get_projected_srnode();
+    const sr_t *sr = in->get_projected_srnode();
     if (sr)
       sr->encode(snapbl);
 
@@ -478,7 +478,7 @@ private:
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
-  void add_root(bool dirty, CInode *in, inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+  void add_root(bool dirty, CInode *in, const inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
 		    map<string,bufferptr> *px=0) {
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
@@ -524,7 +524,7 @@ private:
     return add_dir(dir->dirfrag(), dir->get_projected_fnode(), dir->get_projected_version(),
 		   dirty, false, false, false, dirtydft);
   }
-  dirlump& add_dir(dirfrag_t df, fnode_t *pf, version_t pv, bool dirty,
+  dirlump& add_dir(dirfrag_t df, const fnode_t *pf, version_t pv, bool dirty,
 		   bool complete=false, bool isnew=false,
 		   bool importing=false, bool dirty_dft=false) {
     if (lump_map.count(df) == 0)

@@ -191,7 +191,7 @@ public:
 
   // -------------
   // accessors
-  bool empty() { 
+  bool empty() const { 
     return _splits.empty();
   }
   int get_split(const frag_t hb) const {
