@@ -223,35 +223,27 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     osdmap.encode(full_bl, f | CEPH_FEATURE_RESERVED);
     tx_size += full_bl.length();
 
-    // verify the crc is as expected
-    if (inc.have_crc &&
-	inc.full_crc != osdmap.crc) {
-      derr << "inc for epoch " << osdmap.get_epoch() << " has full_crc "
-	   << inc.full_crc << " but actual is " << osdmap.crc
-	   << " features " << f
-	   << dendl;
-
-      derr << "full map dump (crc " << full_bl.crc32c(-1) << "):\n";
-      full_bl.hexdump(*_dout);
-      *_dout << "\ninc map dump (crc " << inc_bl.crc32c(-1) << "):\n";
-      inc_bl.hexdump(*_dout);
-      *_dout << dendl;
-      bufferlist prev_bl, prev_bl2, again_bl;
-      get_version_full(osdmap.epoch-1, prev_bl);
-      OSDMap pristine;
-      pristine.decode(prev_bl);
-      pristine.encode(prev_bl2, f | CEPH_FEATURE_RESERVED);
-      derr << "previous osdmap reload, raw crc " << prev_bl.crc32c(-1) << dendl;
-      derr << "reencode of that is " << prev_bl2.crc32c(-1) << dendl;
-      pristine.apply_incremental(inc);
-      pristine.encode(again_bl, f | CEPH_FEATURE_RESERVED);
-      derr << "again raw crc is " << again_bl.crc32c(-1) << dendl;
-      derr << " full_crc " << pristine.crc << dendl;
-
-      assert(0 == "got mismatched crc encoding full map");
+    bufferlist orig_full_bl;
+    get_version_full(osdmap.epoch, orig_full_bl);
+    if (orig_full_bl.length()) {
+      // the primary provided the full map
+      assert(inc.have_crc);
+      if (inc.full_crc != osdmap.crc) {
+	// This will happen if the mons were running mixed versions in
+	// the past or some other circumstance made the full encoded
+	// maps divergent.  Reloading here will bring us back into
+	// sync with the primary for this and all future maps.  OSDs
+	// will also be brought back into sync when they discover the
+	// crc mismatch and request a full map from a mon.
+	derr << __func__ << " full map CRC mismatch, resetting to canonical"
+	     << dendl;
+	osdmap = OSDMap();
+	osdmap.decode(orig_full_bl);
+      }
+    } else {
+      assert(!inc.have_crc);
+      put_version_full(t, osdmap.epoch, full_bl);
     }
-
-    put_version_full(t, osdmap.epoch, full_bl);
     put_version_latest_full(t, osdmap.epoch);
 
     // share
@@ -673,14 +665,19 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
-  // determine the new map's crc
+  // encode full map and determine its crc
   OSDMap tmp;
   {
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
-    bufferlist t;
-    ::encode(tmp, t, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    bufferlist fullbl;
+    ::encode(tmp, fullbl, mon->quorum_features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
+
+    // include full map in the txn.  note that old monitors will
+    // overwrite this.  new ones will now skip the local full map
+    // encode and reload from this.
+    put_version_full(t, pending_inc.epoch, fullbl);
   }
 
   // encode
