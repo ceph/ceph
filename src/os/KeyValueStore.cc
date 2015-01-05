@@ -1404,19 +1404,13 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
     case Transaction::OP_COLL_SETATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
-        bufferlist bl;
-        i.decode_bl(bl);
-        r = _collection_setattr(cid, name.c_str(), bl.c_str(), bl.length(), t);
+        assert(0 == "not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-        coll_t cid = i.get_cid(op->cid);
-        string name = i.decode_string();
-        r = _collection_rmattr(cid, name.c_str(), t);
+        assert(0 == "not implemented");
       }
       break;
 
@@ -1428,9 +1422,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
 
     case Transaction::OP_COLL_RENAME:
       {
-        coll_t cid = i.get_cid(op->cid);
-        ghobject_t oid = i.get_oid(op->oid);
-        r = -EOPNOTSUPP;
+        assert(0 == "not implemented");
       }
       break;
 
@@ -2196,177 +2188,6 @@ int KeyValueStore::_rmattrs(coll_t cid, const ghobject_t& oid,
   t.clear_buffer_keys(header, OBJECT_XATTR);
 
   dout(10) << __func__ <<  " " << cid << "/" << oid << " = " << r << dendl;
-  return r;
-}
-
-// collection attrs
-
-int KeyValueStore::collection_getattr(coll_t c, const char *name,
-                                      void *value, size_t size)
-{
-  dout(15) << __func__ << " " << c.to_str() << " '" << name << "' len "
-           << size << dendl;
-
-  bufferlist bl;
-  int r;
-
-  r = collection_getattr(c, name, bl);
-  if (r < 0)
-      goto out;
-
-  if (bl.length() < size) {
-    r = bl.length();
-    bl.copy(0, bl.length(), static_cast<char*>(value));
-  } else {
-    r = size;
-    bl.copy(0, size, static_cast<char*>(value));
-  }
-
-out:
-  dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
-           << size << " = " << r << dendl;
-  return r;
-}
-
-int KeyValueStore::collection_getattr(coll_t c, const char *name,
-                                      bufferlist& bl)
-{
-  dout(15) << __func__ << " " << c.to_str() << " '" << name
-           << "'" << dendl;
-
-  set<string> keys;
-  map<string, bufferlist> out;
-  StripObjectMap::StripObjectHeaderRef header;
-
-  keys.insert(string(name));
-
-  int r = backend->lookup_strip_header(get_coll_for_coll(),
-                                       make_ghobject_for_coll(c), &header);
-  if (r < 0) {
-    dout(10) << __func__ << " lookup_strip_header failed: r =" << r << dendl;
-    return r;
-  }
-
-  r = backend->get_values_with_header(header, COLLECTION_ATTR, keys, &out);
-  if (r < 0) {
-    dout(10) << __func__ << " could not get key" << string(name) << dendl;
-    r = -EINVAL;
-  }
-
-  if (!out.empty()) {
-    bl.swap(out.begin()->second);
-    r = bl.length();
-  } else {
-    r = -ENODATA;
-  }
-
-  dout(10) << __func__ << " " << c.to_str() << " '" << name << "' len "
-           << bl.length() << " = " << r << dendl;
-  return r;
-}
-
-int KeyValueStore::collection_getattrs(coll_t cid,
-                                       map<string, bufferptr> &aset)
-{
-  dout(10) << __func__ << " " << cid.to_str() << dendl;
-
-  map<string, bufferlist> out;
-
-  int r = backend->get(get_coll_for_coll(), make_ghobject_for_coll(cid),
-                       COLLECTION_ATTR, &out);
-  if (r < 0) {
-    dout(10) << __func__ << " could not get keys" << dendl;
-    goto out;
-  }
-
-  for (map<string, bufferlist>::iterator it = out.begin(); it != out.end();
-       ++it) {
-    bufferptr ptr(it->second.c_str(), it->second.length());
-    aset.insert(make_pair(it->first, ptr));
-  }
-
- out:
-  dout(10) << __func__ << " " << cid.to_str() << " = " << r << dendl;
-  return r;
-}
-
-int KeyValueStore::_collection_setattr(coll_t c, const char *name,
-                                       const void *value, size_t size,
-                                       BufferTransaction &t)
-{
-  dout(10) << __func__ << " " << c << " '" << name << "' len "
-           << size << dendl;
-
-  int r;
-  bufferlist bl;
-  map<string, bufferlist> out;
-  StripObjectMap::StripObjectHeaderRef header;
-
-  r = t.lookup_cached_header(get_coll_for_coll(),
-                             make_ghobject_for_coll(c),
-                             &header, false);
-  if (r < 0) {
-    dout(10) << __func__ << " could not find header r = " << r << dendl;
-    return r;
-  }
-
-  bl.append(reinterpret_cast<const char*>(value), size);
-  out.insert(make_pair(string(name), bl));
-
-  t.set_buffer_keys(header, COLLECTION_ATTR, out);
-
-  dout(10) << __func__ << " " << c << " '"
-           << name << "' len " << size << " = " << r << dendl;
-  return r;
-}
-
-int KeyValueStore::_collection_rmattr(coll_t c, const char *name,
-                                      BufferTransaction &t)
-{
-  dout(15) << __func__ << " " << c << dendl;
-
-  bufferlist bl;
-  set<string> out;
-  StripObjectMap::StripObjectHeaderRef header;
-
-  int r = t.lookup_cached_header(get_coll_for_coll(),
-                                 make_ghobject_for_coll(c), &header, false);
-  if (r < 0) {
-    dout(10) << __func__ << " could not find header r = " << r << dendl;
-    return r;
-  }
-
-  out.insert(string(name));
-  r = t.remove_buffer_keys(header, COLLECTION_ATTR, out);
-
-  dout(10) << __func__ << " " << c << " = " << r << dendl;
-  return r;
-}
-
-int KeyValueStore::_collection_setattrs(coll_t cid,
-                                        map<string,bufferptr>& aset,
-                                        BufferTransaction &t)
-{
-  dout(15) << __func__ << " " << cid << dendl;
-
-  map<string, bufferlist> attrs;
-  StripObjectMap::StripObjectHeaderRef header;
-  int r = t.lookup_cached_header(get_coll_for_coll(),
-                                 make_ghobject_for_coll(cid),
-                                 &header, false);
-  if (r < 0) {
-    dout(10) << __func__ << " could not find header r = " << r << dendl;
-    return r;
-  }
-
-  for (map<string, bufferptr>::iterator it = aset.begin(); it != aset.end();
-       ++it) {
-    attrs[it->first].push_back(it->second);
-  }
-
-  t.set_buffer_keys(header, COLLECTION_ATTR, attrs);
-
-  dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
 }
 
