@@ -103,6 +103,10 @@ void usage()
 "  export-diff <image-name> [--from-snap <snap-name>] <path>\n"
 "                                              export an incremental diff to\n"
 "                                              path, or \"-\" for stdout\n"
+"  merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into\n"
+"                                              <path>, <diff1> could be \"-\"\n"
+"                                              for stdin, and <path> could be \"-\"\n"
+"                                              for stdout\n"
 "  import-diff <path> <image-name>             import an incremental diff from\n"
 "                                              path or \"-\" for stdin\n"
 "  (cp | copy) <src> <dest>                    copy src image to dest\n"
@@ -1965,6 +1969,7 @@ enum {
   OPT_LOCK_ADD,
   OPT_LOCK_REMOVE,
   OPT_BENCH_WRITE,
+  OPT_MERGE_DIFF,
 };
 
 static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
@@ -1991,6 +1996,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
       return OPT_EXPORT;
     if (strcmp(cmd, "export-diff") == 0)
       return OPT_EXPORT_DIFF;
+    if (strcmp(cmd, "merge-diff") == 0)
+      return OPT_MERGE_DIFF;
     if (strcmp(cmd, "diff") == 0)
       return OPT_DIFF;
     if (strcmp(cmd, "import") == 0)
