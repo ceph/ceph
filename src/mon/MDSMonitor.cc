@@ -1212,6 +1212,44 @@ int MDSMonitor::management_command(
     pending_mdsmap.created = ceph_clock_now(g_ceph_context);
 
     return 0;
+  } else if (prefix == "fs reset") {
+    string fs_name;
+    cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name);
+    if (!pending_mdsmap.get_enabled() || fs_name != pending_mdsmap.fs_name) {
+        ss << "filesystem '" << fs_name << "' does not exist";
+        // Unlike fs rm, we consider this case an error
+        return -ENOENT;
+    }
+
+    // Check that no MDS daemons are active
+    if (!pending_mdsmap.up.empty()) {
+      ss << "all MDS daemons must be inactive before resetting filesystem: set the cluster_down flag"
+            " and use `ceph mds fail` to make this so";
+      return -EINVAL;
+    }
+
+    MDSMap newmap;
+
+    // Populate rank 0 as existing (so don't go into CREATING)
+    // but failed (so that next available MDS is assigned the rank)
+    newmap.in.insert(mds_rank_t(0));
+    newmap.failed.insert(mds_rank_t(0));
+
+    // Carry forward what makes sense
+    newmap.data_pools = mdsmap.data_pools;
+    newmap.metadata_pool = mdsmap.metadata_pool;
+    newmap.cas_pool = mdsmap.cas_pool;
+    newmap.fs_name = mdsmap.fs_name;
+    newmap.created = ceph_clock_now(g_ceph_context);
+    newmap.epoch = mdsmap.epoch + 1;
+    newmap.inc = mdsmap.inc;
+    newmap.enabled = mdsmap.enabled;
+    newmap.inline_data_enabled = mdsmap.inline_data_enabled;
+
+    // Persist the new MDSMap
+    pending_mdsmap = newmap;
+    return 0;
+
   } else {
     return -ENOSYS;
   }
