@@ -2727,7 +2727,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
       return;
 
     // wait for pending truncate?
-    inode_t *pi = cur->get_projected_inode();
+    const inode_t *pi = cur->get_projected_inode();
     if (pi->is_truncating()) {
       dout(10) << " waiting for pending truncate from " << pi->truncate_from
 	       << " to " << pi->truncate_size << " to complete on " << *cur << dendl;
@@ -3676,10 +3676,10 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
     return;
 
   // validate layout
-  inode_t *pi = cur->get_projected_inode();
+  const inode_t *old_pi = cur->get_projected_inode();
   ceph_file_layout layout;
-  if (pi->has_layout())
-    layout = pi->layout;
+  if (old_pi->has_layout())
+    layout = old_pi->layout;
   else if (dir_layout)
     layout = *dir_layout;
   else
@@ -3714,7 +3714,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
     return;
   }
 
-  pi = cur->project_inode();
+  inode_t *pi = cur->project_inode();
   pi->layout = layout;
   pi->version = cur->pre_dirty();
 
@@ -3918,7 +3918,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	return;
 
       pi = cur->project_inode();
-      cur->get_projected_inode()->layout = layout;
+      pi->layout = layout;
     } else if (name.find("ceph.file.layout") == 0) {
       if (!cur->is_file()) {
 	respond_to_request(mdr, -EINVAL);
@@ -3975,7 +3975,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
         return;
 
       pi = cur->project_inode();
-      cur->get_projected_inode()->quota = quota;
+      pi->quota = quota;
     }
 
     pi->version = cur->pre_dirty();
@@ -4025,9 +4025,9 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
-    cur->project_inode();
-    cur->get_projected_inode()->clear_layout();
-    cur->get_projected_inode()->version = cur->pre_dirty();
+    inode_t *pi = cur->project_inode();
+    pi->clear_layout();
+    pi->version = cur->pre_dirty();
 
     // log + wait
     mdr->ls = mdlog->get_current_segment();
@@ -4789,7 +4789,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   rollback.reqid = mdr->reqid;
   rollback.ino = targeti->ino();
   rollback.old_ctime = targeti->inode.ctime;   // we hold versionlock xlock; no concorrent projections
-  fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
+  const fnode_t *pf = targeti->get_parent_dn()->get_dir()->get_projected_fnode();
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
   rollback.was_inc = inc;
@@ -5632,7 +5632,7 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
   in->get_dirfrags(ls);
   for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
     CDir *dir = *p;
-    fnode_t *pf = dir->get_projected_fnode();
+    const fnode_t *pf = dir->get_projected_fnode();
     if (pf->fragstat.size()) {
       dout(10) << "dir_is_nonempty_unlocked dirstat has "
 	       << pf->fragstat.size() << " items " << *dir << dendl;
