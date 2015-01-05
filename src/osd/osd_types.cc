@@ -3856,10 +3856,11 @@ uint64_t SnapSet::get_clone_bytes(snapid_t clone) const
 
 void watch_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   ::encode(cookie, bl);
   ::encode(timeout_seconds, bl);
   ::encode(addr, bl);
+  ::encode(registered, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3875,6 +3876,9 @@ void watch_info_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 4) {
     ::decode(addr, bl);
   }
+  if (struct_v >= 5) {
+    ::decode(registered, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3882,6 +3886,7 @@ void watch_info_t::dump(Formatter *f) const
 {
   f->dump_unsigned("cookie", cookie);
   f->dump_unsigned("timeout_seconds", timeout_seconds);
+  f->dump_stream("registered") << registered;
   f->open_object_section("addr");
   addr.dump(f);
   f->close_section();
@@ -3893,6 +3898,7 @@ void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
   o.push_back(new watch_info_t);
   o.back()->cookie = 123;
   o.back()->timeout_seconds = 99;
+  o.back()->registered = eversion_t(3, 53);
   entity_addr_t ea;
   ea.set_nonce(1);
   ea.set_family(AF_INET);

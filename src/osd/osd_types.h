@@ -2706,9 +2706,12 @@ struct watch_info_t {
   uint64_t cookie;
   uint32_t timeout_seconds;
   entity_addr_t addr;
+  eversion_t registered;
 
   watch_info_t() : cookie(0), timeout_seconds(0) { }
-  watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a) : cookie(c), timeout_seconds(t), addr(a) {}
+  watch_info_t(uint64_t c, uint32_t t, const entity_addr_t& a,
+	       eversion_t r)
+    : cookie(c), timeout_seconds(t), addr(a), registered(r) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
