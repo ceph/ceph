@@ -1232,6 +1232,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
+  new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
 { 
