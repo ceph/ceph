@@ -2694,26 +2694,32 @@ void CDir::dump(Formatter *f) const
   f->dump_int("snapid_first", first);
   f->dump_bool("auth", is_auth());
 
-  // >> Only meaningful for auth
-  f->open_object_section("replica_map");
-  for (std::map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
-       i != replica_map.end(); ++i) {
-    std::ostringstream rank_str;
-    rank_str << i->first;
-    f->dump_int(rank_str.str().c_str(), i->second);
+  // Fields only meaningful for auth
+  f->open_object_section("auth_state");
+  {
+    f->open_object_section("replica_map");
+    for (std::map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
+         i != replica_map.end(); ++i) {
+      std::ostringstream rank_str;
+      rank_str << i->first;
+      f->dump_int(rank_str.str().c_str(), i->second);
+    }
+    f->close_section();
+    f->dump_stream("projected_version") << get_projected_version();
+    f->dump_stream("version") << get_version();
+    f->dump_stream("comitting_version") << get_committing_version();
+    f->dump_stream("comitted_version") << get_committed_version();
   }
   f->close_section();
-  f->dump_stream("projected_version") << get_projected_version();
-  f->dump_stream("version") << get_version();
-  f->dump_stream("comitting_version") << get_committing_version();
-  f->dump_stream("comitted_version") << get_committed_version();
-  // << Only meaningful for auth
 
-  // >> Only meaningful for replica
-  f->dump_stream("authority_first") << authority().first;
-  f->dump_stream("authority_second") << authority().second;
-  f->dump_stream("replica_nonce") << get_replica_nonce();
-  // << Only meaningful for replica
+  // Fields only meaningful for replica
+  f->open_object_section("replica_state");
+  {
+    f->dump_stream("authority_first") << authority().first;
+    f->dump_stream("authority_second") << authority().second;
+    f->dump_stream("replica_nonce") << get_replica_nonce();
+  }
+  f->close_section();
   
   f->dump_bool("is_rep", is_rep());
 
