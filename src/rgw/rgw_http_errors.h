@@ -37,6 +37,8 @@ const static struct rgw_http_errors RGW_HTTP_ERRORS[] = {
     { ERR_LENGTH_REQUIRED, 411, "MissingContentLength" },
     { EACCES, 403, "AccessDenied" },
     { EPERM, 403, "AccessDenied" },
+    { ERR_SIGNATURE_NO_MATCH, 403, "SignatureDoesNotMatch" },
+    { ERR_INVALID_ACCESS_KEY, 403, "InvalidAccessKeyId" },
     { ERR_USER_SUSPENDED, 403, "UserSuspended" },
     { ERR_REQUEST_TIME_SKEWED, 403, "RequestTimeTooSkewed" },
     { ERR_QUOTA_EXCEEDED, 403, "QuotaExceeded" },
