@@ -2101,7 +2101,8 @@ int main(int argc, const char **argv)
     *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
     *lock_tag = NULL, *output_format = "plain",
-    *fromsnapname = NULL;
+    *fromsnapname = NULL,
+    *first_diff = NULL, *second_diff = NULL;
   bool lflag = false;
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
@@ -2288,6 +2289,9 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_EXPORT_DIFF:
 	SET_CONF_PARAM(v, &imgname, &path, NULL);
 	break;
+      case OPT_MERGE_DIFF:
+        SET_CONF_PARAM(v, &first_diff, &second_diff, &path);
+        break;
       case OPT_IMPORT:
       case OPT_IMPORT_DIFF:
 	SET_CONF_PARAM(v, &path, &imgname, NULL);
@@ -2392,7 +2396,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_IMPORT &&
       opt_cmd != OPT_IMPORT_DIFF &&
       opt_cmd != OPT_UNMAP &&
-      opt_cmd != OPT_SHOWMAPPED && !imgname) {
+      opt_cmd != OPT_SHOWMAPPED &&
+      opt_cmd != OPT_MERGE_DIFF && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
   }
@@ -2446,6 +2451,20 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if (!dest_poolname)
     dest_poolname = "rbd";
 
+  if (opt_cmd == OPT_MERGE_DIFF) {
+    if (!first_diff) {
+      cerr << "rbd: first diff was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (!second_diff) {
+      cerr << "rbd: second diff was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (!path) {
+      cerr << "rbd: path was not specified" << std::endl;
+      return EXIT_FAILURE;
+    }
+  }
   if (opt_cmd == OPT_EXPORT && !path)
     path = imgname;
 
