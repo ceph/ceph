@@ -1712,6 +1712,39 @@ static int do_import_diff(librbd::Image &image, const char *path)
   return r;
 }
 
+/*
+ * fd: the diff file to read from
+ * pd: the diff file to be written into
+ */
+static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t length)
+{
+  if (tag == 'e')
+    return 0;
+
+  bufferlist bl;
+  ::encode(tag, bl);
+  ::encode(offset, bl);
+  ::encode(length, bl);
+  int r;
+  r = bl.write_fd(pd);
+  if (r < 0)
+    return r;
+
+  if (tag == 'w') {
+    bufferptr bp = buffer::create(length);
+    r = safe_read_exact(fd, bp.c_str(), length);
+    if (r < 0)
+      return r;
+    bufferlist data;
+    data.append(bp);
+    r = data.write_fd(pd);
+    if (r < 0)
+      return r;
+  }
+
+  return 0;
+}
+
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 		   const char *destname)
 {
