@@ -208,7 +208,7 @@ dnl check for libkeyutils on linux
 KEYUTILS_LIB=""
 AS_IF([test x"$linux" = x"yes"], [
   AC_CHECK_LIB([keyutils], [add_key], [KEYUTILS_LIB="-lkeyutils"], [
-    AC_MSG_FAILURE([libkeyutils not found])])])
+    AC_MSG_FAILURE([libkeyutils not found (libkeyutils-dev, keyutils-libs-devel)])])])
 AC_SUBST(KEYUTILS_LIB)
 
 AC_CHECK_LIB([m], [pow], [true], AC_MSG_FAILURE([libm not found]))
