@@ -426,9 +426,7 @@ int _action_on_all_objects(ObjectStore *store, action_on_object_t &action, bool 
   for (vector<coll_t>::iterator i = candidates.begin();
        i != candidates.end();
        ++i) {
-    spg_t pgid;
-    snapid_t snap;
-    if (i->is_pg(pgid, snap)) {
+    if (i->is_pg()) {
       colls_to_check.push_back(*i);
     }
   }
@@ -626,7 +624,7 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
 void remove_coll(ObjectStore *store, const coll_t &coll)
 {
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   OSDriver driver(
     store,
     coll_t(),
@@ -685,11 +683,10 @@ int finish_remove_pgs(ObjectStore *store)
        it != ls.end();
        ++it) {
     spg_t pgid;
-    snapid_t snap;
 
-    if (it->is_temp(pgid) ||
+    if (it->is_temp(&pgid) ||
 	it->is_removal(&pgid) ||
-	(it->is_pg(pgid, snap) && PG::_has_removal_flag(store, pgid))) {
+	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
       OSD::recursive_remove_collection(store, pgid, *it);
       continue;
@@ -1335,7 +1332,7 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
     coll_t(),
     OSD::make_snapmapper_oid());
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
 
   t->touch(coll, ob.hoid);
@@ -1689,7 +1686,7 @@ int do_list(ObjectStore *store, string pgidstr, string object, Formatter *format
 int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   spg_t pg;
-  coll.is_pg_prefix(pg);
+  coll.is_pg_prefix(&pg);
   OSDriver driver(
     store,
     coll_t(),
@@ -2606,23 +2603,17 @@ int main(int argc, char **argv)
 
   // Find pg
   for (it = ls.begin(); it != ls.end(); ++it) {
-    snapid_t snap;
     spg_t tmppgid;
 
-    if (!it->is_pg(tmppgid, snap)) {
+    if (!it->is_pg(&tmppgid)) {
       continue;
     }
 
-    if (it->is_temp(tmppgid)) {
+    if (it->is_temp(&tmppgid)) {
       continue;
     }
 
     if (op != "list-pgs" && tmppgid != pgid) {
-      continue;
-    }
-    if (snap != CEPH_NOSNAP && debug) {
-      cout << "skipping snapped dir " << *it
-	       << " (pg " << pgid << " snap " << snap << ")" << std::endl;
       continue;
     }
 
