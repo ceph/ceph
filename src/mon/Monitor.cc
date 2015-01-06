@@ -2683,6 +2683,18 @@ void Monitor::handle_command(MMonCommand *m)
       rs = "needs a valid 'quorum' command";
       r = -EINVAL;
     }
+  } else if (prefix == "version") {
+    if (f) {
+      f->open_object_section("version");
+      f->dump_string("version", pretty_version_to_str());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      ds << pretty_version_to_str();
+    }
+    rdata.append(ds);
+    rs = "";
+    r = 0;
   }
 
  out:
