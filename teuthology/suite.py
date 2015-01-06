@@ -524,8 +524,8 @@ def schedule_suite(job_config,
             package_version = package_versions_for_hash[str(os_type)]
 
         if not package_version:
-            schedule_fail("Packages for ceph hash '{ver}' not found".format(
-                ver=sha1), job_config.name)
+            m = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
+            schedule_fail(m.format(os=os_type, ver=sha1), job_config.name)
 
         arg = copy.deepcopy(base_args)
         arg.extend([
