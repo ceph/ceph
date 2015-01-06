@@ -1024,7 +1024,7 @@ public:
 private:
   OSDMap    *osdmap;
 public:
-  CephContext *cct;
+  using Dispatcher::cct;
   std::multimap<string,string> crush_location;
 
   atomic_t initialized;
@@ -1818,10 +1818,9 @@ private:
 	   Finisher *fin,
 	   double mon_timeout,
 	   double osd_timeout) :
-    Dispatcher(cct),
+    Dispatcher(cct_),
     messenger(m), monc(mc), finisher(fin),
     osdmap(new OSDMap),
-    cct(cct_),
     initialized(0),
     last_tid(0), client_inc(-1), max_linger_id(0),
     num_unacked(0), num_uncommitted(0),

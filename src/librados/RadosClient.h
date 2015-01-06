@@ -36,7 +36,7 @@ class Messenger;
 class librados::RadosClient : public Dispatcher
 {
 public:
-  CephContext *cct;
+  using Dispatcher::cct;
   md_config_t *conf;
 private:
   enum {
