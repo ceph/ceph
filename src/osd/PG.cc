@@ -12,6 +12,8 @@
  * 
  */
 
+#include <math.h>
+
 #include "PG.h"
 #include "common/errno.h"
 #include "common/config.h"
@@ -1928,20 +1930,22 @@ unsigned PG::get_recovery_priority()
 unsigned PG::get_backfill_priority()
 {
   // a higher value -> a higher priority
-
-  // undersized: 200 + num missing replicas
+  // the most important factor
+  uint32_t high = 0;
   if (is_undersized()) {
     assert(pool.info.size > actingset.size());
-    return 200 + (pool.info.size - actingset.size());
+    high += MIN(64, 1 + (pool.info.size - actingset.size()));
+  } else if (is_degraded()) {
+    high += 1;
   }
 
-  // degraded: baseline degraded
-  if (is_degraded()) {
-    return 200;
-  }
+  // the less important factor
+  double low = ::log((double)osd->backfill_reservations_stats.get_sum());
 
-  // baseline
-  return 1;
+  uint32_t priority = high * 64 + MIN(64, (int)low);
+
+  // fit it in [1,255]
+  return MIN(255, MAX(1, priority));
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -5633,6 +5637,7 @@ PG::RecoveryState::Backfilling::Backfilling(my_context ctx)
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILL_WAIT);
   pg->state_set(PG_STATE_BACKFILL);
+  pg->osd->backfill_reservations_stats.reserved_inc();
 }
 
 boost::statechart::result
@@ -5678,6 +5683,7 @@ void PG::RecoveryState::Backfilling::exit()
   pg->state_clear(PG_STATE_BACKFILL);
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_backfilling_latency, dur);
+  pg->osd->backfill_reservations_stats.reserved_dec();
 }
 
 /*--WaitRemoteBackfillReserved--*/
@@ -5690,6 +5696,7 @@ PG::RecoveryState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_con
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->osd->backfill_reservations_stats.remote_waiting_inc();
   post_event(RemoteBackfillReserved());
 }
 
@@ -5728,6 +5735,7 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
+  pg->osd->backfill_reservations_stats.remote_waiting_dec();
   pg->osd->recoverystate_perf->tinc(rs_waitremotebackfillreserved_latency, dur);
 }
 
@@ -5775,6 +5783,7 @@ PG::RecoveryState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_conte
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
+  pg->osd->backfill_reservations_stats.local_waiting_inc();
   pg->osd->local_reserver.request_reservation(
     pg->info.pgid,
     new QueuePeeringEvt<LocalBackfillReserved>(
@@ -5788,6 +5797,7 @@ void PG::RecoveryState::WaitLocalBackfillReserved::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
+  pg->osd->backfill_reservations_stats.local_waiting_dec();
   pg->osd->recoverystate_perf->tinc(rs_waitlocalbackfillreserved_latency, dur);
 }
 

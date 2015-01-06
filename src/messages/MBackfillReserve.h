@@ -33,10 +33,10 @@ public:
 
   MBackfillReserve()
     : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
-      query_epoch(0), type(-1), priority(-1) {}
+      query_epoch(0), type(-1), priority(OSD_PRIORITY_NONE) {}
   MBackfillReserve(int type,
 		   spg_t pgid,
-		   epoch_t query_epoch, unsigned prio = -1)
+		   epoch_t query_epoch, unsigned prio = OSD_PRIORITY_NONE)
     : Message(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}

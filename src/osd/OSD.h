@@ -203,6 +203,73 @@ struct C_CompleteSplits;
 
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 
+struct OSDBackfillReservationsStats {
+  mutable Mutex lock;
+
+  uint64_t reserved;
+  uint64_t local_waiting;
+  uint64_t remote_waiting;
+
+  OSDBackfillReservationsStats() :
+    lock("OSDBackfillReservationsStats::lock"),
+    reserved(0),
+    local_waiting(0),
+    remote_waiting(0)
+  { }
+
+  void dump(Formatter *f) {
+    Mutex::Locker l(lock);
+
+    f->dump_unsigned("reserved", reserved);
+    f->dump_unsigned("local_waiting", local_waiting);
+    f->dump_unsigned("remote_waiting", remote_waiting);
+  }
+
+  void reserved_inc() {
+    Mutex::Locker l(lock);
+    ++reserved;
+  }
+  void reserved_dec() {
+    Mutex::Locker l(lock);
+    --reserved;
+  }
+  uint64_t get_reserved() const {
+    Mutex::Locker l(lock);
+    return reserved;
+  }
+
+  void local_waiting_inc() {
+    Mutex::Locker l(lock);
+    ++local_waiting;
+  }
+  void local_waiting_dec() {
+    Mutex::Locker l(lock);
+    --local_waiting;
+  }
+  uint64_t get_local_waiting() const {
+    Mutex::Locker l(lock);
+    return local_waiting;
+  }
+
+  void remote_waiting_inc() {
+    Mutex::Locker l(lock);
+    ++remote_waiting;
+  }
+  void remote_waiting_dec() {
+    Mutex::Locker l(lock);
+    --remote_waiting;
+  }
+  uint64_t get_remote_waiting() const {
+    Mutex::Locker l(lock);
+    return remote_waiting;
+  }
+
+  uint64_t get_sum() const {
+    Mutex::Locker l(lock);
+    return remote_waiting + local_waiting + reserved;
+  }
+};
+
 class DeletingState {
   Mutex lock;
   Cond cond;
@@ -681,6 +748,9 @@ public:
   Finisher reserver_finisher;
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
+
+  // -- backfill_reservations_stats --
+  OSDBackfillReservationsStats backfill_reservations_stats;
 
   // -- pg_temp --
   Mutex pg_temp_lock;

@@ -60,7 +60,10 @@
 
 
 /// max recovery priority for MBackfillReserve
+#define OSD_PRIORITY_NONE UINT_MAX
+// Keep it low because AsyncReserver creates one queue for each value
 #define OSD_RECOVERY_PRIORITY_MAX 255u
+#define OSD_BACKFILL_PRIORITY_MAX 254u
 
 
 typedef hobject_t collection_list_handle_t;

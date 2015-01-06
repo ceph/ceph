@@ -1719,6 +1719,9 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->open_object_section("remote_reservations");
     service.remote_reserver.dump(f);
     f->close_section();
+    f->open_object_section("backfill_reservations_stats");
+    service.backfill_reservations_stats.dump(f);
+    f->close_section();
     f->close_section();
   } else {
     assert(0 == "broken asok registration");
