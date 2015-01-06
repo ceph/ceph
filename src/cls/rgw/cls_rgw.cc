@@ -382,6 +382,23 @@ static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key,
   }
 }
 
+static int read_bucket_header(cls_method_context_t hctx, struct rgw_bucket_dir_header *header)
+{
+  bufferlist bl;
+  int rc = cls_cxx_map_read_header(hctx, &bl);
+  if (rc < 0)
+    return rc;
+  bufferlist::iterator iter = bl.begin();
+  try {
+    ::decode(*header, iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: read_bucket_header(): failed to decode header\n");
+    return -EIO;
+  }
+
+  return 0;
+}
+
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator iter = in->begin();
@@ -396,16 +413,10 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   struct rgw_cls_list_ret ret;
   struct rgw_bucket_dir& new_dir = ret.dir;
-  bufferlist header_bl;
-  int rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
+  int rc = read_bucket_header(hctx, &new_dir.header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to read header\n");
     return rc;
-  bufferlist::iterator header_iter = header_bl.begin();
-  try {
-    ::decode(new_dir.header, header_iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode header\n");
-    return -EINVAL;
   }
 
   bufferlist bl;
@@ -466,16 +477,10 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 static int check_index(cls_method_context_t hctx, struct rgw_bucket_dir_header *existing_header, struct rgw_bucket_dir_header *calc_header)
 {
-  bufferlist header_bl;
-  int rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
+  int rc = read_bucket_header(hctx, existing_header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
     return rc;
-  bufferlist::iterator header_iter = header_bl.begin();
-  try {
-    ::decode(*existing_header, header_iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode header\n");
-    return -EINVAL;
   }
 
   calc_header->tag_timeout = existing_header->tag_timeout;
@@ -596,17 +601,11 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  bufferlist header_bl;
   struct rgw_bucket_dir_header header;
-  int rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
     return rc;
-  bufferlist::iterator header_iter = header_bl.begin();
-  try {
-    ::decode(header, header_iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
-    return -EINVAL;
   }
 
   header.tag_timeout = op.tag_timeout;
@@ -662,19 +661,11 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   info.state = CLS_RGW_STATE_PENDING_MODIFY;
   info.op = op.op;
 
-
-  bufferlist header_bl;
   struct rgw_bucket_dir_header header;
-  rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
+  rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
     return rc;
-
-  bufferlist::iterator header_iter = header_bl.begin();
-  try {
-    ::decode(header, header_iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
-    return -EINVAL;
   }
 
   if (op.log_op) {
@@ -785,16 +776,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
           (unsigned long)op.ver.pool, (unsigned long long)op.ver.epoch,
           op.tag.c_str());
 
-  bufferlist header_bl;
   struct rgw_bucket_dir_header header;
-  int rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
-    return rc;
-  bufferlist::iterator header_iter = header_bl.begin();
-  try {
-    ::decode(header, header_iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to decode header\n");
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_bucket_complete_op(): failed to read header\n");
     return -EINVAL;
   }
 
@@ -1772,18 +1757,12 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx, bufferlist *in, bufferlis
   bufferlist header_bl;
   struct rgw_bucket_dir_header header;
   bool header_changed = false;
-  int rc = cls_cxx_map_read_header(hctx, &header_bl);
-  if (rc < 0)
-    return rc;
-
   uint64_t tag_timeout;
 
-  try {
-    bufferlist::iterator header_iter = header_bl.begin();
-    ::decode(header, header_iter);
-  } catch (buffer::error& error) {
-    CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to decode header\n");
-    return -EINVAL;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: rgw_dir_suggest_changes(): failed to read header\n");
+    return rc;
   }
 
   tag_timeout = (header.tag_timeout ? header.tag_timeout : CEPH_RGW_TAG_TIMEOUT);
