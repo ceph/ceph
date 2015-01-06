@@ -17,6 +17,12 @@ if [ -z "$id"  ]; then
     exit 1;
 fi
 
+# Check OSD exists
+if [ ! -d ${dir_osd-/var/lib/ceph/osd/}/${cluster:-ceph}-${id} ]; then
+    echo "ceph cluster '${cluster:-ceph}' does not have OSD '${id}' on this host"
+    exit 1;
+fi
+
 update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
 
 if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then
