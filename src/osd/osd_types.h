@@ -571,18 +571,6 @@ public:
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<coll_t*>& o);
-
-private:
-  static std::string pg_and_snap_to_str(spg_t p, snapid_t s) {
-    std::ostringstream oss;
-    oss << p << "_" << s;
-    return oss.str();
-  }
-  static std::string pg_to_tmp_str(spg_t p) {
-    std::ostringstream oss;
-    oss << p << "_TEMP";
-    return oss.str();
-  }
 };
 
 WRITE_CLASS_ENCODER(coll_t)
