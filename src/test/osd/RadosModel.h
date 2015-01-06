@@ -861,6 +861,17 @@ public:
 	     << version << std::endl;
 	assert(0 == "racing read got wrong version");
       }
+
+      {
+	ObjectDesc old_value;
+	assert(context->find_object(oid, &old_value, -1));
+	if (old_value.deleted())
+	  std::cout << num << ":  left oid " << oid << " deleted" << std::endl;
+	else
+	  std::cout << num << ":  left oid " << oid << " "
+		    << old_value.most_recent() << std::endl;
+      }
+
       rcompletion->release();
       context->oid_in_use.erase(oid);
       context->oid_not_in_use.insert(oid);
@@ -984,6 +995,10 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
     assert(context->find_object(oid, &old_value, snap));
+    if (old_value.deleted())
+      std::cout << num << ":  expect deleted" << std::endl;
+    else
+      std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
 
     TestWatchContext *ctx = context->get_watch_context(oid);
     context->state_lock.Unlock();
@@ -1065,8 +1080,12 @@ public:
 	headerbl = iter->second;
 	xattrs.erase(iter);
       }
-      cout << num << ":  expect " << old_value.most_recent() << std::endl;
-      assert(!old_value.deleted());
+      if (old_value.deleted()) {
+	std::cout << num << ":  expect deleted" << std::endl;
+	assert(0 == "expected deleted");
+      } else {
+	std::cout << num << ":  expect " << old_value.most_recent() << std::endl;
+      }
       if (old_value.has_contents()) {
 	ContDesc to_check;
 	bufferlist::iterator p = headerbl.begin();
