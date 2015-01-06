@@ -3876,7 +3876,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   if (name.find("ceph.file.layout") == 0 ||
       name.find("ceph.dir.layout") == 0 ||
       name.find("ceph.quota") == 0) {
-    inode_t *pi;
+    inode_t *pi = NULL;
     string rest;
     if (name.find("ceph.dir.layout") == 0) {
       if (!cur->is_dir()) {
