@@ -626,6 +626,7 @@ public:
 
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
+  void dump(Formatter *f) const;
 };
 
 #endif
