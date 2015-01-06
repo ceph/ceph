@@ -2696,6 +2696,12 @@ struct SnapSet {
 WRITE_CLASS_ENCODER(SnapSet)
 
 ostream& operator<<(ostream& out, const SnapSet& cs);
+static inline bool operator==(const SnapSet& l, const SnapSet& r) {
+  return l.seq.val == r.seq.val && l.head_exists == r.head_exists
+	    && l.snaps == r.snaps && l.clones == r.clones
+	    && l.clone_overlap == r. clone_overlap
+	    && l.clone_size == r.clone_size;
+}
 
 
 

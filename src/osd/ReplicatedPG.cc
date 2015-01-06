@@ -5702,12 +5702,17 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
     if (soid.snap == CEPH_NOSNAP) {
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << soid << dendl;
-      setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
+      bool ss_modified = true;
+      if (*ctx->snapset == ctx->new_snapset)
+	ss_modified = false;
+      if (ss_modified)
+        setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
 
       if (pool.info.require_rollback()) {
 	set<string> changing;
 	changing.insert(OI_ATTR);
-	changing.insert(SS_ATTR);
+	if (ss_modified)
+	  changing.insert(SS_ATTR);
 	ctx->obc->fill_in_setattrs(changing, &(ctx->mod_desc));
       } else {
 	// replicated pools are never rollbackable in this case
