@@ -8222,6 +8222,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   bufferlist::iterator p = m->get_data().begin();
   ::decode(rm->opt, p);
+  rm->localt.set_use_tbl(rm->opt.get_use_tbl());
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -8240,6 +8241,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
+  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
@@ -8264,14 +8266,14 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   
   op->mark_started();
 
-  rm->localt.append(rm->opt);
-  rm->localt.register_on_commit(
+  rm->opt.append(rm->localt);
+  rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
+  rm->opt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
-  parent->queue_transaction(&(rm->localt), op);
+  parent->queue_transaction(&(rm->opt), op);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
