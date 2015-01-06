@@ -1311,17 +1311,37 @@ TEST(spg_t, parse) {
 }
 
 TEST(coll_t, parse) {
+  const char *ok[] = {
+    "meta",
+    "1.2_head",
+    "1.2_TEMP",
+    "1.2s3_head",
+    "1.3s2_TEMP",
+    "1.2s0_head",
+    0
+  };
+  const char *bad[] = {
+    "foo",
+    "1.2_food",
+    "1.2_head ",
+    //" 1.2_head",   // hrm, this parses, which is not ideal.. pg_t's fault?
+    "1.2_temp",
+    "1.2_HEAD",
+    "1.xS3_HEAD",
+    "1.2s_HEAD",
+    "1.2sfoo_HEAD",
+    0
+  };
   coll_t a;
-  ASSERT_TRUE(a.parse("meta"));
-  ASSERT_TRUE(a.parse("1.2_head"));
-  ASSERT_TRUE(a.parse("1.2_TEMP"));
-  ASSERT_TRUE(a.parse("1.2s3_head"));
-  ASSERT_TRUE(a.parse("1.2s3_TEMP"));
-  ASSERT_TRUE(a.parse("1.2s0_head"));
-  ASSERT_FALSE(a.parse("foo"));
-  ASSERT_FALSE(a.parse("1.2_food"));
-  ASSERT_FALSE(a.parse("1.2_temp"));
-  ASSERT_FALSE(a.parse(""));
+  for (int i = 0; ok[i]; ++i) {
+    cout << "check ok " << ok[i] << std::endl;
+    ASSERT_TRUE(a.parse(ok[i]));
+    ASSERT_EQ(string(ok[i]), a.to_str());
+  }
+  for (int i = 0; bad[i]; ++i) {
+    cout << "check bad " << bad[i] << std::endl;
+    ASSERT_FALSE(a.parse(bad[i]));
+  }
 }
 
 TEST(coll_t, temp) {
@@ -1334,7 +1354,7 @@ TEST(coll_t, temp) {
 
   spg_t pgid2;
   ASSERT_TRUE(temp.is_temp());
-  ASSERT_TRUE(temp.is_temp(pgid2));
+  ASSERT_TRUE(temp.is_temp(&pgid2));
   ASSERT_EQ(pgid, pgid2);
 }
 
