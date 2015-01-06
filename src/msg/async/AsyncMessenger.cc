@@ -76,27 +76,6 @@ class C_processor_accept : public EventCallback {
 };
 
 
-class C_processor_start : public EventCallback {
-  Processor *pro;
-  Worker *worker;
- public:
-  C_processor_start(Processor *p, Worker *w): pro(p), worker(w) {}
-  void do_request(int id) {
-    pro->start(worker);
-  }
-};
-
-
-class C_processor_stop : public EventCallback {
-  Processor *pro;
- public:
-  C_processor_stop(Processor *p): pro(p) {}
-  void do_request(int id) {
-    pro->stop_cb();
-  }
-};
-
-
 /*******************
  * Processor
  */
@@ -252,7 +231,6 @@ int Processor::start(Worker *w)
 
   // start thread
   if (listen_sd > 0) {
-    assert(w->center.get_owner() == pthread_self());
     worker = w;
     w->center.create_file_event(listen_sd, EVENT_READABLE,
                                 EventCallbackRef(new C_processor_accept(this)));
@@ -282,32 +260,15 @@ void Processor::accept()
   }
 }
 
-void Processor::stop_cb()
-{
-  ldout(msgr->cct,10) << __func__ << dendl;
-
-  Mutex::Locker l(stop_lock);
-  if (listen_sd >= 0) {
-    worker->center.delete_file_event(listen_sd, EVENT_READABLE);
-    ::shutdown(listen_sd, SHUT_RDWR);
-    ::close(listen_sd);
-    listen_sd = -1;
-  }
-  worker = NULL;
-  stop_cond.Signal();
-}
-
 void Processor::stop()
 {
   ldout(msgr->cct,10) << __func__ << dendl;
 
   if (listen_sd >= 0) {
-    assert(worker && worker->center.get_owner() != pthread_self());
-    Mutex::Locker l(stop_lock);
-    worker->center.dispatch_event_external(EventCallbackRef(new C_processor_stop(this)));
-    stop_cond.Wait(stop_lock);
-    assert(listen_sd == -1);
-    assert(worker == NULL);
+    worker->center.delete_file_event(listen_sd, EVENT_READABLE);
+    ::shutdown(listen_sd, SHUT_RDWR);
+    ::close(listen_sd);
+    listen_sd = -1;
   }
 }
 
@@ -439,8 +400,7 @@ void AsyncMessenger::ready()
 
   Mutex::Locker l(lock);
   Worker *w = pool->get_worker();
-  w->center.dispatch_event_external(
-      EventCallbackRef(new C_processor_start(&processor, w)));
+  processor.start(w);
 }
 
 int AsyncMessenger::shutdown()
@@ -488,8 +448,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   int r = processor.rebind(avoid_ports);
   if (r == 0) {
     Worker *w = pool->get_worker();
-    w->center.dispatch_event_external(
-        EventCallbackRef(new C_processor_start(&processor, w)));
+    processor.start(w);
   }
   return r;
 }

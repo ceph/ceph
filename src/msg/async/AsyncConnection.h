@@ -125,34 +125,7 @@ class AsyncConnection : public Connection {
   int send_message(Message *m);
 
   void send_keepalive();
-  // mark_down need to ensure all events completely finished. So we introduce
-  // a separator impl:
-  //
-  // Thread A             Event loop N          Event loop N+1
-  // mark_down()
-  // dispatch
-  // wait
-  //  \                   C_handle_stop
-  //  \                   stop()
-  //  \                   _stop()
-  //  \                   dispatch
-  //  \                                         C_handle_signal
-  //  \                                         wakeup_stop()
-  //  \                                         signal
-  // finished
-  //
-  // The above flow only happen when the caller isn't the pthread own center,
-  // if the owner of center is self, it's safe to call _stop() directly;
-  void mark_down() {
-    Mutex::Locker l(stop_lock);
-    if (center->get_owner() == pthread_self()) {
-      stop();
-    } else {
-      stopping.set(1);
-      center->dispatch_event_external(stop_handler);
-      stop_cond.Wait(stop_lock);
-    }
-  }
+  void mark_down();
   void mark_disposable() {
     Mutex::Locker l(lock);
     policy.lossy = true;
@@ -312,15 +285,6 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
-  // Helper: only called by C_handle_stop
-  void stop() {
-    Mutex::Locker l(lock);
-    _stop();
-  }
-  void wakeup_stop() {
-    Mutex::Locker l(stop_lock);
-    stop_cond.Signal();
-  }
   void local_deliver();
 }; /* AsyncConnection */
 

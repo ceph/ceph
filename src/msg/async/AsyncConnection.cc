@@ -131,26 +131,6 @@ class C_deliver_accept : public EventCallback {
   }
 };
 
-class C_handle_stop : public EventCallback {
-  AsyncConnectionRef conn;
-
- public:
-  C_handle_stop(AsyncConnectionRef c): conn(c) {}
-  void do_request(int id) {
-    conn->stop();
-  }
-};
-
-class C_handle_signal : public EventCallback {
-  AsyncConnectionRef conn;
-
- public:
-  C_handle_signal(AsyncConnectionRef c): conn(c) {}
-  void do_request(int id) {
-    conn->wakeup_stop();
-  }
-};
-
 class C_local_deliver : public EventCallback {
   AsyncConnectionRef conn;
  public:
@@ -197,8 +177,6 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
   write_handler.reset(new C_handle_write(this));
   reset_handler.reset(new C_handle_reset(async_msgr, this));
   remote_reset_handler.reset(new C_handle_remote_reset(async_msgr, this));
-  stop_handler.reset(new C_handle_stop(this));
-  signal_handler.reset(new C_handle_signal(this));
   connect_handler.reset(new C_deliver_connect(async_msgr, this));
   accept_handler.reset(new C_deliver_accept(async_msgr, this));
   local_deliver_handler.reset(new C_local_deliver(this));
@@ -844,14 +822,14 @@ void AsyncConnection::process()
 
       case STATE_OPEN_TAG_CLOSE:
         {
-          ldout(async_msgr->cct,20) << __func__ << " got CLOSE" << dendl;
+          ldout(async_msgr->cct, 20) << __func__ << " got CLOSE" << dendl;
           _stop();
           return ;
         }
 
       case STATE_STANDBY:
         {
-          ldout(async_msgr->cct,20) << __func__ << " enter STANDY" << dendl;
+          ldout(async_msgr->cct, 20) << __func__ << " enter STANDY" << dendl;
 
           break;
         }
@@ -1643,7 +1621,6 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     existing_seq = existing->in_seq;
   }
   ldout(async_msgr->cct, 10) << __func__ << " accept replacing " << existing << dendl;
-  existing->mark_down();
 
   // In order to avoid dead lock, here need to lock in ordering.
   // It may be another thread access this connection between unlock and lock
@@ -1657,6 +1634,10 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     lock.Lock();
     existing->lock.Lock();
   }
+  // Here we use "_stop" instead of "mark_down" because "mark_down" is a async
+  // operation, but now we need ensure all variables in `existing` is cleaned up
+  // and we will reuse it next.
+  existing->_stop();
   if (existing->policy.lossy) {
     // disconnect from the Connection
     center->dispatch_event_external(EventCallbackRef(new C_handle_reset(async_msgr, existing)));
@@ -1763,6 +1744,7 @@ void AsyncConnection::_connect()
   ldout(async_msgr->cct, 10) << __func__ << " " << connect_seq << dendl;
 
   state = STATE_CONNECTING;
+  stopping.set(0);
   // rescheduler connection in order to avoid lock dep
   // may called by external thread(send_message)
   center->dispatch_event_external(read_handler);
@@ -1890,7 +1872,7 @@ int AsyncConnection::randomize_out_seq()
 void AsyncConnection::fault()
 {
   if (state == STATE_CLOSED) {
-    ldout(async_msgr->cct, 10) << __func__ << " state is already STATE_CLOSED" << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " state is already " << get_state_name(state) << dendl;
     center->dispatch_event_external(reset_handler);
     return ;
   }
@@ -1962,11 +1944,14 @@ void AsyncConnection::was_session_reset()
   in_seq_acked = 0;
 }
 
+// *note: `async` is true only happen when replacing connection process
 void AsyncConnection::_stop()
 {
+  assert(lock.is_locked());
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (sd > 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+
   async_msgr->unregister_conn(this);
   shutdown_socket();
   discard_out_queue();
@@ -1978,9 +1963,6 @@ void AsyncConnection::_stop()
   for (set<uint64_t>::iterator it = register_time_events.begin();
        it != register_time_events.end(); ++it)
     center->delete_time_event(*it);
-  // Here we need to dispatch "signal" event, because we want to ensure signal
-  // it after all events called by this "_stop" has be done.
-  center->dispatch_event_external(signal_handler);
 }
 
 int AsyncConnection::_send(Message *m)
@@ -2111,9 +2093,18 @@ void AsyncConnection::handle_ack(uint64_t seq)
 
 void AsyncConnection::send_keepalive()
 {
+  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   keepalive = true;
   center->dispatch_event_external(write_handler);
+}
+
+void AsyncConnection::mark_down()
+{
+  ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
+  stopping.set(1);
+  Mutex::Locker l(lock);
+  _stop();
 }
 
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
