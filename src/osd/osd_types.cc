@@ -601,13 +601,14 @@ bool coll_t::is_pg_prefix(spg_t& pgid) const
   return true;
 }
 
-bool coll_t::is_removal(uint64_t *seq, spg_t *pgid) const
+bool coll_t::is_removal(spg_t *pgid) const
 {
   if (str.substr(0, 11) != string("FORREMOVAL_"))
     return false;
 
   stringstream ss(str.substr(11));
-  ss >> *seq;
+  uint64_t seq;  // unused...
+  ss >> seq;
   char sep;
   ss >> sep;
   assert(sep == '_');
