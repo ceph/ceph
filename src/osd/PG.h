@@ -2013,7 +2013,7 @@ public:
   int        get_nrep() const { return acting.size(); }
 
   void reset_peer_features() { peer_features = (uint64_t)-1; }
-  uint64_t get_min_peer_features() { return peer_features; }
+  uint64_t get_min_peer_features() const { return peer_features; }
   void apply_peer_features(uint64_t f) { peer_features &= f; }
 
   void init_primary_up_acting(
