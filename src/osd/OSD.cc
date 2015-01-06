@@ -2854,7 +2854,7 @@ void OSD::load_pgs()
       }
       dout(10) << "PG " << pg->info.pgid
 	       << " must upgrade..." << dendl;
-      pg->upgrade(store, i->second);
+      pg->upgrade(store);
     } else if (!i->second.empty()) {
       // handle upgrade bug
       for (interval_set<snapid_t>::iterator j = i->second.begin();

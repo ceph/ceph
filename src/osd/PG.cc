@@ -2595,7 +2595,7 @@ void PG::init(
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+void PG::upgrade(ObjectStore *store)
 {
   assert(info_struct_v <= 8);
   ObjectStore::Transaction t;
