@@ -293,7 +293,6 @@ public:
   void upgrade(
     ObjectStore *store,
     const interval_set<snapid_t> &snapcolls);
-  void _upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls);
 
   const coll_t coll;
   PGLog  pg_log;
