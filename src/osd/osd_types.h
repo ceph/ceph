@@ -478,76 +478,95 @@ ostream& operator<<(ostream& out, const spg_t &pg);
 // ----------------------
 
 class coll_t {
-  explicit coll_t(const std::string &str_)
-    : str(str_)
-  { }
+  enum type_t {
+    TYPE_META = 0,
+    TYPE_LEGACY_TEMP = 1,  /* no longer used */
+    TYPE_PG = 2,
+    TYPE_PG_TEMP = 3,
+    TYPE_PG_REMOVAL = 4,   /* note: deprecated, not encoded */
+  };
+  type_t type;
+  spg_t pgid;
+  uint64_t removal_seq;  // note: deprecated, not encoded
 
 public:
-  coll_t()
-    : str("meta")
+  coll_t() : type(TYPE_META), removal_seq(0)
   { }
 
-  coll_t(const coll_t& other) : str(other.str) {}
+  coll_t(const coll_t& other)
+    : type(other.type), pgid(other.pgid), removal_seq(other.removal_seq) {}
 
-  explicit coll_t(spg_t pgid, snapid_t snap = CEPH_NOSNAP)
-    : str(pg_and_snap_to_str(pgid, snap))
+  explicit coll_t(spg_t pgid)
+    : type(TYPE_PG), pgid(pgid)
   { }
 
-  const std::string& to_str() const {
-    return str;
+  std::string to_str() const;
+  bool parse(const std::string& s);
+
+  int operator<(const coll_t &rhs) const {
+    return type < rhs.type ||
+		  (type == rhs.type && pgid < rhs.pgid);
   }
-  bool parse(const std::string& s) {
-    if (s == "meta") {
-      str = s;
+
+  bool is_meta() const {
+    return type == TYPE_META;
+  }
+  bool is_pg_prefix(spg_t *pgid_) const {
+    if (type == TYPE_PG || type == TYPE_PG_TEMP || type == TYPE_PG_REMOVAL) {
+      *pgid_ = pgid;
       return true;
     }
-    if (s.find("_head") == s.length() - 5 ||
-	s.find("_TEMP") == s.length() - 5) {
-      spg_t pgid;
-      if (pgid.parse(s.substr(0, s.length() - 5))) {
-	str = s;
-	return true;
-      }
+    return false;
+  }
+  bool is_pg() const {
+    return type == TYPE_PG;
+  }
+  bool is_pg(spg_t *pgid_) const {
+    if (type == TYPE_PG) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+  bool is_temp() const {
+    return type == TYPE_PG_TEMP;
+  }
+  bool is_temp(spg_t *pgid_) const {
+    if (type == TYPE_PG_TEMP) {
+      *pgid_ = pgid;
+      return true;
+    }
+    return false;
+  }
+  bool is_removal() const {
+    return type == TYPE_PG_REMOVAL;
+  }
+  bool is_removal(spg_t *pgid_) const {
+    if (type == TYPE_PG_REMOVAL) {
+      *pgid_ = pgid;
+      return true;
     }
     return false;
   }
 
-  const char* c_str() const {
-    return str.c_str();
-  }
-
-  int operator<(const coll_t &rhs) const {
-    return str < rhs.str;
-  }
-
-  bool is_meta() const {
-    return str == string("meta");
-  }
-  bool is_pg_prefix(spg_t *pgid) const;
-  bool is_pg(spg_t *pgid) const;
-  bool is_pg() const {
-    spg_t pgid;
-    return is_pg(&pgid);
-  }
-  bool is_temp(spg_t *pgid) const;
-  bool is_temp() const;
-  bool is_removal(spg_t *pgid) const;
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
+
   inline bool operator==(const coll_t& rhs) const {
-    return str == rhs.str;
+    return type == rhs.type && pgid == rhs.pgid;
   }
   inline bool operator!=(const coll_t& rhs) const {
-    return str != rhs.str;
+    return !(*this == rhs);
   }
 
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
   coll_t get_temp() {
-    spg_t pgid;
-    bool valid = is_pg(&pgid);
-    assert(valid);
-    return coll_t(str.substr(0, str.length() - 4) + "TEMP");
+    assert(type == TYPE_PG);
+    coll_t other;
+    other.type = TYPE_PG_TEMP;
+    other.pgid = pgid;
+    return other;
   }
 
   void dump(Formatter *f) const;
@@ -564,8 +583,6 @@ private:
     oss << p << "_TEMP";
     return oss.str();
   }
-
-  std::string str;
 };
 
 WRITE_CLASS_ENCODER(coll_t)
