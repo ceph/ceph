@@ -556,10 +556,10 @@ bool coll_t::is_temp() const
   return false;
 }
 
-bool coll_t::is_temp(spg_t& pgid) const
+bool coll_t::is_temp(spg_t *pgid) const
 {
   const char *cstr(str.c_str());
-  if (!pgid.parse(cstr))
+  if (!pgid->parse(cstr))
     return false;
   const char *tmp_start = strchr(cstr, '_');
   if (!tmp_start)
@@ -569,31 +569,25 @@ bool coll_t::is_temp(spg_t& pgid) const
   return false;
 }
 
-bool coll_t::is_pg(spg_t& pgid, snapid_t& snap) const
+bool coll_t::is_pg(spg_t *pgid) const
 {
   const char *cstr(str.c_str());
 
-  if (!pgid.parse(cstr))
+  if (!pgid->parse(cstr))
     return false;
   const char *snap_start = strchr(cstr, '_');
   if (!snap_start)
     return false;
-  if (strncmp(snap_start, "_head", 5) == 0) {
-    snap = CEPH_NOSNAP;
-  } else {
-    errno = 0;
-    snap = strtoull(snap_start+1, 0, 16);
-    if (errno)
-      return false;
-  }
+  if (strncmp(snap_start, "_head", 5) != 0)
+    return false;
   return true;
 }
 
-bool coll_t::is_pg_prefix(spg_t& pgid) const
+bool coll_t::is_pg_prefix(spg_t *pgid) const
 {
   const char *cstr(str.c_str());
 
-  if (!pgid.parse(cstr))
+  if (!pgid->parse(cstr))
     return false;
   const char *snap_start = strchr(cstr, '_');
   if (!snap_start)
