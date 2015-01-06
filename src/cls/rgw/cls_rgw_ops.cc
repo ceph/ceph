@@ -154,6 +154,7 @@ void rgw_cls_link_olh_op::generate_test_instances(list<rgw_cls_link_olh_op*>& o)
   rgw_bucket_dir_entry_meta::generate_test_instances(l);
   list<rgw_bucket_dir_entry_meta *>::iterator iter = l.begin();
   op->meta = *(*iter);
+  op->log_op = true;
 
   o.push_back(op);
 
@@ -168,6 +169,7 @@ void rgw_cls_link_olh_op::dump(Formatter *f) const
   ::encode_json("op_tag", op_tag, f);
   ::encode_json("meta", meta, f);
   ::encode_json("olh_epoch", olh_epoch, f);
+  ::encode_json("log_op", log_op, f);
 }
 
 void rgw_cls_unlink_instance_op::generate_test_instances(list<rgw_cls_unlink_instance_op*>& o)
@@ -176,6 +178,7 @@ void rgw_cls_unlink_instance_op::generate_test_instances(list<rgw_cls_unlink_ins
   op->key.name = "name";
   op->op_tag = "op_tag";
   op->olh_epoch = 124;
+  op->log_op = true;
 
   o.push_back(op);
 
@@ -187,6 +190,7 @@ void rgw_cls_unlink_instance_op::dump(Formatter *f) const
   ::encode_json("key", key, f);
   ::encode_json("op_tag", op_tag, f);
   ::encode_json("olh_epoch", olh_epoch, f);
+  ::encode_json("log_op", log_op, f);
 }
 
 void rgw_cls_read_olh_log_op::generate_test_instances(list<rgw_cls_read_olh_log_op*>& o)
