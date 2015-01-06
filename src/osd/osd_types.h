@@ -493,10 +493,6 @@ public:
     : str(pg_and_snap_to_str(pgid, snap))
   { }
 
-  static coll_t make_string_coll(const std::string& s) {
-    return coll_t(s);
-  }
-
   const std::string& to_str() const {
     return str;
   }
