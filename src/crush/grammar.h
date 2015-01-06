@@ -117,7 +117,8 @@ struct crush_grammar : public grammar<crush_grammar>
 				     str_p("list") |
 				     str_p("tree") |
 				     str_p("straw") |
-				     str_p("straw2"));
+				     str_p("straw2") |
+				     str_p("linear") );
       bucket_hash = str_p("hash") >> ( integer |
 				       str_p("rjenkins1") );
       bucket_item = str_p("item") >> name

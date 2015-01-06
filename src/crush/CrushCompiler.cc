@@ -78,6 +78,7 @@ int CrushCompiler::decompile_bucket_impl(int i, ostream &out)
   bool dopos = false;
   switch (alg) {
   case CRUSH_BUCKET_UNIFORM:
+  case CRUSH_BUCKET_LINEAR:
     out << "\t# do not change bucket size (" << n << ") unnecessarily";
     dopos = true;
     break;
@@ -446,6 +447,8 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	alg = CRUSH_BUCKET_STRAW;
       else if (a == "straw2")
 	alg = CRUSH_BUCKET_STRAW2;
+      else if (a == "linear")
+        alg = CRUSH_BUCKET_LINEAR;
       else {
 	err << "unknown bucket alg '" << a << "'" << std::endl << std::endl;
 	return -EINVAL;
@@ -523,15 +526,16 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	  assert(0);
 
       }
-      if (alg == CRUSH_BUCKET_UNIFORM) {
+      if (alg == CRUSH_BUCKET_UNIFORM || alg == CRUSH_BUCKET_LINEAR) {
 	if (!have_uniform_weight) {
 	  have_uniform_weight = true;
 	  uniform_weight = weight;
 	} else {
 	  if (uniform_weight != weight) {
-	    err << "item '" << iname << "' in uniform bucket '" << name << "' has weight " << weight
+	    //string bucket_type = (alg == CRUSH_BUCKET_UNIFORM) ? "uniform" : "linear";
+	    err << "item '" << iname << "' in " << crush_bucket_alg_name(alg) << " bucket '" << name << "' has weight " << weight
 		<< " but previous item(s) have weight " << (float)uniform_weight/(float)0x10000
-		<< "; uniform bucket items must all have identical weights." << std::endl;
+		<< "; " << crush_bucket_alg_name(alg) << " bucket items must all have identical weights." << std::endl;
 	    return -1;
 	  }
 	}

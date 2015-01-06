@@ -135,7 +135,8 @@ public:
       (1 << CRUSH_BUCKET_UNIFORM) |
       (1 << CRUSH_BUCKET_LIST) |
       (1 << CRUSH_BUCKET_STRAW) |
-      (1 << CRUSH_BUCKET_STRAW2);
+      (1 << CRUSH_BUCKET_STRAW2) |
+      (1 << CRUSH_BUCKET_LINEAR);
   }
 
   void set_tunables_legacy() {
@@ -239,9 +240,10 @@ public:
       crush->chooseleaf_vary_r == 1 &&
       crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
-				      (1 << CRUSH_BUCKET_LIST) |
-				      (1 << CRUSH_BUCKET_STRAW) |
-				      (1 << CRUSH_BUCKET_STRAW2));
+				     (1 << CRUSH_BUCKET_LIST) |
+				     (1 << CRUSH_BUCKET_STRAW) |
+				     (1 << CRUSH_BUCKET_STRAW2) |
+				     (1 << CRUSH_BUCKET_LINEAR));
 }
 
   bool has_optimal_tunables() const {
@@ -286,6 +288,8 @@ public:
       return CRUSH_BUCKET_LIST;
     if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_UNIFORM))
       return CRUSH_BUCKET_UNIFORM;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_LINEAR))
+      return CRUSH_BUCKET_LINEAR;
     return 0;
   }
 
