@@ -2463,18 +2463,15 @@ int OSD::read_superblock()
 
 
 
-void OSD::recursive_remove_collection(ObjectStore *store, coll_t tmp)
+void OSD::recursive_remove_collection(ObjectStore *store, spg_t pgid, coll_t tmp)
 {
   OSDriver driver(
     store,
     coll_t(),
     make_snapmapper_oid());
 
-  spg_t pg;
-  tmp.is_pg_prefix(pg);
-
   ObjectStore::Transaction t;
-  SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+  SnapMapper mapper(&driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
   store->collection_list(tmp, objects);
@@ -2771,14 +2768,13 @@ void OSD::load_pgs()
        ++it) {
     spg_t pgid;
     snapid_t snap;
-    uint64_t seq;
 
     if (it->is_temp(pgid) ||
-	it->is_removal(&seq, &pgid) ||
+	it->is_removal(&pgid) ||
 	(it->is_pg(pgid, snap) &&
 	 PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
-      recursive_remove_collection(store, *it);
+      recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
