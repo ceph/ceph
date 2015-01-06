@@ -1913,7 +1913,7 @@ TEST_P(StoreTest, SetAllocHint) {
 INSTANTIATE_TEST_CASE_P(
   ObjectStore,
   StoreTest,
-  ::testing::Values("memstore", "filestore", "keyvaluestore-dev"));
+  ::testing::Values("memstore", "filestore", "keyvaluestore"));
 
 #else
 
@@ -1997,6 +1997,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
   g_ceph_context->_conf->set_val("filestore_debug_disable_sharded_check", "true");
   g_ceph_context->_conf->set_val("filestore_fiemap", "true");
+  g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "keyvaluestore");
   g_ceph_context->_conf->apply_changes(NULL);
 
   ::testing::InitGoogleTest(&argc, argv);
