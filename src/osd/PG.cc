@@ -2738,10 +2738,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
   assert(bl);
   {
     // validate collection name
-    spg_t pgid_temp;
-    snapid_t snap;
-    bool ok = coll.is_pg(pgid_temp, snap);
-    assert(ok);
+    assert(coll.is_pg());
   }
 
   // try for v8

@@ -4725,11 +4725,10 @@ int FileStore::collection_list_partial(coll_t c, ghobject_t start,
   shard_id_t shard;
   {
     spg_t pgid;
-    snapid_t snap;
-    if (c.is_temp(pgid)) {
+    if (c.is_temp(&pgid)) {
       pool = -2 - pgid.pool();
       shard = pgid.shard;
-    } else if (c.is_pg(pgid, snap)) {
+    } else if (c.is_pg(&pgid)) {
       pool = pgid.pool();
       shard = pgid.shard;
     } else if (c.is_meta()) {
