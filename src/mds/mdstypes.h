@@ -611,11 +611,19 @@ struct fnode_t {
   nest_info_t rstat, accounted_rstat;
   damage_flags_t damage_flags;
 
+  // we know we and all our descendants have been scrubbed since this version
+  version_t recursive_scrub_version;
+  utime_t recursive_scrub_stamp;
+  // version at which we last scrubbed our personal data structures
+  version_t localized_scrub_version;
+  utime_t localized_scrub_stamp;
+
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0) {}
+  fnode_t() : version(0),
+	      recursive_scrub_version(0), localized_scrub_version(0) {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
 

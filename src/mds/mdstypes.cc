@@ -560,7 +560,7 @@ void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 3, bl);
+  ENCODE_START(4, 3, bl);
   ::encode(version, bl);
   ::encode(snap_purged_thru, bl);
   ::encode(fragstat, bl);
@@ -568,6 +568,10 @@ void fnode_t::encode(bufferlist &bl) const
   ::encode(rstat, bl);
   ::encode(accounted_rstat, bl);
   ::encode(damage_flags, bl);
+  ::encode(recursive_scrub_version, bl);
+  ::encode(recursive_scrub_stamp, bl);
+  ::encode(localized_scrub_version, bl);
+  ::encode(localized_scrub_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -582,6 +586,12 @@ void fnode_t::decode(bufferlist::iterator &bl)
   ::decode(accounted_rstat, bl);
   if (struct_v >= 3) {
     ::decode(damage_flags, bl);
+  }
+  if (struct_v >= 4) {
+    ::decode(recursive_scrub_version, bl);
+    ::decode(recursive_scrub_stamp, bl);
+    ::decode(localized_scrub_version, bl);
+    ::decode(localized_scrub_stamp, bl);
   }
   DECODE_FINISH(bl);
 }
