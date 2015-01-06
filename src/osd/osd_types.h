@@ -523,9 +523,13 @@ public:
   bool is_meta() const {
     return str == string("meta");
   }
-  bool is_pg_prefix(spg_t& pgid) const;
-  bool is_pg(spg_t& pgid, snapid_t& snap) const;
-  bool is_temp(spg_t& pgid) const;
+  bool is_pg_prefix(spg_t *pgid) const;
+  bool is_pg(spg_t *pgid) const;
+  bool is_pg() const {
+    spg_t pgid;
+    return is_pg(&pgid);
+  }
+  bool is_temp(spg_t *pgid) const;
   bool is_temp() const;
   bool is_removal(spg_t *pgid) const;
   void encode(bufferlist& bl) const;
@@ -541,10 +545,8 @@ public:
   // which we presume is a pg collection.
   coll_t get_temp() {
     spg_t pgid;
-    snapid_t snap;
-    bool foo = is_pg(pgid, snap);
-    assert(foo);
-    assert(snap == CEPH_NOSNAP);
+    bool valid = is_pg(&pgid);
+    assert(valid);
     return coll_t(str.substr(0, str.length() - 4) + "TEMP");
   }
 
