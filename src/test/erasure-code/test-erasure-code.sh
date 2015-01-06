@@ -115,8 +115,8 @@ function plugin_exists() {
 
 function TEST_rados_put_get_lrc_advanced() {
     local dir=$1
-    local poolname=pool-lrc
-    local profile=profile-lrc
+    local poolname=pool-lrc-a
+    local profile=profile-lrc-a
 
     ./ceph osd erasure-code-profile set $profile \
         plugin=lrc \
