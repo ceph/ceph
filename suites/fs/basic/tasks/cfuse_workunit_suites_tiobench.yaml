@@ -1,6 +1,0 @@
-tasks:
-- ceph-fuse:
-- workunit:
-    clients:
-      all:
-        - suites/tiobench.sh
