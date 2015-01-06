@@ -27,6 +27,9 @@ enum RGWModifyOp {
   CLS_RGW_OP_DEL     = 1,
   CLS_RGW_OP_CANCEL  = 2,
   CLS_RGW_OP_UNKNOWN = 3,
+  CLS_RGW_OP_LINK_OLH        = 4,
+  CLS_RGW_OP_LINK_OLH_DM     = 5, /* creation of delete marker */
+  CLS_RGW_OP_UNLINK_INSTANCE = 6,
 };
 
 struct rgw_bucket_pending_info {
