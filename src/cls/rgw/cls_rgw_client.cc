@@ -182,7 +182,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
 
 int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
                             bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
-                            uint64_t olh_epoch)
+                            uint64_t olh_epoch, bool log_op)
 {
   bufferlist in, out;
   struct rgw_cls_link_olh_op call;
@@ -194,6 +194,7 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
     call.meta = *meta;
   }
   call.olh_epoch = olh_epoch;
+  call.log_op = log_op;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_link_olh", in, out);
   if (r < 0)
@@ -204,13 +205,14 @@ int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cl
 
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
-                                   uint64_t olh_epoch)
+                                   uint64_t olh_epoch, bool log_op)
 {
   bufferlist in, out;
   struct rgw_cls_unlink_instance_op call;
   call.key = key;
   call.op_tag = op_tag;
   call.olh_epoch = olh_epoch;
+  call.log_op = log_op;
   ::encode(call, in);
   int r = io_ctx.exec(oid, "rgw", "bucket_unlink_instance", in, out);
   if (r < 0)

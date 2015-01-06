@@ -152,8 +152,9 @@ struct rgw_cls_link_olh_op {
   string op_tag;
   struct rgw_bucket_dir_entry_meta meta;
   uint64_t olh_epoch;
+  bool log_op;
 
-  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0) {}
+  rgw_cls_link_olh_op() : delete_marker(false), olh_epoch(0), log_op(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -163,6 +164,7 @@ struct rgw_cls_link_olh_op {
     ::encode(op_tag, bl);
     ::encode(meta, bl);
     ::encode(olh_epoch, bl);
+    ::encode(log_op, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -174,6 +176,7 @@ struct rgw_cls_link_olh_op {
     ::decode(op_tag, bl);
     ::decode(meta, bl);
     ::decode(olh_epoch, bl);
+    ::decode(log_op, bl);
     DECODE_FINISH(bl);
   }
 
@@ -186,14 +189,16 @@ struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
   string op_tag;
   uint64_t olh_epoch;
+  bool log_op;
 
-  rgw_cls_unlink_instance_op() : olh_epoch(0) {}
+  rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(key, bl);
     ::encode(op_tag, bl);
     ::encode(olh_epoch, bl);
+    ::encode(log_op, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -202,6 +207,7 @@ struct rgw_cls_unlink_instance_op {
     ::decode(key, bl);
     ::decode(op_tag, bl);
     ::decode(olh_epoch, bl);
+    ::decode(log_op, bl);
     DECODE_FINISH(bl);
   }
 

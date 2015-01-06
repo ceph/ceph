@@ -5653,7 +5653,8 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch);
+  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
+                                zone_public_config.log_data);
   if (ret < 0) {
     return ret;
   }
@@ -5685,7 +5686,7 @@ int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& 
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_unlink_instance(index_ctx, oid, key, op_tag, olh_epoch);
+  ret = cls_rgw_bucket_unlink_instance(index_ctx, oid, key, op_tag, olh_epoch, zone_public_config.log_data);
   if (ret < 0) {
     return ret;
   }

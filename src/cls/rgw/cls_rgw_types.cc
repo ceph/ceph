@@ -287,6 +287,15 @@ void rgw_bi_log_entry::dump(Formatter *f) const
     case CLS_RGW_OP_UNKNOWN:
       f->dump_string("op", "unknown");
       break;
+    case CLS_RGW_OP_LINK_OLH:
+      f->dump_string("op", "link_olh");
+      break;
+    case CLS_RGW_OP_LINK_OLH_DM:
+      f->dump_string("op", "link_olh_del");
+      break;
+    case CLS_RGW_OP_UNLINK_INSTANCE:
+      f->dump_string("op", "unlink_instance");
+      break;
     default:
       f->dump_string("op", "invalid");
       break;
