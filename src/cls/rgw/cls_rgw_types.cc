@@ -293,6 +293,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   }
 
   f->dump_string("object", object);
+  f->dump_string("instance", instance);
 
   switch (state) {
     case CLS_RGW_STATE_PENDING_MODIFY:
