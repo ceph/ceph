@@ -104,7 +104,8 @@ EventCenter::~EventCenter()
 
 int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 {
-  int r;
+  int r = 0;
+  Mutex::Locker l(file_lock);
   if (fd > nevent) {
     int new_size = nevent << 2;
     while (fd > new_size)
@@ -145,6 +146,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 
 void EventCenter::delete_file_event(int fd, int mask)
 {
+  Mutex::Locker l(file_lock);
   EventCenter::FileEvent *event = _get_file_event(fd);
   if (!event->mask)
     return ;
@@ -165,6 +167,7 @@ void EventCenter::delete_file_event(int fd, int mask)
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)
 {
+  Mutex::Locker l(time_lock);
   uint64_t id = time_event_next_id++;
 
   ldout(cct, 10) << __func__ << " id=" << id << " trigger after " << microseconds << "us"<< dendl;
@@ -186,6 +189,8 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   event.id = id;
   event.time_cb = ctxt;
   time_events[expire].push_back(event);
+  if (expire < next_time)
+    wakeup();
 
   return id;
 }
@@ -193,6 +198,7 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
 // TODO: Ineffective implementation now!
 void EventCenter::delete_time_event(uint64_t id)
 {
+  Mutex::Locker l(time_lock);
   ldout(cct, 10) << __func__ << " id=" << id << dendl;
   if (id >= time_event_next_id)
     return ;
@@ -230,6 +236,7 @@ int EventCenter::process_time_events()
   utime_t cur = ceph_clock_now(cct);
   ldout(cct, 10) << __func__ << " cur time is " << cur << dendl;
 
+  time_lock.Lock();
   /* If the system clock is moved to the future, and then set back to the
    * right value, time events may be delayed in a random way. Often this
    * means that scheduled operations will not be performed soon enough.
@@ -249,22 +256,25 @@ int EventCenter::process_time_events()
   last_time = now;
 
   map<utime_t, list<TimeEvent> >::iterator prev;
+  list<TimeEvent> need_process;
   for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
        it != time_events.end(); ) {
     prev = it;
     if (cur >= it->first) {
-      for (list<TimeEvent>::iterator j = it->second.begin();
-           j != it->second.end(); ++j) {
-        ldout(cct, 10) << __func__ << " process time event: id=" << j->id << " time is "
-                      << it->first << dendl;
-        j->time_cb->do_request(j->id);
-      }
-      processed++;
+      need_process.splice(need_process.end(), it->second);
       ++it;
       time_events.erase(prev);
     } else {
       break;
     }
+  }
+  time_lock.Unlock();
+
+  for (list<TimeEvent>::iterator it = need_process.begin();
+       it != need_process.end(); ++it) {
+    ldout(cct, 10) << __func__ << " process time event: id=" << it->id << dendl;
+    it->time_cb->do_request(it->id);
+    processed++;
   }
 
   return processed;
@@ -287,6 +297,7 @@ int EventCenter::process_events(int timeout_microseconds)
   shortest.set_from_timeval(&tv);
 
   {
+    Mutex::Locker l(time_lock);
     map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
     if (it != time_events.end() && shortest >= it->first) {
       ldout(cct, 10) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
@@ -307,12 +318,15 @@ int EventCenter::process_events(int timeout_microseconds)
 
   ldout(cct, 10) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
+  next_time = shortest;
   numevents = driver->event_wait(fired_events, &tv);
   for (int j = 0; j < numevents; j++) {
     int rfired = 0;
-    FileEvent *event = _get_file_event(fired_events[j].fd);
-    if (!event)
-      continue;
+    FileEvent *event;
+    {
+      Mutex::Locker l(file_lock);
+      event = _get_file_event(fired_events[j].fd);
+    }
 
     /* note the event->mask & mask & ... code: maybe an already processed
     * event removed an element that fired and we still didn't
@@ -321,9 +335,6 @@ int EventCenter::process_events(int timeout_microseconds)
       rfired = 1;
       event->read_cb->do_request(fired_events[j].fd);
     }
-    event = _get_file_event(fired_events[j].fd);
-    if (!event)
-      continue;
 
     if (event->mask & fired_events[j].mask & EVENT_WRITABLE) {
       if (!rfired || event->read_cb != event->write_cb)
@@ -337,23 +348,23 @@ int EventCenter::process_events(int timeout_microseconds)
     numevents += process_time_events();
 
   {
-    lock.Lock();
+    external_lock.Lock();
     while (!external_events.empty()) {
       EventCallbackRef e = external_events.front();
       external_events.pop_front();
-      lock.Unlock();
+      external_lock.Unlock();
       e->do_request(0);
-      lock.Lock();
+      external_lock.Lock();
     }
-    lock.Unlock();
+    external_lock.Unlock();
   }
   return numevents;
 }
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  lock.Lock();
+  external_lock.Lock();
   external_events.push_back(e);
-  lock.Unlock();
+  external_lock.Unlock();
   wakeup();
 }
