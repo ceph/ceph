@@ -66,15 +66,10 @@ class Processor {
   Worker *worker;
   int listen_sd;
   uint64_t nonce;
-  Mutex stop_lock;
-  Cond stop_cond;
 
  public:
-  Processor(AsyncMessenger *r, uint64_t n)
-    : msgr(r), worker(NULL), listen_sd(-1), nonce(n),
-      stop_lock("AsyncMessenger::Processor::stop_lock") {}
+  Processor(AsyncMessenger *r, uint64_t n): msgr(r), worker(NULL), listen_sd(-1), nonce(n) {}
 
-  void stop_cb();
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
   int rebind(const set<int>& avoid_port);
