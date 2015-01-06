@@ -91,7 +91,7 @@ void usage()
   cout << "                         specify output for for (de)compilation\n";
   cout << "   --build --num_osds N layer1 ...\n";
   cout << "                         build a new map, where each 'layer' is\n";
-  cout << "                           'name (uniform|straw|list|tree) size'\n";
+  cout << "                           'name (uniform|straw|list|tree|linear) size'\n";
   cout << "   -i mapfn --test       test a range of inputs on the map\n";
   cout << "      [--min-x x] [--max-x x] [--x x]\n";
   cout << "      [--min-rule r] [--max-rule r] [--rule r]\n";
@@ -151,6 +151,7 @@ struct bucket_types_t {
   { "list", CRUSH_BUCKET_LIST },
   { "straw", CRUSH_BUCKET_STRAW },
   { "tree", CRUSH_BUCKET_TREE },
+  { "linear", CRUSH_BUCKET_LINEAR },
   { 0, 0 },
 };
 

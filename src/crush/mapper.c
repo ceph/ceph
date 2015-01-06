@@ -239,6 +239,16 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 	return bucket->h.items[high];
 }
 
+/* linear */
+
+static int bucket_linear_choose(struct crush_bucket_linear *bucket,
+			       int x, int r)
+{
+	unsigned int item = x%bucket->h.size;
+	return bucket->h.items[item];
+}
+
+
 static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
@@ -256,6 +266,10 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 	case CRUSH_BUCKET_STRAW:
 		return bucket_straw_choose((struct crush_bucket_straw *)in,
 					   x, r);
+	case CRUSH_BUCKET_LINEAR:
+		return bucket_linear_choose((struct crush_bucket_linear *)in,
+					  x, r);
+
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
 		return in->items[0];
