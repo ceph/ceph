@@ -4637,9 +4637,8 @@ void Client::unmount()
   while (!fd_map.empty()) {
     Fh *fh = fd_map.begin()->second;
     fd_map.erase(fd_map.begin());
-    int release_err = _release_fh(fh);
-    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *fh->inode << "(async_err = " << release_err << ")" << dendl;
-
+    ldout(cct, 0) << " destroyed lost open file " << fh << " on " << *fh->inode << dendl;
+    _release_fh(fh);
   }
 
   _ll_drop_pins();
