@@ -2761,8 +2761,7 @@ void OSD::load_pgs()
     derr << "failed to list pgs: " << cpp_strerror(-r) << dendl;
   }
 
-  set<spg_t> head_pgs;
-  map<spg_t, interval_set<snapid_t> > pgs;
+  set<spg_t> pgs;
   for (vector<coll_t>::iterator it = ls.begin();
        it != ls.end();
        ++it) {
@@ -2776,8 +2775,7 @@ void OSD::load_pgs()
     }
 
     if (it->is_pg(&pgid)) {
-      pgs[pgid];
-      head_pgs.insert(pgid);
+      pgs.insert(pgid);
       continue;
     }
 
@@ -2785,16 +2783,8 @@ void OSD::load_pgs()
   }
 
   bool has_upgraded = false;
-  for (map<spg_t, interval_set<snapid_t> >::iterator i = pgs.begin();
-       i != pgs.end();
-       ++i) {
-    spg_t pgid(i->first);
-
-    if (!head_pgs.count(pgid)) {
-      dout(10) << __func__ << ": " << pgid << " has orphan snap collections " << i->second
-	       << " with no head" << dendl;
-      continue;
-    }
+  for (set<spg_t>::iterator i = pgs.begin(); i != pgs.end(); ++i) {
+    spg_t pgid(*i);
 
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
@@ -2846,20 +2836,6 @@ void OSD::load_pgs()
       dout(10) << "PG " << pg->info.pgid
 	       << " must upgrade..." << dendl;
       pg->upgrade(store);
-    } else if (!i->second.empty()) {
-      // handle upgrade bug
-      for (interval_set<snapid_t>::iterator j = i->second.begin();
-	   j != i->second.end();
-	   ++j) {
-	for (snapid_t k = j.get_start();
-	     k != j.get_start() + j.get_len();
-	     ++k) {
-	  assert(store->collection_empty(coll_t(pgid, k)));
-	  ObjectStore::Transaction t;
-	  t.remove_collection(coll_t(pgid, k));
-	  store->apply_transaction(t);
-	}
-      }
     }
 
     service.init_splits_between(pg->info.pgid, pg->get_osdmap(), osdmap);
