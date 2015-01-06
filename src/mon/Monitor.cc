@@ -178,6 +178,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   paxos_service(PAXOS_NUM),
   admin_hook(NULL),
+  health_tick_event(NULL),
+  health_interval_event(NULL),
   routed_request_tid(0)
 {
   rank = -1;
@@ -431,6 +433,10 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    // periodic health to clog
+    "mon_health_to_clog",
+    "mon_health_to_clog_interval",
+    "mon_health_to_clog_tick_interval",
     NULL
   };
   return KEYS;
@@ -448,6 +454,12 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_level") ||
       changed.count("clog_to_syslog_facility")) {
     update_log_clients();
+  }
+
+  if (changed.count("mon_health_to_clog") ||
+      changed.count("mon_health_to_clog_interval") ||
+      changed.count("mon_health_to_clog_tick_interval")) {
+    health_to_clog_update_conf(changed);
   }
 }
 
@@ -968,7 +980,7 @@ void Monitor::_reset()
 
   cancel_probe_timeout();
   timecheck_finish();
-  cleanup_health_tick_event();
+  health_events_cleanup();
 
   leader_since = utime_t();
   if (!quorum.empty()) {
@@ -1830,7 +1842,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   if (monmap->size() > 1 &&
       monmap->get_epoch() > 0) {
     timecheck_start();
-    start_health_tick_event();
+    health_tick_start();
+    do_health_to_clog_interval();
   }
 }
 
@@ -2048,7 +2061,24 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
 }
 
 
-void Monitor::stop_health_tick_event()
+// health status to clog
+
+void Monitor::health_tick_start()
+{
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_tick_interval <= 0)
+    return;
+
+  dout(15) << __func__ << dendl;
+
+  health_tick_stop();
+  health_tick_event = new C_HealthToClogTick(this);
+
+  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
+                        health_tick_event);
+}
+
+void Monitor::health_tick_stop()
 {
   dout(15) << __func__ << dendl;
 
@@ -2058,22 +2088,90 @@ void Monitor::stop_health_tick_event()
   }
 }
 
-void Monitor::start_health_tick_event()
+utime_t Monitor::health_interval_calc_next_update()
 {
-  if (!cct->_conf->mon_health_to_clog ||
-      cct->_conf->mon_health_to_clog_tick_interval <= 0)
-    return;
+  utime_t now = ceph_clock_now(cct);
 
-  dout(15) << __func__ << dendl;
+  time_t secs = now.sec();
+  int remainder = secs % cct->_conf->mon_health_to_clog_interval;
+  int adjustment = cct->_conf->mon_health_to_clog_interval - remainder;
+  utime_t next = utime_t(secs + adjustment, 0);
 
-  stop_health_tick_event();
-  health_tick_event = new C_HealthTick(this);
-  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
-                        health_tick_event);
+  dout(20) << __func__
+    << " now: " << now << ","
+    << " next: " << next << ","
+    << " interval: " << cct->_conf->mon_health_to_clog_interval
+    << dendl;
+
+  return next;
 }
 
+void Monitor::health_interval_start()
+{
+  dout(15) << __func__ << dendl;
 
-void Monitor::do_health_to_clog()
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_interval <= 0) {
+    return;
+  }
+
+  health_interval_stop();
+  utime_t next = health_interval_calc_next_update();
+  health_interval_event = new C_HealthToClogInterval(this);
+  timer.add_event_at(next, health_interval_event);
+}
+
+void Monitor::health_interval_stop()
+{
+  dout(15) << __func__ << dendl;
+  if (health_interval_event) {
+    timer.cancel_event(health_interval_event);
+  }
+  health_interval_event = NULL;
+}
+
+void Monitor::health_events_cleanup()
+{
+  health_tick_stop();
+  health_interval_stop();
+  health_status_cache.reset();
+}
+
+void Monitor::health_to_clog_update_conf(const std::set<std::string> &changed)
+{
+  dout(20) << __func__ << dendl;
+
+  if (changed.count("mon_health_to_clog")) {
+    if (!cct->_conf->mon_health_to_clog) {
+      health_events_cleanup();
+    } else {
+      if (!health_tick_event) {
+        health_tick_start();
+      }
+      if (!health_interval_event) {
+        health_interval_start();
+      }
+    }
+  }
+
+  if (changed.count("mon_health_to_clog_interval")) {
+    if (cct->_conf->mon_health_to_clog_interval <= 0) {
+      health_interval_stop();
+    } else {
+      health_interval_start();
+    }
+  }
+
+  if (changed.count("mon_health_to_clog_tick_interval")) {
+    if (cct->_conf->mon_health_to_clog_tick_interval <= 0) {
+      health_tick_stop();
+    } else {
+      health_tick_start();
+    }
+  }
+}
+
+void Monitor::do_health_to_clog_interval()
 {
   // outputting to clog may have been disabled in the conf
   // since we were scheduled.
@@ -2083,34 +2181,44 @@ void Monitor::do_health_to_clog()
 
   dout(10) << __func__ << dendl;
 
+  // do we have a cached value for next_clog_update?  if not,
+  // do we know when the last update was?
+
+  do_health_to_clog(true);
+  health_interval_start();
+}
+
+void Monitor::do_health_to_clog(bool force)
+{
+  // outputting to clog may have been disabled in the conf
+  // since we were scheduled.
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_interval <= 0)
+    return;
+
+  dout(10) << __func__ << (force ? " (force)" : "") << dendl;
+
   list<string> status;
   health_status_t overall = get_health(status, NULL, NULL);
 
-  utime_t next_clog_update = health_status_cache.last_update;
-  next_clog_update += cct->_conf->mon_health_to_clog_interval;
-
-  dout(25) << __func__ << " last_update " << health_status_cache.last_update
-           << " next_update " << next_clog_update << dendl;
+  dout(25) << __func__
+           << (force ? " (force)" : "")
+           << dendl;
 
   string summary = joinify(status.begin(), status.end(), string("; "));
 
-  if (overall == health_status_cache.overall &&
+  if (!force &&
+      overall == health_status_cache.overall &&
       !health_status_cache.summary.empty() &&
       health_status_cache.summary == summary) {
     // we got a dup!
-    // should we print anyway?
-    if (next_clog_update > ceph_clock_now(cct))
-      goto out;
+    return;
   }
 
   clog->info() << summary;
 
   health_status_cache.overall = overall;
-  health_status_cache.last_update = ceph_clock_now(cct);
   health_status_cache.summary = summary;
-
-out:
-  start_health_tick_event();
 }
 
 health_status_t Monitor::get_health(list<string>& status,
