@@ -212,7 +212,7 @@ OPTION(mon_reweight_min_pgs_per_osd, OPT_U64, 10)   // min pgs per osd for rewei
 OPTION(mon_reweight_min_bytes_per_osd, OPT_U64, 100*1024*1024)   // min bytes per osd for reweight-by-utilization command
 OPTION(mon_health_data_update_interval, OPT_FLOAT, 60.0)
 OPTION(mon_health_to_clog, OPT_BOOL, true)
-OPTION(mon_health_to_clog_interval, OPT_DOUBLE, 3600.0)
+OPTION(mon_health_to_clog_interval, OPT_INT, 3600)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE, 60.0)
 OPTION(mon_data_avail_crit, OPT_INT, 5)
 OPTION(mon_data_avail_warn, OPT_INT, 30)
