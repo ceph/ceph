@@ -635,6 +635,26 @@ TRACEPOINT_EVENT(librados, rados_ioctx_create_exit,
     )
 )
 
+TRACEPOINT_EVENT(librados, rados_ioctx_create2_enter,
+    TP_ARGS(
+        rados_t, cluster,
+	int64_t, pool_id),
+    TP_FIELDS(
+        ctf_integer_hex(rados_t, cluster, cluster)
+	ctf_integer(int64_t, pool_id, pool_id)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_ioctx_create2_exit,
+    TP_ARGS(
+        int, retval,
+        rados_ioctx_t, ioctx),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
+    )
+)
+
 TRACEPOINT_EVENT(librados, rados_ioctx_destroy_enter,
     TP_ARGS(
         rados_ioctx_t, ioctx),

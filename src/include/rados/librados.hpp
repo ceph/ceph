@@ -1082,12 +1082,14 @@ namespace librados
 		    bufferlist *outbl, std::string *outs);
 
     int ioctx_create(const char *name, IoCtx &pioctx);
+    int ioctx_create2(int64_t pool_id, IoCtx &pioctx);
 
     // Features useful for test cases
     void test_blacklist_self(bool set);
 
     /* listing objects */
     int pool_list(std::list<std::string>& v);
+    int pool_list2(std::list<std::pair<int64_t, std::string> >& v);
     int get_pool_stats(std::list<std::string>& v,
 		       stats_map& result);
     /// deprecated; use simpler form.  categories no longer supported.
