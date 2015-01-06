@@ -2271,7 +2271,7 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
 
   if (end_marker.empty()) {
     end_key = BI_PREFIX_CHAR;
-    end_key.append(bucket_index_prefixes[BI_BUCKET_LAST_INDEX]);
+    end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX + 1]);
   } else {
     end_key = BI_PREFIX_CHAR;
     end_key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
