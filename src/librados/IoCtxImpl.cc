@@ -33,7 +33,7 @@ librados::IoCtxImpl::IoCtxImpl() :
 }
 
 librados::IoCtxImpl::IoCtxImpl(RadosClient *c, Objecter *objecter,
-			       int poolid,
+			       int64_t poolid,
 			       const char *pool_name, snapid_t s)
   : ref_cnt(0), client(c), poolid(poolid), pool_name(pool_name), snap_seq(s),
     assert_ver(0), last_objver(0),

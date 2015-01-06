@@ -413,33 +413,42 @@ namespace librbd {
 
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
-    std::list<string> pools;
-    rados.pool_list(pools);
+    std::list<std::pair<int64_t, string> > pools;
+    rados.pool_list2(pools);
 
-    for (std::list<string>::const_iterator it = pools.begin();
-	 it != pools.end(); ++it) {
-      int64_t pool_id = rados.pool_lookup(it->c_str());
+    for (std::list<std::pair<int64_t, string> >::const_iterator it =
+         pools.begin(); it != pools.end(); ++it) {
       int64_t base_tier;
-      int r = rados.pool_get_base_tier(pool_id, &base_tier);
-      if (r < 0) {
+      int r = rados.pool_get_base_tier(it->first, &base_tier);
+      if (r == -ENOENT) {
+        ldout(cct, 1) << "pool " << it->second << " no longer exists" << dendl;
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "Error retrieving base tier for pool " << it->second
+                   << dendl;
 	return r;
       }
-      if (base_tier != pool_id) {
+      if (it->first != base_tier) {
 	// pool is a cache; skip it
 	continue;
       }
+
       IoCtx ioctx;
-      r = rados.ioctx_create(it->c_str(), ioctx);
-      if (r < 0) {
-        lderr(cct) << "Error accessing child image pool " << *it << dendl;
+      r = rados.ioctx_create2(it->first, ioctx);
+      if (r == -ENOENT) {
+        ldout(cct, 1) << "pool " << it->second << " no longer exists" << dendl;
+        continue;
+      } else if (r < 0) {
+        lderr(cct) << "Error accessing child image pool " << it->second
+                   << dendl;
         return r;
       }
 
       set<string> image_ids;
-      r = cls_client::get_children(&ioctx, RBD_CHILDREN,
-				       parent_spec, image_ids);
+      r = cls_client::get_children(&ioctx, RBD_CHILDREN, parent_spec,
+                                   image_ids);
       if (r < 0 && r != -ENOENT) {
-	lderr(cct) << "Error reading list of children from pool " << *it
+	lderr(cct) << "Error reading list of children from pool " << it->second
 		   << dendl;
 	return r;
       }
@@ -451,10 +460,10 @@ namespace librbd {
 				     *id_it, &name);
 	if (r < 0) {
 	  lderr(cct) << "Error looking up name for image id " << *id_it
-		     << " in pool " << *it << dendl;
+		     << " in pool " << it->second << dendl;
 	  return r;
 	}
-	names.insert(make_pair(*it, name));
+	names.insert(make_pair(it->second, name));
       }
     }
 
@@ -648,42 +657,59 @@ namespace librbd {
     parent_spec pspec(ictx->md_ctx.get_id(), ictx->id, snap_id);
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
-    std::list<std::string> pools;
-    rados.pool_list(pools);
-    std::set<std::string> children;
-    for (std::list<std::string>::const_iterator it = pools.begin(); it != pools.end(); ++it) {
-      int64_t pool_id = rados.pool_lookup(it->c_str());
+    rados.wait_for_latest_osdmap();
+
+    // protect against pools being renamed/deleted
+    std::list<std::pair<int64_t, std::string> > pools;
+    rados.pool_list2(pools);
+
+    for (std::list<std::pair<int64_t, std::string> >::const_iterator it =
+         pools.begin(); it != pools.end(); ++it) {
       int64_t base_tier;
-      r = rados.pool_get_base_tier(pool_id, &base_tier);
-      if (r < 0) {
-	return r;
+      int r = rados.pool_get_base_tier(it->first, &base_tier);
+      if (r == -ENOENT) {
+        ldout(ictx->cct, 1) << "pool " << it->second << " no longer exists"
+                            << dendl;
+        continue;
+      } else if (r < 0) {
+        lderr(ictx->cct) << "snap_unprotect: error retrieving base tier for "
+                         << "pool " << it->second << dendl;
+        goto reprotect_and_return_err;
       }
-      if (base_tier != pool_id) {
+      if (it->first != base_tier) {
 	// pool is a cache; skip it
 	continue;
       }
+
       IoCtx pool_ioctx;
-      r = rados.ioctx_create(it->c_str(), pool_ioctx);
-      if (r < 0) {
-	lderr(ictx->cct) << "snap_unprotect: can't create ioctx for pool "
-			 << *it << dendl;
-	goto reprotect_and_return_err;
+      r = rados.ioctx_create2(it->first, pool_ioctx);
+      if (r == -ENOENT) {
+        ldout(ictx->cct, 1) << "pool " << it->second << " no longer exists"
+                            << dendl;
+        continue;
+      } else if (r < 0) {
+        lderr(ictx->cct) << "snap_unprotect: can't create ioctx for pool "
+        		 << it->second << dendl;
+        goto reprotect_and_return_err;
       }
+
+      std::set<std::string> children;
       r = cls_client::get_children(&pool_ioctx, RBD_CHILDREN, pspec, children);
       // key should not exist for this parent if there is no entry
       if (((r < 0) && (r != -ENOENT))) {
-	lderr(ictx->cct) << "can't get children for pool " << *it << dendl;
-	goto reprotect_and_return_err;
+        lderr(ictx->cct) << "can't get children for pool " << it->second
+                         << dendl;
+        goto reprotect_and_return_err;
       }
       // if we found a child, can't unprotect
       if (r == 0) {
-	lderr(ictx->cct) << "snap_unprotect: can't unprotect; at least " 
-	  << children.size() << " child(ren) in pool " << it->c_str() << dendl;
-	r = -EBUSY;
-	goto reprotect_and_return_err;
+        lderr(ictx->cct) << "snap_unprotect: can't unprotect; at least "
+          << children.size() << " child(ren) in pool " << it->second << dendl;
+        r = -EBUSY;
+        goto reprotect_and_return_err;
       }
-      pool_ioctx.close();	// last one out will self-destruct
     }
+
     // didn't find any child in any pool, go ahead with unprotect
     r = cls_client::set_protection_status(&ictx->md_ctx,
 					  ictx->header_oid,
