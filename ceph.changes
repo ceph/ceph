@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Tue Jan  6 13:21:50 UTC 2015 - osynge@suse.com
+
+- Added 0030-ceph-osd-prestart.sh-check-OSD-exis.patch
+  * check OSD exists and if not exit with clear error message.
+
+-------------------------------------------------------------------
 Mon Dec 15 13:39:37 UTC 2014 - tbehrens@suse.com
 
 - Remove 0026-ceph-disk-run-partprobe-after-zap.patch

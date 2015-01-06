@@ -1,0 +1,31 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 6 Jan 2015 13:16:22 +0100
+Subject: [PATCH] ceph-osd-prestart.sh: check OSD exists.
+
+if the directory ${dir_osd-/var/lib/ceph/osd/}/${cluster:-ceph}-${id}
+does not exist fail with a clear error message.
+
+https://bugzilla.suse.com/show_bug.cgi?id=895759 fixes # 895759
+
+Signed-off-by: Owen Synge <osynge@suse.com>
+---
+ src/ceph-osd-prestart.sh | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/ceph-osd-prestart.sh b/src/ceph-osd-prestart.sh
+index 77153c9..1328893 100644
+--- a/src/ceph-osd-prestart.sh
++++ b/src/ceph-osd-prestart.sh
+@@ -17,6 +17,12 @@ if [ -z "$id"  ]; then
+     exit 1;
+ fi
+ 
++# Check OSD exists
++if [ ! -d ${dir_osd-/var/lib/ceph/osd/}/${cluster:-ceph}-${id} ]; then
++    echo "ceph cluster '${cluster:-ceph}' does not have OSD '${id}' on this host"
++    exit 1;
++fi
++
+ update="$(ceph-conf --cluster=${cluster:-ceph} --name=osd.$id --lookup osd_crush_update_on_start || :)"
+ 
+ if [ "${update:-1}" = "1" -o "${update:-1}" = "true" ]; then

@@ -126,6 +126,7 @@ Patch0026:      0026-rgw-set-length-for-keystone-token-v.patch
 Patch0027:      0027-client-cast-m-get_client_tid-to-com.patch
 Patch0028:      0028-Add-annotation-to-all-assembly-file.patch
 Patch0029:      0029-ceph-disk-dmcrypt-file-permissions.patch
+Patch0030:      0030-ceph-osd-prestart.sh-check-OSD-exis.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -374,6 +375,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0027 -p1
 %patch0028 -p1
 %patch0029 -p1
+%patch0030 -p1
 
 %build
 
