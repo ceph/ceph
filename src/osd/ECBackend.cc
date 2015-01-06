@@ -809,6 +809,7 @@ void ECBackend::handle_sub_write(
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
+  localt->set_use_tbl(op.t.get_use_tbl());
   if (!op.temp_added.empty()) {
     get_temp_coll(localt);
     add_temp_objs(op.temp_added);
@@ -1516,6 +1517,7 @@ void ECBackend::start_write(Op *op) {
        i != get_parent()->get_actingbackfill_shards().end();
        ++i) {
     trans[i->shard];
+    trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
   }
   op->t->generate_transactions(
     op->unstable_hash_infos,
