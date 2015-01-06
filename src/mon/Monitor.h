@@ -653,10 +653,10 @@ public:
   void handle_route(MRoute *m);
 
   /**
+   *
    */
   struct health_cache_t {
     health_status_t overall;
-    utime_t last_update;
     string summary;
 
     void reset() {
@@ -664,29 +664,44 @@ public:
       // okay with setting something else (say, HEALTH_ERR).  so just
       // leave it be.
       summary.clear();
-      last_update = utime_t();
     }
   } health_status_cache;
 
-  struct C_HealthTick : public Context {
+  struct C_HealthToClogTick : public Context {
     Monitor *mon;
-    C_HealthTick(Monitor *m) : mon(m) { }
+    C_HealthToClogTick(Monitor *m) : mon(m) { }
     void finish(int r) {
       if (r < 0)
         return;
       mon->do_health_to_clog();
+      mon->health_tick_start();
+    }
+  };
+
+  struct C_HealthToClogInterval : public Context {
+    Monitor *mon;
+    C_HealthToClogInterval(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      if (r < 0)
+        return;
+      mon->do_health_to_clog_interval();
     }
   };
 
   Context *health_tick_event;
+  Context *health_interval_event;
 
-  void do_health_to_clog();
-  void cleanup_health_tick_event() {
-    stop_health_tick_event();
-    health_status_cache.reset();
-  }
-  void stop_health_tick_event();
-  void start_health_tick_event();
+  void health_tick_start();
+  void health_tick_stop();
+  utime_t health_interval_calc_next_update();
+  void health_interval_start();
+  void health_interval_stop();
+  void health_events_cleanup();
+
+  void health_to_clog_update_conf(const std::set<std::string> &changed);
+
+  void do_health_to_clog_interval();
+  void do_health_to_clog(bool force = false);
 
   /**
    * Generate health report
