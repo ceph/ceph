@@ -110,8 +110,8 @@ string GenericObjectMap::header_key(const coll_t &cid, const ghobject_t &oid)
   full_name.append(GHOBJECT_KEY_SEP_S);
 
   char buf[PATH_MAX];
-  char *t = buf;
-  char *end = t + sizeof(buf);
+  char *t;
+  char *end;
 
   // make field ordering match with ghobject_t compare operations
   t = buf;
@@ -268,8 +268,10 @@ bool GenericObjectMap::parse_header_key(const string &long_name,
     out->hobj.set_hash(out->get_filestore_key());
   }
 
-  if (out_coll)
-    *out_coll = coll_t::make_string_coll(coll);
+  if (out_coll) {
+    bool valid = out_coll->parse(coll);
+    assert(valid);
+  }
 
   return true;
 }
