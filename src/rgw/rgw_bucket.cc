@@ -342,13 +342,13 @@ static bool bucket_object_check_filter(const string& name)
   return rgw_obj::translate_raw_obj_to_obj_in_ns(obj, ns, ver);
 }
 
-int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key, bool use_versioning)
+int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key, int versioning_status)
 {
   RGWObjectCtx rctx(store);
 
   rgw_obj obj(bucket, key);
 
-  int ret = store->delete_obj(rctx, bucket_info, obj, use_versioning);
+  int ret = store->delete_obj(rctx, bucket_info, obj, versioning_status);
 
   return ret;
 }
@@ -391,7 +391,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
     while (!objs.empty()) {
       std::vector<RGWObjEnt>::iterator it = objs.begin();
       for (it = objs.begin(); it != objs.end(); ++it) {
-        ret = rgw_remove_object(store, info, bucket, (*it).key, false);
+        ret = rgw_remove_object(store, info, bucket, (*it).key, 0);
         if (ret < 0)
           return ret;
       }
@@ -585,7 +585,7 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
 
   rgw_obj_key key(object_name);
 
-  int ret = rgw_remove_object(store, bucket_info, bucket, key, bucket_info.versioning_enabled());
+  int ret = rgw_remove_object(store, bucket_info, bucket, key, bucket_info.versioning_status());
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove object" + cpp_strerror(-ret));
     return ret;
