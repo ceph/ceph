@@ -1119,7 +1119,9 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return oid;
   }
-  static void recursive_remove_collection(ObjectStore *store, coll_t tmp);
+  static void recursive_remove_collection(ObjectStore *store,
+					  spg_t pgid,
+					  coll_t tmp);
 
   /**
    * get_osd_initial_compat_set()
