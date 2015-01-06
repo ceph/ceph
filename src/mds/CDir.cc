@@ -2677,10 +2677,65 @@ void CDir::unfreeze_dir()
   }
 }
 
+/**
+ * Slightly less complete than operator<<, because this is intended
+ * for identifying a directory and its state rather than for dumping
+ * debug output.
+ */
+void CDir::dump(Formatter *f) const
+{
+  assert(f != NULL);
 
+  string path;
+  get_inode()->make_path_string_projected(path);
 
+  f->dump_stream("dirfrag") << dirfrag();
+  f->dump_stream("path") << path;
+  f->dump_int("snapid_first", first);
+  f->dump_bool("auth", is_auth());
 
+  // >> Only meaningful for auth
+  f->open_object_section("replica_map");
+  for (std::map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
+       i != replica_map.end(); ++i) {
+    std::ostringstream rank_str;
+    rank_str << i->first;
+    f->dump_int(rank_str.str().c_str(), i->second);
+  }
+  f->close_section();
+  f->dump_stream("projected_version") << get_projected_version();
+  f->dump_stream("version") << get_version();
+  f->dump_stream("comitting_version") << get_committing_version();
+  f->dump_stream("comitted_version") << get_committed_version();
+  // << Only meaningful for auth
 
+  // >> Only meaningful for replica
+  f->dump_stream("authority_first") << authority().first;
+  f->dump_stream("authority_second") << authority().second;
+  f->dump_stream("replica_nonce") << get_replica_nonce();
+  // << Only meaningful for replica
+  
+  f->dump_bool("is_rep", is_rep());
 
+  if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
+    if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
+      f->dump_stream("dir_auth") << get_dir_auth().first;
+    } else {
+      f->dump_stream("dir_auth") << get_dir_auth();
+    }
+  } else {
+    f->dump_string("dir_auth", "");
+  }
 
+  f->open_array_section("states");
+  if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
+  if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
+  if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
+  if (state_test(CDir::STATE_FROZENDIR)) f->dump_string("state", "frozendir");
+  if (state_test(CDir::STATE_FREEZINGDIR)) f->dump_string("state", "freezingdir");
+  if (state_test(CDir::STATE_EXPORTBOUND)) f->dump_string("state", "exportbound");
+  if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
+  if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
+  f->close_section();
+}
 
