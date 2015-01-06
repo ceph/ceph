@@ -205,6 +205,11 @@ struct pg_begin {
 
 struct object_begin {
   ghobject_t hoid;
+
+  // Duplicate what is in the OI_ATTR so we have it at the start
+  // of object processing.
+  object_info_t oi;
+
   object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
@@ -212,14 +217,15 @@ struct object_begin {
   // generation will be NO_GEN, shard_id will be NO_SHARD for a replicated
   // pool.  This means we will allow the decode by struct_v 1.
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(hoid.hobj, bl);
     ::encode(hoid.generation, bl);
     ::encode(hoid.shard_id, bl);
+    ::encode(oi, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(hoid.hobj, bl);
     if (struct_v > 1) {
       ::decode(hoid.generation, bl);
@@ -227,6 +233,9 @@ struct object_begin {
     } else {
       hoid.generation = ghobject_t::NO_GEN;
       hoid.shard_id = shard_id_t::NO_SHARD;
+    }
+    if (struct_v > 2) {
+      ::decode(oi, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -830,6 +839,23 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
     cerr << "size=" << total << std::endl;
 
   object_begin objb(obj);
+
+  {
+    bufferptr bp;
+    bufferlist bl;
+    ret = store->getattr(cid, obj, OI_ATTR, bp);
+    if (ret < 0) {
+      cerr << "getattr failure object_info " << ret << std::endl;
+      return ret;
+    }
+    bl.push_back(bp);
+    decode(objb.oi, bl);
+    if (debug)
+      cerr << "object_info: " << objb.oi << std::endl;
+  }
+
+  // XXX: Should we be checking for WHITEOUT or LOST in objb.oi.flags and skip?
+
   ret = write_section(TYPE_OBJECT_BEGIN, objb, file_fd);
   if (ret < 0)
     return ret;
@@ -1096,6 +1122,8 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
     cerr << "\tattrs: len " << as.data.size() << std::endl;
   t->setattrs(coll, hoid, as.data);
 
+  // This could have been handled in the caller if we didn't need to
+  // support exports that didn't include object_info_t in object_begin.
   if (hoid.hobj.snap < CEPH_MAXSNAP && hoid.generation == ghobject_t::NO_GEN) {
     map<string,bufferptr>::iterator mi = as.data.find(OI_ATTR);
     if (mi != as.data.end()) {
