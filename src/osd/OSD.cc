@@ -2767,26 +2767,17 @@ void OSD::load_pgs()
        it != ls.end();
        ++it) {
     spg_t pgid;
-    snapid_t snap;
-
-    if (it->is_temp(pgid) ||
+    if (it->is_temp(&pgid) ||
 	it->is_removal(&pgid) ||
-	(it->is_pg(pgid, snap) &&
-	 PG::_has_removal_flag(store, pgid))) {
+	(it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
       dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
       recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
-    if (it->is_pg(pgid, snap)) {
-      if (snap != CEPH_NOSNAP) {
-	dout(10) << "load_pgs skipping snapped dir " << *it
-		 << " (pg " << pgid << " snap " << snap << ")" << dendl;
-	pgs[pgid].insert(snap);
-      } else {
-	pgs[pgid];
-	head_pgs.insert(pgid);
-      }
+    if (it->is_pg(&pgid)) {
+      pgs[pgid];
+      head_pgs.insert(pgid);
       continue;
     }
 
