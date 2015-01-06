@@ -155,7 +155,6 @@ dir_result_t::dir_result_t(Inode *in)
 
 Client::Client(Messenger *m, MonClient *mc)
   : Dispatcher(m->cct),
-    cct(m->cct),
     logger(NULL),
     m_command_hook(this),
     timer(m->cct, client_lock),
