@@ -459,20 +459,13 @@ int finish_remove_pgs(ObjectStore *store)
        it != ls.end();
        ++it) {
     spg_t pgid;
-
-    if (it->is_temp(pgid)) {
-      cout << "finish_remove_pgs " << *it << " clearing temp" << std::endl;
-      OSD::recursive_remove_collection(store, *it);
-      continue;
-    }
-
-    uint64_t seq;
     snapid_t snap;
-    if (it->is_removal(&seq, &pgid) || (it->is_pg(pgid, snap) &&
-	PG::_has_removal_flag(store, pgid))) {
-      cout << "finish_remove_pgs removing " << *it
-	   << " pgid is " << pgid << std::endl;
-      remove_coll(store, *it);
+
+    if (it->is_temp(pgid) ||
+	it->is_removal(&pgid) ||
+	(it->is_pg(pgid, snap) && PG::_has_removal_flag(store, pgid))) {
+      cout << "finish_remove_pgs " << *it << " removing " << pgid << std::endl;
+      OSD::recursive_remove_collection(store, pgid, *it);
       continue;
     }
 
