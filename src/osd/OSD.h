@@ -2228,7 +2228,9 @@ protected:
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
     case MSG_OSD_SUBOP:
+    case MSG_OSD_REPOP:
     case MSG_OSD_SUBOPREPLY:
+    case MSG_OSD_REPOPREPLY:
     case MSG_OSD_PG_PUSH:
     case MSG_OSD_PG_PULL:
     case MSG_OSD_PG_PUSH_REPLY:
