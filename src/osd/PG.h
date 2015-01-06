@@ -290,9 +290,7 @@ public:
   bool can_upgrade() {
     return info_struct_v >= compat_struct_v;
   }
-  void upgrade(
-    ObjectStore *store,
-    const interval_set<snapid_t> &snapcolls);
+  void upgrade(ObjectStore *store);
 
   const coll_t coll;
   PGLog  pg_log;
