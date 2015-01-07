@@ -18,13 +18,15 @@ void cls_rgw_bucket_init(librados::ObjectWriteOperation& o);
 void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& o, uint64_t tag_timeout);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                               const cls_rgw_obj_key& key, const string& locator, bool log_op);
+                               const cls_rgw_obj_key& key, const string& locator, bool log_op,
+                               uint16_t bilog_op);
 
 void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp op, string& tag,
                                 rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
                                 rgw_bucket_dir_entry_meta& dir_meta,
-				list<cls_rgw_obj_key> *remove_objs, bool log_op);
+				list<cls_rgw_obj_key> *remove_objs, bool log_op,
+                                uint16_t bilog_op);
 
 int cls_rgw_list_op(librados::IoCtx& io_ctx, const string& oid,
                     const cls_rgw_obj_key& start_obj,
