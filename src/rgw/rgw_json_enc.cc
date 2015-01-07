@@ -664,6 +664,7 @@ void RGWZone::dump(Formatter *f) const
   encode_json("endpoints", endpoints, f);
   encode_json("log_meta", log_meta, f);
   encode_json("log_data", log_data, f);
+  encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -672,6 +673,7 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
+  JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
 }
 
 void RGWRegionPlacementTarget::dump(Formatter *f) const
