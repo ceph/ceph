@@ -431,7 +431,7 @@ static void decode_swift_keys(map<string, RGWAccessKey>& m, JSONObj *o)
 {
   RGWAccessKey k;
   k.decode_json(o, true);
-  m[k.subuser] = k;
+  m[k.id] = k;
 }
 
 static void decode_subusers(map<string, RGWSubUser>& m, JSONObj *o)
