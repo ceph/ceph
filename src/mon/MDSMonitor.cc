@@ -877,7 +877,15 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
       ss << "Can't find any MDS named '" << arg << "'";
       return -ENOENT;
     }
-    rank_or_gid = (unsigned long long)(mds_info->rank);
+    if (mds_info->rank >= 0) {
+      dout(10) << __func__ << ": resolved MDS name '" << arg << "' to rank " << rank_or_gid << dendl;
+      rank_or_gid = (unsigned long long)(mds_info->rank);
+    } else {
+      dout(10) << __func__ << ": resolved MDS name '" << arg << "' to GID " << rank_or_gid << dendl;
+      rank_or_gid = mds_info->global_id;
+    }
+  } else {
+    dout(10) << __func__ << ": treating MDS reference '" << arg << "' as an integer " << rank_or_gid << dendl;
   }
 
   if (!mon->osdmon()->is_writeable()) {
@@ -886,6 +894,7 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
 
   bool failed_mds_gid = false;
   if (pending_mdsmap.up.count(mds_rank_t(rank_or_gid))) {
+    dout(10) << __func__ << ": validated rank/GID " << rank_or_gid << " as a rank" << dendl;
     mds_gid_t gid = pending_mdsmap.up[mds_rank_t(rank_or_gid)];
     if (pending_mdsmap.mds_info.count(gid)) {
       fail_mds_gid(gid);
@@ -893,9 +902,12 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     }
     ss << "failed mds." << rank_or_gid;
   } else if (pending_mdsmap.mds_info.count(mds_gid_t(rank_or_gid))) {
+    dout(10) << __func__ << ": validated rank/GID " << rank_or_gid << " as a GID" << dendl;
     fail_mds_gid(mds_gid_t(rank_or_gid));
     failed_mds_gid = true;
     ss << "failed mds gid " << rank_or_gid;
+  } else {
+    dout(1) << __func__ << ": rank/GID " << rank_or_gid << " not a existent rank or GID" << dendl;
   }
 
   if (failed_mds_gid) {
