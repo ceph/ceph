@@ -1721,7 +1721,7 @@ void MDSMonitor::tick()
   // have a standby take over?
   set<mds_rank_t> failed;
   pending_mdsmap.get_failed_mds_set(failed);
-  if (!failed.empty()) {
+  if (!failed.empty() && !pending_mdsmap.test_flag(CEPH_MDSMAP_DOWN)) {
     set<mds_rank_t>::iterator p = failed.begin();
     while (p != failed.end()) {
       mds_rank_t f = *p++;
