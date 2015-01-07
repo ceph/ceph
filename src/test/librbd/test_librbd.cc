@@ -322,6 +322,7 @@ int test_ls(rados_ioctx_t io_ctx, size_t num_expected, ...)
       image_names.erase(it);
     } else {
       ADD_FAILURE() << "Unable to find image " << expected;
+      va_end(ap);
       return -ENOENT;
     }
   }
@@ -379,6 +380,7 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
     vector<string>::iterator listed_name = find(names.begin(), names.end(), string(expected));
     if (listed_name == names.end()) {
       ADD_FAILURE() << "Unable to find image " << expected;
+      va_end(ap);
       return -ENOENT;
     }
     names.erase(listed_name);
