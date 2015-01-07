@@ -912,14 +912,24 @@ struct RGWZone {
   bool log_meta;
   bool log_data;
 
-  RGWZone() : log_meta(false), log_data(false) {}
+/**
+ * Represents the number of shards for the bucket index object, a value of zero
+ * indicates there is no sharding. By default (no sharding, the name of the object
+ * is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
+ * sharding_id is zero-based value. It is not recommended to set a too large value
+ * (e.g. thousand) as it increases the cost for bucket listing.
+ */
+  uint32_t bucket_index_max_shards;
+
+  RGWZone() : log_meta(false), log_data(false), bucket_index_max_shards(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
     ::encode(log_data, bl);
+    ::encode(bucket_index_max_shards, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -930,6 +940,9 @@ struct RGWZone {
     if (struct_v >= 2) {
       ::decode(log_meta, bl);
       ::decode(log_data, bl);
+    }
+    if (struct_v >= 3) {
+      ::decode(bucket_index_max_shards, bl);
     }
     DECODE_FINISH(bl);
   }

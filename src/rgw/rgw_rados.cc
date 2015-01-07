@@ -1327,14 +1327,6 @@ int RGWRados::init_rados()
 {
   int ret;
 
-  bucket_index_max_shards = cct->_conf->rgw_bucket_index_max_shards;
-  if (bucket_index_max_shards > MAX_BUCKET_INDEX_SHARDS_PRIME) {
-    bucket_index_max_shards = MAX_BUCKET_INDEX_SHARDS_PRIME;
-    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << MAX_BUCKET_INDEX_SHARDS_PRIME << dendl;
-  }
-  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
   rados = new Rados();
   if (!rados)
     return -ENOMEM;
@@ -1454,6 +1446,15 @@ int RGWRados::init_complete()
     gc->start_processor();
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
+
+  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+                             zone_public_config.bucket_index_max_shards);
+  if (bucket_index_max_shards > MAX_BUCKET_INDEX_SHARDS_PRIME) {
+    bucket_index_max_shards = MAX_BUCKET_INDEX_SHARDS_PRIME;
+    ldout(cct, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << MAX_BUCKET_INDEX_SHARDS_PRIME << dendl;
+  }
+  ldout(cct, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
 
   return ret;
 }
