@@ -5,6 +5,7 @@ Content Index
    :maxdepth: 2
 
    index.rst
+   siteconfig.rst
    INSTALL.rst
    LAB_SETUP.rst
    ChangeLog.rst
