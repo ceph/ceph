@@ -93,8 +93,6 @@ int KqueueDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeva
 {
   int retval, numevents = 0;
   struct timespec timeout;
-  timeout.tv_sec = tvp->tv_sec;
-  timeout.tv_nsec = tvp->tv_usec * 1000;
 
   if (tvp != NULL) {
       timeout.tv_sec = tvp->tv_sec;
