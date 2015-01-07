@@ -1762,6 +1762,42 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
   return 0;
 }
 
+static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length)
+{
+  int r;
+
+  if (!(*tag)) {
+    r = safe_read_exact(fd, tag, 1);
+    if (r < 0)
+      return r;
+  }
+
+  if (*tag == 'e') {
+    offset = 0;
+    length = 0;
+    return 0;
+  }
+
+  if (*tag != 'w' && *tag != 'z')
+    return -ENOTSUP;
+
+  char buf[16];
+  r = safe_read_exact(fd, buf, 16);
+  if (r < 0)
+    return r;
+
+  bufferlist bl;
+  bl.append(buf, 16);
+  bufferlist::iterator p = bl.begin();
+  ::decode(*offset, p);
+  ::decode(*length, p);
+
+  if (!(*length))
+    return -ENOTSUP;
+
+  return 0;
+}
+
 /*
  * fd: the diff file to read from
  * pd: the diff file to be written into
