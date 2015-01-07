@@ -1478,6 +1478,9 @@ int Client::make_request(MetaRequest *request,
     request->resend_mds = use_mds;
 
   while (1) {
+    if (request->aborted)
+      break;
+
     // set up wait cond
     Cond caller_cond;
     request->caller_cond = &caller_cond;
@@ -1534,6 +1537,16 @@ int Client::make_request(MetaRequest *request,
     // did we get a reply?
     if (request->reply) 
       break;
+  }
+
+  if (!request->reply) {
+    assert(request->aborted);
+    assert(!request->got_unsafe);
+    request->item.remove_myself();
+    mds_requests.erase(tid);
+    put_request(request); // request map's
+    put_request(request); // ours
+    return -ETIMEDOUT;
   }
 
   // got it!
@@ -4762,6 +4775,22 @@ void Client::tick()
   timer.add_event_after(cct->_conf->client_tick_interval, tick_event);
 
   utime_t now = ceph_clock_now(cct);
+
+  if (!mounted && !mds_requests.empty()) {
+    MetaRequest *req = mds_requests.begin()->second;
+    if (req->op_stamp + cct->_conf->client_mount_timeout < now) {
+      req->aborted = true;
+      if (req->caller_cond) {
+	req->kick = true;
+	req->caller_cond->Signal();
+      }
+      signal_cond_list(waiting_for_mdsmap);
+      for (map<mds_rank_t,MetaSession*>::iterator p = mds_sessions.begin();
+	   p != mds_sessions.end();
+	  ++p)
+	signal_context_list(p->second->waiting_for_open);
+    }
+  }
 
   if (mdsmap->get_epoch()) {
     // renew caps?
