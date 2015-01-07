@@ -65,6 +65,7 @@ Requires:       ceph-common = %{version}-%{release}
 Requires:       python-ceph = %{version}-%{release}
 Requires:       python-argparse
 Requires:       python-requests
+Requires:       python-Flask
 Requires:       xfsprogs
 Requires:       parted
 Requires:       hdparm
@@ -341,7 +342,6 @@ Group:          System/Filesystems
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
-Requires:	python-Flask
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -587,6 +587,7 @@ fi
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
 %{_bindir}/ceph-rest-api
+%{python_sitelib}/ceph_rest_api.py*
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph_filestore_dump
 %{_bindir}/ceph_filestore_tool
@@ -834,7 +835,6 @@ fi
 %files -n python-ceph
 %defattr(-,root,root,-)
 %{python_sitelib}/ceph_argparse.py*
-%{python_sitelib}/ceph_rest_api.py*
 %{python_sitelib}/cephfs.py*
 %{python_sitelib}/rados.py*
 %{python_sitelib}/rbd.py*

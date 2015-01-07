@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Wed Jan  7 21:23:13 UTC 2015 - tbehrens@suse.com
+
+- also do upstream's move of the python rest api server into the
+  main ceph package, thus ridding ceph-common (and python-ceph)
+  of the python-flask dependency 
+
+-------------------------------------------------------------------
 Wed Jan  7 18:13:04 UTC 2015 - tbehrens@suse.com
 
 - still package /etc/init.d/ceph-radosgw for sle11
