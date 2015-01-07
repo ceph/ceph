@@ -1054,11 +1054,7 @@ void Monitor::sync_obtain_latest_monmap(bufferlist &bl)
 
   dout(1) << __func__ << " obtained monmap e" << latest_monmap.epoch << dendl;
 
-  if (quorum_features) {
-    latest_monmap.encode(bl, quorum_features);
-  } else {
-    latest_monmap.encode(bl, CEPH_FEATURES_ALL);
-  }
+  latest_monmap.encode(bl, CEPH_FEATURES_ALL);
 }
 
 void Monitor::sync_reset_requester()
