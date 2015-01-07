@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Wed Jan  7 18:13:04 UTC 2015 - tbehrens@suse.com
+
+- still package /etc/init.d/ceph-radosgw for sle11
+
+-------------------------------------------------------------------
 Wed Jan  7 17:40:14 UTC 2015 - tbehrens@suse.com
 
 - integrate upstream's package split into ceph-common (essential stuff

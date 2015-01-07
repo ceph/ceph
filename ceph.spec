@@ -736,6 +736,7 @@ fi
 %dir /usr/libexec/ceph
 /usr/libexec/ceph/ceph-rgw-prestart.sh
 %else
+%{_initrddir}/ceph-radosgw
 %{_sbindir}/rcceph-radosgw
 %endif
 
