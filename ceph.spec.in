@@ -585,12 +585,12 @@ fi
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/ceph-authtool.8*
-%{_mandir}/man8/ceph-clsinfo.8.gz
-%{_mandir}/man8/librados-config.8.gz
-%{_mandir}/man8/ceph-dencoder.8.gz
-%{_mandir}/man8/ceph-rbdnamer.8.gz
-%{_mandir}/man8/ceph-post-file.8.gz
-%{_mandir}/man8/ceph-rest-api.8.gz
+%{_mandir}/man8/ceph-clsinfo.8*
+%{_mandir}/man8/librados-config.8*
+%{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-rbdnamer.8*
+%{_mandir}/man8/ceph-post-file.8*
+%{_mandir}/man8/ceph-rest-api.8*
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
 # osd mounting directory

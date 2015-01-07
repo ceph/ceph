@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan 7 01:14:42 UTC 2015 - tbehrens@suse.com
+
+- Consistently reference man-pages with glob at the end (might
+  or might not be gzipped yet)
+
+-------------------------------------------------------------------
 Wed Jan 7 01:13:42 UTC 2015 - tbehrens@suse.com
 
 - Sync with cloud4 submission
