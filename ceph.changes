@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan  7 16:08:24 UTC 2015 - osynge@suse.com
+
+- radosgw systemd support.
+  * added 0031-radosgw-systemd-support.patch
+
+-------------------------------------------------------------------
 Wed Jan  7 12:38:19 UTC 2015 - tbehrens@suse.com
 
 - remove ceph-post-file alongside ceph keys

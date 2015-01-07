@@ -127,6 +127,7 @@ Patch0027:      0027-client-cast-m-get_client_tid-to-com.patch
 Patch0028:      0028-Add-annotation-to-all-assembly-file.patch
 Patch0029:      0029-ceph-disk-dmcrypt-file-permissions.patch
 Patch0030:      0030-ceph-osd-prestart.sh-check-OSD-exis.patch
+Patch0031:      0031-radosgw-systemd-support.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -376,6 +377,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0028 -p1
 %patch0029 -p1
 %patch0030 -p1
+%patch0031 -p1
 
 %build
 
@@ -454,9 +456,6 @@ make %{?jobs:-j%{jobs}} check-local
 make DESTDIR=$RPM_BUILD_ROOT install
 find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
-install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
-mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
@@ -469,10 +468,16 @@ mkdir -p $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-rgw@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
+install -m 0755 -D src/ceph-rgw-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
+%else
+install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
+mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
+ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 %endif
 
 # udev rules
@@ -695,30 +700,41 @@ fi
 #################################################################################
 %files radosgw
 %defattr(-,root,root,-)
-%{_initrddir}/ceph-radosgw
 %{_bindir}/radosgw
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%{_sbindir}/rcceph-radosgw
 %dir %{_localstatedir}/log/radosgw/
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
+%if 0%{?suse_version} >= 1310
+%{_unitdir}/ceph-rgw@.service
+%dir /usr/libexec/ceph
+/usr/libexec/ceph/ceph-rgw-prestart.sh
+%else
+%{_sbindir}/rcceph-radosgw
+%endif
 
 %post radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
+%if 0%{?suse_version} < 1200
 %fillup_and_insserv -f -y ceph-radosgw
+%endif
 %endif
 
 %preun radosgw
 %if %{defined suse_version}
+%if 0%{?suse_version} < 1200
 %stop_on_removal ceph-radosgw
+%endif
 %endif
 
 %postun radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
+%if 0%{?suse_version} < 1200
 %restart_on_update ceph-radosgw
+%endif
 %insserv_cleanup
 %endif
 
