@@ -48,11 +48,6 @@ inline int sync_filesystem(int fd)
     return -errno;
 #endif
 
-#ifdef BTRFS_IOC_SYNC
-  if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
-    return 0;
-#endif
-
   sync();
   return 0;
 }
