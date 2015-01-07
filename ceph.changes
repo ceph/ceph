@@ -1,4 +1,13 @@
 -------------------------------------------------------------------
+Wed Jan 7 01:13:42 UTC 2015 - tbehrens@suse.com
+
+- Sync with cloud4 submission
+  * consistent suse_version check for systemd stuff
+  * remove redundant is-this-suse checks
+  * initrddir/ceph purposefully went with ceph init file, see
+    bnc#900154
+
+-------------------------------------------------------------------
 Tue Jan  6 13:21:50 UTC 2015 - osynge@suse.com
 
 - Added 0030-ceph-osd-prestart.sh-check-OSD-exis.patch

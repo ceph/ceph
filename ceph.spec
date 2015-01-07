@@ -93,7 +93,7 @@ BuildRequires:  python-virtualenv
 BuildRequires:  snappy-devel
 BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
-%if 0%{?suse_version} >= 1210
+%if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
@@ -502,24 +502,19 @@ rm -rf $RPM_BUILD_ROOT
 
 %pre
 
-%if %{defined suse_version}
 %if 0%{?suse_version} >= 1310
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_pre $SERVICES
 %endif
-%endif
 
 %post
 /sbin/ldconfig
-%if %{defined suse_version}
 %if 0%{?suse_version} >= 1310
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_post $SERVICES
 %endif
-%endif
 
 %preun
-%if %{defined suse_version}
 %if 0%{?suse_version} >= 1310
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_post $SERVICES
@@ -531,11 +526,9 @@ if [ $1 = 0 ] ; then
 fi
 %endif
 %stop_on_removal ceph
-%endif
 
 
 %postun
-%if %{defined suse_version}
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
@@ -547,7 +540,6 @@ fi
 %endif
 %restart_on_update ceph
 %insserv_cleanup
-%endif
 
 #################################################################################
 # files
