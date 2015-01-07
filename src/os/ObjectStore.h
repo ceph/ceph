@@ -623,7 +623,7 @@ public:
       list<bufferptr> list = bl.buffers();
       std::list<bufferptr>::iterator p;
 
-      for(p = list.begin(); p != list.end(); p++) {
+      for(p = list.begin(); p != list.end(); ++p) {
         assert(p->length() % sizeof(Op) == 0);
 
         char* raw_p = p->c_str();
@@ -655,7 +655,7 @@ public:
       map<coll_t, __le32>::iterator coll_index_p;
       for (coll_index_p = other.coll_index.begin();
            coll_index_p != other.coll_index.end();
-           coll_index_p++) {
+           ++coll_index_p) {
         cm[coll_index_p->second] = _get_coll_id(coll_index_p->first);
       }
 
@@ -663,7 +663,7 @@ public:
       map<ghobject_t, __le32>::iterator object_index_p;
       for (object_index_p = other.object_index.begin();
            object_index_p != other.object_index.end();
-           object_index_p++) {
+           ++object_index_p) {
         om[object_index_p->second] = _get_object_id(object_index_p->first);
       }      
 
@@ -792,14 +792,14 @@ public:
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
              coll_index_p != t->coll_index.end();
-             coll_index_p++) {
+             ++coll_index_p) {
           colls[coll_index_p->second] = coll_index_p->first;
         }
 
         map<ghobject_t, __le32>::iterator object_index_p;
         for (object_index_p = t->object_index.begin();
              object_index_p != t->object_index.end();
-             object_index_p++) {
+             ++object_index_p) {
           objects[object_index_p->second] = object_index_p->first;
         }
       }
