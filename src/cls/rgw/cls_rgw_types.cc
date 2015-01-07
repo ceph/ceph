@@ -321,6 +321,7 @@ void rgw_bi_log_entry::dump(Formatter *f) const
   f->open_object_section("ver");
   ver.dump(f);
   f->close_section();
+  f->dump_bool("versioned", (bilog_flags & RGW_BILOG_FLAG_VERSIONED_OP) != 0);
 }
 
 void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)

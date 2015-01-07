@@ -139,7 +139,7 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
                                string& tag, utime_t& timestamp,
                                rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
-                               string& max_marker)
+                               string& max_marker, uint16_t bilog_flags)
 {
   bufferlist bl;
 
@@ -153,6 +153,7 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
   entry.state = state;
   entry.index_ver = index_ver;
   entry.tag = tag;
+  entry.bilog_flags = bilog_flags;
 
   string key;
   bi_log_index_key(hctx, key, entry.id, index_ver);
@@ -670,7 +671,7 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
-                             entry.ver, info.state, header.ver, header.max_marker);
+                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags);
     if (rc < 0)
       return rc;
   }
@@ -826,7 +827,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (cancel) {
     if (op.log_op) {
       rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
       if (rc < 0)
         return rc;
     }
@@ -886,7 +887,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   if (op.log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
     if (rc < 0)
       return rc;
   }
@@ -911,7 +912,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
     if (op.log_op) {
       rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag, remove_entry.meta.mtime,
-                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+                               remove_entry.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags);
       if (rc < 0)
         continue;
     }
@@ -1487,7 +1488,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
     ret = log_index_operation(hctx, op.key, operation, op.op_tag,
                               entry.meta.mtime, ver,
-                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP);
     if (ret < 0)
       return ret;
   }
@@ -1617,7 +1618,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     utime_t mtime = ceph_clock_now(g_ceph_context); /* mtime has no real meaning in instance removal context */
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                               mtime, ver,
-                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker);
+                              CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
+                              op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP);
     if (ret < 0)
       return ret;
   }
