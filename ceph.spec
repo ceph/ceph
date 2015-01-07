@@ -34,6 +34,9 @@
 # experiences core-dumps in 'tcmalloc::PageHeap::GrowHeap'...
 %bcond_without tcmalloc
 
+# package only the client side part of ceph
+%bcond_without server_parts
+
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
@@ -571,6 +574,7 @@ fi
 #################################################################################
 # files
 #################################################################################
+%if 0%{with server_parts}
 %files
 %defattr(-,root,root,-)
 %docdir %{_docdir}
@@ -660,6 +664,10 @@ fi
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/%{name}.conf
 %endif
+%else
+# don't bother to rm -f all unpackaged server-package files...
+%define _missing_doc_files_terminate_build 0
+%endif
 
 #################################################################################
 %files -n ceph-common
@@ -723,6 +731,7 @@ fi
 %{_libdir}/librados.so
 
 #################################################################################
+%if 0%{with server_parts}
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
@@ -764,16 +773,19 @@ fi
 %endif
 %insserv_cleanup
 %endif
+%endif
 
 #################################################################################
-%if 0%{?suse_version}
 
+%if 0%{with server_parts}
+%if 0%{?suse_version}
 %files resource-agents
 %defattr(0755,root,root,-)
 %dir /usr/lib/ocf
 %dir /usr/lib/ocf/resource.d
 %dir /usr/lib/ocf/resource.d/ceph
 /usr/lib/ocf/resource.d/%{name}/*
+%endif
 %endif
 
 #################################################################################

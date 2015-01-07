@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan  7 22:33:26 UTC 2015 - tbehrens@suse.com
+
+- make ceph main package and radosgw subpackage conditional
+  (via --without server_parts) 
+
+-------------------------------------------------------------------
 Wed Jan  7 21:23:13 UTC 2015 - tbehrens@suse.com
 
 - also do upstream's move of the python rest api server into the
