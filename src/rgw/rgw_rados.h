@@ -1495,8 +1495,9 @@ public:
         ACLOwner obj_owner; /* needed for creation of deletion marker */
         uint64_t olh_epoch;
         string marker_version_id;
+        uint32_t bilog_flags;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0) {}
       } params;
 
       struct DeleteResult {
@@ -1527,9 +1528,14 @@ public:
       string optag;
       rgw_obj obj;
       RGWObjState *obj_state;
+      uint16_t bilog_flags;
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state) {}
+      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0) {}
+
+      void set_bilog_flags(uint16_t flags) {
+        bilog_flags = flags;
+      }
 
       int prepare(RGWModifyOp);
       int complete(int64_t poolid, uint64_t epoch, uint64_t size,
@@ -1686,7 +1692,8 @@ public:
   int bucket_suspended(rgw_bucket& bucket, bool *suspended);
 
   /** Delete an object.*/
-  virtual int delete_obj(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_owner, rgw_obj& src_obj, int versioning_status);
+  virtual int delete_obj(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_owner, rgw_obj& src_obj,
+                         int versioning_status, uint16_t bilog_flags = 0);
 
   /* Delete a system object */
   virtual int delete_system_obj(rgw_obj& src_obj, RGWObjVersionTracker *objv_tracker = NULL);
@@ -1845,12 +1852,12 @@ public:
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
-                         rgw_obj& obj);
+                         rgw_obj& obj, uint16_t bilog_flags);
   int cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs);
-  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs);
-  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj);
-  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj);
+                          RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs, uint16_t bilog_flags);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<rgw_obj_key> *remove_objs, uint16_t bilog_flags);
+  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj, uint16_t bilog_flags);
+  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, rgw_obj& obj, uint16_t bilog_flags);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
   int cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix, uint32_t num, bool list_versions,
                       map<string, RGWObjEnt>& m, bool *is_truncated,

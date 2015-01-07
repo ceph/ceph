@@ -27,7 +27,8 @@ void cls_rgw_bucket_set_tag_timeout(ObjectWriteOperation& o, uint64_t tag_timeou
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                               const cls_rgw_obj_key& key, const string& locator, bool log_op)
+                               const cls_rgw_obj_key& key, const string& locator, bool log_op,
+                               uint16_t bilog_flags)
 {
   struct rgw_cls_obj_prepare_op call;
   call.op = op;
@@ -35,6 +36,7 @@ void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& 
   call.key = key;
   call.locator = locator;
   call.log_op = log_op;
+  call.bilog_flags = bilog_flags;
   bufferlist in;
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
@@ -44,7 +46,8 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
                                 rgw_bucket_entry_ver& ver,
                                 const cls_rgw_obj_key& key,
                                 rgw_bucket_dir_entry_meta& dir_meta,
-				list<cls_rgw_obj_key> *remove_objs, bool log_op)
+				list<cls_rgw_obj_key> *remove_objs, bool log_op,
+                                uint16_t bilog_flags)
 {
 
   bufferlist in;
@@ -55,6 +58,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   call.ver = ver;
   call.meta = dir_meta;
   call.log_op = log_op;
+  call.bilog_flags = bilog_flags;
   if (remove_objs)
     call.remove_objs = *remove_objs;
   ::encode(call, in);

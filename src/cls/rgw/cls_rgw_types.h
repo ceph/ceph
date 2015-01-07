@@ -32,6 +32,10 @@ enum RGWModifyOp {
   CLS_RGW_OP_UNLINK_INSTANCE = 6,
 };
 
+enum RGWBILogFlags {
+  RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
+};
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
   utime_t timestamp;
@@ -462,8 +466,9 @@ struct rgw_bi_log_entry {
   RGWPendingState state;
   uint64_t index_ver;
   string tag;
+  uint16_t bilog_flags;
 
-  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0) {}
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 1, bl);
@@ -478,6 +483,7 @@ struct rgw_bi_log_entry {
     ::encode(c, bl);
     encode_packed_val(index_ver, bl);
     ::encode(instance, bl);
+    ::encode(bilog_flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
@@ -493,7 +499,10 @@ struct rgw_bi_log_entry {
     ::decode(c, bl);
     state = (RGWPendingState)c;
     decode_packed_val(index_ver, bl);
-    ::decode(instance, bl);
+    if (struct_v >= 2) {
+      ::decode(instance, bl);
+      ::decode(bilog_flags, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
