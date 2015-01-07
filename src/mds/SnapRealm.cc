@@ -124,11 +124,11 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
 	return false;
       }
       assert(parent->snaprealm);  // hmm!
+      if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
+	return false;
       if (!open_past_parents.count(p->second.ino)) {
 	add_open_past_parent(parent->snaprealm);
       }
-      if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
-	return false;
     }
   }
 
