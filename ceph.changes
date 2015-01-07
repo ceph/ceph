@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan  7 12:38:19 UTC 2015 - tbehrens@suse.com
+
+- remove ceph-post-file alongside ceph keys
+- move a few more development/testing binaries to ceph-test package  
+
+-------------------------------------------------------------------
 Wed Jan 7 01:14:42 UTC 2015 - tbehrens@suse.com
 
 - Consistently reference man-pages with glob at the end (might

@@ -438,6 +438,8 @@ rm $RPM_BUILD_ROOT%{python_sitelib}/*.pyo
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/id_dsa_drop.ceph.com.pub
 rm -f $RPM_BUILD_ROOT/usr/share/ceph/known_hosts_drop.ceph.com
+rm -f $RPM_BUILD_ROOT%{_bindir}/ceph-post-file
+rm -f $RPM_BUILD_ROOT%{_mandir}/man8/ceph-post-file.8*
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -496,7 +498,6 @@ fi
 %{_bindir}/ceph
 %{_bindir}/cephfs
 %{_bindir}/ceph-conf
-%{_bindir}/ceph-clsinfo
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
@@ -506,7 +507,6 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
-%{_bindir}/ceph-post-file
 %{_bindir}/ceph-rest-api
 %{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph_filestore_dump
@@ -514,14 +514,12 @@ fi
 %{_bindir}/librados-config
 %{_bindir}/rados
 %{_bindir}/rbd
-%{_bindir}/ceph-coverage
 %{_bindir}/ceph-dencoder
 %{_bindir}/ceph-brag
 %{_bindir}/ceph-crush-location
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph_mon_store_converter
-%{_bindir}/ceph_erasure_code
 /sbin/mkcephfs
 /sbin/mount.ceph
 %{_sbindir}/ceph-disk
@@ -585,11 +583,9 @@ fi
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
 %{_mandir}/man8/ceph-authtool.8*
-%{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
 %{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
-%{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph-rest-api.8*
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp/
@@ -747,7 +743,10 @@ fi
 %defattr(-,root,root,-)
 %{_bindir}/rest-bench
 %{_bindir}/ceph_bench_log
+%{_bindir}/ceph-clsinfo
+%{_bindir}/ceph-coverage
 %{_bindir}/ceph_dupstore
+%{_bindir}/ceph_erasure_code
 %{_bindir}/ceph_erasure_code_benchmark
 %{_bindir}/ceph_kvstorebench
 %{_bindir}/ceph_multi_stress_watch
@@ -828,6 +827,7 @@ fi
 %{_bindir}/ceph-kvstore-tool
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-client-debug
+%{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-debugpack.8*
 
 %changelog
