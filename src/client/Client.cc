@@ -4144,8 +4144,24 @@ void Client::_schedule_invalidate_dentry_callback(Dentry *dn, bool del)
     async_dentry_invalidator.queue(new C_Client_DentryInvalidate(this, dn, del));
 }
 
-void Client::_invalidate_inode_parents(Inode *in)
+void Client::_try_to_trim_inode(Inode *in)
 {
+  int ref = in->get_num_ref();
+
+  if (in->dir && !in->dir->dentry_list.empty()) {
+    for (xlist<Dentry*>::iterator p = in->dir->dentry_list.begin();
+	!p.end(); ) {
+      Dentry *dn = *p;
+      ++p;
+      if (dn->lru_is_expireable())
+	unlink(dn, false, false);  // close dir, drop dentry
+    }
+    --ref;
+  }
+  // make sure inode was not freed when closing dir
+  if (ref == 0)
+    return;
+
   set<Dentry*>::iterator q = in->dn_set.begin();
   while (q != in->dn_set.end()) {
     Dentry *dn = *q++;
@@ -4290,7 +4306,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
   // may drop inode's last ref
   if (deleted_inode)
-    _invalidate_inode_parents(in);
+    _try_to_trim_inode(in);
 
   m->put();
 }
