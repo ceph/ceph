@@ -629,7 +629,7 @@ public:
         char* raw_p = p->c_str();
         char* raw_end = raw_p + p->length();
         while (raw_p < raw_end) {
-          _update_op((Op*)raw_p, cm, om);
+          _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);
         }
       }
@@ -814,7 +814,7 @@ public:
       Op* decode_op() {
         assert(ops > 0);
 
-        Op* op =  (Op*)op_buffer_p;
+        Op* op = reinterpret_cast<Op*>(op_buffer_p);
         op_buffer_p += sizeof(Op);
         ops--;
 
@@ -880,7 +880,7 @@ private:
       op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
 
       char* p = ptr.c_str();
-      return (Op*)p;
+      return reinterpret_cast<Op*>(p);
     }
     __le32 _get_coll_id(const coll_t& coll) {
       map<coll_t, __le32>::iterator c = coll_index.find(coll);
