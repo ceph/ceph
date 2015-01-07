@@ -432,7 +432,6 @@ int MDS::_command_flush_journal(std::stringstream *ss)
   // Attach contexts to wait for all expiring segments to expire
   MDSGatherBuilder expiry_gather(g_ceph_context);
 
-  std::list<C_SaferCond*> expired_ctxs;
   const std::set<LogSegment*> &expiring_segments = mdlog->get_expiring_segments();
   for (std::set<LogSegment*>::const_iterator i = expiring_segments.begin();
        i != expiring_segments.end(); ++i) {

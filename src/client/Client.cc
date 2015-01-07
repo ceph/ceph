@@ -2070,7 +2070,7 @@ void Client::handle_osd_map(MOSDMap *m)
     // (i.e. we only need to know which inodes had outstanding ops, not the exact
     // op-to-inode relation)
     for (unordered_map<vinodeno_t,Inode*>::iterator i = inode_map.begin();
-         i != inode_map.end(); i++)
+         i != inode_map.end(); ++i)
     {
       Inode *inode = i->second;
       if (inode->oset.dirty_or_tx) {
@@ -3858,20 +3858,19 @@ void Client::handle_quota(MClientQuota *m)
 
   ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
 
-  Inode *in = NULL;
   vinodeno_t vino(m->ino, CEPH_NOSNAP);
-  if (inode_map.count(vino))
+  if (inode_map.count(vino)) {
+    Inode *in = NULL;
     in = inode_map[vino];
 
-  if (!in)
-    goto done;
+    if (in) {
+      if (in->quota.is_enable() ^ m->quota.is_enable())
+	invalidate_quota_tree(in);
+      in->quota = m->quota;
+      in->rstat = m->rstat;
+    }
+  }
 
-  if (in->quota.is_enable() ^ m->quota.is_enable())
-    invalidate_quota_tree(in);
-  in->quota = m->quota;
-  in->rstat = m->rstat;
-
-done:
   m->put();
 }
 
