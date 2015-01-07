@@ -60,8 +60,14 @@ Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
+Requires:       ceph-common = %{version}-%{release}
 # python-ceph is used for client tools.
 Requires:       python-ceph = %{version}-%{release}
+Requires:       python-argparse
+Requires:       python-requests
+Requires:       xfsprogs
+Requires:       parted
+Requires:       hdparm
 # util-linux because we need mount
 Requires:       util-linux
 Requires(post): binutils
@@ -138,6 +144,17 @@ performance, reliability, and scalability.
 #################################################################################
 # packages
 #################################################################################
+%package -n ceph-common
+Summary:	Ceph Common
+Group:		System Environment/Base
+Requires:	librbd1 = %{version}-%{release}
+Requires:	librados2 = %{version}-%{release}
+Requires:	python-ceph = %{version}-%{release}
+Requires:	python-requests
+
+%description -n ceph-common
+Common utilities to mount and interact with a ceph storage cluster
+
 %package fuse
 Summary:        Ceph fuse-based client
 License:        GPL-2.0 and LGPL-2.1
@@ -163,9 +180,10 @@ Summary:        Ceph headers
 License:        GPL-2.0 and LGPL-2.1
 Group:          Development/Libraries/C and C++
 Requires:       %{name} = %{version}-%{release}
-Requires:       libcephfs1 = %{version}
-Requires:       librados2 = %{version}
-Requires:       librbd1 = %{version}
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
+Requires:       libcephfs1 = %{version}-%{release}
+Requires:       libcephfs_jni1 = %{version}-%{release}
 
 %description devel
 This package contains libraries and headers needed to develop programs
@@ -175,6 +193,7 @@ that use Ceph.
 Summary:        Rados REST Gateway
 License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
+Requires:       ceph-common = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       logrotate
 %if 0%{defined suse_version}
@@ -305,6 +324,7 @@ object storage.
 Summary:        Ceph benchmarks and test tools
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
+Requires:       ceph-common = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
@@ -498,14 +518,10 @@ fi
 %{_docdir}/ceph/sample.ceph.conf
 %{_docdir}/ceph/sample.fetch_config
 %{_docdir}/ceph/README.SUSE
-%{_bindir}/ceph
 %{_bindir}/cephfs
-%{_bindir}/ceph-conf
 %{_bindir}/crushtool
 %{_bindir}/monmaptool
 %{_bindir}/osdmaptool
-%{_bindir}/ceph-authtool
-%{_bindir}/ceph-syn
 %{_bindir}/ceph-run
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
@@ -515,11 +531,6 @@ fi
 %{_bindir}/ceph_filestore_dump
 %{_bindir}/ceph_filestore_tool
 %{_bindir}/librados-config
-%{_bindir}/rados
-%{_bindir}/rbd
-%{_bindir}/ceph-dencoder
-%{_bindir}/ceph-brag
-%{_bindir}/ceph-crush-location
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph_mon_store_converter
@@ -565,33 +576,20 @@ fi
 %dir /usr/lib/udev/rules.d
 /usr/lib/udev/rules.d/50-rbd.rules
 /usr/lib/udev/rules.d/95-ceph-osd.rules
-%config %{_sysconfdir}/bash_completion.d/ceph
-%config %{_sysconfdir}/bash_completion.d/rados
-%config %{_sysconfdir}/bash_completion.d/radosgw-admin
-%config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*
 %{_mandir}/man8/ceph-osd.8*
 %{_mandir}/man8/mkcephfs.8*
 %{_mandir}/man8/ceph-run.8*
-%{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
 %{_mandir}/man8/monmaptool.8*
-%{_mandir}/man8/ceph-conf.8*
-%{_mandir}/man8/ceph.8*
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
-%{_mandir}/man8/rados.8*
-%{_mandir}/man8/rbd.8*
-%{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/librados-config.8*
-%{_mandir}/man8/ceph-dencoder.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-rest-api.8*
-%dir %{_localstatedir}/lib/ceph/
-%dir %{_localstatedir}/lib/ceph/tmp/
 # osd mounting directory
 %dir %{_localstatedir}/lib/ceph/osd
 %dir %{_localstatedir}/log/ceph/
@@ -601,7 +599,33 @@ fi
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/%{name}.conf
 %endif
+
+#################################################################################
+%files -n ceph-common
+%defattr(-,root,root,-)
+%{_bindir}/ceph
+%{_bindir}/ceph-authtool
+%{_bindir}/ceph-conf
+%{_bindir}/ceph-dencoder
+%{_bindir}/ceph-syn
+%{_bindir}/ceph-crush-location
+%{_bindir}/rados
+%{_bindir}/rbd
+%{_bindir}/ceph-brag
+%{_mandir}/man8/ceph-authtool.8*
+%{_mandir}/man8/ceph-conf.8*
+%{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-syn.8*
+%{_mandir}/man8/ceph.8*
+%{_mandir}/man8/rados.8*
+%{_mandir}/man8/rbd.8*
 %dir %{_sysconfdir}/ceph/
+%dir %{_localstatedir}/lib/ceph/
+%dir %{_localstatedir}/lib/ceph/tmp/
+%config %{_sysconfdir}/bash_completion.d/ceph
+%config %{_sysconfdir}/bash_completion.d/rados
+%config %{_sysconfdir}/bash_completion.d/rbd
+
 
 #################################################################################
 %files fuse
@@ -645,6 +669,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %dir %{_localstatedir}/log/radosgw/
+%config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
 %if 0%{?suse_version} >= 1310
 %{_unitdir}/ceph-rgw@.service

@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Wed Jan  7 17:40:14 UTC 2015 - tbehrens@suse.com
+
+- integrate upstream's package split into ceph-common (essential stuff
+  also needed on ceph client systems), and ceph (for the full-blown
+  ceph node)
+
+-------------------------------------------------------------------
 Wed Jan  7 16:08:24 UTC 2015 - osynge@suse.com
 
 - radosgw systemd support.
@@ -8,7 +15,7 @@ Wed Jan  7 16:08:24 UTC 2015 - osynge@suse.com
 Wed Jan  7 12:38:19 UTC 2015 - tbehrens@suse.com
 
 - remove ceph-post-file alongside ceph keys
-- move a few more development/testing binaries to ceph-test package  
+- move a few more development/testing binaries to ceph-test package
 
 -------------------------------------------------------------------
 Wed Jan 7 01:14:42 UTC 2015 - tbehrens@suse.com
