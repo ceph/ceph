@@ -43,9 +43,11 @@ Build-Depends: autoconf,
                python (>= 2.6.6-3~),
                python-argparse,
                python-nose,
+               python-virtualenv,
                uuid-dev,
                uuid-runtime,
                xfslibs-dev,
+               xmlstarlet,
                yasm [amd64]
 Standards-Version: 3.9.3
 
