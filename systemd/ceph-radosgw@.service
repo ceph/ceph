@@ -1,0 +1,15 @@
+[Unit]
+Description=Ceph rados gateway
+After=network-online.target local-fs.target
+Wants=network-online.target local-fs.target
+PartOf=ceph.target
+
+[Service]
+EnvironmentFile=-/etc/sysconfig/ceph
+Environment=CLUSTER=ceph
+ExecStart=/usr/bin/radosgw -d  --conf /etc/ceph/${CLUSTER}.conf --name client.radosgw.%i
+ExecStartPre=/usr/libexec/ceph/ceph-radosgw-prestart.sh --name %i
+User=wwwrun
+
+[Install]
+WantedBy=ceph.target
