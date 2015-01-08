@@ -471,7 +471,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -598,7 +598,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -725,7 +725,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -851,7 +851,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
