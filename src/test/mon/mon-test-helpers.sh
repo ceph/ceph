@@ -20,7 +20,7 @@ source test/test_btrfs_common.sh
 function setup() {
     local dir=$1
     teardown $dir
-    mkdir $dir
+    mkdir -p $dir
 }
 
 function teardown() {
@@ -103,7 +103,7 @@ function call_TEST_functions() {
 }
 
 function main() {
-    local dir=$1
+    local dir=testdir/$1
 
     export PATH=:$PATH # make sure program from sources are prefered
 

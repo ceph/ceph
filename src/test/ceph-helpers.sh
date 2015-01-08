@@ -82,7 +82,7 @@ TIMEOUT=60
 function setup() {
     local dir=$1
     teardown $dir || return 1
-    mkdir $dir
+    mkdir -p $dir
 }
 
 function test_setup() {
@@ -929,7 +929,7 @@ function test_repair() {
 # @return 0 on success, 1 on error
 #
 function main() {
-    local dir=$1
+    local dir=testdir/$1
     shift
 
     set -x
@@ -966,7 +966,7 @@ function run_tests() {
     export CEPH_CONF=/dev/null
 
     local funcs=${@:-$(set | sed -n -e 's/^\(test_[0-9a-z_]*\) .*/\1/p')}
-    local dir=ceph-helpers
+    local dir=testdir/ceph-helpers
 
     for func in $funcs ; do
         $func $dir || return 1
