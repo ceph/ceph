@@ -606,7 +606,7 @@ fi
 %endif
 %else
 # don't bother to rm -f all unpackaged server-package files...
-%define _missing_doc_files_terminate_build 0
+%define _unpackaged_files_terminate_build macro 0
 %endif
 
 #################################################################################

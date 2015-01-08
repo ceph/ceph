@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Jan  8 11:16:01 UTC 2015 - tbehrens@suse.com
+
+- fix mistyped rpmbuild macro 
+
+-------------------------------------------------------------------
 Wed Jan  7 22:33:26 UTC 2015 - tbehrens@suse.com
 
 - make ceph main package and radosgw subpackage conditional
