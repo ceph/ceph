@@ -2279,7 +2279,7 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [filestore (default), memstore, keyvaluestore-dev]")
+     "Arg is one of [filestore (default), memstore, keyvaluestore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
@@ -2501,7 +2501,7 @@ int main(int argc, char **argv)
 
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
+    cerr << "Must provide --type (filestore, memstore, keyvaluestore)" << std::endl;
     exit(1);
   }
 
