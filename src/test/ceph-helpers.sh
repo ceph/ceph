@@ -19,6 +19,7 @@
 #
 CEPH_HELPER_VERBOSE=false
 TIMEOUT=60
+PG_NUM=4
 
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing
@@ -263,7 +264,7 @@ mon host = $(get_config mon a mon_host)
 EOF
 
     ceph osd pool delete rbd rbd --yes-i-really-really-mean-it || return 1
-    ceph osd pool create rbd 4 || return 1
+    ceph osd pool create rbd $PG_NUM || return 1
 }
 
 function test_run_mon() {
@@ -510,7 +511,7 @@ function test_get_osds() {
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
-    wait_for_clean
+    wait_for_clean || return 1
     get_osds rbd GROUP | grep --quiet '[0-1] [0-1] ' || return 1
     teardown $dir || return 1
 }
@@ -540,7 +541,7 @@ function test_get_pg() {
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    wait_for_clean
+    wait_for_clean || return 1
     get_pg rbd GROUP | grep --quiet '^[0-9]\.[0-9a-f][0-9a-f]*$' || return 1
     teardown $dir || return 1
 }
@@ -603,7 +604,7 @@ function test_get_primary() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     local osd=0
     run_osd $dir $osd || return 1
-    wait_for_clean
+    wait_for_clean || return 1
     test $(get_primary rbd GROUP) = $osd || return 1
     teardown $dir || return 1
 }
@@ -636,7 +637,7 @@ function test_get_not_primary() {
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
-    wait_for_clean
+    wait_for_clean || return 1
     local primary=$(get_primary rbd GROUP)
     local not_primary=$(get_not_primary rbd GROUP)
     test $not_primary != $primary || return 1
@@ -747,9 +748,11 @@ function test_get_num_active_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
     local num_active_clean=$(get_num_active_clean)
-    test "$num_active_clean" = 0 || return 1
+    test "$num_active_clean" = $PG_NUM || return 1
     teardown $dir || return 1
 }
 
@@ -771,7 +774,9 @@ function test_get_num_pgs() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
     local num_pgs=$(get_num_pgs)
     test "$num_pgs" -gt 0 || return 1
     teardown $dir || return 1
@@ -798,7 +803,9 @@ function test_get_last_scrub_stamp() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
+    wait_for_clean || return 1
     stamp=$(get_last_scrub_stamp 1.0)
     test -n "$stamp" || return 1
     teardown $dir || return 1
@@ -813,15 +820,20 @@ function test_get_last_scrub_stamp() {
 # @return 0 if the cluster is clean, 1 otherwise
 #
 function is_clean() {
-    test $(get_num_active_clean) = $(get_num_pgs)
+    num_pgs=$(get_num_pgs)
+    test $num_pgs != 0 || return 1
+    test $(get_num_active_clean) = $num_pgs || return 1
 }
 
 function test_is_clean() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
+    run_osd $dir 0 || return 1
     ! is_clean || return 1
+    wait_for_clean || return 1
+    is_clean || return 1
     teardown $dir || return 1
 }
 
@@ -900,10 +912,8 @@ function test_repair() {
     local dir=$1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=2 || return 1
-    ! TIMEOUT=1 repair 1.0 || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
     run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
     wait_for_clean || return 1
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
