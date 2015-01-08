@@ -30,10 +30,10 @@ Requires:	python-argparse
 Requires:	python-requests
 Requires:	python-flask
 Requires:	xfsprogs
-Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
+Requires:	cryptsetup
 Requires(post):	binutils
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
