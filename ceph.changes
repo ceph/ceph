@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Jan  8 15:29:48 UTC 2015 - tbehrens@suse.com
+
+- name change, conditional server packaging now names ses_server
+
+-------------------------------------------------------------------
 Thu Jan  8 11:16:01 UTC 2015 - tbehrens@suse.com
 
 - fix mistyped rpmbuild macro 

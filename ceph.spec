@@ -34,8 +34,8 @@
 # experiences core-dumps in 'tcmalloc::PageHeap::GrowHeap'...
 %bcond_without tcmalloc
 
-# package only the client side part of ceph
-%bcond_without server_parts
+# package both client and server parts of ceph
+%bcond_with ses_server
 
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
@@ -574,7 +574,7 @@ fi
 #################################################################################
 # files
 #################################################################################
-%if 0%{with server_parts}
+%if 0%{with ses_server}
 %files
 %defattr(-,root,root,-)
 %docdir %{_docdir}
@@ -731,7 +731,7 @@ fi
 %{_libdir}/librados.so
 
 #################################################################################
-%if 0%{with server_parts}
+%if 0%{with ses_server}
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
@@ -777,7 +777,7 @@ fi
 
 #################################################################################
 
-%if 0%{with server_parts}
+%if 0%{with ses_server}
 %if 0%{?suse_version}
 %files resource-agents
 %defattr(0755,root,root,-)
