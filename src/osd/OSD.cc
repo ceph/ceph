@@ -8375,7 +8375,8 @@ void OSD::process_peering_events(
       // we need to requeue the PG explicitly since we didn't actually
       // handle an event
       peering_wq.queue(pg);
-    } else if (!pg->peering_queue.empty()) {
+    } else {
+      assert(!pg->peering_queue.empty());
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
       pg->handle_peering_event(evt, &rctx);
