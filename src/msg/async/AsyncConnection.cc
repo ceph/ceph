@@ -2111,6 +2111,7 @@ void AsyncConnection::mark_down()
   stopping.set(1);
   Mutex::Locker l(lock);
   _stop();
+  center->dispatch_event_external(reset_handler);
 }
 
 void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
