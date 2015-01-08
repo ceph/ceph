@@ -572,6 +572,8 @@ void Paxos::handle_last(MMonPaxos *last)
 	  finish_contexts(g_ceph_context, waiting_for_active);
 	  finish_contexts(g_ceph_context, waiting_for_readable);
 	  finish_contexts(g_ceph_context, waiting_for_writeable);
+
+          queue_next();
 	}
       }
     }
@@ -920,6 +922,8 @@ void Paxos::commit_finish()
     finish_contexts(g_ceph_context, waiting_for_active);
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
+
+    queue_next();
   }
 }
 
@@ -1053,11 +1057,15 @@ void Paxos::commit_proposal()
 
 void Paxos::finish_round()
 {
+  dout(10) << __func__ << dendl;
   assert(mon->is_leader());
 
   // ok, now go active!
   state = STATE_ACTIVE;
+}
 
+void Paxos::queue_next()
+{
   dout(10) << __func__ << " state " << state
 	   << " proposals left " << proposals.size() << dendl;
 
@@ -1069,6 +1077,7 @@ void Paxos::finish_round()
     propose_queued();
   }
 }
+
 
 // peon
 void Paxos::handle_lease(MMonPaxos *lease)

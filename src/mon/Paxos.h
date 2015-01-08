@@ -1070,6 +1070,7 @@ private:
 
   void commit_proposal();
   void finish_round();
+  void queue_next();
 
 public:
   /**
