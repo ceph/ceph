@@ -1581,7 +1581,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
                             << " == " << connect.connect_seq << ", sending WAIT" << dendl;
         assert(peer_addr > async_msgr->get_myaddr());
         // make sure our outgoing connection will follow through
-        existing->_send_keepalive_or_ack();
+        existing->send_keepalive();
         return _reply_accept(CEPH_MSGR_TAG_WAIT, connect, reply, authorizer_reply);
       }
     }
