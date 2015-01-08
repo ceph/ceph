@@ -4015,7 +4015,7 @@ int RGWRados::Object::Delete::delete_obj()
     obj.clear_instance();
   }
 
-  bool explicit_marker_version = (params.olh_epoch > 0 || !params.marker_version_id.empty());
+  bool explicit_marker_version = (!params.marker_version_id.empty());
 
   if (params.versioning_status & BUCKET_VERSIONED || explicit_marker_version) {
     if (instance.empty() || explicit_marker_version) {
