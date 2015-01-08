@@ -241,7 +241,8 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
     if (whoami < 0) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
-    } else if (command == "dump_ops_in_flight") {
+    } else if (command == "dump_ops_in_flight" ||
+	       command == "ops") {
       op_tracker.dump_ops_in_flight(f);
     } else if (command == "dump_historic_ops") {
       op_tracker.dump_historic_ops(f);
@@ -493,6 +494,10 @@ void MDS::set_up_admin_socket()
 				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   assert(0 == r);
+  r = admin_socket->register_command("ops",
+				     "ops", asok_hook,
+				     "show the ops currently in flight");
+  assert(0 == r);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
@@ -537,6 +542,7 @@ void MDS::clean_up_admin_socket()
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   admin_socket->unregister_command("status");
   admin_socket->unregister_command("dump_ops_in_flight");
+  admin_socket->unregister_command("ops");
   admin_socket->unregister_command("dump_historic_ops");
   admin_socket->unregister_command("scrub_path");
   admin_socket->unregister_command("flush_path");
