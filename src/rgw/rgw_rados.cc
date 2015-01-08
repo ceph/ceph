@@ -4022,7 +4022,9 @@ int RGWRados::Object::Delete::delete_obj()
       rgw_obj marker = obj;
 
       if (!params.marker_version_id.empty()) {
-        marker.set_instance(params.marker_version_id);
+        if (params.marker_version_id != "null") {
+          marker.set_instance(params.marker_version_id);
+        }
       } else if ((params.versioning_status & BUCKET_VERSIONS_SUSPENDED) == 0) {
         store->gen_rand_obj_instance_name(&marker);
       }
