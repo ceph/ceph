@@ -3872,6 +3872,29 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
+
+    if (p.type != pg_pool_t::TYPE_ERASURE) {
+      if (n < 1 || n > p.size) {
+	ss << "pool min_size must be between 1 and " << (int)p.size;
+	return -EINVAL;
+      }
+    } else {
+       ErasureCodeInterfaceRef erasure_code;
+       int k;
+       stringstream tmp;
+       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, tmp);
+       if (err == 0) {
+	 k = erasure_code->get_data_chunk_count();
+       } else {
+	 ss << __func__ << " get_erasure_code failed: " << tmp;
+	 return err;;
+       }
+
+       if (n < k || n > p.size) {
+	 ss << "pool min_size must be between " << k << " and " << (int)p.size;
+	 return -EINVAL;
+       }
+    }
     p.min_size = n;
   } else if (var == "auid") {
     if (interr.length()) {
