@@ -400,8 +400,6 @@ public:
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
 };
 
-int cls_rgw_get_dir_header(librados::IoCtx& io_ctx, map<string, rgw_cls_list_ret>& dir_headers,
-    uint32_t max_aio);
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, bufferlist& updates);
