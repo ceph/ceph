@@ -116,7 +116,7 @@ For example::
 :Default for other file systems: ``rw, noatime``
 
 For example::
-  ``osd mount options xfs = rw, noatime, inode64, nobarrier, logbufs=8``
+  ``osd mount options xfs = rw, noatime, inode64, logbufs=8``
 
 
 .. index:: OSD; journal settings
