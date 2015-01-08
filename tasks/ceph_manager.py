@@ -189,7 +189,7 @@ class Thrasher:
                     self.ceph_manager.ctx.ceph.conf['osd']):
                 prefix = ("sudo ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore-dev "
+                          "--type keyvaluestore "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
@@ -288,7 +288,7 @@ class Thrasher:
                     self.ceph_manager.ctx.ceph.conf['osd']):
                 prefix = ("sudo ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore-dev "
+                          "--type keyvaluestore "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
