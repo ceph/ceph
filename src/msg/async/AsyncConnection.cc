@@ -1925,7 +1925,7 @@ void AsyncConnection::fault()
 
   // woke up again;
   register_time_events.insert(center->create_time_event(
-          backoff, EventCallbackRef(new C_time_wakeup(this))));
+          backoff.to_nsec()/1000, EventCallbackRef(new C_time_wakeup(this))));
 }
 
 void AsyncConnection::was_session_reset()
