@@ -68,12 +68,14 @@ public:
 
 void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_entries, uint64_t total_size)
 {
-  map<string, struct rgw_cls_list_ret> results;
-  ASSERT_EQ(0, cls_rgw_get_dir_header(ioctx, results, 8));
+  map<int, struct rgw_cls_list_ret> results;
+  map<int, string> oids;
+  oids[0] = oid;
+  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
 
   uint64_t entries = 0;
   uint64_t size = 0;
-  map<string, struct rgw_cls_list_ret>::iterator iter = results.begin();
+  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
   for (; iter != results.end(); ++iter) {
     entries += (iter->second).dir.header.stats[category].num_entries;
     size += (iter->second).dir.header.stats[category].total_size;
@@ -347,11 +349,10 @@ TEST(cls_rgw, index_suggest)
     cls_rgw_encode_suggestion(suggest_op, dirent, updates);
   }
 
-  op = mgr.write_op();
-  vector<string> bucket_objs;
-  bucket_objs.push_back(bucket_oid);
-  cls_rgw_bucket_set_tag_timeout(ioctx, bucket_objs, 1, 8); // short tag timeout
-  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+  map<int, string> bucket_objs;
+  bucket_objs[0] = bucket_oid;
+  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
+  ASSERT_EQ(0, r);
 
   sleep(1);
 
