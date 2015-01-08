@@ -446,7 +446,7 @@ def main(argv):
 
     # Specify a bad --type
     cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
+    ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore)")
 
     # Don't specify a data-path
     cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
