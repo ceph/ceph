@@ -846,6 +846,15 @@ void Pipe::set_socket_options()
     ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
   }
 #endif
+
+  int prio = msgr->get_socket_priority();
+  if (prio >= 0) {
+    int r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+    if (r < 0) {
+      ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
+                         << ": " << cpp_strerror(errno) << dendl;
+    }
+  }
 }
 
 int Pipe::connect()
