@@ -169,14 +169,20 @@ def run_qemu(ctx, config):
                 ]
             )
 
-        base_file = '{tdir}/qemu/base.{client}.qcow2'.format(tdir=testdir, client=client)
+        base_file = '{tdir}/qemu/base.{client}.qcow2'.format(
+            tdir=testdir,
+            client=client
+        )
+        qemu_cmd = 'qemu-system-x86_64'
+        if remote.os.package_type == "rpm":
+            qemu_cmd = "/usr/libexec/qemu-kvm"
         args=[
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
             'daemon-helper',
             'term',
-            'qemu-system-x86_64', '-enable-kvm', '-nographic',
+            qemu_cmd, '-enable-kvm', '-nographic',
             '-m', str(client_config.get('memory', DEFAULT_MEM)),
             # base OS device
             '-drive',
