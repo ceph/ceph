@@ -16,6 +16,7 @@
 
 #include <iostream>
 #include <unistd.h>
+#include <stdlib.h>
 #include <time.h>
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -574,9 +575,11 @@ class MarkdownDispatcher : public Dispatcher {
 
   void ms_handle_fast_connect(Connection *con) {
     cerr << __func__ << con << std::endl;
+    Mutex::Locker l(lock);
     conns.insert(con);
   }
   void ms_handle_fast_accept(Connection *con) {
+    Mutex::Locker l(lock);
     conns.insert(con);
   }
   bool ms_dispatch(Message *m) {
@@ -588,6 +591,7 @@ class MarkdownDispatcher : public Dispatcher {
       return true;
 
     last_mark = true;
+    usleep(rand() % 500);
     for (set<Connection*>::iterator it = conns.begin(); it != conns.end(); ++it) {
       if ((*it) != m->get_connection().get()) {
         (*it)->mark_down();
@@ -601,10 +605,13 @@ class MarkdownDispatcher : public Dispatcher {
   }
   bool ms_handle_reset(Connection *con) {
     cerr << __func__ << con << std::endl;
+    Mutex::Locker l(lock);
     conns.erase(con);
+    usleep(rand() % 500);
     return true;
   }
   void ms_handle_remote_reset(Connection *con) {
+    Mutex::Locker l(lock);
     conns.erase(con);
     cerr << __func__ << con << std::endl;
   }
