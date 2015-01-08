@@ -437,7 +437,13 @@ void MonitorStore::put_bl_sn_map(const char *a,
     derr << "failed to open " << dir << ": " << cpp_strerror(err) << dendl;
     assert(0 == "failed to open temp file");
   }
-  sync_filesystem(dirfd);
+
+  err = sync_filesystem(dirfd);
+  if (err < 0) {
+    derr << "sync_filesystem error " << cpp_strerror(err) << dendl;
+    assert(0 == "failed to sync_filesystem");
+  }
+
   close_err = TEMP_FAILURE_RETRY(::close(dirfd));
   assert (0 == close_err);
     
@@ -481,7 +487,13 @@ void MonitorStore::sync()
 	 << ": " << cpp_strerror(err) << dendl;
     assert(0 == "failed to open dir for syncing");
   }
-  sync_filesystem(dirfd);
+
+  int ret = sync_filesystem(dirfd);
+  if (ret < 0) {
+    derr << __func__ << " sync_filesystem error " << cpp_strerror(ret) << dendl;
+    assert(0 == "failed to sync_filesystem");
+  }
+
   int close_err = TEMP_FAILURE_RETRY(::close(dirfd));
   assert (0 == close_err);
 }
