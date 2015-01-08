@@ -17,7 +17,7 @@
 
 source test/mon/mon-test-helpers.sh
 
-export CEPH_DIR="$PWD/test-$CEPH_PORT"
+export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
 
