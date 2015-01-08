@@ -15,7 +15,7 @@
 # GNU Library Public License for more details.
 #
 set -e
-sudo test/ceph-disk.sh test_activate_dev
+sudo test/ceph-disk.sh test_activate_dev test_activate_dmcrypt_dev test_activate_dmcrypt_plain_dev
 test/ceph-disk.sh
 
 # Local Variables:
