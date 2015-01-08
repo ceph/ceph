@@ -1901,7 +1901,11 @@ void FileStore::_set_global_replay_guard(coll_t cid,
     return;
 
   // sync all previous operations on this sequencer
-  sync_filesystem(basedir_fd);
+  int ret = sync_filesystem(basedir_fd);
+  if (ret < 0) {
+    derr << __func__ << " :sync_filesytem error " << cpp_strerror(ret) << dendl;
+    assert(0 == "_set_global_replay_guard failed");
+  }
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
