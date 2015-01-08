@@ -3309,7 +3309,7 @@ extern "C" int rados_write_op_operate(rados_write_op_t write_op,
   object_t obj(oid);
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  return ctx->operate(obj, oo, mtime, flags);
+  return ctx->operate(obj, oo, mtime, translate_flags(flags));
 }
 
 extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
@@ -3323,7 +3323,7 @@ extern "C" int rados_aio_write_op_operate(rados_write_op_t write_op,
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  return ctx->aio_operate(obj, oo, c, ctx->snapc, flags);
+  return ctx->aio_operate(obj, oo, c, ctx->snapc, translate_flags(flags));
 }
 
 extern "C" rados_read_op_t rados_create_read_op()
@@ -3596,7 +3596,8 @@ extern "C" int rados_read_op_operate(rados_read_op_t read_op,
 {
   object_t obj(oid);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  return ctx->operate_read(obj, (::ObjectOperation *)read_op, NULL, flags);
+  return ctx->operate_read(obj, (::ObjectOperation *)read_op, NULL,
+			   translate_flags(flags));
 }
 
 extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
@@ -3609,5 +3610,5 @@ extern "C" int rados_aio_read_op_operate(rados_read_op_t read_op,
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
   return ctx->aio_operate_read(obj, (::ObjectOperation *)read_op,
-			       c, flags, NULL);
+			       c, translate_flags(flags), NULL);
 }
