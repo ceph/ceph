@@ -86,19 +86,9 @@ class TestFlush(CephFSTestCase):
         self.assertEqual(flush_data['return_code'], 0)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace
-        try:
-            # try/except to work around 10387 -- the 'try' is the expected behaviour, the
-            # expect  is when we encounter 10387 and have to unmount the client to get
-            # past.
-            wait_until_true(
-                lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
-                60)  # timeout is fairly long to allow for tick+rados latencies
-        except RuntimeError:
-            # #10387 case: client doesn't release cap on dir until unmounted, holding up dirfrag delete
-            self.mount.umount_wait()
-            wait_until_true(
-                lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
-                20)
+        wait_until_true(
+            lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
+            60)  # timeout is fairly long to allow for tick+rados latencies
 
         with self.assertRaises(ObjectNotFound):
             self.fs.list_dirfrag(dir_ino)
