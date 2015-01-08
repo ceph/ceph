@@ -57,7 +57,7 @@ void Cycles::init()
   // After 10ms have elapsed, take the ratio between these readings.
 
   struct timeval start_time, stop_time;
-  uint64_t start_cycles, micros;
+  uint64_t micros;
   double old_cycles;
 
   // There is one tricky aspect, which is that we could get interrupted
@@ -70,7 +70,7 @@ void Cycles::init()
     if (gettimeofday(&start_time, NULL) != 0) {
       assert(0 == "couldn't read clock");
     }
-    start_cycles = rdtsc();
+    uint64_t start_cycles = rdtsc();
     while (1) {
       if (gettimeofday(&stop_time, NULL) != 0) {
         assert(0 == "couldn't read clock");
