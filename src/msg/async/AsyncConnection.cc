@@ -842,6 +842,12 @@ void AsyncConnection::process()
           break;
         }
 
+      case STATE_WAIT:
+        {
+          ldout(async_msgr->cct, 20) << __func__ << " enter wait state" << dendl;
+          break;
+        }
+
       default:
         {
           if (_process_connection() < 0)
@@ -1369,7 +1375,7 @@ int AsyncConnection::_process_connection()
 
     default:
       {
-        lderr(async_msgr->cct) << __func__ << " bad state" << get_state_name(state) << dendl;
+        lderr(async_msgr->cct) << __func__ << " bad state: " << get_state_name(state) << dendl;
         assert(0);
       }
   }
