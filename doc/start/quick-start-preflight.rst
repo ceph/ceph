@@ -295,6 +295,22 @@ To configure SELinux persistently (recommended if SELinux is an issue), modify
 the configuration file at  ``/etc/selinux/config``.
 
 
+Priorities/Preferences
+----------------------
+
+Ensure that your package manager has priority/preferences packages installed and
+enabled. On CentOS, you may need to install EPEL. On RHEL, you may need to
+enable optional repositories. ::
+
+	sudo yum install yum-plugin-priorities
+
+For example, on RHEL 7 server, execute the following to install
+``yum-plugin-priorities`` and enable the  ``rhel-7-server-optional-rpms``
+repository::
+
+	sudo yum install yum-plugin-priorities --enablerepo=rhel-7-server-optional-rpms
+
+
 Summary
 =======
 
