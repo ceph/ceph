@@ -1,7 +1,7 @@
 #
 # spec file for package ceph
 #
-# Copyright (c) 2014 SUSE LINUX Products GmbH, Nuernberg, Germany.
+# Copyright (c) 2015 SUSE LINUX Products GmbH, Nuernberg, Germany.
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -59,19 +59,19 @@ Source3:        ceph-tmpfiles.d.conf
 Source99:       update_git.sh
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
 Source4:        ceph-rpmlintrc
+Requires:       ceph-common = %{version}-%{release}
 Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
-Requires:       ceph-common = %{version}-%{release}
 # python-ceph is used for client tools.
-Requires:       python-ceph = %{version}-%{release}
-Requires:       python-argparse
-Requires:       python-requests
-Requires:       python-Flask
-Requires:       xfsprogs
-Requires:       parted
 Requires:       hdparm
+Requires:       parted
+Requires:       python-Flask
+Requires:       python-argparse
+Requires:       python-ceph = %{version}-%{release}
+Requires:       python-requests
+Requires:       xfsprogs
 # util-linux because we need mount
 Requires:       util-linux
 Requires(post): binutils
@@ -179,12 +179,13 @@ performance, reliability, and scalability.
 # packages
 #################################################################################
 %package -n ceph-common
-Summary:	Ceph Common
-Group:		System Environment/Base
-Requires:	librbd1 = %{version}-%{release}
-Requires:	librados2 = %{version}-%{release}
-Requires:	python-ceph = %{version}-%{release}
-Requires:	python-requests
+Summary:        Ceph Common
+License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
+Group:          System Environment/Base
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
+Requires:       python-ceph = %{version}-%{release}
+Requires:       python-requests
 
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster
@@ -214,10 +215,10 @@ Summary:        Ceph headers
 License:        GPL-2.0 and LGPL-2.1
 Group:          Development/Libraries/C and C++
 Requires:       %{name} = %{version}-%{release}
-Requires:       librados2 = %{version}-%{release}
-Requires:       librbd1 = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
 Requires:       libcephfs_jni1 = %{version}-%{release}
+Requires:       librados2 = %{version}-%{release}
+Requires:       librbd1 = %{version}-%{release}
 
 %description devel
 This package contains libraries and headers needed to develop programs
@@ -484,7 +485,6 @@ install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotat
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
-
 # systemd
 %if 0%{?suse_version} >= 1310
 mkdir -p $RPM_BUILD_ROOT%{_unitdir}
@@ -557,7 +557,6 @@ fi
 %endif
 %stop_on_removal ceph
 
-
 %postun
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
@@ -606,8 +605,6 @@ fi
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
-
-
 
 # systemd
 %if 0%{?suse_version} >= 1310
@@ -694,7 +691,6 @@ fi
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config %{_sysconfdir}/bash_completion.d/rados
 %config %{_sysconfdir}/bash_completion.d/rbd
-
 
 #################################################################################
 %files fuse
