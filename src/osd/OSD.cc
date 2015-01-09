@@ -8382,6 +8382,8 @@ void OSD::process_peering_events(
       continue;
     }
     if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs)) {
+      // queue pg back to avoid mismatch
+      peering_wq.queue(pg);
       pg->queue_null(curmap->get_epoch(), curmap->get_epoch());
     } else if (!pg->peering_queue.empty()) {
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
