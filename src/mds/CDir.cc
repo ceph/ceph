@@ -74,7 +74,7 @@ public:
 boost::pool<> CDir::pool(sizeof(CDir));
 
 
-ostream& operator<<(ostream& out, CDir& dir)
+ostream& operator<<(ostream& out, const CDir& dir)
 {
   string path;
   dir.get_inode()->make_path_string_projected(path);
@@ -128,7 +128,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (!(dir.fnode.fragstat == dir.fnode.accounted_fragstat))
     out << "/" << dir.fnode.accounted_fragstat;
   if (g_conf->mds_debug_scatterstat && dir.is_projected()) {
-    fnode_t *pf = dir.get_projected_fnode();
+    const fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->fragstat;
     if (!(pf->fragstat == pf->accounted_fragstat))
       out << "/" << pf->accounted_fragstat;
@@ -139,7 +139,7 @@ ostream& operator<<(ostream& out, CDir& dir)
   if (!(dir.fnode.rstat == dir.fnode.accounted_rstat))
     out << "/" << dir.fnode.accounted_rstat;
   if (g_conf->mds_debug_scatterstat && dir.is_projected()) {
-    fnode_t *pf = dir.get_projected_fnode();
+    const fnode_t *pf = dir.get_projected_fnode();
     out << "->" << pf->rstat;
     if (!(pf->rstat == pf->accounted_rstat))
       out << "/" << pf->accounted_rstat;
@@ -2242,7 +2242,7 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
  * if dir_auth.first == parent, auth is same as inode.
  * unless .second != unknown, in which case that sticks.
  */
-mds_authority_t CDir::authority() 
+mds_authority_t CDir::authority() const
 {
   if (is_subtree_root()) 
     return dir_auth;
@@ -2536,9 +2536,9 @@ void CDir::unfreeze_tree()
   }
 }
 
-bool CDir::is_freezing_tree()
+bool CDir::is_freezing_tree() const
 {
-  CDir *dir = this;
+  const CDir *dir = this;
   while (1) {
     if (dir->is_freezing_tree_root()) return true;
     if (dir->is_subtree_root()) return false;
@@ -2549,9 +2549,9 @@ bool CDir::is_freezing_tree()
   }
 }
 
-bool CDir::is_frozen_tree()
+bool CDir::is_frozen_tree() const
 {
-  CDir *dir = this;
+  const CDir *dir = this;
   while (1) {
     if (dir->is_frozen_tree_root()) return true;
     if (dir->is_subtree_root()) return false;

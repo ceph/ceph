@@ -79,7 +79,7 @@ public:
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
   static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
   static const int PIN_PURGING =      3;
-  const char *pin_name(int p) {
+  const char *pin_name(int p) const {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_FRAGMENTING: return "fragmenting";
@@ -118,13 +118,14 @@ public:
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
-    bool is_primary() { return remote_ino == 0 && inode != 0; }
-    bool is_remote() { return remote_ino > 0; }
-    bool is_null() { return remote_ino == 0 && inode == 0; }
+    bool is_primary() const { return remote_ino == 0 && inode != 0; }
+    bool is_remote() const { return remote_ino > 0; }
+    bool is_null() const { return remote_ino == 0 && inode == 0; }
 
     CInode *get_inode() { return inode; }
-    inodeno_t get_remote_ino() { return remote_ino; }
-    unsigned char get_remote_d_type() { return remote_d_type; }
+    const CInode *get_inode() const { return inode; }
+    inodeno_t get_remote_ino() const { return remote_ino; }
+    unsigned char get_remote_d_type() const { return remote_d_type; }
 
     void set_remote(inodeno_t ino, unsigned char d_type) { 
       remote_ino = ino;
@@ -202,12 +203,14 @@ public:
   }
 
 
-  CDir *get_dir() const { return dir; }
+  const CDir *get_dir() const { return dir; }
+  CDir *get_dir() { return dir; }
   const std::string& get_name() const { return name; }
 
   __u32 get_hash() const { return hash; }
 
   // linkage
+  const linkage_t *get_linkage() const { return &linkage; }
   linkage_t *get_linkage() { return &linkage; }
 
   linkage_t *_project_linkage() {
@@ -225,7 +228,7 @@ public:
   void push_projected_linkage(CInode *inode); 
   linkage_t *pop_projected_linkage();
 
-  bool is_projected() { return !projected.empty(); }
+  bool is_projected() const { return !projected.empty(); }
 
   linkage_t *get_projected_linkage() {
     if (!projected.empty())
@@ -254,16 +257,16 @@ public:
   void _put();
 
   // auth pins
-  bool can_auth_pin();
+  bool can_auth_pin() const;
   void auth_pin(void *by);
   void auth_unpin(void *by);
   void adjust_nested_auth_pins(int adjustment, int diradj, void *by);
-  bool is_frozen();
-  bool is_freezing();
-  bool is_auth_pinned() { return auth_pins || nested_auth_pins; }
-  int get_num_auth_pins() { return auth_pins; }
-  int get_num_dir_auth_pins();
-  int get_num_nested_auth_pins() { return nested_auth_pins; }
+  bool is_frozen() const;
+  bool is_freezing() const;
+  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
+  int get_num_auth_pins() const { return auth_pins; }
+  int get_num_dir_auth_pins() const;
+  int get_num_nested_auth_pins() const { return nested_auth_pins; }
   
   // remote links
   void link_remote(linkage_t *dnl, CInode *in);
@@ -274,16 +277,16 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path_string(std::string& s);
-  void make_path(filepath& fp);
+  void make_path_string(std::string& s) const;
+  void make_path(filepath& fp) const;
 
   // -- version --
-  version_t get_version() { return version; }
+  version_t get_version() const { return version; }
   void set_version(version_t v) { projected_version = version = v; }
-  version_t get_projected_version() { return projected_version; }
+  version_t get_projected_version() const { return projected_version; }
   void set_projected_version(version_t v) { projected_version = v; }
   
-  mds_authority_t authority();
+  mds_authority_t authority() const;
 
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
@@ -291,7 +294,7 @@ public:
   void mark_clean();
 
   void mark_new();
-  bool is_new() { return state_test(STATE_NEW); }
+  bool is_new() const { return state_test(STATE_NEW); }
   void clear_new() { state_clear(STATE_NEW); }
   
   // -- replication
@@ -366,16 +369,21 @@ public:
  public:
   map<client_t,ClientLease*> client_lease_map;
 
-  bool is_any_leases() {
+  bool is_any_leases() const {
     return !client_lease_map.empty();
+  }
+  const ClientLease *get_client_lease(client_t c) const {
+    if (client_lease_map.count(c))
+      return client_lease_map.find(c)->second;
+    return 0;
   }
   ClientLease *get_client_lease(client_t c) {
     if (client_lease_map.count(c))
-      return client_lease_map[c];
+      return client_lease_map.find(c)->second;
     return 0;
   }
-  bool have_client_lease(client_t c) {
-    ClientLease *l = get_client_lease(c);
+  bool have_client_lease(client_t c) const {
+    const ClientLease *l = get_client_lease(c);
     if (l) 
       return true;
     else
@@ -393,7 +401,7 @@ public:
   friend class CDir;
 };
 
-ostream& operator<<(ostream& out, CDentry& dn);
+ostream& operator<<(ostream& out, const CDentry& dn);
 
 
 #endif
