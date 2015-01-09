@@ -10,7 +10,6 @@ import time
 from teuthology.orchestra.run import CommandFailedError
 
 from tasks.cephfs.filesystem import Filesystem
-from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, run_tests
 
 
@@ -21,42 +20,16 @@ log = logging.getLogger(__name__)
 # an MDS or waiting for it to come up
 MDS_RESTART_GRACE = 60
 
+
 class TestMDSAutoRepair(CephFSTestCase):
-    # Environment references
-    mount_a = None
-
-    def __init__(self, *args, **kwargs):
-        super(TestMDSAutoRepair, self).__init__(*args, **kwargs)
-
-        self.configs_set = set()
-
-    def set_conf(self, subsys, key, value):
-        self.configs_set.add((subsys, key))
-        self.fs.set_ceph_conf(subsys, key, value)
-
-    def setUp(self):
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
-
-    def tearDown(self):
-        self.fs.clear_firewall()
-        self.mount_a.teardown()
-
-        for subsys, key in self.configs_set:
-            self.fs.clear_ceph_conf(subsys, key)
-
     def test_backtrace_repair(self):
         """
         MDS should verify/fix backtrace on fetch dirfrag
         """
 
         # trim log segment as fast as possible
-        self.fs.set_ceph_conf('mds', 'mds cache size', 100)
-        self.fs.set_ceph_conf('mds', 'mds log max segments', 2)
-        self.fs.set_ceph_conf('mds', 'mds log events per segment', 1)
-        self.fs.set_ceph_conf('mds', 'mds verify backtrace', 1)
+        self.set_conf('mds', 'mds cache size', 100)
+        self.set_conf('mds', 'mds verify backtrace', 1)
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
@@ -83,7 +56,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.assertEqual(proc.exitstatus, 0)
         objname = "{:x}.00000000".format(long(proc.stdout.getvalue().split()[0]))
         proc = self.mount_a.run_shell(["sudo", "rados", "-p", "metadata", "rmxattr", objname, "parent"])
-        self.assertEqual(proc.exitstatus, 0);
+        self.assertEqual(proc.exitstatus, 0)
 
         # readdir (fetch dirfrag) should fix testdir1's backtrace
         self.mount_a.run_shell(["sudo", "ls", "testdir1"])
@@ -116,7 +89,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         # touching test file should fail
         try:
             self.mount_a.run_shell(["sudo", "touch", "test_file1"])
-        except CommandFailedError, e:
+        except CommandFailedError:
             pass
         else:
             self.assertTrue(False)
@@ -128,9 +101,10 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
 
+
 @contextlib.contextmanager
 def task(ctx, config):
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
     mount_a = ctx.mounts.values()[0]
 
     # Stash references on ctx so that we can easily debug in interactive mode

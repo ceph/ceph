@@ -1,38 +1,18 @@
 import contextlib
 from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import run_tests, CephFSTestCase
-from tasks.cephfs.filesystem import Filesystem, ObjectNotFound
-from tasks.mds_client_limits import wait_until_true
-from teuthology.orchestra import run
-
-
-ROOT_INO = 1
+from tasks.cephfs.filesystem import Filesystem, ObjectNotFound, ROOT_INO
 
 
 class TestFlush(CephFSTestCase):
-    # Environment references
-    mount = None
-
-    def setUp(self):
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount.is_mounted():
-            self.mount.mount()
-            self.mount.wait_until_mounted()
-
-        self.mount.run_shell(["rm", "-rf", run.Raw("*")])
-
-    def tearDown(self):
-        self.mount.teardown()
-
     def test_flush(self):
-        self.mount.run_shell(["mkdir", "mydir"])
-        self.mount.run_shell(["touch", "mydir/alpha"])
-        dir_ino = self.mount.path_to_ino("mydir")
-        file_ino = self.mount.path_to_ino("mydir/alpha")
+        self.mount_a.run_shell(["mkdir", "mydir"])
+        self.mount_a.run_shell(["touch", "mydir/alpha"])
+        dir_ino = self.mount_a.path_to_ino("mydir")
+        file_ino = self.mount_a.path_to_ino("mydir/alpha")
 
         # Unmount the client so that it isn't still holding caps
-        self.mount.umount_wait()
+        self.mount_a.umount_wait()
 
         # Before flush, the dirfrag object does not exist
         with self.assertRaises(ObjectNotFound):
@@ -73,9 +53,9 @@ class TestFlush(CephFSTestCase):
                          ).strip())
 
         # Now for deletion!
-        self.mount.mount()
-        self.mount.wait_until_mounted()
-        self.mount.run_shell(["rm", "-rf", "mydir"])
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+        self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
         # We will count the deletions to detect completion
         # FIXME: let's add some MDS perf counters for strays so that we can monitor
@@ -86,7 +66,7 @@ class TestFlush(CephFSTestCase):
         self.assertEqual(flush_data['return_code'], 0)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace
-        wait_until_true(
+        self.wait_until_true(
             lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
             60)  # timeout is fairly long to allow for tick+rados latencies
 
@@ -99,7 +79,7 @@ class TestFlush(CephFSTestCase):
 
 @contextlib.contextmanager
 def task(ctx, config):
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
 
     # Pick out the clients we will use from the configuration
     # =======================================================
@@ -114,7 +94,7 @@ def task(ctx, config):
 
     run_tests(ctx, config, TestFlush, {
         'fs': fs,
-        'mount': mount,
+        'mount_a': mount,
     })
 
     # Continue to any downstream tasks

@@ -50,7 +50,7 @@ def task(ctx, config):
         except IndexError:
             raise RuntimeError("This task requires at least one client")
 
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
     ctx.fs = fs
     old_journal_version = JOURNAL_FORMAT_LEGACY
     new_journal_version = JOURNAL_FORMAT_RESILIENT
