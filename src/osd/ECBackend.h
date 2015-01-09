@@ -431,6 +431,7 @@ public:
 
 
   const ECUtil::stripe_info_t sinfo;
+  bool subread_all;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid);
