@@ -27,6 +27,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "crush/CrushTester.h"
+#include "crush/CrushTreeDumper.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
@@ -41,6 +42,7 @@
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
 
+#include "common/TextTable.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/perf_counters.h"
@@ -604,6 +606,262 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   out_str = oss.str();
   dout(10) << "reweight_by_utilization: finished with " << out_str << dendl;
   return changed;
+}
+
+template <typename F>
+class OSDUtilizationDumper : public CrushTreeDumper::Dumper<F> {
+public:
+  typedef CrushTreeDumper::Dumper<F> Parent;
+
+  OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
+		       const PGMap *pgm_, bool tree_) :
+    Parent(crush),
+    osdmap(osdmap_),
+    pgm(pgm_),
+    tree(tree_),
+    average_util(100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb),
+    min_var(-1),
+    max_var(-1),
+    stddev(0),
+    sum(0) {}
+
+protected:
+  void dump_stray(F *f) {
+    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+      if (osdmap->exists(i) && !this->is_touched(i))
+	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+    }
+  }
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, F *f) {
+    if (!tree && qi.is_bucket())
+      return;
+
+    float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
+    int64_t kb = 0, kb_used = 0, kb_avail = 0;
+    double util = get_bucket_utilization(qi.id, kb, kb_used, kb_avail) ?
+      100.0 * (double)kb_used / (double)kb : 0;
+    double var = util / average_util;
+
+    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
+
+    if (!qi.is_bucket()) {
+      if (min_var < 0 || var < min_var) min_var = var;
+      if (max_var < 0 || var > max_var) max_var = var;
+
+      double dev = util - average_util;
+      dev *= dev;
+      stddev += reweight * dev;
+      sum += reweight;
+    }
+  }
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, F *f) = 0;
+
+  double dev() {
+    return sum > 0 ? sqrt(stddev / sum) : 0;
+  }
+
+  bool get_bucket_utilization(int id, int64_t& kb, int64_t& kb_used,
+			      int64_t& kb_avail) const {
+    if (id >= 0) {
+      typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
+
+      OsdStat::const_iterator p = pgm->osd_stat.find(id);
+
+      if (p == pgm->osd_stat.end())
+	return false;
+
+      kb = p->second.kb;
+      kb_used = p->second.kb_used;
+      kb_avail = p->second.kb_avail;
+      return true;
+    }
+
+    kb = 0;
+    kb_used = 0;
+    kb_avail = 0;
+
+    for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
+      int item = osdmap->crush->get_bucket_item(id, k);
+      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i;
+      if (!get_bucket_utilization(item, kb_i, kb_used_i, kb_avail_i))
+	return false;
+      kb += kb_i;
+      kb_used += kb_used_i;
+      kb_avail += kb_avail_i;
+    }
+    return true;
+  }
+
+protected:
+  const OSDMap *osdmap;
+  const PGMap *pgm;
+  bool tree;
+  double average_util;
+  double min_var;
+  double max_var;
+  double stddev;
+  double sum;
+};
+
+class OSDUtilizationPlainDumper : public OSDUtilizationDumper<TextTable> {
+public:
+  typedef OSDUtilizationDumper<TextTable> Parent;
+
+  OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
+		     const PGMap *pgm, bool tree) :
+    Parent(crush, osdmap, pgm, tree) {}
+
+  void dump(TextTable *tbl) {
+    tbl->define_column("# id", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("weight", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("reweight", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("size", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("used", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("avail", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("%use", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("var", TextTable::LEFT, TextTable::RIGHT);
+    if (tree)
+      tbl->define_column("type name", TextTable::LEFT, TextTable::LEFT);
+
+    Parent::dump(tbl);
+
+    dump_stray(tbl);
+  }
+
+protected:
+  struct lowprecision_t {
+    float v;
+    lowprecision_t(float _v) : v(_v) {}
+  };
+  friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, TextTable *tbl) {
+    *tbl << qi.id
+	 << stringify(weightf_t(qi.weight))
+	 << stringify(weightf_t(reweight))
+	 << stringify(si_t(kb << 10))
+	 << stringify(si_t(kb_used << 10))
+	 << stringify(si_t(kb_avail << 10))
+	 << stringify(lowprecision_t(util))
+	 << stringify(lowprecision_t(var));
+
+    if (tree) {
+      ostringstream name;
+      for (int k = 0; k < qi.depth; k++)
+	name << "    ";
+      if (qi.is_bucket()) {
+	int type = crush->get_bucket_type(qi.id);
+	name << crush->get_type_name(type) << " "
+	     << crush->get_item_name(qi.id);
+      } else {
+	name << "osd." << qi.id;
+      }
+      *tbl << name.str();
+    }
+
+    *tbl << TextTable::endrow;
+  }
+
+public:
+  string summary() {
+    ostringstream out;
+    out << "# total size/used/avail: " << si_t(pgm->osd_sum.kb)
+	<< "/" << si_t(pgm->osd_sum.kb_used << 10)
+	<< "/" << si_t(pgm->osd_sum.kb_avail << 10) << "\n"
+	<< "# avg %use: " << lowprecision_t(average_util) << "  "
+	<< "min/max var: " << lowprecision_t(min_var)
+	<< "/" << lowprecision_t(max_var) << "  "
+	<< "dev: " << lowprecision_t(dev());
+    return out.str();
+  }
+};
+
+ostream& operator<<(ostream& out,
+		    const OSDUtilizationPlainDumper::lowprecision_t& v)
+{
+  if (v.v < -0.01) {
+    return out << "-";
+  } else if (v.v < 0.001) {
+    return out << "0";
+  } else {
+    std::streamsize p = out.precision();
+    return out << std::fixed << std::setprecision(2) << v.v << std::setprecision(p);
+  }
+}
+
+class OSDUtilizationFormatDumper : public OSDUtilizationDumper<Formatter> {
+public:
+  typedef OSDUtilizationDumper<Formatter> Parent;
+
+  OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
+			     const PGMap *pgm, bool tree) :
+    Parent(crush, osdmap, pgm, tree) {}
+
+  void dump(Formatter *f) {
+    f->open_array_section("nodes");
+    Parent::dump(f);
+    f->close_section();
+
+    f->open_array_section("stray");
+    dump_stray(f);
+    f->close_section();
+  }
+
+protected:
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, Formatter *f) {
+    f->open_object_section("item");
+    CrushTreeDumper::dump_item_fields(crush, qi, f);
+    f->dump_float("reweight", reweight);
+    f->dump_int("kb", kb);
+    f->dump_int("kb_used", kb_used);
+    f->dump_int("kb_avail", kb_avail);
+    f->dump_float("utilization", util);
+    f->dump_float("var", var);
+    CrushTreeDumper::dump_bucket_children(crush, qi, f);
+    f->close_section();
+  }
+
+public:
+  void summary(Formatter *f) {
+    f->open_object_section("summary");
+    f->dump_int("total_kb", pgm->osd_sum.kb);
+    f->dump_int("total_kb_used", pgm->osd_sum.kb_used);
+    f->dump_int("total_kb_avail", pgm->osd_sum.kb_avail);
+    f->dump_float("average_utilization", average_util);
+    f->dump_float("min_var", min_var);
+    f->dump_float("max_var", max_var);
+    f->dump_float("dev", dev());
+    f->close_section();
+  }
+};
+
+void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
+{
+  const PGMap *pgm = &mon->pgmon()->pg_map;
+  const CrushWrapper *crush = osdmap.crush.get();
+
+  if (f) {
+    f->open_object_section("df");
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgm, tree);
+    d.dump(f);
+    d.summary(f);
+    f->close_section();
+    f->flush(out);
+  } else {
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgm, tree);
+    TextTable tbl;
+    d.dump(&tbl);
+    out << tbl
+	<< d.summary() << "\n";
+  }
 }
 
 void OSDMonitor::create_pending()
@@ -2453,6 +2711,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     if (p != &osdmap)
       delete p;
+  } else if (prefix == "osd df") {
+    string method;
+    cmd_getval(g_ceph_context, cmdmap, "output_method", method);
+    print_utilization(ds, f ? f.get() : NULL, method == "tree");
+    rdata.append(ds);
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
