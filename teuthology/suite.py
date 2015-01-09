@@ -464,8 +464,10 @@ def schedule_suite(job_config,
     log.info('Suite %s in %s generated %d jobs (not yet filtered)' % (
         suite_name, path, len(configs)))
 
+    # used as a local cache for package versions from gitbuilder
     package_versions = dict()
     jobs_to_schedule = []
+    jobs_missing_packages = []
     for description, fragment_paths in configs:
         if limit > 0 and len(jobs_to_schedule) >= limit:
             log.info(
@@ -511,22 +513,6 @@ def schedule_suite(job_config,
                      exclude_os_type, description)
             continue
 
-        # Make sure packages actually exist for this distro. Cache results so
-        # we don't hammer the gitbuilder mirror unnecessarily hard.
-        sha1 = job_config.sha1
-        package_versions_for_hash = package_versions.get(sha1, dict())
-        if str(os_type) not in package_versions_for_hash:
-            package_version = package_version_for_hash(sha1,
-                                                       distro=str(os_type))
-            package_versions_for_hash[str(os_type)] = package_version
-            package_versions[sha1] = package_versions_for_hash
-        else:
-            package_version = package_versions_for_hash[str(os_type)]
-
-        if not package_version:
-            m = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
-            schedule_fail(m.format(os=os_type, ver=sha1), job_config.name)
-
         arg = copy.deepcopy(base_args)
         arg.extend([
             '--description', description,
@@ -535,8 +521,29 @@ def schedule_suite(job_config,
         arg.extend(base_yamls)
         arg.extend(fragment_paths)
 
-        jobs_to_schedule.append({'yaml': parsed_yaml, 'desc': description,
-                                'args': arg})
+        job = dict(
+            yaml=parsed_yaml,
+            desc=description,
+            args=arg
+        )
+
+        if dry_run:
+            sha1 = job_config.sha1
+            # Get package versions for this sha1 and os_type. If we've already
+            # retrieved them in a previous loop, they'll be present in
+            # package_versions and gitbuilder will not be asked again for them.
+            package_versions = get_package_versions(
+                sha1,
+                os_type,
+                package_versions
+            )
+
+            if not has_packages_for_distro(sha1, os_type, package_versions):
+                m = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
+                log.info(m.format(os=os_type, ver=sha1))
+                jobs_missing_packages.append(job)
+
+        jobs_to_schedule.append(job)
 
     for job in jobs_to_schedule:
         log.info(
@@ -552,17 +559,107 @@ def schedule_suite(job_config,
                     printable_args.append("'%s'" % item)
                 else:
                     printable_args.append(item)
-            log.info('dry-run: %s' % ' '.join(printable_args))
+            prefix = "dry-run:"
+            if job in jobs_missing_packages:
+                prefix = "dry-run (missing packages):"
+            log.info('%s %s' % (prefix, ' '.join(printable_args)))
         else:
             subprocess.check_call(
                 args=job['args'],
             )
 
     count = len(jobs_to_schedule)
+    missing_count = len(jobs_missing_packages)
     log.info('Suite %s in %s scheduled %d jobs.' % (suite_name, path, count))
     log.info('Suite %s in %s -- %d jobs were filtered out.' %
              (suite_name, path, len(configs) - count))
+    if dry_run:
+        log.info('Suite %s in %s scheduled %d jobs with missing packages.' %
+                 (suite_name, path, missing_count))
     return count
+
+
+def get_package_versions(sha1, os_type, package_versions=None):
+    """
+    Will retrieve the package versions for the given sha1 and os_type
+    from gitbuilder.
+
+    Optionally, a package_versions dict can be provided
+    from previous calls to this function to avoid calling gitbuilder for
+    information we've already retrieved.
+
+    The package_versions dict will be in the following format::
+
+        {
+            "sha1": {
+                "ubuntu": "version",
+                "rhel": "version",
+            },
+            "another-sha1": {
+                "ubuntu": "version",
+            }
+        }
+
+    :param sha1:             The sha1 hash of the ceph version.
+    :param os_type:          The distro we want to get packages for, given
+                             the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param package_versions: Use this optionally to use cached results of
+                             previous calls to gitbuilder.
+    :returns:                A dict of package versions. Will return versions
+                             for all hashs and distros, not just for the given
+                             hash and distro.
+    """
+    if package_versions is None:
+        package_versions = dict()
+
+    os_type = str(os_type)
+
+    package_versions_for_hash = package_versions.get(sha1, dict())
+    if os_type not in package_versions_for_hash:
+        package_version = package_version_for_hash(
+            sha1,
+            distro=os_type
+        )
+        package_versions_for_hash[os_type] = package_version
+        package_versions[sha1] = package_versions_for_hash
+
+    return package_versions
+
+
+def has_packages_for_distro(sha1, os_type, package_versions=None):
+    """
+    Checks to see if gitbuilder has packages for the given sha1 and os_type.
+
+    Optionally, a package_versions dict can be provided
+    from previous calls to this function to avoid calling gitbuilder for
+    information we've already retrieved.
+
+    The package_versions dict will be in the following format::
+
+        {
+            "sha1": {
+                "ubuntu": "version",
+                "rhel": "version",
+            },
+            "another-sha1": {
+                "ubuntu": "version",
+            }
+        }
+
+    :param sha1:             The sha1 hash of the ceph version.
+    :param os_type:          The distro we want to get packages for, given
+                             the ceph sha1. Ex. 'ubuntu', 'rhel', etc.
+    :param package_versions: Use this optionally to use cached results of
+                             previous calls to gitbuilder.
+    :returns:                True, if packages are found. False otherwise.
+    """
+    os_type = str(os_type)
+    if package_versions is None:
+        package_versions = get_package_versions(sha1, os_type)
+
+    package_versions_for_hash = package_versions.get(sha1, dict())
+    # we want to return a boolean here, not the actual package versions
+    return bool(package_versions_for_hash.get(os_type, None))
 
 
 def combine_path(left, right):
