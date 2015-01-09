@@ -7,6 +7,7 @@ import time
 import os
 import subprocess
 
+from teuthology.config import config as teuth_config
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.exceptions import VersionNotFoundError
@@ -254,8 +255,7 @@ def _get_baseurl(ctx, remote, config):
     # get distro name and arch
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     base_url = 'http://{host}/{proj}-{pkg_type}-{dist}-{arch}-{flavor}/{uri}'.format(
-        host=ctx.teuthology_config.get('gitbuilder_host',
-                                       'gitbuilder.ceph.com'),
+        host=teuth_config.gitbuilder_host,
         proj=config.get('project', 'ceph'),
         pkg_type=remote.system_type,
         **baseparms
@@ -427,8 +427,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     baseparms = _get_baseurlinfo_and_dist(ctx, remote, config)
     log.info("Installing packages: {pkglist} on remote rpm {arch}".format(
         pkglist=", ".join(rpm), arch=baseparms['arch']))
-    host = ctx.teuthology_config.get('gitbuilder_host',
-                                     'gitbuilder.ceph.com')
+    host = teuth_config.gitbuilder_host
     dist_release = baseparms['dist_release']
     start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
         host=host, **baseparms)
@@ -860,8 +859,7 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
     tag = config.get('tag')
     uri = _get_uri(tag, branch, sha1)
     base_url = 'http://{host}/{proj}-deb-{dist}-{arch}-{flavor}/{uri}'.format(
-        host=ctx.teuthology_config.get('gitbuilder_host',
-                                       'gitbuilder.ceph.com'),
+        host=teuth_config.gitbuilder_host,
         proj=config.get('project', 'ceph'),
         dist=dist,
         arch=arch,
