@@ -1644,7 +1644,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     f->close_section();
   } else if (command == "flush_journal") {
     store->sync_and_flush();
-  } else if (command == "dump_ops_in_flight") {
+  } else if (command == "dump_ops_in_flight" ||
+	     command == "ops") {
     op_tracker.dump_ops_in_flight(f);
   } else if (command == "dump_historic_ops") {
     op_tracker.dump_historic_ops(f);
@@ -1950,6 +1951,10 @@ void OSD::final_init()
 				     "dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   assert(r == 0);
+  r = admin_socket->register_command("ops",
+				     "ops", asok_hook,
+				     "show the ops currently in flight");
+  assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
 				     "show slowest recent ops");
@@ -2252,6 +2257,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("status");
   cct->get_admin_socket()->unregister_command("flush_journal");
   cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
+  cct->get_admin_socket()->unregister_command("ops");
   cct->get_admin_socket()->unregister_command("dump_historic_ops");
   cct->get_admin_socket()->unregister_command("dump_op_pq_state");
   cct->get_admin_socket()->unregister_command("dump_blacklist");
