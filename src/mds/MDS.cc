@@ -53,6 +53,7 @@
 #include "common/Timer.h"
 
 #include "events/ESession.h"
+#include "events/ESubtreeMap.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MMDSBeacon.h"
@@ -331,6 +332,8 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       command_flush_path(f, path);
     } else if (command == "flush journal") {
       command_flush_journal(f);
+    } else if (command == "get subtrees") {
+      command_get_subtrees(f);
     } else if (command == "force_readonly") {
       mds_lock.Lock();
       mdcache->force_readonly();
@@ -481,6 +484,33 @@ int MDS::_command_flush_journal(std::stringstream *ss)
   return 0;
 }
 
+
+void MDS::command_get_subtrees(Formatter *f)
+{
+  assert(f != NULL);
+
+  std::list<CDir*> subtrees;
+  mdcache->list_subtrees(subtrees);
+
+  f->open_array_section("subtrees");
+  for (std::list<CDir*>::iterator i = subtrees.begin(); i != subtrees.end(); ++i) {
+    const CDir *dir = *i;
+
+    f->open_object_section("subtree");
+    {
+      f->dump_bool("is_auth", dir->is_auth());
+      f->dump_int("auth_first", dir->get_dir_auth().first);
+      f->dump_int("auth_second", dir->get_dir_auth().second);
+      f->open_object_section("dir");
+      dir->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+
 void MDS::set_up_admin_socket()
 {
   int r;
@@ -529,6 +559,11 @@ void MDS::set_up_admin_socket()
 				     "force_readonly",
 				     asok_hook,
 				     "Force MDS to read-only mode");
+  assert(0 == r);
+  r = admin_socket->register_command("get subtrees",
+				     "get subtrees",
+				     asok_hook,
+				     "Return the subtree map");
   assert(0 == r);
 }
 

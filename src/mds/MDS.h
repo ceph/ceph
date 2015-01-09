@@ -384,6 +384,7 @@ private:
   void command_scrub_path(Formatter *f, const string& path);
   void command_flush_path(Formatter *f, const string& path);
   void command_flush_journal(Formatter *f);
+  void command_get_subtrees(Formatter *f);
  private:
   int _command_flush_journal(std::stringstream *ss);
  public:
