@@ -43,7 +43,7 @@ LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
 // CDentry
 
-ostream& operator<<(ostream& out, CDentry& dn)
+ostream& operator<<(ostream& out, const CDentry& dn)
 {
   filepath path;
   dn.make_path(path);
@@ -137,7 +137,7 @@ inodeno_t CDentry::get_ino()
 }
 */
 
-mds_authority_t CDentry::authority()
+mds_authority_t CDentry::authority() const
 {
   return dir->authority();
 }
@@ -213,7 +213,7 @@ void CDentry::mark_new()
   state_set(STATE_NEW);
 }
 
-void CDentry::make_path_string(string& s)
+void CDentry::make_path_string(string& s) const
 {
   if (dir) {
     dir->inode->make_path_string(s);
@@ -224,7 +224,7 @@ void CDentry::make_path_string(string& s)
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp)
+void CDentry::make_path(filepath& fp) const
 {
   assert(dir);
   if (dir->inode->is_base())
@@ -330,7 +330,7 @@ CDentry::linkage_t *CDentry::pop_projected_linkage()
 // ----------------------------
 // auth pins
 
-int CDentry::get_num_dir_auth_pins()
+int CDentry::get_num_dir_auth_pins() const
 {
   assert(!is_projected());
   if (get_linkage()->is_primary())
@@ -338,7 +338,7 @@ int CDentry::get_num_dir_auth_pins()
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin()
+bool CDentry::can_auth_pin() const
 {
   assert(dir);
   return dir->can_auth_pin();
@@ -394,12 +394,12 @@ void CDentry::adjust_nested_auth_pins(int adjustment, int diradj, void *by)
   dir->adjust_nested_auth_pins(adjustment, diradj, by);
 }
 
-bool CDentry::is_frozen()
+bool CDentry::is_frozen() const
 {
   return dir->is_frozen();
 }
 
-bool CDentry::is_freezing()
+bool CDentry::is_freezing() const
 {
   return dir->is_freezing();
 }
