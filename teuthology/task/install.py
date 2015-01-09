@@ -56,6 +56,8 @@ PACKAGES['ceph']['rpm'] = [
     'rest-bench',
     'libcephfs_jni1',
     'libcephfs1',
+    'librados2',
+    'librbd1',
     'python-ceph',
 ]
 
@@ -88,6 +90,8 @@ rpm_packages = {'ceph': [
     'rest-bench',
     'libcephfs_jni1',
     'libcephfs1',
+    'librados2',
+    'librbd1',
     'python-ceph',
 ]}
 
