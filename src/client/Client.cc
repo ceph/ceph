@@ -34,6 +34,8 @@ using namespace std;
 
 #include "common/config.h"
 
+#include "common/version.h"
+
 // ceph stuff
 
 #include "messages/MMonMap.h"
@@ -1732,6 +1734,10 @@ void Client::populate_metadata()
 
   // Ceph entity id (the '0' in "client.0")
   metadata["entity_id"] = cct->_conf->name.get_id();
+
+  // Ceph version
+  metadata["ceph_version"] = pretty_version_to_str();
+  metadata["ceph_sha1"] = git_version_to_str();
 }
 
 /**
