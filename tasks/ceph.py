@@ -176,7 +176,7 @@ def cephfs_setup(ctx, config):
         if metadata_pool_exists:
             log.info("Metadata pool already exists, skipping")
         else:
-            ceph_fs = Filesystem(ctx, config)
+            ceph_fs = Filesystem(ctx)
             ceph_fs.create()
 
         is_active_mds = lambda role: role.startswith('mds.') and not role.endswith('-s') and role.find('-s-') == -1
@@ -375,7 +375,7 @@ def cluster(ctx, config):
             '--set-uid=0',
             '--cap', 'mon', 'allow *',
             '--cap', 'osd', 'allow *',
-            '--cap', 'mds', 'allow',
+            '--cap', 'mds', 'allow *',
             keyring_path,
             ],
         )

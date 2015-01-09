@@ -7,7 +7,6 @@ import contextlib
 import logging
 import time
 import unittest
-from teuthology.orchestra import run
 
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from teuthology.task import interactive
@@ -27,30 +26,9 @@ MDS_RESTART_GRACE = 60
 
 class TestClientRecovery(CephFSTestCase):
     # Environment references
-    mount_a = None
-    mount_b = None
     mds_session_timeout = None
     mds_reconnect_timeout = None
     ms_max_backoff = None
-
-    def setUp(self):
-        self.fs.clear_firewall()
-        self.fs.mds_restart()
-        self.fs.wait_for_daemons()
-        if not self.mount_a.is_mounted():
-            self.mount_a.mount()
-            self.mount_a.wait_until_mounted()
-
-        if not self.mount_b.is_mounted():
-            self.mount_b.mount()
-            self.mount_b.wait_until_mounted()
-
-        self.mount_a.run_shell(["sudo", "rm", "-rf", run.Raw("*")])
-
-    def tearDown(self):
-        self.fs.clear_firewall()
-        self.mount_a.teardown()
-        self.mount_b.teardown()
 
     def test_basic(self):
         # Check that two clients come up healthy and see each others' files
@@ -334,19 +312,29 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(client_id, "open")
 
     def test_filelock(self):
-        # Check that file lock doesn't get lost after an MDS restart
-        # =====================================
+        """
+        Check that file lock doesn't get lost after an MDS restart
+        """
         lock_holder = self.mount_a.lock_background()
 
-        self.mount_b.wait_for_visible("background_file-2");
-        self.mount_b.check_filelock();
+        self.mount_b.wait_for_visible("background_file-2")
+        self.mount_b.check_filelock()
 
         self.fs.mds_stop()
         self.fs.mds_fail()
         self.fs.mds_restart()
         self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
 
-        self.mount_b.check_filelock();
+        self.mount_b.check_filelock()
+
+        # Tear down the background process
+        lock_holder.stdin.close()
+        try:
+            lock_holder.wait()
+        except (CommandFailedError, ConnectionLostError):
+            # We killed it, so it raises an error
+            pass
+
 
 class LogStream(object):
     def __init__(self):
@@ -395,7 +383,7 @@ def task(ctx, config):
     - An outer ceph_fuse task with at least two clients
     - That the clients are on a separate host to the MDS
     """
-    fs = Filesystem(ctx, config)
+    fs = Filesystem(ctx)
 
     # Pick out the clients we will use from the configuration
     # =======================================================
