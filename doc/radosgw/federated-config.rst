@@ -103,14 +103,12 @@ format prepended to the pool name, but you can use any naming convention you
 prefer. For example:
 
 
-- ``.us.rgw.root``
-
-- ``.us-east.domain.rgw``
 - ``.us-east.rgw.root``
 - ``.us-east.rgw.control``
 - ``.us-east.rgw.gc``
-- ``.us-east.rgw.buckets.index``
 - ``.us-east.rgw.buckets``
+- ``.us-east.rgw.buckets.index``
+- ``.us-east.rgw.buckets.extra``
 - ``.us-east.log``
 - ``.us-east.intent-log``
 - ``.us-east.usage``
@@ -119,12 +117,14 @@ prefer. For example:
 - ``.us-east.users.swift``
 - ``.us-east.users.uid``
 
-- ``.us-west.domain.rgw``
+| 
+
 - ``.us-west.rgw.root``
 - ``.us-west.rgw.control``
 - ``.us-west.rgw.gc``
-- ``.us-west.rgw.buckets.index``
 - ``.us-west.rgw.buckets``
+- ``.us-west.rgw.buckets.index``
+- ``.us-west.rgw.buckets.extra``
 - ``.us-west.log``
 - ``.us-west.intent-log``
 - ``.us-west.usage``
@@ -137,7 +137,7 @@ See `Configuration Reference - Pools`_ for details on the default pools for
 gateways. See `Pools`_ for details on creating pools. Execute the following 
 to create a pool:: 
 
-	ceph osd pool create {poolname} {pg-num} {pgp-num}
+	ceph osd pool create {poolname} {pg-num} {pgp-num} {replicated | erasure} [{erasure-code-profile}]  {ruleset-name} {ruleset-number}
 
 
 .. tip:: When adding a large number of pools, it may take some time for your 
@@ -148,6 +148,12 @@ to create a pool::
 	When deploying a Ceph Storage Cluster for the entire region, consider 
 	using a CRUSH rule for the zone such that you do NOT have overlapping
 	failure domains. See `CRUSH Map`_ for details.
+	
+	Ceph supports multiple CRUSH hierarchies and CRUSH rulesets, enabling 
+	great flexibility in the way you configure your gateway. Pools such 
+	as ``rgw.buckets.index`` may benefit from a modestly sized pool of SSDs 
+	for fast performance. Backing storage may benefit from the increased economy
+	of erasure-coded storage, and/or the improved performance from cache tiering.
 
 When you have completed this step, execute the following to ensure that
 you have created all of the foregoing pools::
