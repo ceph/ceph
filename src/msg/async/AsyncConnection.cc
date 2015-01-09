@@ -185,7 +185,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCenter *c)
   : Connection(cct, m), async_msgr(m), global_seq(0), connect_seq(0), peer_global_seq(0),
     out_seq(0), in_seq(0), in_seq_acked(0), state(STATE_NONE), state_after_send(0), sd(-1),
-    lock("AsyncConnection::lock"), open_write(false), keepalive(false),
+    port(-1), lock("AsyncConnection::lock"), open_write(false), keepalive(false),
     stop_lock("AsyncConnection::stop_lock"),
     got_bad_auth(false), authorizer(NULL), replacing(false), stopping(0),
     state_buffer(4096), state_offset(0), net(cct), center(c)
