@@ -82,17 +82,21 @@ will create the pools automatically. However, you should ensure that you have
 set an appropriate default number of placement groups per pool into your Ceph
 configuration file.
 
+.. note:: Ceph Object Gateways have multiple pools, so don't make the number of
+   PGs too high considering all of the pools assigned to the same CRUSH 
+   hierarchy, or performance may suffer.
+
 When configuring a gateway with the default region and zone, the naming
 convention for pools typically omits region and zone naming, but you can use any
 naming convention you prefer. For example:
 
 
-- ``.rgw``
 - ``.rgw.root``
 - ``.rgw.control``
 - ``.rgw.gc``
 - ``.rgw.buckets``
 - ``.rgw.buckets.index``
+- ``.rgw.buckets.extra``
 - ``.log``
 - ``.intent-log``
 - ``.usage``
@@ -106,11 +110,14 @@ See `Configuration Reference - Pools`_ for details on the default pools for
 gateways. See `Pools`_ for details on creating pools. Execute the following 
 to create a pool:: 
 
-	ceph osd pool create {poolname} {pg-num} {pgp-num}
+	ceph osd pool create {poolname} {pg-num} {pgp-num} {replicated | erasure} [{erasure-code-profile}]  {ruleset-name} {ruleset-number}
 
 
-.. tip:: When adding a large number of pools, it may take some time for your 
-   cluster to return to a ``active + clean`` state.
+.. tip:: Ceph supports multiple CRUSH hierarchies and CRUSH rulesets, enabling 
+   great flexibility in the way you configure your gateway. Pools such as 
+   ``rgw.buckets.index`` may benefit from a pool of SSDs for fast performance. 
+   Backing storage may benefit from the increased economy of erasure-coded 
+   storage, and/or the improved performance from cache tiering.
 
 When you have completed this step, execute the following to ensure that
 you have created all of the foregoing pools::
