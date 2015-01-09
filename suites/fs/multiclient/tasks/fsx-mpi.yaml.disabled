@@ -3,6 +3,7 @@ os_type: ubuntu
 os_version: "14.04"
 
 tasks:
+- chef: null
 - pexec:
     clients:
       - cd $TESTDIR
@@ -12,7 +13,7 @@ tasks:
       - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
-    exec: $TESTDIR/fsx-mpi 1MB -N 50000 -p 10000 -l 1048576
+    exec: sudo $TESTDIR/fsx-mpi -o 1MB -N 50000 -p 10000 -l 1048576 $TESTDIR/gmnt
     workdir: $TESTDIR/gmnt
 - pexec:
     all:
