@@ -4,7 +4,6 @@
 #include "include/types.h"
 
 #include "Ager.h"
-#include "os/ObjectStore.h"
 
 #include "common/Clock.h"
 #include "common/debug.h"
