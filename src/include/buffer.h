@@ -100,6 +100,9 @@ public:
     int code;
   };
 
+  enum compression_type {
+    ALG_LZ4,
+  };
 
   /// total bytes allocated
   static int get_total_alloc();
@@ -494,6 +497,8 @@ public:
     int write_fd(int fd) const;
     int write_fd_zero_copy(int fd) const;
     uint32_t crc32c(uint32_t crc) const;
+    void compress(compression_type alg, list& dest);
+    void decompress(compression_type alg, list& dest, uint32_t len);
   };
 
   /*
