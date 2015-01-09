@@ -3411,7 +3411,7 @@ bool OSDMonitor::update_pools_status()
       (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
       (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
 
-    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+    if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
       if (pool_is_full)
         continue;
 
@@ -3458,7 +3458,7 @@ void OSDMonitor::get_pools_health(
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
-    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+    if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
       // uncomment these asserts if/when we update the FULL flag on pg_stat update
       //assert((pool.quota_max_objects > 0) || (pool.quota_max_bytes > 0));
 
@@ -3477,7 +3477,7 @@ void OSDMonitor::get_pools_health(
       health_status_t status = HEALTH_OK;
       if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
 	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-        //assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+        //assert(pool.has_flag(pg_pool_t::FLAG_FULL));
       } else if (crit_threshold > 0 &&
 		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
         ss << "pool '" << pool_name
@@ -3504,7 +3504,7 @@ void OSDMonitor::get_pools_health(
       stringstream ss;
       if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
 	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-	//assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+	//assert(pool.has_flag(pg_pool_t::FLAG_FULL));
       } else if (crit_threshold > 0 &&
 		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
         ss << "pool '" << pool_name

@@ -2230,7 +2230,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // check for full
   if (ctx->delta_stats.num_bytes > 0 &&
-      pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
+      pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
     reply_ctx(ctx, -ENOSPC);
     return;
   }
