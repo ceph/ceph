@@ -24,7 +24,7 @@
   pool 1 pg_num 8000
   pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
+  $ PATTERN=$(echo "size $SIZE.$TOTAL")
   $ grep "$PATTERN" $OUT || cat "$OUT"
   size 3\t24000 (esc)
   $ STATS_CRUSH=$(grep '^ avg ' "$OUT")
@@ -39,7 +39,7 @@
   pool 1 pg_num 8000
   pool 2 pg_num 8000
   $ TOTAL=$((POOL_COUNT * $PG_NUM))
-  $ PATTERN=$(echo "size $SIZE\t$TOTAL")
+  $ PATTERN=$(echo "size $SIZE.$TOTAL")
   $ grep "$PATTERN" $OUT || cat "$OUT"
   size 3\t24000 (esc)
   $ STATS_RANDOM=$(grep '^ avg ' "$OUT")

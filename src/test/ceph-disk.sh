@@ -73,8 +73,9 @@ function run_mon() {
 
 function kill_daemons() {
     for pidfile in $(find $DIR | grep pidfile) ; do
+        pid=$(cat $pidfile)
         for try in 0 1 1 1 2 3 ; do
-            kill $(cat $pidfile) || break
+            kill $pid || break
             sleep $try
         done
     done
@@ -83,7 +84,7 @@ function kill_daemons() {
 function command_fixture() {
     local command=$1
 
-    [ $(which $command) = ./$command ] || return 1
+    [ $(which $command) = ./$command ] || [ $(which $command) = `readlink -f $(pwd)/$command` ] || return 1
 
     cat > $DIR/$command <<EOF
 #!/bin/bash
@@ -184,6 +185,7 @@ function test_activate_dir() {
 
     local osd_data=$DIR/osd
 
+    /bin/mkdir -p $osd_data
     ./ceph-disk $CEPH_DISK_ARGS \
         prepare $osd_data || return 1
 
