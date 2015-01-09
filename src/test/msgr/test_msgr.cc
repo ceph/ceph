@@ -593,7 +593,6 @@ int main(int argc, char **argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make ceph_test_msgr && ./ceph_test_msgr
- *
+ * compile-command: "cd ../.. ; make -j4 unittest_msgr && valgrind --tool=memcheck ./unittest_msgr"
  * End:
  */
