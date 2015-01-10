@@ -777,8 +777,8 @@ bin_DEBUGPROGRAMS += ceph_test_cls_hello
 if WITH_RADOSGW
 ceph_test_cls_rgw_SOURCES = test/cls_rgw/test_cls_rgw.cc
 ceph_test_cls_rgw_LDADD = \
-	$(LIBRADOS) libcls_rgw_client.la \
-	$(LIBCOMMON) $(UNITTEST_LDADD) $(RADOS_TEST_LDADD)
+	$(LIBRADOS) $(CRYPTO_LIBS) libcls_rgw_client.la \
+	$(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(RADOS_TEST_LDADD)
 ceph_test_cls_rgw_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_cls_rgw
 endif # WITH_RADOSGW
