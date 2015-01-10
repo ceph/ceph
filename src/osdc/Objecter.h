@@ -1552,7 +1552,9 @@ public:
     }
 
   private:
-    ~LingerOp() {}
+    ~LingerOp() {
+      delete watch_context;
+    }
   };
 
   struct C_Linger_Register : public Context {
