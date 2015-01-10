@@ -1036,6 +1036,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
+    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL2) {
+      features |= CEPH_FEATURE_OSDHASHPSPOOL2;
+    }
     if (p->second.is_erasure() &&
 	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
       features |= CEPH_FEATURE_OSD_ERASURE_CODES;
@@ -1065,7 +1068,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSDHASHPSPOOL2 |CEPH_FEATURE_OSD_CACHEPOOL;
   if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
     mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
@@ -2694,8 +2697,10 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     int64_t pool = ++pool_max;
     pools[pool].type = pg_pool_t::TYPE_REPLICATED;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
-    if (cct->_conf->osd_pool_default_flag_hashpspool)
+    if (cct->_conf->osd_pool_default_flag_hashpspool == 1)
       pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
+    if (cct->_conf->osd_pool_default_flag_hashpspool == 2)
+      pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL2;
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = default_replicated_ruleset;

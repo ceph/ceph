@@ -3687,8 +3687,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->type = pool_type;
   pi->flags = g_conf->osd_pool_default_flags;
-  if (g_conf->osd_pool_default_flag_hashpspool)
+  if (g_conf->osd_pool_default_flag_hashpspool == 1)
     pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
+  else if (g_conf->osd_pool_default_flag_hashpspool == 2)
+    pi->flags |= pg_pool_t::FLAG_HASHPSPOOL2;
 
   pi->size = size;
   pi->min_size = min_size;
@@ -3941,10 +3943,13 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
       p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
+    } else if (interr.empty() && n == 2) {
+      p.flags |= pg_pool_t::FLAG_HASHPSPOOL2;
     } else if (val == "false" || (interr.empty() && n == 0)) {
       p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
+      p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL2;
     } else {
-      ss << "expecting value 'true', 'false', '0', or '1'";
+      ss << "expecting value 'true', 'false', '0', '1' or '2'";
       return -EINVAL;
     }
   } else if (var == "hit_set_type") {

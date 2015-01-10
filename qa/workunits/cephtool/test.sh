@@ -1139,8 +1139,9 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET hashpspool false
   ceph osd pool set $TEST_POOL_GETSET hashpspool 0
   ceph osd pool set $TEST_POOL_GETSET hashpspool 1
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 2
   expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool asdf
-  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 2
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 3
 
   ceph osd pool delete $TEST_POOL_GETSET $TEST_POOL_GETSET --yes-i-really-really-mean-it
 
