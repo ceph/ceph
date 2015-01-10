@@ -79,7 +79,8 @@ noinst_HEADERS += \
 	msg/xio/XioMessenger.h \
 	msg/xio/XioMsg.h \
 	msg/xio/XioPool.h \
-	msg/xio/XioPortal.h
+	msg/xio/XioPortal.h \
+	msg/xio/XioSubmit.h
 endif
 
 noinst_LTLIBRARIES += libmsg.la
