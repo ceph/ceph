@@ -10446,6 +10446,12 @@ void ReplicatedPG::_clear_recovery_state()
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
   assert(recovering.count(soid));
+  ObjectContextRef obc = recovering[soid];
+  if (obc) {
+    list<OpRequestRef> blocked_ops;
+    obc->drop_recovery_read(&blocked_ops);
+    requeue_ops(blocked_ops);
+  }
   recovering.erase(soid);
   finish_recovery_op(soid);
   if (is_missing_object(soid))
