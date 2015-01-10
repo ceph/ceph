@@ -1721,6 +1721,8 @@ bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
+  } else if (command == "get_latest_osdmap") {
+    get_latest_osdmap();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -1975,6 +1977,11 @@ void OSD::final_init()
   r = admin_socket->register_command("dump_reservations", "dump_reservations",
 				     asok_hook,
 				     "show recovery reservations");
+  assert(r == 0);
+  r = admin_socket->register_command("get_latest_osdmap", "get_latest_osdmap",
+				     asok_hook,
+				     "force osd to update the latest map from "
+				     "the mon");
   assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
@@ -2263,6 +2270,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_blacklist");
   cct->get_admin_socket()->unregister_command("dump_watchers");
   cct->get_admin_socket()->unregister_command("dump_reservations");
+  cct->get_admin_socket()->unregister_command("get_latest_osdmap");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -8531,6 +8539,19 @@ void OSD::set_disk_tp_priority()
 	 << " but only the following values are allowed: idle, be or rt" << dendl;
   else
     disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
+}
+
+// --------------------------------
+
+void OSD::get_latest_osdmap()
+{
+  dout(10) << __func__ << " -- start" << dendl;
+
+  C_SaferCond cond;
+  service.objecter->wait_for_latest_osdmap(&cond);
+  cond.wait();
+
+  dout(10) << __func__ << " -- finish" << dendl;
 }
 
 // --------------------------------
