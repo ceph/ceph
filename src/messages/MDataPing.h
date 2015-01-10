@@ -17,15 +17,14 @@
 
 #include "msg/Message.h"
 #include "messages/MPing.h"
+#include "include/encoding.h"
 #if defined(HAVE_XIO)
 extern "C" {
 #include "libxio.h"
 }
-#endif /* HAVE_XIO */
-
-#if !defined(HAVE_XIO)
+#else
 struct xio_mempool_obj {};
-#endif
+#endif /* HAVE_XIO */
 
 typedef void (*mdata_hook_func)(struct xio_mempool_obj *mp);
 

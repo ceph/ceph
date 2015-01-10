@@ -536,6 +536,10 @@ if test "x$enable_xio" = x"yes"; then
    AC_CHECK_LIB([ibverbs], [ibv_query_device], [], AC_MSG_FAILURE([OFED not found]))
    AC_CHECK_LIB([rdmacm], [rdma_connect], [], AC_MSG_FAILURE([OFED not found]))
 
+   # Also require boost-regex, used in address_helper
+   AC_CHECK_LIB(boost_regex, main, [],
+      AC_MSG_FAILURE(["Boost regex library not found."]))
+
    AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
 
    XIO_LIBS="-lxio -libverbs -lrdmacm"
@@ -747,11 +751,6 @@ AC_CHECK_HEADER([boost/program_options/option.hpp], [],
 AC_CHECK_LIB(boost_system-mt, main, [],
     [AC_CHECK_LIB(boost_system, main, [],
         AC_MSG_NOTICE(["Boost system library not found."]))])
-
-# Also regex, used in address_helper
-AC_CHECK_LIB(boost_regex, main, [],
-    [AC_CHECK_LIB(boost_regex, main, [],
-        AC_MSG_NOTICE(["Boost regex library not found."]))])
 
 # Find the right boost_thread library.
 BOOST_THREAD_LIBS=""

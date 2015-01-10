@@ -109,6 +109,7 @@ noinst_HEADERS += \
 	messages/MPGStats.h \
 	messages/MPGStatsAck.h \
 	messages/MPing.h \
+	messages/MDataPing.h \
 	messages/MPoolOp.h \
 	messages/MPoolOpReply.h \
 	messages/MRemoveSnaps.h \

@@ -574,7 +574,7 @@ function test_get_config() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    test $(get_config mon a ms_nocrc) = false || return 1
+    test $(get_config mon a ms_crc_header) = true || return 1
     teardown $dir || return 1
 }
 
