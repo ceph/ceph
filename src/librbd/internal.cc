@@ -419,7 +419,7 @@ namespace librbd {
     for (std::list<std::pair<int64_t, string> >::const_iterator it =
          pools.begin(); it != pools.end(); ++it) {
       int64_t base_tier;
-      int r = rados.pool_get_base_tier(it->first, &base_tier);
+      r = rados.pool_get_base_tier(it->first, &base_tier);
       if (r == -ENOENT) {
         ldout(cct, 1) << "pool " << it->second << " no longer exists" << dendl;
         continue;
@@ -666,7 +666,7 @@ namespace librbd {
     for (std::list<std::pair<int64_t, std::string> >::const_iterator it =
          pools.begin(); it != pools.end(); ++it) {
       int64_t base_tier;
-      int r = rados.pool_get_base_tier(it->first, &base_tier);
+      r = rados.pool_get_base_tier(it->first, &base_tier);
       if (r == -ENOENT) {
         ldout(ictx->cct, 1) << "pool " << it->second << " no longer exists"
                             << dendl;
