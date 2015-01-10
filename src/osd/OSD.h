@@ -1085,6 +1085,7 @@ private:
   bool paused_recovery;
 
   void set_disk_tp_priority();
+  void get_latest_osdmap();
 
   // -- sessions --
 public:
