@@ -8388,8 +8388,11 @@ void OSD::process_peering_events(
       continue;
     }
     if (!advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs)) {
-      pg->queue_null(curmap->get_epoch(), curmap->get_epoch());
-    } else if (!pg->peering_queue.empty()) {
+      // we need to requeue the PG explicitly since we didn't actually
+      // handle an event
+      peering_wq.queue(pg);
+    } else {
+      assert(!pg->peering_queue.empty());
       PG::CephPeeringEvtRef evt = pg->peering_queue.front();
       pg->peering_queue.pop_front();
       pg->handle_peering_event(evt, &rctx);
