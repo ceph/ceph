@@ -1,0 +1,57 @@
+Monitor Wish List (issue #10509)
+================================
+
+Low-hanging fruit
+-----------------
+
+* audit helpers that put() messages but do not get() them.
+  where possible, get rid of those put().  No one expects helpers to
+  put() messages and that may lead to double frees. (issue #9378)
+
+Medium complexity
+-----------------
+
+* get rid of QuorumServices.  It seemed like a neat idea, but we only have
+  one or two and they just add complexity and noise. (issue #10506)
+
+Time consuming / complex
+------------------------
+
+* Split the OSDMonitor.cc file into auxiliary files.  This will mean:
+
+  1. Logically split subsystems (osd crush, osd pool, ...)
+  2. Split the big badass functions, especially prepare/process_command()
+
+* Have Tracked Ops on the monitor, similarly to the OSDs. (issue #10507)
+
+  1. Instead of passing messages back and forth, we will pass OpRequests
+  2. We may be able to get() the message when we create the OpRequest and
+     put() it upon OpRequest destruction.  This will help controlling the
+     lifespan of messages and reduce leaks.
+  3. There will be a fair amount of work changing stuff from Messages to
+     OpRequests, and we will need to make sure that we reach a format that
+     is easily supported throughout the monitor
+
+  Possible format, off the top of my head:
+
+    MonOpRequest:
+
+      int op = m->get_type();
+      Message *m = m.get();
+
+      template<typename T>
+      T* get_message() { return (T*)m.get(); }
+
+* Move to Ref'erenced messages instead of pointers all around.  This would
+  also help with the Tracked Ops thing, as we'd be able to simply ignore all
+  the get() and put() stuff behind it. (issue #3500)
+
+Delicate / complex
+------------------
+
+* Finer-grained Paxos::is_readable() and/or PaxosService::is_readable()
+  (issue #10508)
+
+  Rationale: a given service S should be able to read its committed state
+  even though a Paxos proposal is happening, as long as the on-going
+  proposal is not a value of service S.
