@@ -1031,6 +1031,12 @@ ps_t pg_pool_t::raw_pg_to_pps(pg_t pg) const
       crush_hash32_2(CRUSH_HASH_RJENKINS1,
 		     ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask),
 		     pg.pool());
+  } else if (flags & FLAG_HASHPSPOOL2) {
+    // Hash pg seed with pool id using congruential generator
+    ps_t stable = ceph_stable_mod(pg.ps(), pgp_num, pgp_num_mask);
+    ps_t pps = (1033*stable + 2*pg.pool() + 1) % pgp_num_mask +
+      crush_hash32(CRUSH_HASH_RJENKINS1, pg.pool());
+    return pps;
   } else {
     // Legacy behavior; add ps and pool together.  This is not a great
     // idea because the PGs from each pool will essentially overlap on

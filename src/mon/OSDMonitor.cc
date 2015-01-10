@@ -3972,6 +3972,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  else if (g_conf->osd_pool_default_flag_hashpspool == 2)
+    pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL2);
 
   pi->size = size;
   pi->min_size = min_size;
@@ -4259,7 +4261,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
     p.crush_ruleset = n;
-  } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
+  } else if (var == "hashpspool") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else if (interr.empty() && n == 2) {
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.set_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else {
+      ss << "expecting value 'true', 'false', '0', '1' or '2'";
+      return -EINVAL;
+    }
+  } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
