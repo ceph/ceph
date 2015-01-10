@@ -28,6 +28,7 @@
 #include "msg/Messenger.h"
 #include "msg/Connection.h"
 #include "messages/MPing.h"
+#include "messages/MCommand.h"
 
 #include <gtest/gtest.h>
 
@@ -554,6 +555,51 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, MessageTest) {
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("127.0.0.1");
+  Messenger::Policy p = Messenger::Policy::stateful_server(0, 0);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+  p = Messenger::Policy::lossless_peer(0, 0);
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+
+  // 1. A very large "front"(as well as "payload")
+  // Because a external message need to invade Messenger::decode_message,
+  // here we only use existing message class(MCommand)
+  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    uuid_d uuid;
+    uuid.generate_random();
+    vector<string> cmds;
+    string s("abcdefghijklmnopqrstuvwxyz");
+    for (int i = 0; i < 1024*30; i++)
+      cmds.push_back(s);
+    MCommand *m = new MCommand(uuid);
+    m->cmd = cmds;
+    ASSERT_EQ(conn->send_message(m), 0);
+    utime_t t;
+    t += 1000*1000*500;
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.WaitInterval(g_ceph_context, cli_dispatcher.lock, t);
+    ASSERT_TRUE(cli_dispatcher.got_new);
+    cli_dispatcher.got_new = false;
+  }
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
 class MarkdownDispatcher : public Dispatcher {
   Mutex lock;
   set<Connection*> conns;
@@ -708,6 +754,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("auth_service_required", "none");
   g_ceph_context->_conf->set_val("auth_client_required", "none");
   g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
+  g_ceph_context->_conf->set_val("ms_die_on_bad_msg", "true");
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);
