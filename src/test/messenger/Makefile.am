@@ -1,3 +1,8 @@
+if ENABLE_XIO
+
+noinst_HEADERS += \
+	test/messenger/message_helper.h \
+	test/messenger/simple_dispatcher.h
 
 simple_server_SOURCES = \
 	test/messenger/simple_server.cc \
@@ -31,7 +36,9 @@ noinst_PROGRAMS += \
 	simple_server \
 	simple_client
 
-if ENABLE_XIO
+noinst_HEADERS += \
+	test/messenger/xio_dispatcher.h
+
 xio_server_SOURCES = \
 	test/messenger/xio_server.cc \
 	test/messenger/xio_dispatcher.cc
@@ -63,4 +70,5 @@ endif
 noinst_PROGRAMS += \
 	xio_server \
 	xio_client
+
 endif
