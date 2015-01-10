@@ -423,7 +423,11 @@ void ReplicatedPG::wait_for_unreadable_object(
   } else {
     dout(7) << "missing " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-    recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    if (is_missing_object(soid)) {
+      recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    } else {
+      prep_object_replica_pushes(soid, v, h);
+    }
     pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
   }
   waiting_for_unreadable_object[soid].push_back(op);
