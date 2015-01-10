@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Sat Jan 10 23:27:55 UTC 2015 - tbehrens@suse.com
+
+- add basic config to ceph-radosgw package. this fixes bnc#905062
+  * add rgw.conf and corresponding fastcgi binary
+  * require ceph-common (for the ceph-conf binary)
+  * add tmpfile setup for the socket 
+
+-------------------------------------------------------------------
 Thu Jan  8 15:29:48 UTC 2015 - tbehrens@suse.com
 
 - name change, conditional server packaging now names ses_server

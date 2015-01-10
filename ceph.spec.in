@@ -56,9 +56,12 @@ Source0:        http://ceph.com/download/%{name}-%{version}.tar.bz2
 Source1:        README.SUSE.v0.2
 Source2:        mkinitrd-root.on.rbd.tar.xz
 Source3:        ceph-tmpfiles.d.conf
-Source99:       update_git.sh
+Source4:        ceph-radosgw-tmpfiles.d.conf
+Source5:        rgw.conf
+Source6:        s3gw.fcgi
 # filter spurious setgid warning - mongoose/civetweb is not trying to relinquish suid
-Source4:        ceph-rpmlintrc
+Source7:        ceph-rpmlintrc
+Source99:       update_git.sh
 Requires:       ceph-common = %{version}-%{release}
 Requires:       cryptsetup
 Requires:       libcephfs1 = %{version}-%{release}
@@ -422,6 +425,15 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
+install -m 0644 -D %{SOURCE5} $RPM_BUILD_ROOT%{_sysconfdir}/apache2/conf.d/rgw.conf
+install -m 0755 -D %{SOURCE6} $RPM_BUILD_ROOT/srv/www/radosgw/s3gw.fcgi
+%if 0%{?suse_version} >= 1310
+%{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
+%{__install} -m 0644 %{SOURCE4} %{buildroot}/%{_tmpfilesdir}/ceph-radosgw.conf
+%else
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph-radosgw/
+%endif
+
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
@@ -453,7 +465,6 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw/
 %if 0%{?suse_version} >= 1310
-%{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
 %{__install} -m 0644 %{SOURCE3} %{buildroot}/%{_tmpfilesdir}/%{name}.conf
 %else
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph/
@@ -675,13 +686,21 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %dir %{_localstatedir}/log/radosgw/
+%dir /srv/www/radosgw/
+/srv/www/radosgw/s3gw.fcgi
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
+%dir %{_sysconfdir}/apache2/
+%dir %{_sysconfdir}/apache2/conf.d/
+%config(noreplace) %{_sysconfdir}/apache2/conf.d/rgw.conf
 %if 0%{?suse_version} >= 1310
+%dir %{_tmpfilesdir}/
+%{_tmpfilesdir}/ceph-radosgw.conf
 %{_unitdir}/ceph-rgw@.service
 %dir /usr/libexec/ceph
 /usr/libexec/ceph/ceph-rgw-prestart.sh
 %else
+%ghost %dir %{_localstatedir}/run/ceph-radosgw/
 %{_initrddir}/ceph-radosgw
 %{_sbindir}/rcceph-radosgw
 %endif
