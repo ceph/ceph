@@ -36,7 +36,7 @@ Step 1: Getting librados
 Your client application must bind with ``librados`` to connect to the Ceph
 Storage Cluster. You must install ``librados`` and any required packages to
 write applications that use ``librados``. The ``librados`` API is written in
-C++, with additional bindings for C, Python and Java. 
+C++, with additional bindings for C, Python, Java and PHP. 
 
 
 Getting librados for C/C++
@@ -505,6 +505,7 @@ With the RADOS extension enabled in PHP you can start creating a new cluster han
 
 
 Save this as rados.php and run the code::
+
 	php rados.php
 
 
@@ -930,7 +931,9 @@ Java-Example
 PHP Example
 -----------
 
-.. code-block: php
+.. code-block:: php
+
+	<?php
 
 	$io = rados_ioctx_create($r, "mypool");
 	rados_write_full($io, "oidOne", "mycontents");
