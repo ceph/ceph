@@ -286,6 +286,10 @@ class AsyncConnection : public Connection {
   void process();
   void wakeup_from(uint64_t id);
   void local_deliver();
+  void stop() {
+    mark_down();
+    center->dispatch_event_external(reset_handler);
+  }
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;

@@ -149,7 +149,6 @@ class FakeDispatcher : public Dispatcher {
     cerr << __func__ << con << std::endl;
     Session *s = static_cast<Session*>(con->get_priv());
     if (s) {
-      Mutex::Locker l(s->lock);
       s->con.reset(NULL);  // break con <-> session ref cycle
       con->set_priv(NULL);   // break ref <-> session cycle, if any
       s->put();

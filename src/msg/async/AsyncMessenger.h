@@ -63,12 +63,13 @@ class Worker : public Thread {
  */
 class Processor {
   AsyncMessenger *msgr;
+  NetHandler net;
   Worker *worker;
   int listen_sd;
   uint64_t nonce;
 
  public:
-  Processor(AsyncMessenger *r, uint64_t n): msgr(r), worker(NULL), listen_sd(-1), nonce(n) {}
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n): msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n) {}
 
   void stop();
   int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
