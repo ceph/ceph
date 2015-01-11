@@ -620,8 +620,11 @@ void AsyncConnection::process()
           // read front
           int front_len = current_header.front_len;
           if (front_len) {
-            bufferptr ptr = buffer::create(front_len);
-            r = read_until(front_len, ptr.c_str());
+            if (!front.length()) {
+              bufferptr ptr = buffer::create(front_len);
+              front.push_back(ptr);
+            }
+            r = read_until(front_len, front.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message front failed" << dendl;
               goto fail;
@@ -629,7 +632,6 @@ void AsyncConnection::process()
               break;
             }
 
-            front.push_back(ptr);
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
@@ -641,15 +643,17 @@ void AsyncConnection::process()
           // read middle
           int middle_len = current_header.middle_len;
           if (middle_len) {
-            bufferptr ptr = buffer::create(middle_len);
-            r = read_until(middle_len, ptr.c_str());
+            if (!middle.length()) {
+              bufferptr ptr = buffer::create(middle_len);
+              middle.push_back(ptr);
+            }
+            r = read_until(middle_len, middle.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read message middle failed" << dendl;
               goto fail;
             } else if (r > 0) {
               break;
             }
-            middle.push_back(ptr);
             ldout(async_msgr->cct, 20) << __func__ << " got middle " << middle.length() << dendl;
           }
 
