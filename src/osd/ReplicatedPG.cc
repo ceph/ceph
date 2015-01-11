@@ -1751,7 +1751,8 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	     << " missing_oid " << missing_oid
 	     << dendl;
 
-  if (obc.get() && obc->is_blocked()) {
+  // if it is write-ordered and blocked, stop now
+  if (obc.get() && obc->is_blocked() && write_ordered) {
     // we're already doing something with this object
     dout(20) << __func__ << " blocked on " << obc->obs.oi.soid << dendl;
     return false;
@@ -1762,85 +1763,91 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
   }
 
+  if (obc.get() && obc->obs.exists) {
+    return false;
+  }
+
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  const object_locator_t& oloc = m->get_object_locator();
+
+  if (must_promote) {
+    promote_object(obc, missing_oid, oloc, op);
+    return true;
+  }
+
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_NONE:
     return false;
 
   case pg_pool_t::CACHEMODE_WRITEBACK:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
-	dout(20) << __func__ << " cache pool full, redirecting read" << dendl;
-	do_cache_redirect(op, obc);
+	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
+	do_proxy_read(op);
 	return true;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
       waiting_for_cache_not_full.push_back(op);
       return true;
     }
-    if (!must_promote && can_skip_promote(op, obc)) {
+    if (can_skip_promote(op, obc)) {
       return false;
     }
-    if (op->may_write() || write_ordered || must_promote || !hit_set) {
-      promote_object(op, obc, missing_oid);
-    } else {
-      switch (pool.info.min_read_recency_for_promote) {
-      case 0:
-        promote_object(op, obc, missing_oid);
-        break;
-      case 1:
-        // Check if in the current hit set
-        if (in_hit_set) {
-          promote_object(op, obc, missing_oid);
-        } else {
-          do_cache_redirect(op, obc);
-        }
-        break;
-      default:
-        if (in_hit_set) {
-          promote_object(op, obc, missing_oid);
-        } else {
-          // Check if in other hit sets
-          map<time_t,HitSetRef>::iterator itor;
-          bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-            if (itor->second->contains(missing_oid)) {
-              in_other_hit_sets = true;
-              break;
-            }
-          }
-          if (in_other_hit_sets) {
-            promote_object(op, obc, missing_oid);
-          } else {
-            do_cache_redirect(op, obc);
-          }
-        }
-        break;
+    if (op->may_write() || write_ordered || !hit_set) {
+      promote_object(obc, missing_oid, oloc, op);
+      return true;
+    }
+
+    // Always proxy
+    do_proxy_read(op);
+
+    // Avoid duplicate promotion
+    if (obc.get() && obc->is_blocked()) {
+      return true;
+    }
+
+    // Promote too?
+    switch (pool.info.min_read_recency_for_promote) {
+    case 0:
+      promote_object(obc, missing_oid, oloc, OpRequestRef());
+      break;
+    case 1:
+      // Check if in the current hit set
+      if (in_hit_set) {
+	promote_object(obc, missing_oid, oloc, OpRequestRef());
       }
+      break;
+    default:
+      if (in_hit_set) {
+	promote_object(obc, missing_oid, oloc, OpRequestRef());
+      } else {
+	// Check if in other hit sets
+	map<time_t,HitSetRef>::iterator itor;
+	bool in_other_hit_sets = false;
+	for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
+	  if (itor->second->contains(missing_oid)) {
+	    in_other_hit_sets = true;
+	    break;
+	  }
+	}
+	if (in_other_hit_sets) {
+	  promote_object(obc, missing_oid, oloc, OpRequestRef());
+	}
+      }
+      break;
     }
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
-    if (must_promote)
-      promote_object(op, obc, missing_oid);
-    else
-      do_cache_redirect(op, obc);
+    do_cache_redirect(op, obc);
     return true;
 
   case pg_pool_t::CACHEMODE_READONLY:
     // TODO: clean this case up
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
     if (!obc.get() && r == -ENOENT) {
       // we don't have the object and op's a read
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
       return true;
     }
     if (!r) { // it must be a write
@@ -1851,10 +1858,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return false;
 
   case pg_pool_t::CACHEMODE_READFORWARD:
-    if (obc.get() && obc->obs.exists) {
-      return false;
-    }
-
     // Do writeback to the cache tier for writes
     if (op->may_write() || write_ordered) {
       if (agent_state &&
@@ -1863,18 +1866,35 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (!must_promote && can_skip_promote(op, obc)) {
+      if (can_skip_promote(op, obc)) {
 	return false;
       }
-      promote_object(op, obc, missing_oid);
+      promote_object(obc, missing_oid, oloc, op);
       return true;
     }
 
     // If it is a read, we can read, we need to forward it
-    if (must_promote)
-      promote_object(op, obc, missing_oid);
-    else
-      do_cache_redirect(op, obc);
+    do_cache_redirect(op, obc);
+    return true;
+
+  case pg_pool_t::CACHEMODE_READPROXY:
+    // Do writeback to the cache tier for writes
+    if (op->may_write() || write_ordered) {
+      if (agent_state &&
+	  agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+	dout(20) << __func__ << " cache pool full, waiting" << dendl;
+	waiting_for_cache_not_full.push_back(op);
+	return true;
+      }
+      if (can_skip_promote(op, obc)) {
+	return false;
+      }
+      promote_object(obc, missing_oid, oloc, op);
+      return true;
+    }
+
+    // If it is a read, we can read, we need to proxy it
+    do_proxy_read(op);
     return true;
 
   default:
@@ -1911,45 +1931,191 @@ void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
   return;
 }
 
+struct C_ProxyRead : public Context {
+  ReplicatedPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  ReplicatedPG::ProxyReadOpRef prdop;
+  C_ProxyRead(ReplicatedPG *p, hobject_t o, epoch_t lpr,
+	     const ReplicatedPG::ProxyReadOpRef& prd)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0), prdop(prd)
+  {}
+  void finish(int r) {
+    if (prdop->canceled)
+      return;
+    pg->lock();
+    if (prdop->canceled)
+      return;
+    if (last_peering_reset == pg->get_last_peering_reset()) {
+      pg->finish_proxy_read(oid, tid, r);
+    }
+    pg->unlock();
+  }
+};
+
+void ReplicatedPG::do_proxy_read(OpRequestRef op)
+{
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  object_locator_t oloc(m->get_object_locator());
+  oloc.pool = pool.info.tier_of;
+
+  hobject_t soid(m->get_oid(),
+		 m->get_object_locator().key,
+		 m->get_snapid(),
+		 m->get_pg().ps(),
+		 m->get_object_locator().get_pool(),
+		 m->get_object_locator().nspace);
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  dout(10) << __func__ << " Start proxy read for " << *m << dendl;
+
+  ProxyReadOpRef prdop(new ProxyReadOp(op, soid, m->ops));
+
+  ObjectOperation obj_op;
+  obj_op.dup(prdop->ops);
+
+  C_ProxyRead *fin = new C_ProxyRead(this, soid, get_last_peering_reset(),
+				     prdop);
+  ceph_tid_t tid = osd->objecter->read(
+    soid.oid, oloc, obj_op,
+    m->get_snapid(), NULL,
+    flags, new C_OnFinisher(fin, &osd->objecter_finisher),
+    &prdop->user_version,
+    &prdop->data_offset);
+  fin->tid = tid;
+  prdop->objecter_tid = tid;
+  proxyread_ops[tid] = prdop;
+  in_progress_proxy_reads[soid].push_back(op);
+}
+
+void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << dendl;
+
+  map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.find(tid);
+  if (p == proxyread_ops.end()) {
+    dout(10) << __func__ << " no proxyread_op found" << dendl;
+    return;
+  }
+  ProxyReadOpRef prdop = p->second;
+  if (tid != prdop->objecter_tid) {
+    dout(10) << __func__ << " tid " << tid << " != prdop " << prdop
+	     << " tid " << prdop->objecter_tid << dendl;
+    return;
+  }
+  if (oid != prdop->soid) {
+    dout(10) << __func__ << " oid " << oid << " != prdop " << prdop
+	     << " soid " << prdop->soid << dendl;
+    return;
+  }
+  proxyread_ops.erase(tid);
+
+  map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_reads.find(oid);
+  if (q == in_progress_proxy_reads.end()) {
+    dout(10) << __func__ << " no in_progress_proxy_reads found" << dendl;
+    return;
+  }
+  assert(q->second.size());
+  OpRequestRef op = q->second.front();
+  assert(op == prdop->op);
+  q->second.pop_front();
+  if (q->second.size() == 0) {
+    in_progress_proxy_reads.erase(oid);
+  }
+
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+  OpContext *ctx = new OpContext(op, m->get_reqid(), prdop->ops, this);
+  ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
+  ctx->user_at_version = prdop->user_version;
+  ctx->data_off = prdop->data_offset;
+  complete_read_ctx(r, ctx);
+}
+
+void ReplicatedPG::kick_proxy_read_blocked(hobject_t& soid)
+{
+  map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.find(soid);
+  if (p == in_progress_proxy_reads.end())
+    return;
+
+  list<OpRequestRef>& ls = p->second;
+  dout(10) << __func__ << " " << soid << " requeuing " << ls.size() << " requests" << dendl;
+  requeue_ops(ls);
+  in_progress_proxy_reads.erase(p);
+}
+
+void ReplicatedPG::cancel_proxy_read(ProxyReadOpRef prdop)
+{
+  dout(10) << __func__ << " " << prdop->soid << dendl;
+  prdop->canceled = true;
+
+  // cancel objecter op, if we can
+  if (prdop->objecter_tid) {
+    osd->objecter->op_cancel(prdop->objecter_tid, -ECANCELED);
+    proxyread_ops.erase(prdop->objecter_tid);
+    prdop->objecter_tid = 0;
+  }
+}
+
+void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
+{
+  dout(10) << __func__ << dendl;
+  map<ceph_tid_t, ProxyReadOpRef>::iterator p = proxyread_ops.begin();
+  while (p != proxyread_ops.end()) {
+    cancel_proxy_read((p++)->second);
+  }
+
+  if (requeue) {
+    for (map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.begin();
+	p != in_progress_proxy_reads.end(); p++) {
+      list<OpRequestRef>& ls = p->second;
+      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size() << " requests" << dendl;
+      requeue_ops(ls);
+      in_progress_proxy_reads.erase(p);
+    }
+  }
+}
+
 class PromoteCallback: public ReplicatedPG::CopyCallback {
-  OpRequestRef op;
   ObjectContextRef obc;
   ReplicatedPG *pg;
 public:
-  PromoteCallback(OpRequestRef op_, ObjectContextRef obc_,
-		  ReplicatedPG *pg_)
-    : op(op_),
-      obc(obc_),
+  PromoteCallback(ObjectContextRef obc_, ReplicatedPG *pg_)
+    : obc(obc_),
       pg(pg_) {}
 
   virtual void finish(ReplicatedPG::CopyCallbackResults results) {
     ReplicatedPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote(r, op, results_data, obc);
+    pg->finish_promote(r, results_data, obc);
   }
 };
 
-void ReplicatedPG::promote_object(OpRequestRef op, ObjectContextRef obc,
-				  const hobject_t& missing_oid)
+void ReplicatedPG::promote_object(ObjectContextRef obc,
+				  const hobject_t& missing_oid,
+				  const object_locator_t& oloc,
+				  OpRequestRef op)
 {
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (!obc) { // we need to create an ObjectContext
     assert(missing_oid != hobject_t());
     obc = get_object_context(missing_oid, true);
   }
   dout(10) << __func__ << " " << obc->obs.oi.soid << dendl;
 
-  PromoteCallback *cb = new PromoteCallback(op, obc, this);
-  object_locator_t oloc(m->get_object_locator());
-  oloc.pool = pool.info.tier_of;
-  start_copy(cb, obc, obc->obs.oi.soid, oloc, 0,
+  PromoteCallback *cb = new PromoteCallback(obc, this);
+  object_locator_t my_oloc = oloc;
+  my_oloc.pool = pool.info.tier_of;
+  start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
 	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP);
 
   assert(obc->is_blocked());
-  wait_for_blocked_object(obc->obs.oi.soid, op);
+
+  if (op)
+    wait_for_blocked_object(obc->obs.oi.soid, op);
 }
 
 void ReplicatedPG::execute_ctx(OpContext *ctx)
@@ -5799,7 +5965,11 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
     publish_stats_to_osd();
 
     // on read, return the current object version
-    reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
+    if (ctx->obs) {
+      reply->set_reply_versions(eversion_t(), ctx->obs->oi.user_version);
+    } else {
+      reply->set_reply_versions(eversion_t(), ctx->user_at_version);
+    }
   } else if (result == -ENOENT) {
     // on ENOENT, set a floor for what the next user version will be.
     reply->set_enoent_reply_versions(info.last_update, info.last_user_version);
@@ -6233,6 +6403,16 @@ void ReplicatedPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
 
   copy_ops.erase(cobc->obs.oi.soid);
   cobc->stop_block();
+
+  // cancel and requeue proxy reads on this object
+  kick_proxy_read_blocked(cobc->obs.oi.soid);
+  for (map<ceph_tid_t, ProxyReadOpRef>::iterator it = proxyread_ops.begin();
+      it != proxyread_ops.end(); it++) {
+    if (it->second->soid == cobc->obs.oi.soid) {
+      cancel_proxy_read(it->second);
+    }
+  }
+
   kick_object_context_blocked(cobc);
 }
 
@@ -6403,8 +6583,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   osd->logger->inc(l_osd_copyfrom);
 }
 
-void ReplicatedPG::finish_promote(int r, OpRequestRef op,
-				  CopyResults *results, ObjectContextRef obc)
+void ReplicatedPG::finish_promote(int r, CopyResults *results,
+				  ObjectContextRef obc)
 {
   const hobject_t& soid = obc->obs.oi.soid;
   dout(10) << __func__ << " " << soid << " r=" << r
@@ -6460,26 +6640,26 @@ void ReplicatedPG::finish_promote(int r, OpRequestRef op,
   }
 
   bool whiteout = false;
-  if (r == -ENOENT &&
-      soid.snap == CEPH_NOSNAP &&
-      (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK ||
-       pool.info.cache_mode == pg_pool_t::CACHEMODE_READFORWARD ||
-       pool.info.cache_mode == pg_pool_t::CACHEMODE_READONLY)) {
+  if (r == -ENOENT) {
+    assert(soid.snap == CEPH_NOSNAP); // snap case is above
     dout(10) << __func__ << " whiteout " << soid << dendl;
     whiteout = true;
   }
 
   if (r < 0 && !whiteout) {
-    // we need to get rid of the op in the blocked queue
+    derr << __func__ << " unexpected promote error " << cpp_strerror(r) << dendl;
+    // pass error to everyone blocked on this object
+    // FIXME: this is pretty sloppy, but at this point we got
+    // something unexpected and don't have many other options.
     map<hobject_t,list<OpRequestRef> >::iterator blocked_iter =
       waiting_for_blocked_object.find(soid);
-    assert(blocked_iter != waiting_for_blocked_object.end());
-    assert(blocked_iter->second.begin()->get() == op.get());
-    blocked_iter->second.pop_front();
-    if (blocked_iter->second.empty()) {
+    if (blocked_iter != waiting_for_blocked_object.end()) {
+      while (!blocked_iter->second.empty()) {
+	osd->reply_op_error(blocked_iter->second.front(), r);
+	blocked_iter->second.pop_front();
+      }
       waiting_for_blocked_object.erase(blocked_iter);
     }
-    osd->reply_op_error(op, r);
     return;
   }
 
@@ -10016,6 +10196,7 @@ void ReplicatedPG::on_shutdown()
   unreg_next_scrub();
   cancel_copy_ops(false);
   cancel_flush_ops(false);
+  cancel_proxy_read_ops(false);
   apply_and_flush_repops(false);
 
   pgbackend->on_change();
@@ -10106,6 +10287,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   cancel_copy_ops(is_primary());
   cancel_flush_ops(is_primary());
+  cancel_proxy_read_ops(is_primary());
 
   // requeue object waiters
   if (is_primary()) {
