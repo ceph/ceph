@@ -2974,6 +2974,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     *op->objver = m->get_user_version();
   if (op->reply_epoch)
     *op->reply_epoch = m->get_map_epoch();
+  if (op->data_offset)
+    *op->data_offset = m->get_header().data_off;
 
   // per-op result demuxing
   vector<OSDOp> out_ops;
