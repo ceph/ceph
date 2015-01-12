@@ -418,6 +418,21 @@ def _yum_fix_repo_priority(remote, project, uri):
     )
 
 
+def _yum_fix_repo_host(remote, project):
+    """
+    Update the hostname to reflect the gitbuilder_host setting.
+    """
+    old_host = teuth_config._defaults['gitbuilder_host']
+    new_host = teuth_config.gitbuilder_host
+    if new_host == old_host:
+        return
+    host_sed_expr = "'s/{0}/{1}/'".format(old_host, new_host)
+    remote.run(
+        args=['sudo', 'sed', '-i', '-e', run.Raw(host_sed_expr),
+              '/etc/yum.repos.d/%s.repo' % project]
+    )
+
+
 def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     """
     Installs the ceph-release package for the relevant branch, then installs
@@ -449,9 +464,10 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
 
     remote.run(args=['rm', '-f', rpm_name])
 
-    # Fix Repo Priority
     uri = baseparms['uri']
-    _yum_fix_repo_priority(remote, config.get('project', 'ceph'), uri)
+    project = config.get('project', 'ceph')
+    _yum_fix_repo_priority(remote, project, uri)
+    _yum_fix_repo_host(remote, project)
 
     remote.run(
         args=[
@@ -969,6 +985,7 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     _run_and_log_error_if_fails(remote, args)
     uri = _get_baseurlinfo_and_dist(ctx, remote, config)['uri']
     _yum_fix_repo_priority(remote, project, uri)
+    _yum_fix_repo_host(remote, project)
 
     remote.run(
         args=[
