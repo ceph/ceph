@@ -61,7 +61,6 @@ private:
    *                     track the object id per callback.
    */
   void add_pending(int id, librados::AioCompletion* completion, string *oid = NULL) {
-    Mutex::Locker l(lock);
     pendings[id] = completion;
     if (oid) {
       pending_objs[id] = *oid;
@@ -96,6 +95,7 @@ public:
    * Do aio read operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectReadOperation *op) {
+    Mutex::Locker l(lock);
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
@@ -109,6 +109,7 @@ public:
    * Do aio write operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectWriteOperation *op) {
+    Mutex::Locker l(lock);
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
