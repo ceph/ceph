@@ -1831,6 +1831,232 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
   return 0;
 }
 
+/*
+ * Merge two diff files into one single file
+ * Note: It does not do the merging work if
+ * either of the source diff files is stripped,
+ * since which complicates the process and is
+ * rarely used
+ */
+static int do_merge_diff(const char *first, const char *second, const char *path)
+{
+  MyProgressContext pc("Merging image diff");
+  int fd = -1, sd = -1, pd = -1, r;
+
+  string f_from, f_to;
+  string s_from, s_to;
+  uint64_t f_size, s_size, pc_size;
+
+  __u8 f_tag = 0, s_tag = 0;
+  uint64_t f_off = 0, f_len = 0;
+  uint64_t s_off = 0, s_len = 0;
+  bool f_end = false, s_end = false;
+
+  bool first_stdin = !strcmp(first, "-");
+  if (first_stdin) {
+    fd = 0;
+  } else {
+    fd = open(first, O_RDONLY);
+    if (fd < 0) {
+      r = -errno;
+      cerr << "rbd: error opening " << first << std::endl;
+      goto done;
+    }
+  }
+
+  sd = open(second, O_RDONLY);
+  if (sd < 0) {
+    r = -errno;
+    cerr << "rbd: error opening " << second << std::endl;
+    goto done;
+  }
+
+  if (strcmp(path, "-") == 0) {
+    pd = 1;
+  } else {
+    pd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (pd < 0) {
+      r = -errno;
+      cerr << "rbd: error create " << path << std::endl;
+      goto done;
+    }
+  }
+
+  //We just handle the case like 'banner, [ftag], [ttag], stag, [wztag]*,etag',
+  // and the (offset,length) in wztag must be ascending order.
+
+  r = parse_diff_header(fd, &f_tag, &f_from, &f_to, &f_size);
+  if (r < 0)
+    goto done;
+
+  r = parse_diff_header(sd, &s_tag, &s_from, &s_to, &s_size);
+  if (r < 0)
+    goto done;
+
+  if (f_to != s_from) {
+    r = -EINVAL;
+    cerr << "The first TO snapshot must be equal with the second FROM snapshot, aborting" << std::endl;
+    goto done;
+  }
+
+  {
+    // header
+    bufferlist bl;
+    bl.append(RBD_DIFF_BANNER, strlen(RBD_DIFF_BANNER));
+
+    __u8 tag;
+    if (f_from.size()) {
+      tag = 'f';
+      ::encode(tag, bl);
+      ::encode(f_from, bl);
+    }
+
+    if (s_to.size()) {
+      tag = 't';
+      ::encode(tag, bl);
+      ::encode(s_to, bl);
+    }
+
+    tag = 's';
+    ::encode(tag, bl);
+    ::encode(s_size, bl);
+
+    r = bl.write_fd(pd);
+    if (r < 0)
+      goto done;
+  }
+
+  if (f_size > s_size)
+    pc_size = f_size << 1;
+  else
+    pc_size = s_size << 1;
+
+  //data block
+  while (!f_end || !s_end) {
+    // progress through input
+    pc.update_progress(f_off + s_off, pc_size);
+
+    if (!f_end && !f_len) {
+      uint64_t last_off = f_off;
+
+      r = parse_diff_body(fd, &f_tag, &f_off, &f_len);
+      if (r < 0)
+        goto done;
+
+      if (f_tag == 'e') {
+        f_end = true;
+        f_tag = 'z';
+        f_off = f_size;
+        if (f_size < s_size)
+          f_len = s_size - f_size;
+        else
+          f_len = 0;
+      }
+
+      if (last_off > f_off) {
+        r = -ENOTSUP;
+        goto done;
+      }
+    }
+
+    if (!s_end && !s_len) {
+      uint64_t last_off = s_off;
+
+      r = parse_diff_body(sd, &s_tag, &s_off, &s_len);
+      if (r < 0)
+        goto done;
+
+      if (s_tag == 'e') {
+        s_end = true;
+        s_off = s_size;
+        if (s_size < f_size)
+          s_len = f_size - s_size;
+        else
+          s_len = 0;
+      }
+
+      if (last_off > s_off) {
+        r = -ENOTSUP;
+        goto done;
+      }
+    }
+
+    if (f_off < s_off && f_len) {
+      uint64_t delta = s_off - f_off;
+      if (delta > f_len)
+        delta = f_len;
+      r = accept_diff_body(fd, pd, f_tag, f_off, delta);
+      f_off += delta;
+      f_len -= delta;
+
+      if (!f_len) {
+        f_tag = 0;
+        continue;
+      }
+    }
+    assert(f_off >= s_off);
+
+    if (f_off < s_off + s_len && f_len) {
+      uint64_t delta = s_off + s_len - f_off;
+      if (delta > f_len)
+        delta = f_len;
+      if (f_tag == 'w') {
+        if (first_stdin) {
+          bufferptr bp = buffer::create(delta);
+          r = safe_read_exact(fd, bp.c_str(), delta);
+          if (r < 0)
+            goto done;
+        } else {
+          r = lseek(fd, delta, SEEK_CUR);
+          if(r < 0)
+            goto done;
+        }
+      }
+      f_off += delta;
+      f_len -= delta;
+
+      if (!f_len) {
+        f_tag = 0;
+        continue;
+      }
+    }
+    assert(f_off >= s_off + s_len);
+
+    if (s_len) {
+      r = accept_diff_body(sd, pd, s_tag, s_off, s_len);
+      s_off += s_len;
+      s_len = 0;
+      s_tag = 0;
+    } else
+      assert(f_end && s_end);
+    continue;
+  }
+
+  {//tail
+    __u8 tag = 'e';
+    bufferlist bl;
+    ::encode(tag, bl);
+    r = bl.write_fd(pd);
+  }
+
+done:
+  if (pd > 2)
+    close(pd);
+  if (sd > 2)
+    close(sd);
+  if (fd > 2)
+    close(fd);
+
+  if(r < 0) {
+    pc.fail();
+    if (pd > 2)
+      unlink(path);
+  } else
+    pc.finish();
+
+  return r;
+}
+
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 		   const char *destname)
 {
@@ -2612,7 +2838,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 
   bool talk_to_cluster = (opt_cmd != OPT_MAP &&
 			  opt_cmd != OPT_UNMAP &&
-			  opt_cmd != OPT_SHOWMAPPED);
+			  opt_cmd != OPT_SHOWMAPPED &&
+                          opt_cmd != OPT_MERGE_DIFF);
   if (talk_to_cluster && rados.init_with_context(g_ceph_context) < 0) {
     cerr << "rbd: couldn't initialize rados!" << std::endl;
     return EXIT_FAILURE;
@@ -2929,6 +3156,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_export_diff(image, fromsnapname, snapname, path);
     if (r < 0) {
       cerr << "rbd: export-diff error: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_MERGE_DIFF:
+    r = do_merge_diff(first_diff, second_diff, path);
+    if (r < 0) {
+      cerr << "rbd: merge-diff error" << std::endl;
       return -r;
     }
     break;
