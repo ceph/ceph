@@ -121,8 +121,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
       lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
       return -errno;
     }
-    memset(file_events+nevent, 0, sizeof(FileEvent)*(new_size-nevent));
     file_events = new_events;
+    memset(file_events+nevent, 0, sizeof(FileEvent)*(new_size-nevent));
     nevent = new_size;
   }
 
