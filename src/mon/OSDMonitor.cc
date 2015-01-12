@@ -70,6 +70,27 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+float cal_average(vector<int> dataset, int length) {
+  float avg = 0;
+  float sum = 0;
+  for(int i = 0; i < length; i++){
+    sum += dataset[i];
+  }
+  avg = sum/length;
+  return avg;
+}
+
+float cal_stdev(vector<int> dataset, int length) {
+  float avg = cal_average(dataset, length);
+  float sum = 0;
+  float stdev;
+  for(int i = 0; i < length; i++){
+    sum += pow(dataset[i] - avg, 2);
+  }
+  stdev = pow(sum/length, 0.5);
+  return stdev;
+}
+
 bool OSDMonitor::_have_pending_crush()
 {
   return pending_inc.crush.length();
@@ -3586,6 +3607,43 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
   return 0;
 }
 
+void OSDMonitor::prepare_adaptive_seed(pg_pool_t *pi, int64_t pool)
+{
+  float min_stdev = 999999;
+  int balance_param = 1;
+
+  for (int k = 1; k < 5; k++) {
+    map<int, int> osd_total_pgs;
+    pi->set_seed(k);
+    for (int i = 0; i < (int)pi->get_pg_num(); i++) {
+      pg_t pg(i, pool);
+      pg.set_pool(pool);
+      vector<int> acting;
+      int nrep = osdmap.pg_to_up_osds_adaptive(*pi, pg, acting);
+      if (nrep) {
+        for (int j = 0; j < nrep; j++) {
+          osd_total_pgs[acting[j]]++;
+        }
+      }
+    }
+
+    vector<int> pg_num;
+    for (map<int, int>::iterator ptr = osd_total_pgs.begin();
+	   ptr != osd_total_pgs.end();
+	   ++ptr) {
+      pg_num.push_back(ptr->second);
+    }
+
+    float stdev = cal_stdev(pg_num, pg_num.size());
+    if (stdev < min_stdev) {
+      min_stdev = stdev;
+      balance_param = k;
+    }
+  }
+
+  pi->set_seed(balance_param);
+}
+
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
@@ -3992,6 +4050,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf->osd_pool_default_cache_min_evict_age;
+
+  prepare_adaptive_seed(pi, pool);
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }

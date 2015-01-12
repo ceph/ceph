@@ -652,6 +652,7 @@ public:
   int pg_to_acting_osds(pg_t pg, vector<int>& acting) const {
     return pg_to_acting_osds(pg, &acting, NULL);
   }
+  int pg_to_up_osds_adaptive(const pg_pool_t& pool, pg_t pg, vector<int>& up) const;
   /**
    * This does not apply temp overrides and should not be used
    * by anybody for data mapping purposes. Specify both pointers.

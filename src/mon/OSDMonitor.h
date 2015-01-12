@@ -268,6 +268,7 @@ private:
   int crush_rename_bucket(const string& srcname,
 			  const string& dstname,
 			  ostream *ss);
+  void prepare_adaptive_seed(pg_pool_t *pi, int64_t pool);
   int crush_ruleset_create_erasure(const string &name,
 				   const string &profile,
 				   int *ruleset,
