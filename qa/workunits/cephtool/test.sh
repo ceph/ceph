@@ -715,6 +715,11 @@ function test_mon_mds()
   metadata_poolnum=$(ceph osd dump | grep "pool.* 'fs_metadata" | awk '{print $2;}')
 
   fail_all_mds
+
+  # Check that 'fs reset' runs
+  ceph fs reset cephfs --yes-i-really-mean-it
+
+  # Clean up to enable subsequent newfs tests
   ceph fs rm cephfs --yes-i-really-mean-it
 
   set +e
