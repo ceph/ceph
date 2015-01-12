@@ -983,7 +983,7 @@ int librados::IoCtxImpl::getxattr(const object_t& oid,
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
   rd.getxattr(name, &bl, NULL);
-  int r = operate_read(oid, &rd, NULL);
+  int r = operate_read(oid, &rd, &bl);
   if (r < 0)
     return r;
 

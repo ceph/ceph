@@ -2977,6 +2977,14 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (op->data_offset)
     *op->data_offset = m->get_header().data_off;
 
+  // got data?
+  if (op->outbl) {
+    if (op->con)
+      op->con->revoke_rx_buffer(op->tid);
+    m->claim_data(*op->outbl);
+    op->outbl = 0;
+  }
+
   // per-op result demuxing
   vector<OSDOp> out_ops;
   m->claim_ops(out_ops);
@@ -3025,14 +3033,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->oncommit = 0;
     num_uncommitted.dec();
     logger->inc(l_osdc_op_commit);
-  }
-
-  // got data?
-  if (op->outbl) {
-    if (op->con)
-      op->con->revoke_rx_buffer(op->tid);
-    m->claim_data(*op->outbl);
-    op->outbl = 0;
   }
 
   /* get it before we call _finish_op() */
