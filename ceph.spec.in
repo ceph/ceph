@@ -461,7 +461,6 @@ fi
 %{_bindir}/cephfs-journal-tool
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
-%{_bindir}/ceph_mon_store_converter
 %{_initrddir}/ceph
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-activate
