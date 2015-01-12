@@ -118,8 +118,8 @@ class Thrasher:
             teuthology.is_type('osd')).remotes.keys()
         allremotes = list(set(allremotes))
         for remote in allremotes:
-            proc = remote.run(args=['type', cmd], check_status=False,
-                              stdout=StringIO(), stderr=StringIO())
+            proc = remote.run(args=['type', cmd], wait=True,
+                check_status=False, stdout=StringIO(), stderr=StringIO())
             if proc.exitstatus != 0:
                 return False;
         return True;
@@ -156,7 +156,8 @@ class Thrasher:
             else:
                 prefix = "sudo ceph-objectstore-tool --data-path {fpath} --journal-path {jpath} --log-file=/var/log/ceph/objectstore_tool.\\$pid.log ".format(fpath=FSPATH, jpath=JPATH)
             cmd = (prefix + "--op list-pgs").format(id=exp_osd)
-            proc = exp_remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
+            proc = exp_remote.run(args=cmd, wait=True,
+                                  check_status=False, stdout=StringIO())
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: exp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
             pgs = proc.stdout.getvalue().split('\n')[:-1]
@@ -179,7 +180,8 @@ class Thrasher:
             if exp_osd != imp_osd:
                 # If pg isn't already on this osd, then we will move it there
                 cmd = (prefix + "--op list-pgs").format(id=imp_osd)
-                proc = imp_remote.run(args=cmd, wait=True, check_status=True, stdout=StringIO())
+                proc = imp_remote.run(args=cmd, wait=True,
+                                      check_status=False, stdout=StringIO())
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: imp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
                 pgs = proc.stdout.getvalue().split('\n')[:-1]
@@ -196,8 +198,9 @@ class Thrasher:
                     imp_osd = exp_osd
                     imp_remote = exp_remote
             # import
-            cmd = (prefix + "--op import --file {file}").format(id=imp_osd, file=exp_path)
-            imp_remote.run(args=cmd)
+            cmd = (prefix + "--op import --file {file}")
+            cmd = cmd.format(id=imp_osd, file=exp_path)
+            proc = imp_remote.run(args=cmd, wait=True, check_status=False)
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: import failure with status {ret}".format(ret=proc.exitstatus))
             cmd = "rm -f {file}".format(file=exp_path)
@@ -233,7 +236,7 @@ class Thrasher:
                           format(fpath=FSPATH, jpath=JPATH))
             cmd = (prefix + "--op list-pgs").format(id=osd)
             proc = remote.run(args=cmd, wait=True,
-                              check_status=True, stdout=StringIO())
+                              check_status=False, stdout=StringIO())
             if proc.exitstatus:
                 raise Exception("ceph_objectstore_tool: "
                                 "exp list-pgs failure with status {ret}".
