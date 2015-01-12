@@ -85,9 +85,9 @@ def get_lines(filename):
     line = True
     lines = []
     while line:
-        line = tmpfd.readline().rstrip('\n')
-        if line:
-            lines += [line]
+        line = tmpfd.readline()
+        if line and line.rstrip('\n'):
+            lines += [line.rstrip('\n')]
     tmpfd.close()
     os.unlink(filename)
     return lines

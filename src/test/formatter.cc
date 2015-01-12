@@ -21,7 +21,7 @@
 using std::ostringstream;
 
 TEST(JsonFormatter, Simple1) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   JSONFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.dump_int("a", 1);
@@ -29,11 +29,12 @@ TEST(JsonFormatter, Simple1) {
   fmt.dump_int("c", 3);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "{\"a\":1,\"b\":2,\"c\":3}");
+  oss1 << "{\"a\":1,\"b\":2,\"c\":3}" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(JsonFormatter, Simple2) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   JSONFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.open_object_section("bar");
@@ -44,20 +45,22 @@ TEST(JsonFormatter, Simple2) {
   fmt.dump_string("string", "str");
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "{\"bar\":{\"int\":263882790666240,\
+  oss1 << "{\"bar\":{\"int\":263882790666240,\
 \"unsigned\":9223372036854775809,\"float\":1.234000},\
-\"string\":\"str\"}");
+\"string\":\"str\"}" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str()); 
 }
 
 TEST(JsonFormatter, Empty) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   JSONFormatter fmt(false);
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "");
+  oss1 << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, Simple1) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.dump_int("a", 1);
@@ -65,11 +68,12 @@ TEST(XmlFormatter, Simple1) {
   fmt.dump_int("c", 3);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><a>1</a><b>2</b><c>3</c></foo>");
+  oss1 << "<foo><a>1</a><b>2</b><c>3</c></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, Simple2) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
   fmt.open_object_section("foo");
   fmt.open_object_section("bar");
@@ -80,42 +84,46 @@ TEST(XmlFormatter, Simple2) {
   fmt.dump_string("string", "str");
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><bar>\
+  oss1 << "<foo><bar>\
 <int>263882790666240</int>\
 <unsigned>9223372036854775809</unsigned>\
 <float>1.234</float>\
 </bar><string>str</string>\
-</foo>");
+</foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, Empty) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "");
+  oss1 << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, DumpStream1) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
   fmt.dump_stream("blah") << "hithere";
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<blah>hithere</blah>");
+  oss1 << "<blah>hithere</blah>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, DumpStream2) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
 
   fmt.open_array_section("foo");
   fmt.dump_stream("blah") << "hithere";
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah></foo>");
+  oss1 << "<foo><blah>hithere</blah></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, DumpStream3) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
 
   fmt.open_array_section("foo");
@@ -123,11 +131,12 @@ TEST(XmlFormatter, DumpStream3) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+  oss1 << "<foo><blah>hithere</blah><pi>3.14</pi></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str()); 
 }
 
 TEST(XmlFormatter, DTD) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
 
   fmt.write_raw_data(XMLFormatter::XML_1_DTD);
@@ -136,12 +145,13 @@ TEST(XmlFormatter, DTD) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+  oss1 <<  "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, Clear) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
 
   fmt.write_raw_data(XMLFormatter::XML_1_DTD);
@@ -150,21 +160,24 @@ TEST(XmlFormatter, Clear) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo><blah>hithere</blah><pi>3.14</pi></foo>");
+  oss1 << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+    "<foo><blah>hithere</blah><pi>3.14</pi></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 
-  ostringstream oss2;
+  ostringstream oss2,oss4;
   fmt.flush(oss2);
-  ASSERT_EQ(oss2.str(), "");
+  oss4 << '\n';
+  ASSERT_EQ(oss2.str(), oss4.str());
 
-  ostringstream oss3;
+  ostringstream oss3,oss5;
   fmt.reset();
   fmt.flush(oss3);
-  ASSERT_EQ(oss3.str(), "");
+  oss5 << '\n';
+  ASSERT_EQ(oss3.str(), oss5.str());
 }
 
 TEST(XmlFormatter, NamespaceTest) {
-  ostringstream oss;
+  ostringstream oss,oss1;
   XMLFormatter fmt(false);
 
   fmt.write_raw_data(XMLFormatter::XML_1_DTD);
@@ -174,26 +187,28 @@ TEST(XmlFormatter, NamespaceTest) {
   fmt.dump_float("pi", 3.14);
   fmt.close_section();
   fmt.flush(oss);
-  ASSERT_EQ(oss.str(), "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">"
-    "<blah>hithere</blah><pi>3.14</pi></foo>");
+  oss1 << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" 
+    "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" 
+    "<blah>hithere</blah><pi>3.14</pi></foo>" << '\n';
+  ASSERT_EQ(oss.str(), oss1.str());
 }
 
 TEST(XmlFormatter, DumpFormatNameSpaceTest) {
-  ostringstream oss1;
+  ostringstream oss1,oss3;
   XMLFormatter fmt(false);
 
   fmt.dump_format_ns("foo",
 		     "http://s3.amazonaws.com/doc/2006-03-01/",
 		     "%s","bar");
   fmt.flush(oss1);
-  ASSERT_EQ(oss1.str(),
-	    "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">bar</foo>");
+  oss3 << "<foo xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">bar</foo>" << '\n';
+  ASSERT_EQ(oss1.str(),oss3.str());
 
   // Testing with a null ns..should be same as dump format
-  ostringstream oss2;
+  ostringstream oss2,oss4;
   fmt.reset();
   fmt.dump_format_ns("foo",NULL,"%s","bar");
   fmt.flush(oss2);
-  ASSERT_EQ(oss2.str(),"<foo>bar</foo>");
+  oss4 << "<foo>bar</foo>" << '\n';
+  ASSERT_EQ(oss2.str(),oss4.str());
 }

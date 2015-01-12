@@ -122,7 +122,7 @@ JSONFormatter::JSONFormatter(bool p)
 void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  os << m_ss.str();
+  os << m_ss.str() << '\n';
   m_ss.clear();
   m_ss.str("");
 }
@@ -311,7 +311,7 @@ XMLFormatter::XMLFormatter(bool pretty)
 void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
-  os << m_ss.str();
+  os << m_ss.str() << '\n';
   m_ss.clear();
   m_ss.str("");
 }

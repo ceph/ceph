@@ -40,14 +40,18 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config_get><key>" + value + "</key></config_get>", s);
+    std::ostringstream oss;
+    oss << "<config_get><key>" + value + "</key></config_get>" << '\n';
+    EXPECT_EQ(oss.str(), s);
   }
 
   {
     bufferlist out;
     cct->do_command("config get", cmdmap, "UNSUPPORTED", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("{ \"key\": \"value\"}", s);
+    std::ostringstream oss;
+    oss << "{ \"key\": \"value\"}" << '\n';
+    EXPECT_EQ(oss.str(), s);
   }
 
   cct->put();
