@@ -1062,8 +1062,8 @@ public:
     map<hobject_t, set<pg_shard_t> > missing;
     map<hobject_t, set<pg_shard_t> > inconsistent;
 
-    // Map from object with errors to good peer
-    map<hobject_t, pair<ScrubMap::object, pg_shard_t> > authoritative;
+    // Map from object with errors to good peers
+    map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> > > authoritative;
 
     // Objects who need digest updates
     map<hobject_t, pair<uint32_t,uint32_t> > missing_digest;
@@ -1176,9 +1176,8 @@ public:
   int active_pushes;
 
   void repair_object(
-    const hobject_t& soid, ScrubMap::object *po,
-    pg_shard_t bad_peer,
-    pg_shard_t ok_peer);
+    const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
+    pg_shard_t bad_peer);
 
   void scrub(ThreadPool::TPHandle &handle);
   void chunky_scrub(ThreadPool::TPHandle &handle);

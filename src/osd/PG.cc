@@ -3586,14 +3586,15 @@ int PG::build_scrub_map_chunk(
 }
 
 void PG::repair_object(
-  const hobject_t& soid, ScrubMap::object *po,
-  pg_shard_t bad_peer, pg_shard_t ok_peer)
+  const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
+  pg_shard_t bad_peer)
 {
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peer osd." << ok_peer << dendl;
+	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+  ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
-  bv.push_back(po->attrs[OI_ATTR]);
+  bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != primary) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t());
@@ -3603,9 +3604,14 @@ void PG::repair_object(
 
     pg_log.missing_add(soid, oi.version, eversion_t());
     missing_loc.add_missing(soid, oi.version, eversion_t());
-    missing_loc.add_location(soid, ok_peer);
+    list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
+    for (i = ok_peers->begin();
+	 i != ok_peers->end();
+	 i++)
+      missing_loc.add_location(soid, i->second);
 
     pg_log.set_last_requested(0);
+    dout(10) << __func__ << ": primary = " << primary << dendl;
   }
 }
 
@@ -4092,7 +4098,7 @@ void PG::scrub_compare_maps()
     stringstream ss;
 
     // Map from object with errors to good peer
-    map<hobject_t, pg_shard_t> authoritative;
+    map<hobject_t, list<pg_shard_t> > authoritative;
     map<pg_shard_t, ScrubMap *> maps;
 
     dout(2) << __func__ << "   osd." << acting[0] << " has "
@@ -4126,20 +4132,26 @@ void PG::scrub_compare_maps()
       osd->clog->error(ss);
     }
 
-    for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t> >::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
+      list<pair<ScrubMap::object, pg_shard_t> > good_peers;
+      for (list<pg_shard_t>::const_iterator j = i->second.begin();
+	   j != i->second.end();
+	   j++) {
+	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
+      }
       scrubber.authoritative.insert(
 	make_pair(
 	  i->first,
-	  make_pair(maps[i->second]->objects[i->first], i->second)));
+	  good_peers));
     }
 
-    for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t> >::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       authmap.objects.erase(i->first);
-      authmap.objects.insert(*(maps[i->second]->objects.find(i->first)));
+      authmap.objects.insert(*(maps[i->second.back()]->objects.find(i->first)));
     }
   }
 
@@ -4149,7 +4161,7 @@ void PG::scrub_compare_maps()
 
 void PG::scrub_process_inconsistent()
 {
-  dout(10) << "process_inconsistent() checking authoritative" << dendl;
+  dout(10) << __func__ << ": checking authoritative" << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
@@ -4163,7 +4175,7 @@ void PG::scrub_process_inconsistent()
     osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
-      for (map<hobject_t, pair<ScrubMap::object, pg_shard_t> >::iterator i =
+      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> > >::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
 	   ++i) {
@@ -4175,9 +4187,8 @@ void PG::scrub_process_inconsistent()
 	       ++j) {
 	    repair_object(
 	      i->first,
-	      &(i->second.first),
-	      *j,
-	      i->second.second);
+	      &(i->second),
+	      *j);
 	    ++scrubber.fixed;
 	  }
 	}
@@ -4186,9 +4197,8 @@ void PG::scrub_process_inconsistent()
 	       j != scrubber.inconsistent[i->first].end(); 
 	       ++j) {
 	    repair_object(i->first, 
-	      &(i->second.first),
-	      *j,
-	      i->second.second);
+	      &(i->second),
+	      *j);
 	    ++scrubber.fixed;
 	  }
 	}
