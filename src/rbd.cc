@@ -1712,6 +1712,56 @@ static int do_import_diff(librbd::Image &image, const char *path)
   return r;
 }
 
+static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64_t *size)
+{
+  int r;
+
+  {//header
+    char buf[strlen(RBD_DIFF_BANNER) + 1];
+    r = safe_read_exact(fd, buf, strlen(RBD_DIFF_BANNER));
+    if (r < 0)
+      return r;
+
+    buf[strlen(RBD_DIFF_BANNER)] = '\0';
+    if (strcmp(buf, RBD_DIFF_BANNER)) {
+      cerr << "invalid banner '" << buf << "', expected '" << RBD_DIFF_BANNER << "'" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  while (true) {
+    r = safe_read_exact(fd, tag, 1);
+    if (r < 0)
+      return r;
+
+    if (*tag == 'f') {
+      r = read_string(fd, 4096, from);   // 4k limit to make sure we don't get a garbage string
+      if (r < 0)
+        return r;
+      dout(2) << " from snap " << *from << dendl;
+    } else if (*tag == 't') {
+      r = read_string(fd, 4096, to);   // 4k limit to make sure we don't get a garbage string
+      if (r < 0)
+        return r;
+      dout(2) << " to snap " << *to << dendl;
+    } else if (*tag == 's') {
+      char buf[8];
+      r = safe_read_exact(fd, buf, 8);
+      if (r < 0)
+        return r;
+
+      bufferlist bl;
+      bl.append(buf, 8);
+      bufferlist::iterator p = bl.begin();
+      ::decode(*size, p);
+    } else {
+      break;
+    }
+  }
+
+  return 0;
+}
+
 /*
  * fd: the diff file to read from
  * pd: the diff file to be written into
