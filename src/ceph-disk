@@ -711,7 +711,7 @@ def get_conf(cluster, variable):
                 'ceph-conf',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
-                    ),
+                    ) if cluster != None else '',
                 '--name=osd.',
                 '--lookup',
                 variable,
@@ -1981,6 +1981,8 @@ def activate(
                 (distro, release, codename) = platform.dist()
                 if distro == 'Ubuntu':
                     init = 'upstart'
+                elif distro == 'Baserock':
+                    init = 'systemd'
                 else:
                     init = 'sysvinit'
 
