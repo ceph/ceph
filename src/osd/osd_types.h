@@ -518,6 +518,9 @@ public:
   const std::string& to_str() const {
     return _str;
   }
+  const char *c_str() const {
+    return _str.c_str();
+  }
   bool parse(const std::string& s);
 
   int operator<(const coll_t &rhs) const {
