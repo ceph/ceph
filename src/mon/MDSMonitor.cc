@@ -1228,6 +1228,15 @@ int MDSMonitor::management_command(
       return -EINVAL;
     }
 
+    // Check for confirmation flag
+    string sure;
+    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
+        "Add --yes-i-really-mean-it if you are sure you wish to continue.";
+      return -EPERM;
+    }
+
     MDSMap newmap;
 
     // Populate rank 0 as existing (so don't go into CREATING)
