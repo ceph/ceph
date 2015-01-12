@@ -402,9 +402,9 @@ def get_gitbuilder_url(project, distro, pkg_type, arch, kernel_flavor):
     :param arch:          A string like 'x86_64'
     :param kernel_flavor: A string like 'basic'
     """
-    templ = 'http://gitbuilder.ceph.com/{proj}-{pkg}-{distro}-{arch}-{flav}/'
+    templ = 'http://{host}/{proj}-{pkg}-{distro}-{arch}-{flav}/'
     return templ.format(proj=project, pkg=pkg_type, distro=distro, arch=arch,
-                        flav=kernel_flavor)
+                        flav=kernel_flavor, host=config.gitbuilder_host)
 
 
 def package_version_for_hash(hash, kernel_flavor='basic',
