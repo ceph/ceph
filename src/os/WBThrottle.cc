@@ -145,7 +145,7 @@ bool WBThrottle::get_next_should_flush(
   assert(!pending_wbs.empty());
   ghobject_t obj(pop_object());
   
-  map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
+  ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
     pending_wbs.find(obj);
   *next = boost::make_tuple(obj, i->second.second, i->second.first);
   pending_wbs.erase(i);
@@ -192,7 +192,7 @@ void WBThrottle::queue_wb(
   bool nocache)
 {
   Mutex::Locker l(lock);
-  map<ghobject_t, pair<PendingWB, FDRef> >::iterator wbiter =
+  ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator wbiter =
     pending_wbs.find(hoid);
   if (wbiter == pending_wbs.end()) {
     wbiter = pending_wbs.insert(
@@ -218,7 +218,7 @@ void WBThrottle::queue_wb(
 void WBThrottle::clear()
 {
   Mutex::Locker l(lock);
-  for (map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
+  for (ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
 	 pending_wbs.begin();
        i != pending_wbs.end();
        ++i) {
@@ -246,7 +246,7 @@ void WBThrottle::clear_object(const ghobject_t &hoid)
   Mutex::Locker l(lock);
   while (clearing == hoid)
     cond.Wait(lock);
-  map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
+  ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> >::iterator i =
     pending_wbs.find(hoid);
   if (i == pending_wbs.end())
     return;
