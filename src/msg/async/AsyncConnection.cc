@@ -1118,6 +1118,7 @@ int AsyncConnection::_process_connection()
         bufferlist authorizer_reply;
         if (connect_reply.authorizer_len) {
           ldout(async_msgr->cct, 10) << __func__ << " reply.authorizer_len=" << connect_reply.authorizer_len << dendl;
+          assert(connect_reply.authorizer_len < 4096);
           r = read_until(connect_reply.authorizer_len, state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read connect reply authorizer failed" << dendl;
@@ -1966,6 +1967,7 @@ void AsyncConnection::_stop()
   shutdown_socket();
   discard_out_queue();
   open_write = false;
+  state_offset = 0;
   state = STATE_CLOSED;
   if (sd > 0)
     ::close(sd);
