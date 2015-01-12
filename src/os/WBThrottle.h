@@ -15,7 +15,7 @@
 #ifndef WBTHROTTLE_H
 #define WBTHROTTLE_H
 
-#include <map>
+#include "include/unordered_map.h"
 #include <boost/tuple/tuple.hpp>
 #include "include/memory.h"
 #include "include/buffer.h"
@@ -45,7 +45,6 @@ enum {
  */
 class WBThrottle : Thread, public md_config_obs_t {
   ghobject_t clearing;
-
   /* *_limits.first is the start_flusher limit and
    * *_limits.second is the hard limit
    */
@@ -90,10 +89,10 @@ class WBThrottle : Thread, public md_config_obs_t {
    * Flush objects in lru order
    */
   list<ghobject_t> lru;
-  map<ghobject_t, list<ghobject_t>::iterator> rev_lru;
+  ceph::unordered_map<ghobject_t, list<ghobject_t>::iterator> rev_lru;
   void remove_object(const ghobject_t &oid) {
     assert(lock.is_locked());
-    map<ghobject_t, list<ghobject_t>::iterator>::iterator iter =
+    ceph::unordered_map<ghobject_t, list<ghobject_t>::iterator>::iterator iter =
       rev_lru.find(oid);
     if (iter == rev_lru.end())
       return;
@@ -114,7 +113,7 @@ class WBThrottle : Thread, public md_config_obs_t {
     rev_lru.insert(make_pair(oid, --lru.end()));
   }
 
-  map<ghobject_t, pair<PendingWB, FDRef> > pending_wbs;
+  ceph::unordered_map<ghobject_t, pair<PendingWB, FDRef> > pending_wbs;
 
   /// get next flush to perform
   bool get_next_should_flush(
