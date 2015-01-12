@@ -3822,7 +3822,8 @@ reprotect_and_return_err:
 
     // readahead
     const md_config_t *conf = ictx->cct->_conf;
-    if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0) {
+    if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0 &&
+	!(op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
       readahead(ictx, image_extents, conf);
     }
 
