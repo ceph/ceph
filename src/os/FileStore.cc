@@ -236,6 +236,13 @@ int FileStore::lfn_open(coll_t cid,
   if (create)
     flags |= O_CREAT;
 
+  if (!replaying) {
+    *outfd = fdcache.lookup(oid);
+    if (*outfd) {
+      return 0;
+    }
+  }
+
   Index index2;
   if (!index) {
     index = &index2;
@@ -251,16 +258,6 @@ int FileStore::lfn_open(coll_t cid,
   if (need_lock) {
     ((*index).index)->access_lock.get_write();
   }
-  if (!replaying) {
-    *outfd = fdcache.lookup(oid);
-    if (*outfd) {
-      if (need_lock) {
-        ((*index).index)->access_lock.put_write();
-      }
-      return 0;
-    }
-  }
-
 
   IndexedPath path2;
   IndexedPath *path = &path2;
