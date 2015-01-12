@@ -817,7 +817,7 @@ struct RGWBucketInfo
 
   void decode_json(JSONObj *obj);
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), bucket_index_shard_hash_type(MOD) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
