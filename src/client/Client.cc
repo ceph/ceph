@@ -8576,17 +8576,17 @@ bool Client::_vxattrcb_quota_exists(Inode *in)
 size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size)
 {
   return snprintf(val, size,
-                  "max_bytes=%ld max_files=%ld",
-                  in->quota.max_bytes,
-                  in->quota.max_files);
+                  "max_bytes=%lld max_files=%lld",
+                  (long long int)in->quota.max_bytes,
+                  (long long int)in->quota.max_files);
 }
 size_t Client::_vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%ld", in->quota.max_bytes);
+  return snprintf(val, size, "%lld", (long long int)in->quota.max_bytes);
 }
 size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%ld", in->quota.max_files);
+  return snprintf(val, size, "%lld", (long long int)in->quota.max_files);
 }
 
 bool Client::_vxattrcb_layout_exists(Inode *in)
