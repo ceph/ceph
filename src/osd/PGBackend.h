@@ -598,7 +598,7 @@
      bool okseed,
      const ScrubMap::object &candidate,
      ostream &errorstream);
-   map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
+   list<map<pg_shard_t, ScrubMap *>::const_iterator> be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,
@@ -608,7 +608,7 @@
      bool okseed,   ///< true if scrub digests have same seed our oi digests
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
-     map<hobject_t, pg_shard_t> &authoritative,
+     map<hobject_t, list<pg_shard_t> > &authoritative,
      map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
