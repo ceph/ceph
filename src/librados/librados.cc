@@ -3220,13 +3220,15 @@ extern "C" int rados_getxattr(rados_ioctx_t io, const char *o, const char *name,
   int ret;
   object_t oid(o);
   bufferlist bl;
+  bl.push_back(buffer::create_static(len, buf));
   ret = ctx->getxattr(oid, name, bl);
   if (ret >= 0) {
     if (bl.length() > len) {
       tracepoint(librados, rados_getxattr_exit, -ERANGE, buf, 0);
       return -ERANGE;
     }
-    bl.copy(0, bl.length(), buf);
+    if (bl.c_str() !=  buf)
+      bl.copy(0, bl.length(), buf);
     ret = bl.length();
   }
 
