@@ -383,10 +383,23 @@ public:
     return _lookup_conn(k);
   }
 
-  void accept_conn(AsyncConnectionRef conn) {
+  int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
+    if (conns.count(conn->peer_addr)) {
+      AsyncConnectionRef existing = conns[conn->peer_addr];
+
+      // lazy delete, see "deleted_conns"
+      Mutex::Locker l(deleted_lock);
+      if (deleted_conns.count(existing)) {
+        deleted_conns.erase(existing);
+        existing->put();
+      } else if (conn != existing) {
+        return -1;
+      }
+    }
     conns[conn->peer_addr] = conn;
     accepting_conns.erase(conn);
+    return 0;
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
