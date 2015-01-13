@@ -890,6 +890,11 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return crush_get_bucket_item_weight(b, pos);
   }
+  float get_bucket_item_weightf(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return 0;
+    return (float)crush_get_bucket_item_weight(b, pos) / (float)0x10000;
+  }
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
