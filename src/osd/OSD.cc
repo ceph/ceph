@@ -8620,6 +8620,14 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  op->set_class_write();
 	break;
       }
+
+    case CEPH_OSD_OP_WATCH:
+      // force the read bit for watch since it is depends on previous
+      // watch state (and may return early if the watch exists) or, in
+      // the case of ping, is simply a read op.
+      op->set_read();
+      break;
+
     default:
       break;
     }

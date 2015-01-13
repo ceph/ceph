@@ -7839,9 +7839,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   oi.watchers.erase(make_pair(watch->get_cookie(),
 			      watch->get_entity()));
 
-  watch_info_t w(watch->get_cookie(),
-		 cct->_conf->osd_client_watch_timeout,  // fixme someday
-		 watch->get_peer_addr());
   ctx->watch_disconnects.push_back(
     OpContext::watch_disconnect_t(watch->get_cookie(), watch->get_entity(), true));
 
