@@ -2259,16 +2259,9 @@ void ReplicatedPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
   ProxyWriteOpRef pwop = p->second;
-  if (tid != pwop->objecter_tid) {
-    dout(10) << __func__ << " tid " << tid << " != pwop " << pwop
-	     << " tid " << pwop->objecter_tid << dendl;
-    return;
-  }
-  if (oid != pwop->soid) {
-    dout(10) << __func__ << " oid " << oid << " != pwop " << pwop
-	     << " soid " << pwop->soid << dendl;
-    return;
-  }
+  assert(tid == pwop->objecter_tid);
+  assert(oid == pwop->soid);
+
   proxywrite_ops.erase(tid);
 
   map<hobject_t, list<OpRequestRef> >::iterator q = in_progress_proxy_ops.find(oid);
@@ -10719,7 +10712,7 @@ void ReplicatedPG::hit_set_in_memory_trim()
   unsigned max = pool.info.hit_set_count;
   unsigned max_in_memory_read = pool.info.min_read_recency_for_promote > 0 ? pool.info.min_read_recency_for_promote - 1 : 0;
   unsigned max_in_memory_write = pool.info.min_write_recency_for_promote > 0 ? pool.info.min_write_recency_for_promote - 1 : 0;
-  unsigned max_in_memory = max_in_memory_read >= max_in_memory_write ? max_in_memory_read : max_in_memory_write;
+  unsigned max_in_memory = MAX(max_in_memory_read, max_in_memory_write);
 
   if (max_in_memory > max) {
     max_in_memory = max;
