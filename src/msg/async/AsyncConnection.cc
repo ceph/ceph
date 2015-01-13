@@ -188,6 +188,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
 
 AsyncConnection::~AsyncConnection()
 {
+  assert(out_q.empty());
+  assert(sent.empty());
   assert(!authorizer);
   if (recv_buf)
     delete recv_buf;
@@ -1555,6 +1557,8 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     goto fail;
   }
 
+  if (existing == this)
+    existing = NULL;
   if (existing) {
     if (connect.global_seq < existing->peer_global_seq) {
       ldout(async_msgr->cct, 10) << __func__ << " accept existing " << existing
@@ -1692,10 +1696,11 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   // Here we use "_stop" instead of "mark_down" because "mark_down" is a async
   // operation, but now we need ensure all variables in `existing` is cleaned up
   // and we will reuse it next.
-  existing->_stop();
+  existing->_stop(true);
   if (existing->policy.lossy) {
     // disconnect from the Connection
     center->dispatch_event_external(EventCallbackRef(new C_handle_reset(async_msgr, existing)));
+    existing->discard_out_queue();
   } else {
     // queue a reset on the new connection, which we're dumping for the old
     center->dispatch_event_external(reset_handler);
@@ -1726,7 +1731,6 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     swap(existing->sd, sd);
     existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
     existing->open_write = false;
-    existing->discard_out_queue();
     existing->replacing = true;
     _stop();
     existing->lock.Unlock();
@@ -1974,6 +1978,7 @@ void AsyncConnection::fault()
   if (policy.lossy && state != STATE_CONNECTING) {
     ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
     center->dispatch_event_external(reset_handler);
+    discard_out_queue();
     _stop();
     return ;
   }
@@ -2039,14 +2044,17 @@ void AsyncConnection::was_session_reset()
 }
 
 // *note: `async` is true only happen when replacing connection process
-void AsyncConnection::_stop()
+void AsyncConnection::_stop(bool replacing)
 {
   assert(lock.is_locked());
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (sd > 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
-  async_msgr->unregister_conn(this);
+  if (!replacing) {
+    discard_out_queue();
+    async_msgr->unregister_conn(this);
+  }
 
   if (async_msgr->cct->_conf->ms_inject_internal_delays) {
     ldout(msgr->cct, 10) << __func__ << " sleep for "
@@ -2058,7 +2066,6 @@ void AsyncConnection::_stop()
   }
 
   shutdown_socket();
-  discard_out_queue();
   open_write = false;
   state_offset = 0;
   state = STATE_CLOSED;
