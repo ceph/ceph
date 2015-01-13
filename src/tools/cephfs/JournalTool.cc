@@ -605,10 +605,15 @@ int JournalTool::scavenge_dentries(
       // Conditionally update existing omap header
       fnode_t old_fnode;
       bufferlist::iterator old_fnode_iter = old_fnode_bl.begin();
-      old_fnode.decode(old_fnode_iter);  // FIXME handle decode error and overwrite
-      dout(4) << "frag " << frag_oid.name << " fnode old v" <<
-        old_fnode.version << " vs new v" << lump.fnode.version << dendl;
-      write_fnode = old_fnode.version < lump.fnode.version;
+      try {
+        old_fnode.decode(old_fnode_iter);
+        dout(4) << "frag " << frag_oid.name << " fnode old v" <<
+          old_fnode.version << " vs new v" << lump.fnode.version << dendl;
+        write_fnode = old_fnode.version < lump.fnode.version;
+      } catch (const buffer::error &err) {
+        dout(1) << "frag " << frag_oid.name << " is corrupt, overwriting" << dendl;
+        write_fnode = true;
+      }
     } else {
       // Unexpected error
       dout(4) << "failed to read OMAP header from directory fragment "
