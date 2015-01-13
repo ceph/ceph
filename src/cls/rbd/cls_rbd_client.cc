@@ -47,7 +47,7 @@ namespace librbd {
     }
 
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-			     uint64_t *size, uint64_t *features,
+			     bool read_only, uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
 			     map<rados::cls::lock::locker_id_t,
 				 rados::cls::lock::locker_info_t> *lockers,
@@ -68,11 +68,15 @@ namespace librbd {
       bufferlist sizebl, featuresbl, parentbl, empty;
       snapid_t snap = CEPH_NOSNAP;
       ::encode(snap, sizebl);
-      ::encode(snap, featuresbl);
-      ::encode(snap, parentbl);
       op.exec("rbd", "get_size", sizebl);
+
+      ::encode(snap, featuresbl);
+      ::encode(read_only, featuresbl);
       op.exec("rbd", "get_features", featuresbl);
+
       op.exec("rbd", "get_snapcontext", empty);
+
+      ::encode(snap, parentbl);
       op.exec("rbd", "get_parent", parentbl);
       rados::cls::lock::get_lock_info_start(&op, RBD_LOCK_NAME);
 

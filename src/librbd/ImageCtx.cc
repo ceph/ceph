@@ -8,9 +8,9 @@
 #include "common/perf_counters.h"
 
 #include "librbd/internal.h"
-#include "librbd/WatchCtx.h"
 
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -37,9 +37,10 @@ namespace librbd {
       flush_encountered(false),
       exclusive_locked(false),
       name(image_name),
-      wctx(NULL),
+      image_watcher(NULL),
       refresh_seq(0),
       last_refresh(0),
+      owner_lock("librbd::ImageCtx::owner_lock"),
       md_lock("librbd::ImageCtx::md_lock"),
       cache_lock("librbd::ImageCtx::cache_lock"),
       snap_lock("librbd::ImageCtx::snap_lock"),
@@ -606,17 +607,16 @@ namespace librbd {
   }
 
   int ImageCtx::register_watch() {
-    assert(!wctx);
-    wctx = new WatchCtx(this);
-    return md_ctx.watch(header_oid, 0, &(wctx->cookie), wctx);
+    assert(image_watcher == NULL);
+    image_watcher = new ImageWatcher(*this);
+    return image_watcher->register_watch();
   }
 
   void ImageCtx::unregister_watch() {
-    assert(wctx);
-    wctx->invalidate();
-    md_ctx.unwatch(header_oid, wctx->cookie);
-    delete wctx;
-    wctx = NULL;
+    assert(image_watcher != NULL);
+    image_watcher->unregister_watch();
+    delete image_watcher;
+    image_watcher = NULL;
   }
 
   size_t ImageCtx::parent_io_len(uint64_t offset, size_t length,
