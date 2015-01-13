@@ -97,6 +97,7 @@ def run_tasks(tasks, ctx):
             ctx.summary['sentry_event'] = event_url
 
         if ctx.config.get('interactive-on-error'):
+            ctx.config['interactive-on-error'] = False
             from .task import interactive
             log.warning('Saw failure during task execution, going into interactive mode...')
             interactive.task(ctx=ctx, config=None)
