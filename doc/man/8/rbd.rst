@@ -123,6 +123,11 @@ Parameters
 
    Map the image read-only.  Equivalent to -o ro.
 
+.. option:: --image-shared
+
+   Specifies that the image will be used concurrently by multiple clients.
+   This will disable features that are dependent upon exclusive ownership
+   of the image.
 
 Commands
 ========
