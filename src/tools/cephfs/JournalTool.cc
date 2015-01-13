@@ -738,6 +738,7 @@ int JournalTool::scavenge_dentries(
       dout(4) << "root does not exist, will create" << dendl;
       write_root_ino = true;
     } else if (r >= 0) {
+      r = 0;
       InodeStore old_inode;
       dout(4) << "root exists, will modify (" << old_root_ino_bl.length() << ")" << dendl;
       bufferlist::iterator inode_bl_iter = old_root_ino_bl.begin(); 
@@ -1106,12 +1107,6 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
     ::decode(inotable_ver, q);
     InoTable ino_table(NULL);
     ino_table.decode(q);
-    interval_set<inodeno_t> projected_free;
-    /*
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, q);
-    ::decode(projected_free, q);
-    DECODE_FINISH(q);
-    */
     
     // Update InoTable in memory
     bool inotable_modified = false;
@@ -1133,11 +1128,6 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
       bufferlist inotable_new_bl;
       ::encode(inotable_ver, inotable_new_bl);
       ino_table.encode_state(inotable_new_bl);
-      /*
-      ENCODE_START(2, 2, inotable_new_bl);
-      ::encode(projected_free, inotable_new_bl);
-      ENCODE_FINISH(inotable_new_bl);
-      */
       int write_r = io.write_full(inotable_oid.name, inotable_new_bl);
       if (write_r != 0) {
         derr << "error writing modified inotable " << inotable_oid.name
