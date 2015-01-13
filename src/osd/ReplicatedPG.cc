@@ -1845,35 +1845,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       do_proxy_write(op, missing_oid);
 
       // Promote too?
-      switch (pool.info.min_write_recency_for_promote) {
-      case 0:
-        promote_object(obc, missing_oid, oloc, OpRequestRef());
-        break;
-      case 1:
-        // Check if in the current hit set
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, OpRequestRef());
-        }
-        break;
-      default:
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, OpRequestRef());
-        } else {
-          // Check if in other hit sets
-          map<time_t,HitSetRef>::iterator itor;
-          bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-            if (itor->second->contains(missing_oid)) {
-              in_other_hit_sets = true;
-              break;
-            }
-          }
-          if (in_other_hit_sets) {
-            promote_object(obc, missing_oid, oloc, OpRequestRef());
-          }
-        }
-        break;
-      }
+      maybe_promote(obc, missing_oid, oloc, in_hit_set,
+		    pool.info.min_write_recency_for_promote,
+		    OpRequestRef());
     } else {
       if (can_proxy_read)
         do_proxy_read(op);
@@ -1889,44 +1863,12 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       }
 
       // Promote too?
-      switch (pool.info.min_read_recency_for_promote) {
-      case 0:
-        promote_object(obc, missing_oid, oloc, promote_op);
-        break;
-      case 1:
-        // Check if in the current hit set
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, promote_op);
-        } else if (!can_proxy_read) {
-          do_cache_redirect(op);
-        }
-        break;
-      default:
-        if (in_hit_set) {
-          promote_object(obc, missing_oid, oloc, promote_op);
-        } else {
-          // Check if in other hit sets
-          map<time_t,HitSetRef>::iterator itor;
-          bool in_other_hit_sets = false;
-          for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
-            if (obc.get()) {
-              if (obc->obs.oi.soid != hobject_t() && itor->second->contains(obc->obs.oi.soid)) {
-                in_other_hit_sets = true;
-                break;
-              }
-            } else {
-              if (missing_oid != hobject_t() && itor->second->contains(missing_oid)) {
-                in_other_hit_sets = true;
-                break;
-              }
-            }
-          }
-          if (in_other_hit_sets) {
-            promote_object(obc, missing_oid, oloc, promote_op);
-          } else if (!can_proxy_read) {
-            do_cache_redirect(op);
-          }
-        }
+      bool promoted = maybe_promote(obc, missing_oid, oloc, in_hit_set,
+	                            pool.info.min_read_recency_for_promote,
+				    promote_op);
+      if (!promoted && !can_proxy_read) {
+	// redirect the op if it's not proxied and not promoting
+	do_cache_redirect(op);
       }
     }
     return true;
@@ -1987,6 +1929,62 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     assert(0 == "unrecognized cache_mode");
   }
   return false;
+}
+
+bool ReplicatedPG::maybe_promote(ObjectContextRef obc,
+				 const hobject_t& missing_oid,
+				 const object_locator_t& oloc,
+				 bool in_hit_set,
+				 uint32_t recency,
+				 OpRequestRef promote_op)
+{
+  dout(20) << __func__ << " missing_oid " << missing_oid
+	   << "  in_hit_set " << in_hit_set << dendl;
+
+  switch (recency) {
+  case 0:
+    promote_object(obc, missing_oid, oloc, promote_op);
+    break;
+  case 1:
+    // Check if in the current hit set
+    if (in_hit_set) {
+      promote_object(obc, missing_oid, oloc, promote_op);
+    } else {
+      // not promoting
+      return false;
+    }
+    break;
+  default:
+    if (in_hit_set) {
+      promote_object(obc, missing_oid, oloc, promote_op);
+    } else {
+      // Check if in other hit sets
+      map<time_t,HitSetRef>::iterator itor;
+      bool in_other_hit_sets = false;
+      for (itor = agent_state->hit_set_map.begin(); itor != agent_state->hit_set_map.end(); ++itor) {
+        if (obc.get()) {
+          if (obc->obs.oi.soid != hobject_t() && itor->second->contains(obc->obs.oi.soid)) {
+            in_other_hit_sets = true;
+            break;
+          }
+        } else {
+          if (missing_oid != hobject_t() && itor->second->contains(missing_oid)) {
+            in_other_hit_sets = true;
+            break;
+          }
+        }
+      }
+      if (in_other_hit_sets) {
+        promote_object(obc, missing_oid, oloc, promote_op);
+      } else {
+	// not promoting
+        return false;
+      }
+    }
+    break;
+  }
+
+  return true;
 }
 
 void ReplicatedPG::do_cache_redirect(OpRequestRef op)
