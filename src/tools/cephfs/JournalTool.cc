@@ -19,6 +19,7 @@
 #include "osdc/Journaler.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
+#include "mds/InoTable.h"
 
 #include "mds/events/ENoOp.h"
 #include "mds/events/EUpdate.h"
@@ -374,6 +375,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     /**
      * Update InoTable to reflect any inode numbers consumed during scavenge
      */
+    dout(4) << "consumed " << consumed_inos.size() << " inodes" << dendl;
     if (consumed_inos.size() && !dry_run) {
       int consume_r = consume_inos(consumed_inos);
       if (consume_r) {
@@ -1099,13 +1101,17 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
     }
 
     // Deserialize InoTable
-    interval_set<inodeno_t> projected_free;
     version_t inotable_ver;
     bufferlist::iterator q = inotable_bl.begin();
     ::decode(inotable_ver, q);
+    InoTable ino_table(NULL);
+    ino_table.decode(q);
+    interval_set<inodeno_t> projected_free;
+    /*
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, q);
     ::decode(projected_free, q);
     DECODE_FINISH(q);
+    */
     
     // Update InoTable in memory
     bool inotable_modified = false;
@@ -1113,10 +1119,9 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
         i != inos.end(); ++i)
     {
       const inodeno_t ino = *i;
-      if (projected_free.contains(ino)) {
+      if (ino_table.force_consume(ino)) {
         dout(4) << "Used ino 0x" << std::hex << ino << std::dec
           << " requires inotable update" << dendl;
-        projected_free.erase(ino);
         inotable_modified = true;
       }
     }
@@ -1127,9 +1132,12 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
       dout(4) << "writing modified inotable version " << inotable_ver << dendl;
       bufferlist inotable_new_bl;
       ::encode(inotable_ver, inotable_new_bl);
+      ino_table.encode_state(inotable_new_bl);
+      /*
       ENCODE_START(2, 2, inotable_new_bl);
       ::encode(projected_free, inotable_new_bl);
       ENCODE_FINISH(inotable_new_bl);
+      */
       int write_r = io.write_full(inotable_oid.name, inotable_new_bl);
       if (write_r != 0) {
         derr << "error writing modified inotable " << inotable_oid.name
