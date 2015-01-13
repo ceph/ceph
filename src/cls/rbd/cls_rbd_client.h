@@ -19,7 +19,7 @@ namespace librbd {
     int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
 			       std::string *object_prefix, uint8_t *order);
     int get_mutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-			     uint64_t *size, uint64_t *features,
+			     bool read_only, uint64_t *size, uint64_t *features,
 			     uint64_t *incompatible_features,
 			     map<rados::cls::lock::locker_id_t,
 				 rados::cls::lock::locker_info_t> *lockers,

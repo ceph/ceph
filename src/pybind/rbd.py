@@ -27,6 +27,7 @@ ADMIN_AUID = 0
 
 RBD_FEATURE_LAYERING = 1
 RBD_FEATURE_STRIPINGV2 = 2
+RBD_FEATURE_EXCLUSIVE_LOCK = 4
 
 class Error(Exception):
     pass
@@ -523,6 +524,13 @@ class Image(object):
         if (ret != 0):
             raise make_ex(ret, 'error getting overlap for image' % (self.name))
         return overlap.value
+
+    def is_exclusive_lock_owner(self):
+        owner = c_int()
+        ret = self.librbd.rbd_is_exclusive_lock_owner(self.image, byref(owner))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting lock status for image' % (self.name))
+        return owner.value == 1
 
     def copy(self, dest_ioctx, dest_name):
         """
