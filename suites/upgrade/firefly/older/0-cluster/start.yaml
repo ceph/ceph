@@ -3,6 +3,9 @@ overrides:
     log-whitelist:
     - scrub
     fs: xfs
+    conf:
+      osd:
+        osd map max advance: 100
 roles:
 - - mon.a
   - mds.a
