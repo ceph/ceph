@@ -29,5 +29,5 @@ RUN rpm -ivh epel-release-7-5.noarch.rpm
 # build dependencies
 RUN cd /root ; ./install-deps.sh
 # development tools
-RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq sudo xmlstarlet
+RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq sudo xmlstarlet parted
 RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
