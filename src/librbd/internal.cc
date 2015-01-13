@@ -3058,9 +3058,6 @@ reprotect_and_return_err:
       return r;
     }
 
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
     ictx->user_flushed();
     r = _flush(ictx);
     ictx->perfcounter->inc(l_librbd_flush);
@@ -3069,6 +3066,10 @@ reprotect_and_return_err:
 
   int _flush(ImageCtx *ictx)
   {
+    if (ictx->image_watcher != NULL) {
+      ictx->image_watcher->flush_aio_operations();
+    }
+
     CephContext *cct = ictx->cct;
     int r;
     // flush any outstanding writes
