@@ -157,7 +157,6 @@ class AsyncConnection : public Connection {
     STATE_CONNECTING_WAIT_ACK_SEQ,
     STATE_CONNECTING_READY,
     STATE_ACCEPTING,
-    STATE_ACCEPTING_HANDLE_CONNECT,
     STATE_ACCEPTING_WAIT_BANNER_ADDR,
     STATE_ACCEPTING_WAIT_CONNECT_MSG,
     STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH,
@@ -194,7 +193,6 @@ class AsyncConnection : public Connection {
                                         "STATE_CONNECTING_WAIT_ACK_SEQ",
                                         "STATE_CONNECTING_READY",
                                         "STATE_ACCEPTING",
-                                        "STATE_ACCEPTING_HANDLE_CONNECT",
                                         "STATE_ACCEPTING_WAIT_BANNER_ADDR",
                                         "STATE_ACCEPTING_WAIT_CONNECT_MSG",
                                         "STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH",
@@ -202,8 +200,7 @@ class AsyncConnection : public Connection {
                                         "STATE_ACCEPTING_READY",
                                         "STATE_STANDBY",
                                         "STATE_CLOSED",
-                                        "STATE_WAIT",
-                                        "STATE_FAULT"};
+                                        "STATE_WAIT"};
       return statenames[state];
   }
 
