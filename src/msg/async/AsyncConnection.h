@@ -53,7 +53,7 @@ class AsyncConnection : public Connection {
   int read_until(uint64_t needed, char *p);
   int _process_connection();
   void _connect();
-  void _stop();
+  void _stop(bool discard=true);
   int handle_connect_reply(ceph_msg_connect &connect, ceph_msg_connect_reply &r);
   int handle_connect_msg(ceph_msg_connect &m, bufferlist &aubl, bufferlist &bl);
   void was_session_reset();
