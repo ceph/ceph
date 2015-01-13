@@ -52,7 +52,7 @@ protected:
                    const utime_t& time,
                    const list<RGWReplicaItemMarker> *entries);
   int delete_bound(const string& oid, const string& pool,
-                   const string& daemon_id);
+                   const string& daemon_id, bool purge_all);
   int get_bounds(const string& oid, const string& pool,
                  RGWReplicaBounds& bounds);
 };
@@ -81,11 +81,11 @@ public:
     return RGWReplicaLogger::update_bound(oid, pool,
                                           daemon_id, marker, time, entries);
   }
-  int delete_bound(int shard, const string& daemon_id) {
+  int delete_bound(int shard, const string& daemon_id, bool purge_all) {
     string oid;
     get_shard_oid(shard, oid);
     return RGWReplicaLogger::delete_bound(oid, pool,
-                                          daemon_id);
+                                          daemon_id, purge_all);
   }
   int get_bounds(int shard, RGWReplicaBounds& bounds) {
     string oid;
@@ -97,20 +97,29 @@ public:
 class RGWReplicaBucketLogger : private RGWReplicaLogger {
   string pool;
   string prefix;
+
+  string get_key(const rgw_bucket& bucket, bool index_by_instance) {
+    if (index_by_instance) {
+      return prefix + bucket.name + ":" + bucket.bucket_id;
+    }
+
+    return prefix + bucket.name;
+  }
 public:
   RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, const string& daemon_id,
                    const string& marker, const utime_t& time,
-                   const list<RGWReplicaItemMarker> *entries) {
-    return RGWReplicaLogger::update_bound(prefix+bucket.name, pool,
+                   const list<RGWReplicaItemMarker> *entries,
+                   bool index_by_instance) {
+    return RGWReplicaLogger::update_bound(get_key(bucket, index_by_instance), pool,
                                           daemon_id, marker, time, entries);
   }
-  int delete_bound(const rgw_bucket& bucket, const string& daemon_id) {
-    return RGWReplicaLogger::delete_bound(prefix+bucket.name, pool,
-                                          daemon_id);
+  int delete_bound(const rgw_bucket& bucket, const string& daemon_id, bool index_by_instance, bool purge_all) {
+    return RGWReplicaLogger::delete_bound(get_key(bucket, index_by_instance), pool,
+                                          daemon_id, purge_all);
   }
-  int get_bounds(const rgw_bucket& bucket, RGWReplicaBounds& bounds) {
-    return RGWReplicaLogger::get_bounds(prefix+bucket.name, pool,
+  int get_bounds(const rgw_bucket& bucket, RGWReplicaBounds& bounds, bool index_by_instance) {
+    return RGWReplicaLogger::get_bounds(get_key(bucket, index_by_instance), pool,
                                         bounds);
   }
 };
