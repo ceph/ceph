@@ -573,7 +573,7 @@ void Paxos::handle_last(MMonPaxos *last)
 	  finish_contexts(g_ceph_context, waiting_for_readable);
 	  finish_contexts(g_ceph_context, waiting_for_writeable);
 
-          queue_next();
+          maybe_propose_pending();
 	}
       }
     }
@@ -923,7 +923,7 @@ void Paxos::commit_finish()
     finish_contexts(g_ceph_context, waiting_for_readable);
     finish_contexts(g_ceph_context, waiting_for_writeable);
 
-    queue_next();
+    maybe_propose_pending();
   }
 }
 
@@ -1039,20 +1039,9 @@ void Paxos::commit_proposal()
   assert(mon->is_leader());
   assert(is_refresh());
 
-  if (proposals.empty()) {
-    return;  // must have been updating previous
-  }
-
-  C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
-  if (proposal->proposed) {
-    dout(10) << __func__ << " proposal " << proposal << " took "
-	     << (ceph_clock_now(NULL) - proposal->proposal_time)
-	     << " to finish" << dendl;
-    proposals.pop_front();
-    proposal->complete(0);
-  } else {
-    // must have been updating previous.
-  }
+  list<Context*> ls;
+  ls.swap(committing_finishers);
+  finish_contexts(g_ceph_context, ls);
 }
 
 void Paxos::finish_round()
@@ -1064,17 +1053,16 @@ void Paxos::finish_round()
   state = STATE_ACTIVE;
 }
 
-void Paxos::queue_next()
+void Paxos::maybe_propose_pending()
 {
-  dout(10) << __func__ << " state " << state
-	   << " proposals left " << proposals.size() << dendl;
+  dout(10) << __func__ << " state " << state << dendl;
 
   if (should_trim()) {
     trim();
   }
 
-  if (is_active() && !proposals.empty()) {
-    propose_queued();
+  if (is_active() && pending_proposal) {
+    propose_pending();
   }
 }
 
@@ -1212,7 +1200,7 @@ void Paxos::trim()
 
   dout(10) << "trim to " << end << " (was " << first_committed << ")" << dendl;
 
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  MonitorDBStore::TransactionRef t = get_pending_transaction();
 
   for (version_t v = first_committed; v < end; ++v) {
     dout(10) << "trim " << v << dendl;
@@ -1224,17 +1212,8 @@ void Paxos::trim()
     t->compact_range(get_name(), stringify(first_committed - 1), stringify(end));
   }
 
-  dout(30) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  t->dump(&f);
-  f.flush(*_dout);
-  *_dout << dendl;
-
-  bufferlist bl;
-  t->encode(bl);
-
   trimming = true;
-  queue_proposal(bl, new C_Trimmed(this));
+  queue_pending_finisher(new C_Trimmed(this));
 }
 
 /*
@@ -1298,13 +1277,19 @@ void Paxos::cancel_events()
   }
 }
 
-void Paxos::shutdown() {
+void Paxos::shutdown()
+{
   dout(10) << __func__ << " cancel all contexts" << dendl;
+
+  // discard pending transaction
+  pending_proposal.reset();
+
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
-  finish_contexts(g_ceph_context, proposals, -ECANCELED);
+  finish_contexts(g_ceph_context, pending_finishers, -ECANCELED);
+  finish_contexts(g_ceph_context, committing_finishers, -ECANCELED);
   if (logger)
     g_ceph_context->get_perfcounters_collection()->remove(logger);
   delete logger;
@@ -1315,7 +1300,11 @@ void Paxos::leader_init()
   cancel_events();
   new_value.clear();
 
-  finish_contexts(g_ceph_context, proposals, -EAGAIN);
+  // discard pending transaction
+  pending_proposal.reset();
+
+  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
+  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
   logger->inc(l_paxos_start_leader);
 
@@ -1342,10 +1331,14 @@ void Paxos::peon_init()
   // start a timer, in case the leader never manages to issue a lease
   reset_lease_timeout();
 
+  // discard pending transaction
+  pending_proposal.reset();
+
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
-  finish_contexts(g_ceph_context, proposals, -EAGAIN);
+  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
+  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
   logger->inc(l_paxos_start_peon);
 }
@@ -1365,7 +1358,11 @@ void Paxos::restart()
   }
   state = STATE_RECOVERING;
 
-  finish_contexts(g_ceph_context, proposals, -EAGAIN);
+  // discard pending transaction
+  pending_proposal.reset();
+
+  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 
@@ -1484,60 +1481,57 @@ bool Paxos::is_writeable()
     is_lease_valid();
 }
 
-void Paxos::list_proposals(ostream& out)
-{
-  out << __func__ << " " << proposals.size() << " in queue:\n";
-  list<Context*>::iterator p_it = proposals.begin();
-  for (int i = 0; p_it != proposals.end(); ++p_it, ++i) {
-    C_Proposal *p = (C_Proposal*) *p_it;
-    out << "-- entry #" << i << "\n";
-    out << *p << "\n";
-  }
-}
-
-void Paxos::propose_queued()
+void Paxos::propose_pending()
 {
   assert(is_active());
-  assert(!proposals.empty());
-
-  C_Proposal *proposal = static_cast<C_Proposal*>(proposals.front());
-  assert(!proposal->proposed);
+  assert(pending_proposal);
 
   cancel_events();
-  dout(10) << __func__ << " " << (last_committed + 1)
-	  << " " << proposal->bl.length() << " bytes" << dendl;
-  proposal->proposed = true;
 
-  dout(30) << __func__ << " ";
-  list_proposals(*_dout);
+  bufferlist bl;
+  pending_proposal->encode(bl);
+  pending_proposal.reset();
+
+  dout(10) << __func__ << " " << (last_committed + 1)
+	   << " " << bl.length() << " bytes" << dendl;
+  dout(30) << __func__ << " transaction dump:\n";
+  JSONFormatter f(true);
+  pending_proposal->dump(&f);
+  f.flush(*_dout);
   *_dout << dendl;
 
+  committing_finishers.swap(pending_finishers);
   state = STATE_UPDATING;
-  begin(proposal->bl);
+  begin(bl);
 }
 
-void Paxos::queue_proposal(bufferlist& bl, Context *onfinished)
+void Paxos::queue_pending_finisher(Context *onfinished)
 {
-  dout(5) << __func__ << " bl " << bl.length() << " bytes;"
-	  << " ctx = " << onfinished << dendl;
-
-  proposals.push_back(new C_Proposal(onfinished, bl));
+  dout(5) << __func__ << " " << onfinished << dendl;
+  assert(onfinished);
+  pending_finishers.push_back(onfinished);
 }
 
-bool Paxos::propose_new_value(bufferlist& bl, Context *onfinished)
+MonitorDBStore::TransactionRef Paxos::get_pending_transaction()
 {
   assert(mon->is_leader());
-
-  queue_proposal(bl, onfinished);
-
-  if (!is_active()) {
-    dout(5) << __func__ << " not active; proposal queued" << dendl; 
-    return true;
+  if (!pending_proposal) {
+    pending_proposal.reset(new MonitorDBStore::Transaction);
+    assert(pending_finishers.empty());
   }
+  return pending_proposal;
+}
 
-  propose_queued();
-  
-  return true;
+bool Paxos::trigger_propose()
+{
+  if (is_active()) {
+    dout(10) << __func__ << " active, proposing now" << dendl;
+    propose_pending();
+    return true;
+  } else {
+    dout(10) << __func__ << " not active, will propose later" << dendl;
+    return false;
+  }
 }
 
 bool Paxos::is_consistent()
