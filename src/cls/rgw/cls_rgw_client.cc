@@ -45,7 +45,7 @@ void BucketIndexAioManager::do_completion(int id) {
 
   map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
   assert(iter != pendings.end());
-  completions.push_back(iter->second);
+  completions[id] = iter->second;
   pendings.erase(iter);
 
   // If the caller needs a list of finished objects, store them
@@ -70,16 +70,18 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   cond.Wait(lock);
 
   // Clear the completed AIOs
-  list<librados::AioCompletion*>::iterator iter = completions.begin();
-  map<int, string>::iterator liter = completion_objs.begin();
-  for (; iter != completions.end() && liter != completion_objs.end(); ++iter, ++liter) {
-    int r = (*iter)->get_return_value();
-    if (objs && r == 0) {
-      (*objs)[liter->first] = liter->second;
+  map<int, librados::AioCompletion*>::iterator iter = completions.begin();
+  for (; iter != completions.end(); ++iter) {
+    int r = iter->second->get_return_value();
+    if (objs && r == 0) { /* update list of successfully completed objs */
+      map<int, string>::iterator liter = completion_objs.find(iter->first);
+      if (liter != completion_objs.end()) {
+        (*objs)[liter->first] = liter->second;
+      }
     }
     if (ret_code && (r < 0 && r != valid_ret_code))
       (*ret_code) = r;
-    (*iter)->release();
+    iter->second->release();
   }
   if (num_completions)
     (*num_completions) = completions.size();

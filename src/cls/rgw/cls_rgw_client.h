@@ -30,7 +30,7 @@ struct BucketIndexAioArg : public RefCountedObject {
 class BucketIndexAioManager {
 private:
   map<int, librados::AioCompletion*> pendings;
-  list<librados::AioCompletion*> completions;
+  map<int, librados::AioCompletion*> completions;
   map<int, string> pending_objs;
   map<int, string> completion_objs;
   int next;
@@ -60,11 +60,9 @@ private:
    * @param oid        - the object id associated with the object, if it is NULL, we don't
    *                     track the object id per callback.
    */
-  void add_pending(int id, librados::AioCompletion* completion, string *oid = NULL) {
+  void add_pending(int id, librados::AioCompletion* completion, const string& oid) {
     pendings[id] = completion;
-    if (oid) {
-      pending_objs[id] = *oid;
-    }
+    pending_objs[id] = oid;
   }
 public:
   /*
@@ -100,7 +98,7 @@ public:
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
     if (r >= 0) {
-      add_pending(arg->id, c);
+      add_pending(arg->id, c, oid);
     }
     return r;
   }
@@ -114,7 +112,7 @@ public:
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
     if (r >= 0) {
-      add_pending(arg->id, c);
+      add_pending(arg->id, c, oid);
     }
     return r;
   }
@@ -241,7 +239,8 @@ public:
 
     int num_completions, r = 0;
     map<int, string> objs;
-    while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, &objs)) {
+    map<int, string> *pobjs = (need_multiple_rounds() ? &objs : NULL);
+    while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r, pobjs)) {
       if (r >= 0 && ret >= 0) {
         for(int i = 0; i < num_completions && iter != objs_container.end(); ++i, ++iter) {
           int issue_ret = issue_op(iter->first, iter->second);
