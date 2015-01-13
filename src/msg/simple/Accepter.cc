@@ -229,15 +229,6 @@ void *Accepter::entry()
     socklen_t slen = sizeof(addr.ss_addr());
     int sd = ::accept(listen_sd, (sockaddr*)&addr.ss_addr(), &slen);
     if (sd >= 0) {
-      int prio = msgr->get_socket_priority();
-      if (prio >= 0) {
-	int rc = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
-	if (rc < 0) {
-	  ldout(msgr->cct,0) << "WARNING: failed to set SO_PRIORITY for sd "
-			     << sd << ": " << cpp_strerror(errno) << dendl;
-	}
-      }
-
       errors = 0;
       ldout(msgr->cct,10) << "accepted incoming on sd " << sd << dendl;
       
