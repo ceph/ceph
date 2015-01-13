@@ -6253,7 +6253,9 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
   if (has_shards) {
     marker_mgr.to_string(&marker);
   } else {
-    marker = result.rbegin()->id;
+    if (!result.empty()) {
+      marker = result.rbegin()->id;
+    }
   }
 
   return 0;
