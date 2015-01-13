@@ -766,6 +766,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 #define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
 #define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
+#define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
 
 std::string pg_state_string(int state);
 
