@@ -5,6 +5,9 @@ overrides:
       - scrub mismatch
       - ScrubResult
     fs: xfs
+    conf:
+      osd:
+        osd map max advance: 100
 roles:
 - - mon.a
   - mds.a
