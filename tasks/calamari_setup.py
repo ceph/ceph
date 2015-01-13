@@ -205,9 +205,11 @@ def calamari_install(config, cal_svr):
     log.info('calamari server on %s' % ice_distro)
     iceball_loc = config.get('iceball_location', '.')
     ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
+    delete_iceball = False
     if iceball_loc.startswith('http'):
-        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '.')
-        iceball_loc = '.'
+        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '/tmp')
+        iceball_loc = '/tmp'
+        delete_iceball = True
     elif iceball_loc == '.':
         ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
         if not os.path.isdir(ice_tool_loc):
@@ -251,6 +253,8 @@ def calamari_install(config, cal_svr):
         yield
     finally:
         log.info('Cleaning up after Calamari installation')
+        if delete_iceball:
+            os.unlink(gz_file)
 
 
 @contextlib.contextmanager
