@@ -286,19 +286,18 @@ def deploy_ceph(ctx, cal_svr):
     """
     osd_to_name = {}
     all_machines = set()
-    mon0 = ''
+    all_mons = set()
     for remote in ctx.cluster.remotes:
         all_machines.add(remote.shortname)
         roles = ctx.cluster.remotes[remote]
-        if 'mon.0' in roles:
-            mon0 = remote.shortname
         for role in roles:
             daemon_type, number = role.split('.')
             if daemon_type == 'osd':
                 osd_to_name[number] = remote.shortname
-    first_cmds = [['new', mon0], ['install'] + list(all_machines),
-                  ['mon', 'create-initial', mon0],
-                  ['gatherkeys', mon0]]
+            if daemon_type == 'mon':
+                all_mons.add(remote.shortname)
+    first_cmds = [['new'] + list(all_mons), ['install'] + list(all_machines),
+                  ['mon', 'create-initial'] ]
     ret = True
     for entry in first_cmds:
         arg_list = ['ceph-deploy'] + entry
