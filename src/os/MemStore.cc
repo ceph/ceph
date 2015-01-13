@@ -101,7 +101,7 @@ int MemStore::_save()
 
 void MemStore::dump_all()
 {
-  Formatter *f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create("json-pretty");
   f->open_object_section("store");
   dump(f);
   f->close_section();

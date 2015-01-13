@@ -63,12 +63,12 @@ Formatter::Formatter() { }
 
 Formatter::~Formatter() { }
 
-Formatter *
-new_formatter(const std::string &type)
+Formatter *Formatter::create(const std::string &type,
+			     const std::string& default_type)
 {
   std::string mytype = type;
   if (mytype == "")
-    mytype = "json-pretty";
+    mytype = default_type;
 
   if (mytype == "json")
     return new JSONFormatter(false);
