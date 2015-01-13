@@ -253,6 +253,9 @@ def configure(ctx, config):
         else:
             s3tests_conf['DEFAULT']['host'] = 'localhost'
 
+        if properties is not None and 'slow_backend' in properties:
+	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
