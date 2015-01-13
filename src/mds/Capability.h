@@ -240,7 +240,7 @@ public:
   Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) : 
     inode(i), client(c),
     cap_id(id),
-    _wanted(0),
+    _wanted(0), num_revoke_warnings(0),
     _pending(0), _issued(0),
     last_sent(0),
     last_issue(0),
