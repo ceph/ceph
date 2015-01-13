@@ -1855,7 +1855,6 @@ void PG::all_activated_and_committed()
   state_clear(PG_STATE_CREATING);
 
   share_pg_info();
-  publish_stats_to_osd();
 
   queue_peering_event(
     CephPeeringEvtRef(
