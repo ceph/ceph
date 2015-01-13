@@ -1081,14 +1081,6 @@ private:
   void commit_proposal();
   void finish_round();
 
-  /**
-   * propose pending, if any
-   *
-   * This is called at the end of the round to check if there is another
-   * pending proposal ready to go.
-   */
-  void maybe_propose_pending();
-
 public:
   /**
    * @param m A monitor
