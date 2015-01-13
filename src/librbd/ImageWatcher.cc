@@ -58,19 +58,6 @@ enum {
   NOTIFY_OP_RESIZE 	   = 7,
   NOTIFY_OP_SNAP_CREATE    = 8
 };
-class FunctionContext : public Context {
-public:
-  FunctionContext(const boost::function<void()> &callback)
-    : m_callback(callback)
-  {
-  }
-
-  virtual void finish(int r) {
-    m_callback();
-  }
-private:
-  boost::function<void()> m_callback;
-};
 
 class RemoteProgressContext : public ProgressContext {
 public:
