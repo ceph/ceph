@@ -609,7 +609,17 @@ def vm_setup(ctx, config):
                         check_status=False,)
                 if r.returncode != 0:
                     p1 = subprocess.Popen(['cat', editinfo], stdout=subprocess.PIPE)
-                    p2 = subprocess.Popen(['ssh', '-t', '-t', str(rem), 'sudo', 'sh'], stdin=p1.stdout, stdout=subprocess.PIPE)
+                    p2 = subprocess.Popen(
+                        [
+                            'ssh',
+                            '-o', 'StrictHostKeyChecking=no',
+                            '-t', '-t',
+                            str(rem),
+                            'sudo',
+                            'sh'
+                        ],
+                        stdin=p1.stdout, stdout=subprocess.PIPE
+                    )
                     _, err = p2.communicate()
                     if err:
                         log.info("Edit of /etc/sudoers failed: %s", err)
