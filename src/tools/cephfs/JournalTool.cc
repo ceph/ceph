@@ -356,7 +356,8 @@ int JournalTool::main_event(std::vector<const char*> &argv)
      * Iterate over log entries, attempting to scavenge from each one
      */
     std::set<inodeno_t> consumed_inos;
-    for (JournalScanner::EventMap::iterator i = js.events.begin(); i != js.events.end(); ++i) {
+    for (JournalScanner::EventMap::iterator i = js.events.begin();
+         i != js.events.end(); ++i) {
       LogEvent *le = i->second.log_event;
       EMetaBlob const *mb = le->get_metablob();
       if (mb) {
@@ -583,13 +584,15 @@ int JournalTool::scavenge_dentries(
     time_t pmtime;
     r = io.stat(frag_oid.name, &psize, &pmtime);
     if (r == -ENOENT) {
-      dout(4) << ": Frag object " << frag_oid.name << " did not exist, will create" << dendl;
+      dout(4) << ": Frag object " << frag_oid.name
+              << " did not exist, will create" << dendl;
     } else if (r != 0) {
       derr << "Unexpected error stat'ing frag " << frag_oid.name
            << ": " << cpp_strerror(r) << dendl;
       return r;
     } else {
-      dout(4) << "Frag object " << frag_oid.name << " exists, will modify" << dendl;
+      dout(4) << "Frag object " << frag_oid.name
+              << " exists, will modify" << dendl;
     }
 
     // Update fnode in omap header of dirfrag object
@@ -613,7 +616,8 @@ int JournalTool::scavenge_dentries(
           old_fnode.version << " vs new v" << lump.fnode.version << dendl;
         write_fnode = old_fnode.version < lump.fnode.version;
       } catch (const buffer::error &err) {
-        dout(1) << "frag " << frag_oid.name << " is corrupt, overwriting" << dendl;
+        dout(1) << "frag " << frag_oid.name
+                << " is corrupt, overwriting" << dendl;
         write_fnode = true;
       }
     } else {
@@ -629,14 +633,17 @@ int JournalTool::scavenge_dentries(
       lump.fnode.encode(fnode_bl);
       r = io.omap_set_header(frag_oid.name, fnode_bl);
       if (r != 0) {
-        derr << "Failed to write fnode for frag object " << frag_oid.name << dendl;
+        derr << "Failed to write fnode for frag object "
+             << frag_oid.name << dendl;
         return r;
       }
     }
 
     // Try to get the existing dentry
-    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list = lump.get_dfull();
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi = fb_list.begin(); fbi != fb_list.end(); ++fbi) {
+    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
+      lump.get_dfull();
+    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+        fb_list.begin(); fbi != fb_list.end(); ++fbi) {
       EMetaBlob::fullbit const &fb = *(*fbi);
 
       // Get a key like "foobar_head"
@@ -655,7 +662,8 @@ int JournalTool::scavenge_dentries(
         return r;
       }
     
-      dout(4) << "inspecting fullbit " << frag_oid.name << "/" << fb.dn << dendl;
+      dout(4) << "inspecting fullbit " << frag_oid.name << "/" << fb.dn
+        << dendl;
       bool write_dentry = false;
       if (vals.find(key) == vals.end()) {
         dout(4) << "dentry did not already exist, will create" << dendl;
@@ -689,13 +697,15 @@ int JournalTool::scavenge_dentries(
             write_dentry = true;
           }
         } else {
-          dout(4) << "corrupt dentry in backing store, overwriting from journal" << dendl;
+          dout(4) << "corrupt dentry in backing store, overwriting from "
+            "journal" << dendl;
           write_dentry = true;
         }
       }
 
       if (write_dentry && !dry_run) {
-        dout(4) << "writing dentry " << key << " into frag " << frag_oid.name << dendl;
+        dout(4) << "writing dentry " << key << " into frag "
+          << frag_oid.name << dendl;
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
@@ -723,7 +733,8 @@ int JournalTool::scavenge_dentries(
    * important because clients use them to infer completeness
    * of directories
    */
-  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p = metablob.roots.begin(); p != metablob.roots.end(); ++p) {
+  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
+       metablob.roots.begin(); p != metablob.roots.end(); ++p) {
     EMetaBlob::fullbit const &fb = *(*p);
     inodeno_t ino = fb.inode.ino;
     dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
@@ -740,7 +751,8 @@ int JournalTool::scavenge_dentries(
     } else if (r >= 0) {
       r = 0;
       InodeStore old_inode;
-      dout(4) << "root exists, will modify (" << old_root_ino_bl.length() << ")" << dendl;
+      dout(4) << "root exists, will modify (" << old_root_ino_bl.length()
+        << ")" << dendl;
       bufferlist::iterator inode_bl_iter = old_root_ino_bl.begin(); 
       std::string magic;
       ::decode(magic, inode_bl_iter);
