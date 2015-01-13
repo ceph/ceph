@@ -1709,7 +1709,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       reply_ctx(ctx, -EINVAL);
       return;
     }
-  } else if (!get_rw_locks(ctx)) {
+  } else if (!get_rw_locks(write_ordered, ctx)) {
     dout(20) << __func__ << " waiting for rw locks " << dendl;
     op->mark_delayed("waiting for rw locks");
     close_op_ctx(ctx, -EBUSY);
