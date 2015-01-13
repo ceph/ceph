@@ -33,21 +33,6 @@ enum {
   NOTIFY_OP_HEADER_UPDATE = 3
 };
 
-class FunctionContext : public Context {
-public:
-  FunctionContext(const boost::function<void()> &callback)
-    : m_callback(callback)
-  {
-  }
-
-  virtual void finish(int r) {
-    m_callback();
-  }
-private:
-  boost::function<void()> m_callback;
-};
-
-
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_watch_ctx(*this), m_handle(0),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),

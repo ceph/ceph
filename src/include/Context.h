@@ -17,12 +17,13 @@
 #define CEPH_CONTEXT_H
 
 #include "common/dout.h"
-#include "include/assert.h"
 
+#include <boost/function.hpp>
 #include <list>
 #include <set>
 
 #include <iostream>
+#include "include/assert.h"
 #include "include/memory.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
@@ -448,6 +449,20 @@ private:
 
 typedef C_GatherBase<Context, Context> C_Gather;
 typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
+
+class FunctionContext : public Context {
+public:
+  FunctionContext(const boost::function<void()> &callback)
+    : m_callback(callback)
+  {
+  }
+
+  virtual void finish(int r) {
+    m_callback();
+  }
+private:
+  boost::function<void()> m_callback;
+};
 
 #undef mydout
 
