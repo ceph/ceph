@@ -223,12 +223,7 @@ def calamari_install(config, cal_svr):
             subprocess.check_call([exec_ice, '-b', version, '-o', ice_distro])
         except subprocess.CalledProcessError:
             raise RuntimeError('Unable to create %s distro' % ice_distro)
-    gz_file = ''
-    for file_loc in os.listdir(iceball_loc):
-        sfield = '^ICE-.*{0}\.tar\.gz$'.format(ice_distro)
-        if re.search(sfield, file_loc):
-            if file_loc > gz_file:
-                gz_file = file_loc
+    gz_file = 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
     lgz_file = os.path.join(iceball_loc, gz_file)
     cal_svr.put_file(lgz_file, os.path.join('/tmp/', gz_file))
     ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
