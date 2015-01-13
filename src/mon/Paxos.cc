@@ -568,12 +568,6 @@ void Paxos::handle_last(MMonPaxos *last)
 	need_refresh = false;
 	if (do_refresh()) {
 	  finish_round();
-
-	  finish_contexts(g_ceph_context, waiting_for_active);
-	  finish_contexts(g_ceph_context, waiting_for_readable);
-	  finish_contexts(g_ceph_context, waiting_for_writeable);
-
-          maybe_propose_pending();
 	}
       }
     }
@@ -917,13 +911,6 @@ void Paxos::commit_finish()
     assert(g_conf->paxos_kill_at != 10);
 
     finish_round();
-
-    // wake (other) people up
-    finish_contexts(g_ceph_context, waiting_for_active);
-    finish_contexts(g_ceph_context, waiting_for_readable);
-    finish_contexts(g_ceph_context, waiting_for_writeable);
-
-    maybe_propose_pending();
   }
 }
 
@@ -1051,11 +1038,15 @@ void Paxos::finish_round()
 
   // ok, now go active!
   state = STATE_ACTIVE;
-}
 
-void Paxos::maybe_propose_pending()
-{
-  dout(10) << __func__ << " state " << state << dendl;
+  dout(20) << __func__ << " waiting_for_acting" << dendl;
+  finish_contexts(g_ceph_context, waiting_for_active);
+  dout(20) << __func__ << " waiting_for_readable" << dendl;
+  finish_contexts(g_ceph_context, waiting_for_readable);
+  dout(20) << __func__ << " waiting_for_writeable" << dendl;
+  finish_contexts(g_ceph_context, waiting_for_writeable);
+  
+  dout(10) << __func__ << " done w/ waiters, state " << state << dendl;
 
   if (should_trim()) {
     trim();
