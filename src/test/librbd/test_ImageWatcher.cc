@@ -29,7 +29,8 @@ using namespace ceph;
 class TestImageWatcher : public TestFixture {
 public:
 
-  TestImageWatcher() : m_watch_ctx(NULL), m_aio_completion_restarts(),
+  TestImageWatcher() : m_watch_ctx(NULL), m_aio_completion_restarts(0),
+		       m_expected_aio_restarts(0),
 		       m_callback_lock("m_callback_lock")
   {
   }
@@ -152,54 +153,47 @@ public:
   static void handle_aio_completion(void *arg1, void *arg2) {
     TestImageWatcher *test_image_watcher =
       reinterpret_cast<TestImageWatcher *>(arg2);
-    Mutex::Locker l(test_image_watcher->m_callback_lock);
+    assert(test_image_watcher->m_callback_lock.is_locked());
     test_image_watcher->m_callback_cond.Signal();
   }
 
-  int handle_restart_aio(librbd::AioCompletion *aio_completion) {
-    {
-      Mutex::Locker l(aio_completion->lock);
-      aio_completion->complete();
+  int handle_restart_aio(librbd::ImageCtx *ictx,
+			 librbd::AioCompletion *aio_completion) {
+    Mutex::Locker l1(m_callback_lock);
+    ++m_aio_completion_restarts;
+
+    RWLock::WLocker l2(ictx->owner_lock);
+    if (!ictx->image_watcher->is_lock_owner() &&
+	m_aio_completion_restarts < m_expected_aio_restarts) {
+      EXPECT_EQ(0, ictx->image_watcher->request_lock(
+        boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
+	aio_completion));
+    } else {
+      {
+	Mutex::Locker l2(aio_completion->lock);
+	aio_completion->complete();
+      }
+
+      m_aio_completions.erase(aio_completion);
+      delete aio_completion;
     }
 
-    Mutex::Locker l(m_callback_lock);
-    m_aio_completions.erase(aio_completion);
-    delete aio_completion;
-    ++m_aio_completion_restarts;
     m_callback_cond.Signal();
     return 0;
   }
 
-  bool wait_for_aio_completions(librbd::ImageCtx &ictx, int result) {
+  bool wait_for_aio_completions(librbd::ImageCtx &ictx) {
     Mutex::Locker l(m_callback_lock);
-    while (!m_aio_completions.empty()) {
-      for (std::set<librbd::AioCompletion *>::iterator iter =
-	     m_aio_completions.begin(); iter != m_aio_completions.end(); ) {
-	std::set<librbd::AioCompletion *>::iterator next(iter);
-	++next;
-
-	librbd::AioCompletion *aio_completion = *iter;
-	if (!aio_completion->building) {
-	  if (result != aio_completion->rval) {
-	    EXPECT_EQ(result, aio_completion->rval);
-	    return false;
-	  }
-	  m_aio_completions.erase(iter);
-	}
-	iter = next;
-      }
-      if (m_aio_completions.empty()) {
-	break;
-      }
-
-      int r = m_callback_cond.WaitInterval(ictx.cct, m_callback_lock,
-                                         utime_t(10, 0));
+    int r = 0;
+    while (!m_aio_completions.empty() &&
+	   m_aio_completion_restarts < m_expected_aio_restarts) {
+      r = m_callback_cond.WaitInterval(ictx.cct, m_callback_lock,
+				       utime_t(10, 0));
       if (r != 0) {
         break;
       }
     }
-    return (m_aio_completions.empty() &&
-	    (result != 0 || m_aio_completion_restarts > 0));
+    return (r == 0);
   }
 
   typedef std::pair<NotifyOp, bufferlist> NotifyOpPayload;
@@ -211,6 +205,7 @@ public:
 
   std::set<librbd::AioCompletion *> m_aio_completions;
   uint32_t m_aio_completion_restarts;
+  uint32_t m_expected_aio_restarts;
 
   Mutex m_callback_lock;
   Cond m_callback_cond;
@@ -405,13 +400,14 @@ TEST_F(TestImageWatcher, RequestLock) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
 
+  m_expected_aio_restarts = 2;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
   }
 
@@ -443,7 +439,7 @@ TEST_F(TestImageWatcher, RequestLock) {
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
-  ASSERT_TRUE(wait_for_aio_completions(*ictx, 0));
+  ASSERT_TRUE(wait_for_aio_completions(*ictx));
 }
 
 TEST_F(TestImageWatcher, RequestLockTimedOut) {
@@ -458,10 +454,11 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
 
+  m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
   }
 
@@ -471,7 +468,7 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
-  ASSERT_TRUE(wait_for_aio_completions(*ictx, 0));
+  ASSERT_TRUE(wait_for_aio_completions(*ictx));
 }
 
 TEST_F(TestImageWatcher, RequestLockTryLockRace) {
@@ -493,10 +490,11 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
 
+  m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
   }
 
@@ -517,7 +515,7 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
     ENCODE_FINISH(bl);
   }
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
-  ASSERT_TRUE(wait_for_aio_completions(*ictx, 0));
+  ASSERT_TRUE(wait_for_aio_completions(*ictx));
   RWLock::RLocker l(ictx->owner_lock);
   ASSERT_FALSE(ictx->image_watcher->is_lock_owner());
 }
@@ -529,13 +527,14 @@ TEST_F(TestImageWatcher, RequestLockPreTryLockFailed) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_SHARED, "manually 1234"));
 
+  m_expected_aio_restarts = 3;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
   }
-  ASSERT_TRUE(wait_for_aio_completions(*ictx, -EROFS));
+  ASSERT_TRUE(wait_for_aio_completions(*ictx));
 }
 
 TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
@@ -557,10 +556,11 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
 
+  m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
-      boost::bind(&TestImageWatcher::handle_restart_aio, this, _1),
+      boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
       create_aio_completion(*ictx)));
   }
 
@@ -584,7 +584,7 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
     ENCODE_FINISH(bl);
   }
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
-  ASSERT_TRUE(wait_for_aio_completions(*ictx, -EROFS));
+  ASSERT_TRUE(wait_for_aio_completions(*ictx));
 }
 
 TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
