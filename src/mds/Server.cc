@@ -3955,7 +3955,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
       pi->add_old_pool(old_pool);
       pi->layout = layout;
       pi->ctime = mdr->get_op_stamp();
-    } else if (name.find("ceph.quota") == 0) {
+    } else {
+      // expect this to be "ceph.quota"
       if (!cur->is_dir() || cur->is_root()) {
         respond_to_request(mdr, -EINVAL);
         return;

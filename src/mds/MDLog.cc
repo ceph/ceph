@@ -184,7 +184,7 @@ class C_ReopenComplete : public MDSInternalContext {
   MDLog *mdlog;
   MDSInternalContextBase *on_complete;
 public:
-  C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog->mds), mdlog(mdlog_), on_complete(on_complete_) {}
+  C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
   void finish(int r) {
     mdlog->append();
     on_complete->complete(r);
