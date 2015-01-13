@@ -307,6 +307,11 @@ COMMAND("fs rm " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"disable the named filesystem", \
 	"fs", "rw", "cli,rest")
+COMMAND("fs reset " \
+	"name=fs_name,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"disaster recovery only: reset to a single-MDS map", \
+	"fs", "rw", "cli,rest")
 COMMAND("fs ls ", \
 	"list filesystems", \
 	"fs", "r", "cli,rest")
