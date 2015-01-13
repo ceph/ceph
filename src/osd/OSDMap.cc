@@ -2477,9 +2477,13 @@ void OSDMap::print_osd_line(int cur, ostream *out, Formatter *f) const
 	   << (exists(cur) ? get_weightf(cur) : 0)
 	   << std::setprecision(p)
 	   << "\t";
+      *out << std::setprecision(4)
+	   << (exists(cur) ? get_primary_affinityf(cur) : 0)
+	   << std::setprecision(p);
     }
     if (f) {
       f->dump_float("reweight", get_weightf(cur));
+      f->dump_float("primary_affinity", get_primary_affinityf(cur));
     }
   }
 }
@@ -2487,7 +2491,7 @@ void OSDMap::print_osd_line(int cur, ostream *out, Formatter *f) const
 void OSDMap::print_tree(ostream *out, Formatter *f) const
 {
   if (out)
-    *out << "# id\tweight\ttype name\tup/down\treweight\n";
+    *out << "# id\tweight\ttype name\tup/down\treweight\tprimary-affinity\n";
   if (f)
     f->open_array_section("nodes");
   set<int> touched;
