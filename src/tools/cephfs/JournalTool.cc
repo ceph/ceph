@@ -605,7 +605,7 @@ int JournalTool::scavenge_dentries(
         << frag_oid.name << " " << cpp_strerror(r) << dendl;
       write_fnode = true;
       // Note: creating the dirfrag *without* a backtrace, relying on
-      // MDS to regenerate backtraces in FSCK
+      // MDS to regenerate backtraces on read or in FSCK
     } else if (r == 0) {
       // Conditionally update existing omap header
       fnode_t old_fnode;
