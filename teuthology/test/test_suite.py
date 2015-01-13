@@ -1,7 +1,7 @@
 from copy import deepcopy
 from datetime import datetime
 
-from mock import patch
+from mock import patch, Mock
 
 from teuthology import suite
 
@@ -23,15 +23,6 @@ class TestSuiteOffline(object):
         name = suite.make_run_name('suite', 'ceph', 'kernel', 'flavor',
                                    'mtype', user='USER')
         assert name.startswith('USER-')
-
-    def test_distro_defaults_saya(self):
-        assert suite.get_distro_defaults('ubuntu', 'saya') == ('armv7l',
-                                                               'saucy', 'deb')
-
-    def test_distro_defaults_plana(self):
-        assert suite.get_distro_defaults('ubuntu', 'plana') == ('x86_64',
-                                                                'precise',
-                                                                'deb')
 
     def test_gitbuilder_url(self):
         ref_url = "http://gitbuilder.ceph.com/ceph-deb-squeeze-x86_64-basic/"
@@ -69,6 +60,76 @@ class TestSuiteOffline(object):
         output_dict = suite.substitute_placeholders(suite.dict_templ,
                                                     input_dict)
         assert 'os_type' not in output_dict
+
+    @patch('teuthology.suite.get_gitbuilder_url')
+    @patch('requests.get')
+    def test_get_hash_success(self, m_get, m_get_gitbuilder_url):
+        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+        mock_resp = Mock()
+        mock_resp.ok = True
+        mock_resp.text = "the_hash"
+        m_get.return_value = mock_resp
+        result = suite.get_hash()
+        m_get.assert_called_with("http://baseurl.com/ref/master/sha1")
+        assert result == "the_hash"
+
+    @patch('teuthology.suite.get_gitbuilder_url')
+    @patch('requests.get')
+    def test_get_hash_fail(self, m_get, m_get_gitbuilder_url):
+        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+        mock_resp = Mock()
+        mock_resp.ok = False
+        m_get.return_value = mock_resp
+        result = suite.get_hash()
+        assert result is None
+
+    @patch('teuthology.suite.get_gitbuilder_url')
+    @patch('requests.get')
+    def test_package_version_for_hash(self, m_get, m_get_gitbuilder_url):
+        m_get_gitbuilder_url.return_value = "http://baseurl.com"
+        mock_resp = Mock()
+        mock_resp.ok = True
+        mock_resp.text = "the_version"
+        m_get.return_value = mock_resp
+        result = suite.package_version_for_hash("hash")
+        m_get.assert_called_with("http://baseurl.com/sha1/hash/version")
+        assert result == "the_version"
+
+    @patch('requests.get')
+    def test_get_branch_info(self, m_get):
+        mock_resp = Mock()
+        mock_resp.ok = True
+        mock_resp.json.return_value = "some json"
+        m_get.return_value = mock_resp
+        result = suite.get_branch_info("teuthology", "master")
+        m_get.assert_called_with(
+            "https://api.github.com/repos/ceph/teuthology/git/refs/heads/master"
+        )
+        assert result == "some json"
+
+    @patch('teuthology.suite.lock')
+    def test_get_arch_fail(self, m_lock):
+        m_lock.list_locks.return_value = False
+        suite.get_arch('magna')
+        m_lock.list_locks.assert_called_with(machine_type="magna", count=1)
+
+    @patch('teuthology.suite.lock')
+    def test_get_arch_success(self, m_lock):
+        m_lock.list_locks.return_value = [{"arch": "arch"}]
+        result = suite.get_arch('magna')
+        m_lock.list_locks.assert_called_with(
+            machine_type="magna",
+            count=1
+        )
+        assert result == "arch"
+
+    def test_combine_path(self):
+        result = suite.combine_path("/path/to/left", "right/side")
+        assert result == "/path/to/left/right/side"
+
+    def test_combine_path_no_right(self):
+        result = suite.combine_path("/path/to/left", None)
+        assert result == "/path/to/left"
 
 
 class TestMissingPackages(object):
@@ -148,3 +209,35 @@ class TestMissingPackages(object):
             "rhel",
         )
         assert not result
+
+
+class TestDistroDefaults(object):
+
+    def test_distro_defaults_saya(self):
+        assert suite.get_distro_defaults('ubuntu', 'saya') == ('armv7l',
+                                                               'saucy', 'deb')
+
+    def test_distro_defaults_plana(self):
+        assert suite.get_distro_defaults('ubuntu', 'plana') == ('x86_64',
+                                                                'precise',
+                                                                'deb')
+
+    def test_distro_defaults_debian(self):
+        assert suite.get_distro_defaults('debian', 'magna') == ('x86_64',
+                                                                'wheezy',
+                                                                'deb')
+
+    def test_distro_defaults_centos(self):
+        assert suite.get_distro_defaults('centos', 'magna') == ('x86_64',
+                                                                'centos6',
+                                                                'rpm')
+
+    def test_distro_defaults_fedora(self):
+        assert suite.get_distro_defaults('fedora', 'magna') == ('x86_64',
+                                                                'fedora20',
+                                                                'rpm')
+
+    def test_distro_defaults_default(self):
+        assert suite.get_distro_defaults('rhel', 'magna') == ('x86_64',
+                                                              'rhel7_0',
+                                                              'rpm')
