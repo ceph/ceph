@@ -175,6 +175,7 @@ TEST(LibRadosAio, TooBig) {
                                          my_completion, buf, UINT_MAX));
   ASSERT_EQ(-E2BIG, rados_aio_append(test_data.m_ioctx, "foo",
                                      my_completion, buf, UINT_MAX));
+  rados_aio_release(my_completion);
 }
 
 TEST(LibRadosAio, TooBigPP) {
@@ -187,6 +188,7 @@ TEST(LibRadosAio, TooBigPP) {
   ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_write("foo", aio_completion, bl, UINT_MAX, 0));
   ASSERT_EQ(-E2BIG, test_data.m_ioctx.aio_append("foo", aio_completion, bl, UINT_MAX));
   // ioctx.aio_write_full no way to overflow bl.length()
+  delete aio_completion;
 }
 
 TEST(LibRadosAio, SimpleWrite) {

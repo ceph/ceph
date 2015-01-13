@@ -668,7 +668,6 @@ librados::NObjectIterator::~NObjectIterator()
 librados::NObjectIterator::NObjectIterator(const NObjectIterator &rhs)
 {
   if (rhs.impl == NULL) {
-    delete impl;
     impl = NULL;
     return;
   }
@@ -4710,7 +4709,6 @@ librados::ListObject::ListObject(librados::ListObjectImpl *i): impl(i)
 librados::ListObject::ListObject(const ListObject& rhs)
 {
   if (rhs.impl == NULL) {
-    delete impl;
     impl = NULL;
     return;
   }

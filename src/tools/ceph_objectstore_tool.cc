@@ -358,11 +358,10 @@ struct action_on_object_t {
 int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
 {
   unsigned LIST_AT_A_TIME = 100;
-  int r;
   ghobject_t next;
   while (!next.is_max()) {
     vector<ghobject_t> list;
-    r = store->collection_list_partial(
+    int r = store->collection_list_partial(
 				       coll,
 				       next,
 				       LIST_AT_A_TIME,
@@ -467,7 +466,7 @@ struct pgid_object_list {
       f->open_array_section("pgid_objects");
     for (list<pair<coll_t, ghobject_t> >::const_iterator i = _objects.begin();
 	 i != _objects.end();
-	 i++) {
+	 ++i) {
       if (i != _objects.begin() && human_readable) {
         f->flush(cout);
         cout << std::endl;
@@ -2415,7 +2414,7 @@ int main(int argc, char **argv)
 	    pgidstr = object_pgidstr;
 	    pgid = object_pgid;
 	  }
-	  i++;
+	  ++i;
 	  v = *i;
 	}
 	try {
