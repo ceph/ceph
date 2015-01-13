@@ -68,7 +68,7 @@ CrushWrapper *build_indep_map(CephContext *cct, int num_rack, int num_host,
   c->set_rule_name(ruleno, "data");
 
   if (false) {
-    Formatter *f = new_formatter("json-pretty");
+    Formatter *f = Formatter::create("json-pretty");
     f->open_object_section("crush_map");
     c->dump(f);
     f->close_section();

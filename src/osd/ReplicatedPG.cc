@@ -603,10 +603,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   string format;
 
   cmd_getval(cct, cmdmap, "format", format);
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
-  // demand that we have a formatter
-  if (!f)
-    f.reset(new_formatter("json"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json"));
 
   string command;
   cmd_getval(cct, cmdmap, "cmd", command);
@@ -12271,7 +12268,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
     dout(30) << "agent_state:\n";
-    Formatter *f = new_formatter("");
+    Formatter *f = Formatter::create("");
     f->open_object_section("agent_state");
     agent_state->dump(f);
     f->close_section();
