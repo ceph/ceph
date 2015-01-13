@@ -3860,7 +3860,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (n == 0 || n > 10) {
+    if (n <= 0 || n > 10) {
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
