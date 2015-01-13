@@ -8,6 +8,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "common/errno.h"
+#include "common/Timer.h"
 #include <sstream>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
@@ -23,6 +24,7 @@ static const std::string WATCHER_LOCK_COOKIE_PREFIX = "auto";
 
 static const uint64_t	NOTIFY_TIMEOUT = 5000;
 static const uint8_t	NOTIFY_VERSION = 1;
+static const double	RETRY_DELAY_SECONDS = 1.0;
 
 enum {
   NOTIFY_OP_ACQUIRED_LOCK = 0,
@@ -50,15 +52,20 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_watch_ctx(*this), m_handle(0),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_finisher(new Finisher(image_ctx.cct)),
+    m_timer_lock("librbd::ImageWatcher::m_timer_lock"),
+    m_timer(new SafeTimer(image_ctx.cct, m_timer_lock)),
     m_watch_lock("librbd::ImageWatcher::m_watch_lock"), m_watch_error(0),
     m_aio_request_lock("librbd::ImageWatcher::m_aio_request_lock"),
-    m_retrying_aio_requests(false)
+    m_retrying_aio_requests(false), m_retry_aio_context(NULL)
 {
   m_finisher->start();
+  m_timer->init();
 }
 
 ImageWatcher::~ImageWatcher()
 {
+  Mutex::Locker l(m_timer_lock);
+  m_timer->shutdown();
   m_finisher->stop();
   delete m_finisher;
 }
@@ -193,12 +200,16 @@ int ImageWatcher::request_lock(
 }
 
 bool ImageWatcher::try_request_lock() {
+  RWLock::WLocker l(m_image_ctx.owner_lock);
+  if (is_lock_owner()) {
+    return true;
+  }
+
   int r = try_lock();
   if (r < 0) {
     ldout(m_image_ctx.cct, 5) << "failed to acquire exclusive lock:"
 			      << cpp_strerror(r) << dendl;
-    cancel_aio_requests(-EROFS);
-    return true;
+    return false;
   }
 
   if (is_lock_owner()) {
@@ -212,11 +223,13 @@ bool ImageWatcher::try_request_lock() {
 }
 
 void ImageWatcher::finalize_request_lock() {
-  {
-    RWLock::WLocker l(m_image_ctx.owner_lock);
-    try_request_lock();
+  cancel_retry_aio_requests();
+
+  if (try_request_lock()) {
+    retry_aio_requests();
+  } else {
+    schedule_retry_aio_requests();
   }
-  retry_aio_requests();
 }
 
 int ImageWatcher::get_lock_owner_info(entity_name_t *locker, std::string *cookie,
@@ -351,6 +364,29 @@ bool ImageWatcher::decode_lock_cookie(const std::string &tag,
   return true;
 }
 
+void ImageWatcher::schedule_retry_aio_requests() {
+  Mutex::Locker l(m_timer_lock);
+  if (m_retry_aio_context == NULL) {
+    m_retry_aio_context = new FunctionContext(boost::bind(
+      &ImageWatcher::finalize_retry_aio_requests, this));
+    m_timer->add_event_after(RETRY_DELAY_SECONDS, m_retry_aio_context);
+  }
+}
+
+void ImageWatcher::cancel_retry_aio_requests() {
+  Mutex::Locker l(m_timer_lock);
+  if (m_retry_aio_context != NULL) {
+    m_timer->cancel_event(m_retry_aio_context);
+    m_retry_aio_context = NULL;
+  }
+}
+
+void ImageWatcher::finalize_retry_aio_requests() {
+  assert(m_timer_lock.is_locked());
+  m_retry_aio_context = NULL;
+  retry_aio_requests();
+}
+
 void ImageWatcher::retry_aio_requests() {
   std::vector<AioRequest> lock_request_restarts;
   {
@@ -372,22 +408,6 @@ void ImageWatcher::retry_aio_requests() {
   m_aio_request_cond.Signal();
 }
 
-void ImageWatcher::cancel_aio_requests(int result) {
-  Mutex::Locker l(m_aio_request_lock);
-  for (std::vector<AioRequest>::iterator iter = m_aio_requests.begin();
-       iter != m_aio_requests.end(); ++iter) {
-    AioCompletion *c = iter->second;
-    c->get();
-    c->lock.Lock();
-    c->rval = result;
-    c->lock.Unlock();
-    c->finish_adding_requests(m_image_ctx.cct);
-    c->put();
-  }
-  m_aio_requests.clear();
-  m_aio_request_cond.Signal();
-}
-
 int ImageWatcher::decode_response_code(bufferlist &bl) {
   int r;
   bufferlist::iterator iter = bl.begin();
@@ -406,13 +426,9 @@ void ImageWatcher::notify_released_lock() {
 }
 
 void ImageWatcher::notify_request_lock() {
-  bool try_lock_complete;
-  {
-    // try to lock now that we know we are not in a rados callback
-    RWLock::WLocker l(m_image_ctx.owner_lock);
-    try_lock_complete = try_request_lock();
-  }
-  if (try_lock_complete) {
+  cancel_retry_aio_requests();
+
+  if (try_request_lock()) {
     retry_aio_requests();
     return;
   }
@@ -430,7 +446,7 @@ void ImageWatcher::notify_request_lock() {
   } else if (r < 0) {
     lderr(m_image_ctx.cct) << "error requesting lock: " << cpp_strerror(r)
 			   << dendl;
-    cancel_aio_requests(-EROFS);
+    schedule_retry_aio_requests();
   }
 }
 
@@ -606,7 +622,7 @@ void ImageWatcher::reregister_watch() {
       if (m_watch_error < 0) {
         lderr(m_image_ctx.cct) << "failed to re-register image watch: "
                                << cpp_strerror(m_watch_error) << dendl;
-        cancel_aio_requests(m_watch_error);
+	schedule_retry_aio_requests();
         return;
       }
     }
@@ -623,6 +639,7 @@ void ImageWatcher::reregister_watch() {
     }
   }
 
+  Mutex::Locker l(m_timer_lock);
   retry_aio_requests();
 }
 

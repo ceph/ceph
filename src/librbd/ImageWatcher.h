@@ -16,6 +16,7 @@
 class entity_name_t;
 class Context;
 class Finisher;
+class SafeTimer;
 
 namespace librbd {
 
@@ -81,6 +82,9 @@ namespace librbd {
 
     Finisher *m_finisher;
 
+    Mutex m_timer_lock;
+    SafeTimer *m_timer;
+
     RWLock m_watch_lock;
     int m_watch_error;
 
@@ -88,6 +92,7 @@ namespace librbd {
     Cond m_aio_request_cond;
     std::vector<AioRequest> m_aio_requests;
     bool m_retrying_aio_requests;
+    Context *m_retry_aio_context;
 
     std::string encode_lock_cookie() const;
     static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
@@ -99,8 +104,10 @@ namespace librbd {
     bool try_request_lock();
     void finalize_request_lock();
 
+    void schedule_retry_aio_requests();
+    void cancel_retry_aio_requests();
+    void finalize_retry_aio_requests();
     void retry_aio_requests();
-    void cancel_aio_requests(int result);
     static int decode_response_code(bufferlist &bl);
 
     void notify_released_lock();
