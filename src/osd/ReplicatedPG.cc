@@ -2067,13 +2067,17 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   }
 
   if (requeue) {
-    for (map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.begin();
-	p != in_progress_proxy_reads.end(); p++) {
+    map<hobject_t, list<OpRequestRef> >::iterator p =
+      in_progress_proxy_reads.begin();
+    while (p != in_progress_proxy_reads.end()) {
       list<OpRequestRef>& ls = p->second;
-      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size() << " requests" << dendl;
+      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size()
+	       << " requests" << dendl;
       requeue_ops(ls);
-      in_progress_proxy_reads.erase(p);
+      in_progress_proxy_reads.erase(p++);
     }
+  } else {
+    in_progress_proxy_reads.clear();
   }
 }
 
