@@ -266,6 +266,7 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
+  bool once_session_reset;
   atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
