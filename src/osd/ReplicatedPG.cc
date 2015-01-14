@@ -9865,7 +9865,9 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     hit_set_clear();
   }
 
-  // we don't trust the object_contexts cache anymore
+  // we don't want to cache object_contexts through the interval change
+  // NOTE: we actually assert that all currently live references are dead
+  // by the time the flush for the next interval completes.
   object_contexts.clear();
 
   // requeue everything in the reverse order they should be
