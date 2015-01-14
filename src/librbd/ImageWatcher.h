@@ -151,7 +151,6 @@ namespace librbd {
     int notify_async_request(uint64_t async_request_id, bufferlist &in,
 			     ProgressContext& prog_ctx);
     void notify_request_leadership();
-    int notify_leader(bufferlist &bl, bufferlist &response);
 
     void handle_header_update();
     void handle_acquired_lock();
