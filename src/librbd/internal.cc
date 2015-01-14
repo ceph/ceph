@@ -16,6 +16,7 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
+#include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 
@@ -2203,6 +2204,8 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
+
+    ictx->wait_for_pending_copyup();
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
@@ -2278,10 +2281,8 @@ reprotect_and_return_err:
     if (ictx->image_watcher != NULL) {
       ictx->image_watcher->flush_aio_operations();
     }
-    if (ictx->cor_completions)
-      ictx->wait_last_completions();//copy-on-read: wait for unfinished AioCompletion requests
-
-    if (ictx->object_cacher)
+    ictx->wait_for_pending_copyup();
+    if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
       flush(ictx);
@@ -3388,6 +3389,7 @@ reprotect_and_return_err:
 
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
     ictx->snap_lock.put_read();
 
     // readahead
@@ -3432,7 +3434,7 @@ reprotect_and_return_err:
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
 	AioRead *req = new AioRead(ictx, q->oid.name, 
 				   q->objectno, q->offset, q->length,
-				   q->buffer_extents,
+				   q->buffer_extents, snapc,
 				   snap_id, true, req_comp, op_flags);
 	req_comp->set_req(req);
 	c->add_request();
