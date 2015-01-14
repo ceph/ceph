@@ -1626,9 +1626,7 @@ public:
 bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
-  Formatter *f = new_formatter(format);
-  if (!f)
-    f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create(format);
   if (command == "status") {
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
@@ -4897,7 +4895,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
   }
 
   cmd_getval(cct, cmdmap, "format", format);
-  f.reset(new_formatter(format));
+  f.reset(Formatter::create(format));
 
   if (prefix == "version") {
     if (f) {
@@ -8220,7 +8218,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   }
 
   lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
-  Formatter *f = new_formatter("json");
+  Formatter *f = Formatter::create("json");
   f->open_object_section("q");
   dump(f);
   f->close_section();

@@ -845,7 +845,7 @@ TEST(CrushWrapper, dump_rules) {
 
   // no ruleset by default
   {
-    Formatter *f = new_formatter("json-pretty");
+    Formatter *f = Formatter::create("json-pretty");
     c->dump_rules(f);
     stringstream ss;
     f->flush(ss);
@@ -859,7 +859,7 @@ TEST(CrushWrapper, dump_rules) {
   EXPECT_EQ(0, ruleset);
 
   {
-    Formatter *f = new_formatter("xml");
+    Formatter *f = Formatter::create("xml");
     c->dump_rules(f);
     stringstream ss;
     f->flush(ss);
@@ -868,7 +868,7 @@ TEST(CrushWrapper, dump_rules) {
   }
 
   {
-    Formatter *f = new_formatter("xml");
+    Formatter *f = Formatter::create("xml");
     c->dump_rule(ruleset, f);
     stringstream ss;
     f->flush(ss);

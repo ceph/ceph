@@ -63,12 +63,12 @@ Formatter::Formatter() { }
 
 Formatter::~Formatter() { }
 
-Formatter *
-new_formatter(const std::string &type)
+Formatter *Formatter::create(const std::string &type,
+			     const std::string& default_type)
 {
   std::string mytype = type;
   if (mytype == "")
-    mytype = "json-pretty";
+    mytype = default_type;
 
   if (mytype == "json")
     return new JSONFormatter(false);
@@ -123,6 +123,8 @@ void JSONFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
+  if (m_pretty)
+    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
@@ -146,7 +148,7 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
     } else {
       m_ss << ",";
     }
-  } else if (entry.is_array && m_pretty) {
+  } else if (m_pretty) {
     m_ss << "\n";
     for (unsigned i = 1; i < m_stack.size(); i++)
       m_ss << "    ";
@@ -173,10 +175,7 @@ void JSONFormatter::print_name(const char *name)
   print_comma(entry);
   if (!entry.is_array) {
     if (m_pretty) {
-      if (entry.size)
-        m_ss << "  ";
-      else
-        m_ss << " ";
+      m_ss << "    ";
     }
     m_ss << "\"" << name << "\"";
     if (m_pretty)
@@ -230,6 +229,11 @@ void JSONFormatter::close_section()
   finish_pending_string();
 
   struct json_formatter_stack_entry_d& entry = m_stack.back();
+  if (m_pretty && entry.size) {
+    m_ss << "\n";
+    for (unsigned i = 1; i < m_stack.size(); i++)
+      m_ss << "    ";
+  }
   m_ss << (entry.is_array ? ']' : '}');
   m_stack.pop_back();
 }
@@ -312,6 +316,8 @@ void XMLFormatter::flush(std::ostream& os)
 {
   finish_pending_string();
   os << m_ss.str();
+  if (m_pretty)
+    os << "\n";
   m_ss.clear();
   m_ss.str("");
 }
