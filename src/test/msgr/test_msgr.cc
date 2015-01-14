@@ -748,7 +748,7 @@ class SyntheticWorkload {
   vector<bufferlist> rand_data;
 
  public:
-  static const unsigned max_in_flight = 512;
+  static const unsigned max_in_flight = 64;
   static const unsigned max_connections = 128;
   static const unsigned max_message_len = 1024 * 1024 * 4;
 
@@ -905,14 +905,14 @@ TEST_P(MessengerTest, SyntheticStressTest) {
     }
     boost::uniform_int<> true_false(0, 99);
     int val = true_false(rng);
-    if (val > 85) {
+    if (val > 90) {
       test_msg.generate_connection();
-    } else if (val > 70) {
+    } else if (val > 80) {
       test_msg.drop_connection();
     } else if (val > 10) {
       test_msg.send_message();
     } else {
-      usleep(rand() % 500 + 100);
+      usleep(rand() % 1000 + 500);
     }
   }
   test_msg.wait_for_done();
@@ -920,7 +920,7 @@ TEST_P(MessengerTest, SyntheticStressTest) {
 
 
 TEST_P(MessengerTest, SyntheticInjectTest) {
-  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "10");
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   SyntheticWorkload test_msg(4, 16, GetParam(), 100);
   for (int i = 0; i < 100; ++i) {
@@ -935,9 +935,9 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
     }
     boost::uniform_int<> true_false(0, 99);
     int val = true_false(rng);
-    if (val > 85) {
+    if (val > 90) {
       test_msg.generate_connection();
-    } else if (val > 70) {
+    } else if (val > 80) {
       test_msg.drop_connection();
     } else if (val > 10) {
       test_msg.send_message();
@@ -1106,6 +1106,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("auth_client_required", "none");
   g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
   g_ceph_context->_conf->set_val("ms_die_on_bad_msg", "true");
+  g_ceph_context->_conf->set_val("ms_max_backoff", "1");
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

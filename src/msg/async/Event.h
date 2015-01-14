@@ -134,6 +134,8 @@ class EventCenter {
     last_time = time(NULL);
   }
   ~EventCenter();
+  ostream& _event_prefix(std::ostream *_dout);
+
   int init(int nevent);
   void set_owner(pthread_t p) { owner = p; }
   pthread_t get_owner() { return owner; }

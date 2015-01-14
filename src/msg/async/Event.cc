@@ -32,7 +32,12 @@
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
-#define dout_prefix *_dout << "Event "
+#define dout_prefix _event_prefix(_dout)
+ostream& EventCenter::_event_prefix(std::ostream *_dout)
+{
+  return *_dout << "Event(" << this << " owner=" << get_owner() << " nevent=" << nevent
+                << " time_id=" << time_event_next_id << ").";
+}
 
 class C_handle_notify : public EventCallback {
  public:
@@ -127,6 +132,10 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
   }
 
   EventCenter::FileEvent *event = _get_file_event(fd);
+  ldout(cct, 20) << __func__ << " create event started fd=" << fd << " mask=" << mask
+                 << " original mask is " << event->mask << dendl;
+  if (event->mask == mask)
+    return 0;
 
   r = driver->add_event(fd, event->mask, mask);
   if (r < 0)
@@ -139,8 +148,8 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
   if (mask & EVENT_WRITABLE) {
     event->write_cb = ctxt;
   }
-  ldout(cct, 10) << __func__ << " create event fd=" << fd << " mask=" << mask
-                 << " now mask is " << event->mask << dendl;
+  ldout(cct, 10) << __func__ << " create event end fd=" << fd << " mask=" << mask
+                 << " original mask is " << event->mask << dendl;
   return 0;
 }
 
@@ -148,6 +157,8 @@ void EventCenter::delete_file_event(int fd, int mask)
 {
   Mutex::Locker l(file_lock);
   EventCenter::FileEvent *event = _get_file_event(fd);
+  ldout(cct, 20) << __func__ << " delete event started fd=" << fd << " mask=" << mask
+                 << " original mask is " << event->mask << dendl;
   if (!event->mask)
     return ;
 
@@ -161,8 +172,8 @@ void EventCenter::delete_file_event(int fd, int mask)
   }
 
   event->mask = event->mask & (~mask);
-  ldout(cct, 10) << __func__ << " delete fd=" << fd << " mask=" << mask
-                 << " now mask is " << event->mask << dendl;
+  ldout(cct, 10) << __func__ << " delete event end fd=" << fd << " mask=" << mask
+                 << " original mask is " << event->mask << dendl;
 }
 
 uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef ctxt)

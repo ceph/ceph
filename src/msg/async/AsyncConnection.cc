@@ -1578,8 +1578,8 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     }
 
     ldout(async_msgr->cct, 0) << __func__ << " accept connect_seq " << connect.connect_seq
-                              << " vs existing " << existing->connect_seq
-                              << " state " << existing->state << dendl;
+                              << " vs existing csq=" << existing->connect_seq << " state="
+                              << get_state_name(existing->state) << dendl;
 
     if (connect.connect_seq == 0 && existing->connect_seq > 0) {
       ldout(async_msgr->cct,0) << __func__ << " accept peer reset, then tried to connect to us, replacing" << dendl;
@@ -1677,7 +1677,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   if (existing->replacing || existing->state == STATE_CLOSED) {
     ldout(async_msgr->cct, 1) << __func__ << " existing racing replace or mark_down happened while replacing."
                               << " state=" << get_state_name(existing->state) << dendl;
-    reply.connect_seq = existing->connect_seq + 1;
+    reply.connect_seq = connect.connect_seq + 1;
     r = _reply_accept(CEPH_MSGR_TAG_RETRY_SESSION, connect, reply, authorizer_reply);
     existing->lock.Unlock();
     if (r < 0)
@@ -1734,7 +1734,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   connect_seq = connect.connect_seq + 1;
   peer_global_seq = connect.global_seq;
   ldout(async_msgr->cct, 10) << __func__ << " accept success, connect_seq = "
-                             << connect_seq << ", sending READY" << dendl;
+                             << connect_seq << " in_seq=" << in_seq << ", sending READY" << dendl;
 
   int next_state;
 

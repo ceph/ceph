@@ -25,7 +25,7 @@
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
-#define dout_prefix *_dout << "net_handler: "
+#define dout_prefix *_dout << "NetHandler "
 
 namespace ceph{
 
@@ -42,7 +42,7 @@ int NetHandler::create_socket(int domain, bool reuse_addr)
    * will be able to close/open sockets a zillion of times */
   if (reuse_addr) {
     if (::setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
-      lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: %s"
+      lderr(cct) << __func__ << " setsockopt SO_REUSEADDR failed: "
                  << strerror(errno) << dendl;
       close(s);
       return -errno;
@@ -60,11 +60,11 @@ int NetHandler::set_nonblock(int sd)
    * Note that fcntl(2) for F_GETFL and F_SETFL can't be
    * interrupted by a signal. */
   if ((flags = fcntl(sd, F_GETFL)) < 0 ) {
-    lderr(cct) << __func__ << " fcntl(F_GETFL) failed: %s" << strerror(errno) << dendl;
+    lderr(cct) << __func__ << " fcntl(F_GETFL) failed: " << strerror(errno) << dendl;
     return -errno;
   }
   if (fcntl(sd, F_SETFL, flags | O_NONBLOCK) < 0) {
-    lderr(cct) << __func__ << " fcntl(F_SETFL,O_NONBLOCK): %s" << strerror(errno) << dendl;
+    lderr(cct) << __func__ << " fcntl(F_SETFL,O_NONBLOCK): " << strerror(errno) << dendl;
     return -errno;
   }
 
@@ -121,7 +121,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     if (errno == EINPROGRESS && nonblock)
       return s;
 
-    lderr(cct) << __func__ << " connect: %s " << strerror(errno) << dendl;
+    lderr(cct) << __func__ << " connect: " << strerror(errno) << dendl;
     close(s);
     return -errno;
   }
