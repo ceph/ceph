@@ -128,17 +128,14 @@ public:
 
   //clear all strong reference from the lru.
   void clear() {
-    VPtr val; // release any ref we have after we drop the lock
-    while (size > 0) {
+    while (true) {
+      VPtr val; // release any ref we have after we drop the lock
       Mutex::Locker l(lock);
-      if (size == 0) //check size again with lock
+      if (size == 0)
         break;
 
-      K key = lru.back().first;
-      if (weak_refs.count(key)) {
-	val = weak_refs[key].first.lock();
-      }
-      lru_remove(key);
+      val = lru.back().second;
+      lru_remove(lru.back().first);
     }
   }
 
