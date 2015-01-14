@@ -389,6 +389,7 @@ public:
       AsyncConnectionRef existing = conns[conn->peer_addr];
 
       // lazy delete, see "deleted_conns"
+      // If conn already in, we will return 0
       Mutex::Locker l(deleted_lock);
       if (deleted_conns.count(existing)) {
         deleted_conns.erase(existing);
