@@ -315,7 +315,7 @@ int EventCenter::process_events(int timeout_microseconds)
       shortest = it->first;
       trigger_time = true;
       if (shortest > now) {
-        period = now - shortest;
+        period = shortest - now;
         period.copy_to_timeval(&tv);
       } else {
         tv.tv_sec = 0;
