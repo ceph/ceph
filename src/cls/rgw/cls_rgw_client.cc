@@ -66,8 +66,11 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
     lock.Unlock();
     return false;
   }
-  // Wait for AIO completion
-  cond.Wait(lock);
+
+  if (completions.empty()) {
+    // Wait for AIO completion
+    cond.Wait(lock);
+  }
 
   // Clear the completed AIOs
   map<int, librados::AioCompletion*>::iterator iter = completions.begin();
