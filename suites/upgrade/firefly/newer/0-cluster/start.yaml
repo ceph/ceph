@@ -4,6 +4,7 @@ overrides:
       - scrub
       - scrub mismatch
       - ScrubResult
+      - osd_map_max_advance
     fs: xfs
     conf:
       osd:
