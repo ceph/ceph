@@ -283,20 +283,27 @@ chance to inspect the system -- both through Teuthology and via extra
 SSH connections -- and the cleanup completes only when you choose so.
 Just exit the interactive Python session to continue the cleanup.
 
-Note that this only catches exceptions *between* the tasks. If a task
-calls multiple subtasks, e.g. with ``contextutil.nested``, those
-cleanups *will* be performed. Later on, we can let tasks communicate
-the subtasks they wish to invoke to the top-level runner, avoiding
-this issue.
-
 Interactive task facilities
 ===========================
 
 The ``interactive`` task presents a prompt for you to interact with the
 teuthology configuration.  The ``ctx`` variable is available to explore,
 and a ``pprint.PrettyPrinter().pprint`` object is added for convenience as
-'pp', so you can do things like pp(dict-of-interest) to see a formatted
+``pp``, so you can do things like pp(dict-of-interest) to see a formatted
 view of the dict.
+
+This is also useful to pause the execution of the test between two tasks,
+either to perform ad hoc operations, or to examine the state of the cluster.
+Hit ``control-D`` to continue when done.
+
+You need to nest ``interactive`` underneath of ``tasks`` in your config. You
+can have has many ``interactive`` tasks as needed in your task list.
+
+An example::
+
+    tasks:
+    - ceph:
+    - interactive:
 
 Test Sandbox Directory
 ======================
