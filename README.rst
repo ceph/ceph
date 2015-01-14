@@ -289,8 +289,21 @@ Interactive task facilities
 The ``interactive`` task presents a prompt for you to interact with the
 teuthology configuration.  The ``ctx`` variable is available to explore,
 and a ``pprint.PrettyPrinter().pprint`` object is added for convenience as
-'pp', so you can do things like pp(dict-of-interest) to see a formatted
+``pp``, so you can do things like pp(dict-of-interest) to see a formatted
 view of the dict.
+
+This is also useful to pause the execution of the test between two tasks,
+either to perform ad hoc operations, or to examine the state of the cluster.
+Hit ``control-D`` to continue when done.
+
+You need to nest ``interactive`` underneath of ``tasks`` in your config. You
+can have has many ``interactive`` tasks as needed in your task list.
+
+An example::
+
+    tasks:
+    - ceph:
+    - interactive:
 
 Test Sandbox Directory
 ======================
