@@ -1998,7 +1998,7 @@ void AsyncConnection::fault()
     return;
   }
 
-  if (state != STATE_CONNECTING) {
+  if (!(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
     // policy maybe empty when state is in accept
     if (policy.server || (state >= STATE_ACCEPTING && state < STATE_ACCEPTING_WAIT_SEQ)) {
       ldout(async_msgr->cct, 0) << __func__ << " server, going to standby" << dendl;
@@ -2017,6 +2017,7 @@ void AsyncConnection::fault()
       if (backoff > async_msgr->cct->_conf->ms_max_backoff)
         backoff.set_from_double(async_msgr->cct->_conf->ms_max_backoff);
     }
+    state = STATE_CONNECTING;
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
   }
 
