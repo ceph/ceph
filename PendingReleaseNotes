@@ -1,40 +1,3 @@
-v0.91
------
-
-* The 'category' field for objects has been removed.  This was originally added
-  to track PG stat summations over different categories of objects for use by
-  radosgw.  It is no longer has any known users and is prone to abuse because it
-  can lead to a pg_stat_t structure that is unbounded.  The librados API calls
-  that accept this field now ignore it, and the OSD no longers tracks the
-  per-category summations.
-
-* The output for 'rados df' has changed.  The 'category' level has been
-  eliminated, so there is now a single stat object per pool.  The structure of
-  the JSON output is different, and the plaintext output has one less column.
-
-* The 'rados create <objectname> [category]' optional category argument is no
-  longer supported or recognized.
-
-* rados.py's Rados class no longer has a __del__ method; it was causing
-  problems on interpreter shutdown and use of threads.  If your code has
-  Rados objects with limited lifetimes and you're concerned about locked
-  resources, call Rados.shutdown() explicitly.
-
-* There is a new version of the librados watch/notify API with vastly
-  improved semantics.  Any applications using this interface are
-  encouraged to migrate to the new API.  The old API calls are marked
-  as deprecated and will eventually be removed.
-
-* The librados rados_unwatch() call used to be safe to call on an
-  invalid handle.  The new version has undefined behavior when passed
-  a bogus value (for example, when rados_watch() returns an error and
-  handle is not defined).
-
-* The structure of the formatted 'pg stat' command is changed for the
-  portion that counts states by name to avoid using the '+' character
-  (which appears in state names) as part of the XML token (it is not
-  legal).
-
 v0.92
 -----
 
@@ -58,3 +21,6 @@ v0.92
   internal values.  Now they are.  Any code that is passing flags to these methods
   should be audited to ensure that they are using the correct LIBRADOS_OP_FLAG_*
   constants.
+
+v0.93
+-----
