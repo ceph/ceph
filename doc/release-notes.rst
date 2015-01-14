@@ -1408,7 +1408,7 @@ Notable Changes
 v0.80.8 Firefly
 ===============
 
-This is a long-awaited bugfix release for firefly.  It several
+This is a long-awaited bugfix release for firefly.  It has several
 imporant (but relatively rare) OSD peering fixes, performance issues
 when snapshots are trimmed, several RGW fixes, a paxos corner case
 fix, and some packaging updates.
