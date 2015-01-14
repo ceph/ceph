@@ -7,7 +7,7 @@
 
 void dump(const SloppyCRCMap& scm)
 {
-  Formatter *f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create("json-pretty");
   f->open_object_section("map");
   scm.dump(f);
   f->close_section();

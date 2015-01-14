@@ -647,7 +647,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = m->get_session();
   if (!session) {
