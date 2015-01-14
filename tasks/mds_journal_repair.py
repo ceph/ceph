@@ -4,6 +4,7 @@ Test our tools for recovering the content of damaged journals
 """
 
 import contextlib
+import json
 import logging
 from textwrap import dedent
 import time
@@ -244,6 +245,96 @@ class TestJournalRepair(CephFSTestCase):
                               reject_fn=lambda v: len(v) > 1)
         self.mount_a.mount()
         self.mount_a.run_shell(["ls", "-R"], wait=True)
+
+    def test_table_tool(self):
+        active_mdss = self.fs.get_active_names()
+        self.assertEqual(len(active_mdss), 1)
+        mds_name = active_mdss[0]
+
+        self.mount_a.run_shell(["touch", "foo"])
+        self.fs.mds_asok(["flush", "journal"], mds_name)
+
+        log.info(self.fs.table_tool(["all", "show", "inode"]))
+        log.info(self.fs.table_tool(["all", "show", "snap"]))
+        log.info(self.fs.table_tool(["all", "show", "session"]))
+
+        # Inode table should always be the same because initial state
+        # and choice of inode are deterministic.
+        # Should see one inode consumed
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "show", "inode"])),
+            {"0": {
+                "data": {
+                    "version": 2,
+                    "inotable": {
+                        "projected_free": [
+                            {"start": 1099511628777,
+                             "len": 1099511626775}],
+                        "free": [
+                            {"start": 1099511628777,
+                             "len": 1099511626775}]}},
+                "result": 0}}
+
+        )
+
+        # Should see one session
+        session_data = json.loads(self.fs.table_tool(
+            ["all", "show", "session"]))
+        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 1)
+        self.assertEqual(session_data["0"]["result"], 0)
+
+        # Should see no snaps
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "show", "snap"])),
+            {"version": 0,
+             "snapserver": {"last_snap": 1,
+                            "pending_noop": [],
+                            "snaps": [],
+                            "need_to_purge": {},
+                            "pending_create": [],
+                            "pending_destroy": []},
+             "result": 0}
+        )
+
+        # Reset everything
+        for table in ["session", "inode", "snap"]:
+            self.fs.table_tool(["all", "reset", table])
+
+        log.info(self.fs.table_tool(["all", "show", "inode"]))
+        log.info(self.fs.table_tool(["all", "show", "snap"]))
+        log.info(self.fs.table_tool(["all", "show", "session"]))
+
+        # Should see 0 sessions
+        session_data = json.loads(self.fs.table_tool(
+            ["all", "show", "session"]))
+        self.assertEqual(len(session_data["0"]["data"]["Sessions"]), 0)
+        self.assertEqual(session_data["0"]["result"], 0)
+
+        # Should see entire inode range now marked free
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "show", "inode"])),
+            {"0": {"data": {"version": 1,
+                            "inotable": {"projected_free": [
+                                {"start": 1099511627776,
+                                 "len": 1099511627776}],
+                                 "free": [
+                                    {"start": 1099511627776,
+                                    "len": 1099511627776}]}},
+                   "result": 0}}
+        )
+
+        # Should see no snaps
+        self.assertEqual(
+            json.loads(self.fs.table_tool(["all", "show", "snap"])),
+            {"version": 1,
+             "snapserver": {"last_snap": 1,
+                            "pending_noop": [],
+                            "snaps": [],
+                            "need_to_purge": {},
+                            "pending_create": [],
+                            "pending_destroy": []},
+             "result": 0}
+        )
 
 
 @contextlib.contextmanager
