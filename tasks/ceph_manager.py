@@ -310,7 +310,7 @@ class Thrasher:
                 self.log("No PGs found for osd.{osd}".format(osd=osd))
                 return
             pg = random.choice(pgs)
-            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").
+            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
                   format(id=osd, pg=pg)
             proc = remote.run(args=cmd)
             if proc.exitstatus:
