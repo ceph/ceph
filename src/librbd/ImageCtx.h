@@ -32,6 +32,7 @@ class PerfCounters;
 namespace librbd {
 
   class ImageWatcher;
+  class CopyupRequest;
 
   struct ImageCtx {
     CephContext *cct;
@@ -74,7 +75,9 @@ namespace librbd {
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
     Mutex aio_lock; // protects pending_aio and pending_aio_cond
-    Mutex cor_lock; //protects cor_completions for copy-on-read
+    Mutex copyup_list_lock; // protects copyup_waiting_list
+
+    Cond copyup_list_cond; // protected by copyup_waiting_list_lock
 
     unsigned extra_read_flags;
 
@@ -98,10 +101,10 @@ namespace librbd {
 
     Readahead readahead;
     uint64_t total_bytes_read;
+    std::map<uint64_t, CopyupRequest*> copyup_list;
 
     Cond pending_aio_cond;
     uint64_t pending_aio;
-    xlist<librados::AioCompletion*> *cor_completions; //copy-on-read AioCompletions
 
     /**
      * Either image_name or image_id must be set.
@@ -167,11 +170,8 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
     void wait_for_pending_aio();
-
-    void add_cor_completion(xlist<librados::AioCompletion*>::item *comp);
-    void wait_last_completions();//wait for uncompleted asynchronous write which is still in xlist
+    void wait_for_pending_copyup();
   };
-  void cor_completion_callback(librados::completion_t aio_completion_impl, void *arg);
 }
 
 #endif
