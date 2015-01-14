@@ -303,9 +303,15 @@ public:
     }
   }
 
+  /**
+   * empty()
+   *
+   * Returns true iff there are no live references left to anything that has been
+   * in the cache.
+   */
   bool empty() {
     Mutex::Locker l(lock);
-    return contents.empty();
+    return weak_refs.empty();
   }
 
   /***
