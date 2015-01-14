@@ -65,12 +65,14 @@ struct OpRequest : public TrackedOp {
   bool need_write_cap();
   bool need_class_read_cap();
   bool need_class_write_cap();
+  bool need_promote();
   void set_read();
   void set_write();
   void set_cache();
   void set_class_read();
   void set_class_write();
   void set_pg_op();
+  void set_promote();
 
   void _dump(utime_t now, Formatter *f) const;
 
