@@ -1553,7 +1553,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
     return;
 
-  if (r) {
+  if (r && (r != -ENOENT || !obc)) {
+    dout(20) << __func__ << "find_object_context got error " << r << dendl;
     osd->reply_op_error(op, r);
     return;
   }
@@ -1713,6 +1714,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     dout(20) << __func__ << " waiting for rw locks " << dendl;
     op->mark_delayed("waiting for rw locks");
     close_op_ctx(ctx, -EBUSY);
+    return;
+  }
+
+  if (r) {
+    dout(20) << __func__ << " returned an error: " << r << dendl;
+    close_op_ctx(ctx, r);
+    osd->reply_op_error(op, r);
     return;
   }
 
