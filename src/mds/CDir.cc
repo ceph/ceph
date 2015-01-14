@@ -793,11 +793,8 @@ void CDir::steal_dentry(CDentry *dn)
       num_head_null++;
     else
       num_snap_null++;
-  } else {
-    if (dn->last == CEPH_NOSNAP)
+  } else if (dn->last == CEPH_NOSNAP) {
       num_head_items++;
-    else
-      num_snap_items++;
 
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
@@ -822,7 +819,8 @@ void CDir::steal_dentry(CDentry *dn)
       else
 	fnode.fragstat.nfiles++;
     }
-  }
+  } else
+      num_snap_items++;
 
   if (dn->auth_pins || dn->nested_auth_pins) {
     // use the helpers here to maintain the auth_pin invariants on the dir inode
