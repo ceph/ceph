@@ -1,3 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2015 Intel Corporation All Rights Reserved
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
 
 #ifdef __KERNEL__
 # include <linux/string.h>
@@ -240,6 +253,45 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 	return bucket->h.items[high];
 }
 
+// compute 2^12*log2(input+1)
+unsigned crush_ln(unsigned xin)
+{
+    unsigned x=xin, x1, result;
+    int iexpon, index1, index2;
+    uint64_t RH, LH, LL, xl64;
+
+    x++;
+
+    // normalize input
+    iexpon = 15;
+    while(!(x&0x18000)) { x<<=1; iexpon--; }
+
+    index1 = (x>>8)<<1;
+    // RH ~ 2^56/index1
+    RH = __RH_LH_tbl[index1 - 256];
+    // LH ~ 2^48 * log2(index1/256)
+    LH = __RH_LH_tbl[index1 + 1 - 256];
+
+    // RH*x ~ 2^48 * (2^15 + xf), xf<2^8
+    xl64 = (int64_t)x * RH;
+    xl64 >>= 48;
+    x1 = xl64;
+
+    result = iexpon << 12;
+
+    index2 = x1 & 0xff;
+    // LL ~ 2^48*log2(1.0+index2/2^15)
+    LL = __LL_tbl[index2];
+
+    LH = LH + LL;
+
+    LH >>= (48-12);
+    result += (unsigned)LH;
+
+    return result;
+}
+
+
 /*
  * straw2
  *
@@ -270,7 +322,7 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 		 * [0, 0xffff] (corresponding to real numbers
 		 * [-11.090355,0]).
 		 */
-		ln = crush_ln_table[u] - 0xfffc;
+		ln = crush_ln(u) - 0xfffc;
 
 		/*
 		 * divide by 16.16 fixed-point weight
