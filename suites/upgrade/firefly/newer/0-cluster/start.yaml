@@ -4,10 +4,11 @@ overrides:
       - scrub
       - scrub mismatch
       - ScrubResult
+      - osd_map_max_advance
     fs: xfs
     conf:
       osd:
-        osd map max advance: 100
+        osd map max advance: 1000
 roles:
 - - mon.a
   - mds.a
