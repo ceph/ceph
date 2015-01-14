@@ -44,7 +44,7 @@ public:
 
   class WatchCtx : public librados::WatchCtx2 {
   public:
-    WatchCtx(TestImageWatcher &parent) : m_parent(parent) {}
+    WatchCtx(TestImageWatcher &parent) : m_parent(parent), m_handle(0) {}
 
     int watch(const librbd::ImageCtx &ictx) {
       m_header_oid = ictx.header_oid;
