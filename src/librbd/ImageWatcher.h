@@ -56,6 +56,8 @@ namespace librbd {
 		     AioCompletion* c);
     int unlock();
 
+    void assert_header_locked(librados::ObjectWriteOperation *op);
+
     int notify_async_progress(const RemoteAsyncRequest &remote_async_request,
 			      uint64_t offset, uint64_t total);
     int notify_async_complete(const RemoteAsyncRequest &remote_async_request,
