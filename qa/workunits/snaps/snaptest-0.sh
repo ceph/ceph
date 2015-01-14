@@ -8,6 +8,7 @@ expect_failure() {
 }
 set -e
 
+ceph mds set allow_new_snaps false
 expect_failure mkdir .snap/foo
 ceph mds set allow_new_snaps true --yes-i-really-mean-it
 
