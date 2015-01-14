@@ -283,12 +283,6 @@ chance to inspect the system -- both through Teuthology and via extra
 SSH connections -- and the cleanup completes only when you choose so.
 Just exit the interactive Python session to continue the cleanup.
 
-Note that this only catches exceptions *between* the tasks. If a task
-calls multiple subtasks, e.g. with ``contextutil.nested``, those
-cleanups *will* be performed. Later on, we can let tasks communicate
-the subtasks they wish to invoke to the top-level runner, avoiding
-this issue.
-
 Interactive task facilities
 ===========================
 
