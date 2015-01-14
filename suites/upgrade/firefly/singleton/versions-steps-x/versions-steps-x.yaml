@@ -36,7 +36,7 @@ tasks:
 - parallel:
    - workload2
    - upgrade-sequence2
-- print: "**** done parallel v0.80.6"
+- print: "**** done parallel v0.80.7"
 - parallel:
    - workload3
    - upgrade-sequence3
@@ -127,12 +127,12 @@ upgrade-sequence2:
    sequential:
    - install.upgrade:
        mon.a:
-         tag: v0.80.6
+         tag: v0.80.7
        mon.b:
-         tag: v0.80.6
+         tag: v0.80.7
        client.1:
-         tag: v0.80.6
-   - print: "**** done v0.80.6 install.upgrade"
+         tag: v0.80.7
+   - print: "**** done v0.80.7 install.upgrade"
    - ceph.restart: [osd.0]
    - sleep:
        duration: 30
