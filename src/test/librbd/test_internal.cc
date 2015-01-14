@@ -222,19 +222,19 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
   int order = ictx->order;
   ASSERT_EQ(0, librbd::clone(m_ioctx, m_image_name.c_str(), "snap1", m_ioctx,
                              clone_name.c_str(), features, &order, 0, 0));
-  BOOST_SCOPE_EXIT( (&m_ioctx) (clone_name) ) {
+
+  TestInternal *parent = this;
+  librbd::ImageCtx *ictx2 = NULL;
+  BOOST_SCOPE_EXIT( (&m_ioctx) (clone_name) (parent) (&ictx2) ) {
+    if (ictx2 != NULL) {
+      parent->close_image(ictx2);
+      parent->unlock_image();
+    }
     librbd::NoOpProgressContext no_op;
     ASSERT_EQ(0, librbd::remove(m_ioctx, clone_name.c_str(), no_op));
   } BOOST_SCOPE_EXIT_END;
 
-  librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-
-  TestInternal *parent = this;
-  BOOST_SCOPE_EXIT( (parent) (ictx2) ) {
-    parent->close_image(ictx2);
-  } BOOST_SCOPE_EXIT_END;
-
   ASSERT_EQ(0, lock_image(*ictx2, LOCK_EXCLUSIVE, "manually locked"));
 
   librbd::NoOpProgressContext no_op;

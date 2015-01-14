@@ -156,6 +156,10 @@ namespace librbd {
 
   void trim_image(ImageCtx *ictx, uint64_t newsize, ProgressContext& prog_ctx)
   {
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
     Mutex my_lock("librbd::trim_image::my_lock");
     Cond cond;
     bool done;
@@ -444,7 +448,7 @@ namespace librbd {
   {
     assert(ictx->owner_lock.is_locked() && !ictx->owner_lock.is_wlocked());
     if (ictx->image_watcher == NULL) {
-      return -EROFS;;
+      return -EROFS;
     } else if (!ictx->image_watcher->is_lock_supported() ||
 	       ictx->image_watcher->is_lock_owner()) {
       return 0;
@@ -475,13 +479,19 @@ namespace librbd {
     if (r < 0)
       return r;
 
-    r = prepare_image_update(ictx);
-    if (r < 0) {
-      return -EROFS;
-    }
-    if (ictx->image_watcher->is_lock_supported() &&
-        !ictx->image_watcher->is_lock_owner()) {
-      return ictx->image_watcher->notify_snap_create(snap_name);
+    while (ictx->image_watcher->is_lock_supported()) {
+      r = prepare_image_update(ictx);
+      if (r < 0) {
+	return -EROFS;
+      } else if (ictx->image_watcher->is_lock_owner()) {
+	break;
+      }
+
+      r = ictx->image_watcher->notify_snap_create(snap_name);
+      if (r != -ETIMEDOUT) {
+	return r;
+      }
+      ldout(ictx->cct, 5) << "snap_create timed out notifying lock owner" << dendl;
     }
 
     RWLock::RLocker l2(ictx->md_lock);
@@ -1442,8 +1452,20 @@ reprotect_and_return_err:
       unknown_format = false;
       id = ictx->id;
 
+      ictx->owner_lock.get_read();
+      if (ictx->image_watcher->is_lock_supported()) {
+        r = prepare_image_update(ictx);
+        if (r < 0 || !ictx->image_watcher->is_lock_owner()) {
+	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+	  ictx->owner_lock.put_read();
+	  close_image(ictx);
+          return -EBUSY;
+        }
+      }
+
       if (ictx->snaps.size()) {
 	lderr(cct) << "image has snapshots - not removing" << dendl;
+	ictx->owner_lock.put_read();
 	close_image(ictx);
 	return -ENOTEMPTY;
       }
@@ -1452,11 +1474,13 @@ reprotect_and_return_err:
       r = io_ctx.list_watchers(header_oid, &watchers);
       if (r < 0) {
         lderr(cct) << "error listing watchers" << dendl;
+	ictx->owner_lock.put_read();
         close_image(ictx);
         return r;
       }
       if (watchers.size() > 1) {
         lderr(cct) << "image has watchers - not removing" << dendl;
+	ictx->owner_lock.put_read();
         close_image(ictx);
         return -EBUSY;
       }
@@ -1475,9 +1499,12 @@ reprotect_and_return_err:
 				   parent_info.spec, id);
       if (r < 0 && r != -ENOENT) {
 	lderr(cct) << "error removing child from children list" << dendl;
+	ictx->owner_lock.put_read();
         close_image(ictx);
 	return r;
       }
+
+      ictx->owner_lock.put_read();
       close_image(ictx);
 
       ldout(cct, 2) << "removing header..." << dendl;
@@ -1531,39 +1558,50 @@ reprotect_and_return_err:
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
 
-    {
-      RWLock::RLocker l(ictx->owner_lock);
-      int r = prepare_image_update(ictx);
-      if (r < 0) {
-	return -EROFS;
+    int r;
+    do {
+      Mutex my_lock("librbd::resize::my_lock");
+      Cond cond;
+      bool done;
+      {
+	RWLock::RLocker l(ictx->owner_lock);
+	while (ictx->image_watcher->is_lock_supported()) {
+	  r = prepare_image_update(ictx);
+	  if (r < 0) {
+	    return -EROFS;
+	  } else if (ictx->image_watcher->is_lock_owner()) {
+	    break;
+	  }
+
+	  r = ictx->image_watcher->notify_resize(size, prog_ctx);
+	  if (r != -ETIMEDOUT && r != -ERESTART) {
+	    return r;
+	  }
+	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner" << dendl;
+	}
+
+	Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+	r = async_resize(ictx, ctx, size, prog_ctx);
+	if (r < 0) {
+	  delete ctx;
+	  return r;
+	}
       }
-      if (ictx->image_watcher->is_lock_supported() &&
-	  !ictx->image_watcher->is_lock_owner()) {
-	return ictx->image_watcher->notify_resize(size, prog_ctx);
+
+      my_lock.Lock();
+      while (!done) {
+	cond.Wait(my_lock);
       }
-    }
+      my_lock.Unlock();
 
-    Mutex my_lock("librbd::resize::my_lock");
-    Cond cond;
-    bool done;
-    int ret;
-    Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &ret);
-
-    ret = async_resize(ictx, ctx, size, prog_ctx);
-    if (ret < 0) {
-      delete ctx;
-      return ret;
-    }
-
-    my_lock.Lock();
-    while (!done) {
-      cond.Wait(my_lock);
-    }
-    my_lock.Unlock();
+      if (r == -ERESTART) {
+	ldout(ictx->cct, 5) << "resize interrupted: restarting" << dendl;
+      }
+    } while (r == -ERESTART);
 
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 2) << "resize finished" << dendl;
-    return ret;
+    return r;
   }
 
   class AsyncResizeFinishContext : public Context {
@@ -1587,6 +1625,10 @@ reprotect_and_return_err:
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx)
   {
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "async_resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
@@ -1602,17 +1644,7 @@ reprotect_and_return_err:
 
     uint64_t original_size;
     {
-      RWLock::RLocker l(ictx->owner_lock);
-      r = prepare_image_update(ictx);
-      if (r < 0) {
-	return -EROFS;
-      }
-      if (ictx->image_watcher->is_lock_supported() &&
-	  !ictx->image_watcher->is_lock_owner()) {
-	return -EROFS;
-      }
-
-      RWLock::RLocker l2(ictx->md_lock);
+      RWLock::RLocker l(ictx->md_lock);
       original_size = ictx->size;
       if (size < ictx->size && ictx->object_cacher) {
         // need to invalidate since we're deleting objects, and
@@ -1658,7 +1690,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-        r = -EROFS;
+        r = -ERESTART;
         return;
       }
 
@@ -1741,7 +1773,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-        return -EROFS;
+        return -ERESTART;
       }
 
       string oid = m_ictx->get_object_name(m_object_no);
@@ -1778,7 +1810,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-	r = -EROFS;
+	r = -ERESTART;
 	return;
       }
 
@@ -2574,7 +2606,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-	return -EROFS;
+	return -ERESTART;
       }
 
       RWLock::RLocker l2(m_ictx->md_lock);
@@ -2647,7 +2679,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-	r = -EROFS;
+	r = -ERESTART;
         return;
       }
 
@@ -2699,43 +2731,58 @@ reprotect_and_return_err:
       return -EROFS;
     }
 
-    {
-      RWLock::RLocker l(ictx->owner_lock);
-      int r = prepare_image_update(ictx);
-      if (r < 0) {
-        return -EROFS;
+    int r;
+    do {
+      Mutex my_lock("librbd::flatten:my_lock");
+      Cond cond;
+      bool done;
+      {
+        RWLock::RLocker l(ictx->owner_lock);
+        while (ictx->image_watcher->is_lock_supported()) {
+          r = prepare_image_update(ictx);
+          if (r < 0) {
+            return -EROFS;
+          } else if (ictx->image_watcher->is_lock_owner()) {
+	    break;
+	  }
+
+          r = ictx->image_watcher->notify_flatten(prog_ctx);
+          if (r != -ETIMEDOUT && r != -ERESTART) {
+            return r;
+          }
+          ldout(ictx->cct, 5) << "flatten timed out notifying lock owner" << dendl;
+        }
+
+        Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+        r = async_flatten(ictx, ctx, prog_ctx);
+        if (r < 0) {
+	  delete ctx;
+	  return r;
+        }
       }
-      if (ictx->image_watcher->is_lock_supported() &&
-          !ictx->image_watcher->is_lock_owner()) {
-        return ictx->image_watcher->notify_flatten(prog_ctx);
+
+      my_lock.Lock();
+      while (!done) {
+        cond.Wait(my_lock);
       }
-    }
+      my_lock.Unlock();
 
-    Mutex my_lock("librbd::flatten:my_lock");
-    Cond cond;
-    bool done;
-    int ret;
-    Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &ret);
-
-    ret = async_flatten(ictx, ctx, prog_ctx);
-    if (ret < 0) {
-      delete ctx;
-      return ret;
-    }
-
-    my_lock.Lock();
-    while (!done) {
-      cond.Wait(my_lock);
-    }
-    my_lock.Unlock();
+      if (r == -ERESTART) {
+	ldout(ictx->cct, 5) << "flatten interrupted: restarting" << dendl;
+      }
+    } while (r == -ERESTART);
 
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 20) << "flatten finished" << dendl;
-    return ret;
+    return r;
   }
 
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx)
   {
+    assert(ictx->owner_lock.is_locked());
+    assert(!ictx->image_watcher->is_lock_supported() ||
+	   ictx->image_watcher->is_lock_owner());
+
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flatten" << dendl;
 
@@ -2777,19 +2824,6 @@ reprotect_and_return_err:
       object_size = ictx->get_object_size();
       overlap = ictx->parent_md.overlap;
       overlap_objects = Striper::get_num_objects(ictx->layout, overlap); 
-    }
-
-    {
-      RWLock::RLocker l(ictx->owner_lock);
-      r = prepare_image_update(ictx);
-      if (r < 0) {
-	return -EROFS;
-      }
-      if (ictx->image_watcher->is_lock_supported() &&
-	  !ictx->image_watcher->is_lock_owner()) {
-	// TODO: temporary until request proxied to lock owner
-	return -EROFS;
-      }
     }
 
     AsyncObjectThrottle::ContextFactory context_factory(
