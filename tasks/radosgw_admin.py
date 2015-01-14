@@ -18,6 +18,8 @@ import boto.exception
 import boto.s3.connection
 import boto.s3.acl
 
+import httplib2
+
 import util.rgw as rgw_utils
 
 from teuthology import misc as teuthology
@@ -34,6 +36,21 @@ def successful_ops(out):
     entry = summary[0]
     return entry['total']['successful_ops']
 
+
+def create_presigned_url(conn, method, bucket_name, key_name, expiration):
+    return conn.generate_url(expires_in=expiration,
+        method=method,
+        bucket=bucket_name,
+        key=key_name,
+        query_auth=True,
+    )
+
+def send_raw_http_request(conn, method, bucket_name, key_name, follow_redirects = False):
+    url = create_presigned_url(conn, method, bucket_name, key_name, 3600)
+    print url
+    h = httplib2.Http()
+    h.follow_redirects = follow_redirects
+    return h.request(url, method)
 
 def task(ctx, config):
     """
@@ -266,26 +283,20 @@ def task(ctx, config):
             # Attempt to create a new connection with user1 to the destination RGW
             log.debug('Attempt to create a new connection with user1 to the destination RGW')
             # and use that to attempt a delete (that should fail)
-            exception_encountered = False
-            try:
-                (dest_remote_host, dest_remote_port) = ctx.rgw.role_endpoints[dest_client]
-                connection_dest = boto.s3.connection.S3Connection(
-                    aws_access_key_id=access_key,
-                    aws_secret_access_key=secret_key,
-                    is_secure=False,
-                    port=dest_remote_port,
-                    host=dest_remote_host,
-                    calling_format=boto.s3.connection.OrdinaryCallingFormat(),
-                    )
 
-                # this should fail
-                connection_dest.delete_bucket(bucket_name2)
-            except boto.exception.S3ResponseError as e:
-                assert e.status == 301
-                exception_encountered = True
+            (dest_remote_host, dest_remote_port) = ctx.rgw.role_endpoints[dest_client]
+            connection_dest = boto.s3.connection.S3Connection(
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                is_secure=False,
+                port=dest_remote_port,
+                host=dest_remote_host,
+                calling_format=boto.s3.connection.OrdinaryCallingFormat(),
+                )
 
-            # confirm that the expected exception was seen
-            assert exception_encountered
+            # this should fail
+            r, content = send_raw_http_request(connection_dest, 'DELETE', bucket_name2, '', follow_redirects = False)
+            assert r.status == 301
 
             # now delete the bucket on the source RGW and do another sync
             log.debug('now delete the bucket on the source RGW and do another sync')
