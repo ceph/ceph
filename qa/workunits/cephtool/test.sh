@@ -719,6 +719,8 @@ function test_mon_mds()
   # Check that 'fs reset' runs
   ceph fs reset cephfs --yes-i-really-mean-it
 
+  fail_all_mds
+
   # Clean up to enable subsequent newfs tests
   ceph fs rm cephfs --yes-i-really-mean-it
 
