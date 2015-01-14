@@ -47,7 +47,8 @@ namespace librbd {
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       aio_lock("librbd::ImageCtx::aio_lock"),
-      cor_lock("librbd::ImageCtx::cor_lock"),
+      copyup_list_lock("librbd::ImageCtx::copyup_list_lock"),
+      copyup_list_cond(),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -102,7 +103,6 @@ namespace librbd {
       object_set->return_enoent = true;
       object_cacher->start();
     }
-    cor_completions = new xlist<librados::AioCompletion*>();
   }
 
   ImageCtx::~ImageCtx() {
@@ -118,10 +118,6 @@ namespace librbd {
     if (object_set) {
       delete object_set;
       object_set = NULL;
-    }
-    if (cor_completions) {
-      delete cor_completions;
-      cor_completions = NULL;
     }
     delete[] format_string;
   }
@@ -669,67 +665,12 @@ namespace librbd {
       pending_aio_cond.Wait(aio_lock);
     }
   }
- }
 
-  void ImageCtx::add_cor_completion(xlist<librados::AioCompletion*>::item *comp)
-  {
-    if(!comp)
-      return;
-
-    cor_lock.Lock();
-    cor_completions->push_back(comp);
-    cor_lock.Unlock();
-
-    ldout(cct, 10) << "add_cor_completion:: size = "<< cor_completions->size() << dendl;
-  }
-
-  void ImageCtx::wait_last_completions()
-  {
-    ldout(cct, 10) << "wait_last_completions:: cor_completions = " << cor_completions  << " size = " << cor_completions->size()  << dendl;
-    xlist<librados::AioCompletion*>::iterator itr;
-    xlist<librados::AioCompletion*>::item *ptr;
-
-    while (!cor_completions->empty()){
-      cor_lock.Lock();
-      librados::AioCompletion *comp = cor_completions->front();
-      comp->wait_for_complete();
-      itr = cor_completions->begin();
-      ptr = itr.get_cur();
-      cor_completions->pop_front();
-      delete ptr;
-      ptr = NULL;
-      cor_lock.Unlock();
+  void ImageCtx::wait_for_pending_copyup() {
+    Mutex::Locker l(copyup_list_lock);
+    while (!copyup_list.empty()) {
+      ldout(cct, 20) << __func__ << " waiting CopyupRequest to be completed" << dendl;
+      copyup_list_cond.Wait(copyup_list_lock);
     }
-    ldout(cct, 10) << "wait_last_completions:: after clear cor_completions = " << cor_completions  << " size = " << cor_completions->size() << dendl;
   }
-
-  void cor_completion_callback(librados::completion_t aio_completion_impl, void *arg)
-  {
-    librbd::ImageCtx * ictx = (librbd::ImageCtx *)arg;
-
-    ictx->cor_lock.Lock();
-    xlist<librados::AioCompletion*> *completions = ictx->cor_completions; 
-    ictx->cor_lock.Unlock();
-
-    ldout(ictx->cct, 10) << "cor_completion_callback:: cor_completions = " << completions << " size = "<< completions->size() << dendl;
-    if (!completions) 
-      return;
-
-    //find current AioCompletion item in xlist, and remove it
-    for (xlist<librados::AioCompletion*>::iterator itr = completions->begin(); !(itr.end()); ++itr) {
-       if (aio_completion_impl == (*itr)->pc){
-         xlist<librados::AioCompletion*>::item *ptr = itr.get_cur();
-
-         ictx->cor_lock.Lock();
-         completions->remove(ptr);
-         ictx->cor_lock.Unlock();
-
-         delete ptr;//delete xlist<librados::AioCompletion*>::item *
-         ptr = NULL;
-         break;
-       }
-    }
-    ldout(ictx->cct, 10) << "cor_completion_callback:: after remove item, size = " << completions->size() << dendl;
-  }
-
 }
