@@ -33,6 +33,7 @@ def nested(*managers):
         exc = sys.exc_info()
         # FIXME this needs to be more generic
         if config.ctx and config.ctx.config.get('interactive-on-error'):
+            config.ctx.config['interactive-on-error'] = False
             from .task import interactive
             log.warning('Saw failure, going into interactive mode...')
             interactive.task(ctx=config.ctx, config=None)
