@@ -421,6 +421,11 @@ void ImageWatcher::finalize_header_update() {
 			&m_image_ctx);
 }
 
+void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
+  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
+                                  encode_lock_cookie(), WATCHER_LOCK_TAG);
+}
+
 int ImageWatcher::notify_async_progress(const RemoteAsyncRequest &request,
 					uint64_t offset, uint64_t total) {
   ldout(m_image_ctx.cct, 20) << "remote async request progress: "
@@ -508,6 +513,7 @@ void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 }
 
 std::string ImageWatcher::encode_lock_cookie() const {
+  RWLock::RLocker l(m_watch_lock);
   std::ostringstream ss;
   ss << WATCHER_LOCK_COOKIE_PREFIX << " " << m_handle;
   return ss.str();

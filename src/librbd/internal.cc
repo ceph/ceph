@@ -1671,8 +1671,12 @@ reprotect_and_return_err:
 	bl.append((const char *)&m_ictx->header, sizeof(m_ictx->header));
 	r = m_ictx->md_ctx.write(m_ictx->header_oid, bl, bl.length(), 0);
       } else {
-	r = cls_client::set_size(&m_ictx->md_ctx, m_ictx->header_oid,
-				 m_new_size);
+	librados::ObjectWriteOperation op;
+        if (m_ictx->image_watcher->is_lock_supported()) {
+	  m_ictx->image_watcher->assert_header_locked(&op);
+        }
+	cls_client::set_size(&op, m_new_size);
+	r = m_ictx->md_ctx.operate(m_ictx->header_oid, &op);
       }
 
       if (r < 0) {
@@ -1891,6 +1895,7 @@ reprotect_and_return_err:
 
   int add_snap(ImageCtx *ictx, const char *snap_name)
   {
+    assert(ictx->owner_lock.is_locked());
     uint64_t snap_id;
 
     int r = ictx->md_ctx.selfmanaged_snap_create(&snap_id);
@@ -1904,13 +1909,18 @@ reprotect_and_return_err:
       r = cls_client::old_snapshot_add(&ictx->md_ctx, ictx->header_oid,
 				       snap_id, snap_name);
     } else {
-      r = cls_client::snapshot_add(&ictx->md_ctx, ictx->header_oid,
-				   snap_id, snap_name);
+      librados::ObjectWriteOperation op;
+      if (ictx->image_watcher->is_lock_supported()) {
+	ictx->image_watcher->assert_header_locked(&op);
+      }
+      cls_client::snapshot_add(&op, snap_id, snap_name);
+      r = ictx->md_ctx.operate(ictx->header_oid, &op);
     }
 
     if (r < 0) {
       lderr(ictx->cct) << "adding snapshot to header failed: "
 		       << cpp_strerror(r) << dendl;
+      ictx->data_ctx.selfmanaged_snap_remove(snap_id);
       return r;
     }
 
@@ -2642,7 +2652,12 @@ reprotect_and_return_err:
       }
 
       // remove parent from this (base) image
-      r = cls_client::remove_parent(&m_ictx->md_ctx, m_ictx->header_oid);
+      librados::ObjectWriteOperation op;
+      if (m_ictx->image_watcher->is_lock_supported()) {
+	m_ictx->image_watcher->assert_header_locked(&op);
+      }
+      cls_client::remove_parent(&op);
+      r = m_ictx->md_ctx.operate(m_ictx->header_oid, &op);
       if (r < 0) {
         lderr(cct) << "error removing parent" << dendl;
         return;
