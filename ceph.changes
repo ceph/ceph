@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan 14 10:03:14 UTC 2015 - lmb@suse.com
+
+- ceph-devel should not require libcephfs_jni1 if the Java code is
+  disabled
+
+-------------------------------------------------------------------
 Sat Jan 10 23:27:55 UTC 2015 - tbehrens@suse.com
 
 - add basic config to ceph-radosgw package. this fixes bnc#905062
