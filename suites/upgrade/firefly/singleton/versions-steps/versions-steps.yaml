@@ -235,7 +235,7 @@ workload_firefly:
        client.0:
          force-branch: firefly-original
          rgw_server: client.0
-  - print: "**** done s3tests workload_firefly"
+   - print: "**** done s3tests workload_firefly"
 upgrade-sequence_firefly:
    sequential:
    - install.upgrade:
