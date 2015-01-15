@@ -199,7 +199,8 @@ def get_ceph_binary_url(package=None,
     """
     return the url of the ceph binary found on gitbuildder.
     """
-    BASE = 'http://gitbuilder.ceph.com/{package}-{format}-{dist}-{arch}-{flavor}/'.format(
+    BASE = 'http://{host}/{package}-{format}-{dist}-{arch}-{flavor}/'.format(
+        host=config.gitbuilder_host,
         package=package,
         flavor=flavor,
         arch=arch,
