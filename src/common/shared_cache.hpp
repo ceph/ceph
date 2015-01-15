@@ -227,25 +227,14 @@ public:
     return true;
   }
   bool get_next(const K &key, pair<K, V> *next) {
-    pair<K, V> r;
-    {
-      Mutex::Locker l(lock);
-      VPtr next_val;
-      typename map<K, pair<WeakVPtr, V*> >::iterator i = weak_refs.upper_bound(key);
-
-      while (i != weak_refs.end() &&
-	     !(next_val = i->second.first.lock()))
-	++i;
-
-      if (i == weak_refs.end())
-	return false;
-
-      if (next)
-	r = make_pair(i->first, *next_val);
-    }
-    if (next)
-      *next = r;
-    return true;
+    pair<K, VPtr> r;
+    bool found = get_next(key, &r);
+    if (!found || !next)
+      return found;
+    next->first = r.first;
+    assert(r.second);
+    next->second = *(r.second);
+    return found;
   }
 
   VPtr lookup(const K& key) {
