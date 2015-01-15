@@ -510,40 +510,10 @@ int main(int argc, const char **argv)
   }
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
-
-  Monitor::StoreConverter converter(g_conf->mon_data, store);
-  if (store->open(std::cerr) < 0) {
-    int needs_conversion = converter.needs_conversion();
-    if (needs_conversion < 0) {
-      if (needs_conversion == -ENOENT) {
-        derr << "monitor data directory at '" << g_conf->mon_data
-             << "' is not empty but has no valid store nor legacy monitor"
-             << " store." << dendl;
-      } else {
-        derr << "found errors while validating legacy unconverted"
-             << " monitor store: " << cpp_strerror(needs_conversion) << dendl;
-      }
-      prefork.exit(1);
-    }
-
-    int ret = store->create_and_open(std::cerr);
-    if (ret < 0) {
-      derr << "failed to create new leveldb store" << dendl;
-      prefork.exit(1);
-    }
-
-    if (needs_conversion > 0) {
-      dout(0) << "converting monitor store, please do not interrupt..." << dendl;
-      int r = converter.convert();
-      if (r) {
-	derr << "failed to convert monitor store: " << cpp_strerror(r) << dendl;
-	prefork.exit(1);
-      }
-    }
-  } else if (converter.is_converting()) {
-    derr << "there is an on-going (maybe aborted?) conversion." << dendl;
-    derr << "you should check what happened" << dendl;
-    derr << "remove store.db to restart conversion" << dendl;
+  err = store->open(std::cerr);
+  if (err < 0) {
+    derr << "error opening mon data directory at '"
+         << g_conf->mon_data << "': " << cpp_strerror(err) << dendl;
     prefork.exit(1);
   }
 
