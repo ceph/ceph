@@ -46,6 +46,8 @@
 
 	osd map max advance = 10
 
+        journal zero on create = true
+
 	filestore ondisk finisher threads = 3
 	filestore apply finisher threads = 3
 
