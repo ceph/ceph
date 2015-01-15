@@ -579,22 +579,6 @@ int JournalTool::scavenge_dentries(
 
     dout(4) << "inspecting lump " << frag_oid.name << dendl;
 
-    // Check for presence of dirfrag object
-    uint64_t psize;
-    time_t pmtime;
-    r = io.stat(frag_oid.name, &psize, &pmtime);
-    if (r == -ENOENT) {
-      dout(4) << ": Frag object " << frag_oid.name
-              << " did not exist, will create" << dendl;
-    } else if (r != 0) {
-      derr << "Unexpected error stat'ing frag " << frag_oid.name
-           << ": " << cpp_strerror(r) << dendl;
-      return r;
-    } else {
-      dout(4) << "Frag object " << frag_oid.name
-              << " exists, will modify" << dendl;
-    }
-
     // Update fnode in omap header of dirfrag object
     bool write_fnode = false;
     bufferlist old_fnode_bl;
@@ -639,7 +623,9 @@ int JournalTool::scavenge_dentries(
       }
     }
 
-    // Try to get the existing dentry
+    std::set<std::string> read_keys;
+
+    // Compose list of existing dentries we would like to fetch
     list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
       lump.get_dfull();
     for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
@@ -650,29 +636,39 @@ int JournalTool::scavenge_dentries(
       std::string key;
       dentry_key_t dn_key(fb.dnlast, fb.dn.c_str());
       dn_key.encode(key);
+      read_keys.insert(key);
+    }
 
-      // See if the dentry is present
-      std::set<std::string> keys;
-      keys.insert(key);
-      std::map<std::string, bufferlist> vals;
-      r = io.omap_get_vals_by_keys(frag_oid.name, keys, &vals);
-      if (r != 0) {
-        derr << "unexpected error reading fragment object "
-             << frag_oid.name << ": " << cpp_strerror(r) << dendl;
-        return r;
-      }
-    
+    // Perform bulk read of existing dentries
+    std::map<std::string, bufferlist> read_vals;
+    r = io.omap_get_vals_by_keys(frag_oid.name, read_keys, &read_vals);
+    if (r != 0) {
+      derr << "unexpected error reading fragment object "
+           << frag_oid.name << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    // Compose list of dentries we will write back
+    std::map<std::string, bufferlist> write_vals;
+    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+        fb_list.begin(); fbi != fb_list.end(); ++fbi) {
+      EMetaBlob::fullbit const &fb = *(*fbi);
+
+      // Get a key like "foobar_head"
+      std::string key;
+      dentry_key_t dn_key(fb.dnlast, fb.dn.c_str());
+      dn_key.encode(key);
+
       dout(4) << "inspecting fullbit " << frag_oid.name << "/" << fb.dn
         << dendl;
       bool write_dentry = false;
-      if (vals.find(key) == vals.end()) {
+      if (read_vals.find(key) == read_vals.end()) {
         dout(4) << "dentry did not already exist, will create" << dendl;
         write_dentry = true;
       } else {
         dout(4) << "dentry " << key << " existed already" << dendl;
-        assert(vals.size() == 1);
         dout(4) << "dentry exists, checking versions..." << dendl;
-        bufferlist &old_dentry = vals[key];
+        bufferlist &old_dentry = read_vals[key];
         // Decode dentry+inode
         bufferlist::iterator q = old_dentry.begin();
 
@@ -713,17 +709,20 @@ int JournalTool::scavenge_dentries(
         ::encode('I', dentry_bl);
         encode_fullbit_as_inode(fb, true, &dentry_bl);
 
-        // Write to RADOS
-        vals[key] = dentry_bl;
-        r = io.omap_set(frag_oid.name, vals);
-        if (r != 0) {
-          dout(0) << "error writing dentry " << key
-                  << " into object " << frag_oid.name << dendl;
-          return r;
-        }
-
+        // Record for writing to RADOS
+        write_vals[key] = dentry_bl;
         consumed_inos->insert(fb.inode.ino);
       }
+    }
+
+    // Write back any new/changed dentries
+    if (!write_vals.empty()) {
+        r = io.omap_set(frag_oid.name, write_vals);
+        if (r != 0) {
+          derr << "error writing dentries to " << frag_oid.name
+              << ": " << cpp_strerror(r) << dendl;
+          return r;
+        }
     }
   }
 
