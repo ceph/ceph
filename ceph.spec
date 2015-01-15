@@ -132,6 +132,7 @@ Patch0019:      0019-Fix-spec-violating-extraneous-unloc.patch
 Patch0020:      0020-Fix-overflowing-journel-partitions.patch
 Patch0021:      0021-Unconditionally-chown-rados-log-fil.patch
 Patch0022:      0022-ceph-osd-prestart.sh-check-OSD-exis.patch
+Patch0023:      0023-Fixes-to-rcceph-script.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -389,6 +390,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0020 -p1
 %patch0021 -p1
 %patch0022 -p1
+%patch0023 -p1
 
 %build
 

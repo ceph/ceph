@@ -1,0 +1,106 @@
+From: Owen Synge <osynge@suse.com>
+Date: Mon, 12 Jan 2015 14:35:41 +0100
+Subject: [PATCH] Fixes to rcceph script
+
+- Fixes only starting OSD's if mon daemons are also present.
+- Adds support for mask and unmask
+- Removes support for cluster with non default cluster name
+  As this was very limited and inconsistent.
+
+Signed-off-by: Owen Synge <osynge@suse.com>
+
+(cherry picked from commit 2a2636e0f89b893e0c3269216aee4b426f30e513)
+---
+ systemd/ceph | 69 ++++++++++++++++++++++++++++++------------------------------
+ 1 file changed, 34 insertions(+), 35 deletions(-)
+
+diff --git a/systemd/ceph b/systemd/ceph
+index e60dec6..251b4a0 100644
+--- a/systemd/ceph
++++ b/systemd/ceph
+@@ -16,51 +16,50 @@ SYSTEMD_NO_WRAP=1 . /etc/rc.status
+ rc_reset
+ 
+ action=$1 ; shift
++
++# default cluster name to "ceph"
+ cluster="ceph"
+-config=$1 ; shift
+ 
+ # Shared variables by many actions
+ dir_mon="/var/lib/ceph/mon/"
+ dir_osd="/var/lib/ceph/osd/"
+ if test -d ${dir_mon} ; then
+-lmon=`ls ${dir_mon} | grep ${cluster}`
++    lmon=`ls ${dir_mon} | grep ${cluster}`
+ fi
+ if test -d ${dir_osd} ; then
+-losd=`ls ${dir_osd} | grep ${cluster}`
++    losd=`ls ${dir_osd} | grep ${cluster}`
+ fi
+ prefix="${cluster}-"
+ 
+-if test -n "$config" ; then
+-	systemctl "${action}" "ceph-mon@${config}.service"
+-else
+-	case $action in
+-    start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed  )
+-        n=0
+-        if test -n ${lmon} ; then
+-            for s in ${lmon#=${prefix}} ; do
+-                systemctl "${action}" ceph-mon@${s#$prefix}.service
+-                rc_check
+-                ((++n))
+-            done
+-        fi
+-        if test -n ${lmon} ; then
+-            for s in ${losd#=${prefix}} ; do
+-                systemctl "${action}" ceph-osd@${s#$prefix}.service
+-                rc_check
+-                ((++n))
+-            done
+-        fi
+-        if test $n -gt 0 ; then
+-			rc_status
+-		else
+-			rc_status -u
+-		fi
+-    ;;
+-	*)
+-		echo "Invalid paramter : $action"
+-        echo "Valid paramters  : start | stop | status | enable | disable | restart | is-active | is-failed | show | kill | reset-failed"
+-	;;
+-	esac
+-fi
++case $action in start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed  )
++    n=0
++    if test -n ${lmon} ; then
++        for s in ${lmon#=${prefix}} ; do
++            systemctl "${action}" ceph-mon@${s#$prefix}.service
++            rc_check
++            ((++n))
++        done
++    fi
++    if test -n ${losd} ; then
++        for s in ${losd#=${prefix}} ; do
++            systemctl "${action}" ceph-osd@${s#$prefix}.service
++            rc_check
++            ((++n))
++        done
++    fi
++    if test $n -gt 0 ; then
++        rc_status
++    else
++        rc_status -u
++    fi
++    systemctl "${action}" ceph.target
++    rc_check
++;;
++*)
++    echo "Invalid paramter : $action"
++    echo "Valid paramters  : start | stop | status | enable | disable | mask | unmask | restart | is-active | is-failed | show | kill | reset-failed"
++;;
++esac
++
+ rc_exit
+ 
