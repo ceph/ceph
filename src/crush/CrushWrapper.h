@@ -1022,11 +1022,11 @@ public:
   }
 
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight) const {
+	       const vector<__u32>& weight, int seed) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
     int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch, seed);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);

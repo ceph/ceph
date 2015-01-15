@@ -149,7 +149,7 @@ TEST(ErasureCodeTest, create_ruleset)
   int rule = c->get_rule_id(rule_name);
   vector<int> out;
   unsigned int n = racks * hosts;
-  c->do_rule(rule, 1, out, n, weight);
+  c->do_rule(rule, 1, out, n, weight, 1);
   EXPECT_EQ(n, out.size());
   //
   // check that the first five are in the same rack and the next five

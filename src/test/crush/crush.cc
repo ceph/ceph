@@ -100,7 +100,7 @@ TEST(CRUSH, indep_toosmall) {
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    c->do_rule(0, x, out, 5, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -120,7 +120,7 @@ TEST(CRUSH, indep_basic) {
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    c->do_rule(0, x, out, 5, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -147,7 +147,7 @@ TEST(CRUSH, indep_out_alt) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 9, weight);
+    c->do_rule(0, x, out, 9, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -173,7 +173,7 @@ TEST(CRUSH, indep_out_contig) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 7, weight);
+    c->do_rule(0, x, out, 7, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -201,7 +201,7 @@ TEST(CRUSH, indep_out_progressive) {
     vector<int> prev;
     for (unsigned i=0; i<weight.size(); ++i) {
       vector<int> out;
-      c->do_rule(0, x, out, 7, weight);
+      c->do_rule(0, x, out, 7, weight, 1);
       cout << "(" << i << "/" << weight.size() << " out) "
 	   << x << " -> " << out << std::endl;
       int num_none = 0;
@@ -294,9 +294,9 @@ TEST(CRUSH, straw_zero) {
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight);
+    c->do_rule(ruleset0, i, out0, 1, reweight, 1);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight);
+    c->do_rule(ruleset1, i, out1, 1, reweight, 1);
     ASSERT_EQ(1u, out1.size());
     ASSERT_EQ(out0[0], out1[0]);
     //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
@@ -388,9 +388,9 @@ TEST(CRUSH, straw_same) {
   int max = 100000;
   for (int i=0; i<max; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight);
+    c->do_rule(ruleset0, i, out0, 1, reweight, 1);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight);
+    c->do_rule(ruleset1, i, out1, 1, reweight, 1);
     ASSERT_EQ(1u, out1.size());
     sum0[out0[0]]++;
     sum1[out1[0]]++;
@@ -454,7 +454,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out;
-    c->do_rule(ruleset0, i, out, 1, reweight);
+    c->do_rule(ruleset0, i, out, 1, reweight, 1);
     sum[out[0]]++;
   }
 
@@ -594,10 +594,10 @@ TEST(CRUSH, straw2_reweight) {
   int total = 1000000;
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight);
+    c->do_rule(ruleset0, i, out0, 1, reweight, 1);
     ASSERT_EQ(1, out0.size());
 
-    c->do_rule(ruleset1, i, out1, 1, reweight);
+    c->do_rule(ruleset1, i, out1, 1, reweight, 1);
     ASSERT_EQ(1, out1.size());
 
     sum[out1[0]]++;
