@@ -99,7 +99,7 @@ TEST(CRUSH, indep_toosmall) {
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    c->do_rule(0, x, out, 5, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -119,7 +119,7 @@ TEST(CRUSH, indep_basic) {
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 5, weight);
+    c->do_rule(0, x, out, 5, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -146,7 +146,7 @@ TEST(CRUSH, indep_out_alt) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 9, weight);
+    c->do_rule(0, x, out, 9, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -172,7 +172,7 @@ TEST(CRUSH, indep_out_contig) {
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
-    c->do_rule(0, x, out, 7, weight);
+    c->do_rule(0, x, out, 7, weight, 1);
     cout << x << " -> " << out << std::endl;
     int num_none = 0;
     for (unsigned i=0; i<out.size(); ++i) {
@@ -200,7 +200,7 @@ TEST(CRUSH, indep_out_progressive) {
     vector<int> prev;
     for (unsigned i=0; i<weight.size(); ++i) {
       vector<int> out;
-      c->do_rule(0, x, out, 7, weight);
+      c->do_rule(0, x, out, 7, weight, 1);
       cout << "(" << i << "/" << weight.size() << " out) "
 	   << x << " -> " << out << std::endl;
       int num_none = 0;

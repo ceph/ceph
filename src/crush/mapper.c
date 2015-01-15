@@ -249,7 +249,7 @@ static int bucket_linear_choose(struct crush_bucket_linear *bucket,
 }
 
 
-static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
+static int crush_bucket_choose(struct crush_bucket *in, int x, int r, int seed)
 {
 	dprintk(" crush_bucket_choose %d x=%d r=%d\n", in->id, x, r);
 	BUG_ON(in->size == 0);
@@ -268,7 +268,7 @@ static int crush_bucket_choose(struct crush_bucket *in, int x, int r)
 					   x, r);
 	case CRUSH_BUCKET_LINEAR:
 		return bucket_linear_choose((struct crush_bucket_linear *)in,
-					  x, r);
+					  x/seed, r);
 
 	default:
 		dprintk("unknown bucket %d alg %d\n", in->id, in->alg);
@@ -328,7 +328,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       int recurse_to_leaf,
 			       unsigned int vary_r,
 			       int *out2,
-			       int parent_r)
+			       int parent_r,
+			       int seed)	
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -374,7 +375,7 @@ static int crush_choose_firstn(const struct crush_map *map,
 				    flocal > local_fallback_retries)
 					item = bucket_perm_choose(in, x, r);
 				else
-					item = crush_bucket_choose(in, x, r);
+					item = crush_bucket_choose(in, x, r, seed);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					skip_rep = 1;
@@ -428,7 +429,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 							 0,
 							 vary_r,
 							 NULL,
-							 sub_r) <= outpos)
+							 sub_r,
+							 seed) <= outpos)
 							/* didn't get leaf */
 							reject = 1;
 					} else {
@@ -575,7 +577,7 @@ static void crush_choose_indep(const struct crush_map *map,
 					break;
 				}
 
-				item = crush_bucket_choose(in, x, r);
+				item = crush_bucket_choose(in, x, r, 1);
 				if (item >= map->max_devices) {
 					dprintk("   bad item %d\n", item);
 					out[rep] = CRUSH_ITEM_NONE;
@@ -688,7 +690,8 @@ static void crush_choose_indep(const struct crush_map *map,
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
 		  const __u32 *weight, int weight_max,
-		  int *scratch)
+		  int *scratch,
+		  int seed)
 {
 	int result_len;
 	int *a = scratch;
@@ -820,7 +823,8 @@ int crush_do_rule(const struct crush_map *map,
 						recurse_to_leaf,
 						vary_r,
 						c+osize,
-						0);
+						0,
+						seed);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
                                                     numrep : (result_max-osize));

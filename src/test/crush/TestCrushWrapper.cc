@@ -111,9 +111,9 @@ TEST(CrushWrapper, straw_zero) {
   vector<unsigned> reweight(n, 0x10000);
   for (int i=0; i<10000; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight);
+    c->do_rule(ruleset0, i, out0, 1, reweight, 1);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight);
+    c->do_rule(ruleset1, i, out1, 1, reweight, 1);
     ASSERT_EQ(1u, out1.size());
     ASSERT_EQ(out0[0], out1[0]);
     //cout << i << "\t" << out0 << "\t" << out1 << std::endl;
@@ -205,9 +205,9 @@ TEST(CrushWrapper, straw_same) {
   int max = 100000;
   for (int i=0; i<max; ++i) {
     vector<int> out0, out1;
-    c->do_rule(ruleset0, i, out0, 1, reweight);
+    c->do_rule(ruleset0, i, out0, 1, reweight, 1);
     ASSERT_EQ(1u, out0.size());
-    c->do_rule(ruleset1, i, out1, 1, reweight);
+    c->do_rule(ruleset1, i, out1, 1, reweight, 1);
     ASSERT_EQ(1u, out1.size());
     sum0[out0[0]]++;
     sum1[out1[0]]++;
