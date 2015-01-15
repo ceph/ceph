@@ -463,7 +463,7 @@ function activate_osd() {
     return $status
 }
 
-function test_run_osd() {
+function test_activate_osd() {
     local dir=$1
 
     setup $dir || return 1
