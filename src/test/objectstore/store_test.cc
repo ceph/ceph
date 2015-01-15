@@ -619,6 +619,49 @@ TEST_P(StoreTest, ManyObjectTest) {
   }
 }
 
+TEST_P(StoreTest, ListCollsTest) {
+  vector<coll_t> cids;
+  int r = 0;
+
+  // Create 10 colls
+  for (uint32_t i = 0; i < 10; i++) {
+    char buf[100];
+    snprintf(buf, sizeof(buf), "test_coll_%d", i);
+    coll_t cid = coll_t(string(buf));
+    cids.push_back(cid);
+
+    ObjectStore::Transaction t;
+    t.create_collection(cid);
+    cerr << "create collection " << cid << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+
+  // List colls
+  vector<coll_t> colls;
+  r = store->list_collections(colls);
+  ASSERT_EQ(r, 0);
+  uint32_t col_count = 0;
+  for (vector<coll_t>::iterator it = colls.begin(); it != colls.end(); it++) {
+    ASSERT_NE(*it, coll_t("omap"));
+    ASSERT_NE(*it, coll_t("."));
+    ASSERT_NE(*it, coll_t(".."));
+    if (!strncmp(it->c_str(), "test_coll_", 10)) {
+      col_count++;
+    }
+  }
+  ASSERT_EQ(col_count, 10);
+
+  // Remove 10 colls
+  for (vector<coll_t>::iterator it = cids.begin(); it != cids.end(); it++) {
+    ObjectStore::Transaction t;
+    t.remove_collection(*it);
+    cerr << "remove collection " << *it << std::endl;
+    r = store->apply_transaction(t);
+    ASSERT_EQ(r, 0);
+  }
+}
+
 
 class ObjectGenerator {
 public:
