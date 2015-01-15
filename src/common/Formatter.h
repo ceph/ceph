@@ -28,9 +28,14 @@ namespace ceph {
   class Formatter {
   public:
     static Formatter *create(const std::string& type,
-			     const std::string& default_type);
+			     const std::string& default_type,
+			     const std::string& fallback);
+    static Formatter *create(const std::string& type,
+			     const std::string& default_type) {
+      return create(type, default_type, "");
+    }
     static Formatter *create(const std::string& type) {
-      return create(type, "json-pretty");
+      return create(type, "json-pretty", "");
     }
 
     Formatter();

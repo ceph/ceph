@@ -64,7 +64,8 @@ Formatter::Formatter() { }
 Formatter::~Formatter() { }
 
 Formatter *Formatter::create(const std::string &type,
-			     const std::string& default_type)
+			     const std::string& default_type,
+			     const std::string& fallback)
 {
   std::string mytype = type;
   if (mytype == "")
@@ -82,6 +83,8 @@ Formatter *Formatter::create(const std::string &type,
     return new TableFormatter();
   else if (mytype == "table-kv")
     return new TableFormatter(true);
+  else if (fallback != "")
+    return create(fallback, "", "");
   else
     return (Formatter *) NULL;
 }
