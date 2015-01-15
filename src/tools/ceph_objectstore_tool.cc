@@ -2793,7 +2793,7 @@ int main(int argc, char **argv)
     format = format.substr(0, format.size() - strlen("-pretty"));
   }
 
-  formatter = new_formatter(format);
+  formatter = Formatter::create(format);
   if (formatter == NULL) {
     cerr << "unrecognized format: " << format << std::endl;
     ret = 1;
