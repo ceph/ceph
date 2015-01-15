@@ -78,7 +78,7 @@ void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp 
 {
   ObjectWriteOperation *op = mgr.write_op();
   cls_rgw_obj_key key(obj, string());
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true);
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
@@ -89,7 +89,7 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true);
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
