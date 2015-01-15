@@ -140,6 +140,16 @@ class C_local_deliver : public EventCallback {
   }
 };
 
+
+class C_clean_handler : public EventCallback {
+  AsyncConnectionRef conn;
+ public:
+  C_clean_handler(AsyncConnectionRef c): conn(c) {}
+  void do_request(int id) {
+    conn->cleanup_handler();
+  }
+};
+
 static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
 {
   // create a buffer to read into that matches the data alignment
@@ -192,9 +202,9 @@ AsyncConnection::~AsyncConnection()
   assert(sent.empty());
   assert(!authorizer);
   if (recv_buf)
-    delete recv_buf;
+    delete[] recv_buf;
   if (state_buffer)
-    delete state_buffer;
+    delete[] state_buffer;
 }
 
 /* return -1 means `fd` occurs error or closed, it should be closed
@@ -785,6 +795,7 @@ void AsyncConnection::process()
           } else {
             if (session_security->check_message_signature(message)) {
               ldout(async_msgr->cct, 0) << __func__ << "Signature check failed" << dendl;
+              message->put();
               goto fail;
             }
           }
@@ -1688,7 +1699,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
 
   if (existing->policy.lossy) {
     // disconnect from the Connection
-    center->dispatch_event_external(EventCallbackRef(new C_handle_reset(async_msgr, existing)));
+    existing->center->dispatch_event_external(existing->reset_handler);
     existing->_stop();
   } else {
     // queue a reset on the new connection, which we're dumping for the old
@@ -1875,16 +1886,19 @@ int AsyncConnection::send_message(Message *m)
       // we want to handle fault within internal thread
       center->dispatch_event_external(write_handler);
     }
-  } else {
-    out_q[m->get_priority()].push_back(m);
-    if ((state == STATE_STANDBY || state == STATE_CLOSED) && !policy.server) {
-      ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
-                                 << " policy.server is false" << dendl;
-      _connect();
-    } else if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
+  } else if (state == STATE_CLOSED) {
+      ldout(async_msgr->cct, 10) << __func__ << " connection closed."
+                                 << " Drop message " << m << dendl;
+  } else if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
       ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
       local_messages.push_back(m);
       center->dispatch_event_external(local_deliver_handler);
+  } else {
+    out_q[m->get_priority()].push_back(m);
+    if (state == STATE_STANDBY && !policy.server) {
+      ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
+                                 << " policy.server is false" << dendl;
+      _connect();
     } else if (sd > 0 && !open_write) {
       center->dispatch_event_external(write_handler);
     }
@@ -1974,7 +1988,7 @@ void AsyncConnection::fault()
     return ;
   }
 
-  if (policy.lossy && state != STATE_CONNECTING) {
+  if (policy.lossy && !(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
     ldout(async_msgr->cct, 10) << __func__ << " on lossy channel, failing" << dendl;
     center->dispatch_event_external(reset_handler);
     _stop();
@@ -2044,7 +2058,6 @@ void AsyncConnection::was_session_reset()
   once_session_reset = true;
 }
 
-// *note: `async` is true only happen when replacing connection process
 void AsyncConnection::_stop()
 {
   assert(lock.is_locked());
@@ -2074,6 +2087,8 @@ void AsyncConnection::_stop()
   for (set<uint64_t>::iterator it = register_time_events.begin();
        it != register_time_events.end(); ++it)
     center->delete_time_event(*it);
+  // Make sure in-queue events will been processed
+  center->dispatch_event_external(EventCallbackRef(new C_clean_handler(this)));
 }
 
 int AsyncConnection::_send(Message *m)
@@ -2206,8 +2221,10 @@ void AsyncConnection::send_keepalive()
 {
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
-  keepalive = true;
-  center->dispatch_event_external(write_handler);
+  if (state != STATE_CLOSED) {
+    keepalive = true;
+    center->dispatch_event_external(write_handler);
+  }
 }
 
 void AsyncConnection::mark_down()

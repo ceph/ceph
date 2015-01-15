@@ -430,6 +430,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
 AsyncMessenger::~AsyncMessenger()
 {
   assert(!did_bind); // either we didn't bind or we shut down the Processor
+  local_connection->mark_down();
 }
 
 void AsyncMessenger::ready()
@@ -700,7 +701,6 @@ void AsyncMessenger::mark_down_all()
       set<AsyncConnectionRef>::iterator it = deleted_conns.begin();
       AsyncConnectionRef p = *it;
       ldout(cct, 5) << __func__ << " delete " << p << dendl;
-      p->put();
       deleted_conns.erase(it);
     }
   }

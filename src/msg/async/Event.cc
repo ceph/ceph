@@ -156,6 +156,11 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
 void EventCenter::delete_file_event(int fd, int mask)
 {
   Mutex::Locker l(file_lock);
+  if (fd > nevent) {
+    ldout(cct, 1) << __func__ << " delete event fd=" << fd << " exceed nevent=" << nevent
+                  << "mask=" << mask << dendl;
+    return ;
+  }
   EventCenter::FileEvent *event = _get_file_event(fd);
   ldout(cct, 20) << __func__ << " delete event started fd=" << fd << " mask=" << mask
                  << " original mask is " << event->mask << dendl;
@@ -364,7 +369,8 @@ int EventCenter::process_events(int timeout_microseconds)
       EventCallbackRef e = external_events.front();
       external_events.pop_front();
       external_lock.Unlock();
-      e->do_request(0);
+      if (e)
+        e->do_request(0);
       external_lock.Lock();
     }
     external_lock.Unlock();

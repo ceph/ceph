@@ -40,11 +40,11 @@ typedef boost::mt11213b gen_type;
 #if GTEST_HAS_PARAM_TEST
 
 #define CHECK_AND_WAIT_TRUE(expr) do {  \
-  int n = 50;                           \
+  int n = 1000;                         \
   while (--n) {                         \
     if (expr)                           \
       break;                            \
-    usleep(100);                        \
+    usleep(1000);                       \
   }                                     \
 } while(0);
 
@@ -140,6 +140,7 @@ class FakeDispatcher : public Dispatcher {
     }
     got_new = true;
     cond.Signal();
+    m->put();
     return true;
   }
   bool ms_handle_reset(Connection *con) {
@@ -180,6 +181,7 @@ class FakeDispatcher : public Dispatcher {
     }
     got_new = true;
     cond.Signal();
+    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
@@ -486,6 +488,7 @@ TEST_P(MessengerTest, StatelessTest) {
   // 2. test for client lossy
   server_conn->mark_down();
   ASSERT_FALSE(server_conn->is_connected());
+  conn->send_keepalive();
   CHECK_AND_WAIT_TRUE(!conn->is_connected());
   ASSERT_FALSE(conn->is_connected());
   conn = client_msgr->get_connection(server_msgr->get_myinst());
@@ -534,25 +537,32 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   ConnectionRef server_conn = server_msgr->get_connection(client_msgr->get_myinst());
   ASSERT_FALSE(cli_dispatcher.got_remote_reset);
+  cli_dispatcher.got_connect = false;
   server_conn->mark_down();
   ASSERT_FALSE(server_conn->is_connected());
   // client should be standby
   usleep(300*1000);
   // client should be standby, so we use original connection
   {
-    m = new MPing();
     conn->send_keepalive();
+    {
+      Mutex::Locker l(cli_dispatcher.lock);
+      while (!cli_dispatcher.got_remote_reset)
+        cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+      cli_dispatcher.got_remote_reset = false;
+      while (!cli_dispatcher.got_connect)
+        cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+      cli_dispatcher.got_connect = false;
+    }
     CHECK_AND_WAIT_TRUE(conn->is_connected());
     ASSERT_TRUE(conn->is_connected());
+    m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);
     Mutex::Locker l(cli_dispatcher.lock);
     while (!cli_dispatcher.got_new)
       cli_dispatcher.cond.Wait(cli_dispatcher.lock);
     cli_dispatcher.got_new = false;
   }
-  // resetcheck for client, so it discard state previously
-  ASSERT_TRUE(cli_dispatcher.got_remote_reset);
-  cli_dispatcher.got_remote_reset = false;
   ASSERT_TRUE(static_cast<Session*>(conn->get_priv())->get_count() == 1);
   server_conn = server_msgr->get_connection(client_msgr->get_myinst());
   ASSERT_TRUE(static_cast<Session*>(server_conn->get_priv())->get_count() == 1);
@@ -624,6 +634,7 @@ class SyntheticDispatcher : public Dispatcher {
     }
     got_new = true;
     cond.Signal();
+    m->put();
   }
 
   bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
@@ -788,7 +799,8 @@ class SyntheticWorkload {
       boost::uniform_int<> u(32, max_message_len);
       uint64_t value_len = u(rng);
       bufferptr bp(value_len);
-      for (uint64_t j = 0; j < value_len; ) {
+      bp.zero();
+      for (uint64_t j = 0; j < value_len-sizeof(i); ) {
         memcpy(bp.c_str()+j, &i, sizeof(i));
         j += 4096;
       }
@@ -882,12 +894,17 @@ class SyntheticWorkload {
          it != available_servers.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      delete (*it);
     }
+    available_servers.clear();
+
     for (set<Messenger*>::iterator it = available_clients.begin();
          it != available_clients.end(); ++it) {
       (*it)->shutdown();
       (*it)->wait();
+      delete (*it);
     }
+    available_clients.clear();
   }
 };
 
@@ -953,7 +970,7 @@ TEST_P(MessengerTest, SyntheticInjectTest) {
 
 class MarkdownDispatcher : public Dispatcher {
   Mutex lock;
-  set<Connection*> conns;
+  set<ConnectionRef> conns;
   bool last_mark;
  public:
   atomic_t count;
@@ -982,13 +999,13 @@ class MarkdownDispatcher : public Dispatcher {
     cerr << __func__ << " conn: " << m->get_connection() << std::endl;
     Mutex::Locker l(lock);
     count.inc();
-    conns.insert(m->get_connection().get());
+    conns.insert(m->get_connection());
     if (conns.size() < 2 && !last_mark)
       return true;
 
     last_mark = true;
     usleep(rand() % 500);
-    for (set<Connection*>::iterator it = conns.begin(); it != conns.end(); ++it) {
+    for (set<ConnectionRef>::iterator it = conns.begin(); it != conns.end(); ++it) {
       if ((*it) != m->get_connection().get()) {
         (*it)->mark_down();
         conns.erase(it);
@@ -997,6 +1014,7 @@ class MarkdownDispatcher : public Dispatcher {
     }
     if (conns.empty())
       last_mark = false;
+    m->put();
     return true;
   }
   bool ms_handle_reset(Connection *con) {
