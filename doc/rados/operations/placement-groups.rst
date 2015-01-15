@@ -342,7 +342,7 @@ Get Statistics for Stuck PGs
 To get the statistics for all placement groups stuck in a specified state,
 execute the following::
 
-        ceph pg dump_stuck inactive|unclean|stale [--format <format>] [-t|--threshold <seconds>]
+        ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format <format>] [-t|--threshold <seconds>]
 
 **Inactive** Placement groups cannot process reads or writes because they are waiting for an OSD
 with the most up-to-date data to come up and in.

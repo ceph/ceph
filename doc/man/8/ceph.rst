@@ -954,7 +954,7 @@ Subcommand ``dump_stuck`` shows information about stuck pgs.
 
 Usage::
 
-	ceph pg dump_stuck {inactive|unclean|stale[inactive|unclean|stale...]}
+	ceph pg dump_stuck {inactive|unclean|stale[inactive|unclean|stale|undersized|degraded...]}
 	{<int>}
 
 Subcommand ``force_create_pg`` forces creation of pg <pgid>.

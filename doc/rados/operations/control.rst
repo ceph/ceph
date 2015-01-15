@@ -65,7 +65,7 @@ The valid formats are ``plain`` (default) and ``json``.
 To display the statistics for all placement groups stuck in a specified state, 
 execute the following:: 
 
-	ceph pg dump_stuck inactive|unclean|stale [--format {format}] [-t|--threshold {seconds}]
+	ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format {format}] [-t|--threshold {seconds}]
 
 
 ``--format`` may be ``plain`` (default) or ``json``
