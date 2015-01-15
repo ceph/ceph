@@ -253,7 +253,7 @@ TEST(CrushWrapper, straw2) {
     0x30000,
     0x50000,
     0x8000,
-    0x20000,
+    0x200000,
     0x10000,
     0x10000,
     0x20000,
@@ -305,12 +305,15 @@ TEST(CrushWrapper, straw2) {
   }
 
   int sum[n];
+  int totalweight = 0;
   vector<unsigned> reweight(n);
   for (int i=0; i<n; ++i) {
     sum[i] = 0;
     reweight[i] = 0x10000;
+    totalweight += weights[i];
   }
-  for (int i=0; i<1000000; ++i) {
+  int total = 1000000;
+  for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
     c->do_rule(ruleset0, i, out0, 1, reweight);
     ASSERT_EQ(1, out0.size());
@@ -326,15 +329,19 @@ TEST(CrushWrapper, straw2) {
       ASSERT_EQ(out0[0], out1[0]);
   }
 
-  cout << "osd\tweight\tweight\tutil\tadjusted\n";
+  cout << "osd\tweight\tweight\tutil\tadjusted\tfracdelta\n";
+  std::streamsize p = cout.precision();
+  cout << std::setprecision(4);
   for (int i=0; i<n; ++i) {
     cout << i
 	 << "\t" << ((double)weights[i] / (double)0x10000)
 	 << "\t" << ((double)weights[i] / (double)weights[0])
 	 << "\t" << sum[i]
 	 << "\t" << ((double)sum[i] / (double)sum[0])
+	 << "\t" << (((double)sum[i] / (double)total) / ((double)weights[i] / (double)totalweight) - 1.0)
 	 << std::endl;
   }
+  cout << std::setprecision(p);
 }
 
 TEST(CrushWrapper, move_bucket) {
