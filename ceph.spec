@@ -133,6 +133,7 @@ Patch0020:      0020-Fix-overflowing-journel-partitions.patch
 Patch0021:      0021-Unconditionally-chown-rados-log-fil.patch
 Patch0022:      0022-ceph-osd-prestart.sh-check-OSD-exis.patch
 Patch0023:      0023-Fixes-to-rcceph-script.patch
+Patch0024:      0024-radosgw-systemd-support.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -391,6 +392,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0021 -p1
 %patch0022 -p1
 %patch0023 -p1
+%patch0024 -p1
 
 %build
 
@@ -489,11 +491,11 @@ mkdir -p $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
-install -m 0644 -D systemd/ceph-rgw@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
 mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
-install -m 0755 -D src/ceph-rgw-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
+install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
 %else
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
@@ -509,7 +511,7 @@ install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/li
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp/
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph/
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw/
+mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph-radosgw/
 %if 0%{?suse_version} >= 1310
 %{__install} -m 0644 %{SOURCE3} %{buildroot}/%{_tmpfilesdir}/%{name}.conf
 %else
@@ -731,7 +733,7 @@ fi
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%dir %{_localstatedir}/log/radosgw/
+%attr(0755, wwwrun, www) %dir %{_localstatedir}/log/ceph-radosgw/
 %dir /srv/www/radosgw/
 /srv/www/radosgw/s3gw.fcgi
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
@@ -742,9 +744,9 @@ fi
 %if 0%{?suse_version} >= 1310
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/ceph-radosgw.conf
-%{_unitdir}/ceph-rgw@.service
+%{_unitdir}/ceph-radosgw@.service
 %dir /usr/libexec/ceph
-/usr/libexec/ceph/ceph-rgw-prestart.sh
+/usr/libexec/ceph/ceph-radosgw-prestart.sh
 %else
 %ghost %dir %{_localstatedir}/run/ceph-radosgw/
 %{_initrddir}/ceph-radosgw

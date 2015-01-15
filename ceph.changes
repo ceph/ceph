@@ -1,4 +1,16 @@
 -------------------------------------------------------------------
+Thu Jan 15 19:27:36 UTC 2015 - osynge@suse.com
+
+- Improver radosgw systemd support.
+  * Changed systemd name to ceph-radosgw from ceph-rgw
+  * Remove "client.radosgw." prefix from paramter
+  * Run as user wwwrun, group www
+  * Changed rados ceph-radosgw-tmpfiles.d.conf directory and ownership.
+  * Changed directory /var/log/radosgw to /var/log/ceph-radosgw and ownership
+  * Changed ceph-rgw-prestart.sh to ceph-radosgw-prestart.sh
+  * Updated 0024-radosgw-systemd-support.patch
+
+-------------------------------------------------------------------
 Thu Jan 15 14:22:06 UTC 2015 - tbehrens@suse.com
 
 - Update to 0.80.8:
