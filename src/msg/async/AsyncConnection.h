@@ -285,8 +285,17 @@ class AsyncConnection : public Connection {
   void wakeup_from(uint64_t id);
   void local_deliver();
   void stop() {
-    mark_down();
     center->dispatch_event_external(reset_handler);
+    mark_down();
+  }
+  void cleanup_handler() {
+    read_handler.reset();
+    write_handler.reset();
+    reset_handler.reset();
+    remote_reset_handler.reset();
+    connect_handler.reset();
+    accept_handler.reset();
+    local_deliver_handler.reset();
   }
 }; /* AsyncConnection */
 

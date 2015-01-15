@@ -116,6 +116,7 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
+    assert(fd < nevent);
     FileEvent *p = &file_events[fd];
     if (!p->mask)
       new(p) FileEvent();
