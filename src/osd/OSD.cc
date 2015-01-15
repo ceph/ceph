@@ -1626,7 +1626,7 @@ public:
 bool OSD::asok_command(string command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
-  Formatter *f = Formatter::create(format);
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (command == "status") {
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;

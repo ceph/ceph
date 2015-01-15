@@ -850,7 +850,7 @@ TEST(CrushWrapper, dump_rules) {
     stringstream ss;
     f->flush(ss);
     delete f;
-    EXPECT_EQ("", ss.str());
+    EXPECT_EQ("\n", ss.str());
   }
 
   string name("NAME");

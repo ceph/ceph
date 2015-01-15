@@ -221,7 +221,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
-  Formatter *f = Formatter::create(format);
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (command == "status") {
 
     const OSDMap *osdmap = objecter->get_osdmap_read();
