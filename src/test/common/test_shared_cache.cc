@@ -286,7 +286,7 @@ TEST_F(SharedLRU_all, get_next) {
     const int value1 = *ptr1 = 800;
 
     pair<unsigned int, int> i;
-    EXPECT_TRUE(cache.get_next(i.first, &i));
+    EXPECT_TRUE(cache.get_next(0, &i));
     EXPECT_EQ(key1, i.first);
     EXPECT_EQ(value1, i.second);
 
