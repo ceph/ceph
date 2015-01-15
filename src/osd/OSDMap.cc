@@ -2467,7 +2467,7 @@ protected:
     std::streamsize p = out->precision();
 
     *out << qi.id << "\t"
-	 << std::setprecision(4) << qi.weight << "\t";
+	 << weightf_t(qi.weight) << "\t";
 
     for (int k=0; k < qi.depth; k++)
       *out << "\t";
@@ -2484,7 +2484,7 @@ protected:
 	*out << "DNE\t\t";
       else
 	*out << (osdmap->is_up(qi.id) ? "up" : "down") << "\t";
-      *out << (osdmap->exists(qi.id) ? osdmap->get_weightf(qi.id) : 0) << "\t"
+      *out << weightf_t(osdmap->exists(qi.id) ? osdmap->get_weightf(qi.id) : 0) << "\t"
 	   << (osdmap->exists(qi.id) ? osdmap->get_primary_affinityf(qi.id) : 0);
     }
     *out << std::setprecision(p) << "\n";
