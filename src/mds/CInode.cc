@@ -2406,6 +2406,19 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
   return old;
 }
 
+void CInode::split_old_inode(snapid_t snap)
+{
+  map<snapid_t, old_inode_t>::iterator p = old_inodes.lower_bound(snap);
+  assert(p != old_inodes.end() && p->second.first < snap);
+
+  old_inode_t &old = old_inodes[snap - 1];
+  old = p->second;
+
+  p->second.first = snap;
+  dout(10) << "split_old_inode " << "[" << old.first << "," << p->first
+	   << "] to [" << snap << "," << p->first << "] on " << *this << dendl;
+}
+
 void CInode::pre_cow_old_inode()
 {
   snapid_t follows = find_snaprealm()->get_newest_seq();
