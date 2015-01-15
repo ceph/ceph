@@ -168,7 +168,7 @@ def validate_tasks(config):
 
 
 def get_initial_tasks(lock, config, machine_type):
-    init_tasks = []
+    init_tasks = [{'internal.check_packages': None}]
     if lock:
         msg = ('You cannot specify targets in a config file when using the ' +
                '--lock option')

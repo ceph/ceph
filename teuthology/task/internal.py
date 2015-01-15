@@ -18,6 +18,7 @@ from teuthology import provision
 from teuthology.job_status import get_status, set_status
 from teuthology.config import config as teuth_config
 from teuthology.parallel import parallel
+from teuthology.suite import has_packages_for_distro
 from ..orchestra import cluster, remote, run
 from .. import report
 
@@ -200,6 +201,47 @@ def check_lock(ctx, config):
             user=status['locked_by'],
             owner=ctx.owner,
             )
+
+
+def check_packages(ctx, config):
+    """
+    Checks gitbuilder to determine if there are missing packages for this job.
+
+    If there are missing packages, fail the job.
+    """
+    log.info("Checking packages...")
+    os_type = ctx.config.get("os_type", None)
+    sha1 = ctx.config.get("sha1", None)
+    # We can only do this check if there are a defined sha1 and os_type
+    # in the job config.
+    if os_type and sha1:
+        log.info(
+            "Checking packages for os_type '{os}' and ceph hash '{ver}'".format(
+                os=os_type,
+                ver=sha1,
+            )
+        )
+        if not has_packages_for_distro(sha1, os_type):
+            msg = "Packages for os_type '{os}' and ceph hash '{ver}' not found"
+            msg = msg.format(
+                os=os_type,
+                ver=sha1,
+            )
+            log.error(msg)
+            # set the failure message and update paddles with the status
+            ctx.summary["failure_reason"] = msg
+            set_status(ctx.summary, "dead")
+            report.try_push_job_info(ctx.config, dict(status='dead'))
+            raise RuntimeError(msg)
+    else:
+        log.info(
+            "Checking packages skipped, missing os_type '{os}' or ceph hash '{ver}'".format(
+                os=os_type,
+                ver=sha1,
+            )
+        )
+
+
 
 @contextlib.contextmanager
 def timer(ctx, config):

@@ -59,7 +59,9 @@ def run_tasks(tasks, ctx):
             # Prevent connection issues being flagged as failures
             set_status(ctx.summary, 'dead')
         else:
-            set_status(ctx.summary, 'fail')
+            # the status may have been set to dead, leave it as-is if so
+            if not ctx.summary.get('status', '') == 'dead':
+                set_status(ctx.summary, 'fail')
         if 'failure_reason' not in ctx.summary:
             ctx.summary['failure_reason'] = str(e)
         log.exception('Saw exception from tasks.')
