@@ -61,7 +61,7 @@ TEST(PerfCounters, SimpleTest) {
   AdminSocketClient client(get_rand_socket_path());
   std::string message;
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\" }", &message));
-  ASSERT_EQ("{}", message);
+  ASSERT_EQ("{}\n", message);
 }
 
 enum {
