@@ -552,7 +552,7 @@ include:
 
 To identify stuck placement groups, execute the following:: 
 
-	ceph pg dump_stuck [unclean|inactive|stale]
+	ceph pg dump_stuck [unclean|inactive|stale|undersized|degraded]
 
 See `Placement Group Subsystem`_ for additional details. To troubleshoot
 stuck placement groups, see `Troubleshooting PG Errors`_.

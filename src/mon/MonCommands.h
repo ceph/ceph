@@ -123,7 +123,7 @@ COMMAND("pg dump_json " \
 COMMAND("pg dump_pools_json", "show pg pools info in json only",\
 	"pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
-	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale,n=N,req=false " \
+	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",
 	"show information about stuck pgs",\
 	"pg", "r", "cli,rest")
