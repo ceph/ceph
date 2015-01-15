@@ -205,30 +205,44 @@ def calamari_install(config, cal_svr):
     log.info('calamari server on %s' % ice_distro)
     iceball_loc = config.get('iceball_location', '.')
     ice_version = config.get('ice_version', ICE_VERSION_DEFAULT)
+    delete_iceball = False
     if iceball_loc.startswith('http'):
-        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '.')
-        iceball_loc = '.'
+        get_iceball_with_http(iceball_loc, ice_version, ice_distro, '/tmp')
+        iceball_loc = '/tmp'
+        delete_iceball = True
     elif iceball_loc == '.':
         ice_tool_loc = os.path.join(ice_tool_dir, 'ice-tools')
         if not os.path.isdir(ice_tool_loc):
             try:
                 subprocess.check_call(['git', 'clone',
-                                       git_icetool_loc + os.sep + 
+                                       git_icetool_loc + os.sep +
                                        'ice-tools.git',
                                        ice_tool_loc])
             except subprocess.CalledProcessError:
-                raise RuntimeError('client.0 not found in roles')
-        exec_ice = os.path.join(ice_tool_loc, 'iceball', 'ice_repo_tgz.py')
+                raise RuntimeError('git clone of ice-tools failed')
+        exec_ice = os.path.join(ice_tool_loc,
+                                'teuth-virtenv/bin/make_iceball')
         try:
-            subprocess.check_call([exec_ice, '-b', version, '-o', ice_distro])
+            subprocess.check_call('virtualenv teuth-virtenv'.split(),
+                                  cwd=ice_tool_loc)
+            subprocess.check_call(
+                'teuth-virtenv/bin/python setup.py develop'.split(),
+                cwd=ice_tool_loc
+            )
+            subprocess.check_call(
+                'teuth-virtenv/bin/pip install -r requirements.txt'.split(),
+                cwd=ice_tool_loc
+            )
+            subprocess.check_call([exec_ice, '-I', ice_version,
+                                   '-b', version, '-o', ice_distro])
+            delete_iceball = True
         except subprocess.CalledProcessError:
-            raise RuntimeError('Unable to create %s distro' % ice_distro)
-    gz_file = ''
-    for file_loc in os.listdir(iceball_loc):
-        sfield = '^ICE-.*{0}\.tar\.gz$'.format(ice_distro)
-        if re.search(sfield, file_loc):
-            if file_loc > gz_file:
-                gz_file = file_loc
+            raise RuntimeError('%s failed for %s distro' %
+                               (exec_ice, ice_distro))
+        subprocess.check_call('rm -rf teuth-virtenv'.split(),
+                              cwd=ice_tool_loc)
+
+    gz_file = 'ICE-{0}-{1}.tar.gz'.format(ice_version, ice_distro)
     lgz_file = os.path.join(iceball_loc, gz_file)
     cal_svr.put_file(lgz_file, os.path.join('/tmp/', gz_file))
     ret = cal_svr.run(args=['gunzip', run.Raw('<'), "/tmp/%s" % gz_file,
@@ -256,6 +270,8 @@ def calamari_install(config, cal_svr):
         yield
     finally:
         log.info('Cleaning up after Calamari installation')
+        if delete_iceball:
+            os.unlink(gz_file)
 
 
 @contextlib.contextmanager
