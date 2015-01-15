@@ -46,7 +46,7 @@
 # common
 #################################################################################
 Name:           ceph
-Version:        0.80.7
+Version:        0.80.8
 Release:        0%{?dist}
 Summary:        A Scalable Distributed File System
 License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
@@ -118,29 +118,20 @@ Patch0005:      0005-ceph_argparse_flag-has-no-regular-3.patch
 Patch0006:      0006-Variable-length-array-of-std-string.patch
 Patch0007:      0007-warning-Fix-deprecation-warning-fro.patch
 Patch0008:      0008-Hack-fix-crashing-tcmalloc-on-sle11.patch
-Patch0009:      0009-osd-OSD.cc-parse-lsb-release-data-v.patch
-Patch0010:      0010-osdmaptool-test-map-pgs.t-fix-escap.patch
-Patch0011:      0011-Convert-remaining-init-script-actio.patch
-Patch0012:      0012-Fix-bnc-890345-wrong-service-name-f.patch
-Patch0013:      0013-Fix-disk-zap-sgdisk-invocation.patch
-Patch0014:      0014-Switch-off-systemd-detection.patch
-Patch0015:      0015-init-add-systemd-service-files.patch
-Patch0016:      0016-Added-a-systemd-target-for-ceph.patch
-Patch0017:      0017-rcceph-wrapper-for-ceph-systemd.patch
-Patch0018:      0018-systemd-support-in-ceph-disk-activa.patch
-Patch0019:      0019-udev-rules-now-explicitly-specify-i.patch
-Patch0020:      0020-Always-provide-summary-for-non-heal.patch
-Patch0021:      0021-Fix-spec-violating-extraneous-unloc.patch
-Patch0022:      0022-Fix-overflowing-journel-partitions.patch
-Patch0023:      0023-Unconditionally-chown-rados-log-fil.patch
-Patch0024:      0024-rgw-subuser-creation-fixes.patch
-Patch0025:      0025-ReplicatedPG-cancel-cb-on-blacklist.patch
-Patch0026:      0026-rgw-set-length-for-keystone-token-v.patch
-Patch0027:      0027-client-cast-m-get_client_tid-to-com.patch
-Patch0028:      0028-Add-annotation-to-all-assembly-file.patch
-Patch0029:      0029-ceph-disk-dmcrypt-file-permissions.patch
-Patch0030:      0030-ceph-osd-prestart.sh-check-OSD-exis.patch
-Patch0031:      0031-radosgw-systemd-support.patch
+Patch0009:      0009-Convert-remaining-init-script-actio.patch
+Patch0010:      0010-Fix-bnc-890345-wrong-service-name-f.patch
+Patch0011:      0011-Fix-disk-zap-sgdisk-invocation.patch
+Patch0012:      0012-Switch-off-systemd-detection.patch
+Patch0013:      0013-init-add-systemd-service-files.patch
+Patch0014:      0014-Added-a-systemd-target-for-ceph.patch
+Patch0015:      0015-rcceph-wrapper-for-ceph-systemd.patch
+Patch0016:      0016-systemd-support-in-ceph-disk-activa.patch
+Patch0017:      0017-udev-rules-now-explicitly-specify-i.patch
+Patch0018:      0018-Always-provide-summary-for-non-heal.patch
+Patch0019:      0019-Fix-spec-violating-extraneous-unloc.patch
+Patch0020:      0020-Fix-overflowing-journel-partitions.patch
+Patch0021:      0021-Unconditionally-chown-rados-log-fil.patch
+Patch0022:      0022-ceph-osd-prestart.sh-check-OSD-exis.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -398,15 +389,6 @@ This package contains Ceph benchmarks and test tools.
 %patch0020 -p1
 %patch0021 -p1
 %patch0022 -p1
-%patch0023 -p1
-%patch0024 -p1
-%patch0025 -p1
-%patch0026 -p1
-%patch0027 -p1
-%patch0028 -p1
-%patch0029 -p1
-%patch0030 -p1
-%patch0031 -p1
 
 %build
 

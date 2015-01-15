@@ -5,6 +5,8 @@ Subject: [PATCH] Unconditionally chown rados log file.
 This fixes bnc#905047 (in a somewhat ad-hoc way). Sadly the log
 file gets created from several places, so its existence does not
 mean init-radosgw had actually run.
+
+(cherry picked from commit 5c2ad621b0f4ebb1356951b64470703f604d31e5)
 ---
  src/init-radosgw      | 6 ++++--
  src/init-radosgw.sysv | 6 ++++--
@@ -28,7 +30,7 @@ index b0f6a9a..9f019bc 100644
              fi
  
 diff --git a/src/init-radosgw.sysv b/src/init-radosgw.sysv
-index dd3dbb0..4598e68 100644
+index 06d41f6..8468eb2 100644
 --- a/src/init-radosgw.sysv
 +++ b/src/init-radosgw.sysv
 @@ -79,8 +79,10 @@ case "$1" in

@@ -7,12 +7,13 @@ in the next available partition and thier is not enough space ceph-disk
 did not provide a clear error message.
 
 Signed-off-by: Owen Synge <osynge@suse.com>
+(cherry picked from commit 05a4347f745f9d648acf67e25736d8d70cdc8f80)
 ---
  src/ceph-disk | 75 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++---
  1 file changed, 72 insertions(+), 3 deletions(-)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index 8140dcd..944caf8 100755
+index 9e7b743..4890f63 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
 @@ -29,6 +29,7 @@ import stat
@@ -23,7 +24,7 @@ index 8140dcd..944caf8 100755
  
  """
  Prepare:
-@@ -918,7 +919,7 @@ def unmount(
+@@ -920,7 +921,7 @@ def unmount(
  ###########################################
  
  
@@ -32,7 +33,7 @@ index 8140dcd..944caf8 100755
      """
      Get the next free partition index on a given device.
  
-@@ -967,6 +968,71 @@ def get_free_partition_index(dev):
+@@ -969,6 +970,71 @@ def get_free_partition_index(dev):
          num += 1
      return num
  
@@ -102,9 +103,9 @@ index 8140dcd..944caf8 100755
 +
 +
  
- def zap(dev):
-     """
-@@ -1023,6 +1089,7 @@ def prepare_journal_dev(
+ def update_partition(action, dev, description):
+      # try to make sure the kernel refreshes the table.  note
+@@ -1057,6 +1123,7 @@ def prepare_journal_dev(
  
      # it is a whole disk.  create a partition!
      num = None
@@ -112,7 +113,7 @@ index 8140dcd..944caf8 100755
      if journal == data:
          # we're sharing the disk between osd data and journal;
          # make journal be partition number 2, so it's pretty
-@@ -1031,6 +1098,8 @@ def prepare_journal_dev(
+@@ -1065,6 +1132,8 @@ def prepare_journal_dev(
              num=num,
              size=journal_size,
              )
@@ -121,7 +122,7 @@ index 8140dcd..944caf8 100755
      else:
          # sgdisk has no way for me to say "whatever is the next
          # free index number" when setting type guids etc, so we
-@@ -1044,8 +1113,8 @@ def prepare_journal_dev(
+@@ -1078,8 +1147,8 @@ def prepare_journal_dev(
              size=journal_size,
              )
          LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')

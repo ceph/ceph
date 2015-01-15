@@ -10,10 +10,10 @@ Signed-off-by: Daniel J. Hofmann <daniel@trvx.org>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/rgw/rgw_main.cc b/src/rgw/rgw_main.cc
-index 9614b07..afe4537 100644
+index 5fa3279..53ca21b 100644
 --- a/src/rgw/rgw_main.cc
 +++ b/src/rgw/rgw_main.cc
-@@ -360,7 +360,7 @@ void RGWLoadGenProcess::run()
+@@ -363,7 +363,7 @@ void RGWLoadGenProcess::run()
    int num_buckets;
    conf->get_val("num_buckets", 1, &num_buckets);
  

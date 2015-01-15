@@ -18,10 +18,10 @@ Created by Vincent Untz <vuntz@suse.com>
  1 file changed, 7 insertions(+)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index 5d6071d..5b71985 100755
+index 6bd0220..3657648 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
-@@ -987,6 +987,13 @@ def zap(dev):
+@@ -1018,6 +1018,13 @@ def zap(dev):
              [
                  'sgdisk',
                  '--zap-all',

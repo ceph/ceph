@@ -8,6 +8,7 @@ does not exist fail with a clear error message.
 https://bugzilla.suse.com/show_bug.cgi?id=895759 fixes # 895759
 
 Signed-off-by: Owen Synge <osynge@suse.com>
+(cherry picked from commit 760ec9af0c30700aa16163bd57c73ed5df9960bb)
 ---
  src/ceph-osd-prestart.sh | 6 ++++++
  1 file changed, 6 insertions(+)

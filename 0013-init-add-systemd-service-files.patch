@@ -38,10 +38,10 @@ Signed-off-by: Owen Synge <osynge@suse.com>
  create mode 100644 systemd/ceph-osd@.service
 
 diff --git a/ceph.spec.in b/ceph.spec.in
-index 5454454..529ef8c 100644
+index 02b300b..d8307a5 100644
 --- a/ceph.spec.in
 +++ b/ceph.spec.in
-@@ -431,6 +431,7 @@ fi
+@@ -455,6 +455,7 @@ fi
  %endif
  %dir %{_libdir}/ceph
  %{_libdir}/ceph/ceph_common.sh
@@ -50,7 +50,7 @@ index 5454454..529ef8c 100644
  %{_libdir}/rados-classes/libcls_rbd.so*
  %{_libdir}/rados-classes/libcls_hello.so*
 diff --git a/src/Makefile.am b/src/Makefile.am
-index edec05e..42363b1 100644
+index 9c394e8..5c893ef 100644
 --- a/src/Makefile.am
 +++ b/src/Makefile.am
 @@ -147,6 +147,7 @@ EXTRA_DIST += \

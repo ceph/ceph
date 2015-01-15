@@ -10,10 +10,10 @@ previous code just fails for systemd with an error
  1 file changed, 15 insertions(+)
 
 diff --git a/src/ceph-disk b/src/ceph-disk
-index 5b71985..8140dcd 100755
+index 3657648..9e7b743 100755
 --- a/src/ceph-disk
 +++ b/src/ceph-disk
-@@ -1712,6 +1712,21 @@ def start_daemon(
+@@ -1689,6 +1689,21 @@ def start_daemon(
                      'osd.{osd_id}'.format(osd_id=osd_id),
                      ],
                  )

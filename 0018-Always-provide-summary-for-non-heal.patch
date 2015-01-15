@@ -7,15 +7,16 @@ popup drill-down for warnings or errors, should the summary
 be missing.
 
 Signed-off-by: Thorsten Behrens <tbehrens@suse.com>
+(cherry picked from commit 092ef99e7da0942d99e60765af69559ace69fe7b)
 ---
  src/mon/Monitor.cc | 49 +++++++++++++++++++++++++------------------------
  1 file changed, 25 insertions(+), 24 deletions(-)
 
 diff --git a/src/mon/Monitor.cc b/src/mon/Monitor.cc
-index fd3a358..e6ee86d 100644
+index ad35e5e..9062022 100644
 --- a/src/mon/Monitor.cc
 +++ b/src/mon/Monitor.cc
-@@ -1906,30 +1906,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+@@ -1925,30 +1925,6 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
  
    health_monitor->get_health(f, summary, (detailbl ? &detail : NULL));
  
@@ -46,7 +47,7 @@ index fd3a358..e6ee86d 100644
    if (f) {
      f->open_object_section("timechecks");
      f->dump_int("epoch", get_epoch());
-@@ -1938,6 +1914,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+@@ -1957,6 +1933,8 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
        << ((timecheck_round%2) ? "on-going" : "finished");
    }
  
@@ -55,7 +56,7 @@ index fd3a358..e6ee86d 100644
    if (!timecheck_skews.empty()) {
      list<string> warns;
      if (f)
-@@ -1984,6 +1962,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+@@ -2003,6 +1981,7 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
          if (!warns.empty())
            ss << ",";
        }
@@ -63,7 +64,7 @@ index fd3a358..e6ee86d 100644
      }
      if (f)
        f->close_section();
-@@ -1991,6 +1970,28 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
+@@ -2010,6 +1989,28 @@ void Monitor::get_health(string& status, bufferlist *detailbl, Formatter *f)
    if (f)
      f->close_section();
  
