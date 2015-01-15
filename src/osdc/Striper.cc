@@ -52,7 +52,7 @@ void Striper::file_to_extents(CephContext *cct, const char *object_format,
   /*
    * we want only one extent per object!
    * this means that each extent we read may map into different bits of the 
-   * final read buffer.. hence OSDExtent.buffer_extents
+   * final read buffer.. hence ObjectExtent.buffer_extents
    */
   
   __u32 object_size = layout->fl_object_size;
