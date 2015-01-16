@@ -6174,7 +6174,7 @@ int RGWRados::list_raw_objects(rgw_bucket& pool, const string& prefix_filter,
 int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& marker, uint32_t max,
                                   std::list<rgw_bi_log_entry>& result, bool *truncated)
 {
-  ldout(cct, 20) << __func__ << bucket << " marker " << marker << " max " << max << dendl;
+  ldout(cct, 20) << __func__ << ": " << bucket << " marker " << marker << " shard_id=" << shard_id << " max " << max << dendl;
   result.clear();
 
   librados::IoCtx index_ctx;
@@ -6191,7 +6191,7 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
   // should have the pattern '{shard_id_1}#{shard_marker_1},{shard_id_2}#
   // {shard_marker_2}...', if there is no sharding, the bi_log_list should
   // only contain one record, and the key is the bucket instance id.
-  r = marker_mgr.from_string(marker, has_shards);
+  r = marker_mgr.from_string(marker, shard_id);
   if (r < 0)
     return r;
  
@@ -6200,50 +6200,60 @@ int RGWRados::list_bi_log_entries(rgw_bucket& bucket, int shard_id, string& mark
     return r;
 
   vector<string> shard_ids_str;
-  vector<list<rgw_bi_log_entry>::iterator> vcurrents;
-  vector<list<rgw_bi_log_entry>::iterator> vends;
+  map<int, list<rgw_bi_log_entry>::iterator> vcurrents;
+  map<int, list<rgw_bi_log_entry>::iterator> vends;
   if (truncated) {
     *truncated = false;
   }
   map<int, cls_rgw_bi_log_list_ret>::iterator miter = bi_log_lists.begin();
   for (; miter != bi_log_lists.end(); ++miter) {
     int shard_id = miter->first;
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", shard_id);
-    shard_ids_str.push_back(buf);
-    vcurrents.push_back(miter->second.entries.begin());
-    vends.push_back(miter->second.entries.end());
+    vcurrents[shard_id] = miter->second.entries.begin();
+    vends[shard_id] = miter->second.entries.end();
     if (truncated) {
       *truncated = (*truncated || miter->second.truncated);
     }
   }
 
+  size_t total = 0;
   bool has_more = true;
-  while (result.size() < max && has_more) {
+  map<int, list<rgw_bi_log_entry>::iterator>::iterator viter;
+  map<int, list<rgw_bi_log_entry>::iterator>::iterator eiter;
+  while (total < max && has_more) {
     has_more = false;
-    for (size_t i = 0;
-        result.size() < max && i < vcurrents.size() && vcurrents[i] != vends[i];
-        ++vcurrents[i], ++i) {
-      string& shard_str = shard_ids_str[i];
-      if (vcurrents[i] != vends[i]) {
-        rgw_bi_log_entry& entry = *(vcurrents[i]);
-        if (has_shards) {
-          // Put the shard name as part of the ID, so that caller can easy find out
-          // the next marker
-          string tmp_id;
-          build_bucket_index_marker(shard_str, entry.id, &tmp_id);
-          entry.id.swap(tmp_id);
-        }
-        marker_mgr.add(i, entry.id);
-        result.push_back(entry);
-        has_more = true;
+
+    viter = vcurrents.begin();
+    eiter = vends.begin();
+
+    for (; total < max && viter != vcurrents.end(); ++viter, ++eiter) {
+      assert (eiter != vends.end());
+
+      int shard_id = viter->first;
+      list<rgw_bi_log_entry>::iterator& liter = viter->second;
+
+      if (liter == eiter->second){
+        continue;
       }
+      rgw_bi_log_entry& entry = *(liter);
+      if (has_shards) {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", shard_id);
+        string tmp_id;
+        build_bucket_index_marker(buf, entry.id, &tmp_id);
+        entry.id.swap(tmp_id);
+      }
+      marker_mgr.add(shard_id, entry.id);
+      result.push_back(entry);
+      total++;
+      has_more = true;
+      ++liter;
     }
   }
 
-  for (size_t i = 0; i < vcurrents.size(); ++i) {
-    if (truncated) {
-      *truncated = (*truncated || (vcurrents[i] != vends[i]));
+  if (truncated) {
+    for (viter = vcurrents.begin(), eiter = vends.begin(); viter != vcurrents.end(); ++viter, ++eiter) {
+      assert (eiter != vends.end());
+      *truncated = (*truncated || (viter->second != eiter->second));
     }
   }
 
@@ -6269,13 +6279,12 @@ int RGWRados::trim_bi_log_entries(rgw_bucket& bucket, int shard_id, string& star
   if (r < 0)
     return r;
 
-  bool has_shards = bucket_objs.size() > 1 || shard_id >= 0;
   BucketIndexShardsManager start_marker_mgr;
-  r = start_marker_mgr.from_string(start_marker, has_shards);
+  r = start_marker_mgr.from_string(start_marker, shard_id);
   if (r < 0)
     return r;
   BucketIndexShardsManager end_marker_mgr;
-  r = end_marker_mgr.from_string(end_marker, has_shards);
+  r = end_marker_mgr.from_string(end_marker, shard_id);
   if (r < 0)
     return r;
 
