@@ -94,10 +94,6 @@ ceph_authtool_SOURCES = tools/ceph_authtool.cc
 ceph_authtool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_PROGRAMS += ceph-authtool
 
-ceph_mon_store_converter_SOURCES = tools/mon_store_converter.cc
-ceph_mon_store_converter_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL)
-bin_PROGRAMS += ceph_mon_store_converter
-
 noinst_HEADERS += \
 	tools/cephfs/JournalTool.h \
 	tools/cephfs/JournalScanner.h \
