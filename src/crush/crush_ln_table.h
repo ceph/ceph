@@ -24,6 +24,9 @@
 #define CEPH_CRUSH_LN_H
 
 
+// RH_LH_tbl[2*k] = 2^48/(1.0+k/128.0)
+// RH_LH_tbl[2*k+1] = 2^48*log2(1.0+k/128.0)
+
 static int64_t __RH_LH_tbl[128*2+2] = {
   0x0001000000000000ll, 0x0000000000000000ll, 0x0000fe03f80fe040ll, 0x000002dfca16dde1ll,
   0x0000fc0fc0fc0fc1ll, 0x000005b9e5a170b4ll, 0x0000fa232cf25214ll, 0x0000088e68ea899all,
