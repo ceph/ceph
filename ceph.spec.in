@@ -485,22 +485,22 @@ rm -rf $RPM_BUILD_ROOT
 
 %pre
 
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_pre $SERVICES
 %endif
 
 %post
 /sbin/ldconfig
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_post $SERVICES
 %endif
 
 %preun
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
-%service_add_post $SERVICES
+%service_add_preun $SERVICES
 %else
 %stop_on_removal ceph
 if [ $1 = 0 ] ; then
@@ -512,9 +512,9 @@ fi
 
 %postun
 /sbin/ldconfig
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
-%service_del_preun $SERVICES
+%service_del_postun $SERVICES
 %else
 if [ "$1" -ge "1" ] ; then
     /sbin/service ceph condrestart >/dev/null 2>&1 || :
@@ -707,17 +707,29 @@ fi
 %{_sbindir}/rcceph-radosgw
 %endif
 
+%pre radosgw
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-radosgw.*@.*\.service | cut -d' ' -f1`
+%service_add_pre $SERVICES
+%endif
+
 %post radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_add_post $SERVICES
+%else
 %fillup_and_insserv -f -y ceph-radosgw
 %endif
 %endif
 
 %preun radosgw
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_add_preun $SERVICES
+%else
 %stop_on_removal ceph-radosgw
 %endif
 %endif
@@ -725,7 +737,10 @@ fi
 %postun radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_del_postun $SERVICES
+%else
 %restart_on_update ceph-radosgw
 %endif
 %insserv_cleanup

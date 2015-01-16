@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Fri Jan 16 15:55:09 UTC 2015 - osynge@suse.com
+
+- Added systemd pre / post macros for ceph-radosgw
+- Fixed incorrect systemd macros being called for ceph
+
+-------------------------------------------------------------------
 Thu Jan 15 19:27:36 UTC 2015 - osynge@suse.com
 
 - Improver radosgw systemd support.
