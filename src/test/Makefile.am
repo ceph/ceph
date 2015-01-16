@@ -416,6 +416,14 @@ if LINUX
 unittest_pglog_LDADD += -ldl
 endif # LINUX
 
+unittest_osdscrub_SOURCES = test/osd/TestOSDScrub.cc
+unittest_osdscrub_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_osdscrub_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_osdscrub
+if LINUX
+unittest_osdscrub_LDADD += -ldl
+endif # LINUX
+
 unittest_ecbackend_SOURCES = test/osd/TestECBackend.cc
 unittest_ecbackend_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_ecbackend_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
