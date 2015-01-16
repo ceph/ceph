@@ -716,16 +716,16 @@ public:
     Parent(crush, osdmap, pgm, tree) {}
 
   void dump(TextTable *tbl) {
-    tbl->define_column("# id", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("weight", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("reweight", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("size", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("used", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("avail", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("%use", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("var", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
     if (tree)
-      tbl->define_column("type name", TextTable::LEFT, TextTable::LEFT);
+      tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
 
     Parent::dump(tbl);
 
@@ -771,13 +771,13 @@ protected:
 public:
   string summary() {
     ostringstream out;
-    out << "# total size/used/avail: " << si_t(pgm->osd_sum.kb)
+    out << "TOTAL SIZE/USED/AVAIL: " << si_t(pgm->osd_sum.kb)
 	<< "/" << si_t(pgm->osd_sum.kb_used << 10)
 	<< "/" << si_t(pgm->osd_sum.kb_avail << 10) << "\n"
-	<< "# avg %use: " << lowprecision_t(average_util) << "  "
-	<< "min/max var: " << lowprecision_t(min_var)
+	<< "AVG %USE: " << lowprecision_t(average_util) << "  "
+	<< "MIN/MAX VAR: " << lowprecision_t(min_var)
 	<< "/" << lowprecision_t(max_var) << "  "
-	<< "dev: " << lowprecision_t(dev());
+	<< "STDDEV: " << lowprecision_t(dev());
     return out.str();
   }
 };
