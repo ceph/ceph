@@ -338,10 +338,15 @@ unittest_util_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_util_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CRYPTO_LIBS) $(EXTRALIBS)
 check_PROGRAMS += unittest_util
 
-unittest_crush_indep_SOURCES = test/crush/indep.cc
-unittest_crush_indep_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-unittest_crush_indep_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
-check_PROGRAMS += unittest_crush_indep
+unittest_crush_wrapper_SOURCES = test/crush/CrushWrapper.cc
+unittest_crush_wrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
+unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
+check_PROGRAMS += unittest_crush_wrapper
+
+unittest_crush_SOURCES = test/crush/crush.cc
+unittest_crush_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+unittest_crush_LDADD = $(LIBCOMMON) -lm $(UNITTEST_LDADD) $(CEPH_CRUSH) $(EXTRALIBS) $(CEPH_GLOBAL)
+check_PROGRAMS += unittest_crush
 
 unittest_osdmap_SOURCES = test/osd/TestOSDMap.cc
 unittest_osdmap_CXXFLAGS = $(UNITTEST_CXXFLAGS)
@@ -377,11 +382,6 @@ unittest_throttle_SOURCES = test/common/Throttle.cc
 unittest_throttle_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_throttle_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_throttle
-
-unittest_crush_wrapper_SOURCES = test/crush/TestCrushWrapper.cc
-unittest_crush_wrapper_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL) $(LIBCRUSH)
-unittest_crush_wrapper_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
-check_PROGRAMS += unittest_crush_wrapper
 
 unittest_base64_SOURCES = test/base64.cc
 unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD)
