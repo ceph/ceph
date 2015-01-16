@@ -158,7 +158,7 @@ int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id,
   }
 
   BucketIndexShardsManager sm;
-  int ret = sm.from_string(marker, true);
+  int ret = sm.from_string(marker, shard_id);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: could not parse shards marker: " << marker << dendl;
     return ret;
