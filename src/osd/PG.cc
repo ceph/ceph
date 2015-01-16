@@ -2356,17 +2356,12 @@ void PG::publish_stats_to_osd()
 
   pg_stats_publish_lock.Lock();
 
-  // update our stat summary
-  info.stats.reported_epoch = get_osdmap()->get_epoch();
-  ++info.stats.reported_seq;
-
   if (info.stats.stats.sum.num_scrub_errors)
     state_set(PG_STATE_INCONSISTENT);
   else
     state_clear(PG_STATE_INCONSISTENT);
 
   utime_t now = ceph_clock_now(cct);
-  info.stats.last_fresh = now;
   if (info.stats.state != state) {
     info.stats.state = state;
     info.stats.last_change = now;
@@ -2374,28 +2369,45 @@ void PG::publish_stats_to_osd()
 	!(info.stats.state & PG_STATE_ACTIVE))
       info.stats.last_became_active = now;
   }
-  if (info.stats.state & PG_STATE_CLEAN)
-    info.stats.last_clean = now;
-  if (info.stats.state & PG_STATE_ACTIVE)
-    info.stats.last_active = now;
-  info.stats.last_unstale = now;
-  if ((info.stats.state & PG_STATE_DEGRADED) == 0)
-    info.stats.last_undegraded = now;
-  if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
-    info.stats.last_fullsized = now;
 
   _update_calc_stats();
   _update_blocked_by();
 
-  pg_stats_publish_valid = true;
-  pg_stats_publish = info.stats;
-  pg_stats_publish.stats.add(unstable_stats);
+  bool publish = false;
+  utime_t cutoff = now;
+  cutoff -= g_conf->osd_pg_stat_report_interval_max;
+  if (pg_stats_publish_valid && info.stats == pg_stats_publish &&
+      info.stats.last_fresh > cutoff) {
+    dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
+	     << ": no change since" << dendl;
+  } else {
+    // update our stat summary and timestamps
+    info.stats.reported_epoch = get_osdmap()->get_epoch();
+    ++info.stats.reported_seq;
 
-  dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
-	   << ":" << pg_stats_publish.reported_seq << dendl;
+    info.stats.last_fresh = now;
+    if (info.stats.state & PG_STATE_CLEAN)
+      info.stats.last_clean = now;
+    if (info.stats.state & PG_STATE_ACTIVE)
+      info.stats.last_active = now;
+    info.stats.last_unstale = now;
+    if ((info.stats.state & PG_STATE_DEGRADED) == 0)
+      info.stats.last_undegraded = now;
+    if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
+      info.stats.last_fullsized = now;
+
+    publish = true;
+    pg_stats_publish_valid = true;
+    pg_stats_publish = info.stats;
+    pg_stats_publish.stats.add(unstable_stats);
+
+    dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
+	     << ":" << pg_stats_publish.reported_seq << dendl;
+  }
   pg_stats_publish_lock.Unlock();
 
-  osd->pg_stat_queue_enqueue(this);
+  if (publish)
+    osd->pg_stat_queue_enqueue(this);
 }
 
 void PG::clear_publish_stats()
