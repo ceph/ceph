@@ -59,7 +59,6 @@ namespace librbd {
     ceph::bufferlist m_read_data;
     bool m_hide_enoent;
     std::vector<librados::snap_t> m_snaps;
-    ceph::bufferlist *m_entire_object;
   };
 
   class AioRead : public AioRequest {
@@ -68,13 +67,7 @@ namespace librbd {
 	    uint64_t objectno, uint64_t offset, uint64_t len,
 	    vector<pair<uint64_t,uint64_t> >& be, const ::SnapContext &snapc,
 	    librados::snap_t snap_id, bool sparse,
-	    Context *completion, int op_flags)
-      : AioRequest(ictx, oid, objectno, offset, len, snapc, snap_id, completion,
-		   false),
-	m_buffer_extents(be), m_tried_parent(false),
-	m_sparse(sparse), m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
-      guard_read();
-    }
+	    Context *completion, int op_flags);
     virtual ~AioRead() {}
     virtual bool should_complete(int r);
     virtual int send();
@@ -92,6 +85,7 @@ namespace librbd {
     bool m_tried_parent;
     bool m_sparse;
     int m_op_flags;
+    vector<pair<uint64_t,uint64_t> > m_image_extents;
 
     /**
      * Reads go through the following state machine to deal with
@@ -169,6 +163,7 @@ namespace librbd {
     librados::ObjectWriteOperation m_write;
     librados::ObjectWriteOperation m_copyup;
     uint64_t m_snap_seq;
+    ceph::bufferlist *m_entire_object;
 
   private:
     void send_copyup();
