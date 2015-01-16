@@ -26,6 +26,10 @@
     export-diff <image-name> [--from-snap <snap-name>] <path>
                                                 export an incremental diff to
                                                 path, or "-" for stdout
+    merge-diff <diff1> <diff2> <path>           merge <diff1> and <diff2> into
+                                                <path>, <diff1> could be "-"
+                                                for stdin, and <path> could be "-"
+                                                for stdout
     import-diff <path> <image-name>             import an incremental diff from
                                                 path or "-" for stdin
     (cp | copy) <src> <dest>                    copy src image to dest
