@@ -1,0 +1,9 @@
+tasks:
+- rgw: 
+    client.0:
+    default_idle_timeout: 300
+- print: "**** done rgw 9-workload"
+- swift:
+    client.0:
+      rgw_server: client.0
+- print: "**** done swift 9-workload"
