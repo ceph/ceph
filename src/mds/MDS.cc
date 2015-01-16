@@ -1768,6 +1768,8 @@ void MDS::boot_create()
 
   mdcache->init_layouts();
 
+  snapserver->set_rank(whoami);
+  inotable->set_rank(whoami);
   sessionmap.set_rank(whoami);
 
   // start with a fresh journal
@@ -1851,6 +1853,7 @@ void MDS::boot_start(BootStep step, int r)
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
         dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+        inotable->set_rank(whoami);
         inotable->load(gather.new_sub());
 
         dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
@@ -1862,6 +1865,7 @@ void MDS::boot_start(BootStep step, int r)
 
         if (mdsmap->get_tableserver() == whoami) {
           dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+          snapserver->set_rank(whoami);
           snapserver->load(gather.new_sub());
         }
 
