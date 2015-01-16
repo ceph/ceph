@@ -150,24 +150,21 @@ public:
   }
 
   void to_string(string *out) const {
-    if (out) {
-      map<int, string>::const_iterator iter = value_by_shards.begin();
-      // No shards
-      if (value_by_shards.size() == 1) {
-        *out = iter->second;
-      } else {
-        for (; iter != value_by_shards.end(); ++iter) {
-          if (out->length()) {
-            // Not the first item, append a separator first
-            out->append(SHARDS_SEPARATOR);
-          }
-          char buf[16];
-          snprintf(buf, sizeof(buf), "%d", iter->first);
-          out->append(buf);
-          out->append(KEY_VALUE_SEPARATOR);
-          out->append(iter->second);
-        }
+    if (!out) {
+      return;
+    }
+    out->clear();
+    map<int, string>::const_iterator iter = value_by_shards.begin();
+    for (; iter != value_by_shards.end(); ++iter) {
+      if (out->length()) {
+        // Not the first item, append a separator first
+        out->append(SHARDS_SEPARATOR);
       }
+      char buf[16];
+      snprintf(buf, sizeof(buf), "%d", iter->first);
+      out->append(buf);
+      out->append(KEY_VALUE_SEPARATOR);
+      out->append(iter->second);
     }
   }
 
@@ -175,27 +172,45 @@ public:
     return marker.find(KEY_VALUE_SEPARATOR) != string::npos;
   }
 
-  int from_string(const string& composed_marker, bool has_shards) {
+  /*
+   * convert from string. There are two options of how the string looks like:
+   *
+   * 1. Single shard, no shard id specified, e.g. 000001.23.1
+   *
+   * for this case, if passed shard_id >= 0, use this shard id, otherwise assume that it's a
+   * bucket with no shards.
+   *
+   * 2. One or more shards, shard id specified for each shard, e.g., 0#00002.12,1#00003.23.2
+   *
+   */
+  int from_string(const string& composed_marker, int shard_id) {
     value_by_shards.clear();
-    if (!has_shards) {
-      add(0, composed_marker);
-    } else {
-      list<string> shards;
-      get_str_list(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
-      list<string>::const_iterator iter = shards.begin();
-      for (; iter != shards.end(); ++iter) {
-        size_t pos = iter->find(KEY_VALUE_SEPARATOR);
-        if (pos == string::npos) {
+    vector<string> shards;
+    get_str_vec(composed_marker, SHARDS_SEPARATOR.c_str(), shards);
+    if (shards.size() > 1 && shard_id >= 0) {
+      return -EINVAL;
+    }
+    vector<string>::const_iterator iter = shards.begin();
+    for (; iter != shards.end(); ++iter) {
+      size_t pos = iter->find(KEY_VALUE_SEPARATOR);
+      if (pos == string::npos) {
+        if (!value_by_shards.empty()) {
           return -EINVAL;
         }
-        string shard_str = iter->substr(0, pos);
-        string err;
-        int shard = (int)strict_strtol(shard_str.c_str(), 10, &err);
-        if (!err.empty()) {
-          return -EINVAL;
+        if (shard_id < 0) {
+          add(0, *iter);
+        } else {
+          add(shard_id, *iter);
         }
-        value_by_shards[shard] = iter->substr(pos + 1);
+        return 0;
       }
+      string shard_str = iter->substr(0, pos);
+      string err;
+      int shard = (int)strict_strtol(shard_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        return -EINVAL;
+      }
+      add(shard, iter->substr(pos + 1));
     }
     return 0;
   }
