@@ -3619,8 +3619,17 @@ void PG::repair_object(
     list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
     for (i = ok_peers->begin();
 	 i != ok_peers->end();
-	 i++)
-      missing_loc.add_location(soid, i->second);
+	 i++) {
+      if (i->second == bad_peer) {
+	stringstream ss;
+	ss << __func__ << ": bad_peer osd." << bad_peer
+	   << " unexpectedly found in ok_peers osd." << *ok_peers
+	   << " (ignored) " << std::endl;
+	osd->clog->error(ss);
+      } else {
+	missing_loc.add_location(soid, i->second);
+      }
+    }
 
     pg_log.set_last_requested(0);
     dout(10) << __func__ << ": primary = " << primary << dendl;
