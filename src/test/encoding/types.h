@@ -178,7 +178,7 @@ TYPE(InoTable)
 TYPEWITHSTRAYDATA(SnapServer)
 
 #include "mds/SessionMap.h"
-TYPE(SessionMap)
+TYPE(SessionMapStore)
 
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
