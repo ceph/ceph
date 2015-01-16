@@ -6154,6 +6154,9 @@ void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entrie
     if (now - pending_info.time >= cct->_conf->rgw_olh_pending_timeout_sec) {
       (*rm_pending_entries)[cur_iter->first] = cur_iter->second;
       pending_entries.erase(cur_iter);
+    } else {
+      /* entries names are sorted by time (rounded to a second) */
+      break;
     }
   }
 }
