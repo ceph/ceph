@@ -883,13 +883,15 @@ CephContext *RGWPutObjProcessor::ctx()
   return store->ctx();
 }
 
-RGWPutObjProcessor::~RGWPutObjProcessor()
+RGWPutObjProcessor_Aio::~RGWPutObjProcessor_Aio()
 {
+  drain_pending();
+
   if (is_complete)
     return;
 
   list<rgw_obj>::iterator iter;
-  for (iter = objs.begin(); iter != objs.end(); ++iter) {
+  for (iter = written_objs.begin(); iter != written_objs.end(); ++iter) {
     rgw_obj& obj = *iter;
     int r = store->delete_obj(obj_ctx, bucket_owner, obj);
     if (r < 0 && r != -ENOENT) {
@@ -943,6 +945,11 @@ int RGWPutObjProcessor_Aio::handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t 
 {
   if ((uint64_t)abs_ofs + bl.length() > obj_len)
     obj_len = abs_ofs + bl.length();
+
+  if (!(obj == last_written_obj)) {
+    add_written_obj(obj);
+    last_written_obj = obj;
+  }
 
   // For the first call pass -1 as the offset to
   // do a write_full.
@@ -1144,7 +1151,6 @@ int RGWPutObjProcessor_Atomic::prepare_next_part(off_t ofs) {
   cur_part_ofs = ofs;
   next_part_ofs = ofs + manifest_gen.cur_stripe_max_size();
   cur_obj = manifest_gen.get_cur_obj();
-  add_obj(cur_obj);
 
   return 0;
 }

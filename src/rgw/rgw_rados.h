@@ -554,14 +554,9 @@ protected:
                           map<string, bufferlist>& attrs,
                           const char *if_match = NULL, const char *if_nomatch = NULL) = 0;
 
-  list<rgw_obj> objs;
-
-  void add_obj(const rgw_obj& obj) {
-    objs.push_back(obj);
-  }
 public:
   RGWPutObjProcessor(const string& _bo) : store(NULL), obj_ctx(NULL), is_complete(false), bucket_owner(_bo) {}
-  virtual ~RGWPutObjProcessor();
+  virtual ~RGWPutObjProcessor() {}
   virtual int prepare(RGWRados *_store, void *_o, string *oid_rand) {
     store = _store;
     obj_ctx = _o;
@@ -614,8 +609,16 @@ class RGWPutObjProcessor_Aio : public RGWPutObjProcessor
   int wait_pending_front();
   bool pending_has_completed();
 
+  rgw_obj last_written_obj;
+
 protected:
   uint64_t obj_len;
+
+  list<rgw_obj> written_objs;
+
+  void add_written_obj(const rgw_obj& obj) {
+    written_objs.push_back(obj);
+  }
 
   int drain_pending();
   int handle_obj_data(rgw_obj& obj, bufferlist& bl, off_t ofs, off_t abs_ofs, void **phandle, bool exclusive);
@@ -624,9 +627,7 @@ public:
   int throttle_data(void *handle, bool need_to_wait);
 
   RGWPutObjProcessor_Aio(const string& bucket_owner) : RGWPutObjProcessor(bucket_owner), max_chunks(RGW_MAX_PENDING_CHUNKS), obj_len(0) {}
-  virtual ~RGWPutObjProcessor_Aio() {
-    drain_pending();
-  }
+  virtual ~RGWPutObjProcessor_Aio();
 };
 
 class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
