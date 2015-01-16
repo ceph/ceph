@@ -29,9 +29,10 @@
 #include <gtest/gtest.h>
 
 #define LARGE_BLOCK_LEN CHAIN_XATTR_MAX_BLOCK_LEN + 1024
+#define FILENAME "chain_xattr"
 
 TEST(chain_xattr, get_and_set) {
-  const char* file = "testfile";
+  const char* file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_WRONLY|O_TRUNC, 0700);
   const string user("user.");
@@ -148,7 +149,7 @@ TEST(chain_xattr, get_and_set) {
 }
 
 TEST(chain_xattr, listxattr) {
-  const char* file = "testfile";
+  const char* file = FILENAME;
   ::unlink(file);
   int fd = ::open(file, O_CREAT|O_WRONLY|O_TRUNC, 0700);
   const string user("user.");
@@ -196,7 +197,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("log_to_stderr", "false");
   g_ceph_context->_conf->apply_changes(NULL);
 
-  const char* file = "testfile";
+  const char* file = FILENAME;
   int x = 1234;
   int y = 0;
   int tmpfd = ::open(file, O_CREAT|O_WRONLY|O_TRUNC, 0700);
