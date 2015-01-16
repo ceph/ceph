@@ -1454,7 +1454,6 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string
 
   head_obj = manifest_gen.get_cur_obj();
   cur_obj = head_obj;
-  add_obj(cur_obj);
 
   return 0;
 }
