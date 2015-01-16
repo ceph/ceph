@@ -29,7 +29,7 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << (mds ? mds->get_nodeid() : -1) << "." << table_name << ": "
+#define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
 
 
 class MDSTableIOContext : public MDSIOContextBase
