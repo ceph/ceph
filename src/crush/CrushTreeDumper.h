@@ -162,6 +162,7 @@ namespace CrushTreeDumper {
       f->open_object_section("item");
       dump_item_fields(qi, f);
       dump_bucket_children(qi, f);
+      f->close_section();
     }
 
     virtual void dump_item_fields(const Item &qi, Formatter *f) {
