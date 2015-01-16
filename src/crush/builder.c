@@ -960,7 +960,7 @@ int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 {
 	unsigned i, j;
 	int newsize;
-	int weight;
+	unsigned weight;
 
 	for (i = 0; i < bucket->h.size; i++)
 		if (bucket->h.items[i] == item)
@@ -1012,7 +1012,7 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 
 	for (i = 0; i < bucket->h.size; i++) {
 		int node;
-		int weight;
+		unsigned weight;
 		int j;
 		int depth = calc_depth(bucket->h.size);
 
