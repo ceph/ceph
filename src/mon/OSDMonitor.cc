@@ -641,7 +641,9 @@ protected:
     int64_t kb = 0, kb_used = 0, kb_avail = 0;
     double util = get_bucket_utilization(qi.id, kb, kb_used, kb_avail) ?
       100.0 * (double)kb_used / (double)kb : 0;
-    double var = util / average_util;
+    double var = 1.0;
+    if (average_util)
+      var = util / average_util;
 
     dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
 
