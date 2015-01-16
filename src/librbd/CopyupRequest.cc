@@ -16,16 +16,12 @@
 #define dout_prefix *_dout << "librbd::CopyupRequest: "
 
 namespace librbd {
-  CopyupRequest::CopyupRequest()
-    : m_ictx(NULL), m_object_no(0), m_lock("librbd::CopyupRequest::m_lock"),
-      m_ready(false), m_need_copyup(false), m_parent_completion(NULL),
-      m_copyup_completion(NULL) {}
 
   CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                               uint64_t objectno, bool need_copyup)
+                               uint64_t objectno, bool send_copyup)
     : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
       m_lock("librbd::CopyupRequest::m_lock"), m_ready(false),
-      m_need_copyup(need_copyup), m_parent_completion(NULL),
+      m_send_copyup(send_copyup), m_parent_completion(NULL),
       m_copyup_completion(NULL) {}
 
   CopyupRequest::~CopyupRequest() {
@@ -57,8 +53,8 @@ namespace librbd {
     return m_ready;
   }
 
-  bool CopyupRequest::is_need_send_copyup() {
-    return m_need_copyup;
+  bool CopyupRequest::should_send_copyup() {
+    return m_send_copyup;
   }
 
   ceph::bufferlist& CopyupRequest::get_copyup_data() {
@@ -117,30 +113,30 @@ namespace librbd {
     aio_read(m_ictx->parent, image_extents, NULL, &m_copyup_data, m_parent_completion, 0);
   }
 
-  void rbd_read_from_parent_cb(completion_t cb, void *arg)
+  void CopyupRequest::rbd_read_from_parent_cb(completion_t cb, void *arg)
   {
     CopyupRequest *req = reinterpret_cast<CopyupRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
 
     ldout(req->m_ictx->cct, 20) << __func__ << dendl;
 
-    req->get_lock().Lock();
+    req->m_lock.Lock();
     req->set_ready();
     req->complete_all(comp->get_return_value());
-    req->get_lock().Unlock();
+    req->m_lock.Unlock();
 
     // If this entry is created by a read request, then copyup operation will
     // be performed asynchronously. Perform cleaning up from copyup callback.
     // If this entry is created by a write request, then copyup operation will
     // be performed synchronously by AioWrite. After extracting data, perform
     // cleaning up here
-    if (req->is_need_send_copyup())
+    if (req->should_send_copyup())
       req->send_copyup(comp->get_return_value());
     else
       delete req;
   }
 
-  void rbd_copyup_cb(rados_completion_t c, void *arg)
+  void CopyupRequest::rbd_copyup_cb(rados_completion_t c, void *arg)
   {
     CopyupRequest *req = reinterpret_cast<CopyupRequest *>(arg);
 
