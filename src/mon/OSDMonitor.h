@@ -222,6 +222,8 @@ private:
   int reweight_by_utilization(int oload, std::string& out_str, bool by_pg,
 			      const set<int64_t> *pools);
 
+  void print_utilization(ostream &out, Formatter *f, bool tree) const;
+
   bool check_source(PaxosServiceMessage *m, uuid_d fsid);
  
   bool preprocess_get_osdmap(class MMonGetOSDMap *m);

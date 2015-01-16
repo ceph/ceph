@@ -638,6 +638,9 @@ COMMAND("osd reweight-by-pg " \
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
 	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
+COMMAND("osd df " \
+	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
+	"show OSD utilization", "osd", "r", "cli,rest")
 
 // tiering
 COMMAND("osd tier add " \
