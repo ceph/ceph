@@ -5604,20 +5604,27 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
     op.setxattr(RGW_ATTR_OLH_VER, verbl);
   }
 
-#define OLH_PENDING_TAG_LEN 32
-  int ret = gen_rand_alphanumeric_lower(cct, op_tag, OLH_PENDING_TAG_LEN);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
-  attr_name.append(*op_tag);
-
   bufferlist bl;
   RGWOLHPendingInfo pending_info;
   pending_info.time = ceph_clock_now(cct);
   ::encode(pending_info, bl);
+
+#define OLH_PENDING_TAG_LEN 32
+  /* tag will start with current time epoch, this so that entries are sorted by time */
+  char buf[32];
+  snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)pending_info.time.sec());
+  *op_tag = buf;
+
+  string s;
+  int ret = gen_rand_alphanumeric_lower(cct, &s, OLH_PENDING_TAG_LEN - op_tag->size());
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: gen_rand_alphanumeric_lower() returned ret=" << ret << dendl;
+    return ret;
+  }
+  op_tag->append(s);
+
+  string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
+  attr_name.append(*op_tag);
 
   op.setxattr(attr_name.c_str(), bl);
 
