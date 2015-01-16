@@ -509,6 +509,8 @@ int FileJournal::open(uint64_t fs_op_seq)
   // looks like a valid header.
   write_pos = 0;  // not writeable yet
 
+  journaled_seq = header.committed_up_to;
+
   // find next entry
   read_pos = header.start;
   uint64_t seq = header.start_seq;
@@ -1723,6 +1725,8 @@ bool FileJournal::read_entry(
     } else {
       read_pos = next_pos;
       next_seq = seq;
+      if (seq > journaled_seq)
+        journaled_seq = seq;
       return true;
     }
   }
