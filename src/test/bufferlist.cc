@@ -37,6 +37,9 @@
 #include "sys/stat.h"
 
 #define MAX_TEST 1000000
+#define FILENAME "bufferlist"
+
+static char cmd[128];
 
 TEST(Buffer, constructors) {
   bool ceph_buffer_track = get_env_bool("CEPH_BUFFER_TRACK");
@@ -150,15 +153,16 @@ TEST(Buffer, constructors) {
     EXPECT_THROW(buffer::create_zero_copy(len, -1, NULL), buffer::error_code);
 
     unsigned zc_len = 4;
-    ::unlink("testfile");
-    EXPECT_EQ(0, ::system("echo ABC > testfile"));
-    int fd = ::open("testfile", O_RDONLY);
+    ::unlink(FILENAME);
+    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
+    EXPECT_EQ(0, ::system(cmd));
+    int fd = ::open(FILENAME, O_RDONLY);
     bufferptr ptr(buffer::create_zero_copy(zc_len, fd, NULL));
     EXPECT_EQ(zc_len, ptr.length());
     if (ceph_buffer_track)
       EXPECT_EQ(zc_len, (unsigned)buffer::get_total_alloc());
     ::close(fd);
-    ::unlink("testfile");
+    ::unlink(FILENAME);
   }
 #endif
   if (ceph_buffer_track)
@@ -178,14 +182,15 @@ class TestRawPipe : public ::testing::Test {
 protected:
   virtual void SetUp() {
     len = 4;
-    ::unlink("testfile");
-    EXPECT_EQ(0, ::system("echo ABC > testfile"));
-    fd = ::open("testfile", O_RDONLY);
+    ::unlink(FILENAME);
+    snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
+    EXPECT_EQ(0, ::system(cmd));
+    fd = ::open(FILENAME, O_RDONLY);
     assert(fd >= 0);
   }
   virtual void TearDown() {
     ::close(fd);
-    ::unlink("testfile");
+    ::unlink(FILENAME);
   }
   int fd;
   unsigned len;
@@ -295,21 +300,21 @@ TEST_F(TestRawPipe, buffer_list_read_fd_zero_copy) {
 }
 
 TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
-  ::unlink("testfile_out");
+  ::unlink(FILENAME);
   bufferlist bl;
   EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
   EXPECT_TRUE(bl.can_zero_copy());
-  int out_fd = ::open("testfile_out", O_RDWR|O_CREAT|O_TRUNC, 0600);
+  int out_fd = ::open(FILENAME, O_RDWR|O_CREAT|O_TRUNC, 0600);
   EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  EXPECT_EQ(0, ::stat("testfile_out", &st));
+  EXPECT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(len, st.st_size);
   char buf[len + 1];
   EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
   EXPECT_EQ(0, memcmp(buf, "ABC\n", len));
   ::close(out_fd);
-  ::unlink("testfile_out");
+  ::unlink(FILENAME);
 }
 #endif // CEPH_HAVE_SPLICE
 
@@ -1874,14 +1879,16 @@ TEST(BufferList, hexdump) {
 TEST(BufferList, read_file) {
   std::string error;
   bufferlist bl;
-  ::unlink("testfile");
+  ::unlink(FILENAME);
   EXPECT_EQ(-ENOENT, bl.read_file("UNLIKELY", &error));
-  EXPECT_EQ(0, ::system("echo ABC > testfile ; chmod 0 testfile"));
+  snprintf(cmd, sizeof(cmd), "echo ABC > %s ; chmod 0 %s", FILENAME, FILENAME);
+  EXPECT_EQ(0, ::system(cmd));
   if (getuid() != 0)
-    EXPECT_EQ(-EACCES, bl.read_file("testfile", &error));
-  EXPECT_EQ(0, ::system("chmod +r testfile"));
-  EXPECT_EQ(0, bl.read_file("testfile", &error));
-  ::unlink("testfile");
+    EXPECT_EQ(-EACCES, bl.read_file(FILENAME, &error));
+  snprintf(cmd, sizeof(cmd), "chmod +r %s", FILENAME);
+  EXPECT_EQ(0, ::system(cmd));
+  EXPECT_EQ(0, bl.read_file(FILENAME, &error));
+  ::unlink(FILENAME);
   EXPECT_EQ((unsigned)4, bl.length());
   std::string actual(bl.c_str(), bl.length());
   EXPECT_EQ("ABC\n", actual);
@@ -1889,36 +1896,37 @@ TEST(BufferList, read_file) {
 
 TEST(BufferList, read_fd) {
   unsigned len = 4;
-  ::unlink("testfile");
-  EXPECT_EQ(0, ::system("echo ABC > testfile"));
+  ::unlink(FILENAME);
+  snprintf(cmd, sizeof(cmd), "echo ABC > %s", FILENAME);
+  EXPECT_EQ(0, ::system(cmd));
   int fd = -1;
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
-  fd = ::open("testfile", O_RDONLY);
+  fd = ::open(FILENAME, O_RDONLY);
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
   EXPECT_EQ(CEPH_PAGE_SIZE - len, bl.buffers().front().unused_tail_length());
   EXPECT_EQ(len, bl.length());
   ::close(fd);
-  ::unlink("testfile");
+  ::unlink(FILENAME);
 }
 
 TEST(BufferList, write_file) {
-  ::unlink("testfile");
+  ::unlink(FILENAME);
   int mode = 0600;
   bufferlist bl;
   EXPECT_EQ(-ENOENT, bl.write_file("un/like/ly", mode));
   bl.append("ABC");
-  EXPECT_EQ(0, bl.write_file("testfile", mode));
+  EXPECT_EQ(0, bl.write_file(FILENAME, mode));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat("testfile", &st);
+  ::stat(FILENAME, &st);
   EXPECT_EQ((unsigned)(mode | S_IFREG), st.st_mode);
-  ::unlink("testfile");
+  ::unlink(FILENAME);
 }
 
 TEST(BufferList, write_fd) {
-  ::unlink("testfile");
-  int fd = ::open("testfile", O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  ::unlink(FILENAME);
+  int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
   bufferlist bl;
   for (unsigned i = 0; i < IOV_MAX * 2; i++) {
     bufferptr ptr("A", 1);
@@ -1928,9 +1936,9 @@ TEST(BufferList, write_fd) {
   ::close(fd);
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat("testfile", &st);
+  ::stat(FILENAME, &st);
   EXPECT_EQ(IOV_MAX * 2, st.st_size);
-  ::unlink("testfile");
+  ::unlink(FILENAME);
 }
 
 TEST(BufferList, crc32c) {
