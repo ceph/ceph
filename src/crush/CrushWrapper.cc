@@ -1501,10 +1501,8 @@ public:
 
 protected:
   virtual void dump_item(const CrushTreeDumper::Item &qi, ostream *out) {
-    std::streamsize p = out->precision();
-
     *out << qi.id << "\t"
-	 << std::setprecision(4) << qi.weight << "\t";
+	 << weightf_t(qi.weight) << "\t";
 
     for (int k=0; k < qi.depth; k++)
       *out << "\t";
@@ -1518,9 +1516,9 @@ protected:
     {
       assert(qi.id >= 0 && (size_t)qi.id < weights.size());
       *out << "osd." << qi.id << "\t"
-	   << (double)weights[qi.id] / (double)0x10000 << "\t";
+	   << weightf_t((double)weights[qi.id] / (double)0x10000) << "\t";
     }
-    *out << std::setprecision(p) << "\n";
+    *out << "\n";
   }
 
 private:
