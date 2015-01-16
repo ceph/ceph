@@ -1768,6 +1768,8 @@ void MDS::boot_create()
 
   mdcache->init_layouts();
 
+  sessionmap.set_rank(whoami);
+
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin.new_sub());
@@ -1852,6 +1854,7 @@ void MDS::boot_start(BootStep step, int r)
         inotable->load(gather.new_sub());
 
         dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+        sessionmap.set_rank(whoami);
         sessionmap.load(gather.new_sub());
 
         dout(2) << "boot_start " << step << ": opening mds log" << dendl;
