@@ -15,30 +15,30 @@ namespace librbd {
 
   class CopyupRequest {
   public:
-    CopyupRequest();
     CopyupRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
-                  bool need_copyup);
+                  bool send_copyup);
     ~CopyupRequest();
 
     void set_ready();
     bool is_ready();
-    bool is_need_send_copyup();
+    bool should_send_copyup();
     ceph::bufferlist& get_copyup_data();
     Mutex& get_lock();
     void append_request(AioRequest *req);
     void complete_all(int r);
     void send_copyup(int r);
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
-    AioCompletion *get_parent_completion() { return m_parent_completion; }
-    librados::AioCompletion *get_copyup_completion() { return m_copyup_completion; }
-    ImageCtx *m_ictx;
+
+    static void rbd_read_from_parent_cb(completion_t cb, void *arg);
+    static void rbd_copyup_cb(completion_t aio_completion_impl, void *arg);
 
   private:
+    ImageCtx *m_ictx;
     std::string m_oid;
     uint64_t m_object_no;
     Mutex m_lock;
     bool m_ready;
-    bool m_need_copyup;
+    bool m_send_copyup;
     AioCompletion *m_parent_completion;
     librados::AioCompletion *m_copyup_completion;
     ceph::bufferlist m_copyup_data;
