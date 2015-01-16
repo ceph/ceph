@@ -253,12 +253,12 @@ static int bucket_straw_choose(struct crush_bucket_straw *bucket,
 	return bucket->h.items[high];
 }
 
-// compute 2^12*log2(input+1)
-unsigned crush_ln(unsigned xin)
+// compute 2^44*log2(input+1)
+uint64_t crush_ln(unsigned xin)
 {
-    unsigned x=xin, x1, result;
+    unsigned x=xin, x1;
     int iexpon, index1, index2;
-    uint64_t RH, LH, LL, xl64;
+    uint64_t RH, LH, LL, xl64, result;
 
     x++;
 
@@ -277,7 +277,8 @@ unsigned crush_ln(unsigned xin)
     xl64 >>= 48;
     x1 = xl64;
 
-    result = iexpon << 12;
+    result = iexpon;
+    result <<= (12 + 32);
 
     index2 = x1 & 0xff;
     // LL ~ 2^48*log2(1.0+index2/2^15)
@@ -285,8 +286,8 @@ unsigned crush_ln(unsigned xin)
 
     LH = LH + LL;
 
-    LH >>= (48-12);
-    result += (unsigned)LH;
+    LH >>= (48-12 - 32);
+    result += LH;
 
     return result;
 }
@@ -319,15 +320,15 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 		 *
 		 * the natural log lookup table maps [0,0xffff]
 		 * (corresponding to real numbers [1/0x10000, 1] to
-		 * [0, 0xffff] (corresponding to real numbers
+		 * [0, 0xffffffffffff] (corresponding to real numbers
 		 * [-11.090355,0]).
 		 */
-		ln = crush_ln(u) - 0x10000;
+		ln = crush_ln(u) - 0x1000000000000ll;
 
 		/*
 		 * divide by 16.16 fixed-point weight
 		 */
-		draw = (ln << 32) / bucket->item_weights[i];
+		draw = ln / bucket->item_weights[i];
 
 		if (i == 0 || draw > high_draw) {
 			high = i;
