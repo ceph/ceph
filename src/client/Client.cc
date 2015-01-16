@@ -8377,7 +8377,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     r = -ENODATA;
     if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
-      if (size != 0) {
+      if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
 	  memcpy(value, in->xattrs[n].c_str(), r);
 	else
