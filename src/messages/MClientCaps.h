@@ -20,8 +20,7 @@
 
 
 class MClientCaps : public Message {
-
-  static const int HEAD_VERSION = 4;   // added flock metadata, inline data
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -32,6 +31,9 @@ class MClientCaps : public Message {
   bufferlist flockbl;
   version_t  inline_version;
   bufferlist inline_data;
+
+  // Receivers may not use their new caps until they have this OSD map
+  epoch_t osd_epoch_barrier;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -85,7 +87,8 @@ class MClientCaps : public Message {
   }
 
   MClientCaps()
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+      osd_epoch_barrier(0) {
     inline_version = 0;
   }
   MClientCaps(int op,
@@ -96,8 +99,10 @@ class MClientCaps : public Message {
 	      int caps,
 	      int wanted,
 	      int dirty,
-	      int mseq)
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {
+	      int mseq,
+              epoch_t oeb)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+      osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -108,20 +113,21 @@ class MClientCaps : public Message {
     head.wanted = wanted;
     head.dirty = dirty;
     head.migrate_seq = mseq;
-    peer.cap_id = 0;
+    memset(&peer, 0, sizeof(peer));
     inline_version = 0;
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
-	      uint64_t id, int mseq)
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION) {
+	      uint64_t id, int mseq, epoch_t oeb)
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
+      osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
     head.realm = realm;
     head.cap_id = id;
     head.migrate_seq = mseq;
-    peer.cap_id = 0;
+    memset(&peer, 0, sizeof(peer));
     inline_version = 0;
   }
 private:
@@ -182,6 +188,10 @@ public:
     } else {
       inline_version = CEPH_INLINE_NONE;
     }
+
+    if (header.version >= 5) {
+      ::decode(osd_epoch_barrier, p);
+    }
   }
   void encode_payload(uint64_t features) {
     head.snap_trace_len = snapbl.length();
@@ -216,9 +226,11 @@ public:
       ::encode(inline_version, payload);
       ::encode(inline_data, payload);
     } else {
-      header.version = 3;
-      return;
+      ::encode(inline_version, payload);
+      ::encode(bufferlist(), payload);
     }
+
+    ::encode(osd_epoch_barrier, payload);
   }
 };
 

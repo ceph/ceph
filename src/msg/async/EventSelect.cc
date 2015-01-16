@@ -66,14 +66,14 @@ int SelectDriver::resize_events(int newsize)
 
 int SelectDriver::event_wait(vector<FiredFileEvent> &fired_events, struct timeval *tvp)
 {
-  int retval, j, numevents = 0;
+  int retval, numevents = 0;
 
   memcpy(&_rfds, &rfds, sizeof(fd_set));
   memcpy(&_wfds, &wfds, sizeof(fd_set));
 
   retval = select(max_fd+1, &_rfds, &_wfds, NULL, tvp);
   if (retval > 0) {
-    for (j = 0; j <= max_fd; j++) {
+    for (int j = 0; j <= max_fd; j++) {
       int mask = 0;
       struct FiredFileEvent fe;
       if (FD_ISSET(j, &_rfds))

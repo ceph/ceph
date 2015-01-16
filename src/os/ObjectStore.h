@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <vector>
+#include <map>
 
 #if defined(DARWIN) || defined(__FreeBSD__)
 #include <sys/statvfs.h>
@@ -32,10 +33,13 @@
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
 #endif /* DARWIN */
 
+#define OPS_PER_PTR 32
+
 class CephContext;
 
 using std::vector;
 using std::string;
+using std::map;
 
 namespace ceph {
   class Formatter;
@@ -204,7 +208,7 @@ public:
    *
    * The data portion of an object is conceptually equivalent to a
    * file in a file system. Random and Partial access for both read
-   * and operations is required. The ability to have a sparse
+   * and write operations is required. The ability to have a sparse
    * implementation of the data portion of an object is beneficial for
    * some workloads, but not required. There is a system-wide limit on
    * the maximum size of an object, which is typically around 100 MB.
@@ -269,7 +273,7 @@ public:
    * execute quickly and must not acquire any locks of the calling
    * environment. Conversely, "on_applied" is called from the separate
    * Finisher thread, meaning that it can contend for calling
-   * environment locks. NB, on_applied and on_applied sync are
+   * environment locks. NB, on_applied and on_applied_sync are
    * sometimes called on_readable and on_readable_sync.
    *
    * The "on_commit" callback is also called from the Finisher thread
@@ -320,7 +324,7 @@ public:
    * Enumeration operations may violate transaction isolation as
    * described above when a storage element is being created or
    * deleted as part of a transaction. In this case, ObjectStore is
-   * allowed to consider the enumeration operation to either preceed
+   * allowed to consider the enumeration operation to either precede
    * or follow the violating transaction element. In other words, the
    * presence/absence of the mutated element in the enumeration is
    * entirely at the discretion of ObjectStore. The arbitrary ordering
@@ -328,7 +332,7 @@ public:
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
    * transaction is pending. It is permissable for ObjectStore to
-   * report any of the four possible combinations of the existance of
+   * report any of the four possible combinations of the existence of
    * A and B.
    *
    */
@@ -383,26 +387,68 @@ public:
       COLL_HINT_EXPECTED_NUM_OBJECTS = 1,
     };
 
+    struct Op {
+      __le32 op;
+      __le32 cid;
+      __le32 oid;
+      __le64 off;
+      __le64 len;
+      __le32 dest_cid;
+      __le32 dest_oid;                  //OP_CLONE, OP_CLONERANGE
+      __le64 dest_off;                  //OP_CLONERANGE
+      __le32 hint_type;                 //OP_COLL_HINT
+      __le64 expected_object_size;      //OP_SETALLOCHINT
+      __le64 expected_write_size;       //OP_SETALLOCHINT
+      __le32 split_bits;                //OP_SPLIT_COLLECTION2
+      __le32 split_rem;                 //OP_SPLIT_COLLECTION2
+    } __attribute__ ((packed)) ;
+
+    struct TransactionData {
+      __le64 ops;
+      __le32 largest_data_len;
+      __le32 largest_data_off;
+      __le32 largest_data_off_in_tbl;
+      __le32 fadvise_flags;
+
+      TransactionData() :
+        ops(0),
+        largest_data_len(0),
+        largest_data_off(0),
+        largest_data_off_in_tbl(0),
+	fadvise_flags(0) { }
+
+      void encode(bufferlist& bl) const {
+        bl.append((char*)this, sizeof(TransactionData));
+      }
+      void decode(bufferlist::iterator &bl) {
+        bl.copy(sizeof(TransactionData), (char*)this);
+      }
+    } __attribute__ ((packed)) ;
+
   private:
-    uint64_t ops;
-    uint64_t pad_unused_bytes;
-    uint32_t largest_data_len, largest_data_off, largest_data_off_in_tbl;
-    bufferlist tbl;
-    bool sobject_encoding;
-    int64_t pool_override;
-    bool use_pool_override;
-    bool replica;
-    bool tolerate_collection_add_enoent;
+    TransactionData data;
+
     void *osr; // NULL on replay
+
+    bool use_tbl;   //use_tbl for encode/decode
+    bufferlist tbl;
+
+    map<coll_t, __le32> coll_index;
+    map<ghobject_t, __le32> object_index;
+
+    __le32 coll_id;
+    __le32 object_id;
+
+    bufferlist data_bl;
+    bufferlist op_bl;
+
+    bufferptr op_ptr;
 
     list<Context *> on_applied;
     list<Context *> on_commit;
     list<Context *> on_applied_sync;
 
   public:
-    void set_tolerate_collection_add_enoent() {
-      tolerate_collection_add_enoent = true;
-    }
 
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
@@ -455,47 +501,202 @@ public:
       return C_Contexts::list_to_context(on_applied_sync);
     }
 
-    /// For legacy transactions, provide the pool to override the encoded pool with
-    void set_pool_override(int64_t pool) {
-      pool_override = pool;
+    void set_fadvise_flags(uint32_t flags) {
+      data.fadvise_flags = flags;
     }
-    void set_replica() {
-      replica = true;
+    void set_fadvise_flag(uint32_t flag) {
+      data.fadvise_flags = data.fadvise_flags | flag;
     }
-    bool get_replica() { return replica; }
+    uint32_t get_fadvise_flags() { return data.fadvise_flags; }
+
+    void set_use_tbl(bool value) {
+      use_tbl = value;
+    }
+    bool get_use_tbl() {
+      return use_tbl;
+    }
 
     void swap(Transaction& other) {
-      std::swap(ops, other.ops);
-      std::swap(largest_data_len, other.largest_data_len);
-      std::swap(largest_data_off, other.largest_data_off);
-      std::swap(largest_data_off_in_tbl, other.largest_data_off_in_tbl);
+      std::swap(data, other.data);
       std::swap(on_applied, other.on_applied);
       std::swap(on_commit, other.on_commit);
       std::swap(on_applied_sync, other.on_applied_sync);
+
+      std::swap(use_tbl, other.use_tbl);
       tbl.swap(other.tbl);
+
+      std::swap(coll_index, other.coll_index);
+      std::swap(object_index, other.object_index);
+      std::swap(coll_id, other.coll_id);
+      std::swap(object_id, other.object_id);
+      op_bl.swap(other.op_bl);
+      data_bl.swap(other.data_bl);
     }
 
+    void _update_op(Op* op,
+      vector<__le32> &cm,
+      vector<__le32> &om) {
+
+      switch (op->op) {
+      case OP_NOP:
+      case OP_STARTSYNC:
+        break;
+
+      case OP_TOUCH:
+      case OP_REMOVE:
+      case OP_SETATTR:
+      case OP_SETATTRS:
+      case OP_RMATTR:
+      case OP_RMATTRS:
+      case OP_COLL_REMOVE:
+      case OP_OMAP_CLEAR:
+      case OP_OMAP_SETKEYS:
+      case OP_OMAP_RMKEYS:
+      case OP_OMAP_RMKEYRANGE:
+      case OP_OMAP_SETHEADER:
+      case OP_WRITE:
+      case OP_ZERO:
+      case OP_TRUNCATE:
+      case OP_CLONERANGE2:
+      case OP_SETALLOCHINT:
+        assert(op->cid < cm.size());
+        assert(op->oid < om.size());
+        op->cid = cm[op->cid];
+        op->oid = om[op->oid];
+        break;
+
+      case OP_CLONE:
+        assert(op->cid < cm.size());
+        assert(op->oid < om.size());
+        assert(op->dest_oid < om.size());
+        op->cid = cm[op->cid];
+        op->oid = om[op->oid];
+        op->dest_oid = om[op->dest_oid];
+        break;
+
+      case OP_MKCOLL:
+      case OP_RMCOLL:
+      case OP_COLL_SETATTR:
+      case OP_COLL_RMATTR:
+      case OP_COLL_SETATTRS:
+      case OP_COLL_HINT:
+        assert(op->cid < cm.size());
+        op->cid = cm[op->cid];
+        break;
+
+      case OP_COLL_ADD:
+        assert(op->cid < cm.size());
+        assert(op->oid < om.size());
+        assert(op->dest_cid < om.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        op->oid = om[op->oid];
+        break;
+
+      case OP_COLL_MOVE_RENAME:
+        assert(op->cid < cm.size());
+        assert(op->oid < om.size());
+        assert(op->dest_cid < cm.size());
+        assert(op->dest_oid < om.size());
+        op->cid = cm[op->cid];
+        op->oid = om[op->oid];
+        op->dest_cid = cm[op->dest_cid];
+        op->dest_oid = om[op->dest_oid];
+        break;
+
+      case OP_SPLIT_COLLECTION2:
+        assert(op->cid < cm.size());
+        op->dest_cid = cm[op->dest_oid];
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
+      default:
+        assert(0 == "Unkown OP");
+      }
+    }
+    void _update_op_bl(
+      bufferlist& bl,
+      vector<__le32> &cm,
+      vector<__le32> &om) {
+
+      list<bufferptr> list = bl.buffers();
+      std::list<bufferptr>::iterator p;
+
+      for(p = list.begin(); p != list.end(); p++) {
+        assert(p->length() % sizeof(Op) == 0);
+
+        char* raw_p = p->c_str();
+        char* raw_end = raw_p + p->length();
+        while (raw_p < raw_end) {
+          _update_op((Op*)raw_p, cm, om);
+          raw_p += sizeof(Op);
+        }
+      }
+    }
     /// Append the operations of the parameter to this Transaction. Those operations are removed from the parameter Transaction
     void append(Transaction& other) {
-      ops += other.ops;
-      assert(pad_unused_bytes == 0);
-      assert(other.pad_unused_bytes == 0);
-      if (other.largest_data_len > largest_data_len) {
-	largest_data_len = other.largest_data_len;
-	largest_data_off = other.largest_data_off;
-	largest_data_off_in_tbl = tbl.length() + other.largest_data_off_in_tbl;
+      assert(use_tbl == other.use_tbl);
+
+      data.ops += other.data.ops;
+      if (other.data.largest_data_len > data.largest_data_len) {
+	data.largest_data_len = other.data.largest_data_len;
+	data.largest_data_off = other.data.largest_data_off;
+	data.largest_data_off_in_tbl = tbl.length() + other.data.largest_data_off_in_tbl;
       }
+      data.fadvise_flags |= other.data.fadvise_flags;
       tbl.append(other.tbl);
       on_applied.splice(on_applied.end(), other.on_applied);
       on_commit.splice(on_commit.end(), other.on_commit);
       on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
+
+      //append coll_index & object_index
+      vector<__le32> cm(other.coll_index.size());
+      map<coll_t, __le32>::iterator coll_index_p;
+      for (coll_index_p = other.coll_index.begin();
+           coll_index_p != other.coll_index.end();
+           coll_index_p++) {
+        cm[coll_index_p->second] = _get_coll_id(coll_index_p->first);
+      }
+
+      vector<__le32> om(other.object_index.size());
+      map<ghobject_t, __le32>::iterator object_index_p;
+      for (object_index_p = other.object_index.begin();
+           object_index_p != other.object_index.end();
+           object_index_p++) {
+        om[object_index_p->second] = _get_object_id(object_index_p->first);
+      }
+
+      //update other.op_bl with cm & om
+      //When the other is appended to current transaction, all coll_index and
+      //object_index in other.op_buffer should be updated by new index of the
+      //combined transaction
+      _update_op_bl(other.op_bl, cm, om);
+
+      //append op_bl
+      op_bl.append(other.op_bl);
+      //append data_bl
+      data_bl.append(other.data_bl);
     }
 
     /** Inquires about the Transaction as a whole. */
 
     /// How big is the encoded Transaction buffer?
     uint64_t get_encoded_bytes() {
-      return 1 + 8 + 8 + 4 + 4 + 4 + 4 + tbl.length();
+      if (use_tbl)
+        return 1 + 8 + 8 + 4 + 4 + 4 + 4 + 4 + tbl.length();
+      else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+        //TODO: maybe we need better way to get encoded bytes;
+        bufferlist bl;
+        ::encode(coll_index, bl);
+        ::encode(object_index, bl);
+
+        return data_bl.length() +
+          op_bl.length() +
+          bl.length() +
+          sizeof(data);
+      }
     }
 
     uint64_t get_num_bytes() {
@@ -503,37 +704,45 @@ public:
     }
     /// Size of largest data buffer to the "write" operation encountered so far
     uint32_t get_data_length() {
-      return largest_data_len;
+      return data.largest_data_len;
     }
     /// offset within the encoded buffer to the start of the largest data buffer that's encoded
     uint32_t get_data_offset() {
-      if (largest_data_off_in_tbl) {
-	return largest_data_off_in_tbl +
-	  sizeof(__u8) +  // encode struct_v
-	  sizeof(__u8) +  // encode compat_v
-	  sizeof(__u32) + // encode len
-	  sizeof(ops) +
-	  sizeof(pad_unused_bytes) +
-	  sizeof(largest_data_len) +
-	  sizeof(largest_data_off) +
-	  sizeof(largest_data_off_in_tbl) +
-	  sizeof(__u32);  // tbl length
+      if (data.largest_data_off_in_tbl) {
+        if (use_tbl) {
+          return data.largest_data_off_in_tbl +
+            sizeof(__u8) +      // encode struct_v
+            sizeof(__u8) +      // encode compat_v
+            sizeof(__u32) +     // encode len
+            sizeof(uint64_t) +  // ops
+            sizeof(uint64_t) +  // pad_unused_bytes(unused)
+            sizeof(uint32_t) +  // largest_data_len
+            sizeof(uint32_t) +  // largest_data_off
+            sizeof(uint32_t) +  // largest_data_off_in_tbl
+	    sizeof(uint32_t) +   //fadvise_flags
+            sizeof(__u32);      // tbl length
+        } else {
+          return data.largest_data_off_in_tbl +
+            sizeof(__u8) +      // encode struct_v
+            sizeof(__u8) +      // encode compat_v
+            sizeof(__u32);      // encode len
+        }
       }
       return 0;  // none
     }
     /// offset of buffer as aligned to destination within object.
     int get_data_alignment() {
-      if (!largest_data_len)
+      if (!data.largest_data_len)
 	return -1;
       return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
     bool empty() {
-      return !ops;
+      return !data.ops;
     }
     /// Number of operations in the transation
     int get_num_ops() {
-      return ops;
+      return data.ops;
     }
 
     void set_osr(void *s) {
@@ -554,104 +763,96 @@ public:
      *
      */
     class iterator {
-      bufferlist::iterator p;
-      bool sobject_encoding;
-      int64_t pool_override;
-      bool use_pool_override;
-      bool replica;
-      bool _tolerate_collection_add_enoent;
+      Transaction *t;
+
+      uint64_t ops;
+      char* op_buffer_p;
+
+      bufferlist::iterator data_bl_p;
+
+      vector<coll_t> colls;
+      vector<ghobject_t> objects;
 
       iterator(Transaction *t)
-	: p(t->tbl.begin()),
-	  sobject_encoding(t->sobject_encoding),
-	  pool_override(t->pool_override),
-	  use_pool_override(t->use_pool_override),
-	  replica(t->replica),
-	  _tolerate_collection_add_enoent(
-	    t->tolerate_collection_add_enoent) {}
+        : t(t),
+	  data_bl_p(t->data_bl.begin()),
+          colls(t->coll_index.size()),
+          objects(t->object_index.size()) {
+
+        ops = t->data.ops;
+        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+
+        map<coll_t, __le32>::iterator coll_index_p;
+        for (coll_index_p = t->coll_index.begin();
+             coll_index_p != t->coll_index.end();
+             coll_index_p++) {
+          colls[coll_index_p->second] = coll_index_p->first;
+        }
+
+        map<ghobject_t, __le32>::iterator object_index_p;
+        for (object_index_p = t->object_index.begin();
+             object_index_p != t->object_index.end();
+             object_index_p++) {
+          objects[object_index_p->second] = object_index_p->first;
+        }
+      }
 
       friend class Transaction;
 
     public:
-      bool tolerate_collection_add_enoent() const {
-	return _tolerate_collection_add_enoent;
-      }
-      /// true if there are more operations left to be enumerated
-      bool have_op() {
-	return !p.end();
-      }
 
-      /* Decode the specified type of object from the input
-       * stream. There is no checking that the encoded data is of the
-       * correct type.
-       */
-      int decode_op() {
-	__u32 op;
-	::decode(op, p);
-	return op;
+      bool have_op() {
+        return ops > 0;
+      }
+      Op* decode_op() {
+        assert(ops > 0);
+
+        Op* op =  (Op*)op_buffer_p;
+        op_buffer_p += sizeof(Op);
+        ops--;
+
+        return op;
+      }
+      string decode_string() {
+        string s;
+        ::decode(s, data_bl_p);
+        return s;
       }
       void decode_bl(bufferlist& bl) {
-	::decode(bl, p);
-      }
-      /// Get an oid, recognize various legacy forms and update them.
-      ghobject_t decode_oid() {
-	ghobject_t oid;
-	if (sobject_encoding) {
-	  sobject_t soid;
-	  ::decode(soid, p);
-	  oid.hobj.snap = soid.snap;
-	  oid.hobj.oid = soid.oid;
-	  oid.generation = ghobject_t::NO_GEN;
-	  oid.shard_id = shard_id_t::NO_SHARD;
-	} else {
-	  ::decode(oid, p);
-	  if (use_pool_override && pool_override != -1 &&
-	      !oid.hobj.is_max() && oid.hobj.pool == -1) {
-	    oid.hobj.pool = pool_override;
-	  }
-	}
-	return oid;
-      }
-      coll_t decode_cid() {
-	coll_t c;
-	::decode(c, p);
-	return c;
-      }
-      uint64_t decode_length() {
-	uint64_t len;
-	::decode(len, p);
-	return len;
-      }
-      string decode_attrname() {
-	string s;
-	::decode(s, p);
-	return s;
-      }
-      string decode_key() {
-	string s;
-	::decode(s, p);
-	return s;
+        ::decode(bl, data_bl_p);
       }
       void decode_attrset(map<string,bufferptr>& aset) {
-	::decode(aset, p);
+        ::decode(aset, data_bl_p);
       }
       void decode_attrset(map<string,bufferlist>& aset) {
-	::decode(aset, p);
+        ::decode(aset, data_bl_p);
       }
-      void decode_keyset(set<string> &keys) {
-	::decode(keys, p);
+      void decode_keyset(set<string> &keys){
+        ::decode(keys, data_bl_p);
       }
-      uint32_t decode_u32() {
-	uint32_t bits;
-	::decode(bits, p);
-	return bits;
+
+      ghobject_t get_oid(__le32 oid_id) {
+        assert(oid_id < objects.size());
+        return objects[oid_id];
       }
-      bool get_replica() { return replica; }
+      coll_t get_cid(__le32 cid_id) {
+        assert(cid_id < colls.size());
+        return colls[cid_id];
+      }
+      uint32_t get_fadvise_flags() const {
+	return t->get_fadvise_flags();
+      }
     };
 
     iterator begin() {
+      if (use_tbl) {
+        _build_actions_from_tbl();
+      }
       return iterator(this);
     }
+
+private:
+    void _build_actions_from_tbl();
 
     /**
      * Helper functions to encode the various mutation elements of a
@@ -661,18 +862,60 @@ public:
      * right place. Sadly, there's no corresponding version nor any
      * form of seat belts for the decoder.
      */
+    Op* _get_next_op() {
+      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
+        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+	op_ptr.zero();
+      }
+      bufferptr ptr(op_ptr, 0, sizeof(Op));
+      op_bl.append(ptr);
 
+      op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
+
+      char* p = ptr.c_str();
+      return (Op*)p;
+    }
+    __le32 _get_coll_id(const coll_t& coll) {
+      map<coll_t, __le32>::iterator c = coll_index.find(coll);
+      if (c != coll_index.end())
+        return c->second;
+
+      __le32 index_id = coll_id++;
+      coll_index[coll] = index_id;
+      return index_id;
+    }
+    __le32 _get_object_id(const ghobject_t& oid) {
+      map<ghobject_t, __le32>::iterator o = object_index.find(oid);
+      if (o != object_index.end())
+        return o->second;
+
+      __le32 index_id = object_id++;
+      object_index[oid] = index_id;
+      return index_id;
+    }
+
+public:
     /// Commence a global file system sync operation.
     void start_sync() {
-      __u32 op = OP_STARTSYNC;
-      ::encode(op, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_STARTSYNC;
+        ::encode(op, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_STARTSYNC;
+      }
+      data.ops++;
     }
     /// noop. 'nuf said
     void nop() {
-      __u32 op = OP_NOP;
-      ::encode(op, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_NOP;
+        ::encode(op, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_NOP;
+      }
+      data.ops++;
     }
     /**
      * touch
@@ -681,11 +924,18 @@ public:
      * empty object if necessary
      */
     void touch(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_TOUCH;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_TOUCH;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_TOUCH;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
     /**
      * Write data to an offset within an object. If the object is too
@@ -698,21 +948,32 @@ public:
      * "hole" in the file.
      */
     void write(coll_t cid, const ghobject_t& oid, uint64_t off, uint64_t len,
-	       const bufferlist& data) {
-      __u32 op = OP_WRITE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(off, tbl);
-      ::encode(len, tbl);
-      assert(len == data.length());
-      if (data.length() > largest_data_len) {
-	largest_data_len = data.length();
-	largest_data_off = off;
-	largest_data_off_in_tbl = tbl.length() + sizeof(__u32);  // we are about to
+	       const bufferlist& write_data, uint32_t flags = 0) {
+      if (use_tbl) {
+        __u32 op = OP_WRITE;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(off, tbl);
+        ::encode(len, tbl);
+        ::encode(write_data, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_WRITE;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->off = off;
+        _op->len = len;
+        ::encode(write_data, data_bl);
       }
-      ::encode(data, tbl);
-      ops++;
+      assert(len == write_data.length());
+      data.fadvise_flags = data.fadvise_flags | flags;
+      if (write_data.length() > data.largest_data_len) {
+	data.largest_data_len = write_data.length();
+	data.largest_data_off = off;
+	data.largest_data_off_in_tbl = tbl.length() + sizeof(__u32);  // we are about to
+      }
+      data.ops++;
     }
     /**
      * zero out the indicated byte range within an object. Some
@@ -720,30 +981,54 @@ public:
      * underlying storage space.
      */
     void zero(coll_t cid, const ghobject_t& oid, uint64_t off, uint64_t len) {
-      __u32 op = OP_ZERO;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(off, tbl);
-      ::encode(len, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_ZERO;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(off, tbl);
+        ::encode(len, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_ZERO;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->off = off;
+        _op->len = len;
+      }
+      data.ops++;
     }
     /// Discard all data in the object beyond the specified size.
     void truncate(coll_t cid, const ghobject_t& oid, uint64_t off) {
-      __u32 op = OP_TRUNCATE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(off, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_TRUNCATE;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(off, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_TRUNCATE;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->off = off;
+      }
+      data.ops++;
     }
     /// Remove an object. All four parts of the object are removed.
     void remove(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_REMOVE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_REMOVE;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_REMOVE;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
     /// Set an xattr of an object
     void setattr(coll_t cid, const ghobject_t& oid, const char* name, bufferlist& val) {
@@ -752,31 +1037,56 @@ public:
     }
     /// Set an xattr of an object
     void setattr(coll_t cid, const ghobject_t& oid, const string& s, bufferlist& val) {
-      __u32 op = OP_SETATTR;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(s, tbl);
-      ::encode(val, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_SETATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(s, tbl);
+        ::encode(val, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_SETATTR;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(s, data_bl);
+        ::encode(val, data_bl);
+      }
+      data.ops++;
     }
     /// Set multiple xattrs of an object
     void setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>& attrset) {
-      __u32 op = OP_SETATTRS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(attrset, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(attrset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(attrset, data_bl);
+      }
+      data.ops++;
     }
     /// Set multiple xattrs of an object
     void setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferlist>& attrset) {
-      __u32 op = OP_SETATTRS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(attrset, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(attrset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(attrset, data_bl);
+      }
+      data.ops++;
     }
     /// remove an xattr from an object
     void rmattr(coll_t cid, const ghobject_t& oid, const char *name) {
@@ -785,20 +1095,35 @@ public:
     }
     /// remove an xattr from an object
     void rmattr(coll_t cid, const ghobject_t& oid, const string& s) {
-      __u32 op = OP_RMATTR;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(s, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_RMATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(s, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_RMATTR;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(s, data_bl);
+      }
+      data.ops++;
     }
     /// remove all xattrs from an object
     void rmattrs(coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_RMATTRS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_RMATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_RMATTRS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
     /**
      * Clone an object into another object.
@@ -808,16 +1133,24 @@ public:
      * object are cloned (data, xattrs, omap header, omap
      * entries).
      *
-     * The destination named object may already exist in
+     * The destination named object may already exist, in
      * which case its previous contents are discarded.
      */
     void clone(coll_t cid, const ghobject_t& oid, ghobject_t noid) {
-      __u32 op = OP_CLONE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(noid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_CLONE;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(noid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_CLONE;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->dest_oid = _get_object_id(noid);
+      }
+      data.ops++;
     }
     /**
      * Clone a byte range from one object to another.
@@ -828,22 +1161,39 @@ public:
      */
     void clone_range(coll_t cid, const ghobject_t& oid, ghobject_t noid,
 		     uint64_t srcoff, uint64_t srclen, uint64_t dstoff) {
-      __u32 op = OP_CLONERANGE2;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(noid, tbl);
-      ::encode(srcoff, tbl);
-      ::encode(srclen, tbl);
-      ::encode(dstoff, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_CLONERANGE2;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(noid, tbl);
+        ::encode(srcoff, tbl);
+        ::encode(srclen, tbl);
+        ::encode(dstoff, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_CLONERANGE2;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->dest_oid = _get_object_id(noid);
+        _op->off = srcoff;
+        _op->len = srclen;
+        _op->dest_off = dstoff;
+      }
+      data.ops++;
     }
     /// Create the collection
     void create_collection(coll_t cid) {
-      __u32 op = OP_MKCOLL;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_MKCOLL;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_MKCOLL;
+        _op->cid = _get_coll_id(cid);
+      }
+      data.ops++;
     }
 
     /**
@@ -854,104 +1204,174 @@ public:
      * @param hint - the hint payload, which contains the customized
      *               data along with the hint type.
      */
-     void collection_hint(coll_t cid, uint32_t type, const bufferlist& hint) {
-       __u32 op = OP_COLL_HINT;
-       ::encode(op, tbl);
-       ::encode(cid, tbl);
-       ::encode(type, tbl);
-       ::encode(hint, tbl);
-       ops++;
-     }
+    void collection_hint(coll_t cid, uint32_t type, const bufferlist& hint) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_HINT;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(type, tbl);
+        ::encode(hint, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_HINT;
+        _op->cid = _get_coll_id(cid);
+        _op->hint_type = type;
+        ::encode(hint, data_bl);
+      }
+      data.ops++;
+    }
 
     /// remove the collection, the collection must be empty
     void remove_collection(coll_t cid) {
-      __u32 op = OP_RMCOLL;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_RMCOLL;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_RMCOLL;
+        _op->cid = _get_coll_id(cid);
+      }
+      data.ops++;
     }
     void collection_move(coll_t cid, coll_t oldcid, const ghobject_t& oid) {
       // NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
       // always appear together, so this is effectively a single MOVE.
-      __u32 op = OP_COLL_ADD;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oldcid, tbl);
-      ::encode(oid, tbl);
-      ops++;
-      op = OP_COLL_REMOVE;
-      ::encode(op, tbl);
-      ::encode(oldcid, tbl);
-      ::encode(oid, tbl);
-      ops++;
-      return;
+      if (use_tbl) {
+        __u32 op = OP_COLL_ADD;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oldcid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_ADD;
+        _op->cid = _get_coll_id(oldcid);
+        _op->oid = _get_object_id(oid);
+        _op->dest_cid = _get_coll_id(cid);
+      }
+      data.ops++;
+
+      if (use_tbl) {
+        __u32 op = OP_COLL_REMOVE;
+        ::encode(op, tbl);
+        ::encode(oldcid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_REMOVE;
+        _op->cid = _get_coll_id(oldcid);
+        _op->oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
     void collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 				coll_t cid, const ghobject_t& oid) {
-      __u32 op = OP_COLL_MOVE_RENAME;
-      ::encode(op, tbl);
-      ::encode(oldcid, tbl);
-      ::encode(oldoid, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_COLL_MOVE_RENAME;
+        ::encode(op, tbl);
+        ::encode(oldcid, tbl);
+        ::encode(oldoid, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_MOVE_RENAME;
+        _op->cid = _get_coll_id(oldcid);
+        _op->oid = _get_object_id(oldoid);
+        _op->dest_cid = _get_coll_id(cid);
+        _op->dest_oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
 
+    // NOTE: Collection attr operations are all DEPRECATED.  new
+    // backends need not implement these at all.
+
     /// Set an xattr on a collection
-    void collection_setattr(coll_t cid, const char* name, bufferlist& val) {
-      string n(name);
-      collection_setattr(cid, n, val);
-    }
-    /// Set an xattr on a collection
-    void collection_setattr(coll_t cid, const string& name, bufferlist& val) {
-      __u32 op = OP_COLL_SETATTR;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(name, tbl);
-      ::encode(val, tbl);
-      ops++;
+    void collection_setattr(coll_t cid, const string& name, bufferlist& val)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(name, tbl);
+        ::encode(val, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTR;
+        _op->cid = _get_coll_id(cid);
+        ::encode(name, data_bl);
+        ::encode(val, data_bl);
+      }
+      data.ops++;
     }
 
     /// Remove an xattr from a collection
-    void collection_rmattr(coll_t cid, const char* name) {
-      string n(name);
-      collection_rmattr(cid, n);
-    }
-    /// Remove an xattr from a collection
-    void collection_rmattr(coll_t cid, const string& name) {
-      __u32 op = OP_COLL_RMATTR;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(name, tbl);
-      ops++;
-    }
-    /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset) {
-      __u32 op = OP_COLL_SETATTRS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(aset, tbl);
-      ops++;
+    void collection_rmattr(coll_t cid, const string& name)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_RMATTR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(name, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_RMATTR;
+        _op->cid = _get_coll_id(cid);
+        ::encode(name, data_bl);
+      }
+      data.ops++;
     }
     /// Set multiple xattrs on a collection
-    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset) {
-      __u32 op = OP_COLL_SETATTRS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(aset, tbl);
-      ops++;
+    void collection_setattrs(coll_t cid, map<string,bufferptr>& aset)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(aset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        ::encode(aset, data_bl);
+      }
+      data.ops++;
     }
-
+    /// Set multiple xattrs on a collection
+    void collection_setattrs(coll_t cid, map<string,bufferlist>& aset)
+      __attribute__ ((deprecated)) {
+      if (use_tbl) {
+        __u32 op = OP_COLL_SETATTRS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(aset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_COLL_SETATTRS;
+        _op->cid = _get_coll_id(cid);
+        ::encode(aset, data_bl);
+      }
+      data.ops++;
+    }
     /// Remove omap from oid
     void omap_clear(
       coll_t cid,           ///< [in] Collection containing oid
       const ghobject_t &oid  ///< [in] Object from which to remove omap
       ) {
-      __u32 op = OP_OMAP_CLEAR;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_OMAP_CLEAR;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_CLEAR;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+      }
+      data.ops++;
     }
     /// Set keys on oid omap.  Replaces duplicate keys.
     void omap_setkeys(
@@ -959,12 +1379,20 @@ public:
       const ghobject_t &oid,                ///< [in] Object to update
       const map<string, bufferlist> &attrset ///< [in] Replacement keys and values
       ) {
-      __u32 op = OP_OMAP_SETKEYS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(attrset, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_OMAP_SETKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(attrset, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_SETKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(attrset, data_bl);
+      }
+      data.ops++;
     }
     /// Remove keys from oid omap
     void omap_rmkeys(
@@ -972,12 +1400,20 @@ public:
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const set<string> &keys ///< [in] Keys to clear
       ) {
-      __u32 op = OP_OMAP_RMKEYS;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(keys, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_OMAP_RMKEYS;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(keys, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_RMKEYS;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(keys, data_bl);
+      }
+      data.ops++;
     }
 
     /// Remove key range from oid omap
@@ -987,13 +1423,22 @@ public:
       const string& first,    ///< [in] first key in range
       const string& last      ///< [in] first key past range, range is [first,last)
       ) {
-      __u32 op = OP_OMAP_RMKEYRANGE;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(first, tbl);
-      ::encode(last, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_OMAP_RMKEYRANGE;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(first, tbl);
+        ::encode(last, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_RMKEYRANGE;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(first, data_bl);
+        ::encode(last, data_bl);
+      }
+      data.ops++;
     }
 
     /// Set omap header
@@ -1002,12 +1447,20 @@ public:
       const ghobject_t &oid,  ///< [in] Object
       const bufferlist &bl    ///< [in] Header value
       ) {
-      __u32 op = OP_OMAP_SETHEADER;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(bl, tbl);
-      ops++;
+      if (use_tbl) {
+        __u32 op = OP_OMAP_SETHEADER;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(bl, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_OMAP_SETHEADER;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        ::encode(bl, data_bl);
+      }
+      data.ops++;
     }
 
     /// Split collection based on given prefixes, objects matching the specified bits/rem are
@@ -1017,13 +1470,22 @@ public:
       uint32_t bits,
       uint32_t rem,
       coll_t destination) {
-      __u32 op = OP_SPLIT_COLLECTION2;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(bits, tbl);
-      ::encode(rem, tbl);
-      ::encode(destination, tbl);
-      ++ops;
+      if (use_tbl) {
+        __u32 op = OP_SPLIT_COLLECTION2;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(bits, tbl);
+        ::encode(rem, tbl);
+        ::encode(destination, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_SPLIT_COLLECTION2;
+        _op->cid = _get_coll_id(cid);
+        _op->dest_cid = _get_coll_id(destination);
+        _op->split_bits = bits;
+        _op->split_rem = rem;
+      }
+      data.ops++;
     }
 
     void set_alloc_hint(
@@ -1032,72 +1494,124 @@ public:
       uint64_t expected_object_size,
       uint64_t expected_write_size
     ) {
-      __u32 op = OP_SETALLOCHINT;
-      ::encode(op, tbl);
-      ::encode(cid, tbl);
-      ::encode(oid, tbl);
-      ::encode(expected_object_size, tbl);
-      ::encode(expected_write_size, tbl);
-      ++ops;
+      if (use_tbl) {
+        __u32 op = OP_SETALLOCHINT;
+        ::encode(op, tbl);
+        ::encode(cid, tbl);
+        ::encode(oid, tbl);
+        ::encode(expected_object_size, tbl);
+        ::encode(expected_write_size, tbl);
+      } else {
+        Op* _op = _get_next_op();
+        _op->op = OP_SETALLOCHINT;
+        _op->cid = _get_coll_id(cid);
+        _op->oid = _get_object_id(oid);
+        _op->expected_object_size = expected_object_size;
+        _op->expected_write_size = expected_write_size;
+      }
+      data.ops++;
     }
 
     // etc.
     Transaction() :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {}
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) { }
 
     Transaction(bufferlist::iterator &dp) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) {
       decode(dp);
     }
 
     Transaction(bufferlist &nbl) :
-      ops(0), pad_unused_bytes(0), largest_data_len(0), largest_data_off(0), largest_data_off_in_tbl(0),
-      sobject_encoding(false), pool_override(-1), use_pool_override(false),
-      replica(false),
-      tolerate_collection_add_enoent(false), osr(NULL) {
+      osr(NULL),
+      use_tbl(false),
+      coll_id(0),
+      object_id(0) {
       bufferlist::iterator dp = nbl.begin();
       decode(dp);
     }
 
     void encode(bufferlist& bl) const {
-      ENCODE_START(7, 5, bl);
-      ::encode(ops, bl);
-      ::encode(pad_unused_bytes, bl);
-      ::encode(largest_data_len, bl);
-      ::encode(largest_data_off, bl);
-      ::encode(largest_data_off_in_tbl, bl);
-      ::encode(tbl, bl);
-      ::encode(tolerate_collection_add_enoent, bl);
-      ENCODE_FINISH(bl);
+      if (use_tbl) {
+        uint64_t ops = data.ops;
+        uint64_t pad_unused_bytes = 0;
+        uint32_t largest_data_len = data.largest_data_len;
+        uint32_t largest_data_off = data.largest_data_off;
+        uint32_t largest_data_off_in_tbl = data.largest_data_off_in_tbl;
+        bool tolerate_collection_add_enoent = false;
+        ENCODE_START(7, 5, bl);
+        ::encode(ops, bl);
+        ::encode(pad_unused_bytes, bl);
+        ::encode(largest_data_len, bl);
+        ::encode(largest_data_off, bl);
+        ::encode(largest_data_off_in_tbl, bl);
+        ::encode(tbl, bl);
+        ::encode(tolerate_collection_add_enoent, bl);
+        ENCODE_FINISH(bl);
+      } else {
+        //layout: data_bl + op_bl + coll_index + object_index + data
+        ENCODE_START(8, 5, bl);
+        ::encode(data_bl, bl);
+        ::encode(op_bl, bl);
+        ::encode(coll_index, bl);
+        ::encode(object_index, bl);
+        data.encode(bl);
+        ENCODE_FINISH(bl);
+      }
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
       DECODE_OLDEST(2);
-      if (struct_v < 4)
-	sobject_encoding = true;
-      else
-	sobject_encoding = false;
-      ::decode(ops, bl);
-      ::decode(pad_unused_bytes, bl);
+      if (struct_v == 8) {
+        ::decode(data_bl, bl);
+        ::decode(op_bl, bl);
+        ::decode(coll_index, bl);
+        ::decode(object_index, bl);
+        data.decode(bl);
+        use_tbl = false;
+        coll_id = coll_index.size();
+        object_id = object_index.size();
+      } else {
+        decode7_5(bl, struct_v);
+        use_tbl = true;
+      }
+      DECODE_FINISH(bl);
+    }
+    void decode7_5(bufferlist::iterator &bl, __u8 struct_v) {
+      uint64_t _ops = 0;
+      uint64_t _pad_unused_bytes = 0;
+      uint32_t _largest_data_len = 0;
+      uint32_t _largest_data_off = 0;
+      uint32_t _largest_data_off_in_tbl = 0;
+      uint32_t _fadvise_flags = 0;
+      bool tolerate_collection_add_enoent = false;
+
+      ::decode(_ops, bl);
+      ::decode(_pad_unused_bytes, bl);
       if (struct_v >= 3) {
-	::decode(largest_data_len, bl);
-	::decode(largest_data_off, bl);
-	::decode(largest_data_off_in_tbl, bl);
+        ::decode(_largest_data_len, bl);
+        ::decode(_largest_data_off, bl);
+        ::decode(_largest_data_off_in_tbl, bl);
       }
       ::decode(tbl, bl);
-      if (struct_v < 6) {
-	use_pool_override = true;
-      }
       if (struct_v >= 7) {
 	::decode(tolerate_collection_add_enoent, bl);
       }
-      DECODE_FINISH(bl);
+      if (struct_v >= 8) {
+	::decode(_fadvise_flags, bl);
+      }
+
+      //assign temp to TransactionData
+      data.ops = _ops;
+      data.largest_data_len = _largest_data_len;
+      data.largest_data_off = _largest_data_off;
+      data.largest_data_off_in_tbl = _largest_data_off_in_tbl;
+      data.fadvise_flags = _fadvise_flags;
     }
 
     void dump(ceph::Formatter *f);
@@ -1323,6 +1837,7 @@ public:
    * @param offset location offset of first byte to be read
    * @param len number of bytes to be read
    * @param bl output bufferlist
+   * @param op_flags is CEPH_OSD_OP_FLAG_*
    * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
@@ -1332,6 +1847,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags = 0,
     bool allow_eio = false) = 0;
 
   /**
@@ -1340,7 +1856,7 @@ public:
    * Returns an encoded map of the extents of an object's data portion
    * (map<offset,size>).
    *
-   * A non-enlightend implementation is free to return the extent (offset, len)
+   * A non-enlightened implementation is free to return the extent (offset, len)
    * as the sole extent.
    *
    * @param cid collection for object
@@ -1449,7 +1965,11 @@ public:
    * @returns 0 on success, negative error code on failure
    */
   virtual int collection_getattr(coll_t cid, const char *name,
-	                         void *value, size_t size) = 0;
+	                         void *value, size_t size)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
+
   /**
    * collection_getattr - get an xattr of a collection
    *
@@ -1458,7 +1978,11 @@ public:
    * @param bl buffer to receive value
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl) = 0;
+  virtual int collection_getattr(coll_t cid, const char *name, bufferlist& bl)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
+
   /**
    * collection_getattrs - get all xattrs of a collection
    *
@@ -1466,7 +1990,11 @@ public:
    * @param asert map of keys and buffers that contain the values
    * @returns 0 on success, negative error code on failure
    */
-  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset) = 0;
+  virtual int collection_getattrs(coll_t cid, map<string,bufferptr> &aset)
+    __attribute__ ((deprecated)) {
+    return -EOPNOTSUPP;
+  }
+
   /**
    * is a collection empty?
    *
@@ -1597,6 +2125,7 @@ public:
   virtual void inject_mdata_error(const ghobject_t &oid) {}
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
+WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
 
 ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 

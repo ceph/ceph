@@ -90,6 +90,9 @@ class MDCache {
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
 
+  bool readonly;
+  void set_readonly() { readonly = true; }
+
   CInode *strays[NUM_STRAY];         // my stray dir
   int stray_index;
 
@@ -103,6 +106,8 @@ public:
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;
   }
+  bool is_readonly() { return readonly; }
+  void force_readonly();
 
   DecayRate decayrate;
 
@@ -277,6 +282,7 @@ public:
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
+  void broadcast_quota_to_client(CInode *in);
   void predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,
@@ -858,7 +864,7 @@ public:
   void eval_remote(CDentry *dn);
 
   void maybe_eval_stray(CInode *in, bool delay=false) {
-    if (in->inode.nlink > 0 || in->is_base())
+    if (in->inode.nlink > 0 || in->is_base() || is_readonly())
       return;
     CDentry *dn = in->get_projected_parent_dn();
     if (!dn->state_test(CDentry::STATE_PURGING) &&
@@ -866,6 +872,7 @@ public:
 	dn->get_dir()->get_inode()->is_stray())
       eval_stray(dn, delay);
   }
+  void try_remove_dentries_for_stray(CInode* diri);
 
   void fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Context *fin);
 

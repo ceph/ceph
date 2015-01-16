@@ -19,6 +19,7 @@
 #include "common/debug.h"
 #include "arch/probe.h"
 #include "arch/intel.h"
+#include "arch/arm.h"
 #include "erasure-code/ErasureCodePlugin.h"
 
 #define dout_subsys ceph_subsys_osd
@@ -44,6 +45,8 @@ static string get_variant() {
 	     ceph_arch_intel_sse3 &&
 	     ceph_arch_intel_sse2) {
     return "sse3";
+  } else if (ceph_arch_neon) {
+    return "neon";
   } else {
     return "generic";
   }

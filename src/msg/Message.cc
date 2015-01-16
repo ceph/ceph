@@ -65,7 +65,10 @@ using namespace std;
 #include "messages/MOSDOpReply.h"
 #include "messages/MOSDSubOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDRepOp.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
+#include "messages/MMonGetOSDMap.h"
 
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
@@ -102,6 +105,7 @@ using namespace std;
 #include "messages/MClientCapRelease.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
+#include "messages/MClientQuota.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -135,6 +139,7 @@ using namespace std;
 
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
+#include "messages/MGatherCaps.h"
 
 
 #include "messages/MDentryUnlink.h"
@@ -376,6 +381,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case CEPH_MSG_MON_GET_MAP:
     m = new MMonGetMap;
     break;
+  case CEPH_MSG_MON_GET_OSDMAP:
+    m = new MMonGetOSDMap;
+    break;
   case CEPH_MSG_MON_GET_VERSION:
     m = new MMonGetVersion();
     break;
@@ -412,6 +420,12 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_OSD_SUBOPREPLY:
     m = new MOSDSubOpReply();
+    break;
+  case MSG_OSD_REPOP:
+    m = new MOSDRepOp();
+    break;
+  case MSG_OSD_REPOPREPLY:
+    m = new MOSDRepOpReply();
     break;
 
   case CEPH_MSG_OSD_MAP:
@@ -529,6 +543,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case CEPH_MSG_CLIENT_SNAP:
     m = new MClientSnap;
     break;
+  case CEPH_MSG_CLIENT_QUOTA:
+    m = new MClientQuota;
+    break;
 
     // mds
   case MSG_MDS_SLAVE_REQUEST:
@@ -629,6 +646,9 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
     break;
   case MSG_MDS_EXPORTCAPSACK:
     m = new MExportCapsAck;
+    break;
+  case MSG_MDS_GATHERCAPS:
+    m = new MGatherCaps;
     break;
 
 

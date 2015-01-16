@@ -40,7 +40,7 @@ class bloom_filter;
 
 struct ObjectOperation;
 
-ostream& operator<<(ostream& out, class CDir& dir);
+ostream& operator<<(ostream& out, const class CDir& dir);
 class CDir : public MDSCacheObject {
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
@@ -73,7 +73,7 @@ public:
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
   static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
-  const char *pin_name(int p) {
+  const char *pin_name(int p) const {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_INOWAITER: return "inowaiter";
@@ -106,6 +106,7 @@ public:
   static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
   static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
   static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
+  static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -114,7 +115,7 @@ public:
   // these state bits are preserved by an import/export
   // ...except if the directory is hashed, in which case none of them are!
   static const unsigned MASK_STATE_EXPORTED = 
-  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT);
+  (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT|STATE_BADFRAG);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
    STATE_IMPORTING
@@ -188,12 +189,19 @@ public:
 
 
 public:
-  version_t get_version() { return fnode.version; }
+  version_t get_version() const { return fnode.version; }
   void set_version(version_t v) { 
     assert(projected_fnode.empty());
     projected_version = fnode.version = v; 
   }
-  version_t get_projected_version() { return projected_version; }
+  version_t get_projected_version() const { return projected_version; }
+
+  const fnode_t *get_projected_fnode() const {
+    if (projected_fnode.empty())
+      return &fnode;
+    else
+      return projected_fnode.back();
+  }
 
   fnode_t *get_projected_fnode() {
     if (projected_fnode.empty())
@@ -204,7 +212,7 @@ public:
   fnode_t *project_fnode();
 
   void pop_and_dirty_projected_fnode(LogSegment *ls);
-  bool is_projected() { return !projected_fnode.empty(); }
+  bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
   void _set_dirty_flag() {
@@ -219,6 +227,8 @@ public:
 
   bool is_new() { return item_new.is_on_list(); }
   void mark_new(LogSegment *ls);
+
+  bool is_bad() { return state_test(STATE_BADFRAG); }
 
 public:
   typedef std::map<dentry_key_t, CDentry*> map_t;
@@ -299,16 +309,17 @@ protected:
   dirfrag_t dirfrag() const { return dirfrag_t(inode->ino(), frag); }
 
   CInode *get_inode()    { return inode; }
+  const CInode *get_inode() const { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
   map_t::iterator begin() { return items.begin(); }
   map_t::iterator end() { return items.end(); }
 
-  unsigned get_num_head_items() { return num_head_items; }
-  unsigned get_num_head_null() { return num_head_null; }
-  unsigned get_num_snap_items() { return num_snap_items; }
-  unsigned get_num_snap_null() { return num_snap_null; }
-  unsigned get_num_any() { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
+  unsigned get_num_head_items() const { return num_head_items; }
+  unsigned get_num_head_null() const { return num_head_null; }
+  unsigned get_num_snap_items() const { return num_snap_items; }
+  unsigned get_num_snap_null() const { return num_snap_null; }
+  unsigned get_num_any() const { return num_head_items + num_head_null + num_snap_items + num_snap_null; }
   
   bool check_rstats();
 
@@ -317,7 +328,7 @@ protected:
     assert(num_dirty > 0);
     num_dirty--; 
   }
-  int get_num_dirty() {
+  int get_num_dirty() const {
     return num_dirty;
   }
 
@@ -360,6 +371,7 @@ private:
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 public:
   void touch_dentries_bottom();
+  void try_remove_dentries_for_stray();
   bool try_trim_snap_dentry(CDentry *dn, const std::set<snapid_t>& snaps);
 
 
@@ -392,21 +404,21 @@ private:
   mds_authority_t dir_auth;
 
  public:
-  mds_authority_t authority();
-  mds_authority_t get_dir_auth() { return dir_auth; }
+  mds_authority_t authority() const;
+  mds_authority_t get_dir_auth() const { return dir_auth; }
   void set_dir_auth(mds_authority_t a);
   void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
-  bool is_ambiguous_dir_auth() {
+  bool is_ambiguous_dir_auth() const {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
   }
-  bool is_full_dir_auth() {
+  bool is_full_dir_auth() const {
     return is_auth() && !is_ambiguous_dir_auth();
   }
-  bool is_full_dir_nonauth() {
+  bool is_full_dir_nonauth() const {
     return !is_auth() && !is_ambiguous_dir_auth();
   }
   
-  bool is_subtree_root() {
+  bool is_subtree_root() const {
     return dir_auth != CDIR_AUTH_DEFAULT;
   }
 
@@ -473,8 +485,8 @@ private:
   bool is_importing() { return state & STATE_IMPORTING; }
   bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
 
-  int get_dir_rep() { return dir_rep; }
-  bool is_rep() { 
+  int get_dir_rep() const { return dir_rep; }
+  bool is_rep() const { 
     if (dir_rep == REP_NONE) return false;
     return true;
   }
@@ -497,7 +509,7 @@ protected:
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
-  void _committed(version_t v);
+  void _committed(int r, version_t v);
 public:
 #if 0  // unused?
   void wait_for_commit(Context *c, version_t v=0);
@@ -507,8 +519,8 @@ public:
 	      bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
-  version_t get_committing_version() { return committing_version; }
-  version_t get_committed_version() { return committed_version; }
+  version_t get_committing_version() const { return committing_version; }
+  version_t get_committed_version() const { return committed_version; }
   void set_committed_version(version_t v) { committed_version = v; }
 
   void mark_complete();
@@ -555,11 +567,11 @@ public:
 
 
   // -- auth pins --
-  bool can_auth_pin() { return is_auth() && !(is_frozen() || is_freezing()); }
-  int get_cum_auth_pins() { return auth_pins + nested_auth_pins; }
-  int get_auth_pins() { return auth_pins; }
-  int get_nested_auth_pins() { return nested_auth_pins; }
-  int get_dir_auth_pins() { return dir_auth_pins; }
+  bool can_auth_pin() const { return is_auth() && !(is_frozen() || is_freezing()); }
+  int get_cum_auth_pins() const { return auth_pins + nested_auth_pins; }
+  int get_auth_pins() const { return auth_pins; }
+  int get_nested_auth_pins() const { return nested_auth_pins; }
+  int get_dir_auth_pins() const { return dir_auth_pins; }
   void auth_pin(void *who);
   void auth_unpin(void *who);
 
@@ -577,17 +589,17 @@ public:
 
   void maybe_finish_freeze();
 
-  bool is_freezing() { return is_freezing_tree() || is_freezing_dir(); }
-  bool is_freezing_tree();
-  bool is_freezing_tree_root() { return state & STATE_FREEZINGTREE; }
-  bool is_freezing_dir() { return state & STATE_FREEZINGDIR; }
+  bool is_freezing() const { return is_freezing_tree() || is_freezing_dir(); }
+  bool is_freezing_tree() const;
+  bool is_freezing_tree_root() const { return state & STATE_FREEZINGTREE; }
+  bool is_freezing_dir() const { return state & STATE_FREEZINGDIR; }
 
-  bool is_frozen() { return is_frozen_dir() || is_frozen_tree(); }
-  bool is_frozen_tree();
-  bool is_frozen_tree_root() { return state & STATE_FROZENTREE; }
-  bool is_frozen_dir() { return state & STATE_FROZENDIR; }
+  bool is_frozen() const { return is_frozen_dir() || is_frozen_tree(); }
+  bool is_frozen_tree() const;
+  bool is_frozen_tree_root() const { return state & STATE_FROZENTREE; }
+  bool is_frozen_dir() const { return state & STATE_FROZENDIR; }
   
-  bool is_freezeable(bool freezing=false) {
+  bool is_freezeable(bool freezing=false) const {
     // no nested auth pins.
     if ((auth_pins-freezing) > 0 || nested_auth_pins > 0) 
       return false;
@@ -598,7 +610,7 @@ public:
 
     return true;
   }
-  bool is_freezeable_dir(bool freezing=false) {
+  bool is_freezeable_dir(bool freezing=false) const {
     if ((auth_pins-freezing) > 0 || dir_auth_pins > 0) 
       return false;
 
@@ -614,6 +626,7 @@ public:
 
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
+  void dump(Formatter *f) const;
 };
 
 #endif

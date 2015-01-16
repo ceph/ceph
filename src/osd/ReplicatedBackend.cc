@@ -15,7 +15,9 @@
 #include "ReplicatedBackend.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDSubOp.h"
+#include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
@@ -163,6 +165,11 @@ bool ReplicatedBackend::handle_message(
     break;
   }
 
+  case MSG_OSD_REPOP: {
+    sub_op_modify(op);
+    return true;
+  }
+
   case MSG_OSD_SUBOPREPLY: {
     MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
     if (r->ops.size() >= 1) {
@@ -173,11 +180,17 @@ bool ReplicatedBackend::handle_message(
 	sub_op_push_reply(op);
 	return true;
       }
-    } else {
-      sub_op_modify_reply(op);
+    }
+    else {
+      sub_op_modify_reply<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
       return true;
     }
     break;
+  }
+
+  case MSG_OSD_REPOPREPLY: {
+    sub_op_modify_reply<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
+    return true;
   }
 
   default:
@@ -225,9 +238,10 @@ int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
   uint64_t len,
+  uint32_t op_flags,
   bufferlist *bl)
 {
-  return store->read(coll, hoid, off, len, *bl);
+  return store->read(coll, hoid, off, len, *bl, op_flags);
 }
 
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
@@ -244,18 +258,19 @@ struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
 };
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<pair<uint64_t, uint64_t>,
+  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		  pair<bufferlist*, Context*> > > &to_read,
   Context *on_complete)
 {
   int r = 0;
-  for (list<pair<pair<uint64_t, uint64_t>,
+  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		 pair<bufferlist*, Context*> > >::const_iterator i =
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = store->read(coll, hoid, i->first.first,
-			 i->first.second, *(i->second.first));
+    int _r = store->read(coll, hoid, i->first.get<0>(),
+			 i->first.get<1>(), *(i->second.first),
+			 i->first.get<2>());
     if (i->second.second) {
       get_parent()->schedule_recovery_work(
 	get_parent()->bless_gencontext(
@@ -298,9 +313,11 @@ class RPGTransaction : public PGBackend::PGTransaction {
       return coll;
   }
 public:
-  RPGTransaction(coll_t coll, coll_t temp_coll)
+  RPGTransaction(coll_t coll, coll_t temp_coll, bool use_tbl)
     : coll(coll), temp_coll(temp_coll), t(new ObjectStore::Transaction), written(0)
-    {}
+    {
+      t->set_use_tbl(use_tbl);
+    }
 
   /// Yields ownership of contained transaction
   ObjectStore::Transaction *get_transaction() {
@@ -319,10 +336,11 @@ public:
     const hobject_t &hoid,
     uint64_t off,
     uint64_t len,
-    bufferlist &bl
+    bufferlist &bl,
+    uint32_t fadvise_flags
     ) {
     written += len;
-    t->write(get_coll_ct(hoid), hoid, off, len, bl);
+    t->write(get_coll_ct(hoid), hoid, off, len, bl, fadvise_flags);
   }
   void remove(
     const hobject_t &hoid
@@ -473,7 +491,7 @@ public:
 
 PGBackend::PGTransaction *ReplicatedBackend::get_transaction()
 {
-  return new RPGTransaction(coll, get_temp_coll());
+  return new RPGTransaction(coll, get_temp_coll(), parent->transaction_use_tbl());
 }
 
 class C_OSD_OnOpCommit : public Context {
@@ -554,6 +572,7 @@ void ReplicatedBackend::submit_transaction(
     op_t);
 
   ObjectStore::Transaction local_t;
+  local_t.set_use_tbl(op_t->get_use_tbl());
   if (t->get_temp_added().size()) {
     get_temp_coll(&local_t);
     add_temp_objs(t->get_temp_added());
@@ -567,8 +586,7 @@ void ReplicatedBackend::submit_transaction(
     trim_rollback_to,
     true,
     &local_t);
-  local_t.append(*op_t);
-  local_t.swap(*op_t);
+  (*op_t).append(local_t);
   
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
@@ -623,10 +641,12 @@ void ReplicatedBackend::op_commit(
   }
 }
 
+template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
-  MOSDSubOpReply *r = static_cast<MOSDSubOpReply*>(op->get_req());
-  assert(r->get_header().type == MSG_OSD_SUBOPREPLY);
+  T *r = static_cast<T *>(op->get_req());
+  assert(r->get_header().type == MSGTYPE);
+  assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
 
   op->mark_started();
 
@@ -690,9 +710,12 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 
 void ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
+  uint32_t seed,
   ScrubMap::object &o,
-  ThreadPool::TPHandle &handle) {
-  bufferhash h, oh;
+  ThreadPool::TPHandle &handle)
+{
+  dout(10) << __func__ << " " << poid << " seed " << seed << dendl;
+  bufferhash h(seed), oh(seed);
   bufferlist bl, hdrbl;
   int r;
   __u64 pos = 0;
@@ -709,7 +732,7 @@ void ReplicatedBackend::be_deep_scrub(
     bl.clear();
   }
   if (r == -EIO) {
-    dout(25) << "_scan_list  " << poid << " got "
+    dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on read, read_error" << dendl;
     o.read_error = true;
   }
@@ -722,14 +745,21 @@ void ReplicatedBackend::be_deep_scrub(
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     &hdrbl, true);
-  if (r == 0) {
+  // NOTE: bobtail to giant, we would crc the head as (len, head).
+  // that changes at the same time we start using a non-zero seed.
+  if (r == 0 && hdrbl.length()) {
     dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
              << dendl;
-    ::encode(hdrbl, bl);
-    oh << bl;
-    bl.clear();
+    if (seed == 0) {
+      // legacy
+      bufferlist bl;
+      ::encode(hdrbl, bl);
+      oh << bl;
+    } else {
+      oh << hdrbl;
+    }
   } else if (r == -EIO) {
-    dout(25) << "_scan_list  " << poid << " got "
+    dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap header read, read_error" << dendl;
     o.read_error = true;
   }
@@ -756,7 +786,7 @@ void ReplicatedBackend::be_deep_scrub(
     bl.clear();
   }
   if (iter->status() == -EIO) {
-    dout(25) << "_scan_list  " << poid << " got "
+    dout(25) << __func__ << "  " << poid << " got "
 	     << r << " on omap scan, read_error" << dendl;
     o.read_error = true;
   }

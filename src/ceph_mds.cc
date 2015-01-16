@@ -151,7 +151,7 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
-  Messenger *messenger = Messenger::create(g_ceph_context,
+  Messenger *messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
 					   entity_name_t::MDS(-1), "mds",
 					   getpid());
   messenger->set_cluster_protocol(CEPH_MDS_PROTOCOL);
@@ -165,7 +165,8 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MDS_INLINE_DATA |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH |
-    CEPH_FEATURE_EXPORT_PEER;
+    CEPH_FEATURE_EXPORT_PEER |
+    CEPH_FEATURE_MDS_QUOTA;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;
   messenger->set_default_policy(Messenger::Policy::lossy_client(supported, required));

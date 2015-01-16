@@ -77,7 +77,7 @@ public:
       goto fail;
 
     //network connection
-    messenger = Messenger::create(cct, entity_name_t::CLIENT(), "client", msgr_nonce);
+    messenger = Messenger::create(cct, cct->_conf->ms_type, entity_name_t::CLIENT(), "client", msgr_nonce);
 
     //at last the client
     ret = -CEPHFS_ERROR_NEW_CLIENT; //defined in libcephfs.h;

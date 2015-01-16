@@ -63,6 +63,18 @@ bool CrushWrapper::is_v3_rule(unsigned ruleid) const
   return false;
 }
 
+bool CrushWrapper::has_v4_buckets() const
+{
+  for (int i=0; i<crush->max_buckets; ++i) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b)
+      continue;
+    if (b->type == CRUSH_BUCKET_STRAW2)
+      return true;
+  }
+  return false;
+}
+
 int CrushWrapper::can_rename_item(const string& srcname,
                                   const string& dstname,
                                   ostream *ss) const
@@ -235,8 +247,8 @@ bool CrushWrapper::_search_item_exists(int item) const
     if (!crush->buckets[i])
       continue;
     crush_bucket *b = crush->buckets[i];
-    for (unsigned i=0; i<b->size; ++i) {
-      if (b->items[i] == item)
+    for (unsigned j=0; j<b->size; ++j) {
+      if (b->items[j] == item)
 	return true;
     }
   }
@@ -541,7 +553,8 @@ int CrushWrapper::insert_item(CephContext *cct, int item, float weight, string n
     if (!name_exists(q->second)) {
       ldout(cct, 5) << "insert_item creating bucket " << q->second << dendl;
       int empty = 0, newid;
-      int r = add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
+      int r = add_bucket(0, get_default_bucket_type(),
+			 CRUSH_HASH_DEFAULT, p->first, 1, &cur, &empty, &newid);
       if (r < 0) {
         ldout(cct, 1) << "add_bucket failure error: " << cpp_strerror(r) << dendl;
         return r;
@@ -651,7 +664,7 @@ int CrushWrapper::create_or_move_item(CephContext *cct, int item, float weight, 
   if (check_item_loc(cct, item, loc, &old_iweight)) {
     ldout(cct, 5) << "create_or_move_item " << item << " already at " << loc << dendl;
   } else {
-    if (item_exists(item)) {
+    if (_search_item_exists(item)) {
       weight = get_item_weightf(item);
       ldout(cct, 10) << "create_or_move_item " << item << " exists with weight " << weight << dendl;
       remove_item(cct, item, true);
@@ -722,7 +735,8 @@ int CrushWrapper::get_item_weight(int id) const
 
 int CrushWrapper::get_item_weight_in_loc(int id, const map<string,string> &loc)
 {
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
+
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
@@ -765,7 +779,7 @@ int CrushWrapper::adjust_item_weight_in_loc(CephContext *cct, int id, int weight
   ldout(cct, 5) << "adjust_item_weight_in_loc " << id << " weight " << weight << " in " << loc << dendl;
   int changed = 0;
 
-  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); l++) {
+  for (map<string,string>::const_iterator l = loc.begin(); l != loc.end(); ++l) {
     int bid = get_item_id(l->second);
     if (!bucket_exists(bid))
       continue;
@@ -1074,6 +1088,12 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
       }
       break;
 
+    case CRUSH_BUCKET_STRAW2:
+      for (unsigned j=0; j<crush->buckets[i]->size; j++) {
+	::encode((reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights[j], bl);
+      }
+      break;
+
     default:
       assert(0);
       break;
@@ -1105,6 +1125,7 @@ void CrushWrapper::encode(bufferlist& bl, bool lean) const
   ::encode(crush->chooseleaf_descend_once, bl);
   ::encode(crush->chooseleaf_vary_r, bl);
   ::encode(crush->straw_calc_version, bl);
+  ::encode(crush->allowed_bucket_types, bl);
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
@@ -1191,6 +1212,9 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     if (!blp.end()) {
       ::decode(crush->straw_calc_version, blp);
     }
+    if (!blp.end()) {
+      ::decode(crush->allowed_bucket_types, blp);
+    }
     finalize();
   }
   catch (...) {
@@ -1221,6 +1245,9 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     break;
   case CRUSH_BUCKET_STRAW:
     size = sizeof(crush_bucket_straw);
+    break;
+  case CRUSH_BUCKET_STRAW2:
+    size = sizeof(crush_bucket_straw2);
     break;
   default:
     {
@@ -1281,6 +1308,15 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     for (unsigned j = 0; j < bucket->size; ++j) {
       ::decode(cbs->item_weights[j], blp);
       ::decode(cbs->straws[j], blp);
+    }
+    break;
+  }
+
+  case CRUSH_BUCKET_STRAW2: {
+    crush_bucket_straw2* cbs = reinterpret_cast<crush_bucket_straw2*>(bucket);
+    cbs->item_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
+    for (unsigned j = 0; j < bucket->size; ++j) {
+      ::decode(cbs->item_weights[j], blp);
     }
     break;
   }
@@ -1376,6 +1412,7 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
   f->dump_int("chooseleaf_vary_r", get_chooseleaf_vary_r());
   f->dump_int("straw_calc_version", get_straw_calc_version());
+  f->dump_int("allowed_bucket_types", get_allowed_bucket_types());
 
   // be helpful about it
   if (has_firefly_tunables())

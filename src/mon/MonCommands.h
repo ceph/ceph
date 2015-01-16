@@ -227,6 +227,7 @@ COMMAND("tell " \
 	"name=target,type=CephName " \
 	"name=args,type=CephString,n=N", \
 	"send a command to a specific daemon", "mon", "rw", "cli,rest")
+COMMAND("version", "show mon daemon version", "mon", "r", "cli,rest")
 
 /*
  * MDS commands (MDSMonitor.cc)
@@ -305,6 +306,11 @@ COMMAND("fs rm " \
 	"name=fs_name,type=CephString " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"disable the named filesystem", \
+	"fs", "rw", "cli,rest")
+COMMAND("fs reset " \
+	"name=fs_name,type=CephString " \
+	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+	"disaster recovery only: reset to a single-MDS map", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs ls ", \
 	"list filesystems", \
@@ -512,10 +518,10 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|nodeep-scrub|notieragent", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 	"osd", "r", "")
@@ -647,7 +653,7 @@ COMMAND("osd tier remove " \
 	"osd", "rw", "cli,rest")
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
-	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward", \
+	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|readproxy", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier set-overlay " \
 	"name=pool,type=CephPoolname " \

@@ -71,7 +71,7 @@ void usage(ostream& out)
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
 "   truncate <obj-name> length       truncate object\n"
-"   create <obj-name> [category]     create object\n"
+"   create <obj-name>                create object\n"
 "   rm <obj-name> ...                remove object(s)\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   clonedata <src-obj> <dst-obj>    clone object data\n"
@@ -282,93 +282,12 @@ static int do_get(IoCtx& io_ctx, const char *objname, const char *outfile, unsig
   return ret;
 }
 
-static int do_copy(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
+static int do_copy(IoCtx& io_ctx, const char *objname,
+		   IoCtx& target_ctx, const char *target_obj)
 {
-  string oid(objname);
-  bufferlist outdata;
-  librados::ObjectReadOperation read_op;
-  string start_after;
-
-#define COPY_CHUNK_SIZE (4 * 1024 * 1024)
-  read_op.read(0, COPY_CHUNK_SIZE, &outdata, NULL);
-
-  map<std::string, bufferlist> attrset;
-  read_op.getxattrs(&attrset, NULL);
-
-  bufferlist omap_header;
-  read_op.omap_get_header(&omap_header, NULL);
-
-#define OMAP_CHUNK 1000
-  map<string, bufferlist> omap;
-  read_op.omap_get_vals(start_after, OMAP_CHUNK, &omap, NULL);
-
-  bufferlist opbl;
-  int ret = io_ctx.operate(oid, &read_op, &opbl);
-  if (ret < 0) {
-    return ret;
-  }
-
-  librados::ObjectWriteOperation write_op;
-  string target_oid(target_obj);
-
-  /* reset dest if exists */
-  write_op.create(false);
-  write_op.remove();
-
-  write_op.write_full(outdata);
-  write_op.omap_set_header(omap_header);
-
-  map<std::string, bufferlist>::iterator iter;
-  for (iter = attrset.begin(); iter != attrset.end(); ++iter) {
-    write_op.setxattr(iter->first.c_str(), iter->second);
-  }
-  if (!omap.empty()) {
-    write_op.omap_set(omap);
-  }
-  ret = target_ctx.operate(target_oid, &write_op);
-  if (ret < 0) {
-    return ret;
-  }
-
-  uint64_t off = 0;
-
-  while (outdata.length() == COPY_CHUNK_SIZE) {
-    off += outdata.length();
-    outdata.clear();
-    ret = io_ctx.read(oid, outdata, COPY_CHUNK_SIZE, off); 
-    if (ret < 0)
-      goto err;
-
-    ret = target_ctx.write(target_oid, outdata, outdata.length(), off);
-    if (ret < 0)
-      goto err;
-  }
-
-  /* iterate through source omap and update target. This is not atomic */
-  while (omap.size() == OMAP_CHUNK) {
-    /* now start_after should point at the last entry */    
-    map<string, bufferlist>::iterator iter = omap.end();
-    --iter;
-    start_after = iter->first;
-
-    omap.clear();
-    ret = io_ctx.omap_get_vals(oid, start_after, OMAP_CHUNK, &omap);
-    if (ret < 0)
-      goto err;
-
-    if (omap.empty())
-      break;
-
-    ret = target_ctx.omap_set(target_oid, omap);
-    if (ret < 0)
-      goto err;
-  }
-
-  return 0;
-
-err:
-  target_ctx.remove(target_oid);
-  return ret;
+  ObjectWriteOperation op;
+  op.copy_from(objname, io_ctx, 0);
+  return target_ctx.operate(target_obj, &op);
 }
 
 static int do_clone_data(IoCtx& io_ctx, const char *objname, IoCtx& target_ctx, const char *target_obj)
@@ -486,20 +405,29 @@ static int do_put(IoCtx& io_ctx, const char *objname, const char *infile, int op
   return ret;
 }
 
-class RadosWatchCtx : public librados::WatchCtx {
+class RadosWatchCtx : public librados::WatchCtx2 {
+  IoCtx& ioctx;
   string name;
 public:
-  RadosWatchCtx(const char *imgname) : name(imgname) {}
+  RadosWatchCtx(IoCtx& io, const char *imgname) : ioctx(io), name(imgname) {}
   virtual ~RadosWatchCtx() {}
-  virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
-    string s;
-    try {
-      bufferlist::iterator iter = bl.begin();
-      ::decode(s, iter);
-    } catch (buffer::error *err) {
-      cout << "could not decode bufferlist, buffer length=" << bl.length() << std::endl;
-    }
-    cout << name << " got notification opcode=" << (int)opcode << " ver=" << ver << " msg='" << s << "'" << std::endl;
+  void handle_notify(uint64_t notify_id,
+		     uint64_t cookie,
+		     uint64_t notifier_id,
+		     bufferlist& bl) {
+    cout << "NOTIFY"
+	 << " cookie " << cookie
+	 << " notify_id " << notify_id
+	 << " from " << notifier_id
+	 << std::endl;
+    bl.hexdump(cout);
+    ioctx.notify_ack(name, notify_id, cookie, bl);
+  }
+  void handle_error(uint64_t cookie, int err) {
+    cout << "ERROR"
+	 << " cookie " << cookie
+	 << " err " << cpp_strerror(err)
+	 << std::endl;
   }
 };
 
@@ -1213,7 +1141,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   const char *snapname = NULL;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
-  std::string category;
 
   uint64_t min_obj_len = 0;
   uint64_t max_obj_len = 0;
@@ -1261,10 +1188,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("target_nspace");
   if (i != opts.end()) {
     target_nspace = i->second;
-  }
-  i = opts.find("category");
-  if (i != opts.end()) {
-    category = i->second;
   }
   i = opts.find("concurrent-ios");
   if (i != opts.end()) {
@@ -1493,29 +1416,42 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       vec.push_back(pool_name);
     }
 
-    map<string, map<string, pool_stat_t> > stats;
-    ret = rados.get_pool_stats(vec, category, stats);
+    map<string,pool_stat_t> stats;
+    ret = rados.get_pool_stats(vec, stats);
     if (ret < 0) {
       cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
       goto out;
     }
 
     if (!formatter) {
-      printf("%-15s %-15s"
+      printf("%-15s "
 	     "%12s %12s %12s %12s "
 	     "%12s %12s %12s %12s %12s\n",
 	     "pool name",
-	     "category",
 	     "KB", "objects", "clones", "degraded",
 	     "unfound", "rd", "rd KB", "wr", "wr KB");
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
     }
-    for (map<string, librados::stats_map>::iterator c = stats.begin(); c != stats.end(); ++c) {
-      const char *pool_name = c->first.c_str();
-      stats_map& m = c->second;
-      if (formatter) {
+    for (map<string,pool_stat_t>::iterator i = stats.begin();
+	 i != stats.end();
+	 ++i) {
+      const char *pool_name = i->first.c_str();
+      pool_stat_t& s = i->second;
+      if (!formatter) {
+	printf("%-15s "
+	       "%12lld %12lld %12lld %12lld"
+	       "%12lld %12lld %12lld %12lld %12lld\n",
+	       pool_name,
+	       (long long)s.num_kb,
+	       (long long)s.num_objects,
+	       (long long)s.num_object_clones,
+	       (long long)s.num_objects_degraded,
+	       (long long)s.num_objects_unfound,
+	       (long long)s.num_rd, (long long)s.num_rd_kb,
+	         (long long)s.num_wr, (long long)s.num_wr_kb);
+      } else {
         formatter->open_object_section("pool");
         int64_t pool_id = rados.pool_lookup(pool_name);
         formatter->dump_string("name", pool_name);
@@ -1523,53 +1459,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
           formatter->dump_format("id", "%lld", pool_id);
         else
           cerr << "ERROR: lookup_pg_pool_name for name=" << pool_name << " returned " << pool_id << std::endl;
-        formatter->open_array_section("categories");
-      }
-      for (stats_map::iterator i = m.begin(); i != m.end(); ++i) {
-        const char *category = (i->first.size() ? i->first.c_str() : "");
-        pool_stat_t& s = i->second;
-        if (!formatter) {
-          if (!*category)
-            category = "-";
-          printf("%-15s "
-                 "%-15s "
-	         "%12lld %12lld %12lld %12lld"
-	         "%12lld %12lld %12lld %12lld %12lld\n",
-	         pool_name,
-                 category,
-	         (long long)s.num_kb,
-	         (long long)s.num_objects,
-	         (long long)s.num_object_clones,
-	         (long long)s.num_objects_degraded,
-	         (long long)s.num_objects_unfound,
-	         (long long)s.num_rd, (long long)s.num_rd_kb,
-	         (long long)s.num_wr, (long long)s.num_wr_kb);
-        } else {
-          formatter->open_object_section("category");
-          if (category)
-            formatter->dump_string("name", category);
-          formatter->dump_format("size_bytes", "%lld", s.num_bytes);
-          formatter->dump_format("size_kb", "%lld", s.num_kb);
-          formatter->dump_format("num_objects", "%lld", s.num_objects);
-          formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
-          formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
-          formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
-          formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
-          formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
-          formatter->dump_format("read_ops", "%lld", s.num_rd);
-          formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
-          formatter->dump_format("write_ops", "%lld", s.num_wr);
-          formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
-          formatter->flush(cout);
-        }
-        if (formatter) {
-          formatter->close_section();
-        }
-      }
-      if (formatter) {
-        formatter->close_section();
-        formatter->close_section();
-        formatter->flush(cout);
+	formatter->dump_format("size_bytes", "%lld", s.num_bytes);
+	formatter->dump_format("size_kb", "%lld", s.num_kb);
+	formatter->dump_format("num_objects", "%lld", s.num_objects);
+	formatter->dump_format("num_object_clones", "%lld", s.num_object_clones);
+	formatter->dump_format("num_object_copies", "%lld", s.num_object_copies);
+	formatter->dump_format("num_objects_missing_on_primary", "%lld", s.num_objects_missing_on_primary);
+	formatter->dump_format("num_objects_unfound", "%lld", s.num_objects_unfound);
+	formatter->dump_format("num_objects_degraded", "%lld", s.num_objects_degraded);
+	formatter->dump_format("read_ops", "%lld", s.num_rd);
+	formatter->dump_format("read_bytes", "%lld", s.num_rd_kb * 1024ull);
+	formatter->dump_format("write_ops", "%lld", s.num_wr);
+	formatter->dump_format("write_bytes", "%lld", s.num_wr_kb * 1024ull);
+	formatter->close_section();
       }
     }
 
@@ -2088,12 +1990,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    if (nargs.size() > 2) {
-      string category(nargs[2]);
-      ret = io_ctx.create(oid, true, category);
-    } else {
-      ret = io_ctx.create(oid, true);
-    }
+    ret = io_ctx.create(oid, true);
     if (ret < 0) {
       cerr << "error creating " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       goto out;
@@ -2329,7 +2226,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 3)
       usage_exit();
 
-    ret = io_ctx.rollback(nargs[1], nargs[2]);
+    ret = io_ctx.snap_rollback(nargs[1], nargs[2]);
     if (ret < 0) {
       cerr << "error rolling back pool " << pool_name << " to snapshot " << nargs[1]
 	   << cpp_strerror(ret) << std::endl;
@@ -2376,9 +2273,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    RadosWatchCtx ctx(oid.c_str());
+    RadosWatchCtx ctx(io_ctx, oid.c_str());
     uint64_t cookie;
-    ret = io_ctx.watch(oid, 0, &cookie, &ctx);
+    ret = io_ctx.watch2(oid, &cookie, &ctx);
     if (ret != 0)
       cerr << "error calling watch: " << ret << std::endl;
     else {
@@ -2391,11 +2288,32 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     string oid(nargs[1]);
     string msg(nargs[2]);
-    bufferlist bl;
+    bufferlist bl, replybl;
     ::encode(msg, bl);
-    ret = io_ctx.notify(oid, 0, bl);
+    ret = io_ctx.notify2(oid, bl, 10000, &replybl);
     if (ret != 0)
       cerr << "error calling notify: " << ret << std::endl;
+    if (replybl.length()) {
+      map<pair<uint64_t,uint64_t>,bufferlist> rm;
+      set<pair<uint64_t,uint64_t> > missed;
+      bufferlist::iterator p = replybl.begin();
+      ::decode(rm, p);
+      ::decode(missed, p);
+      for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();
+	   p != rm.end();
+	   ++p) {
+	cout << "reply client." << p->first.first
+	     << " cookie " << p->first.second
+	     << " : " << p->second.length() << " bytes" << std::endl;
+	if (p->second.length())
+	  p->second.hexdump(cout);
+      }
+      for (multiset<pair<uint64_t,uint64_t> >::iterator p = missed.begin();
+	   p != missed.end(); ++p) {
+	cout << "timeout client." << p->first
+	     << " cookie " << p->second << std::endl;
+      }
+    }
   } else if (strcmp(nargs[0], "set-alloc-hint") == 0) {
     if (!pool_name || nargs.size() < 4)
       usage_exit();
@@ -2730,8 +2648,6 @@ int main(int argc, const char **argv)
       opts["target_locator"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)NULL)) {
       opts["target_nspace"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--category", (char*)NULL)) {
-      opts["category"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
       opts["concurrent-ios"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {

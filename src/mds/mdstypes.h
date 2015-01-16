@@ -260,6 +260,44 @@ inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
     (l.ino == r.ino && l.snapid < r.snapid);
 }
 
+struct quota_info_t
+{
+  int64_t max_bytes;
+  int64_t max_files;
+ 
+  quota_info_t() : max_bytes(0), max_files(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(max_bytes, bl);
+    ::encode(max_files, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& p) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    ::decode(max_bytes, p);
+    ::decode(max_files, p);
+    DECODE_FINISH(p);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<quota_info_t *>& ls);
+
+  bool is_valid() const {
+    return max_bytes >=0 && max_files >=0;
+  }
+  bool is_enable() const {
+    return max_bytes || max_files;
+  }
+};
+WRITE_CLASS_ENCODER(quota_info_t)
+
+inline bool operator==(const quota_info_t &l, const quota_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+ostream& operator<<(ostream &out, const quota_info_t &n);
+
 CEPH_HASH_NAMESPACE_START
   template<> struct hash<vinodeno_t> {
     size_t operator()(const vinodeno_t &vino) const { 
@@ -364,6 +402,8 @@ struct inode_t {
   frag_info_t dirstat;         // protected by my filelock
   nest_info_t rstat;           // protected by my nestlock
   nest_info_t accounted_rstat; // protected by parent's nestlock
+
+  quota_info_t quota;
  
   // special stuff
   version_t version;           // auth only
@@ -382,6 +422,7 @@ struct inode_t {
 	      version(0), file_data_version(0), xattr_version(0), backtrace_version(0) {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
+    memset(&quota, 0, sizeof(quota));
   }
 
   // file type
@@ -451,7 +492,7 @@ struct inode_t {
     }
   }
 
-  bool is_backtrace_updated() {
+  bool is_backtrace_updated() const {
     return backtrace_version == version;
   }
   void update_backtrace(version_t pv=0) {
@@ -1157,7 +1198,7 @@ class MDSCacheObject {
   const static int PIN_TEMPEXPORTING = 1008;  // temp pin between encode_ and finish_export
   static const int PIN_CLIENTLEASE = 1009;
 
-  const char *generic_pin_name(int p) {
+  const char *generic_pin_name(int p) const {
     switch (p) {
     case PIN_REPLICATED: return "replicated";
     case PIN_DIRTY: return "dirty";
@@ -1220,8 +1261,8 @@ class MDSCacheObject {
 
   // --------------------------------------------
   // authority
-  virtual mds_authority_t authority() = 0;
-  bool is_ambiguous_auth() {
+  virtual mds_authority_t authority() const = 0;
+  bool is_ambiguous_auth() const {
     return authority().second != CDIR_AUTH_UNKNOWN;
   }
 
@@ -1234,12 +1275,14 @@ protected:
 #endif
 
  public:
-  int get_num_ref(int by = -1) {
+  int get_num_ref(int by = -1) const {
 #ifdef MDS_REF_SET
     if (by >= 0) {
-      if (ref_map.find(by) == ref_map.end())
+      if (ref_map.find(by) == ref_map.end()) {
 	return 0;
-      return ref_map[by];
+      } else {
+        return ref_map.find(by)->second;
+      }
     }
 #endif
     return ref;
@@ -1253,7 +1296,7 @@ protected:
     return total;
   }
 #endif
-  virtual const char *pin_name(int by) = 0;
+  virtual const char *pin_name(int by) const = 0;
   //bool is_pinned_by(int by) { return ref_set.count(by); }
   //multiset<int>& get_ref_set() { return ref_set; }
 
@@ -1304,9 +1347,9 @@ protected:
 #endif
   }
 
-  void print_pin_set(std::ostream& out) {
+  void print_pin_set(std::ostream& out) const {
 #ifdef MDS_REF_SET
-    std::map<int, int>::iterator it = ref_map.begin();
+    std::map<int, int>::const_iterator it = ref_map.begin();
     while (it != ref_map.end()) {
       out << " " << pin_name(it->first) << "=" << it->second;
       ++it;
@@ -1319,12 +1362,12 @@ protected:
 
   // --------------------------------------------
   // auth pins
-  virtual bool can_auth_pin() = 0;
+  virtual bool can_auth_pin() const = 0;
   virtual void auth_pin(void *who) = 0;
   virtual void auth_unpin(void *who) = 0;
-  virtual bool is_frozen() = 0;
-  virtual bool is_freezing() = 0;
-  virtual bool is_freezing_or_frozen() {
+  virtual bool is_frozen() const = 0;
+  virtual bool is_freezing() const = 0;
+  virtual bool is_freezing_or_frozen() const {
     return is_frozen() || is_freezing();
   }
 
@@ -1336,9 +1379,9 @@ protected:
   std::map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
 
  public:
-  bool is_replicated() { return !replica_map.empty(); }
-  bool is_replica(mds_rank_t mds) { return replica_map.count(mds); }
-  int num_replicas() { return replica_map.size(); }
+  bool is_replicated() const { return !replica_map.empty(); }
+  bool is_replica(mds_rank_t mds) const { return replica_map.count(mds); }
+  int num_replicas() const { return replica_map.size(); }
   unsigned add_replica(mds_rank_t mds) {
     if (replica_map.count(mds)) 
       return ++replica_map[mds];  // inc nonce
@@ -1368,15 +1411,15 @@ protected:
   }
   std::map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
   std::map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const std::map<mds_rank_t,unsigned>& get_replicas() { return replica_map; }
-  void list_replicas(std::set<mds_rank_t>& ls) {
+  const std::map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
+  void list_replicas(std::set<mds_rank_t>& ls) const {
     for (std::map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
 	 p != replica_map.end();
 	 ++p) 
       ls.insert(p->first);
   }
 
-  unsigned get_replica_nonce() { return replica_nonce; }
+  unsigned get_replica_nonce() const { return replica_nonce; }
   void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
 

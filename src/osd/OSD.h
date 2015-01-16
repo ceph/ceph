@@ -315,7 +315,6 @@ public:
   LogClient &log_client;
   LogChannelRef clog;
   PGRecoveryStats &pg_recovery_stats;
-  hobject_t infos_oid;
 private:
   Messenger *&cluster_messenger;
   Messenger *&client_messenger;
@@ -328,7 +327,6 @@ public:
   ThreadPool::WorkQueue<PG> &recovery_wq;
   ThreadPool::WorkQueue<PG> &snap_trim_wq;
   ThreadPool::WorkQueue<PG> &scrub_wq;
-  ThreadPool::WorkQueue<PG> &scrub_finalize_wq;
   ThreadPool::WorkQueue<MOSDRepScrub> &rep_scrub_wq;
   GenContextWQ recovery_gen_wq;
   GenContextWQ op_gen_wq;
@@ -1087,6 +1085,7 @@ private:
   bool paused_recovery;
 
   void set_disk_tp_priority();
+  void get_latest_osdmap();
 
   // -- sessions --
 public:
@@ -1683,8 +1682,7 @@ protected:
   PG   *_lookup_lock_pg(spg_t pgid);
   PG   *_lookup_pg(spg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
-		      spg_t pg, bool no_lockdep_check=false,
-		      bool hold_map_lock=false);
+		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {
     RES_PARENT,    // resurrected a parent
     RES_SELF,      // resurrected self
@@ -1897,18 +1895,18 @@ protected:
   void repeer(PG *pg, map< int, map<spg_t,pg_query_t> >& query_map);
 
   bool require_mon_peer(Message *m);
-  bool require_osd_peer(OpRequestRef& op);
+  bool require_osd_peer(Message *m);
   /***
    * Verifies that we were alive in the given epoch, and that
    * still are.
    */
-  bool require_self_aliveness(OpRequestRef& op, epoch_t alive_since);
+  bool require_self_aliveness(Message *m, epoch_t alive_since);
   /**
    * Verifies that the OSD who sent the given op has the same
    * address as in the given map.
    * @pre op was sent by an OSD using the cluster messenger
    */
-  bool require_same_peer_instance(OpRequestRef& op, OSDMapRef& map,
+  bool require_same_peer_instance(Message *m, OSDMapRef& map,
 				  bool is_fast_dispatch);
 
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
@@ -2135,50 +2133,6 @@ protected:
     }
   } scrub_wq;
 
-  struct ScrubFinalizeWQ : public ThreadPool::WorkQueue<PG> {
-  private:
-    xlist<PG*> scrub_finalize_queue;
-
-  public:
-    ScrubFinalizeWQ(time_t ti, ThreadPool *tp)
-      : ThreadPool::WorkQueue<PG>("OSD::ScrubFinalizeWQ", ti, ti*10, tp) {}
-
-    bool _empty() {
-      return scrub_finalize_queue.empty();
-    }
-    bool _enqueue(PG *pg) {
-      if (pg->scrub_finalize_item.is_on_list()) {
-	return false;
-      }
-      pg->get("ScrubFinalizeWQ");
-      scrub_finalize_queue.push_back(&pg->scrub_finalize_item);
-      return true;
-    }
-    void _dequeue(PG *pg) {
-      if (pg->scrub_finalize_item.remove_myself()) {
-	pg->put("ScrubFinalizeWQ");
-      }
-    }
-    PG *_dequeue() {
-      if (scrub_finalize_queue.empty())
-	return NULL;
-      PG *pg = scrub_finalize_queue.front();
-      scrub_finalize_queue.pop_front();
-      return pg;
-    }
-    void _process(PG *pg) {
-      pg->scrub_finalize();
-      pg->put("ScrubFinalizeWQ");
-    }
-    void _clear() {
-      while (!scrub_finalize_queue.empty()) {
-	PG *pg = scrub_finalize_queue.front();
-	scrub_finalize_queue.pop_front();
-	pg->put("ScrubFinalizeWQ");
-      }
-    }
-  } scrub_finalize_wq;
-
   struct RepScrubWQ : public ThreadPool::WorkQueue<MOSDRepScrub> {
   private: 
     OSD *osd;
@@ -2267,10 +2221,6 @@ protected:
       remove_queue.clear();
     }
   } remove_wq;
-  uint64_t next_removal_seq;
-  coll_t get_next_removal_coll(spg_t pgid) {
-    return coll_t::make_removal_coll(next_removal_seq++, pgid);
-  }
 
  private:
   bool ms_can_fast_dispatch_any() const { return true; }
@@ -2278,7 +2228,9 @@ protected:
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
     case MSG_OSD_SUBOP:
+    case MSG_OSD_REPOP:
     case MSG_OSD_SUBOPREPLY:
+    case MSG_OSD_REPOPREPLY:
     case MSG_OSD_PG_PUSH:
     case MSG_OSD_PG_PULL:
     case MSG_OSD_PG_PUSH_REPLY:

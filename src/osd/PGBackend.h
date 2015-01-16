@@ -204,6 +204,10 @@
      virtual spg_t primary_spg_t() const = 0;
      virtual pg_shard_t primary_shard() const = 0;
 
+     virtual uint64_t min_peer_features() const = 0;
+
+     virtual bool transaction_use_tbl() = 0;
+
      virtual void send_message_osd_cluster(
        int peer, Message *m, epoch_t from_epoch) = 0;
      virtual void send_message_osd_cluster(
@@ -434,7 +438,8 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags = 0 ///< [in] fadvise hint
        ) { assert(0); }
      virtual void omap_setkeys(
        const hobject_t &hoid,         ///< [in] object to write
@@ -475,8 +480,9 @@
        const hobject_t &hoid, ///< [in] object to write
        uint64_t off,          ///< [in] off at which to write
        uint64_t len,          ///< [in] len to write from bl
-       bufferlist &bl         ///< [in] bl to write will be claimed to len
-       ) { write(hoid, off, len, bl); }
+       bufferlist &bl,        ///< [in] bl to write will be claimed to len
+       uint32_t fadvise_flags ///< [in] fadvise hint
+       ) { write(hoid, off, len, bl, fadvise_flags); }
 
      /// to_append *must* have come from the same PGBackend (same concrete type)
      virtual void append(
@@ -572,31 +578,38 @@
      const hobject_t &hoid,
      uint64_t off,
      uint64_t len,
+     uint32_t op_flags,
      bufferlist *bl) = 0;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const list<pair<pair<uint64_t, uint64_t>,
+     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete) = 0;
 
    virtual bool scrub_supported() { return false; }
    void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep,
+     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
      ThreadPool::TPHandle &handle);
    enum scrub_error_type be_compare_scrub_objects(
+     pg_shard_t auth_shard,
      const ScrubMap::object &auth,
+     const object_info_t& auth_oi,
+     bool okseed,
      const ScrubMap::object &candidate,
      ostream &errorstream);
-   map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
+   list<map<pg_shard_t, ScrubMap *>::const_iterator> be_select_auth_object(
      const hobject_t &obj,
-     const map<pg_shard_t,ScrubMap*> &maps);
+     const map<pg_shard_t,ScrubMap*> &maps,
+     bool okseed,
+     object_info_t *auth_oi);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
+     bool okseed,   ///< true if scrub digests have same seed our oi digests
      map<hobject_t, set<pg_shard_t> > &missing,
      map<hobject_t, set<pg_shard_t> > &inconsistent,
-     map<hobject_t, pg_shard_t> &authoritative,
-     map<hobject_t, set<pg_shard_t> > &invalid_snapcolls,
+     map<hobject_t, list<pg_shard_t> > &authoritative,
+     map<hobject_t, pair<uint32_t,uint32_t> > &missing_digest,
      int &shallow_errors, int &deep_errors,
      const spg_t& pgid,
      const vector<int> &acting,
@@ -605,6 +618,7 @@
      uint64_t logical_size) { assert(0); return 0; }
    virtual void be_deep_scrub(
      const hobject_t &poid,
+     uint32_t seed,
      ScrubMap::object &o,
      ThreadPool::TPHandle &handle) { assert(0); }
 

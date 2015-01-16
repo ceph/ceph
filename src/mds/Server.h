@@ -50,6 +50,9 @@ private:
   Messenger *messenger;
   PerfCounters *logger;
 
+  // OSDMap full status, used to generate ENOSPC on some operations
+  bool is_full;
+
 public:
   int failed_reconnects;
 
@@ -60,6 +63,7 @@ public:
     mdcache(mds->mdcache), mdlog(mds->mdlog),
     messenger(mds->messenger),
     logger(0),
+    is_full(false),
     failed_reconnects(0),
     terminating_sessions(false) {
   }
@@ -73,6 +77,7 @@ public:
   // message handler
   void dispatch(Message *m);
 
+  void handle_osd_map();
 
   // -- sessions and recovery --
   utime_t  reconnect_start;
@@ -102,6 +107,7 @@ public:
   void recover_filelocks(CInode *in, bufferlist locks, int64_t client);
 
   void recall_client_state(float ratio);
+  void force_clients_readonly();
 
   // -- requests --
   void handle_client_request(MClientRequest *m);
@@ -167,6 +173,7 @@ public:
 
   int parse_layout_vxattr(string name, string value, const OSDMap *osdmap,
 			  ceph_file_layout *layout);
+  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 			 ceph_file_layout *dir_layout,
 			 set<SimpleLock*> rdlocks,

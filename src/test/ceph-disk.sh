@@ -201,11 +201,12 @@ function test_activate_dir_magic() {
 function test_activate() {
     local to_prepare=$1
     local to_activate=$2
+    local journal=$3
 
     $mkdir -p $OSD_DATA
 
     ./ceph-disk $CEPH_DISK_ARGS \
-        prepare $to_prepare || return 1
+        prepare $to_prepare $journal || return 1
 
     $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
         activate \
@@ -231,25 +232,65 @@ function test_activate_dir() {
     $rm -fr $osd_data
 }
 
-function test_activate_dev() {
-    run_mon
+function create_dev() {
+    local name=$1
 
+    dd if=/dev/zero of=$name bs=1024k count=200
+    losetup --find $name
+    local dev=$(losetup --associated $name | cut -f1 -d:)
+    ceph-disk zap $dev > /dev/null 2>&1
+    echo $dev
+}
+
+function destroy_dev() {
+    local name=$1
+    local dev=$2
+
+    for partition in 1 2 3 4 ; do
+        umount ${dev}p${partition} || true
+    done
+    losetup --detach $dev
+    rm $name
+}
+
+function activate_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+
+    setup
+    run_mon
+    test_activate $disk ${disk}p1 $journal || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    teardown
+
+    # reuse the journal partition
+    setup
+    run_mon
+    test_activate $newdisk ${newdisk}p1 ${journal}p1 || return 1
+    kill_daemons
+    umount ${newdisk}p1 || return 1
+    teardown
+}
+
+function test_activate_dev() {
     if test $(id -u) != 0 ; then
         echo "SKIP because not root"
         return 0
     fi
 
-    dd if=/dev/zero of=vde.disk bs=1024k count=200
-    losetup --find vde.disk
-    local disk=$(losetup --associated vde.disk | cut -f1 -d:)
-    ./ceph-disk zap $disk
-    test_activate ${disk} ${disk}p1
-    kill_daemons
-    umount ${disk}p1
-    ./ceph-disk zap $disk
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dev_body $disk $journal $newdisk
     status=$?
-    losetup --detach $disk
-    rm vde.disk
+
+    destroy_dev vdf.disk $disk
+    destroy_dev vdg.disk $journal
+    destroy_dev vdh.disk $newdisk
+
     return $status
 }
 

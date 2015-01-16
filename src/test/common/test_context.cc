@@ -24,6 +24,7 @@
 #include "include/msgr.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "log/Log.h"
 
 TEST(CephContext, do_command)
 {
@@ -39,17 +40,49 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config get><key>" + value + "</key></config get>", s);
+    EXPECT_EQ("<config_get><key>" + value + "</key></config_get>", s);
   }
 
   {
     bufferlist out;
     cct->do_command("config get", cmdmap, "UNSUPPORTED", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("{ \"key\": \"value\"}", s);
+    EXPECT_EQ("{\n    \"key\": \"value\"\n}\n", s);
   }
 
   cct->put();
+}
+
+TEST(CephContext, experimental_features)
+{
+  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("foo"));
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
+
+  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+		      "foo,bar");
+  cct->_conf->apply_changes(&cout);
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("bar"));
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
+
+  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+		      "foo bar");
+  cct->_conf->apply_changes(&cout);
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("bar"));
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("baz"));
+
+  cct->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features",
+		      "baz foo");
+  cct->_conf->apply_changes(&cout);
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("foo"));
+  ASSERT_FALSE(cct->check_experimental_feature_enabled("bar"));
+  ASSERT_TRUE(cct->check_experimental_feature_enabled("baz"));
+
+  cct->_log->flush();
 }
 
 /*

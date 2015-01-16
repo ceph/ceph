@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
@@ -30,7 +31,7 @@ class PerfCounters;
 
 namespace librbd {
 
-  class WatchCtx;
+  class ImageWatcher;
 
   struct ImageCtx {
     CephContext *cct;
@@ -55,14 +56,16 @@ namespace librbd {
     std::string name;
     std::string snap_name;
     IoCtx data_ctx, md_ctx;
-    WatchCtx *wctx;
+    ImageWatcher *image_watcher;
     int refresh_seq;    ///< sequence for refresh requests
     int last_refresh;   ///< last completed refresh
 
     /**
      * Lock ordering:
-     * md_lock, cache_lock, snap_lock, parent_lock, refresh_lock
+     * owner_lock, md_lock, cache_lock, snap_lock, parent_lock, refresh_lock,
+     * aio_lock
      */
+    RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
                    // isn't guarded by other locks below
                    // (size, features, image locks, etc)
@@ -70,6 +73,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    Mutex aio_lock; // protects pending_aio and pending_aio_cond
 
     unsigned extra_read_flags;
 
@@ -93,6 +97,9 @@ namespace librbd {
 
     Readahead readahead;
     uint64_t total_bytes_read;
+
+    Cond pending_aio_cond;
+    uint64_t pending_aio;
 
     /**
      * Either image_name or image_id must be set.
@@ -157,7 +164,7 @@ namespace librbd {
 			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
-
+    void wait_for_pending_aio();
   };
 }
 

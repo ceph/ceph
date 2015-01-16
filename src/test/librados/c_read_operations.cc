@@ -101,7 +101,7 @@ protected:
     while (i < len) {
       ASSERT_EQ(0, rados_getxattrs_next(iter, (const char**) &key,
 					(const char**) &val, &val_len));
-      if (val_len == 0 && key == NULL && val == NULL)
+      if (key == NULL || (val_len == 0 && val == NULL))
 	break;
       EXPECT_EQ(std::string(keys[i]), std::string(key));
       EXPECT_EQ(0, memcmp(vals[i], val, val_len));
@@ -264,6 +264,19 @@ TEST_F(CReadOpsTest, Read) {
     size_t bytes_read = 0;
     int rval;
     rados_read_op_read(op, 0, len, buf, &bytes_read, &rval);
+    ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+    ASSERT_EQ(len, (int)bytes_read);
+    ASSERT_EQ(0, rval);
+    ASSERT_EQ(0, memcmp(data, buf, len));
+    rados_release_read_op(op);
+  }
+
+  {
+    rados_read_op_t op = rados_create_read_op();
+    size_t bytes_read = 0;
+    int rval;
+    rados_read_op_read(op, 0, len, buf, &bytes_read, &rval);
+    rados_read_op_set_flags(op, LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
     ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
     ASSERT_EQ(len, (int)bytes_read);
     ASSERT_EQ(0, rval);

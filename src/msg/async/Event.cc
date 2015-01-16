@@ -39,7 +39,8 @@ class C_handle_notify : public EventCallback {
   C_handle_notify() {}
   void do_request(int fd_or_id) {
     char c[100];
-    assert(read(fd_or_id, c, 100));
+    int r = read(fd_or_id, c, 100);
+    assert(r > 0);
   }
 };
 
@@ -91,9 +92,10 @@ int EventCenter::init(int n)
 
 EventCenter::~EventCenter()
 {
-  if (driver)
-    delete driver;
+  delete driver;
 
+  if (file_events)
+    free(file_events);
   if (notify_receive_fd > 0)
     ::close(notify_receive_fd);
   if (notify_send_fd > 0)
@@ -118,6 +120,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
       lderr(cct) << __func__ << " failed to realloc file_events" << cpp_strerror(errno) << dendl;
       return -errno;
     }
+    memset(file_events+nevent, 0, sizeof(FileEvent)*(new_size-nevent));
     file_events = new_events;
     nevent = new_size;
   }
@@ -187,6 +190,28 @@ uint64_t EventCenter::create_time_event(uint64_t microseconds, EventCallbackRef 
   return id;
 }
 
+// TODO: Ineffective implementation now!
+void EventCenter::delete_time_event(uint64_t id)
+{
+  ldout(cct, 10) << __func__ << " id=" << id << dendl;
+  if (id >= time_event_next_id)
+    return ;
+
+
+  for (map<utime_t, list<TimeEvent> >::iterator it = time_events.begin();
+       it != time_events.end(); ++it) {
+    for (list<TimeEvent>::iterator j = it->second.begin();
+         j != it->second.end(); ++j) {
+      if (j->id == id) {
+        it->second.erase(j);
+        if (it->second.empty())
+          time_events.erase(it);
+        return ;
+      }
+    }
+  }
+}
+
 void EventCenter::wakeup()
 {
   ldout(cct, 1) << __func__ << dendl;
@@ -247,6 +272,8 @@ int EventCenter::process_time_events()
 
 int EventCenter::process_events(int timeout_microseconds)
 {
+  // Must set owner before looping
+  assert(owner);
   struct timeval tv;
   int numevents;
   bool trigger_time = false;

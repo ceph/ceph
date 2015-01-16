@@ -97,7 +97,7 @@ int num_cinode_locks = 5;
 
 
 
-ostream& operator<<(ostream& out, CInode& in)
+ostream& operator<<(ostream& out, const CInode& in)
 {
   string path;
   in.make_path_string_projected(path);
@@ -147,14 +147,14 @@ ostream& operator<<(ostream& out, CInode& in)
   if (in.is_frozen_inode()) out << " FROZEN";
   if (in.is_frozen_auth_pin()) out << " FROZEN_AUTHPIN";
 
-  inode_t *pi = in.get_projected_inode();
+  const inode_t *pi = in.get_projected_inode();
   if (pi->is_truncating())
     out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
 
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
     if (g_conf->mds_debug_scatterstat && in.is_projected()) {
-      inode_t *pi = in.get_projected_inode();
+      const inode_t *pi = in.get_projected_inode();
       out << "->" << pi->dirstat;
     }
   } else {
@@ -168,7 +168,7 @@ ostream& operator<<(ostream& out, CInode& in)
   if (!(in.inode.rstat == in.inode.accounted_rstat))
     out << "/" << in.inode.accounted_rstat;
   if (g_conf->mds_debug_scatterstat && in.is_projected()) {
-    inode_t *pi = in.get_projected_inode();
+    const inode_t *pi = in.get_projected_inode();
     out << "->" << pi->rstat;
     if (!(pi->rstat == pi->accounted_rstat))
       out << "/" << pi->accounted_rstat;
@@ -209,7 +209,7 @@ ostream& operator<<(ostream& out, CInode& in)
 
   if (!in.get_client_caps().empty()) {
     out << " caps={";
-    for (map<client_t,Capability*>::iterator it = in.get_client_caps().begin();
+    for (map<client_t,Capability*>::const_iterator it = in.get_client_caps().begin();
          it != in.get_client_caps().end();
          ++it) {
       if (it != in.get_client_caps().begin()) out << ",";
@@ -229,7 +229,7 @@ ostream& operator<<(ostream& out, CInode& in)
   }
   if (!in.get_mds_caps_wanted().empty()) {
     out << " mcw={";
-    for (map<int,int>::iterator p = in.get_mds_caps_wanted().begin();
+    for (map<int,int>::const_iterator p = in.get_mds_caps_wanted().begin();
 	 p != in.get_mds_caps_wanted().end(); ++p) {
       if (p != in.get_mds_caps_wanted().begin())
 	out << ',';
@@ -765,7 +765,7 @@ bool CInode::is_projected_ancestor_of(CInode *other)
   return false;
 }
 
-void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
+void CInode::make_path_string(string& s, bool force, CDentry *use_parent) const
 {
   if (!force)
     use_parent = parent;
@@ -790,7 +790,7 @@ void CInode::make_path_string(string& s, bool force, CDentry *use_parent)
     s += n;
   }
 }
-void CInode::make_path_string_projected(string& s)
+void CInode::make_path_string_projected(string& s) const
 {
   make_path_string(s);
   
@@ -798,7 +798,7 @@ void CInode::make_path_string_projected(string& s)
     string q;
     q.swap(s);
     s = "{" + q;
-    for (list<CDentry*>::iterator p = projected_parent.begin();
+    for (list<CDentry*>::const_iterator p = projected_parent.begin();
 	 p != projected_parent.end();
 	 ++p) {
       string q;
@@ -810,7 +810,7 @@ void CInode::make_path_string_projected(string& s)
   }
 }
 
-void CInode::make_path(filepath& fp)
+void CInode::make_path(filepath& fp) const
 {
   if (parent) 
     parent->make_path(fp);
@@ -904,8 +904,7 @@ struct C_IO_Inode_Stored : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_Stored(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    assert(r == 0);
-    in->_stored(version, fin);
+    in->_stored(r, version, fin);
   }
 };
 
@@ -943,9 +942,17 @@ void CInode::store(MDSInternalContextBase *fin)
 				 NULL, newfin);
 }
 
-void CInode::_stored(version_t v, Context *fin)
+void CInode::_stored(int r, version_t v, Context *fin)
 {
-  dout(10) << "_stored " << v << " " << *this << dendl;
+  if (r < 0) {
+    dout(1) << "store error " << r << " v " << v << " on " << *this << dendl;
+    mdcache->mds->clog->error() << "failed to store ino " << ino() << " object,"
+				<< " errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    return;
+  }
+
+  dout(10) << "_stored " << v << " on " << *this << dendl;
   if (v == get_projected_version())
     mark_clean();
 
@@ -1062,8 +1069,7 @@ struct C_IO_Inode_StoredBacktrace : public CInodeIOContext {
   Context *fin;
   C_IO_Inode_StoredBacktrace(CInode *i, version_t v, Context *f) : CInodeIOContext(i), version(v), fin(f) {}
   void finish(int r) {
-    assert(r == 0);
-    in->_stored_backtrace(version, fin);
+    in->_stored_backtrace(r, version, fin);
   }
 };
 
@@ -1130,9 +1136,17 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   gather.activate();
 }
 
-void CInode::_stored_backtrace(version_t v, Context *fin)
+void CInode::_stored_backtrace(int r, version_t v, Context *fin)
 {
-  dout(10) << "_stored_backtrace" << dendl;
+  if (r < 0) {
+    dout(1) << "store backtrace error " << r << " v " << v << dendl;
+    mdcache->mds->clog->error() << "failed to store backtrace on dir ino "
+				<< ino() << " object, errno " << r << "\n";
+    mdcache->mds->handle_write_error(r);
+    return;
+  }
+
+  dout(10) << "_stored_backtrace v " << v <<  dendl;
 
   auth_unpin(this);
   if (v == inode.backtrace_version)
@@ -1174,6 +1188,33 @@ void CInode::clear_dirty_parent()
     state_clear(STATE_DIRTYPOOL);
     put(PIN_DIRTYPARENT);
     item_dirty_parent.remove_myself();
+  }
+}
+
+void CInode::verify_diri_backtrace(bufferlist &bl, int err)
+{
+  if (is_base() || is_dirty_parent())
+    return;
+
+  dout(10) << "verify_diri_backtrace" << dendl;
+
+  if (err == 0) {
+    inode_backtrace_t backtrace;
+    ::decode(backtrace, bl);
+    CDentry *pdn = get_parent_dn();
+    if (backtrace.ancestors.empty() ||
+	backtrace.ancestors[0].dname != pdn->name ||
+	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
+      err = -EINVAL;
+  }
+
+  if (err) {
+    MDS *mds = mdcache->mds;
+    mds->clog->error() << "bad backtrace on dir ino " << ino() << "\n";
+    assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
+
+    _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
+    mds->mdlog->flush();
   }
 }
 
@@ -1398,6 +1439,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::encode(inode.version, bl);
       ::encode(inode.layout, bl);
+      ::encode(inode.quota, bl);
     }
     break;
   
@@ -1653,6 +1695,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     if (inode.is_dir()) {
       ::decode(inode.version, p);
       ::decode(inode.layout, p);
+      ::decode(inode.quota, p);
     }
     break;
 
@@ -2015,6 +2058,8 @@ void CInode::finish_scatter_gather_update(int type)
 	  pi->rstat.version = v;
 	}
       }
+
+      mdcache->broadcast_quota_to_client(this);
     }
     break;
 
@@ -2056,20 +2101,20 @@ void CInode::finish_scatter_gather_update_accounted(int type, MutationRef& mut, 
 
 // waiting
 
-bool CInode::is_frozen()
+bool CInode::is_frozen() const
 {
   if (is_frozen_inode()) return true;
   if (parent && parent->dir->is_frozen()) return true;
   return false;
 }
 
-bool CInode::is_frozen_dir()
+bool CInode::is_frozen_dir() const
 {
   if (parent && parent->dir->is_frozen_dir()) return true;
   return false;
 }
 
-bool CInode::is_freezing()
+bool CInode::is_freezing() const
 {
   if (is_freezing_inode()) return true;
   if (parent && parent->dir->is_freezing()) return true;
@@ -2211,7 +2256,7 @@ void CInode::clear_ambiguous_auth()
 }
 
 // auth_pins
-bool CInode::can_auth_pin() {
+bool CInode::can_auth_pin() const {
   if (!is_auth() || is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin())
     return false;
   if (parent)
@@ -2298,7 +2343,7 @@ void CInode::adjust_nested_auth_pins(int a, void *by)
 
 // authority
 
-mds_authority_t CInode::authority() 
+mds_authority_t CInode::authority() const
 {
   if (inode_auth.first >= 0) 
     return inode_auth;
@@ -2473,6 +2518,8 @@ void CInode::decode_snap(bufferlist::iterator& p)
 
 client_t CInode::calc_ideal_loner()
 {
+  if (mdcache->is_readonly())
+    return -1;
   if (!mds_caps_wanted.empty())
     return -1;
   
@@ -2691,7 +2738,7 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
 }
 
   // caps allowed
-int CInode::get_caps_liked()
+int CInode::get_caps_liked() const
 {
   if (is_dir())
     return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
@@ -2699,7 +2746,7 @@ int CInode::get_caps_liked()
     return CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO;
 }
 
-int CInode::get_caps_allowed_ever()
+int CInode::get_caps_allowed_ever() const
 {
   int allowed;
   if (is_dir())
@@ -2714,7 +2761,7 @@ int CInode::get_caps_allowed_ever()
      (linklock.gcaps_allowed_ever() << linklock.get_cap_shift()));
 }
 
-int CInode::get_caps_allowed_by_type(int type)
+int CInode::get_caps_allowed_by_type(int type) const
 {
   return 
     CEPH_CAP_PIN |
@@ -2724,7 +2771,7 @@ int CInode::get_caps_allowed_by_type(int type)
     (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_careful()
+int CInode::get_caps_careful() const
 {
   return 
     (filelock.gcaps_careful() << filelock.get_cap_shift()) |
@@ -2733,7 +2780,7 @@ int CInode::get_caps_careful()
     (linklock.gcaps_careful() << linklock.get_cap_shift());
 }
 
-int CInode::get_xlocker_mask(client_t client)
+int CInode::get_xlocker_mask(client_t client) const
 {
   return 
     (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
@@ -2742,7 +2789,7 @@ int CInode::get_xlocker_mask(client_t client)
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(client_t client)
+int CInode::get_caps_allowed_for_client(client_t client) const
 {
   int allowed;
   if (client == get_loner()) {
@@ -2765,9 +2812,11 @@ int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
 {
   int c = 0;
   int loner = 0, other = 0, xlocker = 0;
-  if (!is_auth())
+  if (!is_auth()) {
     loner_cap = -1;
-  for (map<client_t,Capability*>::iterator it = client_caps.begin();
+  }
+
+  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
        it != client_caps.end();
        ++it) {
     int i = it->second->issued();
@@ -2784,9 +2833,9 @@ int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
   return (c >> shift) & mask;
 }
 
-bool CInode::is_any_caps_wanted()
+bool CInode::is_any_caps_wanted() const
 {
-  for (map<client_t,Capability*>::iterator it = client_caps.begin();
+  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
        it != client_caps.end();
        ++it)
     if (it->second->wanted())
@@ -2794,11 +2843,11 @@ bool CInode::is_any_caps_wanted()
   return false;
 }
 
-int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask)
+int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
 {
   int w = 0;
   int loner = 0, other = 0;
-  for (map<client_t,Capability*>::iterator it = client_caps.begin();
+  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
        it != client_caps.end();
        ++it) {
     if (!it->second->is_stale()) {
@@ -2812,7 +2861,7 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask)
     //cout << " get_caps_wanted client " << it->first << " " << cap_string(it->second.wanted()) << endl;
   }
   if (is_auth())
-    for (map<int,int>::iterator it = mds_caps_wanted.begin();
+    for (map<int,int>::const_iterator it = mds_caps_wanted.begin();
 	 it != mds_caps_wanted.end();
 	 ++it) {
       w |= it->second;
@@ -2979,6 +3028,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   e.rbytes = i->rstat.rbytes;
   e.rfiles = i->rstat.rfiles;
   e.rsubdirs = i->rstat.rsubdirs;
+  if (cap) {
+    cap->last_rbytes = i->rstat.rbytes;
+    cap->last_rsize = i->rstat.rsize();
+  }
 
   // auth
   i = pauth ? pi:oi;
@@ -3127,6 +3180,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
     ::encode(inline_version, bl);
     ::encode(inline_data, bl);
+  }
+  if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
+    i = ppolicy ? pi : oi;
+    ::encode(i->quota, bl);
   }
 
   return valid;

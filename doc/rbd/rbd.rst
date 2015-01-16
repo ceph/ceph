@@ -52,9 +52,12 @@ devices simultaneously.
 	Manpage rbd <../../man/8/rbd>
 	Manpage rbd-fuse <../../man/8/rbd-fuse>
 	Manpage ceph-rbdnamer <../../man/8/ceph-rbdnamer>
+	RBD Replay <rbd-replay>
 	Manpage rbd-replay-prep <../../man/8/rbd-replay-prep>
 	Manpage rbd-replay <../../man/8/rbd-replay>
+	Manpage rbd-replay-many <../../man/8/rbd-replay-many>
 	librbd <librbdpy>
+	
 	
 
 .. _RBD Caching: ../rbd-config-ref/

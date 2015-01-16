@@ -17,7 +17,7 @@
 
 source test/mon/mon-test-helpers.sh
 
-export CEPH_DIR="$PWD/test-$CEPH_PORT"
+export CEPH_DIR="$PWD/testdir/test-$CEPH_PORT"
 export CEPH_DEV_DIR="$CEPH_DIR/dev"
 export CEPH_OUT_DIR="$CEPH_DIR/out"
 
@@ -29,7 +29,7 @@ function vstart_setup()
     export LC_ALL=C # some tests are vulnerable to i18n
     ./vstart.sh \
         -o 'paxos propose interval = 0.01' \
-        -n -l $VSTART_ARGS || return 1
+        -n -l $CEPH_START || return 1
     export PATH=.:$PATH
     export CEPH_CONF=$CEPH_DIR/ceph.conf
 

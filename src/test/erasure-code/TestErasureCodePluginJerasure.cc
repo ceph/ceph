@@ -4,6 +4,7 @@
  * Ceph distributed storage system
  *
  * Copyright (C) 2013,2014 Cloudwatt <libre.licensing@cloudwatt.com>
+ * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
  * Author: Loic Dachary <loic@dachary.org>
  *
@@ -17,6 +18,7 @@
 #include <errno.h>
 #include "arch/probe.h"
 #include "arch/intel.h"
+#include "arch/arm.h"
 #include "global/global_init.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "common/ceph_argparse.h"
@@ -65,6 +67,7 @@ TEST(ErasureCodePlugin, select)
   int arch_intel_ssse3  = ceph_arch_intel_ssse3;
   int arch_intel_sse3   = ceph_arch_intel_sse3;
   int arch_intel_sse2   = ceph_arch_intel_sse2;
+  int arch_neon		= ceph_arch_neon;
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   map<std::string,std::string> parameters;
@@ -82,6 +85,7 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 1;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int sse4_side_effect = -444;
@@ -96,6 +100,7 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 1;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int sse3_side_effect = -333;
@@ -110,11 +115,27 @@ TEST(ErasureCodePlugin, select)
     ceph_arch_intel_ssse3  = 1;
     ceph_arch_intel_sse3   = 0;
     ceph_arch_intel_sse2   = 1;
+    ceph_arch_neon	   = 0;
 
     ErasureCodeInterfaceRef erasure_code;
     int generic_side_effect = -111;
     EXPECT_EQ(generic_side_effect, instance.factory("jerasure", parameters,
-                                                 &erasure_code, cerr));
+						    &erasure_code, cerr));
+  }
+  // neon is set, load the neon plugin
+  {
+    ceph_arch_intel_pclmul = 0;
+    ceph_arch_intel_sse42  = 0;
+    ceph_arch_intel_sse41  = 0;
+    ceph_arch_intel_ssse3  = 0;
+    ceph_arch_intel_sse3   = 0;
+    ceph_arch_intel_sse2   = 0;
+    ceph_arch_neon	   = 1;
+
+    ErasureCodeInterfaceRef erasure_code;
+    int generic_side_effect = -555;
+    EXPECT_EQ(generic_side_effect, instance.factory("jerasure", parameters,
+						    &erasure_code, cerr));
   }
 
 
@@ -125,6 +146,7 @@ TEST(ErasureCodePlugin, select)
   ceph_arch_intel_ssse3  = arch_intel_ssse3;
   ceph_arch_intel_sse3   = arch_intel_sse3;
   ceph_arch_intel_sse2   = arch_intel_sse2;
+  ceph_arch_neon	 = arch_neon;
 }
 
 TEST(ErasureCodePlugin, sse)

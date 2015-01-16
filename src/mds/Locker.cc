@@ -31,6 +31,7 @@
 #include "events/EOpen.h"
 
 #include "msg/Messenger.h"
+#include "osdc/Objecter.h"
 
 #include "messages/MGenericMessage.h"
 #include "messages/MDiscover.h"
@@ -1950,7 +1951,8 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
 					 in->find_snaprealm()->inode->ino(),
 					 cap->get_cap_id(), cap->get_last_seq(),
 					 after, wanted, 0,
-					 cap->get_mseq());
+					 cap->get_mseq(),
+                                         mds->get_osd_epoch_barrier());
 	in->encode_cap_message(m, cap);
 
 	mds->send_message_client_counted(m, it->first);
@@ -1977,7 +1979,8 @@ void Locker::issue_truncate(CInode *in)
 				     in->find_snaprealm()->inode->ino(),
 				     cap->get_cap_id(), cap->get_last_seq(),
 				     cap->pending(), cap->wanted(), 0,
-				     cap->get_mseq());
+				     cap->get_mseq(),
+                                     mds->get_osd_epoch_barrier());
     in->encode_cap_message(m, cap);			     
     mds->send_message_client_counted(m, it->first);
   }
@@ -2328,7 +2331,8 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
 				       in->find_snaprealm()->inode->ino(),
 				       cap->get_cap_id(), cap->get_last_seq(),
 				       cap->pending(), cap->wanted(), 0,
-				       cap->get_mseq());
+                                       cap->get_mseq(),
+                                       mds->get_osd_epoch_barrier());
       in->encode_cap_message(m, cap);
       mds->send_message_client_counted(m, client);
     }
@@ -2473,6 +2477,16 @@ void Locker::handle_client_caps(MClientCaps *m)
     return;
   }
 
+  if (m->osd_epoch_barrier && !mds->objecter->have_map(m->osd_epoch_barrier)) {
+    // Pause RADOS operations until we see the required epoch
+    mds->objecter->set_epoch_barrier(m->osd_epoch_barrier);
+  }
+
+  if (mds->get_osd_epoch_barrier() < m->osd_epoch_barrier) {
+    // Record the barrier so that we will retransmit it to clients
+    mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
+  }
+
   CInode *in = mdcache->pick_inode_snap(head_in, follows);
   if (in != head_in)
     dout(10) << " head inode " << *head_in << dendl;
@@ -2529,7 +2543,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       // case we get a dup response, so whatever.)
       MClientCaps *ack = 0;
       if (m->get_dirty()) {
-	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, 0, m->get_dirty(), 0);
+	ack = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP_ACK, in->ino(), 0, 0, 0, 0, 0, m->get_dirty(), 0, mds->get_osd_epoch_barrier());
 	ack->set_snap_follows(follows);
 	ack->set_client_tid(m->get_client_tid());
       }
@@ -2592,7 +2606,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty()) 
 	      << " seq " << m->get_seq() << " on " << *in << dendl;
       ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
-			    m->get_caps(), 0, m->get_dirty(), 0);
+			    m->get_caps(), 0, m->get_dirty(), 0, mds->get_osd_epoch_barrier());
       ack->set_client_tid(m->get_client_tid());
     }
 
@@ -3127,6 +3141,16 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
+  }
+
+  if (m->osd_epoch_barrier && !mds->objecter->have_map(m->osd_epoch_barrier)) {
+    // Pause RADOS operations until we see the required epoch
+    mds->objecter->set_epoch_barrier(m->osd_epoch_barrier);
+  }
+
+  if (mds->get_osd_epoch_barrier() < m->osd_epoch_barrier) {
+    // Record the barrier so that we will retransmit it to clients
+    mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
@@ -3692,6 +3716,14 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
       return;
   }
 
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "simple_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
+
   CInode *in = 0;
   int wanted = 0;
   if (lock->get_type() != CEPH_LOCK_DN) {
@@ -4119,6 +4151,14 @@ void Locker::scatter_eval(ScatterLock *lock, bool *need_issue)
     dout(20) << "  freezing|frozen" << dendl;
     return;
   }
+
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "scatter_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
   
   if (!lock->is_rdlocked() &&
       lock->get_state() != LOCK_MIX &&
@@ -4225,6 +4265,14 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool fo
 	  return;
 	}
 	*/
+
+	if (mdcache->is_readonly()) {
+	  if (lock->get_state() != LOCK_SYNC) {
+	    dout(10) << "scatter_nudge auth, read-only FS, syncing " << *lock << " on " << *p << dendl;
+	    simple_sync(static_cast<ScatterLock*>(lock));
+	  }
+	  break;
+	}
 
 	// adjust lock state
 	dout(10) << "scatter_nudge auth, scatter/unscattering " << *lock << " on " << *p << dendl;
@@ -4467,6 +4515,14 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 
   if (lock->get_parent()->is_freezing_or_frozen())
     return;
+
+  if (mdcache->is_readonly()) {
+    if (lock->get_state() != LOCK_SYNC) {
+      dout(10) << "file_eval read-only FS, syncing " << *lock << " on " << *lock->get_parent() << dendl;
+      simple_sync(lock, need_issue);
+    }
+    return;
+  }
 
   // excl -> *?
   if (lock->get_state() == LOCK_EXCL) {

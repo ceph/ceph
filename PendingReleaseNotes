@@ -1,12 +1,26 @@
-v0.89
+v0.92
 -----
 
-* New ability to list all objects from all namespaces can fail or return
-  incomplete results when not all OSDs have been upgraded.  Features
-  rados --all ls, rados cppool, rados export, rados cache-flush-evict-all
-  and rados cache-try-flush-evict-all can also fail or return incomplete
-  results.
+* The experiemental 'keyvaluestore-dev' OSD backend has been renamed
+  'keyvaluestore' (for simplicity) and marked as experimental.  To
+  enable this untested feature and acknowledge that you understand
+  that it is untested and may destroy data, you need to add the
+  following to your ceph.conf::
 
+    enable experimental unrecoverable data corrupting featuers = keyvaluestore
 
-v0.90
+* The following librados C API function calls take a 'flags' argument whose value
+  is now correctly interpreted:
+
+     rados_write_op_operate()
+     rados_aio_write_op_operate()
+     rados_read_op_operate()
+     rados_aio_read_op_operate()
+
+  The flags were not correctly being translated from the librados constants to the
+  internal values.  Now they are.  Any code that is passing flags to these methods
+  should be audited to ensure that they are using the correct LIBRADOS_OP_FLAG_*
+  constants.
+
+v0.93
 -----

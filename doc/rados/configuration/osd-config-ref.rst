@@ -91,6 +91,7 @@ that Ceph uses the entire partition for the journal.
 
 
 .. index:: OSD; file system
+
 File System Settings
 ====================
 Ceph builds and mounts file systems which are used for Ceph OSDs.
@@ -115,7 +116,7 @@ For example::
 :Default for other file systems: ``rw, noatime``
 
 For example::
-  ``osd mount options xfs = rw, noatime, inode64, nobarrier, logbufs=8``
+  ``osd mount options xfs = rw, noatime, inode64, logbufs=8``
 
 
 .. index:: OSD; journal settings

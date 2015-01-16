@@ -224,7 +224,7 @@ def main(argv):
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph_objectstore_tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
+    CFSD_PREFIX = "./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
     PROFNAME = "testecprofile"
 
     os.environ['CEPH_CONF'] = CEPH_CONF
@@ -449,17 +449,74 @@ def main(argv):
     ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
 
     # Don't specify a data-path
-    cmd = "./ceph_objectstore_tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     # Don't specify a journal-path for filestore
-    cmd = "./ceph_objectstore_tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     # Test --op list and generate json for all objects
-    print "Test --op list by generating json for all objects"
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
+
+    print "Test --op list variants"
+    OSDS = get_osds(ALLPGS[0], OSDDIR)
+    osd = OSDS[0]
+
+    # retrieve all objects from all PGs
+    cmd = (CFSD_PREFIX + "--op list --pretty-format=false").format(osd=osd)
+    logging.debug(cmd);
+    tmpfd = open(TMPFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(TMPFILE)
+    JSONOBJ = sorted(set(lines))
+    (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
+
+    # retrieve all objects in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --pretty-format=false").format(osd=osd, pg=pgid)
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) = json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg}".format(pg=pgid))
+        ERRORS += 1
+
+    # retrieve all objects with a given name in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --pretty-format=false").format(osd=osd, pg=pgid, object=jsondict['oid'])
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) in json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg} {object}".format(pg=pgid, object=jsondict['oid']))
+        ERRORS += 1
+
+    print "Test --op list by generating json for all objects using default format"
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
@@ -475,8 +532,9 @@ def main(argv):
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
-        jsondict = json.loads(JSON)
-        db[jsondict['namespace']][jsondict['oid']]['json'] = JSON
+        (pgid, jsondict) = json.loads(JSON)
+        db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
+        # print db[jsondict['namespace']][jsondict['oid']]['json']
         if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
             logging.error("Malformed JSON {json}".format(json=JSON))
             ERRORS += 1
@@ -817,7 +875,7 @@ def main(argv):
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                cmd = "./ceph_objectstore_tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:

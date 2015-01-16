@@ -93,6 +93,7 @@ struct ceph_dir_layout {
 /* client <-> monitor */
 #define CEPH_MSG_MON_MAP                4
 #define CEPH_MSG_MON_GET_MAP            5
+#define CEPH_MSG_MON_GET_OSDMAP         6
 #define CEPH_MSG_STATFS                 13
 #define CEPH_MSG_STATFS_REPLY           14
 #define CEPH_MSG_MON_SUBSCRIBE          15
@@ -115,6 +116,7 @@ struct ceph_dir_layout {
 #define CEPH_MSG_CLIENT_LEASE           0x311
 #define CEPH_MSG_CLIENT_SNAP            0x312
 #define CEPH_MSG_CLIENT_CAPRELEASE      0x313
+#define CEPH_MSG_CLIENT_QUOTA           0x314
 
 /* pool ops */
 #define CEPH_MSG_POOLOP_REPLY           48
@@ -130,10 +132,12 @@ struct ceph_dir_layout {
 
 /* watch-notify operations */
 enum {
-  WATCH_NOTIFY				= 1, /* notifying watcher */
-  WATCH_NOTIFY_COMPLETE			= 2, /* notifier notified when done */
+	CEPH_WATCH_EVENT_NOTIFY		  = 1, /* notifying watcher */
+	CEPH_WATCH_EVENT_NOTIFY_COMPLETE  = 2, /* notifier notified when done */
+	CEPH_WATCH_EVENT_DISCONNECT       = 3, /* we were disconnected */
 };
 
+const char *ceph_watch_event_name(int o);
 
 /* pool operations */
 enum {
@@ -285,6 +289,7 @@ enum {
 	CEPH_SESSION_RECALL_STATE,
 	CEPH_SESSION_FLUSHMSG,
 	CEPH_SESSION_FLUSHMSG_ACK,
+	CEPH_SESSION_FORCE_RO,
 };
 
 extern const char *ceph_session_op_name(int op);

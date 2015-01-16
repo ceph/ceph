@@ -42,6 +42,22 @@ const char *ceph_osd_state_name(int s)
 	}	
 }
 
+const char *ceph_osd_watch_op_name(int o)
+{
+	switch (o) {
+	case CEPH_OSD_WATCH_OP_UNWATCH:
+		return "unwatch";
+	case CEPH_OSD_WATCH_OP_WATCH:
+		return "watch";
+	case CEPH_OSD_WATCH_OP_RECONNECT:
+		return "reconnect";
+	case CEPH_OSD_WATCH_OP_PING:
+		return "ping";
+	default:
+		return "???";
+	}
+}
+
 const char *ceph_mds_state_name(int s)
 {
 	switch (s) {
@@ -160,6 +176,16 @@ const char *ceph_snap_op_name(int o)
 	case CEPH_SNAP_OP_CREATE: return "create";
 	case CEPH_SNAP_OP_DESTROY: return "destroy";
 	case CEPH_SNAP_OP_SPLIT: return "split";
+	}
+	return "???";
+}
+
+const char *ceph_watch_event_name(int e)
+{
+	switch (e) {
+	case CEPH_WATCH_EVENT_NOTIFY: return "notify";
+	case CEPH_WATCH_EVENT_NOTIFY_COMPLETE: return "notify_complete";
+	case CEPH_WATCH_EVENT_DISCONNECT: return "disconnect";
 	}
 	return "???";
 }

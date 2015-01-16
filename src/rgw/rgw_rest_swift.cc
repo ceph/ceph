@@ -225,11 +225,11 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  s->cio->print("X-Container-Object-Count: %s\n", buf);
+  s->cio->print("X-Container-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  s->cio->print("X-Container-Bytes-Used: %s\n", buf);
+  s->cio->print("X-Container-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
-  s->cio->print("X-Container-Bytes-Used-Actual: %s\n", buf);
+  s->cio->print("X-Container-Bytes-Used-Actual: %s\r\n", buf);
 
   if (!s->object) {
     RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
@@ -241,6 +241,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     if (write_acl.size()) {
       s->cio->print("X-Container-Write: %s\r\n", write_acl.c_str());
     }
+    if (!s->bucket_info.placement_rule.empty()) {
+      s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
+    }
   }
 }
 
@@ -249,13 +252,13 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
-  s->cio->print("X-Account-Container-Count: %s\n", buf);
+  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
-  s->cio->print("X-Account-Object-Count: %s\n", buf);
+  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
-  s->cio->print("X-Account-Bytes-Used: %s\n", buf);
+  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
-  s->cio->print("X-Account-Bytes-Used-Actual: %s\n", buf);
+  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
@@ -350,6 +353,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params()
   }
 
   location_constraint = store->region.api_name;
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
 }
@@ -437,6 +441,7 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
       return r;
     }
   }
+  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
 }
@@ -604,7 +609,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
   dump_errno(s);
 
   for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
-    s->cio->print("%s: %s\n", riter->first.c_str(), riter->second.c_str());
+    s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
 
   if (!content_type)

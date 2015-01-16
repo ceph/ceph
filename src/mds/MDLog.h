@@ -146,6 +146,13 @@ protected:
   } submit_thread;
   friend class SubmitThread;
 
+public:
+  const std::set<LogSegment*> &get_expiring_segments() const
+  {
+    return expiring_segments;
+  }
+protected:
+
   // -- subtreemaps --
   friend class ESubtreeMap;
   friend class MDCache;
@@ -277,24 +284,21 @@ public:
   }
 
 private:
-  class C_MaybeExpiredSegment : public MDSInternalContext {
-    MDLog *mdlog;
-    LogSegment *ls;
-    int op_prio;
-  public:
-    C_MaybeExpiredSegment(MDLog *mdl, LogSegment *s, int p) : MDSInternalContext(mdl->mds), mdlog(mdl), ls(s), op_prio(p) {}
-    void finish(int res) {
-      mdlog->_maybe_expired(ls, op_prio);
-    }
-  };
-
   void try_expire(LogSegment *ls, int op_prio);
   void _maybe_expired(LogSegment *ls, int op_prio);
   void _expired(LogSegment *ls);
   void _trim_expired_segments();
 
+  friend class C_MaybeExpiredSegment;
+
 public:
+  void trim_expired_segments();
   void trim(int max=-1);
+  int trim_all();
+  bool expiry_done() const
+  {
+    return expiring_segments.empty() && expired_segments.empty();
+  };
 
 private:
   void write_head(MDSInternalContextBase *onfinish);

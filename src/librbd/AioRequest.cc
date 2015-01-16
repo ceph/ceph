@@ -49,7 +49,7 @@ namespace librbd {
 			   << " extents " << image_extents
 			   << dendl;
     aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
-	     m_parent_completion);
+	     m_parent_completion, 0);
   }
 
   /** read **/
@@ -99,6 +99,8 @@ namespace librbd {
     } else {
       op.read(m_object_off, m_object_len, &m_read_data, NULL);
     }
+    op.set_op_flags2(m_op_flags);
+
     r = m_ioctx->aio_operate(m_oid, rados_completion, &op, flags, NULL);
 
     rados_completion->release();

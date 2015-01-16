@@ -34,17 +34,18 @@ inline int sync_filesystem(int fd)
 #ifdef HAVE_SYS_SYNCFS
   if (syncfs(fd) == 0)
     return 0;
+  else
+    return -errno;
 #elif defined(SYS_syncfs)
   if (syscall(SYS_syncfs, fd) == 0)
     return 0;
+  else
+    return -errno;
 #elif defined(__NR_syncfs)
   if (syscall(__NR_syncfs, fd) == 0)
     return 0;
-#endif
-
-#ifdef BTRFS_IOC_SYNC
-  if (::ioctl(fd, BTRFS_IOC_SYNC) == 0)
-    return 0;
+  else
+    return -errno;
 #endif
 
   sync();

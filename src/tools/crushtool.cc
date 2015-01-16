@@ -150,6 +150,7 @@ struct bucket_types_t {
   { "uniform", CRUSH_BUCKET_UNIFORM },
   { "list", CRUSH_BUCKET_LIST },
   { "straw", CRUSH_BUCKET_STRAW },
+  { "straw2", CRUSH_BUCKET_STRAW2 },
   { "tree", CRUSH_BUCKET_TREE },
   { 0, 0 },
 };
@@ -195,6 +196,7 @@ int main(int argc, const char **argv)
   int chooseleaf_descend_once = -1;
   int chooseleaf_vary_r = -1;
   int straw_calc_version = -1;
+  int allowed_bucket_types = -1;
 
   CrushWrapper crush;
 
@@ -274,6 +276,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_withint(args, i, &straw_calc_version, &err,
 				     "--set_straw_calc_version", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &allowed_bucket_types, &err,
+				     "--set_allowed_bucket_types", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
@@ -733,6 +738,10 @@ int main(int argc, const char **argv)
   }
   if (straw_calc_version >= 0) {
     crush.set_straw_calc_version(straw_calc_version);
+    modified = true;
+  }
+  if (allowed_bucket_types >= 0) {
+    crush.set_allowed_bucket_types(allowed_bucket_types);
     modified = true;
   }
   if (modified) {

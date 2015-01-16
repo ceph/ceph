@@ -136,9 +136,19 @@ typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off,
 
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
+typedef void (*client_remount_callback_t)(void *handle);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
+
+struct client_callback_args {
+  void *handle;
+  client_ino_callback_t ino_cb;
+  client_dentry_callback_t dentry_cb;
+  client_switch_interrupt_callback_t switch_intr_cb;
+  client_remount_callback_t remount_cb;
+  client_getgroups_callback_t getgroups_cb;
+};
 
 // ========================================================
 // client interface
@@ -208,7 +218,7 @@ struct dir_result_t {
 
 class Client : public Dispatcher {
  public:
-  CephContext *cct;
+  using Dispatcher::cct;
 
   PerfCounters *logger;
 
@@ -226,20 +236,17 @@ class Client : public Dispatcher {
 
   SafeTimer timer;
 
+  void *callback_handle;
   client_switch_interrupt_callback_t switch_interrupt_cb;
-
+  client_remount_callback_t remount_cb;
   client_ino_callback_t ino_invalidate_cb;
-  void *ino_invalidate_cb_handle;
-
   client_dentry_callback_t dentry_invalidate_cb;
-  void *dentry_invalidate_cb_handle;
-
   client_getgroups_callback_t getgroups_cb;
-  void *getgroups_cb_handle;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
   Finisher interrupt_finisher;
+  Finisher remount_finisher;
   Finisher objecter_finisher;
 
   Context *tick_event;
@@ -254,6 +261,9 @@ public:
   MonClient *monclient;
   Messenger *messenger;  
   client_t whoami;
+
+  void set_cap_epoch_barrier(epoch_t e);
+  epoch_t cap_epoch_barrier;
 
   // mds sessions
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq
@@ -332,6 +342,8 @@ protected:
   // cache
   ceph::unordered_map<vinodeno_t, Inode*> inode_map;
   Inode*                 root;
+  map<Inode*, Inode*>    root_parents;
+  Inode*                 root_ancestor;
   LRU                    lru;    // lru list of Dentry's in our local metadata cache.
 
   // all inodes with caps sit on either cap_list or delayed_caps.
@@ -399,7 +411,7 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
-  friend class C_Client_PutInode; // calls put_inode()
+  friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
@@ -433,6 +445,11 @@ protected:
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
   void dump_cache(Formatter *f);  // debug
+
+  // force read-only
+  void force_session_readonly(MetaSession *s);
+
+  void dump_status(Formatter *f);  // debug
   
   // trace generation
   ofstream traceout;
@@ -451,6 +468,13 @@ protected:
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
 
   int authenticate();
+
+  void put_qtree(Inode *in);
+  void invalidate_quota_tree(Inode *in);
+  Inode* get_quota_root(Inode *in);
+  bool is_quota_files_exceeded(Inode *in);
+  bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes);
+  bool is_quota_bytes_approaching(Inode *in);
 
  public:
   void set_filer_flags(int flags);
@@ -472,6 +496,7 @@ protected:
 
   // messaging
   void handle_mds_map(class MMDSMap *m);
+  void handle_osd_map(class MOSDMap *m);
 
   void handle_lease(MClientLease *m);
 
@@ -498,6 +523,7 @@ protected:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater, 
 			      vector<snapid_t>& snaps);
 
+  void handle_quota(struct MClientQuota *m);
   void handle_snap(struct MClientSnap *m);
   void handle_caps(class MClientCaps *m);
   void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
@@ -520,7 +546,7 @@ protected:
 
   void _schedule_invalidate_dentry_callback(Dentry *dn, bool del);
   void _async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string& name);
-  void _invalidate_inode_parents(Inode *in);
+  void _try_to_trim_inode(Inode *in);
 
   void _schedule_invalidate_callback(Inode *in, int64_t off, int64_t len, bool keep_caps);
   void _invalidate_inode_cache(Inode *in);
@@ -539,7 +565,7 @@ protected:
    * 
    * @returns true if the data was already flushed, false otherwise.
    */
-  bool _flush(Inode *in, Context *c=NULL);
+  bool _flush(Inode *in, Context *c);
   void _flush_range(Inode *in, int64_t off, uint64_t size);
   void _flushed(Inode *in);
   void flush_set_callback(ObjectCacher::ObjectSet *oset);
@@ -660,6 +686,11 @@ private:
 	  bool readonly, hidden;
 	  bool (Client::*exists_cb)(Inode *in);
   };
+
+  bool _vxattrcb_quota_exists(Inode *in);
+  size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
 
   bool _vxattrcb_layout_exists(Inode *in);
   size_t _vxattrcb_layout(Inode *in, char *val, size_t size);
@@ -922,10 +953,7 @@ public:
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
 
-  void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
-  void ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle);
-  void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
-  void ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb);
+  void ll_register_callbacks(struct client_callback_args *args);
 };
 
 #endif

@@ -56,6 +56,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER CompatSet::Feature(10, "snapmapper")
 #define CEPH_OSD_FEATURE_INCOMPAT_SHARDS CompatSet::Feature(11, "sharded objects")
 #define CEPH_OSD_FEATURE_INCOMPAT_HINTS CompatSet::Feature(12, "transaction hints")
+#define CEPH_OSD_FEATURE_INCOMPAT_PGMETA CompatSet::Feature(13, "pg meta object")
 
 
 /// max recovery priority for MBackfillReserve
@@ -66,9 +67,13 @@ typedef hobject_t collection_list_handle_t;
 
 /// convert a single CPEH_OSD_FLAG_* to a string
 const char *ceph_osd_flag_name(unsigned flag);
+/// convert a single CEPH_OSD_OF_FLAG_* to a string
+const char *ceph_osd_op_flag_name(unsigned flag);
 
 /// convert CEPH_OSD_FLAG_* op flags to a string
 string ceph_osd_flag_string(unsigned flags);
+/// conver CEPH_OSD_OP_FLAG_* op flags to a string
+string ceph_osd_op_flag_string(unsigned flags);
 
 struct pg_shard_t {
   int32_t osd;
@@ -271,17 +276,15 @@ struct pg_t {
   int32_t m_preferred;
 
   pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref=-1) {
-    m_seed = seed;
-    m_pool = pool;
-    m_preferred = pref;
+  pg_t(ps_t seed, uint64_t pool, int pref=-1) :
+    m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  pg_t(const ceph_pg& cpg) :
+    m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
+
+  pg_t(const old_pg_t& opg) {
+    *this = opg.v;
   }
 
-  pg_t(const ceph_pg& cpg) {
-    m_pool = cpg.pool;
-    m_seed = cpg.ps;
-    m_preferred = (__s16)cpg.preferred;
-  }
   old_pg_t get_old_pg() const {
     old_pg_t o;
     assert(m_pool < 0xffffffffull);
@@ -289,9 +292,6 @@ struct pg_t {
     o.v.ps = m_seed;
     o.v.preferred = (__s16)m_preferred;
     return o;
-  }
-  pg_t(const old_pg_t& opg) {
-    *this = opg.v;
   }
 
   ps_t ps() const {
@@ -435,6 +435,11 @@ struct spg_t {
   bool is_no_shard() const {
     return shard == shard_id_t::NO_SHARD;
   }
+
+  ghobject_t make_pgmeta_oid() const {
+    return ghobject_t::make_pgmeta(pgid.pool(), pgid.ps(), shard);
+  }
+
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(pgid, bl);
@@ -485,10 +490,6 @@ public:
     return coll_t(pg_to_tmp_str(pgid));
   }
 
-  static coll_t make_removal_coll(uint64_t seq, spg_t pgid) {
-    return coll_t(seq_to_removal_str(seq, pgid));
-  }
-
   const std::string& to_str() const {
     return str;
   }
@@ -526,11 +527,6 @@ private:
   static std::string pg_to_tmp_str(spg_t p) {
     std::ostringstream oss;
     oss << p << "_TEMP";
-    return oss.str();
-  }
-  static std::string seq_to_removal_str(uint64_t seq, spg_t pgid) {
-    std::ostringstream oss;
-    oss << "FORREMOVAL_" << seq << "_" << pgid;
     return oss.str();
   }
 
@@ -656,6 +652,11 @@ struct objectstore_perf_stat_t {
   objectstore_perf_stat_t() :
     filestore_commit_latency(0), filestore_apply_latency(0) {}
 
+  bool operator==(const objectstore_perf_stat_t &r) const {
+    return filestore_commit_latency == r.filestore_commit_latency &&
+      filestore_apply_latency == r.filestore_apply_latency;
+  }
+
   void add(const objectstore_perf_stat_t &o) {
     filestore_commit_latency += o.filestore_commit_latency;
     filestore_apply_latency += o.filestore_apply_latency;
@@ -719,7 +720,9 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.snap_trim_queue_len == r.snap_trim_queue_len &&
     l.num_snap_trimming == r.num_snap_trimming &&
     l.hb_in == r.hb_in &&
-    l.hb_out == r.hb_out;
+    l.hb_out == r.hb_out &&
+    l.op_queue_age_hist == r.op_queue_age_hist &&
+    l.fs_perf_stat == r.fs_perf_stat;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -849,7 +852,8 @@ struct pg_pool_t {
     CACHEMODE_WRITEBACK = 1,             ///< write to cache, flush later
     CACHEMODE_FORWARD = 2,               ///< forward if not in cache
     CACHEMODE_READONLY = 3,              ///< handle reads, forward writes [not strongly consistent]
-    CACHEMODE_READFORWARD = 4            ///< forward reads, write to cache flush later
+    CACHEMODE_READFORWARD = 4,           ///< forward reads, write to cache flush later
+    CACHEMODE_READPROXY = 5              ///< proxy reads, write to cache flush later
   } cache_mode_t;
   static const char *get_cache_mode_name(cache_mode_t m) {
     switch (m) {
@@ -858,6 +862,7 @@ struct pg_pool_t {
     case CACHEMODE_FORWARD: return "forward";
     case CACHEMODE_READONLY: return "readonly";
     case CACHEMODE_READFORWARD: return "readforward";
+    case CACHEMODE_READPROXY: return "readproxy";
     default: return "unknown";
     }
   }
@@ -872,6 +877,8 @@ struct pg_pool_t {
       return CACHEMODE_READONLY;
     if (s == "readforward")
       return CACHEMODE_READFORWARD;
+    if (s == "readproxy")
+      return CACHEMODE_READPROXY;
     return (cache_mode_t)-1;
   }
   const char *get_cache_mode_name() const {
@@ -885,6 +892,7 @@ struct pg_pool_t {
       return false;
     case CACHEMODE_WRITEBACK:
     case CACHEMODE_READFORWARD:
+    case CACHEMODE_READPROXY:
       return true;
     default:
       assert(0 == "implement me");
@@ -1298,12 +1306,9 @@ WRITE_CLASS_ENCODER(object_stat_sum_t)
  */
 struct object_stat_collection_t {
   object_stat_sum_t sum;
-  map<string,object_stat_sum_t> cat_sum;
 
   void calc_copies(int nrep) {
     sum.calc_copies(nrep);
-    for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
-      p->second.calc_copies(nrep);
   }
 
   void dump(Formatter *f) const;
@@ -1312,43 +1317,26 @@ struct object_stat_collection_t {
   static void generate_test_instances(list<object_stat_collection_t*>& o);
 
   bool is_zero() const {
-    return (cat_sum.empty() && sum.is_zero());
+    return sum.is_zero();
   }
 
   void clear() {
     sum.clear();
-    cat_sum.clear();
   }
 
   void floor(int64_t f) {
     sum.floor(f);
-    for (map<string,object_stat_sum_t>::iterator p = cat_sum.begin(); p != cat_sum.end(); ++p)
-      p->second.floor(f);
   }
 
-  void add(const object_stat_sum_t& o, const string& cat) {
+  void add(const object_stat_sum_t& o) {
     sum.add(o);
-    if (cat.length())
-      cat_sum[cat].add(o);
   }
 
   void add(const object_stat_collection_t& o) {
     sum.add(o.sum);
-    for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
-	 p != o.cat_sum.end();
-	 ++p)
-      cat_sum[p->first].add(p->second);
   }
   void sub(const object_stat_collection_t& o) {
     sum.sub(o.sum);
-    for (map<string,object_stat_sum_t>::const_iterator p = o.cat_sum.begin();
-	 p != o.cat_sum.end();
-	 ++p) {
-      object_stat_sum_t& s = cat_sum[p->first];
-      s.sub(p->second);
-      if (s.is_zero())
-	cat_sum.erase(p->first);
-    }
   }
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
@@ -1472,8 +1460,10 @@ struct pool_stat_t {
   object_stat_collection_t stats;
   int64_t log_size;
   int64_t ondisk_log_size;    // >= active_log_size
+  int32_t up;       ///< number of up replicas or shards
+  int32_t acting;   ///< number of acting replicas or shards
 
-  pool_stat_t() : log_size(0), ondisk_log_size(0)
+  pool_stat_t() : log_size(0), ondisk_log_size(0), up(0), acting(0)
   { }
 
   void floor(int64_t f) {
@@ -1482,23 +1472,33 @@ struct pool_stat_t {
       log_size = f;
     if (ondisk_log_size < f)
       ondisk_log_size = f;
+    if (up < f)
+      up = f;
+    if (acting < f)
+      acting = f;
   }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    up += o.up.size();
+    acting += o.acting.size();
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    up -= o.up.size();
+    acting -= o.acting.size();
   }
 
   bool is_zero() const {
     return (stats.is_zero() &&
 	    log_size == 0 &&
-	    ondisk_log_size == 0);
+	    ondisk_log_size == 0 &&
+	    up == 0 &&
+	    acting == 0);
   }
 
   void dump(Formatter *f) const;
@@ -2495,30 +2495,36 @@ WRITE_CLASS_ENCODER(object_copy_cursor_t)
  * based on the contents of the cursor.
  */
 struct object_copy_data_t {
+  enum {
+    FLAG_DATA_DIGEST = 1<<0,
+    FLAG_OMAP_DIGEST = 1<<1,
+  };
   object_copy_cursor_t cursor;
   uint64_t size;
   utime_t mtime;
+  uint32_t data_digest, omap_digest;
+  uint32_t flags;
   map<string, bufferlist> attrs;
   bufferlist data;
   bufferlist omap_header;
-  map<string, bufferlist> omap;
-  string category;
+  bufferlist omap_data;
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
   ///< latest snap seq for the object (if head)
   snapid_t snap_seq;
 public:
-  object_copy_data_t() : size((uint64_t)-1) {}
+  object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
+			 omap_digest(-1), flags(0) {}
 
   static void generate_test_instances(list<object_copy_data_t*>& o);
   void encode_classic(bufferlist& bl) const;
   void decode_classic(bufferlist::iterator& bl);
-  void encode(bufferlist& bl) const;
+  void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
 };
-WRITE_CLASS_ENCODER(object_copy_data_t)
+WRITE_CLASS_ENCODER_FEATURES(object_copy_data_t)
 
 /**
  * pg creation info
@@ -2739,8 +2745,6 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 
 struct object_info_t {
   hobject_t soid;
-  string category;
-
   eversion_t version, prior_version;
   version_t user_version;
   osd_reqid_t last_reqid;
@@ -2756,6 +2760,8 @@ struct object_info_t {
     FLAG_WHITEOUT = 1<<1,  // object logically does not exist
     FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
     FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
+    FLAG_DATA_DIGEST = 1 << 4,  // has data crc
+    FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -2774,6 +2780,10 @@ struct object_info_t {
       s += "|uses_tmap";
     if (flags & FLAG_OMAP)
       s += "|omap";
+    if (flags & FLAG_DATA_DIGEST)
+      s += "|data_digest";
+    if (flags & FLAG_OMAP_DIGEST)
+      s += "|omap_digest";
     if (s.length())
       return s.substr(1);
     return s;
@@ -2788,6 +2798,10 @@ struct object_info_t {
   uint64_t truncate_seq, truncate_size;
 
   map<pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
+  // opportunistic checksums; may or may not be present
+  __u32 data_digest;  ///< data crc32c
+  __u32 omap_digest;  ///< omap crc32c
 
   void copy_user_bits(const object_info_t& other);
 
@@ -2815,6 +2829,33 @@ struct object_info_t {
   bool is_omap() const {
     return test_flag(FLAG_OMAP);
   }
+  bool is_data_digest() const {
+    return test_flag(FLAG_DATA_DIGEST);
+  }
+  bool is_omap_digest() const {
+    return test_flag(FLAG_OMAP_DIGEST);
+  }
+
+  void set_data_digest(__u32 d) {
+    set_flag(FLAG_DATA_DIGEST);
+    data_digest = d;
+  }
+  void set_omap_digest(__u32 d) {
+    set_flag(FLAG_OMAP_DIGEST);
+    omap_digest = d;
+  }
+  void clear_data_digest() {
+    clear_flag(FLAG_DATA_DIGEST);
+    data_digest = -1;
+  }
+  void clear_omap_digest() {
+    clear_flag(FLAG_OMAP_DIGEST);
+    omap_digest = -1;
+  }
+  void new_object() {
+    set_data_digest(-1);
+    set_omap_digest(-1);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
@@ -2827,13 +2868,16 @@ struct object_info_t {
 
   explicit object_info_t()
     : user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0)
+      truncate_seq(0), truncate_size(0),
+      data_digest(-1), omap_digest(-1)
   {}
 
   object_info_t(const hobject_t& s)
     : soid(s),
       user_version(0), size(0), flags((flag_t)0),
-      truncate_seq(0), truncate_size(0) {}
+      truncate_seq(0), truncate_size(0),
+      data_digest(-1), omap_digest(-1)
+  {}
 
   object_info_t(bufferlist& bl) {
     decode(bl);
@@ -3289,11 +3333,11 @@ struct ScrubMap {
     uint64_t size;
     bool negative;
     map<string,bufferptr> attrs;
-    __u32 digest;
+    __u32 digest;              ///< data crc32c
     bool digest_present;
     uint32_t nlinks;
     set<snapid_t> snapcolls;
-    __u32 omap_digest;
+    __u32 omap_digest;         ///< omap crc32c
     bool omap_digest_present;
     bool read_error;
 
@@ -3311,7 +3355,6 @@ struct ScrubMap {
   WRITE_CLASS_ENCODER(object)
 
   map<hobject_t,object> objects;
-  map<string,bufferptr> attrs;
   eversion_t valid_through;
   eversion_t incr_since;
 

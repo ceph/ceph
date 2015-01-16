@@ -26,6 +26,7 @@ class TestObjectStoreState {
 public:
   struct coll_entry_t {
     int m_id;
+    spg_t m_pgid;
     coll_t m_coll;
     hobject_t m_meta_obj;
     ObjectStore::Sequencer m_osr;
@@ -33,7 +34,9 @@ public:
     int m_next_object_id;
 
     coll_entry_t(int i, char *coll_buf, char *meta_obj_buf)
-    : m_id(i), m_coll(coll_buf),
+      : m_id(i),
+	m_pgid(pg_t(i, 1), shard_id_t::NO_SHARD),
+	m_coll(m_pgid),
       m_meta_obj(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP)),
       m_osr(coll_buf), m_next_object_id(0) {
     }

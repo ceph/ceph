@@ -117,6 +117,10 @@ public:
   int size(uint64_t *size);
   int features(uint64_t *features);
   int overlap(uint64_t *overlap);
+
+  /* exclusive lock feature */
+  int is_exclusive_lock_owner(bool *is_owner);
+
   int copy(IoCtx& dest_io_ctx, const char *destname);
   int copy2(Image& dest);
   int copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
@@ -157,6 +161,8 @@ public:
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
+  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  ssize_t read2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int64_t read_iterate(uint64_t ofs, size_t len,
 		       int (*cb)(uint64_t, size_t, const char *, void *), void *arg);
   int read_iterate2(uint64_t ofs, uint64_t len,
@@ -184,10 +190,14 @@ public:
 		   uint64_t ofs, uint64_t len,
 		   int (*cb)(uint64_t, size_t, int, void *), void *arg);
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
+  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  ssize_t write2(uint64_t ofs, size_t len, ceph::bufferlist& bl, int op_flags);
   int discard(uint64_t ofs, uint64_t len);
 
   int aio_write(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
-
+  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  int aio_write2(uint64_t off, size_t len, ceph::bufferlist& bl,
+		  RBD::AioCompletion *c, int op_flags);
   /**
    * read async from image
    *
@@ -206,6 +216,9 @@ public:
    * @param c aio completion to notify when read is complete
    */
   int aio_read(uint64_t off, size_t len, ceph::bufferlist& bl, RBD::AioCompletion *c);
+  /* @parmam op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */
+  int aio_read2(uint64_t off, size_t len, ceph::bufferlist& bl,
+		  RBD::AioCompletion *c, int op_flags);
   int aio_discard(uint64_t off, uint64_t len, RBD::AioCompletion *c);
 
   int flush();

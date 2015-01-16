@@ -39,7 +39,9 @@
 #include "messages/MOSDECSubOpReadReply.h"
 
 #include "messages/MOSDSubOp.h"
+#include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
+#include "messages/MOSDRepOpReply.h"
 #include "common/BackTrace.h"
 
 #ifdef WITH_LTTNG
@@ -53,6 +55,14 @@
 #define dout_prefix _prefix(_dout, this)
 
 static coll_t META_COLL("meta");
+
+// prefix pgmeta_oid keys with _ so that PGLog::read_log() can
+// easily skip them
+const string infover_key("_infover");
+const string info_key("_info");
+const string biginfo_key("_biginfo");
+const string epoch_key("_epoch");
+
 
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
@@ -160,8 +170,7 @@ void PGPool::update(OSDMapRef map)
 }
 
 PG::PG(OSDService *o, OSDMapRef curmap,
-       const PGPool &_pool, spg_t p, const hobject_t& loid,
-       const hobject_t& ioid) :
+       const PGPool &_pool, spg_t p) :
   osd(o),
   cct(o->cct),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
@@ -181,9 +190,10 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), pg_log(cct), log_oid(loid), biginfo_oid(ioid),
+  coll(p), pg_log(cct),
+  pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
-  recovery_item(this), scrub_item(this), scrub_finalize_item(this), snap_trim_item(this), stat_queue_item(this),
+  recovery_item(this), scrub_item(this), snap_trim_item(this), stat_queue_item(this),
   recovery_ops_active(0),
   role(0),
   state(0),
@@ -860,8 +870,6 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 
   agent_clear();
-
-  osd->remove_want_pg_temp(info.pgid.pgid);
 }
 
 /**
@@ -2462,7 +2470,48 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
+{
+  assert(info_struct_v <= 8);
+  ObjectStore::Transaction t;
+
+  if (info_struct_v < 7) {
+    _upgrade_v7(store, snapcolls);
+  }
+
+  // 7 -> 8
+  pg_log.mark_log_for_rewrite();
+  hobject_t log_oid(OSD::make_pg_log_oid(pg_id));
+  hobject_t biginfo_oid(OSD::make_pg_biginfo_oid(pg_id));
+  t.remove(META_COLL, log_oid);
+  t.remove(META_COLL, biginfo_oid);
+  t.collection_rmattr(coll, "info");
+
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> v;
+  __u8 ver = cur_struct_v;
+  ::encode(ver, v[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, v);
+
+  dirty_info = true;
+  dirty_big_info = true;
+  write_if_dirty(t);
+
+  int r = store->apply_transaction(t);
+  if (r != 0) {
+    derr << __func__ << ": apply_transaction returned "
+	 << cpp_strerror(r) << dendl;
+    assert(0);
+  }
+  assert(r == 0);
+}
+
+#pragma GCC diagnostic pop
+
+void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
   unsigned removed = 0;
   for (interval_set<snapid_t>::const_iterator i = snapcolls.begin();
@@ -2584,60 +2633,64 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
     }
     objects.clear();
   }
-  ObjectStore::Transaction t;
-  snap_collections.clear();
-  dirty_info = true;
-  write_if_dirty(t);
-  int r = store->apply_transaction(t);
-  if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
-	 << cpp_strerror(r) << dendl;
-    assert(0);
-  }
-  assert(r == 0);
 }
 
 int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
-    pg_info_t &info, coll_t coll,
-    map<epoch_t,pg_interval_t> &past_intervals,
-    interval_set<snapid_t> &snap_collections,
-    hobject_t &infos_oid,
-    __u8 info_struct_v, bool dirty_big_info, bool force_ver)
+		    pg_info_t &info, coll_t coll,
+		    map<epoch_t,pg_interval_t> &past_intervals,
+		    ghobject_t &pgmeta_oid,
+		    bool dirty_big_info)
 {
   // pg state
-
-  if (info_struct_v > cur_struct_v)
-    return -EINVAL;
-
-  // Only need to write struct_v to attr when upgrading
-  if (force_ver || info_struct_v < cur_struct_v) {
-    bufferlist attrbl;
-    info_struct_v = cur_struct_v;
-    ::encode(info_struct_v, attrbl);
-    t.collection_setattr(coll, "info", attrbl);
-    dirty_big_info = true;
-  }
+  map<string,bufferlist> v;
 
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  map<string,bufferlist> v;
-  ::encode(epoch, v[get_epoch_key(info.pgid)]);
+  ::encode(epoch, v[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[get_info_key(info.pgid)]);
+  ::encode(info, v[info_key]);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
-    bufferlist& bigbl = v[get_biginfo_key(info.pgid)];
+    bufferlist& bigbl = v[biginfo_key];
     ::encode(past_intervals, bigbl);
-    ::encode(snap_collections, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
 
-  t.omap_setkeys(META_COLL, infos_oid, v);
+  t.omap_setkeys(coll, pgmeta_oid, v);
 
   return 0;
+}
+
+void PG::_create(ObjectStore::Transaction& t, spg_t pgid)
+{
+  coll_t coll(pgid);
+  t.create_collection(coll);
+}
+
+void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
+{
+  coll_t coll(pgid);
+
+  if (pool) {
+    // Give a hint to the PG collection
+    bufferlist hint;
+    uint32_t pg_num = pool->get_pg_num();
+    uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
+    ::encode(pg_num, hint);
+    ::encode(expected_num_objects_pg, hint);
+    uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+    t.collection_hint(coll, hint_type, hint);
+  }
+
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> values;
+  __u8 struct_v = cur_struct_v;
+  ::encode(struct_v, values[infover_key]);
+  t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
 void PG::write_info(ObjectStore::Transaction& t)
@@ -2646,8 +2699,8 @@ void PG::write_info(ObjectStore::Transaction& t)
   unstable_stats.clear();
 
   int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-     past_intervals, snap_collections, osd->infos_oid,
-     info_struct_v, dirty_big_info);
+			past_intervals, pgmeta_oid,
+			dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
 
@@ -2655,44 +2708,102 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
-epoch_t PG::peek_map_epoch(ObjectStore *store, coll_t coll, hobject_t &infos_oid, bufferlist *bl)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+bool PG::_has_removal_flag(ObjectStore *store,
+			   spg_t pgid)
 {
-  assert(bl);
-  spg_t pgid;
-  snapid_t snap;
-  bool ok = coll.is_pg(pgid, snap);
-  assert(ok);
-  int r = store->collection_getattr(coll, "info", *bl);
-  assert(r > 0);
-  bufferlist::iterator bp = bl->begin();
-  __u8 struct_v = 0;
-  ::decode(struct_v, bp);
-  if (struct_v < 5)
-    return 0;
+  coll_t coll(pgid);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+
+  // first try new way
+  set<string> keys;
+  keys.insert("_remove");
+  map<string,bufferlist> values;
+  if (store->omap_get_values(coll, pgmeta_oid, keys, &values) == 0 &&
+      values.size() == 1)
+    return true;
+
+  // try old way.  tolerate EOPNOTSUPP.
+  char val;
+  if (store->collection_getattr(coll, "remove", &val, 1) > 0)
+    return true;
+  return false;
+}
+
+epoch_t PG::peek_map_epoch(ObjectStore *store,
+			   spg_t pgid,
+			   bufferlist *bl)
+{
+  coll_t coll(pgid);
+  hobject_t legacy_infos_oid(OSD::make_infos_oid());
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   epoch_t cur_epoch = 0;
-  if (struct_v < 6) {
+
+  assert(bl);
+  {
+    // validate collection name
+    spg_t pgid_temp;
+    snapid_t snap;
+    bool ok = coll.is_pg(pgid_temp, snap);
+    assert(ok);
+  }
+
+  // try for v8
+  set<string> keys;
+  keys.insert(infover_key);
+  keys.insert(epoch_key);
+  map<string,bufferlist> values;
+  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  if (r == 0) {
+    assert(values.size() == 2);
+
+    // sanity check version
+    bufferlist::iterator bp = values[infover_key].begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    assert(struct_v >= 8);
+
+    // get epoch
+    bp = values[epoch_key].begin();
     ::decode(cur_epoch, bp);
-  } else {
+  } else if (r == -ENOENT) {
+    // legacy: try v7 or older
+    r = store->collection_getattr(coll, "info", *bl);
+    assert(r > 0);
+    bufferlist::iterator bp = bl->begin();
+    __u8 struct_v = 0;
+    ::decode(struct_v, bp);
+    if (struct_v < 5)
+      return 0;
+    if (struct_v < 6) {
+      ::decode(cur_epoch, bp);
+      return cur_epoch;
+    }
+
     // get epoch out of leveldb
-    bufferlist tmpbl;
     string ek = get_epoch_key(pgid);
-    set<string> keys;
-    keys.insert(get_epoch_key(pgid));
-    map<string,bufferlist> values;
-    store->omap_get_values(META_COLL, infos_oid, keys, &values);
+    keys.clear();
+    values.clear();
+    keys.insert(ek);
+    store->omap_get_values(META_COLL, legacy_infos_oid, keys, &values);
     assert(values.size() == 1);
-    tmpbl = values[ek];
-    bufferlist::iterator p = tmpbl.begin();
+    bufferlist::iterator p = values[ek].begin();
     ::decode(cur_epoch, p);
+  } else {
+    assert(0 == "unable to open pg metadata");
   }
   return cur_epoch;
 }
+
+#pragma GCC diagnostic pop
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
   if (dirty_big_info || dirty_info)
     write_info(t);
-  pg_log.write_log(t, log_oid);
+  pg_log.write_log(t, coll, pgmeta_oid);
 }
 
 void PG::trim_peers()
@@ -2785,7 +2896,7 @@ void PG::append_log(
   }
 
   dout(10) << "append_log  adding " << keys.size() << " keys" << dendl;
-  t.omap_setkeys(META_COLL, log_oid, keys);
+  t.omap_setkeys(coll, pgmeta_oid, keys);
 
   pg_log.trim(&handler, trim_to, info);
 
@@ -2823,91 +2934,73 @@ std::string PG::get_corrupt_pg_log_name() const
 }
 
 int PG::read_info(
-  ObjectStore *store, const coll_t &coll, bufferlist &bl,
+  ObjectStore *store, spg_t pgid, const coll_t &coll, bufferlist &bl,
   pg_info_t &info, map<epoch_t,pg_interval_t> &past_intervals,
-  hobject_t &biginfo_oid, hobject_t &infos_oid,
-  interval_set<snapid_t>  &snap_collections, __u8 &struct_v)
+  __u8 &struct_v)
 {
-  bufferlist::iterator p = bl.begin();
-  bufferlist lbl;
+  // try for v8 or later
+  set<string> keys;
+  keys.insert(infover_key);
+  keys.insert(info_key);
+  keys.insert(biginfo_key);
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  map<string,bufferlist> values;
+  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  if (r == 0) {
+    assert(values.size() == 3);
 
-  // info
-  ::decode(struct_v, p);
-  if (struct_v < 4)
-    ::decode(info, p);
-  if (struct_v < 2) {
-    ::decode(past_intervals, p);
-  
-    // snap_collections
-    store->collection_getattr(coll, "snap_collections", lbl);
-    p = lbl.begin();
+    bufferlist::iterator p = values[infover_key].begin();
     ::decode(struct_v, p);
-  } else {
-    if (struct_v < 6) {
-      int r = store->read(META_COLL, biginfo_oid, 0, 0, lbl);
-      if (r < 0)
-        return r;
-      p = lbl.begin();
-      ::decode(past_intervals, p);
-    } else {
-      // get info out of leveldb
-      string k = get_info_key(info.pgid);
-      string bk = get_biginfo_key(info.pgid);
-      set<string> keys;
-      keys.insert(k);
-      keys.insert(bk);
-      map<string,bufferlist> values;
-      store->omap_get_values(META_COLL, infos_oid, keys, &values);
-      assert(values.size() == 2);
-      lbl = values[k];
-      p = lbl.begin();
-      ::decode(info, p);
+    assert(struct_v >= 8);
 
-      lbl = values[bk];
-      p = lbl.begin();
-      ::decode(past_intervals, p);
-    }
+    p = values[info_key].begin();
+    ::decode(info, p);
+
+    p = values[biginfo_key].begin();
+    ::decode(past_intervals, p);
+    ::decode(info.purged_snaps, p);
+    return 0;
   }
 
-  if (struct_v < 3) {
-    set<snapid_t> snap_collections_temp;
-    ::decode(snap_collections_temp, p);
-    snap_collections.clear();
-    for (set<snapid_t>::iterator i = snap_collections_temp.begin();
-	 i != snap_collections_temp.end();
-	 ++i) {
-      snap_collections.insert(*i);
-    }
-  } else {
-    ::decode(snap_collections, p);
-    if (struct_v >= 4 && struct_v < 6)
-      ::decode(info, p);
-    else if (struct_v >= 6)
-      ::decode(info.purged_snaps, p);
-  }
+  // legacy (ver < 8)
+  hobject_t infos_oid(OSD::make_infos_oid());
+  bufferlist::iterator p = bl.begin();
+  ::decode(struct_v, p);
+  assert(struct_v == 7);
+
+  // get info out of leveldb
+  string k = get_info_key(info.pgid);
+  string bk = get_biginfo_key(info.pgid);
+  keys.clear();
+  keys.insert(k);
+  keys.insert(bk);
+  values.clear();
+  store->omap_get_values(META_COLL, infos_oid, keys, &values);
+  assert(values.size() == 2);
+
+  p = values[k].begin();
+  ::decode(info, p);
+
+  p = values[bk].begin();
+  ::decode(past_intervals, p);
+  interval_set<snapid_t> snap_collections;  // obsolete
+  ::decode(snap_collections, p);
+  ::decode(info.purged_snaps, p);
   return 0;
 }
 
 void PG::read_state(ObjectStore *store, bufferlist &bl)
 {
-  int r = read_info(store, coll, bl, info, past_intervals, biginfo_oid,
-    osd->infos_oid, snap_collections, info_struct_v);
+  int r = read_info(store, pg_id, coll, bl, info, past_intervals,
+		    info_struct_v);
   assert(r >= 0);
 
   ostringstream oss;
-  if (pg_log.read_log(
-      store, coll, log_oid, info,
-      oss)) {
-    /* We don't want to leave the old format around in case the next log
-     * write happens to be an append_log()
-     */
-    pg_log.mark_log_for_rewrite();
-    ObjectStore::Transaction t;
-    t.remove(coll_t(), log_oid); // remove old version
-    pg_log.write_log(t, log_oid);
-    int r = osd->store->apply_transaction(t);
-    assert(!r);
-  }
+  pg_log.read_log(store,
+		  coll,
+		  info_struct_v < 8 ? META_COLL : coll,
+		  info_struct_v < 8 ? OSD::make_pg_log_oid(pg_id) : pgmeta_oid,
+		  info, oss);
   if (oss.str().length())
     osd->clog->error() << oss;
 
@@ -2999,6 +3092,10 @@ void PG::update_snap_map(
  */
 void PG::filter_snapc(vector<snapid_t> &snaps)
 {
+  //nothing needs to trim, we can return immediately
+  if(snap_trimq.empty() && info.purged_snaps.empty())
+    return;
+
   bool filtering = false;
   vector<snapid_t> newsnaps;
   for (vector<snapid_t>::iterator p = snaps.begin();
@@ -3152,7 +3249,7 @@ void PG::unreg_next_scrub()
 void PG::sub_op_scrub_map(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_map" << dendl;
 
   if (m->map_epoch < info.history.same_interval_since) {
@@ -3179,32 +3276,19 @@ void PG::sub_op_scrub_map(OpRequestRef op)
   }
 }
 
-// send scrub v2-compatible messages (classic scrub)
-void PG::_request_scrub_map_classic(pg_shard_t replica, eversion_t version)
-{
-  assert(replica != pg_whoami);
-  dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
-  MOSDRepScrub *repscrubop =
-    new MOSDRepScrub(
-      spg_t(info.pgid.pgid, replica.shard), version,
-      last_update_applied,
-      get_osdmap()->get_epoch());
-  osd->send_message_osd_cluster(
-    replica.osd, repscrubop, get_osdmap()->get_epoch());
-}
-
 // send scrub v3 messages (chunky scrub)
 void PG::_request_scrub_map(
   pg_shard_t replica, eversion_t version,
   hobject_t start, hobject_t end,
-  bool deep)
+  bool deep, uint32_t seed)
 {
   assert(replica != pg_whoami);
-  dout(10) << "scrub  requesting scrubmap from osd." << replica << dendl;
+  dout(10) << "scrub  requesting scrubmap from osd." << replica
+	   << " deep " << (int)deep << " seed " << seed << dendl;
   MOSDRepScrub *repscrubop = new MOSDRepScrub(
     spg_t(info.pgid.pgid, replica.shard), version,
     get_osdmap()->get_epoch(),
-    start, end, deep);
+    start, end, deep, seed);
   osd->send_message_osd_cluster(
     replica.osd, repscrubop, get_osdmap()->get_epoch());
 }
@@ -3212,7 +3296,7 @@ void PG::_request_scrub_map(
 void PG::sub_op_scrub_reserve(OpRequestRef op)
 {
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_reserve" << dendl;
 
   if (scrubber.reserved) {
@@ -3233,7 +3317,7 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 {
   MOSDSubOpReply *reply = static_cast<MOSDSubOpReply*>(op->get_req());
-  assert(reply->get_header().type == MSG_OSD_SUBOPREPLY);
+  assert(reply->get_type() == MSG_OSD_SUBOPREPLY);
   dout(7) << "sub_op_scrub_reserve_reply" << dendl;
 
   if (!scrubber.reserved) {
@@ -3265,7 +3349,7 @@ void PG::sub_op_scrub_reserve_reply(OpRequestRef op)
 
 void PG::sub_op_scrub_unreserve(OpRequestRef op)
 {
-  assert(op->get_req()->get_header().type == MSG_OSD_SUBOP);
+  assert(op->get_req()->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_unreserve" << dendl;
 
   op->mark_started();
@@ -3278,7 +3362,7 @@ void PG::sub_op_scrub_stop(OpRequestRef op)
   op->mark_started();
 
   MOSDSubOp *m = static_cast<MOSDSubOp*>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_SUBOP);
+  assert(m->get_type() == MSG_OSD_SUBOP);
   dout(7) << "sub_op_scrub_stop" << dendl;
 
   // see comment in sub_op_scrub_reserve
@@ -3336,7 +3420,7 @@ void PG::scrub_reserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(
@@ -3358,7 +3442,7 @@ void PG::scrub_unreserve_replicas()
     eversion_t v;
     osd_reqid_t reqid;
     MOSDSubOp *subop = new MOSDSubOp(
-      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, false, 0,
+      reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
     osd->send_message_osd_cluster(i->osd, subop, get_osdmap()->get_epoch());
@@ -3470,11 +3554,11 @@ void PG::_scan_snaps(ScrubMap &smap)
  */
 int PG::build_scrub_map_chunk(
   ScrubMap &map,
-  hobject_t start, hobject_t end, bool deep,
+  hobject_t start, hobject_t end, bool deep, uint32_t seed,
   ThreadPool::TPHandle &handle)
 {
-  dout(10) << "build_scrub_map" << dendl;
-  dout(20) << "scrub_map_chunk [" << start << "," << end << ")" << dendl;
+  dout(10) << __func__ << " [" << start << "," << end << ") "
+	   << " seed " << seed << dendl;
 
   map.valid_through = info.last_update;
 
@@ -3493,101 +3577,24 @@ int PG::build_scrub_map_chunk(
   }
 
 
-  get_pgbackend()->be_scan_list(map, ls, deep, handle);
+  get_pgbackend()->be_scan_list(map, ls, deep, seed, handle);
   _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
 
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
-  dout(10) << __func__ << " done." << dendl;
-
+  dout(20) << __func__ << " done" << dendl;
   return 0;
 }
 
-/*
- * build a (sorted) summary of pg content for purposes of scrubbing
- * called while holding pg lock
- */ 
-void PG::build_scrub_map(ScrubMap &map, ThreadPool::TPHandle &handle)
-{
-  dout(10) << "build_scrub_map" << dendl;
-
-  map.valid_through = info.last_update;
-  epoch_t epoch = get_osdmap()->get_epoch();
-
-  unlock();
-
-  // wait for any writes on our pg to flush to disk first.  this avoids races
-  // with scrub starting immediately after trim or recovery completion.
-  osr->flush();
-
-  // objects
-  vector<hobject_t> ls;
-  osd->store->collection_list(coll, ls);
-
-  get_pgbackend()->be_scan_list(map, ls, false, handle);
-  lock();
-  _scan_snaps(map);
-
-  if (pg_has_reset_since(epoch)) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    return;
-  }
-
-
-  dout(10) << "PG relocked, finalizing" << dendl;
-
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
-
-  dout(10) << __func__ << " done." << dendl;
-}
-
-
-/* 
- * build a summary of pg content changed starting after v
- * called while holding pg lock
- */
-void PG::build_inc_scrub_map(
-  ScrubMap &map, eversion_t v,
-  ThreadPool::TPHandle &handle)
-{
-  map.valid_through = last_update_applied;
-  map.incr_since = v;
-  vector<hobject_t> ls;
-  list<pg_log_entry_t>::const_iterator p;
-  if (v == pg_log.get_tail()) {
-    p = pg_log.get_log().log.begin();
-  } else if (v > pg_log.get_tail()) {
-    p = pg_log.get_log().find_entry(v);
-    ++p;
-  } else {
-    assert(0);
-  }
-  
-  for (; p != pg_log.get_log().log.end(); ++p) {
-    if (p->is_update()) {
-      ls.push_back(p->soid);
-      map.objects[p->soid].negative = false;
-    } else if (p->is_delete()) {
-      map.objects[p->soid].negative = true;
-    }
-  }
-
-  get_pgbackend()->be_scan_list(map, ls, false, handle);
-  // pg attrs
-  osd->store->collection_getattrs(coll, map.attrs);
-}
-
 void PG::repair_object(
-  const hobject_t& soid, ScrubMap::object *po,
-  pg_shard_t bad_peer, pg_shard_t ok_peer)
+  const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
+  pg_shard_t bad_peer)
 {
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peer osd." << ok_peer << dendl;
+	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+  ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
-  bv.push_back(po->attrs[OI_ATTR]);
+  bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != primary) {
     peer_missing[bad_peer].add(soid, oi.version, eversion_t());
@@ -3597,9 +3604,14 @@ void PG::repair_object(
 
     pg_log.missing_add(soid, oi.version, eversion_t());
     missing_loc.add_missing(soid, oi.version, eversion_t());
-    missing_loc.add_location(soid, ok_peer);
+    list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
+    for (i = ok_peers->begin();
+	 i != ok_peers->end();
+	 i++)
+      missing_loc.add_location(soid, i->second);
 
     pg_log.set_last_requested(0);
+    dout(10) << __func__ << ": primary = " << primary << dendl;
   }
 }
 
@@ -3641,7 +3653,7 @@ void PG::replica_scrub(
   }
 
   build_scrub_map_chunk(
-    map, msg->start, msg->end, msg->deep,
+    map, msg->start, msg->end, msg->deep, msg->seed,
     handle);
 
   vector<OSDOp> scrub(1);
@@ -3654,7 +3666,6 @@ void PG::replica_scrub(
     pg_whoami,
     spg_t(info.pgid.pgid, get_primary().shard),
     poid,
-    false,
     0,
     msg->map_epoch,
     osd->get_tid(),
@@ -3669,7 +3680,7 @@ void PG::replica_scrub(
  * PG_STATE_SCRUBBING is set when the scrub is queued
  * 
  * scrub will be chunky if all OSDs in PG support chunky scrub
- * scrub will fall back to classic in any other case
+ * scrub will fail if OSDs are too old.
  */
 void PG::scrub(ThreadPool::TPHandle &handle)
 {
@@ -3744,8 +3755,9 @@ void PG::scrub(ThreadPool::TPHandle &handle)
  *  (4) Wait for writes to flush on the chunk
  *  (5) Wait for maps from replicas
  *  (6) Compare / repair all scrub maps
+ *  (7) Wait for digest updates to apply
  *
- * This logic is encoded in the very linear state machine:
+ * This logic is encoded in the mostly linear state machine:
  *
  *           +------------------+
  *  _________v__________        |
@@ -3782,6 +3794,12 @@ void PG::scrub(ThreadPool::TPHandle &handle)
  *  _________v__________    |   |
  * |                    |   |   |
  * |    COMPARE_MAPS    |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |WAIT_DIGEST_UPDATES |   |   |
  * |____________________|   |   |
  *           |   |          |   |
  *           |   +----------+   |
@@ -3845,6 +3863,12 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  oss << info.pgid.pgid << " " << mode << " starts" << std::endl;
 	  osd->clog->info(oss);
 	}
+
+	if (peer_features & CEPH_FEATURE_OSD_OBJECT_DIGEST)
+	  scrubber.seed = -1; // better, and enables oi digest checks
+	else
+	  scrubber.seed = 0;  // compat
+
         break;
 
       case PG::Scrubber::NEW_CHUNK:
@@ -3926,7 +3950,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	     ++i) {
 	  if (*i == pg_whoami) continue;
           _request_scrub_map(*i, scrubber.subset_last_update,
-                             scrubber.start, scrubber.end, scrubber.deep);
+                             scrubber.start, scrubber.end, scrubber.deep,
+			     scrubber.seed);
           scrubber.waiting_on_whom.insert(*i);
           ++scrubber.waiting_on;
         }
@@ -3960,7 +3985,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         // build my own scrub map
         ret = build_scrub_map_chunk(scrubber.primary_scrubmap,
                                     scrubber.start, scrubber.end,
-                                    scrubber.deep,
+                                    scrubber.deep, scrubber.seed,
 				    handle);
         if (ret < 0) {
           dout(5) << "error building scrub map: " << ret << ", aborting" << dendl;
@@ -3996,8 +4021,21 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         // requeue the writes from the chunk that just finished
         requeue_ops(waiting_for_active);
 
-        if (scrubber.end < hobject_t::get_max()) {
-          // schedule another leg of the scrub
+	scrubber.state = PG::Scrubber::WAIT_DIGEST_UPDATES;
+
+	// fall-thru
+
+      case PG::Scrubber::WAIT_DIGEST_UPDATES:
+	if (scrubber.num_digest_updates_pending) {
+	  dout(10) << __func__ << " waiting on "
+		   << scrubber.num_digest_updates_pending
+		   << " digest updates" << dendl;
+	  done = true;
+	  break;
+	}
+
+	if (scrubber.end < hobject_t::get_max()) {
+	  // schedule another leg of the scrub
           scrubber.start = scrubber.end;
 
           scrubber.state = PG::Scrubber::NEW_CHUNK;
@@ -4007,7 +4045,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           scrubber.state = PG::Scrubber::FINISH;
         }
 
-        break;
+	break;
 
       case PG::Scrubber::FINISH:
         scrub_finish();
@@ -4047,47 +4085,23 @@ void PG::scrub_clear_state()
   _scrub_clear_state();
 }
 
-bool PG::scrub_gather_replica_maps()
-{
-  assert(scrubber.waiting_on == 0);
-  assert(_lock.is_locked());
-
-  for (map<pg_shard_t, ScrubMap>::iterator p = scrubber.received_maps.begin();
-       p != scrubber.received_maps.end();
-       ++p) {
-    
-    if (scrubber.received_maps[p->first].valid_through != pg_log.get_head()) {
-      scrubber.waiting_on++;
-      scrubber.waiting_on_whom.insert(p->first);
-      // Need to request another incremental map
-      _request_scrub_map_classic(p->first, p->second.valid_through);
-    }
-  }
-  
-  if (scrubber.waiting_on > 0) {
-    return false;
-  } else {
-    return true;
-  }
-}
-
 void PG::scrub_compare_maps() 
 {
-  dout(10) << "scrub_compare_maps has maps, analyzing" << dendl;
+  dout(10) << __func__ << " has maps, analyzing" << dendl;
 
   // construct authoritative scrub map for type specific scrubbing
   ScrubMap authmap(scrubber.primary_scrubmap);
 
   if (acting.size() > 1) {
-    dout(10) << "scrub  comparing replica scrub maps" << dendl;
+    dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
 
     stringstream ss;
 
     // Map from object with errors to good peer
-    map<hobject_t, pg_shard_t> authoritative;
+    map<hobject_t, list<pg_shard_t> > authoritative;
     map<pg_shard_t, ScrubMap *> maps;
 
-    dout(2) << "scrub   osd." << acting[0] << " has " 
+    dout(2) << __func__ << "   osd." << acting[0] << " has "
 	    << scrubber.primary_scrubmap.objects.size() << " items" << dendl;
     maps[pg_whoami] = &scrubber.primary_scrubmap;
 
@@ -4095,7 +4109,7 @@ void PG::scrub_compare_maps()
 	 i != actingbackfill.end();
 	 ++i) {
       if (*i == pg_whoami) continue;
-      dout(2) << "scrub replica " << *i << " has "
+      dout(2) << __func__ << " replica " << *i << " has "
 	      << scrubber.received_maps[*i].objects.size()
 	      << " items" << dendl;
       maps[*i] = &scrubber.received_maps[*i];
@@ -4103,34 +4117,41 @@ void PG::scrub_compare_maps()
 
     get_pgbackend()->be_compare_scrubmaps(
       maps,
+      scrubber.seed == 0xffffffff,  // can we relate scrub digests to oi digests?
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
-      scrubber.inconsistent_snapcolls,
+      scrubber.missing_digest,
       scrubber.shallow_errors,
       scrubber.deep_errors,
       info.pgid, acting,
       ss);
     dout(2) << ss.str() << dendl;
 
-    if (!authoritative.empty() || !scrubber.inconsistent_snapcolls.empty()) {
+    if (!authoritative.empty()) {
       osd->clog->error(ss);
     }
 
-    for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t> >::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
+      list<pair<ScrubMap::object, pg_shard_t> > good_peers;
+      for (list<pg_shard_t>::const_iterator j = i->second.begin();
+	   j != i->second.end();
+	   j++) {
+	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
+      }
       scrubber.authoritative.insert(
 	make_pair(
 	  i->first,
-	  make_pair(maps[i->second]->objects[i->first], i->second)));
+	  good_peers));
     }
 
-    for (map<hobject_t, pg_shard_t>::iterator i = authoritative.begin();
+    for (map<hobject_t, list<pg_shard_t> >::iterator i = authoritative.begin();
 	 i != authoritative.end();
 	 ++i) {
       authmap.objects.erase(i->first);
-      authmap.objects.insert(*(maps[i->second]->objects.find(i->first)));
+      authmap.objects.insert(*(maps[i->second.back()]->objects.find(i->first)));
     }
   }
 
@@ -4140,34 +4161,21 @@ void PG::scrub_compare_maps()
 
 void PG::scrub_process_inconsistent()
 {
-  dout(10) << "process_inconsistent() checking authoritative" << dendl;
+  dout(10) << __func__ << ": checking authoritative" << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
   bool deep_scrub = state_test(PG_STATE_DEEP_SCRUB);
   const char *mode = (repair ? "repair": (deep_scrub ? "deep-scrub" : "scrub"));
 
   if (!scrubber.authoritative.empty() || !scrubber.inconsistent.empty()) {
     stringstream ss;
-    for (map<hobject_t, set<pg_shard_t> >::iterator obj =
-	   scrubber.inconsistent_snapcolls.begin();
-	 obj != scrubber.inconsistent_snapcolls.end();
-	 ++obj) {
-      for (set<pg_shard_t>::iterator j = obj->second.begin();
-	   j != obj->second.end();
-	   ++j) {
-	++scrubber.shallow_errors;
-	ss << info.pgid << " " << mode << " " << " object " << obj->first
-	   << " has inconsistent snapcolls on " << *j << std::endl;
-      }
-    }
-
     ss << info.pgid << " " << mode << " "
        << scrubber.missing.size() << " missing, "
-       << scrubber.inconsistent.size() << " inconsistent objects\n";
+       << scrubber.inconsistent.size() << " inconsistent objects";
     dout(2) << ss.str() << dendl;
     osd->clog->error(ss);
     if (repair) {
       state_clear(PG_STATE_CLEAN);
-      for (map<hobject_t, pair<ScrubMap::object, pg_shard_t> >::iterator i =
+      for (map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> > >::iterator i =
 	     scrubber.authoritative.begin();
 	   i != scrubber.authoritative.end();
 	   ++i) {
@@ -4179,9 +4187,8 @@ void PG::scrub_process_inconsistent()
 	       ++j) {
 	    repair_object(
 	      i->first,
-	      &(i->second.first),
-	      *j,
-	      i->second.second);
+	      &(i->second),
+	      *j);
 	    ++scrubber.fixed;
 	  }
 	}
@@ -4190,47 +4197,14 @@ void PG::scrub_process_inconsistent()
 	       j != scrubber.inconsistent[i->first].end(); 
 	       ++j) {
 	    repair_object(i->first, 
-	      &(i->second.first),
-	      *j,
-	      i->second.second);
+	      &(i->second),
+	      *j);
 	    ++scrubber.fixed;
 	  }
 	}
       }
     }
   }
-}
-
-void PG::scrub_finalize()
-{
-  lock();
-  if (deleting) {
-    unlock();
-    return;
-  }
-
-  assert(last_update_applied == info.last_update);
-
-  if (scrubber.epoch_start != info.history.same_interval_since) {
-    dout(10) << "scrub  pg changed, aborting" << dendl;
-    scrub_clear_state();
-    scrub_unreserve_replicas();
-    unlock();
-    return;
-  }
-
-  if (!scrub_gather_replica_maps()) {
-    dout(10) << "maps not yet up to date, sent out new requests" << dendl;
-    unlock();
-    return;
-  }
-
-  scrub_compare_maps();
-
-  scrub_finish();
-
-  dout(10) << "scrub done" << dendl;
-  unlock();
 }
 
 // the part that actually finalizes a scrub
@@ -4741,8 +4715,10 @@ void PG::start_peering_interval(
   actingbackfill.clear();
 
   // reset primary state?
-  if (was_old_primary || is_primary())
-    clear_primary_state();
+  if (was_old_primary || is_primary()) {
+    osd->remove_want_pg_temp(info.pgid.pgid);
+  }
+  clear_primary_state();
 
     
   // pg->on_*
@@ -4861,9 +4837,12 @@ ostream& operator<<(ostream& out, const PG& pg)
 	<< "/" << pg.past_intervals.size();
   }
 
-  if (pg.is_active() &&
-      pg.last_update_ondisk != pg.info.last_update)
-    out << " luod=" << pg.last_update_ondisk;
+  if (pg.is_active()) {
+    if (pg.last_update_ondisk != pg.info.last_update)
+      out << " luod=" << pg.last_update_ondisk;
+    if (pg.last_update_applied != pg.info.last_update)
+      out << " lua=" << pg.last_update_applied;
+  }
 
   if (pg.recovery_ops_active)
     out << " rops=" << pg.recovery_ops_active;
@@ -4974,7 +4953,7 @@ template<typename T, int MSGTYPE>
 bool PG::can_discard_replica_op(OpRequestRef& op)
 {
   T *m = static_cast<T *>(op->get_req());
-  assert(m->get_header().type == MSGTYPE);
+  assert(m->get_type() == MSGTYPE);
 
   /* Mostly, this overlaps with the old_peering_msg
    * condition.  An important exception is pushes
@@ -4999,7 +4978,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
 bool PG::can_discard_scan(OpRequestRef op)
 {
   MOSDPGScan *m = static_cast<MOSDPGScan *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_SCAN);
+  assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
     dout(10) << " got old scan, ignoring" << dendl;
@@ -5011,7 +4990,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 bool PG::can_discard_backfill(OpRequestRef op)
 {
   MOSDPGBackfill *m = static_cast<MOSDPGBackfill *>(op->get_req());
-  assert(m->get_header().type == MSG_OSD_PG_BACKFILL);
+  assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
     dout(10) << " got old backfill, ignoring" << dendl;
@@ -5029,6 +5008,8 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_op(op);
   case MSG_OSD_SUBOP:
     return can_discard_replica_op<MOSDSubOp, MSG_OSD_SUBOP>(op);
+  case MSG_OSD_REPOP:
+    return can_discard_replica_op<MOSDRepOp, MSG_OSD_REPOP>(op);
   case MSG_OSD_PG_PUSH:
     return can_discard_replica_op<MOSDPGPush, MSG_OSD_PG_PUSH>(op);
   case MSG_OSD_PG_PULL:
@@ -5037,6 +5018,8 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDPGPushReply, MSG_OSD_PG_PUSH_REPLY>(op);
   case MSG_OSD_SUBOPREPLY:
     return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
+  case MSG_OSD_REPOPREPLY:
+    return can_discard_replica_op<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
 
   case MSG_OSD_EC_WRITE:
     return can_discard_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
@@ -5068,10 +5051,20 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
       cur_epoch,
       static_cast<MOSDSubOp*>(op->get_req())->map_epoch);
 
+  case MSG_OSD_REPOP:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDRepOp*>(op->get_req())->map_epoch);
+
   case MSG_OSD_SUBOPREPLY:
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<MOSDSubOpReply*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_REPOPREPLY:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDRepOpReply*>(op->get_req())->map_epoch);
 
   case MSG_OSD_PG_SCAN:
     return !have_same_or_newer_map(
@@ -5542,6 +5535,7 @@ void PG::RecoveryState::Primary::exit()
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
+  pg->clear_primary_state();
 }
 
 /*---------Peering--------*/

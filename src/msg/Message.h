@@ -114,6 +114,10 @@
 #define MSG_OSD_EC_READ        110
 #define MSG_OSD_EC_READ_REPLY  111
 
+#define MSG_OSD_REPOP         112
+#define MSG_OSD_REPOPREPLY    113
+
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor
@@ -157,6 +161,7 @@
 
 #define MSG_MDS_EXPORTCAPS            0x470
 #define MSG_MDS_EXPORTCAPSACK         0x471
+#define MSG_MDS_GATHERCAPS            0x472
 
 #define MSG_MDS_HEARTBEAT          0x500  // for mds load balancer
 
@@ -314,7 +319,7 @@ public:
   void set_payload(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    payload.claim(bl);
+    payload.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
@@ -322,25 +327,26 @@ public:
   void set_middle(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
-    middle.claim(bl);
+    middle.claim(bl, buffer::list::CLAIM_ALLOW_NONSHAREABLE);
     if (byte_throttler)
       byte_throttler->take(payload.length());
   }
   bufferlist& get_middle() { return middle; }
 
-  void set_data(const bufferlist &d) {
+  void set_data(const bufferlist &bl) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    data = d;
+    data.share(bl);
     if (byte_throttler)
       byte_throttler->take(data.length());
   }
 
   bufferlist& get_data() { return data; }
-  void claim_data(bufferlist& bl) {
+  void claim_data(bufferlist& bl,
+		  unsigned int flags = buffer::list::CLAIM_DEFAULT) {
     if (byte_throttler)
       byte_throttler->put(data.length());
-    bl.claim(data);
+    bl.claim(data, flags);
   }
   off_t get_data_len() { return data.length(); }
 

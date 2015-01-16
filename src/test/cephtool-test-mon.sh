@@ -14,7 +14,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Library Public License for more details.
 #
-MON=1 OSD=3 CEPH_START='mon osd' CEPH_PORT=7202 test/vstart_wrapper.sh \
+MON=3 OSD=3 CEPH_START='mon osd' CEPH_PORT=7202 test/vstart_wrapper.sh \
     ../qa/workunits/cephtool/test.sh \
     --test-mon \
     --asok-does-not-need-root

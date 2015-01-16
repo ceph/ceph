@@ -123,6 +123,17 @@ public:
       DECODE_FINISH(p);
     }
 
+    uint64_t used_bytes() const {
+      uint64_t result = 0;
+      for (map<ghobject_t, ObjectRef>::const_iterator p = object_map.begin();
+	   p != object_map.end();
+	   ++p) {
+        result += p->second->data.length();
+      }
+
+      return result;
+    }
+
     Collection() : lock("MemStore::Collection::lock") {}
   };
   typedef ceph::shared_ptr<Collection> CollectionRef;
@@ -182,13 +193,15 @@ private:
 
   Finisher finisher;
 
+  uint64_t used_bytes;
+
   void _do_transaction(Transaction& t);
 
   void _write_into_bl(const bufferlist& src, unsigned offset, bufferlist *dst);
 
   int _touch(coll_t cid, const ghobject_t& oid);
-  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, const bufferlist& bl,
-      bool replica = false);
+  int _write(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len,
+	      const bufferlist& bl, uint32_t fadvsie_flags = 0);
   int _zero(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len);
   int _truncate(coll_t cid, const ghobject_t& oid, uint64_t size);
   int _remove(coll_t cid, const ghobject_t& oid);
@@ -214,10 +227,6 @@ private:
   int _collection_add(coll_t cid, coll_t ocid, const ghobject_t& oid);
   int _collection_move_rename(coll_t oldcid, const ghobject_t& oldoid,
 			      coll_t cid, const ghobject_t& o);
-  int _collection_setattr(coll_t cid, const char *name, const void *value,
-			  size_t size);
-  int _collection_setattrs(coll_t cid, map<string,bufferptr> &aset);
-  int _collection_rmattr(coll_t cid, const char *name);
   int _split_collection(coll_t cid, uint32_t bits, uint32_t rem, coll_t dest);
 
   int _save();
@@ -232,7 +241,8 @@ public:
       coll_lock("MemStore::coll_lock"),
       apply_lock("MemStore::apply_lock"),
       finisher(cct),
-      sharded(false) { }
+      used_bytes(0),
+      sharded(false) {}
   ~MemStore() { }
 
   bool need_journal() { return false; };
@@ -279,6 +289,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
+    uint32_t op_flags = 0,
     bool allow_eio = false);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
   int getattr(coll_t cid, const ghobject_t& oid, const char *name, bufferptr& value);
@@ -286,10 +297,6 @@ public:
 
   int list_collections(vector<coll_t>& ls);
   bool collection_exists(coll_t c);
-  int collection_getattr(coll_t cid, const char *name,
-			 void *value, size_t size);
-  int collection_getattr(coll_t cid, const char *name, bufferlist& bl);
-  int collection_getattrs(coll_t cid, map<string,bufferptr> &aset);
   bool collection_empty(coll_t c);
   int collection_list(coll_t cid, vector<ghobject_t>& o);
   int collection_list_partial(coll_t cid, ghobject_t start,

@@ -68,6 +68,79 @@ struct CapSnap {
   void dump(Formatter *f) const;
 };
 
+class QuotaTree {
+private:
+  Inode *_in;
+
+  int _ancestor_ref;
+  QuotaTree *_ancestor;
+  int _parent_ref;
+  QuotaTree *_parent;
+
+  void _put()
+  {
+    if (!_in && !_ancestor_ref && !_parent_ref) {
+      set_parent(NULL);
+      set_ancestor(NULL);
+      delete this;
+    }
+  }
+  ~QuotaTree() {}
+public:
+  QuotaTree(Inode *i) :
+    _in(i),
+    _ancestor_ref(0),
+    _ancestor(NULL),
+    _parent_ref(0),
+    _parent(NULL)
+  { assert(i); }
+
+  Inode *in() { return _in; }
+
+  int ancestor_ref() { return _ancestor_ref; }
+  int parent_ref() { return _parent_ref; }
+
+  QuotaTree *ancestor() { return _ancestor; }
+  void set_ancestor(QuotaTree *ancestor)
+  {
+    if (ancestor == _ancestor)
+      return;
+
+    if (_ancestor) {
+      --_ancestor->_ancestor_ref;
+      _ancestor->_put();
+    }
+    _ancestor = ancestor;
+    if (_ancestor)
+      ++_ancestor->_ancestor_ref;
+  }
+
+  QuotaTree *parent() { return _parent; }
+  void set_parent(QuotaTree *parent)
+  {
+    if (parent == _parent)
+      return;
+
+    if (_parent) {
+      --_parent->_parent_ref;
+      _parent->_put();
+    }
+    _parent = parent;
+    if (parent)
+      ++_parent->_parent_ref;
+  }
+
+  void invalidate()
+  {
+    if (!_in)
+      return;
+
+    _in = NULL;
+    set_ancestor(NULL);
+    set_parent(NULL);
+    _put();
+  }
+};
 
 // inode flags
 #define I_COMPLETE 1
@@ -116,6 +189,7 @@ struct Inode {
   version_t  inline_version;
   bufferlist inline_data;
 
+  bool is_root()    const { return ino == MDS_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
@@ -135,6 +209,9 @@ struct Inode {
   }
 
   unsigned flags;
+
+  quota_info_t quota;
+  QuotaTree* qtree;
 
   bool is_complete_and_ordered() {
     static const unsigned wants = I_COMPLETE | I_DIR_ORDERED;
@@ -227,6 +304,7 @@ struct Inode {
       time_warp_seq(0), max_size(0), version(0), xattr_version(0),
       inline_version(0),
       flags(0),
+      qtree(NULL),
       dir_hashed(false), dir_replicated(false), auth_cap(NULL),
       dirty_caps(0), flushing_caps(0), flushing_cap_seq(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
@@ -235,11 +313,13 @@ struct Inode {
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
       _ref(0), ll_ref(0), dir(0), dn_set(),
-      fcntl_locks(NULL), flock_locks(NULL)
+      fcntl_locks(NULL), flock_locks(NULL),
+      async_err(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));
     memset(&flushing_cap_tid, 0, sizeof(__u16)*CEPH_CAP_BITS);
+    memset(&quota, 0, sizeof(quota));
   }
   ~Inode() { }
 
@@ -275,6 +355,9 @@ struct Inode {
 
   bool have_valid_size();
   Dir *open_dir();
+
+  // Record errors to be exposed in fclose/fflush
+  int async_err;
 
   void dump(Formatter *f) const;
 };

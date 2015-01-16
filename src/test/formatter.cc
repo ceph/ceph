@@ -45,7 +45,7 @@ TEST(JsonFormatter, Simple2) {
   fmt.close_section();
   fmt.flush(oss);
   ASSERT_EQ(oss.str(), "{\"bar\":{\"int\":263882790666240,\
-\"unsigned\":9223372036854775809,\"float\":\"1.234000\"},\
+\"unsigned\":9223372036854775809,\"float\":1.234000},\
 \"string\":\"str\"}");
 }
 

@@ -8,9 +8,9 @@
 #include "common/perf_counters.h"
 
 #include "librbd/internal.h"
-#include "librbd/WatchCtx.h"
 
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -37,14 +37,16 @@ namespace librbd {
       flush_encountered(false),
       exclusive_locked(false),
       name(image_name),
-      wctx(NULL),
+      image_watcher(NULL),
       refresh_seq(0),
       last_refresh(0),
+      owner_lock("librbd::ImageCtx::owner_lock"),
       md_lock("librbd::ImageCtx::md_lock"),
       cache_lock("librbd::ImageCtx::cache_lock"),
       snap_lock("librbd::ImageCtx::snap_lock"),
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
+      aio_lock("librbd::ImageCtx::aio_lock"),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -53,7 +55,8 @@ namespace librbd {
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0)
+      total_bytes_read(0),
+      pending_aio(0)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -583,6 +586,7 @@ namespace librbd {
     } else if (r) {
       lderr(cct) << "flush_cache returned " << r << dendl;
     }
+    wait_for_pending_aio();
     cache_lock.Lock();
     loff_t unclean = object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -603,17 +607,16 @@ namespace librbd {
   }
 
   int ImageCtx::register_watch() {
-    assert(!wctx);
-    wctx = new WatchCtx(this);
-    return md_ctx.watch(header_oid, 0, &(wctx->cookie), wctx);
+    assert(image_watcher == NULL);
+    image_watcher = new ImageWatcher(*this);
+    return image_watcher->register_watch();
   }
 
   void ImageCtx::unregister_watch() {
-    assert(wctx);
-    wctx->invalidate();
-    md_ctx.unwatch(header_oid, wctx->cookie);
-    delete wctx;
-    wctx = NULL;
+    assert(image_watcher != NULL);
+    image_watcher->unregister_watch();
+    delete image_watcher;
+    image_watcher = NULL;
   }
 
   size_t ImageCtx::parent_io_len(uint64_t offset, size_t length,
@@ -652,5 +655,12 @@ namespace librbd {
 		   << ", object overlap " << len
 		   << " from image extents " << objectx << dendl;
     return len;
- }
+  }
+
+  void ImageCtx::wait_for_pending_aio() {
+    Mutex::Locker l(aio_lock);
+    while (pending_aio > 0) {
+      pending_aio_cond.Wait(aio_lock);
+    }
+  }
 }

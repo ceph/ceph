@@ -155,6 +155,37 @@ function expect_config_value()
   fi
 }
 
+function ceph_watch_start()
+{
+    local whatch_opt=--watch
+
+    if [ -n "$1" ]; then
+	whatch_opt=--watch-$1
+    fi
+
+    CEPH_WATCH_FILE=${TMPDIR}/CEPH_WATCH_$$
+    ceph $whatch_opt > $CEPH_WATCH_FILE &
+    CEPH_WATCH_PID=$!
+}
+
+function ceph_watch_wait()
+{
+    local regexp=$1
+    local timeout=30
+
+    if [ -n "$2" ]; then
+	timeout=$2
+    fi
+
+    for i in `seq ${timeout}`; do
+	sleep 1
+	grep -q "$regexp" $CEPH_WATCH_FILE && break
+    done
+
+    kill $CEPH_WATCH_PID
+    grep "$regexp" $CEPH_WATCH_FILE
+}
+
 function test_mon_injectargs()
 {
   CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
@@ -495,19 +526,11 @@ function test_mon_misc()
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
 
-  ceph -w > $TMPDIR/$$ &
-  wpid="$!"
+  ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
   ceph log "$mymsg"
-  sleep 3
-  if ! grep "$mymsg" $TMPDIR/$$; then
-    # in case it is very slow (mon thrashing or something)
-    sleep 30
-    grep "$mymsg" $TMPDIR/$$
-  fi
-  kill $wpid
+  ceph_watch_wait "$mymsg"
 }
-
 
 function check_mds_active()
 {
@@ -692,6 +715,13 @@ function test_mon_mds()
   metadata_poolnum=$(ceph osd dump | grep "pool.* 'fs_metadata" | awk '{print $2;}')
 
   fail_all_mds
+
+  # Check that 'fs reset' runs
+  ceph fs reset cephfs --yes-i-really-mean-it
+
+  fail_all_mds
+
+  # Clean up to enable subsequent newfs tests
   ceph fs rm cephfs --yes-i-really-mean-it
 
   set +e
@@ -765,6 +795,21 @@ function test_mon_mds()
   fail_all_mds
   ceph fs rm cephfs --yes-i-really-mean-it
 
+  # Create a FS and check that we can subsequently add a cache tier to it
+  ceph fs new cephfs fs_metadata fs_data
+
+  # Adding overlay to FS pool should be permitted, RADOS clients handle this.
+  ceph osd tier add fs_metadata mds-tier
+  ceph osd tier cache-mode mds-tier writeback
+  ceph osd tier set-overlay fs_metadata mds-tier
+
+  # Clean up FS
+  fail_all_mds
+  ceph fs rm cephfs --yes-i-really-mean-it
+
+  # Clean up overlay/tier relationship
+  ceph osd tier remove-overlay fs_metadata
+  ceph osd tier remove fs_metadata mds-tier
 
   ceph osd pool delete mds-tier mds-tier --yes-i-really-really-mean-it
   ceph osd pool delete mds-ec-pool mds-ec-pool --yes-i-really-really-mean-it
@@ -834,7 +879,7 @@ function test_mon_osd()
   ceph osd deep-scrub 0
   ceph osd repair 0
 
-  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent full
   do
     ceph osd set $f
     ceph osd unset $f
@@ -1040,7 +1085,6 @@ function test_mon_pg()
   #
   ceph tell osd.0 version
   expect_false ceph tell osd.9999 version 
-  expect_false ceph tell osd.foo version
 
   # back to pg stuff
 
@@ -1287,6 +1331,22 @@ function test_osd_bench()
   ceph tell osd.0 bench 104857600 2097152
 }
 
+function test_mon_tell()
+{
+  ceph tell mon.a version
+  ceph tell mon.b version
+  expect_false ceph tell mon.foo version
+
+  sleep 1
+
+  ceph_watch_start debug
+  ceph tell mon.a version
+  ceph_watch_wait 'mon.0 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+
+  ceph_watch_start debug
+  ceph tell mon.b version
+  ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
+}
 
 #
 # New tests should be added to the TESTS array below
@@ -1305,39 +1365,32 @@ function test_osd_bench()
 #
 
 set +x
-MON_TESTS=(
-  mon_injectargs
-  mon_injectargs_SI
-  tiering
-  auth
-  auth_profiles
-  mon_misc
-  mon_mon
-  mon_osd
-  mon_osd_pool
-  mon_osd_pool_quota
-  mon_pg
-  mon_osd_pool_set
-  mon_osd_tiered_pool_set
-  mon_osd_erasure_code
-  mon_osd_misc
-  mon_heap_profiler
-)
+MON_TESTS+=" mon_injectargs"
+MON_TESTS+=" mon_injectargs_SI"
+MON_TESTS+=" tiering"
+MON_TESTS+=" auth"
+MON_TESTS+=" auth_profiles"
+MON_TESTS+=" mon_misc"
+MON_TESTS+=" mon_mon"
+MON_TESTS+=" mon_osd"
+MON_TESTS+=" mon_osd_pool"
+MON_TESTS+=" mon_osd_pool_quota"
+MON_TESTS+=" mon_pg"
+MON_TESTS+=" mon_osd_pool_set"
+MON_TESTS+=" mon_osd_tiered_pool_set"
+MON_TESTS+=" mon_osd_erasure_code"
+MON_TESTS+=" mon_osd_misc"
+MON_TESTS+=" mon_heap_profiler"
+MON_TESTS+=" mon_tell"
 
-OSD_TESTS=(
-  osd_bench
-)
+OSD_TESTS+=" osd_bench"
 
-MDS_TESTS=(
-  mds_tell
-  mon_mds
-)
+MDS_TESTS+=" mds_tell"
+MDS_TESTS+=" mon_mds"
 
-TESTS=(
-  $MON_TESTS
-  $OSD_TESTS
-  $MDS_TESTS
-)
+TESTS+=$MON_TESTS
+TESTS+=$OSD_TESTS
+TESTS+=$MDS_TESTS
 
 #
 # "main" follows
@@ -1346,7 +1399,7 @@ TESTS=(
 function list_tests()
 {
   echo "AVAILABLE TESTS"
-  for i in ${TESTS[@]}; do
+  for i in $TESTS; do
     echo "  $i"
   done
 }
@@ -1374,13 +1427,13 @@ while [[ $# -gt 0 ]]; do
       sanity_check=false
       ;;
     "--test-mon" )
-      tests_to_run=("${tests_to_run[@]}" $MON_TESTS)
+      tests_to_run+="$MON_TESTS"
       ;;
     "--test-osd" )
-      tests_to_run=("${tests_to_run[@]}" $OSD_TESTS)
+      tests_to_run+="$OSD_TESTS"
       ;;
     "--test-mds" )
-      tests_to_run=("${tests_to_run[@]}" $MDS_TESTS)
+      tests_to_run+="$MDS_TESTS"
       ;;
     "-t" )
       shift
@@ -1389,7 +1442,7 @@ while [[ $# -gt 0 ]]; do
         usage ;
         exit 1
       fi
-      tests_to_run=("${tests_to_run[@]}" "$1")
+      tests_to_run+=" $1"
       ;;
     "-h" )
       usage ;
@@ -1404,14 +1457,14 @@ if [[ $do_list -eq 1 ]]; then
   exit 0
 fi
 
-if [[ ${#tests_to_run[@]} -eq 0 ]]; then
-  tests_to_run=("${TESTS[@]}")
+if test -z "$tests_to_run" ; then
+  tests_to_run="$TESTS"
 fi
 
 if $sanity_check ; then
     wait_no_osd_down
 fi
-for i in ${tests_to_run[@]}; do
+for i in $tests_to_run; do
   if $sanity_check ; then
       check_no_osd_down
   fi

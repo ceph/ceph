@@ -31,6 +31,7 @@
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
 #include "messages/MOSDMap.h"
+#include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDAlive.h"
 #include "messages/MPoolOp.h"
@@ -109,7 +110,9 @@ void OSDMonitor::create_initial()
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
 
   // encode into pending incremental
-  newmap.encode(pending_inc.fullmap, mon->quorum_features);
+  newmap.encode(pending_inc.fullmap, mon->quorum_features | CEPH_FEATURE_RESERVED);
+  pending_inc.full_crc = newmap.get_crc();
+  dout(20) << " full crc " << pending_inc.full_crc << dendl;
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -217,10 +220,30 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (!f)
       f = -1;
     bufferlist full_bl;
-    osdmap.encode(full_bl, f);
+    osdmap.encode(full_bl, f | CEPH_FEATURE_RESERVED);
     tx_size += full_bl.length();
 
-    put_version_full(t, osdmap.epoch, full_bl);
+    bufferlist orig_full_bl;
+    get_version_full(osdmap.epoch, orig_full_bl);
+    if (orig_full_bl.length()) {
+      // the primary provided the full map
+      assert(inc.have_crc);
+      if (inc.full_crc != osdmap.crc) {
+	// This will happen if the mons were running mixed versions in
+	// the past or some other circumstance made the full encoded
+	// maps divergent.  Reloading here will bring us back into
+	// sync with the primary for this and all future maps.  OSDs
+	// will also be brought back into sync when they discover the
+	// crc mismatch and request a full map from a mon.
+	derr << __func__ << " full map CRC mismatch, resetting to canonical"
+	     << dendl;
+	osdmap = OSDMap();
+	osdmap.decode(orig_full_bl);
+      }
+    } else {
+      assert(!inc.have_crc);
+      put_version_full(t, osdmap.epoch, full_bl);
+    }
     put_version_latest_full(t, osdmap.epoch);
 
     // share
@@ -642,9 +665,27 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // encode full map and determine its crc
+  OSDMap tmp;
+  {
+    tmp.deepish_copy_from(osdmap);
+    tmp.apply_incremental(pending_inc);
+    bufferlist fullbl;
+    ::encode(tmp, fullbl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+    pending_inc.full_crc = tmp.get_crc();
+
+    // include full map in the txn.  note that old monitors will
+    // overwrite this.  new ones will now skip the local full map
+    // encode and reload from this.
+    put_version_full(t, pending_inc.epoch, fullbl);
+  }
+
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
-  ::encode(pending_inc, bl, mon->quorum_features);
+  ::encode(pending_inc, bl, mon->quorum_features | CEPH_FEATURE_RESERVED);
+
+  dout(20) << " full_crc " << tmp.get_crc()
+	   << " inc_crc " << pending_inc.inc_crc << dendl;
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
@@ -746,6 +787,8 @@ bool OSDMonitor::preprocess_query(PaxosServiceMessage *m)
     // READs
   case MSG_MON_COMMAND:
     return preprocess_command(static_cast<MMonCommand*>(m));
+  case CEPH_MSG_MON_GET_OSDMAP:
+    return preprocess_get_osdmap(static_cast<MMonGetOSDMap*>(m));
 
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
@@ -831,6 +874,32 @@ bool OSDMonitor::should_propose(double& delay)
 
 // ---------------------------
 // READs
+
+bool OSDMonitor::preprocess_get_osdmap(MMonGetOSDMap *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  MOSDMap *reply = new MOSDMap(mon->monmap->fsid);
+  epoch_t first = get_first_committed();
+  epoch_t last = osdmap.get_epoch();
+  int max = g_conf->osd_map_message_max;
+  for (epoch_t e = MAX(first, m->get_full_first());
+       e < MIN(last, m->get_full_last()) && max > 0;
+       ++e, --max) {
+    int r = get_version_full(e, reply->maps[e]);
+    assert(r >= 0);
+  }
+  for (epoch_t e = MAX(first, m->get_inc_first());
+       e < MIN(last, m->get_inc_last()) && max > 0;
+       ++e, --max) {
+    int r = get_version(e, reply->incremental_maps[e]);
+    assert(r >= 0);
+  }
+  reply->oldest_map = get_first_committed();
+  reply->newest_map = osdmap.get_epoch();
+  mon->send_reply(m, reply);
+  m->put();
+  return true;
+}
 
 
 // ---------------------------
@@ -1716,7 +1785,8 @@ void OSDMonitor::send_latest(PaxosServiceMessage *m, epoch_t start)
 
 MOSDMap *OSDMonitor::build_latest_full()
 {
-  MOSDMap *r = new MOSDMap(mon->monmap->fsid, &osdmap);
+  MOSDMap *r = new MOSDMap(mon->monmap->fsid);
+  get_version_full(osdmap.get_epoch(), r->maps[osdmap.get_epoch()]);
   r->oldest_map = get_first_committed();
   r->newest_map = osdmap.get_epoch();
   return r;
@@ -2264,7 +2334,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
     osdmap.print_summary(f.get(), ds);
@@ -2308,21 +2378,27 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     int64_t epochnum;
     cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
     epoch = epochnum;
+    if (!epoch)
+      epoch = osdmap.get_epoch();
 
-    OSDMap *p = &osdmap;
-    if (epoch) {
-      bufferlist b;
-      int err = get_version_full(epoch, b);
-      if (err == -ENOENT) {
-	r = -ENOENT;
-        ss << "there is no map for epoch " << epoch;
-	goto reply;
-      }
-      assert(err == 0);
-      assert(b.length());
-      p = new OSDMap;
-      p->decode(b);
+    bufferlist osdmap_bl;
+    int err = get_version_full(epoch, osdmap_bl);
+    if (err == -ENOENT) {
+      r = -ENOENT;
+      ss << "there is no map for epoch " << epoch;
+      goto reply;
     }
+    assert(err == 0);
+    assert(osdmap_bl.length());
+
+    OSDMap *p;
+    if (epoch == osdmap.get_epoch()) {
+      p = &osdmap;
+    } else {
+      p = new OSDMap;
+      p->decode(osdmap_bl);
+    }
+
     if (prefix == "osd dump") {
       stringstream ds;
       if (f) {
@@ -2369,7 +2445,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       } 
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
-      p->encode(rdata, m->get_connection()->get_features());
+      rdata.append(osdmap_bl);
       ss << "got osdmap epoch " << p->get_epoch();
     } else if (prefix == "osd getcrushmap") {
       p->crush->encode(rdata);
@@ -2402,11 +2478,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
-    if (!f)
-      f.reset(new_formatter("json-pretty"));
-
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
     f->dump_stream("ip") << osdmap.get_addr(osd);
@@ -2431,10 +2504,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
-    if (!f)
-      f.reset(new_formatter("json-pretty"));
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_metadata");
     r = dump_osd_metadata(osd, f.get(), &ss);
     if (r < 0)
@@ -2930,11 +3001,8 @@ stats_out:
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_array_section("rules");
     osdmap.crush->list_rules(f.get());
     f->close_section();
@@ -2946,11 +3014,8 @@ stats_out:
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name == "") {
       f->open_array_section("rules");
       osdmap.crush->dump_rules(f.get());
@@ -2970,11 +3035,8 @@ stats_out:
     rdata.append(rs.str());
   } else if (prefix == "osd crush dump") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
     f->close_section();
@@ -2984,11 +3046,8 @@ stats_out:
     rdata.append(rs.str());
   } else if (prefix == "osd crush show-tunables") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map_tunables");
     osdmap.crush->dump_tunables(f.get());
     f->close_section();
@@ -4026,7 +4085,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
@@ -4131,9 +4190,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
     int bucketno;
-    err = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
-				       CRUSH_HASH_DEFAULT, type, 0, NULL,
-				       NULL, &bucketno);
+    err = newcrush.add_bucket(0, 0,
+			      CRUSH_HASH_DEFAULT, type, 0, NULL,
+			      NULL, &bucketno);
     if (err < 0) {
       ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
@@ -4873,7 +4932,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd set") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
-    if (key == "pause")
+    if (key == "full")
+      return prepare_set_flag(m, CEPH_OSDMAP_FULL);
+    else if (key == "pause")
       return prepare_set_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_set_flag(m, CEPH_OSDMAP_NOUP);
@@ -4901,7 +4962,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd unset") {
     string key;
     cmd_getval(g_ceph_context, cmdmap, "key", key);
-    if (key == "pause")
+    if (key == "full")
+      return prepare_unset_flag(m, CEPH_OSDMAP_FULL);
+    else if (key == "pause")
       return prepare_unset_flag(m, CEPH_OSDMAP_PAUSERD | CEPH_OSDMAP_PAUSEWR);
     else if (key == "noup")
       return prepare_unset_flag(m, CEPH_OSDMAP_NOUP);
@@ -5766,10 +5829,6 @@ done:
       goto reply;
     }
 
-    if (!_check_remove_tier(pool_id, p, &err, &ss)) {
-      goto reply;
-    }
-
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->read_tier = overlaypool_id;
@@ -5855,14 +5914,16 @@ done:
      *  forward:    Forward all reads and writes to base pool
      *  writeback:  Cache writes, promote reads from base pool
      *  readonly:   Forward writes to base pool
-     *  readforward: Writes are in writeback mode, Reads and in forward mode
+     *  readforward: Writes are in writeback mode, Reads are in forward mode
+     *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
      *
      * Hence, these are the allowed transitions:
      *
      *  none -> any
-     *  forward -> readforward || writeback || any IF num_objects_dirty == 0
-     *  readforward -> forward || writeback || any IF num_objects_dirty == 0
-     *  writeback -> readforward || forward
+     *  forward -> readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readforward -> forward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  readproxy -> forward || readforward || writeback || any IF num_objects_dirty == 0
+     *  writeback -> readforward || readproxy || forward
      *  readonly -> any
      */
 
@@ -5872,24 +5933,34 @@ done:
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
         (mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD)) {
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READPROXY)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
 	 << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READFORWARD)
+	 << "','"
+         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READPROXY)
         << "' allowed.";
       err = -EINVAL;
       goto reply;
     }
     if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD)) ||
+	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
+
+        (p->cache_mode == pg_pool_t::CACHEMODE_READPROXY &&
+        (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
+	  mode != pg_pool_t::CACHEMODE_FORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READFORWARD)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD))) {
+	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
       const pool_stat_t& tier_stats =
         mon->pgmon()->pg_map.get_pg_pool_sum_stat(pool_id);
