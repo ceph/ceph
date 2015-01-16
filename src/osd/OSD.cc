@@ -2485,7 +2485,7 @@ PGPool OSD::_get_pool(int id, OSDMapRef createmap)
 
 PG *OSD::_open_lock_pg(
   OSDMapRef createmap,
-  spg_t pgid, bool no_lockdep_check, bool hold_map_lock)
+  spg_t pgid, bool no_lockdep_check)
 {
   assert(osd_lock.is_locked());
 
@@ -2624,7 +2624,7 @@ PG *OSD::_create_lock_pg(
   assert(osd_lock.is_locked());
   dout(20) << "_create_lock_pg pgid " << pgid << dendl;
 
-  PG *pg = _open_lock_pg(createmap, pgid, true, hold_map_lock);
+  PG *pg = _open_lock_pg(createmap, pgid, true);
 
   service.init_splits_between(pgid, pg->get_osdmap(), service.get_osdmap());
 
