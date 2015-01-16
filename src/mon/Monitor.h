@@ -550,7 +550,7 @@ public:
     return quorum_features;
   }
   uint64_t get_required_features() const {
-    return quorum_features;
+    return required_features;
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
@@ -796,6 +796,7 @@ public:
   void extract_save_mon_key(KeyRing& keyring);
 
   // features
+  static CompatSet get_initial_supported_features();
   static CompatSet get_supported_features();
   static CompatSet get_legacy_features();
   /// read the ondisk features into the CompatSet pointed to by read_features
