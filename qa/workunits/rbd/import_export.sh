@@ -9,7 +9,7 @@ objects () {
    # it doesn't necessarily make sense as they're hex, at least it makes
    # the list repeatable and comparable
    objects=$(rados ls -p rbd | grep $prefix | \
-       sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort)
+       sed -e 's/'$prefix'\.//' -e 's/^0*\([0-9a-f]\)/\1/' | sort -u)
    echo $objects
 }
 
