@@ -1491,11 +1491,11 @@ class CrushTreePlainDumper : public CrushTreeDumper::Dumper<ostream> {
 public:
   typedef CrushTreeDumper::Dumper<ostream> Parent;
 
-  CrushTreePlainDumper(const CrushWrapper *crush, const vector<__u32>& w)
-    : Parent(crush), weights(w) {}
+  CrushTreePlainDumper(const CrushWrapper *crush)
+    : Parent(crush) {}
 
   void dump(ostream *out) {
-    *out << "ID\tWEIGHT\tTYPE NAME\tREWEIGHT\n";
+    *out << "ID\tWEIGHT\tTYPE NAME\n";
     Parent::dump(out);
   }
 
@@ -1514,15 +1514,10 @@ protected:
     }
     else
     {
-      assert(qi.id >= 0 && (size_t)qi.id < weights.size());
-      *out << "osd." << qi.id << "\t"
-	   << weightf_t((double)weights[qi.id] / (double)0x10000) << "\t";
+      *out << "osd." << qi.id;
     }
     *out << "\n";
   }
-
-private:
-    const vector<__u32>& weights;
 };
 
 
@@ -1530,8 +1525,8 @@ class CrushTreeFormattingDumper : public CrushTreeDumper::FormattingDumper {
 public:
   typedef CrushTreeDumper::FormattingDumper Parent;
 
-  CrushTreeFormattingDumper(const CrushWrapper *crush, const vector<__u32>& w)
-    : Parent(crush), weights(w) {}
+  CrushTreeFormattingDumper(const CrushWrapper *crush)
+    : Parent(crush) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -1540,28 +1535,15 @@ public:
     f->open_array_section("stray");
     f->close_section();
   }
-
-protected:
-  virtual void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) {
-    CrushTreeFormattingDumper::dump_item_fields(qi, f);
-    if (!qi.is_bucket())
-    {
-      assert(qi.id >= 0 && (size_t)qi.id < weights.size());
-      f->dump_float("reweight", (double)weights[qi.id] / (double)0x10000);
-    }
-  }
-
-private:
-  const vector<__u32>& weights;
 };
 
 
-void CrushWrapper::dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const
+void CrushWrapper::dump_tree(ostream *out, Formatter *f) const
 {
   if (out)
-    CrushTreePlainDumper(this, w).dump(out);
+    CrushTreePlainDumper(this).dump(out);
   if (f)
-    CrushTreeFormattingDumper(this, w).dump(f);
+    CrushTreeFormattingDumper(this).dump(f);
 }
 
 void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
