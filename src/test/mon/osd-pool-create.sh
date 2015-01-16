@@ -17,6 +17,12 @@
 #
 source test/mon/mon-test-helpers.sh
 
+function expect_false()
+{
+    set -x
+    if "$@"; then return 1; else return 0; fi
+}
+
 function run() {
     local dir=$1
 
@@ -218,6 +224,16 @@ function TEST_replicated_pool() {
         grep "pool 'replicated2' created" || return 1
     ./ceph osd pool create replicated 12 12 erasure 2>&1 | \
         grep 'cannot change to type erasure' || return 1
+}
+
+function TEST_no_pool_delete() {
+    local dir=$1
+    run_mon $dir a --public-addr $CEPH_MON
+    ./ceph osd pool create foo 1
+    ./ceph tell mon.a injectargs -- --no-mon-allow-pool-delete
+    expect_false ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
+    ./ceph tell mon.a injectargs -- --mon-allow-pool-delete
+    ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
 }
 
 
