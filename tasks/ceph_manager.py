@@ -148,7 +148,8 @@ class Thrasher:
         allremotes = list(set(allremotes))
         for remote in allremotes:
             proc = remote.run(args=['type', cmd], wait=True,
-                check_status=False, stdout=StringIO(), stderr=StringIO())
+                              check_status=False, stdout=StringIO(),
+                              stderr=StringIO())
             if proc.exitstatus != 0:
                 return False;
         return True;
@@ -311,7 +312,7 @@ class Thrasher:
                 return
             pg = random.choice(pgs)
             cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
-                  format(id=osd, pg=pg)
+                format(id=osd, pg=pg)
             proc = remote.run(args=cmd)
             if proc.exitstatus:
                 raise Exception("ceph_objectstore_tool: "
