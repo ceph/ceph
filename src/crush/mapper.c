@@ -322,7 +322,7 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 		 * [0, 0xffff] (corresponding to real numbers
 		 * [-11.090355,0]).
 		 */
-		ln = crush_ln(u) - 0xfffc;
+		ln = crush_ln(u) - 0x10000;
 
 		/*
 		 * divide by 16.16 fixed-point weight
