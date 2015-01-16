@@ -16,6 +16,12 @@
 #
 source test/mon/mon-test-helpers.sh
 
+function expect_false()
+{
+    set -x
+    if "$@"; then return 1; else return 0; fi
+}
+
 function run() {
     local dir=$1
 
@@ -242,6 +248,16 @@ function TEST_utf8_cli() {
     ./ceph -f json-pretty osd dump | \
         python -c "import json; import sys; json.load(sys.stdin)" || return 1
     ./ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
+}
+
+function TEST_no_pool_delete() {
+    local dir=$1
+    run_mon $dir a --public-addr 127.0.0.1
+    ./ceph osd pool create foo 1
+    ./ceph tell mon.a injectargs -- --no-mon-allow-pool-delete
+    expect_false ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
+    ./ceph tell mon.a injectargs -- --mon-allow-pool-delete
+    ./ceph osd pool delete foo foo --yes-i-really-really-mean-it
 }
 
 main osd-pool-create

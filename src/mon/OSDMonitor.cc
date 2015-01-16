@@ -5993,6 +5993,12 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     }
     return -EBUSY;
   }
+
+  if (!g_conf->mon_allow_pool_delete) {
+    *ss << "pool deletion is disabled; you must first set the mon_allow_pool_delete config option to true before you can destroy a pool";
+    return -EPERM;
+  }
+
   *ss << "pool '" << poolstr << "' removed";
   return 0;
 }
