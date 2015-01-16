@@ -821,6 +821,7 @@ struct pg_pool_t {
     FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
+    FLAG_HASHPSPOOL2 = 1<<4, // hash pg seed and pool using congruential pseudo-random number generator
   };
 
   static const char *get_flag_name(int f) {
@@ -829,6 +830,7 @@ struct pg_pool_t {
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
+    case FLAG_HASHPSPOOL2: return "hashpspool_congruential";
     default: return "???";
     }
   }
@@ -989,6 +991,8 @@ public:
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
 
+  __u8 seed; ///< seed for compressing size of pps number space
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1012,7 +1016,8 @@ public:
       hit_set_count(0),
       min_read_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      seed(1)
   { }
 
   void dump(Formatter *f) const;
@@ -1104,6 +1109,8 @@ public:
   uint64_t get_quota_max_objects() {
     return quota_max_objects;
   }
+  void set_seed(int s) {seed = s; }
+  int get_seed() const { return seed; }
 
   static int calc_bits_of(int t);
   void calc_pg_masks();
