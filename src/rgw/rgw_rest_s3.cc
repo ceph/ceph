@@ -161,7 +161,7 @@ done:
   dump_errno(s);
 
   for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
-    s->cio->print("%s: %s\n", riter->first.c_str(), riter->second.c_str());
+    s->cio->print("%s: %s\r\n", riter->first.c_str(), riter->second.c_str());
   }
 
   if (!content_type)
@@ -303,9 +303,9 @@ static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
-  s->cio->print("X-RGW-Object-Count: %s\n", buf);
+  s->cio->print("X-RGW-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
-  s->cio->print("X-RGW-Bytes-Used: %s\n", buf);
+  s->cio->print("X-RGW-Bytes-Used: %s\r\n", buf);
 }
 
 void RGWStatBucket_ObjStore_S3::send_response()
@@ -1264,7 +1264,7 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     set_req_state_err(s, ret);
     dump_errno(s);
 
-    end_header(s, this, "binary/octet-stream");
+    end_header(s, this, "application/xml");
     if (ret == 0) {
       s->formatter->open_object_section("CopyObjectResult");
     }
@@ -1285,13 +1285,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-    if (iter != attrs.end()) {
-      bufferlist& bl = iter->second;
-      if (bl.length()) {
-        char *etag = bl.c_str();
-        s->formatter->dump_string("ETag", etag);
-      }
+    if (!etag.empty()) {
+      s->formatter->dump_string("ETag", etag);
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
