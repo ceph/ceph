@@ -1302,9 +1302,11 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
 					 pool->get_type(),
 					 pool->get_size());
-    uint64_t avail;
+    int64_t avail;
     if (avail_by_rule.count(ruleno) == 0) {
       avail = get_rule_avail(osdmap, ruleno);
+      if (avail < 0)
+        avail = 0;
       avail_by_rule[ruleno] = avail;
     } else {
       avail = avail_by_rule[ruleno];
