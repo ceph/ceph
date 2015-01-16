@@ -178,7 +178,7 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
     return -EIO;
   }
 
-  *entries = op_ret.entries;
+  entries->swap(op_ret.entries);
   *is_truncated = op_ret.is_truncated;
 
   return 0;
@@ -419,7 +419,7 @@ int cls_rgw_bi_log_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max
     return -EIO;
   }
 
-  entries = ret.entries;
+  entries.swap(ret.entries);
 
   if (truncated)
     *truncated = ret.truncated;
@@ -549,7 +549,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
     return -EIO;
   }
 
-  entries = ret.entries;
+  entries.swap(ret.entries);
 
   if (truncated)
     *truncated = ret.truncated;
