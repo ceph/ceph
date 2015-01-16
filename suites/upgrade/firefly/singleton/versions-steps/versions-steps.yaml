@@ -277,4 +277,3 @@ upgrade-sequence_firefly:
    - sleep:
        duration: 60
    - print: "**** done ceph.restart all firefly current branch mds/osd/mon"
-
