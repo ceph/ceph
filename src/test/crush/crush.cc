@@ -251,7 +251,7 @@ TEST(CRUSH, indep_out_progressive) {
   delete c;
 }
 
-TEST(CrushWrapper, straw_zero) {
+TEST(CRUSH, straw_zero) {
   // zero weight items should have no effect on placement.
 
   CrushWrapper *c = new CrushWrapper;
@@ -303,7 +303,7 @@ TEST(CrushWrapper, straw_zero) {
   }
 }
 
-TEST(CrushWrapper, straw_same) {
+TEST(CRUSH, straw_same) {
   // items with the same weight should map about the same as items
   // with very similar weights.
   //
