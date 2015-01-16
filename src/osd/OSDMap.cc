@@ -2456,12 +2456,12 @@ public:
     : Parent(crush), osdmap(osdmap_) {}
 
   void dump(TextTable *tbl) {
-    tbl->define_column("# id", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("weight", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("type name", TextTable::LEFT, TextTable::LEFT);
-    tbl->define_column("up/down", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("reweight", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("primary-affinity", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
+    tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
 
     Parent::dump(tbl);
 

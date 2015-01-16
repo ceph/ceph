@@ -1495,7 +1495,7 @@ public:
     : Parent(crush), weights(w) {}
 
   void dump(ostream *out) {
-    *out << "# id\tweight\ttype name\treweight\n";
+    *out << "ID\tWEIGHT\tTYPE NAME\tREWEIGHT\n";
     Parent::dump(out);
   }
 
