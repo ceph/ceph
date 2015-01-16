@@ -743,13 +743,13 @@ protected:
 			 int64_t kb, int64_t kb_used, int64_t kb_avail,
 			 double& util, double& var, TextTable *tbl) {
     *tbl << qi.id
-	 << stringify(weightf_t(qi.weight))
-	 << stringify(weightf_t(reweight))
-	 << stringify(si_t(kb << 10))
-	 << stringify(si_t(kb_used << 10))
-	 << stringify(si_t(kb_avail << 10))
-	 << stringify(lowprecision_t(util))
-	 << stringify(lowprecision_t(var));
+	 << weightf_t(qi.weight)
+	 << weightf_t(reweight)
+	 << si_t(kb << 10)
+	 << si_t(kb_used << 10)
+	 << si_t(kb_avail << 10)
+	 << lowprecision_t(util)
+	 << lowprecision_t(var);
 
     if (tree) {
       ostringstream name;
