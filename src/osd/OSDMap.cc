@@ -2475,7 +2475,7 @@ protected:
   virtual void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) {
 
     *tbl << qi.id
-	 << stringify(weightf_t(qi.weight));
+	 << weightf_t(qi.weight);
 
     ostringstream name;
     for (int k = 0; k < qi.depth; k++)
@@ -2494,8 +2494,8 @@ protected:
 	     << 0;
       } else {
 	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
-	     << stringify(weightf_t(osdmap->get_weightf(qi.id)))
-	     << osdmap->get_primary_affinityf(qi.id);
+	     << weightf_t(osdmap->get_weightf(qi.id))
+	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
       }
     }
     *tbl << TextTable::endrow;
