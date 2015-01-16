@@ -21,14 +21,14 @@
 
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
-#define dout_prefix *_dout << "mds." << mds->get_nodeid() << "." << table_name << ": "
+#define dout_prefix *_dout << "mds." << rank << "." << table_name << ": "
 
 void InoTable::reset_state()
 {
   // use generic range. FIXME THIS IS CRAP
   free.clear();
   //#ifdef __LP64__
-  uint64_t start = (uint64_t)(mds->get_nodeid()+1) << 40;
+  uint64_t start = (uint64_t)(rank+1) << 40;
   uint64_t len = (uint64_t)1 << 40;
   //#else
   //# warning this looks like a 32-bit system, using small inode numbers.
