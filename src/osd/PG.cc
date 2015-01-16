@@ -3585,12 +3585,24 @@ int PG::build_scrub_map_chunk(
   return 0;
 }
 
+std::ostream& operator << (std::ostream& o, const list<pair<ScrubMap::object, pg_shard_t> > l)
+{
+  list<pair<ScrubMap::object, pg_shard_t> >::const_iterator i;
+  if (l.size() > 1)
+    o << '{';
+  for (i = l.begin(); i != l.end(); ++i)
+    o << i->second << ' ';
+  if (l.size() > 1)
+    o << '}';
+  return o;
+}
+
 void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
 {
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+	   << bad_peer << " ok_peers osd." << *ok_peers << dendl;
   ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
