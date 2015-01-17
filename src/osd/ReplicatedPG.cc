@@ -1738,6 +1738,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 				      bool must_promote,
 				      bool in_hit_set)
 {
+  // return quickly if caching is not enabled
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+    return false;
+
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
 	     << (obc->obs.exists ? "exists" : "DNE")
@@ -1773,9 +1777,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   }
 
   switch (pool.info.cache_mode) {
-  case pg_pool_t::CACHEMODE_NONE:
-    return false;
-
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
