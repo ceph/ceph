@@ -3460,6 +3460,9 @@ int Objecter::create_pool(string& name, Context *onfinish, uint64_t auid,
   RWLock::WLocker wl(rwlock);
   ldout(cct, 10) << "create_pool name=" << name << dendl;
 
+  if (name.length() == 0)
+    return -EINVAL;
+
   if (osdmap->lookup_pg_pool_name(name.c_str()) >= 0)
     return -EEXIST;
 
