@@ -113,6 +113,14 @@ namespace librbd {
     aio_read(m_ictx->parent, image_extents, NULL, &m_copyup_data, m_parent_completion, 0);
   }
 
+  void CopyupRequest::queue_read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
+  {
+    // TODO: once the ObjectCacher allows reentrant read requests, the finisher
+    // should be eliminated
+    C_ReadFromParent *ctx = new C_ReadFromParent(this, image_extents);
+    m_ictx->copyup_finisher->queue(ctx);
+  }
+
   void CopyupRequest::rbd_read_from_parent_cb(completion_t cb, void *arg)
   {
     CopyupRequest *req = reinterpret_cast<CopyupRequest *>(arg);

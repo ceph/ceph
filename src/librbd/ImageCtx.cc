@@ -57,7 +57,7 @@ namespace librbd {
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0),
+      total_bytes_read(0), copyup_finisher(NULL),
       pending_aio(0)
   {
     md_ctx.dup(p);
@@ -103,6 +103,11 @@ namespace librbd {
       object_set->return_enoent = true;
       object_cacher->start();
     }
+
+    if (cct->_conf->rbd_clone_copy_on_read) {
+      copyup_finisher = new Finisher(cct);
+      copyup_finisher->start();
+    }
   }
 
   ImageCtx::~ImageCtx() {
@@ -118,6 +123,10 @@ namespace librbd {
     if (object_set) {
       delete object_set;
       object_set = NULL;
+    }
+    if (copyup_finisher != NULL) {
+      delete copyup_finisher;
+      copyup_finisher = NULL;
     }
     delete[] format_string;
   }
