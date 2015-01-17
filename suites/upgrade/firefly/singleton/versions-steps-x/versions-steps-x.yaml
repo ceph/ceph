@@ -41,6 +41,10 @@ tasks:
 - parallel:
    - workload3
    - upgrade-sequence3
+- print: "**** done parallel v0.80.8"
+- parallel:
+   - workload_firefly
+   - upgrade-sequence_firefly
 - print: "**** done parallel firefly"
 - parallel:
    - workload-x
@@ -124,6 +128,7 @@ workload2:
        clients:
          client.0:
            - cls/test_cls_rbd.sh
+   - print: "**** done cls/test_cls_rbd.sh workload2"
 upgrade-sequence2:
    sequential:
    - install.upgrade:
@@ -166,6 +171,54 @@ upgrade-sequence2:
        duration: 60
    - print: "**** done ceph.restart all 2 osd/mon/mds"
 workload3:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - cls/test_cls_rbd.sh
+   - print: "**** done cls/test_cls_rbd.sh workload3"
+upgrade-sequence3:
+   sequential:
+   - install.upgrade:
+       mon.a:
+         tag: v0.80.8
+       mon.b:
+         tag: v0.80.8
+       client.1:
+         tag: v0.80.8
+   - print: "**** done v0.80.8 install.upgrade"
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all 3 osd/mon/mds"
+workload_firefly:
   rados:
     clients: [client.0]
     ops: 2000
@@ -177,7 +230,7 @@ workload3:
       snap_create: 50
       snap_remove: 50
       rollback: 50
-upgrade-sequence3:
+upgrade-sequence_firefly:
    sequential:
    - install.upgrade:
        mon.a:
