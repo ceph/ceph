@@ -28,12 +28,28 @@ namespace librbd {
     void complete_all(int r);
     void send_copyup(int r);
     void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void queue_read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
 
     static void rbd_read_from_parent_cb(completion_t cb, void *arg);
     static void rbd_copyup_cb(completion_t aio_completion_impl, void *arg);
 
   private:
     ImageCtx *m_ictx;
+
+    class C_ReadFromParent : public Context {
+    public:
+      C_ReadFromParent(CopyupRequest *c, vector<pair<uint64_t,uint64_t> > i)
+        : m_req(c), m_image_extents(i) {}
+
+      virtual void finish(int r) {
+        m_req->read_from_parent(m_image_extents);
+      }
+
+    private:
+      CopyupRequest *m_req;
+      vector<pair<uint64_t,uint64_t> > m_image_extents;
+    };
+
     std::string m_oid;
     uint64_t m_object_no;
     Mutex m_lock;

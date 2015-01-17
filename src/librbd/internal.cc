@@ -2281,13 +2281,18 @@ reprotect_and_return_err:
     if (ictx->image_watcher != NULL) {
       ictx->image_watcher->flush_aio_operations();
     }
-    ictx->wait_for_pending_copyup();
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
       flush(ictx);
       ictx->wait_for_pending_aio();
     }
+
+    if (ictx->copyup_finisher != NULL) {
+      ictx->copyup_finisher->wait_for_empty();
+      ictx->copyup_finisher->stop();
+    }
+    ictx->wait_for_pending_copyup();
 
     if (ictx->parent) {
       close_image(ictx->parent);

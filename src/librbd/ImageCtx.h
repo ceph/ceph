@@ -27,6 +27,7 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class Finisher;
 class PerfCounters;
 
 namespace librbd {
@@ -101,6 +102,8 @@ namespace librbd {
 
     Readahead readahead;
     uint64_t total_bytes_read;
+
+    Finisher *copyup_finisher;
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
     Cond pending_aio_cond;
