@@ -1078,11 +1078,16 @@ void FileJournal::do_write(bufferlist& bl)
      * NOTE: using sync_file_range here would not be safe as it does not
      * flush disk caches or commits any sort of metadata.
      */
+    int ret = 0;
 #if defined(DARWIN) || defined(__FreeBSD__)
-    ::fsync(fd);
+    ret = ::fsync(fd);
 #else
-    ::fdatasync(fd);
+    ret = ::fdatasync(fd);
 #endif
+    if (ret < 0) {
+      derr << __func__ << " fsync/fdatasync failed: " << cpp_strerror(errno) << dendl;
+      ceph_abort();
+    }
 #ifdef HAVE_POSIX_FADVISE
     if (g_conf->filestore_fadvise)
       posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
