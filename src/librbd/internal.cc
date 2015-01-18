@@ -3441,7 +3441,7 @@ reprotect_and_return_err:
 				    cache_comp);
 	} else {
 	  r = req->send();
-	  if (r < 0 && r == -ENOENT)
+	  if (r == -ENOENT)
 	    r = 0;
 	  if (r < 0) {
 	    ret = r;
