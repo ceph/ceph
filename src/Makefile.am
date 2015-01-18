@@ -98,7 +98,7 @@ ceph_fuse_SOURCES = ceph_fuse.cc
 ceph_fuse_LDADD = $(LIBCLIENT_FUSE) $(CEPH_GLOBAL)
 bin_PROGRAMS += ceph-fuse
 
-rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.c
+rbd_fuse_SOURCES = rbd_fuse/rbd-fuse.cc
 rbd_fuse_LDADD = -lfuse $(LIBRBD) $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += rbd-fuse
 endif # WITH_FUSE

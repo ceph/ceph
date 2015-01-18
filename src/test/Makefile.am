@@ -1,4 +1,5 @@
 include test/erasure-code/Makefile.am
+include test/messenger/Makefile.am
 
 ## Unknown/other tests
 
@@ -289,7 +290,7 @@ UNITTEST_LDADD = \
 	$(PTHREAD_LIBS)
 
 unittest_encoding_SOURCES = test/encoding.cc
-unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) -lm $(UNITTEST_LDADD)
+unittest_encoding_LDADD = $(LIBCEPHFS) $(LIBRADOS) $(CEPH_GLOBAL) -lm $(UNITTEST_LDADD)
 unittest_encoding_CXXFLAGS = $(UNITTEST_CXXFLAGS) -fno-strict-aliasing
 check_PROGRAMS += unittest_encoding
 
@@ -384,7 +385,7 @@ unittest_throttle_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_throttle
 
 unittest_base64_SOURCES = test/base64.cc
-unittest_base64_LDADD = $(LIBCEPHFS) -lm $(UNITTEST_LDADD)
+unittest_base64_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) -lm $(UNITTEST_LDADD)
 unittest_base64_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_base64
 
@@ -450,7 +451,7 @@ unittest_gather_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_gather
 
 unittest_run_cmd_SOURCES = test/run_cmd.cc
-unittest_run_cmd_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+unittest_run_cmd_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_run_cmd_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_run_cmd
 
@@ -460,12 +461,12 @@ unittest_signals_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_signals
 
 unittest_simple_spin_SOURCES = test/simple_spin.cc
-unittest_simple_spin_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+unittest_simple_spin_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_simple_spin_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_simple_spin
 
 unittest_librados_SOURCES = test/librados/librados.cc
-unittest_librados_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+unittest_librados_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_librados_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_librados
 
@@ -573,7 +574,7 @@ unittest_formatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_formatter
 
 unittest_libcephfs_config_SOURCES = test/libcephfs_config.cc
-unittest_libcephfs_config_LDADD = $(LIBCEPHFS) $(UNITTEST_LDADD)
+unittest_libcephfs_config_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_libcephfs_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_libcephfs_config
 
@@ -583,7 +584,7 @@ unittest_lfnindex_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_lfnindex
 
 unittest_librados_config_SOURCES = test/librados/librados_config.cc
-unittest_librados_config_LDADD = $(LIBRADOS) $(UNITTEST_LDADD)
+unittest_librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL) $(UNITTEST_LDADD)
 unittest_librados_config_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 check_PROGRAMS += unittest_librados_config
 

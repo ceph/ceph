@@ -15,8 +15,9 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/oprequest.h"
+#else
+#define tracepoint(...)
 #endif
-
 
 OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   TrackedOp(tracker, req->get_recv_stamp()),

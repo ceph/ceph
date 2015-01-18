@@ -1,0 +1,14 @@
+
+
+Building
+
+The Accelio XioMessenger is built conditionally only, when --enable-xio is
+provided to configure.
+
+Accelio depends on OpenFabrics verbs development headers/libraries.
+
+If either the Accelio or OFED development environments are in non-standard locations,
+include and library paths must be added to both CFLAGS and CXXFLAGS, in the Autotools
+build as of 1/1/2015.
+
+-Matt
