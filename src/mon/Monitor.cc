@@ -2788,10 +2788,10 @@ struct AnonConnection : public Connection {
     assert(!"send_keepalive on anonymous connection");
   }
   void mark_down() {
-    assert(!"mark_down on anonymous connection");
+    // silently ignore
   }
   void mark_disposable() {
-    assert(!"mark_disposable on anonymous connection");
+    // silengtly ignore
   }
   bool is_connected() { return false; }
 };
