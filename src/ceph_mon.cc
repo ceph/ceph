@@ -655,12 +655,12 @@ int main(int argc, const char **argv)
 
   // bind
   int rank = monmap.get_rank(g_conf->name.get_id());
-  Messenger *messenger = Messenger::create(g_ceph_context, g_conf->ms_type,
-					   entity_name_t::MON(rank),
-					   "mon",
-					   0);
-  messenger->set_cluster_protocol(CEPH_MON_PROTOCOL);
-  messenger->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
+  Messenger *msgr = Messenger::create(g_ceph_context, g_conf->ms_type,
+				      entity_name_t::MON(rank),
+				      "mon",
+				      0);
+  msgr->set_cluster_protocol(CEPH_MON_PROTOCOL);
+  msgr->set_default_send_priority(CEPH_MSG_PRIO_HIGH);
 
   uint64_t supported =
     CEPH_FEATURE_UID |
@@ -668,34 +668,38 @@ int main(int argc, const char **argv)
     CEPH_FEATURE_MONCLOCKCHECK |
     CEPH_FEATURE_PGID64 |
     CEPH_FEATURE_MSG_AUTH;
-  messenger->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MON,
-                        Messenger::Policy::lossless_peer_reuse(supported,
-							       CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_MON_SINGLE_PAXOS));
-  messenger->set_policy(entity_name_t::TYPE_OSD,
-                        Messenger::Policy::stateless_server(supported,
-                                                            CEPH_FEATURE_PGID64 |
-                                                            CEPH_FEATURE_OSDENC));
-  messenger->set_policy(entity_name_t::TYPE_CLIENT,
-			Messenger::Policy::stateless_server(supported, 0));
-  messenger->set_policy(entity_name_t::TYPE_MDS,
-			Messenger::Policy::stateless_server(supported, 0));
-
+  msgr->set_default_policy(Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_policy(entity_name_t::TYPE_MON,
+                   Messenger::Policy::lossless_peer_reuse(
+                       supported,
+                       CEPH_FEATURE_UID |
+                       CEPH_FEATURE_PGID64 |
+                       CEPH_FEATURE_MON_SINGLE_PAXOS));
+  msgr->set_policy(entity_name_t::TYPE_OSD,
+                   Messenger::Policy::stateless_server(
+                       supported,
+                       CEPH_FEATURE_PGID64 |
+                       CEPH_FEATURE_OSDENC));
+  msgr->set_policy(entity_name_t::TYPE_CLIENT,
+                   Messenger::Policy::stateless_server(supported, 0));
+  msgr->set_policy(entity_name_t::TYPE_MDS,
+                   Messenger::Policy::stateless_server(supported, 0));
 
   // throttle client traffic
   Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
 					    g_conf->mon_client_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_CLIENT, client_throttler, NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
+				     client_throttler, NULL);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
   Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
 					    g_conf->mon_daemon_bytes);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler, NULL);
-  messenger->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler, NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
+				     NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
+				     NULL);
 
   dout(0) << "starting " << g_conf->name << " rank " << rank
        << " at " << ipaddr
@@ -703,15 +707,21 @@ int main(int argc, const char **argv)
        << " fsid " << monmap.get_fsid()
        << dendl;
 
-  err = messenger->bind(ipaddr);
+  err = msgr->bind(ipaddr);
   if (err < 0) {
     derr << "unable to bind monitor to " << ipaddr << dendl;
     prefork.exit(1);
   }
 
+  cout << "starting " << g_conf->name << " rank " << rank
+       << " at " << ipaddr
+       << " mon_data " << g_conf->mon_data
+       << " fsid " << monmap.get_fsid()
+       << std::endl;
+
   // start monitor
-  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store, 
-		    messenger, &monmap);
+  mon = new Monitor(g_ceph_context, g_conf->name.get_id(), store,
+		    msgr, &monmap);
 
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
@@ -735,7 +745,7 @@ int main(int argc, const char **argv)
     prefork.daemonize();
   }
 
-  messenger->start();
+  msgr->start();
 
   mon->init();
 
@@ -748,7 +758,7 @@ int main(int argc, const char **argv)
   if (g_conf->inject_early_sigterm)
     kill(getpid(), SIGTERM);
 
-  messenger->wait();
+  msgr->wait();
 
   store->close();
 
@@ -759,7 +769,7 @@ int main(int argc, const char **argv)
 
   delete mon;
   delete store;
-  delete messenger;
+  delete msgr;
   delete client_throttler;
   delete daemon_throttler;
   g_ceph_context->put();
