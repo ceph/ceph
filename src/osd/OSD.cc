@@ -8660,7 +8660,13 @@ int OSD::init_op_flags(OpRequestRef& op)
       // watch state (and may return early if the watch exists) or, in
       // the case of ping, is simply a read op.
       op->set_read();
-      break;
+      // fall through
+    case CEPH_OSD_OP_NOTIFY:
+    case CEPH_OSD_OP_NOTIFY_ACK:
+      {
+        op->set_promote();
+        break;
+      }
 
     default:
       break;
