@@ -1773,7 +1773,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
-  if (must_promote) {
+  if (must_promote || op->need_promote()) {
     promote_object(obc, missing_oid, oloc, op);
     return true;
   }
@@ -1791,7 +1791,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       waiting_for_cache_not_full.push_back(op);
       return true;
     }
-    if (can_skip_promote(op, obc)) {
+    if (can_skip_promote(op)) {
       return false;
     }
     if (op->may_write() || write_ordered || !hit_set) {
@@ -1840,7 +1840,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
-    do_cache_redirect(op, obc);
+    do_cache_redirect(op);
     return true;
 
   case pg_pool_t::CACHEMODE_READONLY:
@@ -1851,7 +1851,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
     if (!r) { // it must be a write
-      do_cache_redirect(op, obc);
+      do_cache_redirect(op);
       return true;
     }
     // crap, there was a failure of some kind
@@ -1866,7 +1866,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op, obc)) {
+      if (can_skip_promote(op)) {
 	return false;
       }
       promote_object(obc, missing_oid, oloc, op);
@@ -1874,7 +1874,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // If it is a read, we can read, we need to forward it
-    do_cache_redirect(op, obc);
+    do_cache_redirect(op);
     return true;
 
   case pg_pool_t::CACHEMODE_READPROXY:
@@ -1886,7 +1886,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op, obc)) {
+      if (can_skip_promote(op)) {
 	return false;
       }
       promote_object(obc, missing_oid, oloc, op);
@@ -1903,7 +1903,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   return false;
 }
 
-bool ReplicatedPG::can_skip_promote(OpRequestRef op, ObjectContextRef obc)
+bool ReplicatedPG::can_skip_promote(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (m->ops.empty())
@@ -1917,7 +1917,7 @@ bool ReplicatedPG::can_skip_promote(OpRequestRef op, ObjectContextRef obc)
   return false;
 }
 
-void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
+void ReplicatedPG::do_cache_redirect(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
