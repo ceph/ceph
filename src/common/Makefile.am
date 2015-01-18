@@ -75,6 +75,11 @@ libcommon_internal_la_SOURCES = \
 	common/Readahead.cc \
 	common/Cycles.cc
 
+if ENABLE_XIO
+libcommon_internal_la_SOURCES += \
+	common/address_helper.cc
+endif
+
 # these should go out of libcommon_internal
 libcommon_internal_la_SOURCES += \
 	mon/MonCap.cc \
@@ -221,6 +226,12 @@ noinst_HEADERS += \
 	common/Readahead.h \
 	common/Cycles.h \
 	common/Initialize.h
+
+if ENABLE_XIO
+noinst_HEADERS += \
+	common/address_helper.h
+endif
+
 
 libsecret_la_SOURCES = common/secret.c
 libsecret_la_LIBADD = $(KEYUTILS_LIB)

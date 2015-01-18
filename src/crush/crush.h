@@ -3,12 +3,6 @@
 
 #include "include/int_types.h"
 
-#if defined(__linux__)
-#include <linux/types.h>
-#elif defined(__FreeBSD__)
-#include <sys/types.h>
-#endif
-
 /*
  * CRUSH is a pseudo-random data distribution algorithm that
  * efficiently distributes input values (typically, data objects)

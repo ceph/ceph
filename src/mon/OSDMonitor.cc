@@ -1889,10 +1889,11 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     osd_epoch[osd] = last;
 }
 
-void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool onetime)
+void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
+				  bool onetime)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << dest << dendl;
+	  << " to " << session->inst << dendl;
 
   if (first < get_first_committed()) {
     first = get_first_committed();
@@ -1908,14 +1909,14 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
     m->oldest_map = first;
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
-    mon->messenger->send_message(m, dest);
+    session->con->send_message(m);
     first++;
   }
 
   while (first <= osdmap.get_epoch()) {
     epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
-    mon->messenger->send_message(m, dest);
+    session->con->send_message(m);
     first = last + 1;
     if (onetime)
       break;
@@ -1953,7 +1954,7 @@ void OSDMonitor::check_sub(Subscription *sub)
 	   << (sub->onetime ? " (onetime)":" (ongoing)") << dendl;
   if (sub->next <= osdmap.get_epoch()) {
     if (sub->next >= 1)
-      send_incremental(sub->next, sub->session->inst, sub->incremental_onetime);
+      send_incremental(sub->next, sub->session, sub->incremental_onetime);
     else
       sub->session->con->send_message(build_latest_full());
     if (sub->onetime)
