@@ -24,6 +24,9 @@
 #include "common/Mutex.h"
 #include "include/types.h"
 #include "include/compat.h"
+#if defined(HAVE_XIO)
+#include "msg/xio/XioMsg.h"
+#endif
 
 #include <errno.h>
 #include <fstream>
@@ -528,6 +531,59 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       return new buffer::raw_char(len);
     }
   };
+
+#if defined(HAVE_XIO)
+  class buffer::xio_msg_buffer : public buffer::raw {
+  private:
+    XioDispatchHook* m_hook;
+  public:
+    xio_msg_buffer(XioDispatchHook* _m_hook, const char *d,
+	unsigned l) :
+      raw((char*)d, l), m_hook(_m_hook->get()) {}
+
+    bool is_shareable() { return false; }
+    static void operator delete(void *p)
+    {
+      xio_msg_buffer *buf = static_cast<xio_msg_buffer*>(p);
+      // return hook ref (counts against pool);  it appears illegal
+      // to do this in our dtor, because this fires after that
+      buf->m_hook->put();
+    }
+    raw* clone_empty() {
+      return new buffer::raw_char(len);
+    }
+  };
+
+  class buffer::xio_mempool : public buffer::raw {
+  public:
+    struct xio_mempool_obj *mp;
+    xio_mempool(struct xio_mempool_obj *_mp, unsigned l) :
+      raw((char*)mp->addr, l), mp(_mp)
+    { }
+    ~xio_mempool() {}
+    raw* clone_empty() {
+      return new buffer::raw_char(len);
+    }
+  };
+
+  struct xio_mempool_obj* get_xio_mp(const buffer::ptr& bp)
+  {
+    buffer::xio_mempool *mb = dynamic_cast<buffer::xio_mempool*>(bp.get_raw());
+    if (mb) {
+      return mb->mp;
+    }
+    return NULL;
+  }
+
+  buffer::raw* buffer::create_msg(
+      unsigned len, char *buf, XioDispatchHook* m_hook) {
+    XioPool& pool = m_hook->get_pool();
+    buffer::raw* bp =
+      static_cast<buffer::raw*>(pool.alloc(sizeof(xio_msg_buffer)));
+    new (bp) xio_msg_buffer(m_hook, buf, len);
+    return bp;
+  }
+#endif /* HAVE_XIO */
 
   buffer::raw* buffer::copy(const char *c, unsigned len) {
     raw* r = new raw_char(len);

@@ -138,6 +138,8 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
+#else
+#define tracepoint(...)
 #endif
 
 static coll_t META_COLL("meta");
@@ -1486,7 +1488,9 @@ int OSD::peek_meta(ObjectStore *store, std::string& magic,
 // cons/des
 
 OSD::OSD(CephContext *cct_, ObjectStore *store_,
-	 int id, Messenger *internal_messenger, Messenger *external_messenger,
+	 int id,
+	 Messenger *internal_messenger,
+	 Messenger *external_messenger,
 	 Messenger *hb_clientm,
 	 Messenger *hb_front_serverm,
 	 Messenger *hb_back_serverm,
@@ -2385,7 +2389,9 @@ int OSD::shutdown()
   objecter_messenger->shutdown();
   hb_front_server_messenger->shutdown();
   hb_back_server_messenger->shutdown();
+
   peering_wq.clear();
+
   return r;
 }
 

@@ -79,6 +79,8 @@ using ceph::crypto::SHA1;
 
 #ifdef WITH_LTTNG
 #include "tracing/objectstore.h"
+#else
+#define tracepoint(...)
 #endif
 
 #define dout_subsys ceph_subsys_filestore

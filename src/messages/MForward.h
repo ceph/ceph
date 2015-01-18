@@ -71,7 +71,7 @@ public:
     ::decode(tid, p);
     ::decode(client, p);
     ::decode(client_caps, p);
-    msg = (PaxosServiceMessage *)decode_message(NULL, p);
+    msg = (PaxosServiceMessage *)decode_message(NULL, 0, p);
     if (header.version >= 2) {
       ::decode(con_features, p);
     } else {

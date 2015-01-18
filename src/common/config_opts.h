@@ -63,6 +63,18 @@ OPTION(mon_cluster_log_file_level, OPT_STR, "info")
 
 OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR, "")
 
+OPTION(xio_trace_mempool, OPT_BOOL, false) // mempool allocation counters
+OPTION(xio_trace_msgcnt, OPT_BOOL, false) // incoming/outgoing msg counters
+OPTION(xio_trace_xcon, OPT_BOOL, false) // Xio message encode/decode trace
+OPTION(xio_queue_depth, OPT_INT, 512) // depth of Accelio msg queue
+OPTION(xio_mp_min, OPT_INT, 128) // default min mempool size
+OPTION(xio_mp_max_64, OPT_INT, 65536) // max 64-byte chunks (buffer is 40)
+OPTION(xio_mp_max_256, OPT_INT, 8192) // max 256-byte chunks
+OPTION(xio_mp_max_1k, OPT_INT, 8192) // max 1K chunks
+OPTION(xio_mp_max_page, OPT_INT, 4096) // max 1K chunks
+OPTION(xio_mp_max_hint, OPT_INT, 4096) // max size-hint chunks
+OPTION(xio_portal_threads, OPT_INT, 2) // xio portal threads per messenger
+
 DEFAULT_SUBSYS(0, 5)
 SUBSYS(lockdep, 0, 1)
 SUBSYS(context, 0, 1)
@@ -106,6 +118,7 @@ SUBSYS(javaclient, 1, 5)
 SUBSYS(asok, 1, 5)
 SUBSYS(throttle, 1, 1)
 SUBSYS(refs, 0, 0)
+SUBSYS(xio, 1, 5)
 
 OPTION(key, OPT_STR, "")
 OPTION(keyfile, OPT_STR, "")
@@ -121,7 +134,8 @@ OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
 OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
 OPTION(ms_initial_backoff, OPT_DOUBLE, .2)
 OPTION(ms_max_backoff, OPT_DOUBLE, 15.0)
-OPTION(ms_nocrc, OPT_BOOL, false)
+OPTION(ms_crc_data, OPT_BOOL, true)
+OPTION(ms_crc_header, OPT_BOOL, true)
 OPTION(ms_die_on_bad_msg, OPT_BOOL, false)
 OPTION(ms_die_on_unhandled_msg, OPT_BOOL, false)
 OPTION(ms_die_on_old_message, OPT_BOOL, false)     // assert if we get a dup incoming message and shouldn't have (may be triggered by pre-541cd3c64be0dfa04e8a2df39422e0eb9541a428 code)
