@@ -709,6 +709,11 @@ public:
     ruleno = crush_add_rule(crush, n, ruleno);
     return ruleno;
   }
+  int set_rule_mask_max_size(unsigned ruleno, int max_size) {
+    crush_rule *r = get_rule(ruleno);
+    if (IS_ERR(r)) return -1;
+    return r->mask.max_size = max_size;
+  }
   int set_rule_step(unsigned ruleno, unsigned step, int op, int arg1, int arg2) {
     if (!crush) return -ENOENT;
     crush_rule *n = get_rule(ruleno);
