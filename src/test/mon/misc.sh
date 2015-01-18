@@ -53,6 +53,27 @@ function TEST_osd_pool_get_set() {
     ! ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
     ./ceph osd pool set $TEST_POOL hashpspool true || return 1
     ./ceph osd dump | grep 'pool 0' | grep hashpspool || return 1
+
+    local size=$(./ceph osd pool get $TEST_POOL size|awk '{print $2}')
+    local min_size=$(./ceph osd pool get $TEST_POOL min_size|awk '{print $2}')
+    #replicated pool size restrict in 1 and 10
+    ! ./ceph osd pool set $TEST_POOL 11 || return 1
+    #replicated pool min_size must be between in 1 and size
+    ! ./ceph osd pool set $TEST_POOL min_size $(expr $size + 1) || return 1
+    ! ./ceph osd pool set $TEST_POOL min_size 0 || return 1
+
+    local ecpool=erasepool
+    ./ceph osd pool create $ecpool 12 12 erasure default || return 1
+    #erasue pool size=k+m, min_size=k
+    local size=$(./ceph osd pool get $ecpool size|awk '{print $2}')
+    local k=$(./ceph osd pool get $ecpool min_size|awk '{print $2}')
+    #erasure pool size can't change
+    ! ./ceph osd pool set $ecpool size  $(expr $size + 1) || return 1
+    #erasure pool min_size must be between in k and size
+    ./ceph osd pool set $ecpool min_size $(expr $k + 1) || return 1
+    ! ./ceph osd pool set $ecpool min_size $(expr $k - 1) || return 1
+    ! ./ceph osd pool set $ecpool min_size $(expr $size + 1) || return 1
+
 }
 
 main misc
