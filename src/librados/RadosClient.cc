@@ -221,7 +221,7 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
-  objecter = new Objecter(cct, messenger, &monclient,
+  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
 			  &finisher,
 			  cct->_conf->rados_mon_op_timeout,
 			  cct->_conf->rados_osd_op_timeout);
@@ -274,8 +274,19 @@ int librados::RadosClient::connect()
   err = 0;
 
  out:
-  if (err)
+  if (err) {
     state = DISCONNECTED;
+
+    if (objecter) {
+      delete objecter;
+      objecter = NULL;
+    }
+    if (messenger) {
+      delete messenger;
+      messenger = NULL;
+    }
+  }
+
   return err;
 }
 
