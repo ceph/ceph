@@ -385,7 +385,6 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
                 'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
-        stdout=StringIO(),
     )
     ldir = _get_local_dir(config, remote)
     if ldir:
@@ -622,7 +621,6 @@ def _remove_deb(ctx, config, remote, debs):
                 'Dpkg::Options::="--force-confold"'),
             'autoremove',
         ],
-        stdout=StringIO(),
     )
 
 
@@ -925,7 +923,6 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
                 'Dpkg::Options::="--force-confold"'),
             'install',
         ] + ['%s=%s' % (d, version) for d in debs],
-        stdout=StringIO(),
     )
 
 
