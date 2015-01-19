@@ -197,3 +197,30 @@ class TestRun(object):
         # ensures os_type and os_version are property overwritten
         assert fake_ctx["config"]["os_type"] == "os_type"
         assert fake_ctx["config"]["os_version"] == "os_version"
+
+    def test_get_teuthology_command(self):
+        doc = scripts_run.__doc__
+        args = docopt.docopt(doc, [
+            "--archive", "some/archive/dir",
+            "--description", "the_description",
+            "--lock",
+            "--block",
+            "--name", "the_name",
+            "--suite-path", "some/suite/dir",
+            "path/to/config.yml", "path/to/config2.yaml",
+        ])
+        result = run.get_teuthology_command(args)
+        result = result.split()
+        expected = [
+            "teuthology",
+            "path/to/config.yml", "path/to/config2.yaml",
+            "--suite-path", "some/suite/dir",
+            "--lock",
+            "--description", "the_description",
+            "--name", "the_name",
+            "--block",
+            "--archive", "some/archive/dir",
+        ]
+        assert len(result) == len(expected)
+        for arg in expected:
+            assert arg in result

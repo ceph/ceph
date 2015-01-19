@@ -243,6 +243,28 @@ def report_outcome(config, archive, summary, fake_ctx):
         sys.exit(1)
 
 
+def get_teuthology_command(args):
+    """
+    Rebuilds the teuthology command used to run this job
+    and returns it as a string.
+    """
+    cmd = ["teuthology"]
+    for key, value in args.iteritems():
+        if value:
+            # an option, not an argument
+            if not key.startswith("<"):
+                cmd.append(key)
+            else:
+                # this is the <config> argument
+                for arg in value:
+                    cmd.append(str(arg))
+                continue
+            # so we don't print something like --verbose True
+            if isinstance(value, str):
+                cmd.append(value)
+    return " ".join(cmd)
+
+
 def main(args):
     verbose = args["--verbose"]
     archive = args["--archive"]
@@ -258,6 +280,9 @@ def main(args):
     os_version = args["--os-version"]
 
     set_up_logging(verbose, archive)
+
+    # print the command being ran
+    log.debug("Teuthology command: {0}".format(get_teuthology_command(args)))
 
     if owner is None:
         args["--owner"] = owner = get_user()
