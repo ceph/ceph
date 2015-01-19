@@ -22,7 +22,7 @@ tasks:
 - install:
 - ceph:
     conf:
-        client.1: 
+        client:
           rgw region: default
           rgw zone: r1z1
           rgw region root pool: .rgw
@@ -32,6 +32,12 @@ tasks:
           rgw user uid pool: .users.uid
           rgw user keys pool: .users
 - rgw:
+    regions:
+      default:
+        api name: api1
+        is master: true
+        master zone: r1z1
+        zones: [r1z1]
     client.0:
       system user:
         name: nr-system
