@@ -311,7 +311,8 @@ public:
 			  CInode **pcow_inode=0);
   void journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows=CEPH_NOSNAP);
 
-  void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink);
+  void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
+				   int linkunlink, SnapRealm *prealm);
   void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
 				    CDir *parent, int linkunlink=0);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
