@@ -519,7 +519,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
     return r;
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  string bucket_ver, master_ver;
+  uint64_t bucket_ver, master_ver;
   string max_marker;
   int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
@@ -535,8 +535,8 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
   formatter->dump_int("mtime", mtime);
-  formatter->dump_string("ver", bucket_ver);
-  formatter->dump_string("master_ver", master_ver);
+  formatter->dump_int("ver", bucket_ver);
+  formatter->dump_int("master_ver", master_ver);
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   formatter->close_section();
@@ -2350,7 +2350,7 @@ next:
 
     do {
       list<rgw_bi_log_entry> entries;
-      ret = store->list_bi_log_entries(bucket, shard_id, marker, max_entries - count, entries, &truncated);
+      ret = store->list_bi_log_entries(bucket, marker, max_entries - count, entries, &truncated);
       if (ret < 0) {
         cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2382,7 +2382,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->trim_bi_log_entries(bucket, shard_id, start_marker, end_marker);
+    ret = store->trim_bi_log_entries(bucket, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2565,7 +2565,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, shard_id, bounds);
+      ret = logger.get_bounds(bucket, bounds);
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
@@ -2616,7 +2616,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, shard_id, daemon_id);
+      ret = logger.delete_bound(bucket, daemon_id);
       if (ret < 0)
         return -ret;
     }
