@@ -59,58 +59,6 @@ enum {
   NOTIFY_OP_SNAP_CREATE    = 8
 };
 
-class RemoteProgressContext : public ProgressContext {
-public:
-  RemoteProgressContext(ImageWatcher &image_watcher, Finisher &finisher,
-			const RemoteAsyncRequest &remote_async_request)
-    : m_image_watcher(image_watcher), m_finisher(finisher),
-      m_remote_async_request(remote_async_request)
-  {
-  }
-
-  virtual int update_progress(uint64_t offset, uint64_t total) {
-    // TODO: JD throttle notify updates(?)
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_async_progress,
-		  &m_image_watcher, m_remote_async_request, offset, total));
-    m_finisher.queue(ctx);
-    return 0;
-  }
-
-private:
-  ImageWatcher &m_image_watcher;
-  Finisher &m_finisher;
-  RemoteAsyncRequest m_remote_async_request;
-};
-
-class RemoteContext : public Context {
-public:
-  RemoteContext(ImageWatcher &image_watcher, Finisher &finisher,
-		const RemoteAsyncRequest &remote_async_request,
-		RemoteProgressContext *prog_ctx)
-    : m_image_watcher(image_watcher), m_finisher(finisher),
-      m_remote_async_request(remote_async_request), m_prog_ctx(prog_ctx)
-  {
-  }
-
-  ~RemoteContext() {
-    delete m_prog_ctx;
-  }
-
-  virtual void finish(int r) {
-    FunctionContext *ctx = new FunctionContext(
-      boost::bind(&ImageWatcher::notify_async_complete,
-		  &m_image_watcher, m_remote_async_request, r));
-    m_finisher.queue(ctx);
-  }
-
-private:
-  ImageWatcher &m_image_watcher;
-  Finisher &m_finisher;
-  RemoteAsyncRequest m_remote_async_request;
-  RemoteProgressContext *m_prog_ctx;
-};
-
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), m_watch_ctx(*this), m_handle(0),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
@@ -443,6 +391,9 @@ int ImageWatcher::notify_async_progress(const RemoteAsyncRequest &request,
   ENCODE_FINISH(bl);
 
   m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+
+  RWLock::WLocker l(m_async_request_lock);
+  m_async_progress.erase(request);
   return 0;
 }
 
@@ -757,6 +708,19 @@ int ImageWatcher::notify_async_request(uint64_t async_request_id,
   return r;
 }
 
+void ImageWatcher::schedule_update_progress(
+    const RemoteAsyncRequest &remote_async_request,
+    uint64_t offset, uint64_t total) {
+  RWLock::WLocker l(m_async_request_lock);
+  if (m_async_progress.count(remote_async_request) == 0) {
+    m_async_progress.insert(remote_async_request);
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_async_progress,
+		  this, remote_async_request, offset, total));
+    m_finisher->queue(ctx);
+  }
+}
+
 void ImageWatcher::handle_header_update() {
   ldout(m_image_ctx.cct, 1) << "image header updated" << dendl;
 
@@ -857,13 +821,11 @@ void ImageWatcher::handle_flatten(bufferlist::iterator iter, bufferlist *out) {
     RemoteAsyncRequest request;
     ::decode(request, iter);
 
-    RemoteProgressContext *prog_ctx =
-      new RemoteProgressContext(*this, *m_finisher, request);
-    RemoteContext *ctx = new RemoteContext(*this, *m_finisher, request,
-					   prog_ctx);
+    RemoteProgressContext *prog_ctx = new RemoteProgressContext(*this,
+							        request);
+    RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
 
     ldout(m_image_ctx.cct, 20) << "remote flatten request: " << request << dendl;
-
     int r = librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
     if (r < 0) {
       delete ctx;
@@ -884,14 +846,12 @@ void ImageWatcher::handle_resize(bufferlist::iterator iter, bufferlist *out) {
     RemoteAsyncRequest request;
     ::decode(request, iter);
 
-    RemoteProgressContext *prog_ctx =
-      new RemoteProgressContext(*this, *m_finisher, request);
-    RemoteContext *ctx = new RemoteContext(*this, *m_finisher, request,
-					   prog_ctx);
+    RemoteProgressContext *prog_ctx = new RemoteProgressContext(*this,
+								request);
+    RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
 
     ldout(m_image_ctx.cct, 20) << "remote resize request: " << request
 			       << " " << size << dendl;
-
     int r = librbd::async_resize(&m_image_ctx, ctx, size, *prog_ctx);
     if (r < 0) {
       delete ctx;
@@ -1073,6 +1033,13 @@ void ImageWatcher::WatchCtx::handle_failed_notify(uint64_t notify_id,
 
 void ImageWatcher::WatchCtx::handle_error(uint64_t handle, int err) {
   image_watcher.handle_error(handle, err);
+}
+
+void ImageWatcher::RemoteContext::finish(int r) {
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_async_complete,
+		  &m_image_watcher, m_remote_async_request, r));
+    m_image_watcher.m_finisher->queue(ctx);
 }
 
 }
