@@ -368,7 +368,10 @@ int JournalTool::main_event(std::vector<const char*> &argv)
           if (r == 0) {
             r = scav_r;
           }
-          // Our goal is to read all we can, so don't stop on errors
+          // Our goal is to read all we can, so don't stop on errors, but
+          // do record them for possible later output
+          js.errors.insert(std::make_pair(i->first,
+                JournalScanner::EventError(scav_r, cpp_strerror(r))));
         }
       }
     }
