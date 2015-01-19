@@ -270,6 +270,7 @@ void Striper::StripedReadResult::add_partial_result(
     size_t actual = MIN(bl.length(), p->second);
     bl.splice(0, actual, &r.first);
     r.second = p->second;
+    total_intended_len += r.second;
   }
 }
 
@@ -297,6 +298,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	ldout(cct, 20) << "  s at end" << dendl;
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	r.second = tlen;
+	total_intended_len += r.second;
 	break;
       }
 
@@ -315,6 +317,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	size_t gap = MIN(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
+	total_intended_len += r.second;
 	bl_off += gap;
 	tofs += gap;
 	tlen -= gap;
@@ -332,6 +335,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
 	pair<bufferlist, uint64_t>& r = partial[tofs];
 	bl.splice(0, actual, &r.first);
 	r.second = actual;
+	total_intended_len += r.second;
 	bl_off += actual;
 	tofs += actual;
 	tlen -= actual;
