@@ -181,13 +181,6 @@ void RGWOp_BILog_SetBounds::execute() {
     return;
   }
 
-  int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
-    dout(5) << "failed to parse bucket instance" << dendl;
-    return;
-  }
-
   rgw_bucket bucket;
   if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
     return;
@@ -201,7 +194,7 @@ void RGWOp_BILog_SetBounds::execute() {
     return;
   }
 
-  http_ret = rl.update_bound(bucket, shard_id, daemon_id, marker, ut, &markers);
+  http_ret = rl.update_bound(bucket, daemon_id, marker, ut, &markers);
 }
 
 void RGWOp_BILog_GetBounds::execute() {
@@ -213,19 +206,12 @@ void RGWOp_BILog_GetBounds::execute() {
     return;
   }
 
-  int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
-    dout(5) << "failed to parse bucket instance" << dendl;
-    return;
-  }
-
   rgw_bucket bucket;
   if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
     return;
 
   RGWReplicaBucketLogger rl(store);
-  http_ret = rl.get_bounds(bucket, shard_id, bounds);
+  http_ret = rl.get_bounds(bucket, bounds);
 }
 
 void RGWOp_BILog_GetBounds::send_response() {
@@ -251,19 +237,12 @@ void RGWOp_BILog_DeleteBounds::execute() {
     return;
   }
   
-  int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
-  if (http_ret < 0) {
-    dout(5) << "failed to parse bucket instance" << dendl;
-    return;
-  }
-
   rgw_bucket bucket;
   if ((http_ret = bucket_instance_to_bucket(store, bucket_instance, bucket)) < 0) 
     return;
   
   RGWReplicaBucketLogger rl(store);
-  http_ret = rl.delete_bound(bucket, shard_id, daemon_id);
+  http_ret = rl.delete_bound(bucket, daemon_id);
 }
 
 RGWOp *RGWHandler_ReplicaLog::op_get() {

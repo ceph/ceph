@@ -545,8 +545,6 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
-  encode_json("num_shards", num_shards, f);
-  encode_json("bi_shard_hash_type", (uint32_t)bucket_index_shard_hash_type, f);
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -558,10 +556,6 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("placement_rule", placement_rule, obj);
   JSONDecoder::decode_json("has_instance_obj", has_instance_obj, obj);
   JSONDecoder::decode_json("quota", quota, obj);
-  JSONDecoder::decode_json("num_shards", num_shards, obj);
-  uint32_t hash_type;
-  JSONDecoder::decode_json("bi_shard_hash_type", hash_type, obj);
-  bucket_index_shard_hash_type = (uint8_t)hash_type;
 }
 
 void RGWObjEnt::dump(Formatter *f) const
@@ -664,7 +658,6 @@ void RGWZone::dump(Formatter *f) const
   encode_json("endpoints", endpoints, f);
   encode_json("log_meta", log_meta, f);
   encode_json("log_data", log_data, f);
-  encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
 }
 
 void RGWZone::decode_json(JSONObj *obj)
@@ -673,7 +666,6 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("endpoints", endpoints, obj);
   JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
-  JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
 }
 
 void RGWRegionPlacementTarget::dump(Formatter *f) const
