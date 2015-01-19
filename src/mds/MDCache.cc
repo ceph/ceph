@@ -167,6 +167,9 @@ public:
 
 
 MDCache::MDCache(MDS *m) :
+  num_strays(0),
+  num_strays_purging(0),
+  num_strays_delayed(0),
   recovery_queue(m),
   delayed_eval_stray(member_offset(CDentry, item_stray))
 {
@@ -710,8 +713,13 @@ CDentry *MDCache::get_or_create_stray_dentry(CInode *in)
   if (!straydn) {
     straydn = straydir->add_null_dentry(straydname);
     straydn->mark_new();
-  } else 
+
+    num_strays++;
+    logger->set(l_mdc_num_strays, num_strays);
+    logger->inc(l_mdc_strays_created);
+  } else {
     assert(straydn->get_projected_linkage()->is_null());
+  }
 
   straydn->state_set(CDentry::STATE_STRAY);
   return straydn;
@@ -6060,8 +6068,10 @@ bool MDCache::trim(int max, int count)
     CDentry *dn = *p;
     ++p;
     dn->item_stray.remove_myself();
+    num_strays_delayed--;
     eval_stray(dn);
   }
+  logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
 
   map<mds_rank_t, MCacheExpire*> expiremap;
   bool is_standby_replay = mds->is_standby_replay();
@@ -8877,6 +8887,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
     for (CDir::map_t::iterator q = dir->items.begin(); q != dir->items.end(); ++q) {
       CDentry *dn = q->second;
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
+      num_strays++;
       if (dnl->is_primary())
 	maybe_eval_stray(dnl->get_inode());
     }
@@ -8952,8 +8963,11 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
       return;
     }
     if (delay) {
-      if (!dn->item_stray.is_on_list())
+      if (!dn->item_stray.is_on_list()) {
 	delayed_eval_stray.push_back(&dn->item_stray);
+	num_strays_delayed++;
+	logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
+      }
     } else {
       if (in->is_dir())
 	in->close_dirfrags();
@@ -9036,8 +9050,14 @@ void MDCache::purge_stray(CDentry *dn)
   dn->get(CDentry::PIN_PURGING);
   in->state_set(CInode::STATE_PURGING);
 
-  if (dn->item_stray.is_on_list())
+  num_strays_purging++;
+  logger->set(l_mdc_num_strays_purging, num_strays_purging);
+
+  if (dn->item_stray.is_on_list()) {
     dn->item_stray.remove_myself();
+    num_strays_delayed--;
+    logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
+  }
 
   if (in->is_dirty_parent())
     in->clear_dirty_parent();
@@ -9177,6 +9197,12 @@ void MDCache::_purge_stray_purged(CDentry *dn, int r)
     le->metablob.add_destroyed_inode(in->ino());
 
     mds->mdlog->submit_entry(le, new C_MDC_PurgeStrayLogged(this, dn, pdv, mds->mdlog->get_current_segment()));
+
+    num_strays_purging--;
+    num_strays--;
+    logger->set(l_mdc_num_strays, num_strays);
+    logger->set(l_mdc_num_strays_purging, num_strays_purging);
+    logger->inc(l_mdc_strays_purged);
   } else {
     // new refs.. just truncate to 0
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
@@ -11709,3 +11735,25 @@ void MDCache::flush_dentry_work(MDRequestRef& mdr)
     return;
   in->flush(new C_FinishIOMDR(mds, mdr));
 }
+
+
+/**
+ * Initialize performance counters with global perfcounter
+ * collection.
+ */
+void MDCache::register_perfcounters()
+{
+    PerfCountersBuilder pcb(g_ceph_context,
+            "mds_cache", l_mdc_first, l_mdc_last);
+
+    /* Stray/purge statistics */
+    pcb.add_u64(l_mdc_num_strays, "num_strays");
+    pcb.add_u64(l_mdc_num_strays_purging, "num_strays_purging");
+    pcb.add_u64(l_mdc_num_strays_delayed, "num_strays_delayed");
+    pcb.add_u64_counter(l_mdc_strays_created, "strays_created");
+    pcb.add_u64_counter(l_mdc_strays_purged, "strays_purged");
+
+    logger = pcb.create_perf_counters();
+    g_ceph_context->get_perfcounters_collection()->add(logger);
+}
+
