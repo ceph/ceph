@@ -61,42 +61,6 @@ PACKAGES['ceph']['rpm'] = [
     'python-ceph',
 ]
 
-deb_packages = {'ceph': [
-    'ceph',
-    'ceph-dbg',
-    'ceph-mds',
-    'ceph-mds-dbg',
-    'ceph-common',
-    'ceph-common-dbg',
-    'ceph-fuse',
-    'ceph-fuse-dbg',
-    'ceph-test',
-    'ceph-test-dbg',
-    'radosgw',
-    'radosgw-dbg',
-    'python-ceph',
-    'libcephfs1',
-    'libcephfs1-dbg',
-    'libcephfs-java',
-    'librados2',
-    'librbd1',
-]}
-
-rpm_packages = {'ceph': [
-    'ceph-debuginfo',
-    'ceph-radosgw',
-    'ceph-test',
-    'ceph-devel',
-    'ceph',
-    'ceph-fuse',
-    'rest-bench',
-    'libcephfs_jni1',
-    'libcephfs1',
-    'librados2',
-    'librbd1',
-    'python-ceph',
-]}
-
 def _run_and_log_error_if_fails(remote, args):
     """
     Yet another wrapper around command execution. This one runs a command on
@@ -776,10 +740,9 @@ def install(ctx, config):
 
     project = config.get('project', 'ceph')
 
-    global deb_packages
-    global rpm_packages
-    debs = deb_packages.get(project, [])
-    rpm = rpm_packages.get(project, [])
+    global PACKAGES
+    debs = PACKAGES[project]['deb']
+    rpm = PACKAGES[project]['rpm']
 
     # pull any additional packages out of config
     extra_pkgs = config.get('extra_packages')

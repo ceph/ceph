@@ -258,9 +258,9 @@ def remove_installed_packages(ctx):
     install_task.remove_packages(
         ctx,
         conf,
-        {"deb": install_task.deb_packages['ceph'] +
+        {"deb": install_task.PACKAGES['ceph']['deb'] +
          ['salt-common', 'salt-minion', 'calamari-server'],
-         "rpm": install_task.rpm_packages['ceph'] +
+         "rpm": install_task.PACKAGES['ceph']['rpm'] +
          ['salt-common', 'salt-minion', 'calamari-server']})
     install_task.remove_sources(ctx, conf)
     install_task.purge_data(ctx)
