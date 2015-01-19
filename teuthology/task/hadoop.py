@@ -10,6 +10,16 @@ log = logging.getLogger(__name__)
 
 HADOOP_2x_URL = "http://apache.osuosl.org/hadoop/common/hadoop-2.5.2/hadoop-2.5.2.tar.gz"
 
+def dict_to_hadoop_conf(items):
+    out = "<configuration>\n"
+    for key, value in items.iteritems():
+        out += "  <property>\n"
+        out += "    <name>" + key + "</name>\n"
+        out += "    <value>" + value + "</value>\n"
+        out += "  </property>\n"
+    out += "</configuration>\n"
+    return out
+
 def get_slaves_data(ctx):
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/slaves".format(tdir=tempdir)
@@ -32,60 +42,27 @@ def get_core_site_data(ctx, config):
     nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
     host = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes][0]
 
+    conf = {
+        'hadoop.tmp.dir': '{tdir}/hadoop_tmp',
+    }
+
     if config.get('hdfs', False):
-        data_tmpl = """
-<configuration>
-     <property>
-         <name>fs.defaultFS</name>
-         <value>hdfs://{namenode}:9000</value>
-     </property>
-     <property>
-         <name>hadoop.tmp.dir</name>
-         <value>{tdir}/hadoop_tmp</value>
-     </property>
-</configuration>
-"""
+        conf.update({
+            'fs.defaultFS': 'hdfs://{namenode}:9000',
+        })
     else:
-        data_tmpl = """
-<configuration>
-  <property>
-    <name>fs.default.name</name>
-    <value>ceph://{namenode}:6789/</value>
-  </property>
-  <property>
-    <name>fs.defaultFS</name>
-    <value>ceph://{namenode}:6789/</value>
-  </property>
-  <property>
-    <name>ceph.conf.file</name>
-    <value>/etc/ceph/ceph.conf</value>
-  </property>
-  <property>
-    <name>ceph.mon.address</name>
-    <value>{namenode}:6789</value>
-  </property>
-  <property>
-    <name>ceph.auth.id</name>
-    <value>admin</value>
-  </property>
-  <property>
-    <name>ceph.data.pools</name>
-    <value>cephfs_data</value>
-  </property>
-  <property>
-    <name>fs.AbstractFileSystem.ceph.impl</name>
-    <value>org.apache.hadoop.fs.ceph.CephFs</value>
-  </property>
-  <property>
-    <name>fs.ceph.impl</name>
-    <value>org.apache.hadoop.fs.ceph.CephFileSystem</value>
-  </property>
-  <property>
-    <name>hadoop.tmp.dir</name>
-    <value>{tdir}/hadoop_tmp$</value>
-  </property>
-</configuration>
-"""
+        conf.update({
+            'fs.default.name': 'ceph://{namenode}:6789/',
+            'fs.defaultFS': 'ceph://{namenode}:6789/',
+            'ceph.conf.file': '/etc/ceph/ceph.conf',
+            'ceph.mon.address': '{namenode}:6789',
+            'ceph.auth.id': 'admin',
+            'ceph.data.pools': 'cephfs_data',
+            'fs.AbstractFileSystem.ceph.impl': 'org.apache.hadoop.fs.ceph.CephFs',
+            'fs.ceph.impl': 'org.apache.hadoop.fs.ceph.CephFileSystem',
+        })
+
+    data_tmpl = dict_to_hadoop_conf(conf)
     return path, data_tmpl.format(tdir=tempdir, namenode=host)
 
 def get_mapred_site_data(ctx):
