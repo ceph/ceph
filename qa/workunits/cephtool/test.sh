@@ -1056,6 +1056,8 @@ function test_mon_pg()
   ceph pg dump_stuck inactive
   ceph pg dump_stuck unclean
   ceph pg dump_stuck stale
+  ceph pg dump_stuck undersized
+  ceph pg dump_stuck degraded
   # can't test this...
   # ceph pg force_create_pg
   ceph pg getmap -o $TMPDIR/map.$$
