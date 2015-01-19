@@ -2094,16 +2094,37 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
 
   string old_header_oid = imgname;
   old_header_oid += RBD_SUFFIX;
+  string new_id_oid = RBD_ID_PREFIX;
   string new_header_oid = RBD_HEADER_PREFIX;
-  new_header_oid += imgname;
+  new_id_oid += imgname;
   bool old_format = true;
 
   int r = pp.stat(old_header_oid, NULL, NULL);
   if (r < 0) {
-    r = pp.stat(new_header_oid, NULL, NULL);
+    r = pp.stat(new_id_oid, NULL, NULL);
     if (r < 0)
       return r;
     old_format = false;
+  }
+
+  if (!old_format) {
+    librbd::RBD rbd;
+    librbd::image_info_t info;
+    librbd::Image image;
+
+    r = rbd.open_read_only(pp, image, imgname, NULL);
+    if (r < 0)
+      return r;
+
+    r = image.stat(info, sizeof(info));
+    if (r < 0)
+      return r;
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    new_header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
   }
 
   r = pp.watch(old_format ? old_header_oid : new_header_oid,
