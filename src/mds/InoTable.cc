@@ -99,6 +99,8 @@ void InoTable::apply_release_ids(interval_set<inodeno_t>& ids)
 
 void InoTable::replay_alloc_id(inodeno_t id) 
 {
+  assert(mds);  // Only usable in online mode
+
   dout(10) << "replay_alloc_id " << id << dendl;
   if (free.contains(id)) {
     free.erase(id);
@@ -111,6 +113,8 @@ void InoTable::replay_alloc_id(inodeno_t id)
 }
 void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids) 
 {
+  assert(mds);  // Only usable in online mode
+
   dout(10) << "replay_alloc_ids " << ids << dendl;
   interval_set<inodeno_t> is;
   is.intersection_of(free, ids);

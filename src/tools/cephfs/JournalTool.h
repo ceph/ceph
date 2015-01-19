@@ -16,12 +16,12 @@
 
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
+#include "mds/events/EMetaBlob.h"
 
 #include "include/rados/librados.hpp"
 
 #include "JournalFilter.h"
 
-class EMetaBlob;
 class JournalScanner;
 
 
@@ -55,10 +55,21 @@ class JournalTool : public MDSUtility
     librados::IoCtx io;
 
     // Metadata backing store manipulation
+    int scavenge_dentries(
+        EMetaBlob const &metablob,
+        bool const dry_run,
+        std::set<inodeno_t> *consumed_inos);
     int replay_offline(EMetaBlob const &metablob, bool const dry_run);
 
     // Splicing
     int erase_region(JournalScanner const &jp, uint64_t const pos, uint64_t const length);
+
+    // Backing store helpers
+    void encode_fullbit_as_inode(
+        const EMetaBlob::fullbit &fb,
+        const bool bare,
+        bufferlist *out_bl);
+    int consume_inos(const std::set<inodeno_t> &inos);
 
   public:
     void usage();
