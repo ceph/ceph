@@ -34,9 +34,6 @@
 # experiences core-dumps in 'tcmalloc::PageHeap::GrowHeap'...
 %bcond_without tcmalloc
 
-# package both client and server parts of ceph
-%bcond_with ses_server
-
 %if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
@@ -531,22 +528,22 @@ rm -rf $RPM_BUILD_ROOT
 
 %pre
 
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_pre $SERVICES
 %endif
 
 %post
 /sbin/ldconfig
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %service_add_post $SERVICES
 %endif
 
 %preun
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
-%service_add_post $SERVICES
+%service_add_preun $SERVICES
 %else
 %stop_on_removal ceph
 if [ $1 = 0 ] ; then
@@ -558,9 +555,9 @@ fi
 
 %postun
 /sbin/ldconfig
-%if 0%{?suse_version} >= 1310
+%if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
-%service_del_preun $SERVICES
+%service_del_postun $SERVICES
 %else
 if [ "$1" -ge "1" ] ; then
     /sbin/service ceph condrestart >/dev/null 2>&1 || :
@@ -572,7 +569,6 @@ fi
 #################################################################################
 # files
 #################################################################################
-%if 0%{with ses_server}
 %files
 %defattr(-,root,root,-)
 %docdir %{_docdir}
@@ -660,10 +656,6 @@ fi
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/%{name}.conf
 %endif
-%else
-# don't bother to rm -f all unpackaged server-package files...
-%define _unpackaged_files_terminate_build macro 0
-%endif
 
 #################################################################################
 %files -n ceph-common
@@ -726,7 +718,6 @@ fi
 %{_libdir}/librados.so
 
 #################################################################################
-%if 0%{with ses_server}
 %files radosgw
 %defattr(-,root,root,-)
 %{_bindir}/radosgw
@@ -753,17 +744,29 @@ fi
 %{_sbindir}/rcceph-radosgw
 %endif
 
+%pre radosgw
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-radosgw.*@.*\.service | cut -d' ' -f1`
+%service_add_pre $SERVICES
+%endif
+
 %post radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_add_post $SERVICES
+%else
 %fillup_and_insserv -f -y ceph-radosgw
 %endif
 %endif
 
 %preun radosgw
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_add_preun $SERVICES
+%else
 %stop_on_removal ceph-radosgw
 %endif
 %endif
@@ -771,16 +774,17 @@ fi
 %postun radosgw
 /sbin/ldconfig
 %if %{defined suse_version}
-%if 0%{?suse_version} < 1200
+%if 0%{?suse_version} >= 1210
+SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+%service_del_postun $SERVICES
+%else
 %restart_on_update ceph-radosgw
 %endif
 %insserv_cleanup
 %endif
-%endif
 
 #################################################################################
 
-%if 0%{with ses_server}
 %if 0%{?suse_version}
 %files resource-agents
 %defattr(0755,root,root,-)
@@ -788,7 +792,6 @@ fi
 %dir /usr/lib/ocf/resource.d
 %dir /usr/lib/ocf/resource.d/ceph
 /usr/lib/ocf/resource.d/%{name}/*
-%endif
 %endif
 
 #################################################################################

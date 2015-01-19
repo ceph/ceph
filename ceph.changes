@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Mon Jan 19 11:34:02 UTC 2015 - tbehrens@suse.com
+
+- remove ses_server config macro again, we'll package everything
+  and instead ship selectively. 
+
+-------------------------------------------------------------------
 Fri Jan 16 15:55:09 UTC 2015 - osynge@suse.com
 
 - Added systemd pre / post macros for ceph-radosgw
