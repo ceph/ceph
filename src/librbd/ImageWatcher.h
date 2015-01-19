@@ -7,6 +7,8 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "include/rados/librados.hpp"
+#include "include/rbd/librbd.hpp"
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,7 +24,6 @@ namespace librbd {
 
   class AioCompletion;
   class ImageCtx;
-  class ProgressContext;
 
   struct RemoteAsyncRequest {
     uint64_t gid;
@@ -32,11 +33,20 @@ namespace librbd {
     RemoteAsyncRequest() : gid(), handle(), request_id() {}
     RemoteAsyncRequest(uint64_t gid_, uint64_t handle_, uint64_t request_id_)
       : gid(gid_), handle(handle_), request_id(request_id_) {}
+
+    inline bool operator<(const RemoteAsyncRequest &rhs) const {
+      if (gid != rhs.gid) {
+	return gid < rhs.gid;
+      } else if (handle != rhs.handle) {
+	return handle < rhs.handle;
+      } else {
+	return request_id < request_id;
+      }
+    }
   };
 
   class ImageWatcher {
   public:
-
 
     ImageWatcher(ImageCtx& image_ctx);
     ~ImageWatcher();
@@ -97,6 +107,48 @@ namespace librbd {
       virtual void handle_error(uint64_t handle, int err);
     };
 
+    class RemoteProgressContext : public ProgressContext {
+    public:
+      RemoteProgressContext(ImageWatcher &image_watcher,
+			    const RemoteAsyncRequest &remote_async_request)
+        : m_image_watcher(image_watcher),
+          m_remote_async_request(remote_async_request)
+      {
+      }
+
+      virtual int update_progress(uint64_t offset, uint64_t total) {
+	m_image_watcher.schedule_update_progress(
+	  m_remote_async_request, offset, total);
+        return 0;
+      }
+
+    private:
+      ImageWatcher &m_image_watcher;
+      RemoteAsyncRequest m_remote_async_request;
+    };
+
+    class RemoteContext : public Context {
+    public:
+      RemoteContext(ImageWatcher &image_watcher,
+		    const RemoteAsyncRequest &remote_async_request,
+		    RemoteProgressContext *prog_ctx)
+        : m_image_watcher(image_watcher),
+          m_remote_async_request(remote_async_request), m_prog_ctx(prog_ctx)
+      {
+      }
+
+      ~RemoteContext() {
+        delete m_prog_ctx;
+      }
+
+      virtual void finish(int r);
+
+    private:
+      ImageWatcher &m_image_watcher;
+      RemoteAsyncRequest m_remote_async_request;
+      RemoteProgressContext *m_prog_ctx;
+    };
+
     ImageCtx &m_image_ctx;
 
     WatchCtx m_watch_ctx;
@@ -115,6 +167,7 @@ namespace librbd {
     RWLock m_async_request_lock;
     uint64_t m_async_request_id;
     std::map<uint64_t, AsyncRequest> m_async_requests;
+    std::set<RemoteAsyncRequest> m_async_progress;
 
     Mutex m_aio_request_lock;
     Cond m_aio_request_cond;
@@ -151,6 +204,9 @@ namespace librbd {
     int notify_async_request(uint64_t async_request_id, bufferlist &in,
 			     ProgressContext& prog_ctx);
     void notify_request_leadership();
+
+    void schedule_update_progress(const RemoteAsyncRequest &remote_async_request,
+				  uint64_t offset, uint64_t total);
 
     void handle_header_update();
     void handle_acquired_lock();
