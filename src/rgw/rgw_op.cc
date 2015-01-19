@@ -1454,6 +1454,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, void *obj_ctx, string
   }
 
   head_obj = manifest_gen.get_cur_obj();
+  head_obj.index_hash_source = obj_str;
   cur_obj = head_obj;
 
   return 0;
@@ -2531,6 +2532,7 @@ void RGWInitMultipart::execute()
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
     obj.set_in_extra_data(true);
+    obj.index_hash_source = s->object_str;
     ret = store->put_obj_meta(s->obj_ctx, obj, 0, NULL, attrs, RGW_OBJ_CATEGORY_MULTIMETA, PUT_OBJ_CREATE_EXCL, s->owner.get_id());
   } while (ret == -EEXIST);
 }
@@ -2739,6 +2741,7 @@ void RGWCompleteMultipart::execute()
 
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object_str;
 
   ret = get_obj_attrs(store, s, meta_obj, attrs, NULL, NULL);
   if (ret < 0) {
@@ -2890,6 +2893,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
+        obj.index_hash_source = s->object_str;
         ret = store->delete_obj(s->obj_ctx, owner, obj);
         if (ret < 0 && ret != -ENOENT)
           return;
@@ -2898,6 +2902,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
+          loc.index_hash_source = s->object_str;
           ret = store->delete_obj(s->obj_ctx, owner, loc);
           if (ret < 0 && ret != -ENOENT)
             return;
@@ -2909,6 +2914,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object_str;
   ret = store->delete_obj(s->obj_ctx, owner, meta_obj);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;

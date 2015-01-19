@@ -1190,21 +1190,13 @@ public:
 class RGWGetBucketStats_CB : public RefCountedObject {
 protected:
   rgw_bucket bucket;
-  uint64_t bucket_ver;
-  uint64_t master_ver;
   map<RGWObjCategory, RGWStorageStats> *stats;
-  string max_marker;
 public:
   RGWGetBucketStats_CB(rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
   virtual ~RGWGetBucketStats_CB() {}
   virtual void handle_response(int r) = 0;
-  virtual void set_response(uint64_t _bucket_ver, uint64_t _master_ver,
-                            map<RGWObjCategory, RGWStorageStats> *_stats,
-                            const string &_max_marker) {
-    bucket_ver = _bucket_ver;
-    master_ver = _master_ver;
+  virtual void set_response(map<RGWObjCategory, RGWStorageStats> *_stats) {
     stats = _stats;
-    max_marker = _max_marker;
   }
 };
 
@@ -1261,6 +1253,17 @@ class RGWRados
   int open_bucket_data_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_data_extra_ctx(rgw_bucket& bucket, librados::IoCtx&  io_ctx);
   int open_bucket_index(rgw_bucket& bucket, librados::IoCtx&  index_ctx, string& bucket_oid);
+  int open_bucket_index_base(rgw_bucket& bucket, librados::IoCtx&  index_ctx,
+      string& bucket_oid_base);
+  int open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      const string& obj_key, string *bucket_obj);
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      vector<string>& bucket_objs);
+  template<typename T>
+  int open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
+      map<string, T>& bucket_objs);
+  void build_bucket_index_marker(const string& shard_name, const string& shard_marker,
+      string *marker);
 
   struct GetObjState {
     librados::IoCtx io_ctx;
@@ -1293,6 +1296,9 @@ class RGWRados
   bool watch_initialized;
 
   Mutex bucket_id_lock;
+
+  // This field represents the number of bucket index object shards
+  uint32_t bucket_index_max_shards;
 
   int get_obj_ioctx(const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_ref(const rgw_obj& obj, rgw_rados_ref *ref, rgw_bucket *bucket, bool ref_system_obj = false);
@@ -1365,7 +1371,9 @@ public:
                gc(NULL), use_gc_thread(false), quota_threads(false),
                num_watchers(0), watchers(NULL), watch_handles(NULL),
                watch_initialized(false),
-               bucket_id_lock("rados_bucket_id"), max_bucket_id(0),
+               bucket_id_lock("rados_bucket_id"),
+               bucket_index_max_shards(0),
+               max_bucket_id(0),
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
@@ -1811,8 +1819,8 @@ public:
   }
 
   int decode_policy(bufferlist& bl, ACLOwner *owner);
-  int get_bucket_stats(rgw_bucket& bucket, uint64_t *bucket_ver, uint64_t *master_ver, map<RGWObjCategory, RGWStorageStats>& stats,
-                       string *max_marker);
+  int get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *master_ver,
+      map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker);
   int get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *cb);
   int get_user_stats(const string& user, RGWStorageStats& stats);
   int get_user_stats_async(const string& user, RGWGetUserStats_CB *cb);
@@ -1838,34 +1846,34 @@ public:
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(rgw_bucket& bucket, RGWModifyOp op, string& tag,
-                         string& name, string& locator);
+                         string& name, string& locator, const string& index_hash_object);
   int cls_obj_complete_op(rgw_bucket& bucket, RGWModifyOp op, string& tag, int64_t pool, uint64_t epoch,
-                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
-  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs);
-  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name);
-  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name);
+                          RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs, const string& index_hash_object);
+  int cls_obj_complete_add(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, RGWObjEnt& ent, RGWObjCategory category, list<string> *remove_objs, const string& index_hash_object);
+  int cls_obj_complete_del(rgw_bucket& bucket, string& tag, int64_t pool, uint64_t epoch, string& name, const string& index_hash_object);
+  int cls_obj_complete_cancel(rgw_bucket& bucket, string& tag, string& name, const string& index_hash_object);
   int cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeout);
-  int cls_bucket_list(rgw_bucket& bucket, string start, string prefix, uint32_t num,
-                      map<string, RGWObjEnt>& m, bool *is_truncated,
-                      string *last_entry, bool (*force_check_filter)(const string&  name) = NULL);
-  int cls_bucket_head(rgw_bucket& bucket, struct rgw_bucket_dir_header& header);
-  int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx);
+  int cls_bucket_list(rgw_bucket& bucket, const string& start, const string& prefix, uint32_t hint_num,
+                      map<string, RGWObjEnt>& m, bool *is_truncated, string *last_entry,
+                      bool (*force_check_filter)(const string&  name) = NULL);
+  int cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers);
+  int cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int *num_aio);
   int prepare_update_index(RGWObjState *state, rgw_bucket& bucket,
                            RGWModifyOp op, rgw_obj& oid, string& tag);
-  int complete_update_index(rgw_bucket& bucket, string& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
+  int complete_update_index(rgw_bucket& bucket, rgw_obj& oid, string& tag, int64_t poolid, uint64_t epoch, uint64_t size,
                             utime_t& ut, string& etag, string& content_type, bufferlist *acl_bl, RGWObjCategory category,
 			    list<string> *remove_objs);
-  int complete_update_index_del(rgw_bucket& bucket, string& oid, string& tag, int64_t pool, uint64_t epoch) {
+  int complete_update_index_del(rgw_bucket& bucket, rgw_obj& oid, string& tag, int64_t pool, uint64_t epoch) {
     if (bucket_is_system(bucket))
       return 0;
 
-    return cls_obj_complete_del(bucket, tag, pool, epoch, oid);
+    return cls_obj_complete_del(bucket, tag, pool, epoch, oid.object, oid.get_hash_object());
   }
-  int complete_update_index_cancel(rgw_bucket& bucket, string& oid, string& tag) {
+  int complete_update_index_cancel(rgw_bucket& bucket, rgw_obj& oid, string& tag) {
     if (bucket_is_system(bucket))
       return 0;
 
-    return cls_obj_complete_cancel(bucket, tag, oid);
+    return cls_obj_complete_cancel(bucket, tag, oid.object, oid.get_hash_object());
   }
   int list_bi_log_entries(rgw_bucket& bucket, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(rgw_bucket& bucket, string& marker, string& end_marker);
@@ -1945,6 +1953,32 @@ public:
   }
 
  private:
+  /**
+   * This is a helper method, it generates a list of bucket index objects with the given
+   * bucket base oid and number of shards.
+   *
+   * bucket_oid_base [in] - base name of the bucket index object;
+   * num_shards [in] - number of bucket index object shards.
+   * bucket_objs [out] - filled by this method, a list of bucket index objects.
+   */
+  void get_bucket_index_objects(const string& bucket_oid_base, const uint32_t num_shards,
+      vector<string>& bucket_objs);
+
+  /**
+   * Get the bucket index object with the given base bucket index object and object key,
+   * and the number of bucket index shards.
+   *
+   * bucket_oid_base [in] - bucket object base name.
+   * obj_key [in] - object key.
+   * num_shards [in] - number of bucket index shards.
+   * hash_type [in] - type of hash to find the shard ID.
+   * bucket_obj [out] - the bucket index object for the given object.
+   *
+   * Return 0 on success, a failure code otherwise.
+   */
+  int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
+      uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type, string *bucket_obj);
+
   int process_intent_log(rgw_bucket& bucket, string& oid,
 			 time_t epoch, int flags, bool purge);
   /**
