@@ -57,13 +57,18 @@ class TestFlush(CephFSTestCase):
         self.mount_a.wait_until_mounted()
         self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
-        # We will count the deletions to detect completion
-        # FIXME: let's add some MDS perf counters for strays so that we can monitor
-        # deletions directly (#10388)
+        # We will count the RADOS deletions and MDS file purges, to verify that
+        # the expected behaviour is happening as a result of the purge
         initial_dels = self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete']
+        initial_purges = self.fs.mds_asok(['perf', 'dump'])['mds_cache']['strays_purged']
 
         flush_data = self.fs.mds_asok(["flush", "journal"])
         self.assertEqual(flush_data['return_code'], 0)
+
+        # We expect to see a single file purge
+        self.wait_until_true(
+            lambda: self.fs.mds_asok(['perf', 'dump'])['mds_cache']['strays_purged'] - initial_purges >= 1,
+            60)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace
         self.wait_until_true(
