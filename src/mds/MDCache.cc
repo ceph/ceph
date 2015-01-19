@@ -1669,7 +1669,8 @@ void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode
 
 // nested ---------------------------------------------------------------
 
-void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first, int linkunlink)
+void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
+					  int linkunlink, SnapRealm *prealm)
 {
   CDentry *parentdn = cur->get_projected_parent_dn();
   inode_t *curi = cur->get_projected_inode();
@@ -1690,6 +1691,17 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
   snapid_t floor = parentdn->first;
   dout(20) << " floor of " << floor << " from parent dn " << *parentdn << dendl;
 
+  if (!prealm)
+      prealm = parent->inode->find_snaprealm();
+  const set<snapid_t> snaps = prealm->get_snaps();
+
+  if (cur->last != CEPH_NOSNAP) {
+    assert(cur->dirty_old_rstats.empty());
+    set<snapid_t>::const_iterator q = snaps.lower_bound(MAX(first, floor));
+    if (q == snaps.end() || *q > cur->last)
+      return;
+  }
+
   if (cur->last >= floor)
     _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
       
@@ -1697,8 +1709,12 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
        p != cur->dirty_old_rstats.end();
        ++p) {
     old_inode_t& old = cur->old_inodes[*p];
+    snapid_t ofirst = MAX(old.first, floor);
+    set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
+    if (q == snaps.end() || *q > *p)
+      continue;
     if (*p >= floor)
-      _project_rstat_inode_to_frag(old.inode, MAX(old.first, floor), *p, parent);
+      _project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
   }
   cur->dirty_old_rstats.clear();
 }
@@ -2092,7 +2108,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       parent->resync_accounted_rstat();
 
       // now push inode rstats into frag
-      project_rstat_inode_to_frag(cur, parent, first, linkunlink);
+      project_rstat_inode_to_frag(cur, parent, first, linkunlink, prealm);
       cur->clear_dirty_rstat();
     }
 
