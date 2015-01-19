@@ -3689,7 +3689,13 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->type = pool_type;
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
-    pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
+    pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  if (g_conf->osd_pool_default_flag_nodelete)
+    pi->set_flag(pg_pool_t::FLAG_NODELETE);
+  if (g_conf->osd_pool_default_flag_nopgchange)
+    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+  if (g_conf->osd_pool_default_flag_nosizechange)
+    pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
 
   pi->size = size;
   pi->min_size = min_size;
@@ -3836,6 +3842,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   }
 
   if (var == "size") {
+    if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+      ss << "pool size change is disabled; you must unset nosizechange flag for the pool first";
+      return -EPERM;
+    }
     if (p.type == pg_pool_t::TYPE_ERASURE) {
       ss << "can not change the size of an erasure-coded pool";
       return -ENOTSUP;
@@ -3852,6 +3862,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (n < p.min_size)
       p.min_size = n;
   } else if (var == "min_size") {
+    if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+      ss << "pool min size change is disabled; you must unset nosizechange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -3893,6 +3907,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.crash_replay_interval = n;
   } else if (var == "pg_num") {
+    if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
+      ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -3930,6 +3948,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.set_pg_num(n);
   } else if (var == "pgp_num") {
+    if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
+      ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -3961,12 +3983,14 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
     p.crush_ruleset = n;
-  } else if (var == "hashpspool") {
+  } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
+	     var == "nosizechange") {
+    uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
+      p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
+      p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
@@ -6480,6 +6504,11 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
 
   if (!g_conf->mon_allow_pool_delete) {
     *ss << "pool deletion is disabled; you must first set the mon_allow_pool_delete config option to true before you can destroy a pool";
+    return -EPERM;
+  }
+
+  if (p->has_flag(pg_pool_t::FLAG_NODELETE)) {
+    *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
     return -EPERM;
   }
 
