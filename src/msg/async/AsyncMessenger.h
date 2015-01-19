@@ -39,41 +39,44 @@ using namespace std;
 
 
 class AsyncMessenger;
-
-/**
- * If the Messenger binds to a specific address, the Processor runs
- * and listens for incoming connections.
- */
-class Processor : public Thread {
-  AsyncMessenger *msgr;
-  bool done;
-  int listen_sd;
-  uint64_t nonce;
-
- public:
-  Processor(AsyncMessenger *r, uint64_t n) : msgr(r), done(false), listen_sd(-1), nonce(n) {}
-
-  void *entry();
-  void stop();
-  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
-  int rebind(const set<int>& avoid_port);
-  int start();
-  void accept();
-};
+class WorkerPool;
 
 class Worker : public Thread {
   CephContext *cct;
+  WorkerPool *pool;
   bool done;
+  int id;
 
  public:
   EventCenter center;
-  Worker(CephContext *c): cct(c), done(false), center(c) {
+  Worker(CephContext *c, WorkerPool *p, int i)
+    : cct(c), pool(p), done(false), id(i), center(c) {
     center.init(5000);
   }
   void *entry();
   void stop();
 };
 
+/**
+ * If the Messenger binds to a specific address, the Processor runs
+ * and listens for incoming connections.
+ */
+class Processor {
+  AsyncMessenger *msgr;
+  NetHandler net;
+  Worker *worker;
+  int listen_sd;
+  uint64_t nonce;
+
+ public:
+  Processor(AsyncMessenger *r, CephContext *c, uint64_t n): msgr(r), net(c), worker(NULL), listen_sd(-1), nonce(n) {}
+
+  void stop();
+  int bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports);
+  int rebind(const set<int>& avoid_port);
+  int start(Worker *w);
+  void accept();
+};
 
 class WorkerPool: CephContext::AssociatedSingletonObject {
   WorkerPool(const WorkerPool &);
@@ -81,9 +84,24 @@ class WorkerPool: CephContext::AssociatedSingletonObject {
   CephContext *cct;
   uint64_t seq;
   vector<Worker*> workers;
+  vector<int> coreids;
   // Used to indicate whether thread started
   bool started;
+  Mutex barrier_lock;
+  Cond barrier_cond;
+  atomic_t barrier_count;
 
+  class C_barrier : public EventCallback {
+    WorkerPool *pool;
+   public:
+    C_barrier(WorkerPool *p): pool(p) {}
+    void do_request(int id) {
+      Mutex::Locker l(pool->barrier_lock);
+      pool->barrier_count.dec();
+      pool->barrier_cond.Signal();
+    }
+  };
+  friend class C_barrier;
  public:
   WorkerPool(CephContext *c);
   virtual ~WorkerPool();
@@ -91,6 +109,12 @@ class WorkerPool: CephContext::AssociatedSingletonObject {
   Worker *get_worker() {
     return workers[(seq++)%workers.size()];
   }
+  int get_cpuid(int id) {
+    if (coreids.empty())
+      return -1;
+    return coreids[id % coreids.size()];
+  }
+  void barrier();
   // uniq name for CephContext to distinguish differnt object
   static const string name;
 };
@@ -327,7 +351,6 @@ private:
     Mutex::Locker l(deleted_lock);
     if (deleted_conns.count(p->second)) {
       deleted_conns.erase(p->second);
-      p->second->put();
       conns.erase(p);
       return NULL;
     }
@@ -359,10 +382,23 @@ public:
     return _lookup_conn(k);
   }
 
-  void accept_conn(AsyncConnectionRef conn) {
+  int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
+    if (conns.count(conn->peer_addr)) {
+      AsyncConnectionRef existing = conns[conn->peer_addr];
+
+      // lazy delete, see "deleted_conns"
+      // If conn already in, we will return 0
+      Mutex::Locker l(deleted_lock);
+      if (deleted_conns.count(existing)) {
+        deleted_conns.erase(existing);
+      } else if (conn != existing) {
+        return -1;
+      }
+    }
     conns[conn->peer_addr] = conn;
     accepting_conns.erase(conn);
+    return 0;
   }
 
   void learned_addr(const entity_addr_t &peer_addr_for_me);
