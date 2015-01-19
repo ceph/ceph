@@ -42,13 +42,11 @@ def get_core_site_data(ctx, config):
     nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
     host = [s.ssh.get_transport().getpeername()[0] for s in nodes.remotes][0]
 
-    conf = {
-        'hadoop.tmp.dir': '{tdir}/hadoop_tmp',
-    }
-
+    conf = {}
     if config.get('hdfs', False):
         conf.update({
             'fs.defaultFS': 'hdfs://{namenode}:9000',
+            'hadoop.tmp.dir': '{tdir}/hadoop_tmp',
         })
     else:
         conf.update({
@@ -57,7 +55,7 @@ def get_core_site_data(ctx, config):
             'ceph.conf.file': '/etc/ceph/ceph.conf',
             'ceph.mon.address': '{namenode}:6789',
             'ceph.auth.id': 'admin',
-            'ceph.data.pools': 'cephfs_data',
+            #'ceph.data.pools': 'cephfs_data',
             'fs.AbstractFileSystem.ceph.impl': 'org.apache.hadoop.fs.ceph.CephFs',
             'fs.ceph.impl': 'org.apache.hadoop.fs.ceph.CephFileSystem',
         })
@@ -233,6 +231,63 @@ def install_hadoop(ctx, config):
             )
         )
 
+    log.info("Fetching cephfs-hadoop...")
+
+    sha1, url = teuthology.get_ceph_binary_url(
+            package = "hadoop",
+            format = "jar",
+            dist = "precise",
+            arch = "x86_64",
+            flavor = "basic",
+            branch = "master")
+
+    run.wait(
+        hadoops.run(
+            args = [
+                'wget',
+                '-nv',
+                '-O',
+                "{tdir}/cephfs-hadoop.jar".format(tdir=testdir), # FIXME
+                url + "/cephfs-hadoop-0.80.6.jar", # FIXME
+            ],
+            wait = False,
+            )
+        )
+
+    run.wait(
+        hadoops.run(
+            args = [
+                'mv',
+                "{tdir}/cephfs-hadoop.jar".format(tdir=testdir),
+                "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
+            ],
+            wait = False,
+            )
+        )
+
+    run.wait(
+        hadoops.run(
+            args = [
+                'cp',
+                "/usr/lib/jni/libcephfs_jni.so",
+                "{tdir}/hadoop/lib/native/".format(tdir=testdir),
+            ],
+            wait = False,
+            )
+        )
+
+    run.wait(
+        hadoops.run(
+            args = [
+                'cp',
+                "/usr/share/java/libcephfs.jar",
+                "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
+            ],
+            wait = False,
+            )
+        )
+
+
     log.info("Create Hadoop temporary directory...")
     hadoop_tmp_dir = "{tdir}/hadoop_tmp".format(tdir=testdir)
     run.wait(
@@ -295,13 +350,14 @@ def start_hadoop(ctx, config):
         wait = True,
         )
 
-    log.info("Starting HDFS...")
-    master.run(
-        args = [
-            hadoop_dir + "sbin/start-dfs.sh"
-        ],
-        wait = True,
-        )
+    if config.get('hdfs', False):
+        log.info("Starting HDFS...")
+        master.run(
+            args = [
+                hadoop_dir + "sbin/start-dfs.sh"
+            ],
+            wait = True,
+            )
 
     log.info("Starting YARN...")
     master.run(
