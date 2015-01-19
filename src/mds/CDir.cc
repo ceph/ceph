@@ -1108,7 +1108,7 @@ void CDir::assimilate_dirty_rstat_inodes()
     inode_t *pi = in->project_inode();
     pi->version = in->pre_dirty();
 
-    inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0);
+    inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0, NULL);
   }
   state_set(STATE_ASSIMRSTAT);
   dout(10) << "assimilate_dirty_rstat_inodes done" << dendl;
