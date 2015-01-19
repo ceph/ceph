@@ -822,6 +822,9 @@ struct pg_pool_t {
     FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
+    FLAG_NODELETE = 1<<4, // pool can't be deleted
+    FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
+    FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
   };
 
   static const char *get_flag_name(int f) {
@@ -830,6 +833,9 @@ struct pg_pool_t {
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
+    case FLAG_NODELETE: return "nodelete";
+    case FLAG_NOPGCHANGE: return "nopgchange";
+    case FLAG_NOSIZECHANGE: return "nosizechange";
     default: return "???";
     }
   }
@@ -846,6 +852,23 @@ struct pg_pool_t {
   }
   string get_flags_string() const {
     return get_flags_string(flags);
+  }
+  static uint64_t get_flag_by_name(const string& name) {
+    if (name == "hashpspool")
+      return FLAG_HASHPSPOOL;
+    if (name == "full")
+      return FLAG_FULL;
+    if (name == "require_local_rollback")
+      return FLAG_DEBUG_FAKE_EC_POOL;
+    if (name == "incomplete_clones")
+      return FLAG_INCOMPLETE_CLONES;
+    if (name == "nodelete")
+      return FLAG_NODELETE;
+    if (name == "nopgchange")
+      return FLAG_NOPGCHANGE;
+    if (name == "nosizechange")
+      return FLAG_NOSIZECHANGE;
+    return 0;
   }
 
   typedef enum {
@@ -1020,6 +1043,8 @@ public:
 
   uint64_t get_flags() const { return flags; }
   bool has_flag(uint64_t f) const { return flags & f; }
+  void set_flag(uint64_t f) { flags |= f; }
+  void unset_flag(uint64_t f) { flags &= ~f; }
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
