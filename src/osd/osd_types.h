@@ -2053,6 +2053,7 @@ struct pg_log_entry_t {
     LOST_MARK = 7,   // lost new version, now EIO
     PROMOTE = 8,     // promoted object from another tier
     CLEAN = 9,       // mark an object clean
+    TRUNCATE = 10,
   };
   static const char *get_op_name(int op) {
     switch (op) {
@@ -2074,6 +2075,8 @@ struct pg_log_entry_t {
       return "l_mark  ";
     case CLEAN:
       return "clean   ";
+	case TRUNCATE:
+	  return "truncate";
     default:
       return "unknown ";
     }
@@ -2094,12 +2097,17 @@ struct pg_log_entry_t {
 
   uint64_t offset;   // [soft state] my offset on disk
 
+  uint64_t truncate_offset; // only valid when op == modify, it is used to identify whether modification is a truncate op and where to truncate
+
+  /// describes the modified interval for a object
+  interval_set<uint64_t>  dirty_data_interval;
+
   /// describes state for a locally-rollbackable entry
   ObjectModDesc mod_desc;
-      
+
   pg_log_entry_t()
     : op(0), user_version(0),
-      invalid_hash(false), invalid_pool(false), offset(0) {}
+      invalid_hash(false), invalid_pool(false), offset(0) {dirty_data_interval.clear();}
   pg_log_entry_t(int _op, const hobject_t& _soid, 
 		 const eversion_t& v, const eversion_t& pv,
 		 version_t uv,
@@ -2107,8 +2115,17 @@ struct pg_log_entry_t {
     : op(_op), soid(_soid), version(v),
       prior_version(pv), user_version(uv),
       reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
-      offset(0) {}
-      
+      offset(0) {dirty_data_interval.clear();}
+
+  pg_log_entry_t(int _op, const hobject_t& _soid, 
+		 const eversion_t& v, const eversion_t& pv,
+		 version_t uv,
+		 const osd_reqid_t& rid, const utime_t& mt, interval_set<uint64_t> dty, const uint32_t& trff)
+    : op(_op), soid(_soid), version(v),
+      prior_version(pv), user_version(uv),
+      reqid(rid), mtime(mt), invalid_hash(false), invalid_pool(false),
+      offset(0), truncate_offset(trff) {dirty_data_interval.insert(dty);}
+
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
   bool is_promote() const { return op == PROMOTE; }
@@ -2117,18 +2134,19 @@ struct pg_log_entry_t {
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
+  bool is_truncate() const { return op == TRUNCATE; }
 
   bool is_update() const {
     return
       is_clone() || is_modify() || is_promote() || is_clean() ||
-      is_backlog() || is_lost_revert() || is_lost_mark();
+      is_backlog() || is_lost_revert() || is_lost_mark() || is_truncate();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
   }
       
   bool reqid_is_indexed() const {
-    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE);
+    return reqid != osd_reqid_t() && (op == MODIFY || op == DELETE || op == TRUNCATE);
   }
 
   string get_key_name() const;
@@ -2304,6 +2322,7 @@ struct pg_missing_t {
   WRITE_CLASS_ENCODER(item)
 
   map<hobject_t, item> missing;         // oid -> (need v, have v)
+  map<hobject_t, interval_set<uint64_t> > missing_range;
   map<version_t, hobject_t> rmissing;  // v -> oid
 
   unsigned int num_missing() const;
@@ -2324,6 +2343,7 @@ struct pg_missing_t {
 
   void clear() {
     missing.clear();
+	missing_range.clear();
     rmissing.clear();
   }
 

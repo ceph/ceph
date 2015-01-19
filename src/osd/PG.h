@@ -869,11 +869,21 @@ public:
     list<pg_log_entry_t> to_rollback;
     set<hobject_t> to_remove;
     list<pg_log_entry_t> to_trim;
+	  map<hobject_t, uint64_t> to_truncate;
     
     // LogEntryHandler
     void remove(const hobject_t &hoid) {
       to_remove.insert(hoid);
     }
+	  void truncate(const hobject_t &hoid, uint64_t offset) {
+	    map<hobject_t, uint64_t>::iterator it = to_truncate.find(hoid);
+	    if (it != to_truncate.end() ) {
+		  if (it->second > offset)
+		    it->second = offset;
+	    } else {
+	  	  to_truncate.insert(make_pair(hoid, offset));
+	    }
+	  }
     void rollback(const pg_log_entry_t &entry) {
       to_rollback.push_back(entry);
     }
@@ -896,6 +906,12 @@ public:
 	pg->get_pgbackend()->rollback_create(*i, t);
 	pg->remove_snap_mapped_object(*t, *i);
       }
+	  for (map<hobject_t, uint64_t>::iterator i = to_truncate.begin();
+	   i != to_truncate.end();
+	   ++i) {
+  pg->truncate_stale_object(*t, i->first, i->second);
+	// t->truncate(coll, ghobject_t(i->first, ghobject_t::NO_GEN, pg_whoami.shard), i->second);
+	   }
       for (list<pg_log_entry_t>::reverse_iterator i = to_trim.rbegin();
 	   i != to_trim.rend();
 	   ++i) {
@@ -915,6 +931,8 @@ public:
     ObjectStore::Transaction *t, const hobject_t &soid);
   void remove_snap_mapped_object(
     ObjectStore::Transaction& t, const hobject_t& soid);
+  void truncate_stale_object(
+    ObjectStore::Transaction& t, const hobject_t &soid, uint64_t offset);
   void merge_log(
     ObjectStore::Transaction& t, pg_info_t &oinfo,
     pg_log_t &olog, pg_shard_t from);

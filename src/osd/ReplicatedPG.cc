@@ -204,7 +204,7 @@ public:
 // ======================
 // PGBackend::Listener
 
-
+/*
 void ReplicatedPG::on_local_recover_start(
   const hobject_t &oid,
   ObjectStore::Transaction *t)
@@ -212,6 +212,16 @@ void ReplicatedPG::on_local_recover_start(
   pg_log.revise_have(oid, eversion_t());
   remove_snap_mapped_object(*t, oid);
 }
+*/
+
+void ReplicatedPG::on_local_recover_start(
+  const hobject_t &oid,
+  ObjectStore::Transaction *t)
+{
+  pg_log.revise_have(oid, eversion_t());
+  clear_object_snap_mapping(t, oid);
+}
+
 
 void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
@@ -4212,6 +4222,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    dout(10) << " truncate_seq " << op.extent.truncate_seq << " > current " << seq
 		     << ", truncating to " << op.extent.truncate_size << dendl;
 	    t->truncate(soid, op.extent.truncate_size);
+		ctx->has_truncate = true;
+		ctx->truncate_offset= op.extent.truncate_size;
 	    oi.truncate_seq = op.extent.truncate_seq;
 	    oi.truncate_size = op.extent.truncate_size;
 	    if (op.extent.truncate_size != oi.size) {
@@ -4291,6 +4303,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->mod_desc.mark_unrollbackable();
 	  if (obs.exists) {
 	    t->truncate(soid, 0);
+		ctx->truncate_offset = 0;
 	  }
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
@@ -4419,6 +4432,7 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	t->truncate(soid, op.extent.offset);
+	ctx->truncate_offset = op.extent.offset;
 	if (oi.size > op.extent.offset) {
 	  interval_set<uint64_t> trim;
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
@@ -5742,7 +5756,7 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     make_writeable(ctx);
 
   finish_ctx(ctx,
-	     ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
+	     ctx->new_obs.exists ? (ctx->has_truncate ? pg_log_entry_t::TRUNCATE : pg_log_entry_t::MODIFY) :
 	     pg_log_entry_t::DELETE);
 
   return result;
@@ -5892,7 +5906,7 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   ctx->log.push_back(pg_log_entry_t(log_op_type, soid, ctx->at_version,
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
-				    ctx->mtime));
+				    ctx->mtime, ctx->modified_ranges, ctx->truncate_offset));
   if (soid.snap < CEPH_NOSNAP) {
     set<snapid_t> _snaps(ctx->new_obs.oi.snaps.begin(),
 			 ctx->new_obs.oi.snaps.end());
@@ -8553,6 +8567,9 @@ void ReplicatedBackend::calc_head_subsets(
   uint64_t size = obc->obs.oi.size;
   if (size)
     data_subset.insert(0, size);
+  map<hobject_t, interval_set<uint64_t> >::const_iterator it = missing.missing_range.find(head);
+  assert(it != missing.missing_range.end());
+  data_subset.intersection_of(it->second);
 
   if (get_parent()->get_pool().allow_incomplete_clones()) {
     dout(10) << __func__ << ": caching (was) enabled, skipping clone subsets" << dendl;
@@ -8763,7 +8780,8 @@ void ReplicatedBackend::prepare_pull(
   } else {
     // pulling head or unversioned object.
     // always pull the whole thing.
-    recovery_info.copy_subset.insert(0, (uint64_t)-1);
+    assert(get_parent()->get_local_missing().missing_range.count(soid));
+    recovery_info.copy_subset.insert(get_parent()->get_local_missing().missing_range.find(soid)->second);
     recovery_info.size = ((uint64_t)-1);
   }
 
@@ -9035,6 +9053,7 @@ void ReplicatedBackend::submit_push_data(
   ObjectStore::Transaction *t)
 {
   coll_t target_coll;
+  
   if (first && complete) {
     target_coll = coll;
   } else {
@@ -9043,12 +9062,14 @@ void ReplicatedBackend::submit_push_data(
     add_temp_obj(recovery_info.soid);
     target_coll = get_temp_coll(t);
   }
-
+  
   if (first) {
     get_parent()->on_local_recover_start(recovery_info.soid, t);
     t->remove(get_temp_coll(t), recovery_info.soid);
+	  if (target_coll != coll)
+	    t->collection_move(target_coll, coll, recovery_info.soid);
     t->touch(target_coll, recovery_info.soid);
-    t->truncate(target_coll, recovery_info.soid, recovery_info.size);
+	  t->truncate(target_coll, recovery_info.soid, recovery_info.size);
     t->omap_setheader(target_coll, recovery_info.soid, omap_header);
   }
   uint64_t off = 0;
@@ -9145,8 +9166,9 @@ bool ReplicatedBackend::handle_pull_response(
   PullInfo &pi = pulling[hoid];
   if (pi.recovery_info.size == (uint64_t(-1))) {
     pi.recovery_info.size = pop.recovery_info.size;
-    pi.recovery_info.copy_subset.intersection_of(
-      pop.recovery_info.copy_subset);
+	assert(pi.recovery_info.copy_subset == pop.recovery_info.copy_subset);
+    //pi.recovery_info.copy_subset.intersection_of(
+    //  pop.recovery_info.copy_subset);
   }
 
   bool first = pi.recovery_progress.first;
@@ -9637,9 +9659,9 @@ void ReplicatedBackend::handle_pull(pg_shard_t peer, PullOp &op, PushOp *reply)
     if (progress.first && recovery_info.size == ((uint64_t)-1)) {
       // Adjust size and copy_subset
       recovery_info.size = st.st_size;
-      recovery_info.copy_subset.clear();
-      if (st.st_size)
-        recovery_info.copy_subset.insert(0, st.st_size);
+      // recovery_info.copy_subset.clear();
+      if (st.st_size && recovery_info.copy_subset.empty())
+	      recovery_info.copy_subset.insert(0, st.st_size);
       assert(recovery_info.clone_subset.empty());
     }
 

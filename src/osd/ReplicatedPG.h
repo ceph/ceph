@@ -255,6 +255,9 @@ public:
   void on_local_recover_start(
     const hobject_t &oid,
     ObjectStore::Transaction *t);
+  void on_local_recover_start_partial(
+    const hobject_t &oid,
+    ObjectStore::Transaction *t);
   void on_local_recover(
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff,
@@ -522,6 +525,8 @@ public:
     ObjectContextRef snapset_obc;  // if we created/deleted a snapdir
 
     int data_off;        // FIXME: we may want to kill this msgr hint off at some point!
+    bool has_truncate;   // whether modify op has truncation
+    uint64_t truncate_offset;  // truncate truncate offset if there is a truncation included 
 
     MOSDOpReply *reply;
 
@@ -595,9 +600,8 @@ public:
       ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
-      op_t(NULL),
-      obc(obc),
-      data_off(0), reply(NULL), pg(_pg),
+      op_t(NULL), obc(obc),
+      data_off(0), has_truncate(false), truncate_offset(0), reply(NULL), pg(_pg),
       num_read(0),
       num_write(0),
       copy_cb(NULL),

@@ -2774,7 +2774,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(9, 4, bl);
+  ENCODE_START(10, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -2797,13 +2797,15 @@ void pg_log_entry_t::encode(bufferlist &bl) const
     ::encode(prior_version, bl);
   ::encode(snaps, bl);
   ::encode(user_version, bl);
+  ::encode(truncate_offset, bl);
+  ::encode(dirty_data_interval, bl);
   ::encode(mod_desc, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -2845,7 +2847,15 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
   else
     user_version = version.version;
 
-  if (struct_v >= 9)
+  if (struct_v >= 9) {
+	::decode(truncate_offset, bl);
+	::decode(dirty_data_interval, bl);    
+  } else {
+	truncate_offset = 0;
+	dirty_data_interval.insert(0, (uint64_t)-1);
+  }
+  
+  if (struct_v >= 10)
     ::decode(mod_desc, bl);
   else
     mod_desc.mark_unrollbackable();
@@ -3052,6 +3062,7 @@ void pg_missing_t::encode(bufferlist &bl) const
 {
   ENCODE_START(3, 2, bl);
   ::encode(missing, bl);
+  ::encode(missing_range, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3059,6 +3070,7 @@ void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   ::decode(missing, bl);
+  ::decode(missing_range, bl);
   DECODE_FINISH(bl);
 
   if (struct_v < 3) {
@@ -3134,6 +3146,7 @@ bool pg_missing_t::have_missing() const
 void pg_missing_t::swap(pg_missing_t& o)
 {
   missing.swap(o.missing);
+  missing_range.swap(o.missing_range);
   rmissing.swap(o.rmissing);
 }
 
@@ -3175,6 +3188,7 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
       if (missing.count(e.soid))  // already missing divergent item
 	rmissing.erase(missing[e.soid].need.version);
       missing[e.soid] = item(e.version, eversion_t());  // .have = nil
+      missing_range[e.soid].clear();
     } else if (missing.count(e.soid)) {
       // already missing (prior).
       //assert(missing[e.soid].need == e.prior_version);
@@ -3186,7 +3200,9 @@ void pg_missing_t::add_next_event(const pg_log_entry_t& e)
     } else {
       // not missing, we must have prior_version (if any)
       missing[e.soid] = item(e.version, e.prior_version);
+	  assert(missing_range[e.soid].empty());
     }
+	missing_range[e.soid].union_of(e.dirty_data_interval);
     rmissing[e.version.version] = e.soid;
   } else
     rm(e.soid, e.version);
@@ -3213,6 +3229,8 @@ void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
 void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
 {
   missing[oid] = item(need, have);
+  missing_range[oid].clear();
+  missing_range[oid].insert(0, (uint64_t) - 1);
   rmissing[need.version] = oid;
 }
 
@@ -3226,6 +3244,7 @@ void pg_missing_t::rm(const hobject_t& oid, eversion_t v)
 void pg_missing_t::rm(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
+  missing_range.erase(m->first);
   missing.erase(m);
 }
 
@@ -3233,13 +3252,14 @@ void pg_missing_t::got(const hobject_t& oid, eversion_t v)
 {
   std::map<hobject_t, pg_missing_t::item>::iterator p = missing.find(oid);
   assert(p != missing.end());
-  assert(p->second.need <= v);
+  assert(p->second.need <= v);  
   got(p);
 }
 
 void pg_missing_t::got(const std::map<hobject_t, pg_missing_t::item>::iterator &m)
 {
   rmissing.erase(m->second.need.version);
+  missing_range.erase(m->first);
   missing.erase(m);
 }
 

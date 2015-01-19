@@ -350,6 +350,15 @@ void PG::remove_snap_mapped_object(
   clear_object_snap_mapping(&t, soid);
 }
 
+void PG::truncate_stale_object(
+  ObjectStore::Transaction &t, const hobject_t &soid, uint64_t offset)
+{
+  t.truncate(
+    coll,
+    ghobject_t(soid, ghobject_t::NO_GEN, pg_whoami.shard),
+    offset);
+}
+
 void PG::clear_object_snap_mapping(
   ObjectStore::Transaction *t, const hobject_t &soid)
 {
