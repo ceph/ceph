@@ -84,6 +84,18 @@ enum {
   l_mdc_strays_created,
   // How many dentries have ever finished purging from stray dir
   l_mdc_strays_purged,
+
+  // How many inode sizes currently being recovered
+  l_mdc_num_recovering_processing,
+  // How many inodes currently waiting to have size recovered
+  l_mdc_num_recovering_enqueued,
+  // How many inodes waiting with elevated priority for recovery
+  l_mdc_num_recovering_prioritized,
+  // How many inodes ever started size recovery
+  l_mdc_recovery_started,
+  // How many inodes ever completed size recovery
+  l_mdc_recovery_completed,
+
   l_mdc_last,
 };
 
