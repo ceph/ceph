@@ -120,4 +120,14 @@ void EventOutput::summary() const
   for (std::map<std::string, int>::iterator i = type_count.begin(); i != type_count.end(); ++i) {
       std::cout << "  " << i->first << ": " << i->second << std::endl;
   }
+
+  std::cout << "Errors: " << scan.errors.size() << std::endl;
+  if (scan.errors.size()) {
+    for (JournalScanner::ErrorMap::const_iterator i = scan.errors.begin();
+         i != scan.errors.end(); ++i) {
+      std::cout << "  0x" << std::hex << i->first << std::dec
+                << ": " << i->second.r << " "
+                << i->second.description << std::endl;
+    }
+  }
 }
