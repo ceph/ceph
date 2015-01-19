@@ -72,6 +72,21 @@ struct MDRequestImpl;
 typedef ceph::shared_ptr<MDRequestImpl> MDRequestRef;
 struct MDSlaveUpdate;
 
+enum {
+  l_mdc_first = 3000,
+  // How many dentries are currently in stray dirs
+  l_mdc_num_strays,
+  // How many stray dentries are currently being purged
+  l_mdc_num_strays_purging,
+  // How many stray dentries are currently delayed for purge due to refs
+  l_mdc_num_strays_delayed,
+  // How many dentries have ever been added to stray dir
+  l_mdc_strays_created,
+  // How many dentries have ever finished purging from stray dir
+  l_mdc_strays_purged,
+  l_mdc_last,
+};
+
 
 // flags for predirty_journal_parents()
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
@@ -102,6 +117,8 @@ class MDCache {
 
   set<CInode*> base_inodes;
 
+  PerfCounters *logger;
+
 public:
   void advance_stray() {
     stray_index = (stray_index+1)%NUM_STRAY;
@@ -114,10 +131,16 @@ public:
   int num_inodes_with_caps;
   int num_caps;
 
+  uint64_t num_strays;
+  uint64_t num_strays_purging;
+  uint64_t num_strays_delayed;
+
   unsigned max_dir_commit_size;
 
   ceph_file_layout default_file_layout;
   ceph_file_layout default_log_layout;
+
+  void register_perfcounters();
 
   // -- client leases --
 public:
