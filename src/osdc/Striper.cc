@@ -359,3 +359,38 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct, bufferlist& b
   partial.clear();
 }
 
+void Striper::StripedReadResult::assemble_result(CephContext *cct, char *buffer, size_t length)
+{
+
+  assert(buffer && length == total_intended_len);
+
+  map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p = partial.rbegin();
+  if (p == partial.rend())
+    return;
+
+  uint64_t curr = length;
+  uint64_t end = p->first + p->second.second;
+  while (p != partial.rend()) {
+    // sanity check
+    ldout(cct, 0) << "assemble_result(" << this << ") " << p->first << "~" << p->second.second
+		   << " " << p->second.first.length() << " bytes"
+		   << dendl;
+    assert(p->first == end - p->second.second);
+    end = p->first;
+
+    size_t len = p->second.first.length();
+    assert(curr >= p->second.second);
+    curr -= p->second.second;
+    if (len < p->second.second) {
+      if (len)
+	p->second.first.copy(0, len, buffer + curr);
+      memset(buffer + curr + len, 0, p->second.second - len);
+    } else {
+      p->second.first.copy(0, len, buffer + curr);
+    }
+    ++p;
+  }
+  partial.clear();
+  assert(curr == 0);
+}
+

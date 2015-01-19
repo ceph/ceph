@@ -92,6 +92,12 @@ class CephContext;
 				     const vector<pair<uint64_t,uint64_t> >& buffer_extents);
 
       void assemble_result(CephContext *cct, bufferlist& bl, bool zero_tail);
+
+      /**
+       * @buffer copy read data into buffer
+       * @len the length of buffer
+       */
+      void assemble_result(CephContext *cct, char *buffer, size_t len);
     };
 
   };
