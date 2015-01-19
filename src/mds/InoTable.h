@@ -67,6 +67,22 @@ class InoTable : public MDSTable {
   static void generate_test_instances(list<InoTable*>& ls);
 
   void skip_inos(inodeno_t i);
+
+  /**
+   * If the specified inode is marked as free, mark it as used.
+   * For use in tools, not normal operations.
+   *
+   * @returns true if the inode was previously marked as free
+   */
+  bool force_consume(inodeno_t ino)
+  {
+    if (free.contains(ino)) {
+      free.erase(ino);
+      return true;
+    } else {
+      return false;
+    }
+  }
 };
 
 #endif
