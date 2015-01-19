@@ -710,9 +710,6 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
       }
     }
 
-    ls.splice(ls.end(), waitfor_read);
-    waitfor_read.clear();
-
     // apply to bh's!
     loff_t opos = start;
     while (true) {
@@ -766,6 +763,9 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 
       loff_t oldpos = opos;
       opos = bh->end();
+
+      ls.splice(ls.end(), waitfor_read);
+      waitfor_read.clear();
 
       if (r == -ENOENT) {
 	if (trust_enoent) {
