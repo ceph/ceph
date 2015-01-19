@@ -244,6 +244,10 @@ int FileStore::lfn_open(coll_t cid,
   }
   if (!((*index).index)) {
     r = get_index(cid, index);
+    if (r < 0) {
+      dout(10) << __func__ << " could not get index r = " << r << dendl;
+      return r;
+    }
   } else {
     need_lock = false;
   }
