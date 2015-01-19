@@ -18,7 +18,7 @@ runs the dumpling-x facet of the upgrade suite.
 
 Miscellaneous arguments:
   -h, --help                  Show this help message and exit
-  -v, --verbose               Be more verbose
+  -v, --verbose               Be more verbose [default: True]
   --dry-run                   Do a dry run; do not schedule anything
 
 Standard arguments:
