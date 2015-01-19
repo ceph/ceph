@@ -1258,6 +1258,11 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
     return 0;
   int64_t min = -1;
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
+    if (pg_map.osd_stat[p->first].kb == 0) {
+      // osd must be out, hence its stats have been zeroed
+      // (unless we somehow managed to have a disk with size 0...)
+      continue;
+    }
     int64_t proj = (float)(pg_map.osd_stat[p->first].kb_avail * 1024ull) /
       (double)p->second;
     if (min < 0 || proj < min)
