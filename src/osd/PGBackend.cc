@@ -624,15 +624,20 @@ void PGBackend::be_compare_scrubmaps(
     if (okseed &&
 	auth_object.digest_present && auth_object.omap_digest_present &&
 	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
-      utime_t age = now - auth_oi.local_mtime;
-      if (age > g_conf->osd_deep_scrub_update_digest_min_age) {
-	dout(20) << __func__ << " noting missing digest on " << *k << dendl;
-	missing_digest[*k] = make_pair(auth_object.digest,
-				       auth_object.omap_digest);
+      if (!cur_inconsistent.empty() || !cur_missing.empty()) {
+	dout(20) << __func__ << " not updating oi digest on "
+		 << *k << " since it is inconsistent" << dendl;
       } else {
-	dout(20) << __func__ << " missing digest but age " << age
-		 << " < " << g_conf->osd_deep_scrub_update_digest_min_age
-		 << " on " << *k << dendl;
+	utime_t age = now - auth_oi.local_mtime;
+	if (age > g_conf->osd_deep_scrub_update_digest_min_age) {
+	  dout(20) << __func__ << " noting missing digest on " << *k << dendl;
+	  missing_digest[*k] = make_pair(auth_object.digest,
+					 auth_object.omap_digest);
+	} else {
+	  dout(20) << __func__ << " missing digest but age " << age
+		   << " < " << g_conf->osd_deep_scrub_update_digest_min_age
+		   << " on " << *k << dendl;
+	}
       }
     }
   }
