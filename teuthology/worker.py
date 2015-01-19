@@ -145,7 +145,8 @@ def main(ctx):
             args = [
                 os.path.join(teuth_bin_path, 'teuthology-results'),
                 '--timeout',
-                str(job_config.get('results_timeout', 32400)),
+                str(job_config.get('results_timeout',
+                                   teuth_config.results_timeout)),
                 '--email',
                 job_config['email'],
                 '--archive-dir',

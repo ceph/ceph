@@ -134,6 +134,7 @@ class TeuthologyConfig(YamlConfig):
         'max_job_time': 259200,  # 3 days
         'results_server': 'http://paddles.front.sepia.ceph.com/',
         'results_sending_email': 'teuthology',
+        'results_timeout': 43200,
         'src_base_path': os.path.expanduser('~/src'),
         'verify_host_keys': True,
         'watchdog_interval': 120,

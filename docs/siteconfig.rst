@@ -40,6 +40,10 @@ Here is a sample configuration with many of the options set and documented::
     # Email address that job results summaries originate from
     results_sending_email: teuthology@example.com
 
+    # How long (in seconds) teuthology-results should wait for jobs to finish
+    # before considering them 'hung'
+    results_timeout: 43200
+
     # Gitbuilder archive that stores e.g. ceph packages
     gitbuilder_host: gitbuilder.example.com
 
