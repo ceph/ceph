@@ -1420,7 +1420,9 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("allowed_bucket_algs", get_allowed_bucket_algs());
 
   // be helpful about it
-  if (has_firefly_tunables())
+  if (has_hammer_tunables())
+    f->dump_string("profile", "hammer");
+  else if (has_firefly_tunables())
     f->dump_string("profile", "firefly");
   else if (has_bobtail_tunables())
     f->dump_string("profile", "bobtail");
