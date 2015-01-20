@@ -1,7 +1,9 @@
 -------------------------------------------------------------------
-Tue Jan 20 14:22:32 UTC 2015 - osynge@suse.com
+Tue Jan 20 18:22:32 UTC 2015 - osynge@suse.com
 
 - Fix postinstall hooks with systemd
+  * Added systemd-tmpfiles --create /%{_tmpfilesdir}/ceph[-radosgw].conf
+    hook to make tmp file on instalation.
 
 -------------------------------------------------------------------
 Tue Jan 20 11:20:09 UTC 2015 - tbehrens@suse.com

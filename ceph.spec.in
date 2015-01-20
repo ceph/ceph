@@ -490,6 +490,7 @@ SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %post
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1210
+systemd-tmpfiles --create /%{_tmpfilesdir}/%{name}.conf
 SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %service_add_post $SERVICES
 %endif
@@ -708,6 +709,7 @@ SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 /sbin/ldconfig
 %if %{defined suse_version}
 %if 0%{?suse_version} >= 1210
+systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-radosgw.conf
 SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %service_add_post $SERVICES
 %else
