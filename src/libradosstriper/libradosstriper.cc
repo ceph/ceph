@@ -395,7 +395,7 @@ extern "C" int rados_striper_read(rados_striper_t striper,
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
-    if (bl.c_str() != buf)
+    if (!bl.is_provided_buffer(buf))
       bl.copy(0, bl.length(), buf);
     ret = bl.length();    // hrm :/
   }
