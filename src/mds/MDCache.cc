@@ -1485,6 +1485,9 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   oldin->inode.trim_client_ranges(last);
 
+  if (in->first < in->oldest_snap)
+    in->oldest_snap = in->first;
+
   in->first = last+1;
 
   dout(10) << "cow_inode " << *in << " to " << *oldin << dendl;
@@ -1549,7 +1552,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     dnl = dn->get_projected_linkage();
   assert(!dnl->is_null());
 
-  if (dnl->is_primary()) {
+  if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
     // multiversion inode.
     CInode *in = dnl->get_inode();
 
