@@ -3812,7 +3812,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
           results->raw_rstats.error_str << "dirfrag is INCOMPLETE despite fetching; probably too large compared to MDS cache size?\n";
           return true;
         }
-        assert(p->second->check_rstats());
+        assert(p->second->scrub_local());
         sub_info.add(p->second->fnode.accounted_rstat);
       }
       // ...and that their sum matches our inode settings
