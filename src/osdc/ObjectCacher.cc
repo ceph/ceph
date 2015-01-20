@@ -510,7 +510,7 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb,
     last_read_tid(0),
     flusher_stop(false), flusher_thread(this), finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0), stat_missing(0),
-    stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
+    stat_error(0), stat_dirty_waiting(0), stat_total_commit(0), reads_outstanding(0)
 {
   this->max_dirty_age.set_from_double(max_dirty_age);
   perf_start();
@@ -890,6 +890,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       if (r >= 0) {
 	// ok!  mark bh clean and error-free
 	mark_clean(bh);
+	stat_total_commit += bh->length();
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
 	mark_dirty(bh);
@@ -1371,6 +1372,7 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
   //  - do not wait for bytes other waiters are waiting on.  this means that
   //    threads do not wait for each other.  this effectively allows the cache
   //    size to balloon proportional to the data that is in flight.
+  int64_t total_commit = get_stat_total_commit();
   while (get_stat_dirty() + get_stat_tx() > 0 &&
 	 (uint64_t) (get_stat_dirty() + get_stat_tx()) >=
 	 max_dirty + get_stat_dirty_waiting()) {
@@ -1384,6 +1386,10 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
     stat_dirty_waiting -= len;
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
+    // avoid livelock if dirty data were added continuously
+    if ((uint64_t)(get_stat_total_commit() - total_commit) >=
+	get_stat_dirty_waiting() + len)
+      break;
   }
   if (blocked && perfcounter) {
     perfcounter->inc(l_objectcacher_write_ops_blocked);
