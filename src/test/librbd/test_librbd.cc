@@ -1464,14 +1464,14 @@ TEST_F(TestLibRBD, TestCoR)
 
   // find out what objects the parent image has generated
   ASSERT_EQ(0, rbd_stat(parent, &p_info, sizeof(p_info)));
-  ASSERT_EQ(0, rados_objects_list_open(ioctx, &list_ctx));
-  while (rados_objects_list_next(list_ctx, &entry, NULL) != -ENOENT) {
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
     if (strstr(entry, p_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(p_info.block_name_prefix) + 1;
       obj_checker.insert(block_name_suffix);
     }
   }
-  rados_objects_list_close(list_ctx);
+  rados_nobjects_list_close(list_ctx);
   ASSERT_EQ(obj_checker.size(), write_tracker.size());
 
   // create a snapshot, reopen as the parent we're interested in and protect it
@@ -1514,8 +1514,8 @@ TEST_F(TestLibRBD, TestCoR)
   printf("check whether child image has the same set of objects as parent\n");
   ASSERT_EQ(0, rbd_open(ioctx, "child", &child, NULL));
   ASSERT_EQ(0, rbd_stat(child, &c_info, sizeof(c_info)));
-  ASSERT_EQ(0, rados_objects_list_open(ioctx, &list_ctx));
-  while (rados_objects_list_next(list_ctx, &entry, NULL) != -ENOENT) {
+  ASSERT_EQ(0, rados_nobjects_list_open(ioctx, &list_ctx));
+  while (rados_nobjects_list_next(list_ctx, &entry, NULL, NULL) != -ENOENT) {
     if (strstr(entry, c_info.block_name_prefix)) {
       const char *block_name_suffix = entry + strlen(c_info.block_name_prefix) + 1;
       set<string>::iterator it = obj_checker.find(block_name_suffix);
@@ -1523,7 +1523,7 @@ TEST_F(TestLibRBD, TestCoR)
       obj_checker.erase(it);
     }
   }
-  rados_objects_list_close(list_ctx);
+  rados_nobjects_list_close(list_ctx);
   ASSERT_TRUE(obj_checker.empty());
   ASSERT_EQ(0, rbd_close(child));
 
