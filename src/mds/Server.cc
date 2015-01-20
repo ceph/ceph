@@ -45,8 +45,6 @@
 
 #include "messages/MLock.h"
 
-#include "messages/MDentryUnlink.h"
-
 #include "events/EUpdate.h"
 #include "events/ESlaveUpdate.h"
 #include "events/ESession.h"
