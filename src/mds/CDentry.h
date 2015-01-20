@@ -152,6 +152,7 @@ protected:
   friend class Migrator;
   friend class Locker;
   friend class MDCache;
+  friend class StrayManager;
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
