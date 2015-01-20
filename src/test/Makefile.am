@@ -32,6 +32,11 @@ ceph_test_async_driver_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 ceph_test_async_driver_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph_test_async_driver
 
+ceph_test_msgr_SOURCES = test/msgr/test_msgr.cc
+ceph_test_msgr_LDADD = $(LIBOS) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+ceph_test_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+bin_DEBUGPROGRAMS += ceph_test_msgr
+
 ceph_streamtest_SOURCES = test/streamtest.cc
 ceph_streamtest_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 bin_DEBUGPROGRAMS += ceph_streamtest
@@ -655,13 +660,6 @@ unittest_readahead_SOURCES = test/common/Readahead.cc
 unittest_readahead_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 unittest_readahead_CXXFLAGS = $(UNITTEST_CXXFLAGS) -O2
 check_PROGRAMS += unittest_readahead
-
-unittest_msgr_SOURCES = test/msgr/test_msgr.cc
-unittest_msgr_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-unittest_msgr_CXXFLAGS = $(UNITTEST_CXXFLAGS)
-# restore once http://tracker.ceph.com/issues/10494 is fixed
-#check_PROGRAMS += unittest_msgr
-bin_DEBUGPROGRAMS += unittest_msgr
 
 unittest_tableformatter_SOURCES = test/common/test_tableformatter.cc
 unittest_tableformatter_CXXFLAGS = $(UNITTEST_CXXFLAGS)
