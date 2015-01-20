@@ -79,6 +79,9 @@ public:
   std::map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
                                            // rehydrate it without full MDCache
+  snapid_t                  oldest_snap;
+
+  InodeStore() : oldest_snap(CEPH_NOSNAP) { }
 
   /* Helpers */
   bool is_file() const    { return inode.is_file(); }

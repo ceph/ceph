@@ -397,7 +397,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
-  ENCODE_START(7, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(dn, bl);
   ::encode(dnfirst, bl);
   ::encode(dnlast, bl);
@@ -419,6 +419,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl) const {
   }
   if (!inode.is_dir())
     ::encode(snapbl, bl);
+  ::encode(oldest_snap, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -464,6 +465,11 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
     if (struct_v >= 7)
       ::decode(snapbl, bl);
   }
+  if (struct_v >= 8)
+    ::decode(oldest_snap, bl);
+  else
+    oldest_snap = CEPH_NOSNAP;
+
   DECODE_FINISH(bl);
 }
 
@@ -516,7 +522,7 @@ void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
   map<string,bufferptr> empty_xattrs;
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
-                                inode, fragtree, empty_xattrs, "", empty_snapbl,
+                                inode, fragtree, empty_xattrs, "", 0, empty_snapbl,
                                 false, NULL);
   ls.push_back(sample);
 }
@@ -553,6 +559,7 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
    * be a no-op.. we have no children (namely open snaprealms) to
    * divy up
    */
+  in->oldest_snap = oldest_snap;
   in->decode_snap_blob(snapbl);
 }
 
