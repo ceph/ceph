@@ -1,0 +1,8 @@
+roles:
+- [mon.0, osd.0, osd.1, client.0]
+tasks:
+- install:
+- exec:
+    client.0:
+          - ceph_test_async_driver
+          - ceph_test_msgr
