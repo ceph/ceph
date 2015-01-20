@@ -1129,6 +1129,12 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     return true;
   }
 
+  bool buffer::list::is_provided_buffer(const char *dst) const
+  {
+    assert(!_buffers.empty());
+    return (is_contiguous() && (_buffers.front().c_str() == dst));
+  }
+
   bool buffer::list::is_aligned(unsigned align) const
   {
     for (std::list<ptr>::const_iterator it = _buffers.begin();
@@ -1158,6 +1164,11 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
       }
     }
     return true;
+  }
+
+  bool buffer::list::is_contiguous() const
+  {
+    return &(*_buffers.begin()) == &(*_buffers.rbegin());
   }
 
   void buffer::list::zero()
@@ -1200,11 +1211,6 @@ static simple_spinlock_t buffer_debug_lock = SIMPLE_SPINLOCK_INITIALIZER;
     }
   }
   
-  bool buffer::list::is_contiguous()
-  {
-    return &(*_buffers.begin()) == &(*_buffers.rbegin());
-  }
-
   bool buffer::list::is_n_page_sized() const
   {
     return is_n_align_sized(CEPH_PAGE_SIZE);
