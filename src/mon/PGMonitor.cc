@@ -1269,7 +1269,10 @@ void PGMonitor::dump_object_stat_sum(TextTable &tbl, Formatter *f,
   } else {
     tbl << stringify(si_t(sum.num_bytes));
     int64_t kb_used = SHIFT_ROUND_UP(sum.num_bytes, 10);
-    tbl << percentify(((float)kb_used / pg_map.osd_sum.kb)*100);
+    float used = 0.0;
+    if (pg_map.osd_sum.kb > 0)
+      used = (float)kb_used / pg_map.osd_sum.kb;
+    tbl << percentify(used*100);
     tbl << si_t(avail);
     tbl << sum.num_objects;
     if (verbose) {
@@ -1292,6 +1295,11 @@ int64_t PGMonitor::get_rule_avail(OSDMap& osdmap, int ruleno)
   for (map<int,float>::iterator p = wm.begin(); p != wm.end(); ++p) {
     ceph::unordered_map<int32_t,osd_stat_t>::const_iterator osd_info = pg_map.osd_stat.find(p->first);
     if (osd_info != pg_map.osd_stat.end()) {
+      if (osd_info->second.kb == 0) {
+        // osd must be out, hence its stats have been zeroed
+        // (unless we somehow managed to have a disk with size 0...)
+        continue;
+      }
       int64_t proj = (float)((osd_info->second).kb_avail * 1024ull) /
         (double)p->second;
       if (min < 0 || proj < min)
@@ -1339,9 +1347,11 @@ void PGMonitor::dump_pool_stats(stringstream &ss, Formatter *f, bool verbose)
     int ruleno = osdmap.crush->find_rule(pool->get_crush_ruleset(),
 					 pool->get_type(),
 					 pool->get_size());
-    uint64_t avail;
+    int64_t avail;
     if (avail_by_rule.count(ruleno) == 0) {
       avail = get_rule_avail(osdmap, ruleno);
+      if (avail < 0)
+        avail = 0;
       avail_by_rule[ruleno] = avail;
     } else {
       avail = avail_by_rule[ruleno];
@@ -1419,7 +1429,11 @@ void PGMonitor::dump_fs_stats(stringstream &ss, Formatter *f, bool verbose)
     tbl << stringify(si_t(pg_map.osd_sum.kb*1024))
         << stringify(si_t(pg_map.osd_sum.kb_avail*1024))
         << stringify(si_t(pg_map.osd_sum.kb_used*1024));
-    tbl << percentify(((float)pg_map.osd_sum.kb_used / pg_map.osd_sum.kb)*100);
+    float used = 0.0;
+    if (pg_map.osd_sum.kb > 0) {
+      used = ((float)pg_map.osd_sum.kb_used / pg_map.osd_sum.kb);
+    }
+    tbl << percentify(used*100);
     if (verbose) {
       tbl << stringify(si_t(pg_map.pg_sum.stats.sum.num_objects));
     }
