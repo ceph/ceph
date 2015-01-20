@@ -11,8 +11,8 @@ configuration using command-line utilities.
 
 When Ceph starts, it activates three daemons:
 
-- ``ceph-osd`` (mandatory)
 - ``ceph-mon`` (mandatory)
+- ``ceph-osd`` (mandatory)
 - ``ceph-mds`` (mandatory for cephfs only)
 
 Each process, daemon or utility loads the host's configuration file. A process
