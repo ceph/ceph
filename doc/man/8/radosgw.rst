@@ -67,7 +67,7 @@ Options
 Configuration
 =============
 
-Earlier RADOS Gateway had to configured with ``Apache`` and ``mod_fastcgi``.
+Earlier RADOS Gateway had to be configured with ``Apache`` and ``mod_fastcgi``.
 Now, ``mod_proxy_fcgi`` module is used instead of ``mod_fastcgi`` as the later
 doesn't come under a free license. ``mod_proxy_fcgi`` works differently than a
 traditional FastCGI module. This module requires the service of ``mod_proxy``
@@ -96,46 +96,90 @@ Apache 2.4, needs to be configured for use with localhost tcp.
 		rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
 
 #. Modify Apache's configuration file so that ``mod_proxy_fcgi`` can be used
-   with localhost tcp. ::
+   with localhost tcp.
 
-	<VirtualHost *:80>
-	ServerName localhost
-	DocumentRoot /var/www/html
+   Debian/Ubuntu::
 
-	ErrorLog ${APACHE_LOG_DIR}/error.log
-	CustomLog ${APACHE_LOG_DIR}/access.log combined
+		<VirtualHost *:80>
+		ServerName localhost
+		DocumentRoot /var/www/html
 
-	LogLevel debug
+		ErrorLog /var/log/apache2/error.log
+		CustomLog /var/log/apache2/access.log combined
+
+		LogLevel debug
 
 
-	RewriteEngine On
+		RewriteEngine On
 
-	RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
 
-	SetEnv proxy-nokeepalive 1
+		SetEnv proxy-nokeepalive 1
 
-	ProxyPass / fcgi://127.0.01:9000/
-	</VirtualHost>
+		ProxyPass / fcgi://127.0.01:9000/
+		</VirtualHost>
+
+   CentOS/RHEL::
+
+		<VirtualHost *:80>
+		ServerName localhost
+		DocumentRoot /var/www/html
+
+		ErrorLog /var/log/httpd/error.log
+		CustomLog /var/log/httpd/access.log combined
+
+		LogLevel debug
+
+
+		RewriteEngine On
+
+		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+		SetEnv proxy-nokeepalive 1
+
+		ProxyPass / fcgi://127.0.01:9000/
+		</VirtualHost>
 
 #. Modify Apache's configuration file so that ``mod_proxy_fcgi`` can be used
-   through unix domain socket. ::
+   through unix domain socket.
 
-	<VirtualHost *:80>
-	ServerName localhost
-	DocumentRoot /var/www/html
+   Debian/Ubuntu::
 
-	ErrorLog ${APACHE_LOG_DIR}/error.log
-	CustomLog ${APACHE_LOG_DIR}/access.log combined
+		<VirtualHost *:80>
+		ServerName localhost
+		DocumentRoot /var/www/html
 
-	LogLevel debug
+		ErrorLog /var/log/apache2/error.log
+		CustomLog /var/log/apache2/access.log combined
+
+		LogLevel debug
 
 
-	RewriteEngine On
+		RewriteEngine On
 
-	RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
 
-	ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
-	</VirtualHost>
+		ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+		</VirtualHost>
+
+   CentOS/RHEL::
+
+		<VirtualHost *:80>
+		ServerName localhost
+		DocumentRoot /var/www/html
+
+		ErrorLog /var/log/httpd/error.log
+		CustomLog /var/log/httpd/access.log combined
+
+		LogLevel debug
+
+
+		RewriteEngine On
+
+		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+		ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+		</VirtualHost>
 
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 
@@ -146,10 +190,17 @@ Apache 2.4, needs to be configured for use with localhost tcp.
 
 	ceph auth add client.radosgw.gateway --in-file=keyring.radosgw.gateway
 
-#. Start Apache and radosgw. ::
+#. Start Apache and radosgw.
 
-	/etc/init.d/apache2 start
-	/etc/init.d/radosgw start
+   Debian/Ubuntu::
+
+		sudo /etc/init.d/apache2 start
+		sudo /etc/init.d/radosgw start
+
+   CentOS/RHEL::
+
+		sudo apachectl start
+		sudo /etc/init.d/ceph-radosgw start
 
 Usage Logging
 =============
