@@ -2541,9 +2541,16 @@ void RGWPutCORS::execute()
 
   RGWObjVersionTracker *ptracker = (!s->object.empty() ? NULL : &s->bucket_info.objv_tracker);
 
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_atomic(s->obj_ctx, obj);
-  ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl, ptracker);
+  bool is_object_op = (!s->object.empty());
+  if (is_object_op) {
+    store->get_bucket_instance_obj(s->bucket, obj);
+    store->set_atomic(s->obj_ctx, obj);
+    ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl, ptracker);
+  } else {
+    map<string, bufferlist> attrs;
+    attrs[RGW_ATTR_CORS] = cors_bl;
+    ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, NULL, ptracker);
+  }
 }
 
 int RGWDeleteCORS::verify_permission()
