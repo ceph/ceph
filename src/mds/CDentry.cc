@@ -622,3 +622,47 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
   }
 }
 
+void CDentry::scrub_initialize(CDir *parent, bool recurse, bool children,
+                               Context *f)
+{
+  if (!scrub_infop)
+    scrub_info_create();
+  else
+    assert(!scrub_infop->dentry_scrubbing);
+
+  scrub_infop->scrub_parent = parent;
+  scrub_infop->scrub_recursive = recurse;
+  scrub_infop->scrub_children = children;
+  scrub_infop->dentry_scrubbing = true;
+  scrub_infop->on_finish = f;
+
+  auth_pin(this);
+}
+
+void CDentry::scrub_finished(Context **c)
+{
+  dout(10) << __func__ << dendl;
+  assert(scrub_info()->dentry_scrubbing);
+
+  if (scrub_infop->scrub_parent) {
+    scrub_infop->scrub_parent->scrub_dentry_finished(this);
+  }
+
+  *c = scrub_infop->on_finish;
+
+  delete scrub_infop;
+  scrub_infop = NULL;
+
+  auth_unpin(this);
+}
+
+void CDentry::scrub_info_create() const
+{
+  assert(!scrub_infop);
+
+  // break out of const-land to set up implicit initial state
+  CDentry *me = const_cast<CDentry*>(this);
+
+  // we don't need to change or set up any default parameters; assign directly
+  me->scrub_infop = new scrub_info_t();
+}
