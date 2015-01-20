@@ -5348,8 +5348,11 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
   // clean up?
-  if (straydn)
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    // Tip off the MDCache that this dentry is a stray that
+    // might be elegible for purge.
+    mdcache->notify_stray(straydn);
+  }
 }
 
 bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, CDentry *dn, CDentry *straydn)
@@ -6183,8 +6186,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     mds->locker->eval(in, CEPH_CAP_LOCKS, true);
 
   // clean up?
-  if (straydn) 
-    mdcache->eval_stray(straydn);
+  if (straydn) {
+    mdcache->notify_stray(straydn);
+  }
 }
 
 
@@ -6692,6 +6696,20 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
     } else {
       // FIXME: fix up snaprealm!
     }
+  }
+
+  if (srcdn->get_dir()->inode->is_stray() &&
+      srcdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A reintegration event or a migration away from me
+    dout(20) << __func__ << ": src dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_removed();
+  }
+
+  if (destdn->get_dir()->inode->is_stray() &&
+      destdn->get_dir()->inode->get_stray_owner() == mds->whoami) {
+    // A stray migration (to me)
+    dout(20) << __func__ << ": dst dentry was a stray, updating stats" << dendl;
+    mdcache->notify_stray_created();
   }
 
   // src
