@@ -545,7 +545,7 @@ SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %preun
 %if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
-%service_add_preun $SERVICES
+%service_del_preun $SERVICES
 %else
 %stop_on_removal ceph
 if [ $1 = 0 ] ; then
@@ -767,7 +767,7 @@ SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %if %{defined suse_version}
 %if 0%{?suse_version} >= 1210
 SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
-%service_add_preun $SERVICES
+%service_del_preun $SERVICES
 %else
 %stop_on_removal ceph-radosgw
 %endif

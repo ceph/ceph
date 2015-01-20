@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Tue Jan 20 14:22:32 UTC 2015 - osynge@suse.com
+
+- Fix postinstall hooks with systemd
+
+-------------------------------------------------------------------
 Tue Jan 20 11:20:09 UTC 2015 - tbehrens@suse.com
 
 - Add rgw-swift-GET-HEAD-object-returns-X.patch: fixes bnc#891306
