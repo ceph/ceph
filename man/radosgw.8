@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RADOSGW" "8" "January 15, 2015" "dev" "Ceph"
+.TH "RADOSGW" "8" "January 20, 2015" "dev" "Ceph"
 .SH NAME
 radosgw \- rados REST gateway
 .
@@ -122,7 +122,7 @@ The zone where radosgw runs
 .UNINDENT
 .SH CONFIGURATION
 .sp
-Earlier RADOS Gateway had to configured with \fBApache\fP and \fBmod_fastcgi\fP\&.
+Earlier RADOS Gateway had to be configured with \fBApache\fP and \fBmod_fastcgi\fP\&.
 Now, \fBmod_proxy_fcgi\fP module is used instead of \fBmod_fastcgi\fP as the later
 doesn\(aqt come under a free license. \fBmod_proxy_fcgi\fP works differently than a
 traditional FastCGI module. This module requires the service of \fBmod_proxy\fP
@@ -161,6 +161,8 @@ keyring = /etc/ceph/keyring.radosgw.gateway
 .IP 2. 3
 Modify Apache\(aqs configuration file so that \fBmod_proxy_fcgi\fP can be used
 with localhost tcp.
+.sp
+Debian/Ubuntu:
 .INDENT 3.0
 .INDENT 3.5
 .sp
@@ -170,8 +172,37 @@ with localhost tcp.
 ServerName localhost
 DocumentRoot /var/www/html
 
-ErrorLog ${APACHE_LOG_DIR}/error.log
-CustomLog ${APACHE_LOG_DIR}/access.log combined
+ErrorLog /var/log/apache2/error.log
+CustomLog /var/log/apache2/access.log combined
+
+LogLevel debug
+
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+SetEnv proxy\-nokeepalive 1
+
+ProxyPass / fcgi://127.0.01:9000/
+</VirtualHost>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+CentOS/RHEL:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot /var/www/html
+
+ErrorLog /var/log/httpd/error.log
+CustomLog /var/log/httpd/access.log combined
 
 LogLevel debug
 
@@ -191,6 +222,8 @@ ProxyPass / fcgi://127.0.01:9000/
 .IP 3. 3
 Modify Apache\(aqs configuration file so that \fBmod_proxy_fcgi\fP can be used
 through unix domain socket.
+.sp
+Debian/Ubuntu:
 .INDENT 3.0
 .INDENT 3.5
 .sp
@@ -200,8 +233,35 @@ through unix domain socket.
 ServerName localhost
 DocumentRoot /var/www/html
 
-ErrorLog ${APACHE_LOG_DIR}/error.log
-CustomLog ${APACHE_LOG_DIR}/access.log combined
+ErrorLog /var/log/apache2/error.log
+CustomLog /var/log/apache2/access.log combined
+
+LogLevel debug
+
+
+RewriteEngine On
+
+RewriteRule .* \- [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+ProxyPass / unix:///tmp/.radosgw.sock|fcgi://localhost:9000/ disablereuse=On
+</VirtualHost>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+CentOS/RHEL:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+<VirtualHost *:80>
+ServerName localhost
+DocumentRoot /var/www/html
+
+ErrorLog /var/log/httpd/error.log
+CustomLog /var/log/httpd/access.log combined
 
 LogLevel debug
 
@@ -243,13 +303,28 @@ ceph auth add client.radosgw.gateway \-\-in\-file=keyring.radosgw.gateway
 .UNINDENT
 .IP 6. 3
 Start Apache and radosgw.
+.sp
+Debian/Ubuntu:
 .INDENT 3.0
 .INDENT 3.5
 .sp
 .nf
 .ft C
-/etc/init.d/apache2 start
-/etc/init.d/radosgw start
+sudo /etc/init.d/apache2 start
+sudo /etc/init.d/radosgw start
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+CentOS/RHEL:
+.INDENT 3.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+sudo apachectl start
+sudo /etc/init.d/ceph\-radosgw start
 .ft P
 .fi
 .UNINDENT
