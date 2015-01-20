@@ -134,7 +134,7 @@ def get_hdfs_site_data(ctx):
     path = "{tdir}/hadoop/etc/hadoop/hdfs-site.xml".format(tdir=tempdir)
     return path, data
 
-def configure(ctx, config, hadoops, hadoop_dir):
+def configure(ctx, config, hadoops):
     tempdir = teuthology.get_testdir(ctx)
 
     log.info("Writing Hadoop slaves file...")
@@ -172,6 +172,22 @@ def configure(ctx, config, hadoops, hadoop_dir):
         path = "{tdir}/hadoop/etc/hadoop/hadoop-env.sh".format(tdir=tempdir)
         data = "JAVA_HOME=/usr/lib/jvm/default-java\n" # FIXME: RHEL?
         teuthology.prepend_lines_to_file(remote, path, data)
+
+    if config.get('hdfs', False):
+        log.info("Formatting HDFS...")
+        testdir = teuthology.get_testdir(ctx)
+        hadoop_dir = "{tdir}/hadoop/".format(tdir=testdir)
+        masters = ctx.cluster.only(teuthology.is_type('hadoop.master'))
+        assert len(masters.remotes) == 1
+        master = masters.remotes.keys()[0]
+        master.run(
+            args = [
+                hadoop_dir + "bin/hadoop",
+                "namenode",
+                "-format"
+            ],
+            wait = True,
+            )
 
 @contextlib.contextmanager
 def install_hadoop(ctx, config):
@@ -231,63 +247,6 @@ def install_hadoop(ctx, config):
             )
         )
 
-    log.info("Fetching cephfs-hadoop...")
-
-    sha1, url = teuthology.get_ceph_binary_url(
-            package = "hadoop",
-            format = "jar",
-            dist = "precise",
-            arch = "x86_64",
-            flavor = "basic",
-            branch = "master")
-
-    run.wait(
-        hadoops.run(
-            args = [
-                'wget',
-                '-nv',
-                '-O',
-                "{tdir}/cephfs-hadoop.jar".format(tdir=testdir), # FIXME
-                url + "/cephfs-hadoop-0.80.6.jar", # FIXME
-            ],
-            wait = False,
-            )
-        )
-
-    run.wait(
-        hadoops.run(
-            args = [
-                'mv',
-                "{tdir}/cephfs-hadoop.jar".format(tdir=testdir),
-                "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
-            ],
-            wait = False,
-            )
-        )
-
-    run.wait(
-        hadoops.run(
-            args = [
-                'cp',
-                "/usr/lib/jni/libcephfs_jni.so",
-                "{tdir}/hadoop/lib/native/".format(tdir=testdir),
-            ],
-            wait = False,
-            )
-        )
-
-    run.wait(
-        hadoops.run(
-            args = [
-                'cp',
-                "/usr/share/java/libcephfs.jar",
-                "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
-            ],
-            wait = False,
-            )
-        )
-
-
     log.info("Create Hadoop temporary directory...")
     hadoop_tmp_dir = "{tdir}/hadoop_tmp".format(tdir=testdir)
     run.wait(
@@ -300,7 +259,64 @@ def install_hadoop(ctx, config):
             )
         )
 
-    configure(ctx, config, hadoops, hadoop_dir)
+    if not config.get('hdfs', False):
+        log.info("Fetching cephfs-hadoop...")
+
+        sha1, url = teuthology.get_ceph_binary_url(
+                package = "hadoop",
+                format = "jar",
+                dist = "precise",
+                arch = "x86_64",
+                flavor = "basic",
+                branch = "master")
+
+        run.wait(
+            hadoops.run(
+                args = [
+                    'wget',
+                    '-nv',
+                    '-O',
+                    "{tdir}/cephfs-hadoop.jar".format(tdir=testdir), # FIXME
+                    url + "/cephfs-hadoop-0.80.6.jar", # FIXME
+                ],
+                wait = False,
+                )
+            )
+
+        run.wait(
+            hadoops.run(
+                args = [
+                    'mv',
+                    "{tdir}/cephfs-hadoop.jar".format(tdir=testdir),
+                    "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
+                ],
+                wait = False,
+                )
+            )
+
+        run.wait(
+            hadoops.run(
+                args = [
+                    'cp',
+                    "/usr/lib/jni/libcephfs_jni.so",
+                    "{tdir}/hadoop/lib/native/".format(tdir=testdir),
+                ],
+                wait = False,
+                )
+            )
+
+        run.wait(
+            hadoops.run(
+                args = [
+                    'cp',
+                    "/usr/share/java/libcephfs.jar",
+                    "{tdir}/hadoop/share/hadoop/common/".format(tdir=testdir),
+                ],
+                wait = False,
+                )
+            )
+
+    configure(ctx, config, hadoops)
 
     try:
         yield
@@ -324,16 +340,6 @@ def start_hadoop(ctx, config):
     masters = ctx.cluster.only(teuthology.is_type('hadoop.master'))
     assert len(masters.remotes) == 1
     master = masters.remotes.keys()[0]
-
-    log.info("Formatting HDFS...")
-    master.run(
-        args = [
-            hadoop_dir + "bin/hadoop",
-            "namenode",
-            "-format"
-        ],
-        wait = True,
-        )
 
     log.info("Stopping Hadoop daemons")
     master.run(
