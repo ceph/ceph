@@ -131,6 +131,7 @@ Patch0021:      0021-Unconditionally-chown-rados-log-fil.patch
 Patch0022:      0022-ceph-osd-prestart.sh-check-OSD-exis.patch
 Patch0023:      0023-Fixes-to-rcceph-script.patch
 Patch0024:      0024-radosgw-systemd-support.patch
+Patch0025:      0025-rgw-swift-GET-HEAD-object-returns-X.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -390,6 +391,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0022 -p1
 %patch0023 -p1
 %patch0024 -p1
+%patch0025 -p1
 
 %build
 

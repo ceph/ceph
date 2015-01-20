@@ -1,0 +1,26 @@
+From: Yehuda Sadeh <yehuda@redhat.com>
+Date: Tue, 30 Sep 2014 14:15:47 -0700
+Subject: [PATCH] rgw: swift GET / HEAD object returns X-Timestamp field
+
+Fixes: #8911
+Backport: giant, firefly, dumpling
+Swift clients expect X-Timestamp header, dump it.
+
+Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+(cherry picked from commit 5b41d80b7fb9ed96c26801fc42c044191bb18d84)
+---
+ src/rgw/rgw_rest_swift.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/rgw/rgw_rest_swift.cc b/src/rgw/rgw_rest_swift.cc
+index 9bdb811..b27e956 100644
+--- a/src/rgw/rgw_rest_swift.cc
++++ b/src/rgw/rgw_rest_swift.cc
+@@ -564,6 +564,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
+ 
+   dump_content_length(s, total_len);
+   dump_last_modified(s, lastmod);
++  s->cio->print("X-Timestamp: %lld\r\n", (long long)lastmod);
+ 
+   if (!ret) {
+     map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
