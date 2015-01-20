@@ -9865,11 +9865,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     hit_set_clear();
   }
 
-  // we don't want to cache object_contexts through the interval change
-  // NOTE: we actually assert that all currently live references are dead
-  // by the time the flush for the next interval completes.
-  object_contexts.clear();
-
   // requeue everything in the reverse order they should be
   // reexamined.
   clear_scrub_reserved();
@@ -9932,6 +9927,11 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   debug_op_order.clear();
   unstable_stats.clear();
+
+  // we don't want to cache object_contexts through the interval change
+  // NOTE: we actually assert that all currently live references are dead
+  // by the time the flush for the next interval completes.
+  object_contexts.clear();
 }
 
 void ReplicatedPG::on_role_change()
