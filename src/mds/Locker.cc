@@ -25,27 +25,15 @@
 #include "MDLog.h"
 #include "MDSMap.h"
 
-#include "include/filepath.h"
-
 #include "events/EUpdate.h"
 #include "events/EOpen.h"
 
 #include "msg/Messenger.h"
 #include "osdc/Objecter.h"
 
-#include "messages/MGenericMessage.h"
-#include "messages/MDiscover.h"
-#include "messages/MDiscoverReply.h"
-
-#include "messages/MDirUpdate.h"
-
 #include "messages/MInodeFileCaps.h"
-
 #include "messages/MLock.h"
 #include "messages/MClientLease.h"
-#include "messages/MDentryUnlink.h"
-
-#include "messages/MClientRequest.h"
 #include "messages/MClientReply.h"
 #include "messages/MClientCaps.h"
 #include "messages/MClientCapRelease.h"
