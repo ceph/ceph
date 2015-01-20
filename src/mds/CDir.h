@@ -250,6 +250,8 @@ public:
 
     scrub_stamps recursive_start; // when we last started a recursive scrub
     scrub_stamps last_recursive; // when we last finished a recursive scrub
+    scrub_stamps last_local; // when we last did a local scrub
+
     bool directory_scrubbing; /// safety check
     bool last_scrub_dirty; /// is scrub info dirty or is it flushed to fnode?
 
@@ -303,6 +305,12 @@ public:
    * scrub_dentry_next's listing. It finalizes the scrub statistics.
    */
   void scrub_finished();
+  /**
+   * Tell the CDir to do a local scrub of itself.
+   * @pre The CDir is_complete().
+   * @returns true if the rstats and directory contents match, false otherwise.
+   */
+  bool scrub_local();
 private:
   /**
    * Create a scrub_info_t struct for the scrub_infop pointer.

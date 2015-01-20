@@ -1263,11 +1263,16 @@ fnode_t *CDir::project_fnode()
   fnode_t *p = new fnode_t;
   *p = *get_projected_fnode();
   projected_fnode.push_back(p);
+
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
+    p->localized_scrub_stamp = scrub_infop->last_local.time;
+    p->localized_scrub_version = scrub_infop->last_local.version;
     p->recursive_scrub_stamp = scrub_infop->last_recursive.time;
     p->recursive_scrub_version = scrub_infop->last_recursive.version;
     scrub_infop->last_scrub_dirty = false;
     scrub_maybe_delete_info();
+  }
+
   dout(10) << "project_fnode " << p << dendl;
   return p;
 }
@@ -2870,6 +2875,9 @@ void CDir::scrub_info_create() const
   si->last_recursive.time = si->recursive_start.time =
       fn->recursive_scrub_stamp;
 
+  si->last_local.version = fn->localized_scrub_version;
+  si->last_local.time = fn->localized_scrub_stamp;
+
   me->scrub_infop = si;
 }
 
@@ -2907,6 +2915,8 @@ void CDir::scrub_initialize()
       scrub_infop->others_to_scrub.insert(i->first);
   }
   scrub_infop->directory_scrubbing = true;
+
+  assert(scrub_local()); // TODO: handle failure
 }
 
 void CDir::scrub_finished()
@@ -3041,4 +3051,18 @@ void CDir::scrub_maybe_delete_info()
     delete scrub_infop;
     scrub_infop = NULL;
   }
+}
+
+bool CDir::scrub_local()
+{
+  assert(is_complete());
+  bool rval = check_rstats();
+
+  if (rval) {
+    scrub_info();
+    scrub_infop->last_local.time = ceph_clock_now(g_ceph_context);
+    scrub_infop->last_local.version = get_projected_version();
+    scrub_infop->last_scrub_dirty = true;
+  }
+  return rval;
 }
