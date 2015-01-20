@@ -1253,9 +1253,6 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
       return true;
     }
 
-    if (!_rdlock_kick(lock, as_anon))
-      break;
-
     // hmm, wait a second.
     if (in && !in->is_head() && in->is_auth() &&
 	lock->get_state() == LOCK_SNAP_SYNC) {
@@ -1270,6 +1267,9 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
 	// oh, check our lock again then
       }
     }
+
+    if (!_rdlock_kick(lock, as_anon))
+      break;
   }
 
   // wait!
