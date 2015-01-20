@@ -64,14 +64,15 @@ Scheduler arguments:
                               [default: 1000]
   --timeout <timeout>         How long, in seconds, to wait for jobs to finish
                               before sending email. This does not kill jobs.
-                              [default: 32400]
+                              [default: {default_results_timeout}]
   --filter KEYWORDS           Only run jobs whose name contains at least one
                               of the keywords in the comma separated keyword
                               string specified.
   --filter-out KEYWORDS       Do not run jobs whose name contains any of
                               the keywords in the comma separated keyword
                               string specified.
-""".format(default_machine_type=config.default_machine_type)
+""".format(default_machine_type=config.default_machine_type,
+           default_results_timeout=config.results_timeout)
 
 
 def main():
