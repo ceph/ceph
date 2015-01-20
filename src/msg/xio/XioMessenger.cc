@@ -22,6 +22,7 @@
 #include "XioMsg.h"
 #include "XioMessenger.h"
 #include "common/address_helper.h"
+#include "common/code_environment.h"
 #include "messages/MNop.h"
 
 #define dout_subsys ceph_subsys_xio
@@ -283,6 +284,12 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
       xopt = 1;
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_DISABLE_HUGETBL,
 		  &xopt, sizeof(xopt));
+
+      if (g_code_env == CODE_ENVIRONMENT_DAEMON) {
+        xopt = 1;
+        xio_set_opt(NULL, XIO_OPTLEVEL_RDMA, XIO_OPTNAME_ENABLE_FORK_INIT,
+		    &xopt, sizeof(xopt));
+      }
 
       xopt = XIO_MSGR_IOVLEN;
       xio_set_opt(NULL, XIO_OPTLEVEL_ACCELIO, XIO_OPTNAME_MAX_IN_IOVLEN,
