@@ -299,7 +299,8 @@ TEST_F(LibRadosMisc, Exec) {
   bufferlist::iterator iter = bl.begin();
   uint64_t all_features;
   ::decode(all_features, iter);
-  ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
+  // make sure *some* features are specified; don't care which ones
+  ASSERT_NE(all_features, 0);
 }
 
 TEST_F(LibRadosMiscPP, ExecPP) {
@@ -311,7 +312,8 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist::iterator iter = out.begin();
   uint64_t all_features;
   ::decode(all_features, iter);
-  ASSERT_EQ(all_features, (uint64_t)RBD_FEATURES_ALL);
+  // make sure *some* features are specified; don't care which ones
+  ASSERT_NE(all_features, 0);
 }
 
 TEST_F(LibRadosMiscPP, Operate1PP) {
