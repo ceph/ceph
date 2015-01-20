@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Tue Jan 20 10:24:33 UTC 2015 - osynge@suse.com
+
+- Improve systemd filters for install and uninstall of rpms.
+
+-------------------------------------------------------------------
 Mon Jan 19 11:34:02 UTC 2015 - tbehrens@suse.com
 
 - remove ses_server config macro again, we'll package everything

@@ -529,20 +529,20 @@ rm -rf $RPM_BUILD_ROOT
 %pre
 
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %service_add_pre $SERVICES
 %endif
 
 %post
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %service_add_post $SERVICES
 %endif
 
 %preun
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %service_add_preun $SERVICES
 %else
 %stop_on_removal ceph
@@ -556,7 +556,7 @@ fi
 %postun
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
 %service_del_postun $SERVICES
 %else
 if [ "$1" -ge "1" ] ; then
@@ -746,7 +746,7 @@ fi
 
 %pre radosgw
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-radosgw.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %service_add_pre $SERVICES
 %endif
 
@@ -754,7 +754,7 @@ SERVICES=`systemctl | grep ceph-radosgw.*@.*\.service | cut -d' ' -f1`
 /sbin/ldconfig
 %if %{defined suse_version}
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %service_add_post $SERVICES
 %else
 %fillup_and_insserv -f -y ceph-radosgw
@@ -764,7 +764,7 @@ SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 %preun radosgw
 %if %{defined suse_version}
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %service_add_preun $SERVICES
 %else
 %stop_on_removal ceph-radosgw
@@ -775,7 +775,7 @@ SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
 /sbin/ldconfig
 %if %{defined suse_version}
 %if 0%{?suse_version} >= 1210
-SERVICES=`systemctl | grep ceph-.*@.*\.service | cut -d' ' -f1`
+SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %service_del_postun $SERVICES
 %else
 %restart_on_update ceph-radosgw
