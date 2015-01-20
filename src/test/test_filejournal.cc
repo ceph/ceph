@@ -56,6 +56,8 @@ public:
 };
 
 unsigned size_mb = 200;
+//Gtest argument prefix
+const char GTEST_PRFIX[] = "--gtest_";
 
 int main(int argc, char **argv) {
   vector<const char*> args;
@@ -71,13 +73,21 @@ int main(int argc, char **argv) {
 
   finisher = new Finisher(g_ceph_context);
   
+  path[0] = '\0';
   if (!args.empty()) {
-    size_t copy_len = std::min(sizeof(path)-1, strlen(args[0]));
-    strncpy(path, args[0], copy_len);
-    path[copy_len] = '\0';
-  } else {
-    srand(getpid()+time(0));
-    snprintf(path, sizeof(path), "/tmp/ceph_test_filejournal.tmp.%d", rand());
+    for ( unsigned int i = 0; i < args.size(); ++i) {
+      if (strncmp(args[i], GTEST_PRFIX, sizeof(GTEST_PRFIX) - 1)) {
+      	//Non gtest argument, set to path.
+        size_t copy_len = std::min(sizeof(path) - 1, strlen(args[i]));
+        strncpy(path, args[i], copy_len);
+        path[copy_len] = '\0';
+        break;
+      }
+    }
+  }
+  if ( path[0] == '\0') {
+    srand(getpid() + time(0));
+    snprintf(path, sizeof(path), "/var/tmp/ceph_test_filejournal.tmp.%d", rand());
   }
   cout << "path " << path << std::endl;
 
