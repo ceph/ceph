@@ -740,7 +740,6 @@ def install(ctx, config):
 
     project = config.get('project', 'ceph')
 
-    global PACKAGES
     debs = PACKAGES[project]['deb']
     rpm = PACKAGES[project]['rpm']
 
