@@ -324,7 +324,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 
   std::vector<object_t> remove_oids;
 
-  int max = 10 - pr->uncommitted;
+  int max = cct->_conf->filer_max_purge_ops - pr->uncommitted;
   while (pr->num > 0 && max > 0) {
     remove_oids.push_back(file_object_t(pr->ino, pr->first));
     pr->uncommitted++;
