@@ -54,6 +54,9 @@ using namespace std;
     ASSERT_TRUE(passed);          \
   } while(0)
 
+void register_test_librbd() {
+}
+
 static int get_features(bool *old_format, uint64_t *features)
 {
   const char *c = getenv("RBD_FEATURES");
@@ -2242,17 +2245,4 @@ TEST_F(TestLibRBD, TestPendingAio)
   }
 
   rados_ioctx_destroy(ioctx);
-}
-
-int main(int argc, char **argv)
-{
-  ::testing::InitGoogleTest(&argc, argv);
-
-  vector<const char*> args;
-  argv_to_vec(argc, (const char **)argv, args);
-
-  global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
-  common_init_finish(g_ceph_context);
-
-  return RUN_ALL_TESTS();
 }
