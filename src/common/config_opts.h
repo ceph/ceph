@@ -340,6 +340,9 @@ OPTION(objecter_inflight_ops, OPT_U64, 1024)               // max in-flight ios
 OPTION(objecter_completion_locks_per_session, OPT_U64, 32) // num of completion locks per each session, for serializing same object responses
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL, false)   // suppress watch pings
 
+// Max number of deletes at once in a single Filer::purge call
+OPTION(filer_max_purge_ops, OPT_U32, 10)
+
 OPTION(journaler_allow_split_entries, OPT_BOOL, true)
 OPTION(journaler_write_head_interval, OPT_INT, 15)
 OPTION(journaler_prefetch_periods, OPT_INT, 10)   // * journal object size
