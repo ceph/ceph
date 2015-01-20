@@ -556,13 +556,6 @@ add_executable(ceph-authtool ${ceph_authtool_srcs})
 target_link_libraries(ceph-authtool global ${EXTRALIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
-set(ceph_mon_store_converter_srcs
-  tools/mon_store_converter.cc)
-add_executable(ceph_mon_store_converter ${ceph_mon_store_converter_srcs}
-  $<TARGET_OBJECTS:monitorstore_obj>)
-target_link_libraries(ceph_mon_store_converter os global)
-install(TARGETS ceph_mon_store_converter DESTINATION bin)
-
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
   ${CMAKE_BINARY_DIR}/ceph-coverage @ONLY)
 
@@ -657,7 +650,7 @@ if(${WITH_RBD})
     librbd/ImageCtx.cc
     librbd/internal.cc
     librbd/LibrbdWriteback.cc
-    librbd/WatchCtx.cc)
+    librbd/ImageWatcher.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
