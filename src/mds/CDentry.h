@@ -80,11 +80,14 @@ public:
   static const int PIN_INODEPIN =     1;  // linked inode is pinned
   static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
   static const int PIN_PURGING =      3;
+  static const int PIN_SCRUBQUEUE =   4; // TODO: negative value?
+
   const char *pin_name(int p) const {
     switch (p) {
     case PIN_INODEPIN: return "inodepin";
     case PIN_FRAGMENTING: return "fragmenting";
     case PIN_PURGING: return "purging";
+    case PIN_SCRUBQUEUE: return "scrub_enqueued";
     default: return generic_pin_name(p);
     }
   }
@@ -137,6 +140,19 @@ public:
     void link_remote(CInode *in);
   };
   
+  class scrub_info_t {
+  public:
+    CDir *scrub_parent; /// This either matches get_parent_dir() or NULL
+    bool scrub_recursive; /// true if we are scrubbing everything under this
+    bool scrub_children; /// true if we have to scrub all direct children
+    bool dentry_scrubbing; /// safety check
+    Context *on_finish; /// called when we finish scrubbing
+    scrub_info_t() :
+      scrub_parent(NULL), scrub_recursive(false),
+      scrub_children(false), dentry_scrubbing(false), on_finish(NULL)
+    {}
+  };
+
 protected:
   CDir *dir;     // containing dirfrag
   linkage_t linkage;
@@ -144,10 +160,26 @@ protected:
   
   version_t version;  // dir version when last touched.
   version_t projected_version;  // what it will be when i unlock/commit.
+  scrub_info_t* scrub_infop;
 
 public:
   elist<CDentry*>::item item_dirty;
   elist<CDentry*>::item item_stray;
+
+  const scrub_info_t *scrub_info() const {
+    if(!scrub_infop)
+      scrub_info_create();
+    return scrub_infop;
+  }
+  void scrub_initialize(CDir *parent, bool recurse, bool children,
+                        Context *f);
+  void scrub_finished(Context **c);
+
+private:
+  /**
+   * Create a scrub_info_t struct for the scrub_infop pointer.
+   */
+  void scrub_info_create() const;
 
 protected:
   friend class Migrator;
@@ -174,6 +206,7 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
+    scrub_infop(NULL),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type) {
@@ -186,6 +219,7 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
+    scrub_infop(NULL),
     item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type) {
@@ -195,6 +229,7 @@ public:
     linkage.remote_d_type = dt;
   }
   ~CDentry() {
+    assert(!scrub_infop);
     g_num_dn--;
     g_num_dns++;
   }
