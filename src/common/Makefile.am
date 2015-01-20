@@ -73,7 +73,8 @@ libcommon_internal_la_SOURCES = \
 	common/linux_version.c \
 	common/module.c \
 	common/Readahead.cc \
-	common/Cycles.cc
+	common/Cycles.cc \
+	common/ContextCompletion.cc
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
@@ -225,7 +226,8 @@ noinst_HEADERS += \
 	common/Continuation.h \
 	common/Readahead.h \
 	common/Cycles.h \
-	common/Initialize.h
+	common/Initialize.h \
+	common/ContextCompletion.h
 
 if ENABLE_XIO
 noinst_HEADERS += \
