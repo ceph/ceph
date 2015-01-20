@@ -70,15 +70,9 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   finisher = new Finisher(g_ceph_context);
+  srand(getpid()+time(0));
+  snprintf(path, sizeof(path), "/tmp/ceph_test_filejournal.tmp.%d", rand());
   
-  if (!args.empty()) {
-    size_t copy_len = std::min(sizeof(path)-1, strlen(args[0]));
-    strncpy(path, args[0], copy_len);
-    path[copy_len] = '\0';
-  } else {
-    srand(getpid()+time(0));
-    snprintf(path, sizeof(path), "/tmp/ceph_test_filejournal.tmp.%d", rand());
-  }
   cout << "path " << path << std::endl;
 
   ::testing::InitGoogleTest(&argc, argv);
