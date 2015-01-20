@@ -1239,11 +1239,12 @@ void InodeStore::encode_bare(bufferlist &bl) const
   ::encode(xattrs, bl);
   ::encode(snap_blob, bl);
   ::encode(old_inodes, bl);
+  ::encode(oldest_snap, bl);
 }
 
 void InodeStore::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   encode_bare(bl);
   ENCODE_FINISH(bl);
 }
@@ -1272,12 +1273,14 @@ void InodeStore::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
+  if (struct_v >= 5)
+    ::decode(oldest_snap, bl);
 }
 
 
 void InodeStore::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   decode_bare(bl, struct_v);
   DECODE_FINISH(bl);
 }
@@ -2375,7 +2378,7 @@ snapid_t CInode::get_oldest_snap()
   snapid_t t = first;
   if (!old_inodes.empty())
     t = old_inodes.begin()->second.first;
-  return MIN(t, first);
+  return MIN(t, oldest_snap);
 }
 
 old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
@@ -2389,6 +2392,9 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
   old.first = first;
   old.inode = *pi;
   old.xattrs = *px;
+
+  if (first < oldest_snap)
+    oldest_snap = first;
   
   dout(10) << " " << px->size() << " xattrs cowed, " << *px << dendl;
 

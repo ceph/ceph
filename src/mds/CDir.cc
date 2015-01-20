@@ -1706,8 +1706,9 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  
 	  in->dirfragtree.swap(inode_data.dirfragtree);
 	  in->xattrs.swap(inode_data.xattrs);
-	  in->decode_snap_blob(inode_data.snap_blob);
 	  in->old_inodes.swap(inode_data.old_inodes);
+	  in->decode_snap_blob(inode_data.snap_blob);
+	  in->oldest_snap = inode_data.oldest_snap;
 	  if (snaps && !in->snaprealm)
 	    in->purge_stale_snap_data(*snaps);
 
