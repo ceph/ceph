@@ -465,7 +465,8 @@ When running Ceph with  default settings, the default cluster name is ``ceph``,
 which means you would  save your Ceph configuration file with the file name
 ``ceph.conf`` in the  ``/etc/ceph`` default directory.
 
-See `ceph-deploy new` for details.
+See `ceph-deploy new`_ for details.
+.. _ceph-deploy new:../ceph-deploy-new
 
 When you run multiple clusters, you must name your cluster and save the Ceph
 configuration file with the name of the cluster. For example, a cluster named
