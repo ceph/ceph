@@ -704,6 +704,7 @@ void MDS::create_logger()
 
   mdlog->create_logger();
   server->create_logger();
+  mdcache->register_perfcounters();
 }
 
 
