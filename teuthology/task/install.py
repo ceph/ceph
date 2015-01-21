@@ -741,8 +741,8 @@ def install(ctx, config):
 
     project = config.get('project', 'ceph')
 
-    debs = PACKAGES[project]['deb']
-    rpm = PACKAGES[project]['rpm']
+    debs = PACKAGES.get(project, {}).get('deb', [])
+    rpm = PACKAGES.get(project, {}).get('rpm', [])
 
     # pull any additional packages out of config
     extra_pkgs = config.get('extra_packages')
