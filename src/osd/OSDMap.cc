@@ -19,10 +19,14 @@
 
 #include "common/config.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include "include/ceph_features.h"
 #include "include/str_map.h"
+#include "include/stringify.h"
 
 #include "common/code_environment.h"
+
+#include "crush/CrushTreeDumper.h"
 
 #define dout_subsys ceph_subsys_osd
 
@@ -2445,147 +2449,106 @@ void OSDMap::print(ostream& out) const
   // ignore pg_swap_primary
 }
 
-void OSDMap::print_osd_line(int cur, ostream *out, Formatter *f) const
-{
-  if (f) {
-    f->dump_unsigned("id", cur);
-    f->dump_stream("name") << "osd." << cur;
-    f->dump_unsigned("exists", (int)exists(cur));
-    f->dump_string("type", crush->get_type_name(0));
-    f->dump_int("type_id", 0);
+class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
+public:
+  typedef CrushTreeDumper::Dumper<TextTable> Parent;
+  OSDTreePlainDumper(const CrushWrapper *crush, const OSDMap *osdmap_)
+    : Parent(crush), osdmap(osdmap_) {}
+
+  void dump(TextTable *tbl) {
+    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
+    tbl->define_column("UP/DOWN", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("PRIMARY-AFFINITY", TextTable::LEFT, TextTable::RIGHT);
+
+    Parent::dump(tbl);
+
+    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+      if (osdmap->exists(i) && !is_touched(i))
+	dump_item(CrushTreeDumper::Item(i, 0, 0), tbl);
+    }
   }
-  if (out)
-    *out << "osd." << cur << "\t";
-  if (!exists(cur)) {
-    if (out)
-      *out << "DNE\t\t";
-  } else {
-    if (is_up(cur)) {
-      if (out)
-	*out << "up\t";
-      if (f)
-	f->dump_string("status", "up");
+
+protected:
+  virtual void dump_item(const CrushTreeDumper::Item &qi, TextTable *tbl) {
+
+    *tbl << qi.id
+	 << weightf_t(qi.weight);
+
+    ostringstream name;
+    for (int k = 0; k < qi.depth; k++)
+      name << "    ";
+    if (qi.is_bucket()) {
+      name << crush->get_type_name(crush->get_bucket_type(qi.id)) << " "
+	   << crush->get_item_name(qi.id);
     } else {
-      if (out)
-	*out << "down\t";
-      if (f)
-	f->dump_string("status", "down");
+      name << "osd." << qi.id;
     }
-    if (out) {
-      std::streamsize p = out->precision();
-      *out << std::setprecision(4)
-	   << (exists(cur) ? get_weightf(cur) : 0)
-	   << std::setprecision(p)
-	   << "\t";
-      *out << std::setprecision(4)
-	   << (exists(cur) ? get_primary_affinityf(cur) : 0)
-	   << std::setprecision(p);
+    *tbl << name.str();
+
+    if (!qi.is_bucket()) {
+      if (!osdmap->exists(qi.id)) {
+	*tbl << "DNE"
+	     << 0;
+      } else {
+	*tbl << (osdmap->is_up(qi.id) ? "up" : "down")
+	     << weightf_t(osdmap->get_weightf(qi.id))
+	     << weightf_t(osdmap->get_primary_affinityf(qi.id));
+      }
     }
-    if (f) {
-      f->dump_float("reweight", get_weightf(cur));
-      f->dump_float("primary_affinity", get_primary_affinityf(cur));
+    *tbl << TextTable::endrow;
+  }
+
+private:
+  const OSDMap *osdmap;
+};
+
+class OSDTreeFormattingDumper : public CrushTreeDumper::FormattingDumper {
+public:
+  typedef CrushTreeDumper::FormattingDumper Parent;
+
+  OSDTreeFormattingDumper(const CrushWrapper *crush, const OSDMap *osdmap_)
+    : Parent(crush), osdmap(osdmap_) {}
+
+  void dump(Formatter *f) {
+    f->open_array_section("nodes");
+    Parent::dump(f);
+    f->close_section();
+    f->open_array_section("stray");
+    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+      if (osdmap->exists(i) && !is_touched(i))
+	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+    }
+    f->close_section();
+  }
+
+protected:
+  virtual void dump_item_fields(const CrushTreeDumper::Item &qi, Formatter *f) {
+    Parent::dump_item_fields(qi, f);
+    if (!qi.is_bucket())
+    {
+      f->dump_unsigned("exists", (int)osdmap->exists(qi.id));
+      f->dump_string("status", osdmap->is_up(qi.id) ? "up" : "down");
+      f->dump_float("reweight", osdmap->get_weightf(qi.id));
+      f->dump_float("primary_affinity", osdmap->get_primary_affinityf(qi.id));
     }
   }
-}
+
+private:
+  const OSDMap *osdmap;
+};
 
 void OSDMap::print_tree(ostream *out, Formatter *f) const
 {
-  if (out)
-    *out << "# id\tweight\ttype name\tup/down\treweight\tprimary-affinity\n";
-  if (f)
-    f->open_array_section("nodes");
-  set<int> touched;
-  set<int> roots;
-  crush->find_roots(roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
-    list<qi> q;
-    q.push_back(qi(*p, 0, crush->get_bucket_weight(*p) / (float)0x10000));
-    while (!q.empty()) {
-      int cur = q.front().item;
-      int depth = q.front().depth;
-      float weight = q.front().weight;
-      q.pop_front();
-
-      if (out) {
-	*out << cur << "\t";
-	int oldprecision = out->precision();
-	*out << std::setprecision(4) << weight << std::setprecision(oldprecision) << "\t";
-
-	for (int k=0; k<depth; k++)
-	  *out << "\t";
-      }
-      if (f) {
-	f->open_object_section("item");
-      }
-      if (cur >= 0) {
-	print_osd_line(cur, out, f);
-	if (out)
-	  *out << "\n";
-	if (f) {
-	  f->dump_float("crush_weight", weight);
-	  f->dump_unsigned("depth", depth);
-	  f->close_section();
-	}
-	touched.insert(cur);
-      }
-      if (cur >= 0) {
-	continue;
-      }
-
-      // queue bucket contents...
-      int type = crush->get_bucket_type(cur);
-      int s = crush->get_bucket_size(cur);
-      if (f) {
-	f->dump_int("id", cur);
-	f->dump_string("name", crush->get_item_name(cur));
-	f->dump_string("type", crush->get_type_name(type));
-	f->dump_int("type_id", type);
-	f->open_array_section("children");
-      }
-      for (int k=s-1; k>=0; k--) {
-	int item = crush->get_bucket_item(cur, k);
-	q.push_front(qi(item, depth+1, (float)crush->get_bucket_item_weight(cur, k) / (float)0x10000));
-	if (f)
-	  f->dump_int("child", item);
-      }
-      if (f)
-	f->close_section();
-
-      if (out)
-	*out << crush->get_type_name(type) << " " << crush->get_item_name(cur) << "\n";
-      if (f) {
-	f->close_section();
-      }
-
-    }
-  }
-  if (f) {
-    f->close_section();
-    f->open_array_section("stray");
-  }
-
-  set<int> stray;
-  for (int i=0; i<max_osd; i++)
-    if (exists(i) && touched.count(i) == 0)
-      stray.insert(i);
-
-  if (!stray.empty()) {
-    if (out)
-      *out << "\n";
-    for (set<int>::iterator p = stray.begin(); p != stray.end(); ++p) {
-      if (out)
-	*out << *p << "\t0\t";
-      if (f)
-        f->open_object_section("osd");
-      print_osd_line(*p, out, f);
-      if (out)
-	*out << "\n";
-      if (f)
-        f->close_section();
-    }
+  if (out) {
+    TextTable tbl;
+    OSDTreePlainDumper(crush.get(), this).dump(&tbl);
+    *out << tbl;
   }
   if (f)
-    f->close_section();
+    OSDTreeFormattingDumper(crush.get(), this).dump(f);
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out) const
