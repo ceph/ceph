@@ -121,6 +121,7 @@ void usage()
 "  snap protect <snap-name>                    prevent a snapshot from being deleted\n"
 "  snap unprotect <snap-name>                  allow a snapshot to be deleted\n"
 "  watch <image-name>                          watch events on image\n"
+"  status <image-name>                         show the status of this image\n"
 "  map <image-name>                            map image to a block device\n"
 "                                              using the kernel\n"
 "  unmap <device>                              unmap a rbd device that was\n"
@@ -2170,6 +2171,71 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   return 0;
 }
 
+static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
+                          const char *imgname, Formatter *f)
+{
+  librbd::image_info_t info;
+  uint8_t old_format;
+  int r;
+  string header_oid;
+  std::list<obj_watch_t> watchers;
+
+  r = image.old_format(&old_format);
+  if (r < 0)
+    return r;
+
+  if (old_format) {
+    header_oid = imgname;
+    header_oid += RBD_SUFFIX;
+  } else {
+    r = image.stat(info, sizeof(info));
+    if (r < 0)
+      return r;
+
+    char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
+    strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
+    prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
+
+    header_oid = RBD_HEADER_PREFIX;
+    header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
+  }
+
+  r = io_ctx.list_watchers(header_oid, &watchers);
+  if (r < 0)
+    return r;
+
+  if (f)
+    f->open_object_section("status");
+
+  if (f) {
+    f->open_object_section("watchers");
+    for (std::list<obj_watch_t>::iterator i = watchers.begin(); i != watchers.end(); ++i) {
+      f->open_object_section("watcher");
+      f->dump_string("address", i->addr);
+      f->dump_unsigned("client", i->watcher_id);
+      f->dump_unsigned("cookie", i->cookie);
+      f->close_section();
+    }
+    f->close_section();
+  } else {
+    if (watchers.size()) {
+      cout << "Watchers:" << std::endl;
+      for (std::list<obj_watch_t>::iterator i = watchers.begin(); i != watchers.end(); ++i) {
+        cout << "\twatcher=" << i->addr << " client." << i->watcher_id << " cookie=" << i->cookie << std::endl;
+      }
+    } else {
+      cout << "Watchers: none" << std::endl;
+    }
+  }
+
+  if (f) {
+    f->close_section();
+    f->flush(cout);
+  }
+
+  return 0;
+}
+
 static int do_kernel_map(const char *poolname, const char *imgname,
 			 const char *snapname)
 {
@@ -2363,6 +2429,7 @@ enum {
   OPT_SNAP_PROTECT,
   OPT_SNAP_UNPROTECT,
   OPT_WATCH,
+  OPT_STATUS,
   OPT_MAP,
   OPT_UNMAP,
   OPT_SHOWMAPPED,
@@ -2413,6 +2480,8 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
       return OPT_RENAME;
     if (strcmp(cmd, "watch") == 0)
       return OPT_WATCH;
+    if (strcmp(cmd, "status") == 0)
+      return OPT_STATUS;
     if (strcmp(cmd, "map") == 0)
       return OPT_MAP;
     if (strcmp(cmd, "showmapped") == 0)
@@ -2679,6 +2748,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_SNAP_PROTECT:
       case OPT_SNAP_UNPROTECT:
       case OPT_WATCH:
+      case OPT_STATUS:
       case OPT_MAP:
       case OPT_BENCH_WRITE:
       case OPT_LOCK_LIST:
@@ -2751,7 +2821,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   if (output_format_specified && opt_cmd != OPT_SHOWMAPPED &&
       opt_cmd != OPT_INFO && opt_cmd != OPT_LIST &&
       opt_cmd != OPT_SNAP_LIST && opt_cmd != OPT_LOCK_LIST &&
-      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_DIFF) {
+      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_DIFF &&
+      opt_cmd != OPT_STATUS) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -2929,11 +3000,13 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_IMPORT_DIFF ||
        opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF || opt_cmd == OPT_COPY ||
        opt_cmd == OPT_DIFF ||
-       opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST)) {
+       opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
+       opt_cmd == OPT_STATUS)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
-	opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST) {
+	opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
+        opt_cmd == OPT_STATUS) {
       r = rbd.open_read_only(io_ctx, image, imgname, NULL);
     } else {
       r = rbd.open(io_ctx, image, imgname);
@@ -3260,6 +3333,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_watch(io_ctx, imgname);
     if (r < 0) {
       cerr << "rbd: watch failed: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_STATUS:
+    r = do_show_status(io_ctx, image, imgname, formatter.get());
+    if (r < 0) {
+      cerr << "rbd: show status failed: " << cpp_strerror(-r) << std::endl;
       return -r;
     }
     break;
