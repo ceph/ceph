@@ -237,7 +237,10 @@ public:
 
     // modifiers
     void set_offset(unsigned o) { _off = o; }
-    void set_length(unsigned l) { _len = l; }
+    void set_length(unsigned l) {
+      assert(raw_length() >= l);
+      _len = l;
+    }
 
     void append(char c);
     void append(const char *p, unsigned l);
