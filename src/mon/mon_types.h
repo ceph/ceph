@@ -56,6 +56,13 @@ struct LevelDBStoreStats {
   uint64_t bytes_misc;
   utime_t last_update;
 
+  LevelDBStoreStats() :
+    bytes_total(0),
+    bytes_sst(0),
+    bytes_log(0),
+    bytes_misc(0)
+  {}
+
   void dump(Formatter *f) const {
     assert(f != NULL);
     f->dump_int("bytes_total", bytes_total);
