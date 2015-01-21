@@ -934,6 +934,17 @@ struct MonCommand {
   string module;
   string req_perms;
   string availability;
+  uint64_t flags;
+
+  // MonCommand flags
+  enum {
+    FLAG_NONE      = (0 << 0),
+    FLAG_NOFORWARD = (1 << 0),
+  };
+
+  bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
+  void set_flag(uint64_t flag) { flags |= flag; }
+  void unset_flag(uint64_t flag) { flags &= ~flag; }
 
   void encode(bufferlist &bl) const {
     /*
@@ -954,30 +965,36 @@ struct MonCommand {
     ::decode(req_perms, bl);
     ::decode(availability, bl);
   }
-  bool operator==(const MonCommand& o) const {
-    return cmdstring == o.cmdstring && helpstring == o.helpstring &&
-	module == o.module && req_perms == o.req_perms &&
-	availability == o.availability;
-  }
-  bool operator!=(const MonCommand& o) const {
-    return !(*this == o);
+  bool is_compat(const MonCommand* o) const {
+    return cmdstring == o->cmdstring && helpstring == o->helpstring &&
+	module == o->module && req_perms == o->req_perms &&
+	availability == o->availability;
   }
 
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     uint16_t s = size;
     ::encode(s, bl);
     ::encode_array_nohead(cmds, size, bl);
+    for (int i = 0; i < size; i++)
+      ::encode(cmds[i].flags, bl);
     ENCODE_FINISH(bl);
   }
   static void decode_array(MonCommand **cmds, int *size,
                            bufferlist::iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     uint16_t s = 0;
     ::decode(s, bl);
     *size = s;
     *cmds = new MonCommand[*size];
     ::decode_array_nohead(*cmds, *size, bl);
+    if (struct_v >= 2) {
+      for (int i = 0; i < *size; i++)
+	::decode((*cmds)[i].flags, bl);
+    } else {
+      for (int i = 0; i < *size; i++)
+	(*cmds)[i].flags = 0;
+    }
     DECODE_FINISH(bl);
   }
 
