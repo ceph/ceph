@@ -299,7 +299,17 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   }
 }
 
-
+void CInode::split_need_snapflush(CInode *cowin, CInode *in)
+{
+  dout(10) << "split_need_snapflush [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
+  for (map<snapid_t, set<client_t> >::iterator p = client_need_snapflush.lower_bound(cowin->first);
+       p != client_need_snapflush.end() && p->first <= cowin->last;
+       ++p) {
+    assert(!p->second.empty());
+    cowin->auth_pin(this);
+    in->auth_unpin(this);
+  }
+}
 
 void CInode::mark_dirty_rstat()
 {
