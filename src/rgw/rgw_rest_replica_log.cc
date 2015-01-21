@@ -248,7 +248,7 @@ void RGWOp_BILog_SetBounds::execute() {
     return;
   }
 
-  http_ret = rl.update_bound(bucket, shard_id, daemon_id, marker, ut, &markers);
+  http_ret = rl.update_bound(bucket, shard_id, daemon_id, marker, ut, &markers, index_by_instance);
 }
 
 void RGWOp_BILog_GetBounds::execute() {
