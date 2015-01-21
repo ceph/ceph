@@ -620,6 +620,93 @@ void OSDMonitor::create_pending()
   OSDMap::remove_down_temps(g_ceph_context, osdmap, &pending_inc);
 }
 
+void OSDMonitor::maybe_prime_pg_temp()
+{
+  if (pending_inc.crush.length()) {
+    dout(10) << __func__ << " new crush map" << dendl;
+    OSDMap next;
+    next.deepish_copy_from(osdmap);
+    next.apply_incremental(pending_inc);
+    prime_pg_temp(next, &mon->pgmon()->pg_map);
+    return;
+  }
+
+  // check for interesting OSDs
+  set<int> osds;
+  for (map<int32_t,uint8_t>::iterator p = pending_inc.new_state.begin();
+       p != pending_inc.new_state.end();
+       ++p) {
+    if (p->second & CEPH_OSD_UP) {
+      osds.insert(p->first);
+    }
+  }
+  for (map<int32_t,uint32_t>::iterator p = pending_inc.new_weight.begin();
+       p != pending_inc.new_weight.end();
+       ++p) {
+    osds.insert(p->first);
+  }
+  if (!osds.empty()) {
+    dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
+    OSDMap next;
+    next.deepish_copy_from(osdmap);
+    next.apply_incremental(pending_inc);
+    for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
+      prime_pg_temp(next, &mon->pgmon()->pg_map, *p);
+    }
+  }
+}
+
+void OSDMonitor::prime_pg_temp(OSDMap& next,
+			       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp)
+{
+  // do not touch a mapping if a change is pending
+  if (pending_inc.new_pg_temp.count(pp->first))
+    return;
+  vector<int> up, acting;
+  int up_primary, acting_primary;
+  next.pg_to_up_acting_osds(pp->first, &up, &up_primary, &acting, &acting_primary);
+  if (acting == pp->second.acting)
+    return;  // no change since last pg update, skip
+  vector<int> cur_up, cur_acting;
+  osdmap.pg_to_up_acting_osds(pp->first, &cur_up, &up_primary,
+			      &cur_acting, &acting_primary);
+  if (cur_acting == acting)
+    return;  // no change this epoch; must be stale pg_stat
+
+  dout(20) << __func__ << " " << pp->first << " " << cur_up << "/" << cur_acting
+	   << " -> " << up << "/" << acting
+	   << ", priming " << cur_acting
+	   << dendl;
+  pending_inc.new_pg_temp[pp->first] = cur_acting;
+}
+
+void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
+{
+  dout(10) << __func__ << " osd." << osd << dendl;
+  ceph::unordered_map<int, set<pg_t> >::iterator po = pg_map->pg_by_osd.find(osd);
+  if (po != pg_map->pg_by_osd.end()) {
+    for (set<pg_t>::iterator p = po->second.begin();
+	 p != po->second.end();
+	 ++p) {
+      ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.find(*p);
+      if (pp == pg_map->pg_stat.end())
+	continue;
+      prime_pg_temp(next, pp);
+    }
+  }
+}
+
+void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map)
+{
+  dout(10) << __func__ << dendl;
+  for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.begin();
+       pp != pg_map->pg_stat.end();
+       ++pp) {
+    prime_pg_temp(next, pp);
+  }
+}
+
+
 /**
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
@@ -634,6 +721,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   int r = pending_inc.propagate_snaps_to_tiers(g_ceph_context, osdmap);
   assert(r == 0);
+
+  if (g_conf->mon_osd_prime_pg_temp)
+    maybe_prime_pg_temp();
 
   bufferlist bl;
 
