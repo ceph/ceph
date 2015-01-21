@@ -18,8 +18,10 @@
 namespace librbd {
 
   CopyupRequest::CopyupRequest(ImageCtx *ictx, const std::string &oid,
-                               uint64_t objectno, bool send_copyup)
-    : m_ictx(ictx), m_oid(oid), m_object_no(objectno), m_send_copyup(send_copyup)
+                               uint64_t objectno,
+			       vector<pair<uint64_t,uint64_t> >& image_extents)
+    : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
+      m_image_extents(image_extents)
   {
   }
 
@@ -47,6 +49,7 @@ namespace librbd {
   }
 
   void CopyupRequest::append_request(AioRequest *req) {
+    ldout(m_ictx->cct, 20) << __func__ << " " << this << ": " << req << dendl;
     m_pending_requests.push_back(req);
   }
 
@@ -54,13 +57,17 @@ namespace librbd {
     while (!m_pending_requests.empty()) {
       vector<AioRequest *>::iterator it = m_pending_requests.begin();
       AioRequest *req = *it;
+      ldout(m_ictx->cct, 20) << __func__ << " completing request " << req
+			     << dendl;
       req->complete(r);
       m_pending_requests.erase(it);
     }
   }
 
   void CopyupRequest::send_copyup(int r) {
-    ldout(m_ictx->cct, 20) << __func__ << dendl;
+    ldout(m_ictx->cct, 20) << __func__ << " " << this
+			   << ": oid " << m_oid
+			   << ", r " << r << dendl;
 
     m_ictx->snap_lock.get_read();
     ::SnapContext snapc = m_ictx->snapc;
@@ -78,16 +85,17 @@ namespace librbd {
     comp->release();
   }
 
-  void CopyupRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
+  void CopyupRequest::read_from_parent()
   {
     AioCompletion *comp = aio_create_completion_internal(
       this, &CopyupRequest::read_from_parent_cb);
-    ldout(m_ictx->cct, 20) << __func__ << " this = " << this
-                           << " parent completion " << comp
-                           << " extents " << image_extents
+    ldout(m_ictx->cct, 20) << __func__ << " " << this
+                           << ": completion " << comp
+			   << ", oid " << m_oid
+                           << ", extents " << m_image_extents
                            << dendl;
 
-    int r = aio_read(m_ictx->parent, image_extents, NULL, &m_copyup_data,
+    int r = aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data,
 		     comp, 0);
     if (r < 0) {
       comp->release();
@@ -95,11 +103,14 @@ namespace librbd {
     }
   }
 
-  void CopyupRequest::queue_read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
+  void CopyupRequest::queue_read_from_parent()
   {
     // TODO: once the ObjectCacher allows reentrant read requests, the finisher
     // should be eliminated
-    C_ReadFromParent *ctx = new C_ReadFromParent(this, image_extents);
+    ldout(m_ictx->cct, 20) << __func__ << " " << this
+			   << ": oid " << m_oid << " "
+			   << ", extents " << m_image_extents << dendl;
+    C_ReadFromParent *ctx = new C_ReadFromParent(this);
     m_ictx->copyup_finisher->queue(ctx);
   }
 
@@ -108,19 +119,21 @@ namespace librbd {
     CopyupRequest *req = reinterpret_cast<CopyupRequest *>(arg);
     AioCompletion *comp = reinterpret_cast<AioCompletion *>(cb);
 
-    ldout(req->m_ictx->cct, 20) << __func__ << dendl;
-    req->complete_all(comp->get_return_value());
+    ldout(req->m_ictx->cct, 20) << __func__ << " " << req
+				<< ": oid " << req->m_oid
+			        << ", extents " << req->m_image_extents << dendl;
 
     // If this entry is created by a read request, then copyup operation will
     // be performed asynchronously. Perform cleaning up from copyup callback.
     // If this entry is created by a write request, then copyup operation will
     // be performed synchronously by AioWrite. After extracting data, perform
     // cleaning up here
-    if (req->m_send_copyup) {
-      req->send_copyup(comp->get_return_value());
-    }
-
     Mutex::Locker l(req->m_ictx->copyup_list_lock);
+    if (req->m_pending_requests.empty()) {
+      req->send_copyup(comp->get_return_value());
+    } else {
+      req->complete_all(comp->get_return_value());
+    }
     delete req;
   }
 }
