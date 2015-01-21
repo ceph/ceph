@@ -30,6 +30,13 @@ struct ceph_data_stats
   uint64_t byte_avail;
   int avail_percent;
 
+  ceph_data_stats() :
+    byte_total(0),
+    byte_used(0),
+    byte_avail(0),
+    avail_percent(0)
+  { }
+
   void dump(Formatter *f) const {
     assert(f != NULL);
     f->dump_int("total", byte_total);
