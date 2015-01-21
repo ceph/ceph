@@ -420,6 +420,7 @@ $extra_conf
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
+        mon osd prime pg temp = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
