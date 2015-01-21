@@ -263,6 +263,9 @@ Commands
 :command:`showmapped`
   Show the rbd images that are mapped via the rbd kernel module.
 
+:command:`status` [*image-name*]
+  Show the status of the image, including which clients have it open.
+
 :command:`lock` list [*image-name*]
   Show locks held on the image. The first column is the locker
   to use with the `lock remove` command.
