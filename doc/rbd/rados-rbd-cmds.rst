@@ -23,11 +23,16 @@ the  following::
 
 	rbd create {image-name} --size {megabytes} --pool {pool-name}
 	
-For example, to create a 1GB image named ``foo`` that stores information in a 
+For example, to create a 1GB image named ``bar`` that stores information in a
 pool named ``swimmingpool``, execute the following::
 
-	rbd create foo --size 1024
 	rbd create bar --size 1024 --pool swimmingpool
+
+If you don't specify pool when creating an image, it will be stored in the
+default pool ``rbd``. For example, to create a 1GB image named ``foo`` stored in
+the default pool ``rbd``, execute the following::
+
+        rbd create foo --size 1024
 
 .. note:: You must create a pool first before you can specify it as a 
    source. See `Storage Pools`_ for details.
