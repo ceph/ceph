@@ -97,12 +97,18 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 
 
 #undef COMMAND
+#undef COMMAND_FLAGS
 MonCommand mon_commands[] = {
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail) \
-  {parsesig, helptext, modulename, req_perms, avail},
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
+  {parsesig, helptext, modulename, req_perms, avail,
+#define COMMAND_FLAGS(flag)	\
+  MonCommand::FLAG_##flag},
 #include <mon/MonCommands.h>
 };
+#undef COMMAND
 MonCommand classic_mon_commands[] = {
+#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
+  {parsesig, helptext, modulename, req_perms, avail},
 #include <mon/DumplingMonCommands.h>
 };
 
@@ -2588,16 +2594,41 @@ void Monitor::handle_command(MMonCommand *m)
     reply_command(m, -EINVAL, "command not known", 0);
     return;
   }
-  // validate command is in our map & matches, or forward
+  // validate command is in our map & matches, or forward if it is allowed
   const MonCommand *mon_cmd = _get_moncommand(prefix, mon_commands,
                                               ARRAY_SIZE(mon_commands));
-  if (!is_leader() && (!mon_cmd ||
-      (*leader_cmd != *mon_cmd))) {
-    dout(10) << "We don't match leader, forwarding request " << m << dendl;
-    forward_request_leader(m);
+  if (!is_leader()) {
+    if (!mon_cmd) {
+      if (leader_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+	reply_command(m, -EINVAL,
+		      "command not locally supported and not allowed to forward",
+		      0);
+	return;
+      }
+      dout(10) << "Command not locally supported, forwarding request "
+	       << m << dendl;
+      forward_request_leader(m);
+      return;
+    } else if (!mon_cmd->is_compat(leader_cmd)) {
+      if (mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+	reply_command(m, -EINVAL,
+		      "command not compatible with leader and not allowed to forward",
+		      0);
+	return;
+      }
+      dout(10) << "Command not compatible with leader, forwarding request "
+	       << m << dendl;
+      forward_request_leader(m);
+      return;
+    }
+  }
+
+  if (session->proxy_con && mon_cmd->has_flag(MonCommand::FLAG_NOFORWARD)) {
+    dout(10) << "Got forward for noforward command " << m << dendl;
+    reply_command(m, -EINVAL, "forward for noforward command", rdata, 0);
     return;
   }
-  
+
   /* what we perceive as being the service the command falls under */
   string service(mon_cmd->module);
 
