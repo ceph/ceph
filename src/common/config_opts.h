@@ -212,7 +212,7 @@ OPTION(mon_cache_target_full_warn_ratio, OPT_FLOAT, .66) // position between poo
 OPTION(mon_osd_full_ratio, OPT_FLOAT, .95) // what % full makes an OSD "full"
 OPTION(mon_osd_nearfull_ratio, OPT_FLOAT, .85) // what % full makes an OSD near full
 OPTION(mon_allow_pool_delete, OPT_BOOL, true) // allow pool deletion
-OPTION(mon_globalid_prealloc, OPT_INT, 10000)   // how many globalids to prealloc
+OPTION(mon_globalid_prealloc, OPT_U32, 10000)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT, 900)    // grace period before declaring unresponsive OSDs dead
 OPTION(mon_force_standby_active, OPT_BOOL, true) // should mons force standby-replay mds to be active
 OPTION(mon_warn_on_old_mons, OPT_BOOL, true) // should mons set health to WARN if part of quorum is old?
