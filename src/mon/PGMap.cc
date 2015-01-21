@@ -360,6 +360,7 @@ void PGMap::calc_stats()
   pg_pool_sum.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
+  pg_by_osd.clear();
 
   for (ceph::unordered_map<pg_t,pg_stat_t>::iterator p = pg_stat.begin();
        p != pg_stat.end();
@@ -380,16 +381,18 @@ void PGMap::update_pg(pg_t pgid, bufferlist& bl)
 {
   bufferlist::iterator p = bl.begin();
   ceph::unordered_map<pg_t,pg_stat_t>::iterator s = pg_stat.find(pgid);
-  epoch_t old_lec = 0;
+  epoch_t old_lec = 0, lec;
   if (s != pg_stat.end()) {
     old_lec = s->second.get_effective_last_epoch_clean();
-    stat_pg_sub(pgid, s->second);
+    stat_pg_update(pgid, s->second, p);
+    lec = s->second.get_effective_last_epoch_clean();
+  } else {
+    pg_stat_t& r = pg_stat[pgid];
+    ::decode(r, p);
+    stat_pg_add(pgid, r);
+    lec = r.get_effective_last_epoch_clean();
   }
-  pg_stat_t& r = pg_stat[pgid];
-  ::decode(r, p);
-  stat_pg_add(pgid, r);
 
-  epoch_t lec = r.get_effective_last_epoch_clean();
   if (min_last_epoch_clean &&
       (lec < min_last_epoch_clean ||  // we did
        (lec > min_last_epoch_clean && // we might
@@ -456,7 +459,8 @@ void PGMap::remove_osd(int osd)
   }
 }
 
-void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
+void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+			bool sameosds)
 {
   pg_pool_sum[pgid.pool()].add(s);
   pg_sum.add(s);
@@ -472,14 +476,32 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     if (s.acting_primary >= 0)
       creating_pgs_by_osd[s.acting_primary].insert(pgid);
   }
+
+  if (sameosds)
+    return;
+
   for (vector<int>::const_iterator p = s.blocked_by.begin();
        p != s.blocked_by.end();
        ++p) {
     ++blocked_by_sum[*p];
   }
+
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p) {
+    set<pg_t>& oset = pg_by_osd[*p];
+    oset.erase(pgid);
+    if (oset.empty())
+      pg_by_osd.erase(*p);
+  }
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
+void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly,
+			bool sameosds)
 {
   pool_stat_t& ps = pg_pool_sum[pgid.pool()];
   ps.sub(s);
@@ -503,6 +525,9 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     }
   }
 
+  if (sameosds)
+    return;
+
   for (vector<int>::const_iterator p = s.blocked_by.begin();
        p != s.blocked_by.end();
        ++p) {
@@ -512,6 +537,27 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s, bool sumonly)
     if (q->second == 0)
       blocked_by_sum.erase(q);
   }
+
+  for (vector<int>::const_iterator p = s.acting.begin(); p != s.acting.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
+  for (vector<int>::const_iterator p = s.up.begin(); p != s.up.end(); ++p)
+    pg_by_osd[*p].insert(pgid);
+}
+
+void PGMap::stat_pg_update(const pg_t pgid, pg_stat_t& s,
+			   bufferlist::iterator& blp)
+{
+  pg_stat_t n;
+  ::decode(n, blp);
+
+  bool sameosds =
+    s.acting == n.acting &&
+    s.up == n.up &&
+    s.blocked_by == n.blocked_by;
+
+  stat_pg_sub(pgid, s, false, sameosds);
+  s = n;
+  stat_pg_add(pgid, n, false, sameosds);
 }
 
 void PGMap::stat_osd_add(const osd_stat_t &s)
