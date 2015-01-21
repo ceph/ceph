@@ -6,8 +6,3 @@ tasks:
       all:
         - fs/misc
 
-overrides:
-  ceph:
-    conf:
-      client:
-        client quota: true
