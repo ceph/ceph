@@ -983,39 +983,65 @@ int RGWPostObj_ObjStore_S3::get_policy()
 
     ret = rgw_get_user_info_by_access_key(store, s3_access_key, user_info);
     if (ret < 0) {
-      ldout(s->cct, 0) << "User lookup failed!" << dendl;
-      err_msg = "Bad access key / signature";
-      return -EACCES;
+      // Try keystone authentication as well
+      int keystone_result = -EINVAL;
+      if (store->ctx()->_conf->rgw_s3_auth_use_keystone
+	  && !store->ctx()->_conf->rgw_keystone_url.empty()) {
+	dout(20) << "s3 keystone: trying keystone auth" << dendl;
+
+	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
+	keystone_result = keystone_validator.validate_s3token(s3_access_key,string(encoded_policy.c_str(),encoded_policy.length()),received_signature_str);
+
+	if (keystone_result < 0) {
+	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
+	  err_msg = "Bad access key / signature";
+	  return -EACCES;
+	}
+
+	user_info.user_id = keystone_validator.response.token.tenant.id;
+	user_info.display_name = keystone_validator.response.token.tenant.name;
+
+	/* try to store user if it not already exists */
+	if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
+	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
+	  if (ret < 0) {
+	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+	  }
+
+	  s->perm_mask = RGW_PERM_FULL_CONTROL;
+	}
+      }
+    } else {
+      map<string, RGWAccessKey> access_keys  = user_info.access_keys;
+
+      map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
+      // We know the key must exist, since the user was returned by
+      // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
+      if (iter == access_keys.end()) {
+	ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
+	err_msg = "No secret key for matching access key";
+	return -EACCES;
+      }
+      string s3_secret_key = (iter->second).key;
+
+      char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
+
+      calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), expected_signature_char);
+      bufferlist expected_signature_hmac_raw;
+      bufferlist expected_signature_hmac_encoded;
+      expected_signature_hmac_raw.append(expected_signature_char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
+      expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
+      expected_signature_hmac_encoded.append((char)0); /* null terminate */
+
+      if (received_signature_str.compare(expected_signature_hmac_encoded.c_str()) != 0) {
+	ldout(s->cct, 0) << "Signature verification failed!" << dendl;
+	ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
+	ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
+	err_msg = "Bad access key / signature";
+	return -EACCES;
+      }
     }
 
-    map<string, RGWAccessKey> access_keys  = user_info.access_keys;
-
-    map<string, RGWAccessKey>::const_iterator iter = access_keys.find(s3_access_key);
-    // We know the key must exist, since the user was returned by
-    // rgw_get_user_info_by_access_key, but it doesn't hurt to check!
-    if (iter == access_keys.end()) {
-      ldout(s->cct, 0) << "Secret key lookup failed!" << dendl;
-      err_msg = "No secret key for matching access key";
-      return -EACCES;
-    }
-    string s3_secret_key = (iter->second).key;
-
-    char expected_signature_char[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
-
-    calc_hmac_sha1(s3_secret_key.c_str(), s3_secret_key.size(), encoded_policy.c_str(), encoded_policy.length(), expected_signature_char);
-    bufferlist expected_signature_hmac_raw;
-    bufferlist expected_signature_hmac_encoded;
-    expected_signature_hmac_raw.append(expected_signature_char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
-    expected_signature_hmac_raw.encode_base64(expected_signature_hmac_encoded);
-    expected_signature_hmac_encoded.append((char)0); /* null terminate */
-
-    if (received_signature_str.compare(expected_signature_hmac_encoded.c_str()) != 0) {
-      ldout(s->cct, 0) << "Signature verification failed!" << dendl;
-      ldout(s->cct, 0) << "received: " << received_signature_str.c_str() << dendl;
-      ldout(s->cct, 0) << "expected: " << expected_signature_hmac_encoded.c_str() << dendl;
-      err_msg = "Bad access key / signature";
-      return -EACCES;
-    }
     ldout(s->cct, 0) << "Successful Signature Verification!" << dendl;
     bufferlist decoded_policy;
     try {
