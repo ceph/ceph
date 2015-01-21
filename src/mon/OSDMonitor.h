@@ -34,6 +34,8 @@ using namespace std;
 #include "Session.h"
 
 class Monitor;
+class PGMap;
+
 #include "messages/MOSDBoot.h"
 #include "messages/MMonCommand.h"
 #include "messages/MOSDMap.h"
@@ -197,6 +199,12 @@ private:
                                       stringstream &ss);
 
   void share_map_with_random_osd();
+
+  void maybe_prime_pg_temp();
+  void prime_pg_temp(OSDMap& next,
+		     ceph::unordered_map<pg_t, pg_stat_t>::iterator pp);
+  void prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
+  void prime_pg_temp(OSDMap& next, PGMap *pg_map);
 
   void update_logger();
 
