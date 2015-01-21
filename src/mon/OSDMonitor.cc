@@ -650,8 +650,17 @@ void OSDMonitor::maybe_prime_pg_temp()
     OSDMap next;
     next.deepish_copy_from(osdmap);
     next.apply_incremental(pending_inc);
+    utime_t stop = ceph_clock_now(NULL);
+    stop += g_conf->mon_osd_prime_pg_temp_max_time;
     for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
       prime_pg_temp(next, &mon->pgmon()->pg_map, *p);
+      if (ceph_clock_now(NULL) > stop) {
+	dout(10) << __func__ << " consumed more than "
+		 << g_conf->mon_osd_prime_pg_temp_max_time
+		 << " seconds, stopping"
+		 << dendl;
+	break;
+      }
     }
   }
 }
@@ -699,10 +708,23 @@ void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
 void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map)
 {
   dout(10) << __func__ << dendl;
+  utime_t stop = ceph_clock_now(NULL);
+  stop += g_conf->mon_osd_prime_pg_temp_max_time;
+  int n = 0;
   for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.begin();
        pp != pg_map->pg_stat.end();
        ++pp) {
     prime_pg_temp(next, pp);
+    if (++n == 1000) {
+      n = 0;
+      if (ceph_clock_now(NULL) > stop) {
+	dout(10) << __func__ << " consumed more than "
+		 << g_conf->mon_osd_prime_pg_temp_max_time
+		 << " seconds, stopping"
+		 << dendl;
+	break;
+      }
+    }
   }
 }
 
