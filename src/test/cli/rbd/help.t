@@ -42,6 +42,7 @@
     snap protect <snap-name>                    prevent a snapshot from being deleted
     snap unprotect <snap-name>                  allow a snapshot to be deleted
     watch <image-name>                          watch events on image
+    status <image-name>                         show the status of this image
     map <image-name>                            map image to a block device
                                                 using the kernel
     unmap <device>                              unmap a rbd device that was
