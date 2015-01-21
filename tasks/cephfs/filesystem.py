@@ -491,6 +491,56 @@ class Filesystem(object):
 
         return json.loads(p.stdout.getvalue().strip())
 
+    def _enumerate_data_objects(self, ino, size):
+        """
+        Get the list of expected data objects for a range, and the list of objects
+        that really exist.
+
+        :return a tuple of two lists of strings (expected, actual)
+        """
+        stripe_size = 1024 * 1024 * 4
+
+        size = max(stripe_size, size)
+
+        want_objects = [
+            "{0:x}.{1:08x}".format(ino, n)
+            for n in range(0, ((size - 1) / stripe_size) + 1)
+        ]
+
+        exist_objects = self.rados(["ls"], pool=self.get_data_pool_name()).split("\n")
+
+        return want_objects, exist_objects
+
+    def data_objects_present(self, ino, size):
+        """
+        Check that *all* the expected data objects for an inode are present in the data pool
+        """
+
+        want_objects, exist_objects = self._enumerate_data_objects(ino, size)
+        missing = set(want_objects) - set(exist_objects)
+
+        if missing:
+            log.info("Objects missing (ino {0}, size {1}): {2}".format(
+                ino, size, missing
+            ))
+            return False
+        else:
+            log.info("All objects for ino {0} size {1} found".format(ino, size))
+            return True
+
+    def data_objects_absent(self, ino, size):
+        want_objects, exist_objects = self._enumerate_data_objects(ino, size)
+        present = set(want_objects) & set(exist_objects)
+
+        if present:
+            log.info("Objects not absent (ino {0}, size {1}): {2}".format(
+                ino, size, present
+            ))
+            return False
+        else:
+            log.info("All objects for ino {0} size {1} are absent".format(ino, size))
+            return True
+
     def rados(self, args, pool=None):
         """
         Call into the `rados` CLI from an MDS
