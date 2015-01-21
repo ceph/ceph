@@ -606,6 +606,7 @@ AC_LANG_POP([C++])
 # Find supported SIMD / NEON / SSE extensions supported by the compiler
 AX_ARM_FEATURES()
 AM_CONDITIONAL(HAVE_NEON, [ test "x$ax_cv_support_neon_ext" = "xyes"])
+AM_CONDITIONAL(HAVE_ARMV8_CRC, [ test "x$ax_cv_support_crc_ext" = "xyes"])
 AX_INTEL_FEATURES()
 AM_CONDITIONAL(HAVE_SSSE3, [ test "x$ax_cv_support_ssse3_ext" = "xyes"])
 AM_CONDITIONAL(HAVE_SSE4_PCLMUL, [ test "x$ax_cv_support_pclmuldq_ext" = "xyes"])
