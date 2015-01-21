@@ -7185,6 +7185,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
     e.content_type = dirent.meta.content_type;
     e.tag = dirent.tag;
     e.flags = dirent.flags;
+    e.versioned_epoch = dirent.versioned_epoch;
 
     /* oh, that shouldn't happen! */
     if (e.key.empty()) {
