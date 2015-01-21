@@ -203,8 +203,7 @@ private:
   void maybe_prime_pg_temp();
   void prime_pg_temp(OSDMap& next,
 		     ceph::unordered_map<pg_t, pg_stat_t>::iterator pp);
-  void prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
-  void prime_pg_temp(OSDMap& next, PGMap *pg_map);
+  int prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd);
 
   void update_logger();
 

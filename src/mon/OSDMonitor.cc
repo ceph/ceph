@@ -622,44 +622,84 @@ void OSDMonitor::create_pending()
 
 void OSDMonitor::maybe_prime_pg_temp()
 {
+  bool all = false;
   if (pending_inc.crush.length()) {
-    dout(10) << __func__ << " new crush map" << dendl;
-    OSDMap next;
-    next.deepish_copy_from(osdmap);
-    next.apply_incremental(pending_inc);
-    prime_pg_temp(next, &mon->pgmon()->pg_map);
-    return;
+    dout(10) << __func__ << " new crush map, all" << dendl;
+    all = true;
+  }
+
+  if (!pending_inc.new_up_client.empty()) {
+    dout(10) << __func__ << " new up osds, all" << dendl;
+    all = true;
   }
 
   // check for interesting OSDs
   set<int> osds;
   for (map<int32_t,uint8_t>::iterator p = pending_inc.new_state.begin();
-       p != pending_inc.new_state.end();
+       !all && p != pending_inc.new_state.end();
        ++p) {
-    if (p->second & CEPH_OSD_UP) {
+    if ((p->second & CEPH_OSD_UP) &&
+	osdmap.is_up(p->first)) {
       osds.insert(p->first);
     }
   }
   for (map<int32_t,uint32_t>::iterator p = pending_inc.new_weight.begin();
-       p != pending_inc.new_weight.end();
+       !all && p != pending_inc.new_weight.end();
        ++p) {
-    osds.insert(p->first);
+    if (p->second < osdmap.get_weight(p->first)) {
+      // weight reduction
+      osds.insert(p->first);
+    } else {
+      dout(10) << __func__ << " osd." << p->first << " weight increase, all"
+	       << dendl;
+      all = true;
+    }
   }
-  if (!osds.empty()) {
+
+  if (!all && osds.empty())
+    return;
+
+  OSDMap next;
+  next.deepish_copy_from(osdmap);
+  next.apply_incremental(pending_inc);
+
+  PGMap *pg_map = &mon->pgmon()->pg_map;
+
+  utime_t stop = ceph_clock_now(NULL);
+  stop += g_conf->mon_osd_prime_pg_temp_max_time;
+  int chunk = 1000;
+  int n = chunk;
+
+  if (all) {
+    for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp =
+	   pg_map->pg_stat.begin();
+	 pp != pg_map->pg_stat.end();
+	 ++pp) {
+      prime_pg_temp(next, pp);
+      if (--n <= 0) {
+	n = chunk;
+	if (ceph_clock_now(NULL) > stop) {
+	  dout(10) << __func__ << " consumed more than "
+		   << g_conf->mon_osd_prime_pg_temp_max_time
+		   << " seconds, stopping"
+		   << dendl;
+	  break;
+	}
+      }
+    }
+  } else {
     dout(10) << __func__ << " " << osds.size() << " interesting osds" << dendl;
-    OSDMap next;
-    next.deepish_copy_from(osdmap);
-    next.apply_incremental(pending_inc);
-    utime_t stop = ceph_clock_now(NULL);
-    stop += g_conf->mon_osd_prime_pg_temp_max_time;
     for (set<int>::iterator p = osds.begin(); p != osds.end(); ++p) {
-      prime_pg_temp(next, &mon->pgmon()->pg_map, *p);
-      if (ceph_clock_now(NULL) > stop) {
-	dout(10) << __func__ << " consumed more than "
-		 << g_conf->mon_osd_prime_pg_temp_max_time
-		 << " seconds, stopping"
-		 << dendl;
-	break;
+      n -= prime_pg_temp(next, pg_map, *p);
+      if (--n <= 0) {
+	n = chunk;
+	if (ceph_clock_now(NULL) > stop) {
+	  dout(10) << __func__ << " consumed more than "
+		   << g_conf->mon_osd_prime_pg_temp_max_time
+		   << " seconds, stopping"
+		   << dendl;
+	  break;
+	}
       }
     }
   }
@@ -689,43 +729,22 @@ void OSDMonitor::prime_pg_temp(OSDMap& next,
   pending_inc.new_pg_temp[pp->first] = cur_acting;
 }
 
-void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
+int OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map, int osd)
 {
   dout(10) << __func__ << " osd." << osd << dendl;
+  int num = 0;
   ceph::unordered_map<int, set<pg_t> >::iterator po = pg_map->pg_by_osd.find(osd);
   if (po != pg_map->pg_by_osd.end()) {
     for (set<pg_t>::iterator p = po->second.begin();
 	 p != po->second.end();
-	 ++p) {
+	 ++p, ++num) {
       ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.find(*p);
       if (pp == pg_map->pg_stat.end())
 	continue;
       prime_pg_temp(next, pp);
     }
   }
-}
-
-void OSDMonitor::prime_pg_temp(OSDMap& next, PGMap *pg_map)
-{
-  dout(10) << __func__ << dendl;
-  utime_t stop = ceph_clock_now(NULL);
-  stop += g_conf->mon_osd_prime_pg_temp_max_time;
-  int n = 0;
-  for (ceph::unordered_map<pg_t, pg_stat_t>::iterator pp = pg_map->pg_stat.begin();
-       pp != pg_map->pg_stat.end();
-       ++pp) {
-    prime_pg_temp(next, pp);
-    if (++n == 1000) {
-      n = 0;
-      if (ceph_clock_now(NULL) > stop) {
-	dout(10) << __func__ << " consumed more than "
-		 << g_conf->mon_osd_prime_pg_temp_max_time
-		 << " seconds, stopping"
-		 << dendl;
-	break;
-      }
-    }
-  }
+  return num;
 }
 
 
