@@ -172,9 +172,10 @@ namespace librbd {
           if (newlen != 0) {
             // create and kick off a CopyupRequest
             CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                       m_object_no, true);
+                                                       m_object_no,
+						       m_image_extents);
             m_ictx->copyup_list[m_object_no] = new_req;
-            new_req->queue_read_from_parent(m_image_extents);
+            new_req->queue_read_from_parent();
           }
         }
       }
@@ -294,7 +295,8 @@ namespace librbd {
             if (it == m_ictx->copyup_list.end()) {
               // If it is not in the list, create a CopyupRequest and wait for it.
               CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                                         m_object_no, false);
+                                                         m_object_no,
+							 m_object_image_extents);
               // make sure to wait on this CopyupRequest
               new_req->append_request(this);
               m_ictx->copyup_list[m_object_no] = new_req;
@@ -303,7 +305,7 @@ namespace librbd {
               ldout(m_ictx->cct, 20) << __func__ << " creating new Copyup for AioWrite, obj-"
                                      << m_object_no << dendl;
 	      m_ictx->copyup_list_lock.Unlock();
-              new_req->read_from_parent(m_object_image_extents);
+              new_req->read_from_parent();
               ldout(m_ictx->cct, 20) << __func__ << " issuing read_from_parent" << dendl;
             } else {
               ldout(m_ictx->cct, 20) << __func__ << " someone is reading back from parent" << dendl;
@@ -338,18 +340,14 @@ namespace librbd {
 
       // Read data from waiting list safely. If this AioWrite created a
       // CopyupRequest, m_read_data should be empty.
-      {
-        RWLock::RLocker l3(m_ictx->snap_lock);
-        if (is_copy_on_read(m_ictx, m_snap_id) &&
-            m_read_data.is_zero()) {
-          Mutex::Locker l(m_ictx->copyup_list_lock);
-          ldout(m_ictx->cct, 20) << __func__ << " releasing self pending, obj-"
-                                 << m_object_no << dendl;
-          it = m_ictx->copyup_list.find(m_object_no);
-          assert(it != m_ictx->copyup_list.end());
-          assert(m_entire_object);
-          m_read_data.append(*m_entire_object);
-        }
+      if (m_entire_object != NULL) {
+	assert(m_ictx->copyup_list_lock.is_locked());
+	ldout(m_ictx->cct, 20) << __func__ << " releasing self pending, obj-"
+			       << m_object_no << dendl;
+	assert(m_ictx->copyup_list.find(m_object_no) !=
+	       m_ictx->copyup_list.end());
+	assert(m_read_data.length() == 0);
+	m_read_data.append(*m_entire_object);
       }
 
       send_copyup();
