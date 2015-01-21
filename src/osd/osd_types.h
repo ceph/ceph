@@ -1198,6 +1198,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  * This is just a container for object stats; we don't know what for.
  */
 struct object_stat_sum_t {
+  /**************************************************************************
+   * WARNING: be sure to update operator==, floor, and split when
+   * adding/removing fields!
+   **************************************************************************/
   int64_t num_bytes;    // in bytes
   int64_t num_objects;
   int64_t num_object_clones;
@@ -1206,8 +1210,10 @@ struct object_stat_sum_t {
   int64_t num_objects_degraded;
   int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
-  int64_t num_rd, num_rd_kb;
-  int64_t num_wr, num_wr_kb;
+  int64_t num_rd;
+  int64_t num_rd_kb;
+  int64_t num_wr;
+  int64_t num_wr_kb;
   int64_t num_scrub_errors;	// total deep and shallow scrub errors
   int64_t num_shallow_scrub_errors;
   int64_t num_deep_scrub_errors;
@@ -1325,12 +1331,17 @@ struct object_stat_sum_t {
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
+bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r);
+
 /**
  * a collection of object stat sums
  *
  * This is a collection of stat sums over different categories.
  */
 struct object_stat_collection_t {
+  /**************************************************************************
+   * WARNING: be sure to update the operator== when adding/removing fields! *
+   **************************************************************************/
   object_stat_sum_t sum;
 
   void calc_copies(int nrep) {
@@ -1367,10 +1378,19 @@ struct object_stat_collection_t {
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
 
+inline bool operator==(const object_stat_collection_t& l,
+		       const object_stat_collection_t& r) {
+  return l.sum == r.sum;
+}
+
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
+  /**************************************************************************
+   * WARNING: be sure to update the operator== when adding/removing fields! *
+   **************************************************************************/
   eversion_t version;
   version_t reported_seq;  // sequence number
   epoch_t reported_epoch;  // epoch of this report
@@ -1478,6 +1498,8 @@ struct pg_stat_t {
   static void generate_test_instances(list<pg_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
+
+bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
 /*
  * summation over an entire pool
