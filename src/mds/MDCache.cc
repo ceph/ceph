@@ -1496,6 +1496,12 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
   SnapRealm *realm = in->find_snaprealm();
   const set<snapid_t>& snaps = realm->get_snaps();
 
+  if (in->last != CEPH_NOSNAP) {
+    CInode *head_in = get_inode(in->ino());
+    assert(head_in);
+    head_in->split_need_snapflush(oldin, in);
+  }
+
   // clone caps?
   for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
       p != in->client_caps.end();
