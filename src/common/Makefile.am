@@ -118,11 +118,19 @@ endif
 LIBCOMMON_DEPS += libcommon_crc.la
 noinst_LTLIBRARIES += libcommon_crc.la
 
+if HAVE_ARMV8_CRC
+libcommon_crc_aarch64_la_SOURCES = common/crc32c_aarch64.c
+libcommon_crc_aarch64_la_CFLAGS = $(AM_CFLAGS) $(ARM_CRC_FLAGS)
+LIBCOMMON_DEPS += libcommon_crc_aarch64.la
+noinst_LTLIBRARIES += libcommon_crc_aarch64.la
+endif
+
 noinst_HEADERS += \
 	common/bloom_filter.hpp \
 	common/sctp_crc32.h \
 	common/crc32c_intel_baseline.h \
-	common/crc32c_intel_fast.h
+	common/crc32c_intel_fast.h \
+	common/crc32c_aarch64.h
 
 
 # important; libmsg before libauth!
