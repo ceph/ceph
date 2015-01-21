@@ -217,6 +217,8 @@ OSDService::OSDService(OSD *osd) :
   agent_stop_flag(false),
   agent_timer_lock("OSD::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
+  scrub_timer_lock("OSD::scrub_timer_lock"),
+  scrub_timer(cct, scrub_timer_lock),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
   watch_lock("OSD::watch_lock"),
@@ -441,6 +443,13 @@ void OSDService::start_shutdown()
     agent_timer.cancel_all_events();
     agent_timer.shutdown();
   }
+
+  {
+    Mutex::Locker l(scrub_timer_lock);
+    scrub_timer.cancel_all_events();
+    scrub_timer.shutdown();
+  }
+
 }
 
 void OSDService::shutdown()
@@ -470,6 +479,7 @@ void OSDService::init()
   objecter->start();
   watch_timer.init();
   agent_timer.init();
+  scrub_timer.init();
 
   agent_thread.create();
 }

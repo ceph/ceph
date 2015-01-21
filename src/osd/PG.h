@@ -1032,7 +1032,8 @@ public:
       num_digest_updates_pending(0),
       state(INACTIVE),
       deep(false),
-      seed(0)
+      seed(0),
+      last_scrub_num_bytes(0), last_scrub_stamp(utime_t())
     {
     }
 
@@ -1089,6 +1090,9 @@ public:
     // deep scrub
     bool deep;
     uint32_t seed;
+
+    uint32_t last_scrub_num_bytes;
+    utime_t last_scrub_stamp;
 
     list<Context*> callbacks;
     void add_callback(Context *context) {
@@ -1167,6 +1171,9 @@ public:
       authoritative.clear();
       missing_digest.clear();
       num_digest_updates_pending = 0;
+
+      last_scrub_num_bytes = 0;
+      last_scrub_stamp = utime_t();
     }
 
   } scrubber;
