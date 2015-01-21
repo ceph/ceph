@@ -895,6 +895,11 @@ public:
     if (IS_ERR(b)) return PTR_ERR(b);
     return crush_get_bucket_item_weight(b, pos);
   }
+  float get_bucket_item_weightf(int id, int pos) const {
+    const crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) return 0;
+    return (float)crush_get_bucket_item_weight(b, pos) / (float)0x10000;
+  }
 
   /* modifiers */
   int add_bucket(int bucketno, int alg, int hash, int type, int size,
@@ -1005,7 +1010,7 @@ public:
   void dump_rule(int ruleset, Formatter *f) const;
   void dump_tunables(Formatter *f) const;
   void list_rules(Formatter *f) const;
-  void dump_tree(const vector<__u32>& w, ostream *out, Formatter *f) const;
+  void dump_tree(ostream *out, Formatter *f) const;
   static void generate_test_instances(list<CrushWrapper*>& o);
 
   int get_osd_pool_default_crush_replicated_ruleset(CephContext *cct);
