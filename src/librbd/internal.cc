@@ -1623,12 +1623,15 @@ reprotect_and_return_err:
     }
 
     RWLock::WLocker l2(ictx->md_lock);
-    if (size < ictx->size && ictx->object_cacher) {
-      // need to invalidate since we're deleting objects, and
-      // ObjectCacher doesn't track non-existent objects
-      r = ictx->invalidate_cache();
-      if (r < 0) {
-	return r;
+    if (size < ictx->size) {
+      ictx->wait_for_pending_copyup();
+      if (ictx->object_cacher) {
+	// need to invalidate since we're deleting objects, and
+	// ObjectCacher doesn't track non-existent objects
+	r = ictx->invalidate_cache();
+	if (r < 0) {
+	  return r;
+	}
       }
     }
     resize_helper(ictx, size, prog_ctx);
@@ -2205,10 +2208,10 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
 
-    ictx->wait_for_pending_copyup();
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
+    ictx->wait_for_pending_copyup();
     if (ictx->image_watcher != NULL) {
       ictx->image_watcher->flush_aio_operations();
     }
