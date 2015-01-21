@@ -750,15 +750,24 @@ def install(ctx, config):
     debs += extra_pkgs
     rpm += extra_pkgs
 
-    # the extras option right now is specific to the 'ceph' project
+    # When extras is in the config we want to purposely not install ceph.
+    # This is typically used on jobs that use ceph-deploy to install ceph
+    # or when we are testing ceph-deploy directly.  The packages being
+    # installed are needed to properly test ceph as ceph-deploy won't
+    # install these. 'extras' might not be the best name for this.
     extras = config.get('extras')
     if extras is not None:
         debs = ['ceph-test', 'ceph-test-dbg', 'ceph-fuse', 'ceph-fuse-dbg',
-                'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg', 'python-ceph']
+                'librados2', 'librados2-dbg', 'librbd1', 'librbd1-dbg',
+                'python-ceph']
         rpm = ['ceph-fuse', 'librbd1', 'librados2', 'ceph-test', 'python-ceph']
 
     # install lib deps (so we explicitly specify version), but do not
     # uninstall them, as other packages depend on them (e.g., kvm)
+    # TODO: these can probably be removed as these packages are now included
+    # in PACKAGES. We've found that not uninstalling them each run can
+    # sometimes cause a baremetal machine to end up in a weird state so
+    # they were included in PACKAGES to ensure that nuke cleans them up.
     proj_install_debs = {'ceph': [
         'librados2',
         'librados2-dbg',
@@ -774,6 +783,9 @@ def install(ctx, config):
     install_debs = proj_install_debs.get(project, [])
     install_rpm = proj_install_rpm.get(project, [])
 
+    # TODO: see previous todo comment. The install_debs and install_rpm
+    # part can and should be removed eventually as those packages are now
+    # present in PACKAGES.
     install_info = {
         "deb": debs + install_debs,
         "rpm": rpm + install_rpm}
