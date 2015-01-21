@@ -236,7 +236,10 @@ public:
     bool is_zero() const;
 
     // modifiers
-    void set_offset(unsigned o) { _off = o; }
+    void set_offset(unsigned o) {
+      assert(_len >= o);
+      _off = o;
+    }
     void set_length(unsigned l) {
       assert(raw_length() >= l);
       _len = l;
