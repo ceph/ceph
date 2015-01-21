@@ -1565,8 +1565,29 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
       }
       f->flush(ds);
     } else {
-      // plain format ignores dumpcontents
-      pg_map.dump(ds);
+      if (what.count("all")) {
+	pg_map.dump(ds);
+      } else if (what.count("summary") || what.count("sum")) {
+	pg_map.dump_basic(ds);
+	pg_map.dump_pg_sum_stats(ds, true);
+	pg_map.dump_osd_sum_stats(ds);
+      } else {
+	if (what.count("pgs_brief")) {
+	  pg_map.dump_pg_stats(ds, true);
+	}
+	bool header = true;
+	if (what.count("pgs")) {
+	  pg_map.dump_pg_stats(ds, false);
+	  header = false;
+	}
+	if (what.count("pools")) {
+	  pg_map.dump_pool_stats(ds, header);
+	  header = false;
+	}
+	if (what.count("osds")) {
+	  pg_map.dump_osd_stats(ds);
+	}
+      }
     }
     ss << "dumped " << what << " in format " << format;
     r = 0;
