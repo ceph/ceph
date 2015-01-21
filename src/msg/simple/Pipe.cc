@@ -1875,7 +1875,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   
   ceph_msg_header header; 
   ceph_msg_footer footer;
-  __u32 header_crc;
+  __u32 header_crc = 0;
 
   if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
     if (tcp_read((char*)&header, sizeof(header)) < 0)
