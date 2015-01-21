@@ -721,6 +721,11 @@ void OSDMonitor::prime_pg_temp(OSDMap& next,
 			      &cur_acting, &acting_primary);
   if (cur_acting == acting)
     return;  // no change this epoch; must be stale pg_stat
+  if (cur_acting.empty())
+    return;  // if previously empty now we can be no worse off
+  const pg_pool_t *pool = next.get_pg_pool(pp->first.pool());
+  if (pool && cur_acting.size() < pool->min_size)
+    return;  // can be no worse off than before
 
   dout(20) << __func__ << " " << pp->first << " " << cur_up << "/" << cur_acting
 	   << " -> " << up << "/" << acting
