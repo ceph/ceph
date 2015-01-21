@@ -310,12 +310,25 @@ class CephFSMount(object):
     def teardown(self):
         for p in self.background_procs:
             log.info("Terminating background process")
-            if p.stdin:
-                p.stdin.close()
-                try:
-                    p.wait()
-                except (CommandFailedError, ConnectionLostError):
-                    pass
+            self._kill_background(p)
+
+        self.background_procs = []
+
+    def _kill_background(self, p):
+        if p.stdin:
+            p.stdin.close()
+            try:
+                p.wait()
+            except (CommandFailedError, ConnectionLostError):
+                pass
+
+    def kill_background(self, p):
+        """
+        For a process that was returned by one of the _background member functions,
+        kill it hard.
+        """
+        self._kill_background(p)
+        self.background_procs.remove(p)
 
     def spam_dir_background(self, path):
         """
