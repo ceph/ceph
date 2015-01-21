@@ -2695,7 +2695,13 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].type = pg_pool_t::TYPE_REPLICATED;
     pools[pool].flags = cct->_conf->osd_pool_default_flags;
     if (cct->_conf->osd_pool_default_flag_hashpspool)
-      pools[pool].flags |= pg_pool_t::FLAG_HASHPSPOOL;
+      pools[pool].set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    if (cct->_conf->osd_pool_default_flag_nodelete)
+      pools[pool].set_flag(pg_pool_t::FLAG_NODELETE);
+    if (cct->_conf->osd_pool_default_flag_nopgchange)
+      pools[pool].set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+    if (cct->_conf->osd_pool_default_flag_nosizechange)
+      pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = default_replicated_ruleset;
