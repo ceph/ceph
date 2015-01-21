@@ -1730,6 +1730,18 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   op->mark_started();
   ctx->src_obc = src_obc;
 
+  // Store the req id in the object op log
+  if (op->may_write() || op->may_cache()) {
+    deque<osd_reqid_t> &log = obc->obs.oi.op_log;
+    log.push_back(m->get_reqid());
+    if (log.size() > pool.info.object_max_op_log) {
+      uint32_t k = log.size() - pool.info.object_max_op_log;
+      while (k-- > 0) {
+        log.pop_front();
+      }
+    }
+  }
+
   execute_ctx(ctx);
 }
 
