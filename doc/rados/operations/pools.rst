@@ -274,6 +274,30 @@ You may set values for the following keys:
 :Version: Version ``0.48`` Argonaut and above.	
 
 
+``nodelete``
+
+:Description: Set/Unset NODELETE flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+:Version: Version ``FIXME``
+
+
+``nopgchange``
+
+:Description: Set/Unset NOPGCHANGE flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+:Version: Version ``FIXME``
+
+
+``nosizechange``
+
+:Description: Set/Unset NOSIZECHANGE flag on a given pool.
+:Type: Integer
+:Valid Range: 1 sets flag, 0 unsets flag
+:Version: Version ``FIXME``
+
+
 ``hit_set_type``
 
 :Description: Enables hit set tracking for cache pools.
