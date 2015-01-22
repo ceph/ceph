@@ -138,7 +138,7 @@ see those messages in case of problem.
 Availability
 ============
 
-**ceph-rest-api** is part of the Ceph distributed storage system. Please refer to the Ceph documentation at
+**ceph-rest-api** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to the Ceph documentation at
 http://ceph.com/docs for more information.
 
 
