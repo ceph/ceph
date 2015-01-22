@@ -598,7 +598,7 @@
      bool okseed,
      const ScrubMap::object &candidate,
      ostream &errorstream);
-   list<map<pg_shard_t, ScrubMap *>::const_iterator> be_select_auth_object(
+   map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      bool okseed,
