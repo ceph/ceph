@@ -1005,6 +1005,30 @@ def find_cmd_target(childargs):
             # pg doesn't need revalidation; the string is fine
             return 'pg', valid_dict['pgid']
 
+    # If we reached this far it must mean that so far we've been unable to
+    # obtain a proper target from childargs.  This may mean that we are not
+    # dealing with a 'tell' command, or that the specified target is invalid.
+    # If the latter, we likely were unable to catch it because we were not
+    # really looking for it: first we tried to parse a 'CephName' (osd, mon,
+    # mds, followed by and id); given our failure to parse, we tried to parse
+    # a 'CephPgid' instead (e.g., 0.4a).  Considering we got this far though
+    # we were unable to do so.
+    #
+    # We will now check if this is a tell and, if so, forcefully validate the
+    # target as a 'CephName'.  This must be so because otherwise we will end
+    # up sending garbage to a monitor, which is the default target when a
+    # target is not explicitly specified.
+    # e.g.,
+    #   'ceph status' -> target is any one monitor
+    #   'ceph tell mon.* status -> target is all monitors
+    #   'ceph tell foo status -> target is invalid!
+    if len(childargs) > 1 and childargs[0] == 'tell':
+        name = CephName()
+        # CephName.valid() raises on validation error; find_cmd_target()'s
+        # caller should handle them
+        name.valid(childargs[1])
+        return name.nametype, name.nameid
+
     sig = parse_funcsig(['pg', {'name':'pgid', 'type':'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
