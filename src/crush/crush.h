@@ -112,6 +112,15 @@ enum {
 };
 extern const char *crush_bucket_alg_name(int alg);
 
+/*
+ * although tree was a legacy algorithm, it has been buggy, so
+ * exclude it.
+ */
+#define CRUSH_LEGACY_ALLOWED_BUCKET_ALGS (	\
+		(1 << CRUSH_BUCKET_UNIFORM) |	\
+		(1 << CRUSH_BUCKET_LIST) |	\
+		(1 << CRUSH_BUCKET_STRAW))
+
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
 	__u16 type;      /* non-zero; type=0 is reserved for devices */
@@ -197,6 +206,15 @@ struct crush_map {
 	 * fixes a few of them.
 	 */
 	__u8 straw_calc_version;
+
+	/*
+	 * allowed bucket algs is a bitmask, here the bit positions
+	 * are CRUSH_BUCKET_*.  note that these are *bits* and
+	 * CRUSH_BUCKET_* values are not, so we need to or together (1
+	 * << CRUSH_BUCKET_WHATEVER).  The 0th bit is not used to
+	 * minimize confusion (bucket type values start at 1).
+	 */
+	__u32 allowed_bucket_algs;
 
 	__u32 *choose_tries;
 };

@@ -193,6 +193,9 @@ int CrushCompiler::decompile(ostream &out)
     out << "tunable chooseleaf_vary_r " << crush.get_chooseleaf_vary_r() << "\n";
   if (crush.get_straw_calc_version() != 0)
     out << "tunable straw_calc_version " << crush.get_straw_calc_version() << "\n";
+  if (crush.get_allowed_bucket_algs() != CRUSH_LEGACY_ALLOWED_BUCKET_ALGS)
+    out << "tunable allowed_bucket_algs " << crush.get_allowed_bucket_algs()
+	<< "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -372,6 +375,8 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_chooseleaf_vary_r(val);
   else if (name == "straw_calc_version")
     crush.set_straw_calc_version(val);
+  else if (name == "allowed_bucket_algs")
+    crush.set_allowed_bucket_algs(val);
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;
