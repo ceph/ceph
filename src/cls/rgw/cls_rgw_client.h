@@ -354,7 +354,7 @@ int cls_rgw_clear_olh(librados::IoCtx& io_ctx, string& oid, const cls_rgw_obj_ke
 */
 
 class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
-  string start_obj;
+  cls_rgw_obj_key start_obj;
   string filter_prefix;
   uint32_t num_entries;
   bool list_versions;
@@ -362,7 +362,7 @@ class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const string& oid);
 public:
-  CLSRGWIssueBucketList(librados::IoCtx& io_ctx, const string& _start_obj,
+  CLSRGWIssueBucketList(librados::IoCtx& io_ctx, const cls_rgw_obj_key& _start_obj,
                         const string& _filter_prefix, uint32_t _num_entries,
                         bool _list_versions,
                         map<int, string>& oids,

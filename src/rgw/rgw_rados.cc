@@ -3977,9 +3977,11 @@ int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx,
   if (ret < 0)
     return ret;
 
+  RGWObjectCtx obj_ctx(this);
+
   // Get the bucket info
   RGWBucketInfo binfo;
-  ret = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  ret = get_bucket_instance_info(obj_ctx, bucket, binfo, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -4014,9 +4016,11 @@ int RGWRados::open_bucket_index_shard(rgw_bucket& bucket, librados::IoCtx& index
   if (ret < 0)
     return ret;
 
+  RGWObjectCtx obj_ctx(this);
+
   // Get the bucket info
   RGWBucketInfo binfo;
-  ret = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  ret = get_bucket_instance_info(obj_ctx, bucket, binfo, NULL, NULL);
   if (ret < 0)
     return ret;
 
@@ -4941,10 +4945,10 @@ int RGWRados::SystemObject::Read::stat(RGWObjVersionTracker *objv_tracker)
 
 int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
 {
-  rgw_bucket& bucket = target->get_bucket();
   RGWRados *store = target->get_store();
   BucketShard *bs;
-  int ret = target->get_bucket_shard(&bs);
+  int ret = get_bucket_shard(&bs);
+  if (ret < 0) {
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
@@ -4962,7 +4966,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op)
       append_rand_alpha(store->ctx(), optag, optag, 32);
     }
   }
-  ret = store->cls_obj_prepare_op(*bs, bucket, op, optag, obj, bilog_flags);
+  ret = store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags);
 
   return ret;
 }
@@ -4972,9 +4976,9 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
                                     list<rgw_obj_key> *remove_objs)
 {
   RGWRados *store = target->get_store();
-  rgw_bucket& bucket = target->get_bucket();
   BucketShard *bs;
-  int ret = target->get_bucket_shard(&bs);
+  int ret = get_bucket_shard(&bs);
+  if (ret < 0) {
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
@@ -4995,7 +4999,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   ent.owner_display_name = owner.get_display_name();
   ent.content_type = content_type;
 
-  int ret = store->cls_obj_complete_add(*bs, optag, poolid, epoch, ent, category, remove_objs, bilog_flags);
+  ret = store->cls_obj_complete_add(*bs, optag, poolid, epoch, ent, category, remove_objs, bilog_flags);
 
   return ret;
 }
@@ -5004,7 +5008,8 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch)
 {
   RGWRados *store = target->get_store();
   BucketShard *bs;
-  int ret = target->get_bucket_shard(&bs);
+  int ret = get_bucket_shard(&bs);
+  if (ret < 0) {
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
@@ -5015,7 +5020,13 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch)
 int RGWRados::Bucket::UpdateIndex::cancel()
 {
   RGWRados *store = target->get_store();
-  return store->cls_obj_complete_cancel(target->get_bucket(), optag, obj, bilog_flags);
+  BucketShard *bs;
+  int ret = get_bucket_shard(&bs);
+  if (ret < 0) {
+    ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
+    return ret;
+  }
+  return store->cls_obj_complete_cancel(*bs, optag, obj, bilog_flags);
 }
 
 int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
@@ -6514,7 +6525,9 @@ public:
 int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *ctx)
 {
   RGWBucketInfo binfo;
-  int r = get_bucket_instance_info(NULL, bucket, binfo, NULL, NULL);
+  RGWObjectCtx obj_ctx(this);
+
+  int r = get_bucket_instance_info(obj_ctx, bucket, binfo, NULL, NULL);
   if (r < 0)
     return r;
 
@@ -7313,7 +7326,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   ObjectWriteOperation o;
   cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.get_loc(), zone_public_config.log_data, bilog_flags);
-  r = bs.index_ctx.operate(bs.bucket_obj, &o);
+  int r = bs.index_ctx.operate(bs.bucket_obj, &o);
   return r;
 }
 
@@ -7434,7 +7447,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
   map<string, size_t> candidates;
   for (size_t i = 0; i < vcurrents.size(); ++i) {
     if (vcurrents[i] != vends[i]) {
-      candidates[vcurrents[i]->second.name] = i;
+      candidates[vcurrents[i]->first] = i;
     }
   }
 
@@ -7443,6 +7456,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
   while (count < num_entries && !candidates.empty()) {
     // Select the next one
     int pos = candidates.begin()->second;
+    const string& name = vcurrents[pos]->first;
     struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
 
     // fill it in with initial values; we may correct later
@@ -7470,7 +7484,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
       }
     }
     if (r >= 0) {
-      m[e.name] = e;
+      m[name] = e;
       ldout(cct, 10) << "RGWRados::cls_bucket_list: got " << e.key.name << "[" << e.key.instance << "]" << dendl;
       ++count;
     }
@@ -7479,7 +7493,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
     candidates.erase(candidates.begin());
     ++vcurrents[pos];
     if (vcurrents[pos] != vends[pos]) {
-      candidates[vcurrents[pos]->second.name] = pos;
+      candidates[vcurrents[pos]->first] = pos;
     }
   }
 
