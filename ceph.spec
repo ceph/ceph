@@ -472,8 +472,8 @@ find $RPM_BUILD_ROOT -type f -name "*.la" -exec rm -f {} ';'
 find $RPM_BUILD_ROOT -type f -name "*.a" -exec rm -f {} ';'
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph-radosgw
-install -m 0644 -D %{SOURCE5} $RPM_BUILD_ROOT%{_sysconfdir}/apache2/conf.d/rgw.conf
-install -m 0755 -D %{SOURCE6} $RPM_BUILD_ROOT/srv/www/radosgw/s3gw.fcgi
+install -m 0644 -D %{SOURCE5} $RPM_BUILD_ROOT%{_docdir}/ceph-deploy/rgw.conf
+install -m 0755 -D %{SOURCE6} $RPM_BUILD_ROOT%{_docdir}/ceph-deploy/s3gw.fcgi
 %if 0%{?suse_version} >= 1310
 %{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
 %{__install} -m 0644 %{SOURCE4} %{buildroot}/%{_tmpfilesdir}/ceph-radosgw.conf
@@ -728,13 +728,11 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %attr(0755, wwwrun, www) %dir %{_localstatedir}/log/ceph-radosgw/
-%dir /srv/www/radosgw/
-/srv/www/radosgw/s3gw.fcgi
+%dir %{_docdir}/ceph-deploy
+%{_docdir}/ceph-deploy/s3gw.fcgi
+%{_docdir}/ceph-deploy/rgw.conf
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
-%dir %{_sysconfdir}/apache2/
-%dir %{_sysconfdir}/apache2/conf.d/
-%config(noreplace) %{_sysconfdir}/apache2/conf.d/rgw.conf
 %if 0%{?suse_version} >= 1310
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/ceph-radosgw.conf

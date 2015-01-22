@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Jan 22 11:06:37 UTC 2015 - osynge@suse.com
+
+- Moved rgw.conf and s3gw.fcgi to documentation directory.
+
+-------------------------------------------------------------------
 Tue Jan 20 18:22:32 UTC 2015 - osynge@suse.com
 
 - Fix postinstall hooks with systemd
