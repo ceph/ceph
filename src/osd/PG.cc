@@ -1852,6 +1852,7 @@ void PG::all_activated_and_committed()
   assert(is_primary());
   assert(peer_activated.size() == actingbackfill.size());
   assert(!actingbackfill.empty());
+  assert(blocked_by.empty());
 
   // info.last_epoch_started is set during activate()
   info.history.last_epoch_started = info.last_epoch_started;
@@ -6272,6 +6273,17 @@ PG::RecoveryState::Active::Active(my_context ctx)
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map(),
 	       context< RecoveryMachine >().get_recovery_ctx());
+
+  // everyone has to commit/ack before we are truly active
+  pg->blocked_by.clear();
+  for (set<pg_shard_t>::iterator p = pg->actingbackfill.begin();
+       p != pg->actingbackfill.end();
+       ++p) {
+    if (p->shard != pg->pg_whoami.shard) {
+      pg->blocked_by.insert(p->shard);
+    }
+  }
+  pg->publish_stats_to_osd();
   dout(10) << "Activate Finished" << dendl;
 }
 
@@ -6401,7 +6413,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
     dout(10) << " peer osd." << infoevt.from << " activated and committed" 
 	     << dendl;
     pg->peer_activated.insert(infoevt.from);
-
+    pg->blocked_by.erase(infoevt.from.shard);
+    pg->publish_stats_to_osd();
     if (pg->peer_activated.size() == pg->actingbackfill.size()) {
       pg->all_activated_and_committed();
     }
@@ -6508,6 +6521,7 @@ void PG::RecoveryState::Active::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  pg->blocked_by.clear();
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
   pg->state_clear(PG_STATE_ACTIVATING);
