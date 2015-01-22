@@ -716,37 +716,61 @@ void PGMap::dump_osd_stats(Formatter *f) const
 }
 
 void PGMap::dump_pg_stats_plain(ostream& ss,
-				const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats) const
+				const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
+				bool brief) const
 {
-  ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\tstate_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\tlast_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  if (brief)
+    ss << "pg_stat\tstate\tup\tup_primary\tacting\tacting_primary" << std::endl;
+  else
+    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\t"
+      "state_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\t"
+      "last_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
   for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stats.begin();
        i != pg_stats.end(); ++i) {
     const pg_stat_t &st(i->second);
-    ss << i->first
-       << "\t" << st.stats.sum.num_objects
-      //<< "\t" << st.num_object_copies
-       << "\t" << st.stats.sum.num_objects_missing_on_primary
-       << "\t" << st.stats.sum.num_objects_degraded
-       << "\t" << st.stats.sum.num_objects_misplaced
-       << "\t" << st.stats.sum.num_objects_unfound
-       << "\t" << st.stats.sum.num_bytes
-       << "\t" << st.log_size
-       << "\t" << st.ondisk_log_size
-       << "\t" << pg_state_string(st.state)
-       << "\t" << st.last_change
-       << "\t" << st.version
-       << "\t" << st.reported_epoch << ":" << st.reported_seq
-       << "\t" << st.up
-       << "\t" << st.up_primary
-       << "\t" << st.acting
-       << "\t" << st.acting_primary
-       << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
-       << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
-       << std::endl;
+    if (brief) {
+      ss << i->first
+	 << "\t" << pg_state_string(st.state)
+	 << "\t" << st.up
+	 << "\t" << st.up_primary
+	 << "\t" << st.acting
+	 << "\t" << st.acting_primary
+	 << std::endl;
+    } else {
+      ss << i->first
+	 << "\t" << st.stats.sum.num_objects
+	 << "\t" << st.stats.sum.num_objects_missing_on_primary
+	 << "\t" << st.stats.sum.num_objects_degraded
+	 << "\t" << st.stats.sum.num_objects_misplaced
+	 << "\t" << st.stats.sum.num_objects_unfound
+	 << "\t" << st.stats.sum.num_bytes
+	 << "\t" << st.log_size
+	 << "\t" << st.ondisk_log_size
+	 << "\t" << pg_state_string(st.state)
+	 << "\t" << st.last_change
+	 << "\t" << st.version
+	 << "\t" << st.reported_epoch << ":" << st.reported_seq
+	 << "\t" << st.up
+	 << "\t" << st.up_primary
+	 << "\t" << st.acting
+	 << "\t" << st.acting_primary
+	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
+	 << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
+	 << std::endl;
+    }
   }
 }
 
 void PGMap::dump(ostream& ss) const
+{
+  dump_basic(ss);
+  dump_pg_stats(ss, false);
+  dump_pool_stats(ss, false);
+  dump_pg_sum_stats(ss, false);
+  dump_osd_stats(ss);
+}
+
+void PGMap::dump_basic(ostream& ss) const
 {
   ss << "version " << version << std::endl;
   ss << "stamp " << stamp << std::endl;
@@ -754,33 +778,56 @@ void PGMap::dump(ostream& ss) const
   ss << "last_pg_scan " << last_pg_scan << std::endl;
   ss << "full_ratio " << full_ratio << std::endl;
   ss << "nearfull_ratio " << nearfull_ratio << std::endl;
-  dump_pg_stats_plain(ss, pg_stat);
+}
+
+void PGMap::dump_pg_stats(ostream& ss, bool brief) const
+{
+  dump_pg_stats_plain(ss, pg_stat, brief);
+}
+
+void PGMap::dump_pool_stats(ostream& ss, bool header) const
+{
+  if (header)
+    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog" << std::endl;
   for (ceph::unordered_map<int,pool_stat_t>::const_iterator p = pg_pool_sum.begin();
        p != pg_pool_sum.end();
-       ++p)
+       ++p) {
     ss << "pool " << p->first
        << "\t" << p->second.stats.sum.num_objects
       //<< "\t" << p->second.num_object_copies
        << "\t" << p->second.stats.sum.num_objects_missing_on_primary
        << "\t" << p->second.stats.sum.num_objects_degraded
+       << "\t" << p->second.stats.sum.num_objects_misplaced
        << "\t" << p->second.stats.sum.num_objects_unfound
        << "\t" << p->second.stats.sum.num_bytes
        << "\t" << p->second.log_size
        << "\t" << p->second.ondisk_log_size
        << std::endl;
+  }
+}
+
+void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
+{
+  if (header)
+    ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog" << std::endl;
   ss << " sum\t" << pg_sum.stats.sum.num_objects
     //<< "\t" << pg_sum.num_object_copies
      << "\t" << pg_sum.stats.sum.num_objects_missing_on_primary
      << "\t" << pg_sum.stats.sum.num_objects_degraded
+     << "\t" << pg_sum.stats.sum.num_objects_misplaced
      << "\t" << pg_sum.stats.sum.num_objects_unfound
      << "\t" << pg_sum.stats.sum.num_bytes
      << "\t" << pg_sum.log_size
      << "\t" << pg_sum.ondisk_log_size
      << std::endl;
+}
+
+void PGMap::dump_osd_stats(ostream& ss) const
+{
   ss << "osdstat\tkbused\tkbavail\tkb\thb in\thb out" << std::endl;
   for (ceph::unordered_map<int32_t,osd_stat_t>::const_iterator p = osd_stat.begin();
        p != osd_stat.end();
-       ++p)
+       ++p) {
     ss << p->first
        << "\t" << p->second.kb_used
        << "\t" << p->second.kb_avail 
@@ -788,6 +835,16 @@ void PGMap::dump(ostream& ss) const
        << "\t" << p->second.hb_in
        << "\t" << p->second.hb_out
        << std::endl;
+  }
+  ss << " sum\t" << osd_sum.kb_used
+     << "\t" << osd_sum.kb_avail 
+     << "\t" << osd_sum.kb
+     << std::endl;
+}
+
+void PGMap::dump_osd_sum_stats(ostream& ss) const
+{
+  ss << "osdstat\tkbused\tkbavail\tkb" << std::endl;
   ss << " sum\t" << osd_sum.kb_used
      << "\t" << osd_sum.kb_avail 
      << "\t" << osd_sum.kb
@@ -858,7 +915,7 @@ void PGMap::dump_stuck_plain(ostream& ss, PGMap::StuckPG type, utime_t cutoff) c
   ceph::unordered_map<pg_t, pg_stat_t> stuck_pg_stats;
   get_stuck_stats(type, cutoff, stuck_pg_stats);
   if (!stuck_pg_stats.empty())
-    dump_pg_stats_plain(ss, stuck_pg_stats);
+    dump_pg_stats_plain(ss, stuck_pg_stats, true);
 }
 
 void PGMap::dump_osd_perf_stats(Formatter *f) const

@@ -101,7 +101,7 @@ int MemStore::_save()
 
 void MemStore::dump_all()
 {
-  Formatter *f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create("json-pretty");
   f->open_object_section("store");
   dump(f);
   f->close_section();
@@ -241,7 +241,7 @@ int MemStore::statfs(struct statfs *st)
   st->f_blocks = g_conf->memstore_device_bytes / st->f_bsize;
 
   dout(10) << __func__ << ": used_bytes: " << used_bytes << "/" << g_conf->memstore_device_bytes << dendl;
-  st->f_bfree = st->f_bavail = MAX((st->f_blocks - used_bytes / st->f_bsize), 0);
+  st->f_bfree = st->f_bavail = MAX((long(st->f_blocks) - long(used_bytes / st->f_bsize)), 0);
 
   return 0;
 }

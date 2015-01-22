@@ -30,7 +30,8 @@ Plain create with various options specified via usual cli arguments
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -46,7 +47,8 @@ Plain create with various options specified via usual cli arguments
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -62,7 +64,8 @@ Plain create with various options specified via usual cli arguments
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -83,7 +86,8 @@ Format 2 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -101,7 +105,8 @@ Format 2 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -119,7 +124,8 @@ Format 2 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -152,7 +158,8 @@ Format 1 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -168,7 +175,8 @@ Format 1 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -184,7 +192,8 @@ Format 1 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 
@@ -200,7 +209,8 @@ Format 1 Usual arguments with custom rbd_default_* params
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
           "layering", 
-          "striping"
+          "striping", 
+          "exclusive"
       ], 
       "format": 2, 
       "name": "test", 

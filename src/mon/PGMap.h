@@ -269,13 +269,20 @@ public:
   void dump_delta(Formatter *f) const;
 
   void dump_pg_stats_plain(ostream& ss,
-			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats) const;
+			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
+			   bool brief) const;
   void get_stuck_stats(StuckPG type, utime_t cutoff,
 		       ceph::unordered_map<pg_t, pg_stat_t>& stuck_pgs) const;
   void dump_stuck(Formatter *f, StuckPG type, utime_t cutoff) const;
   void dump_stuck_plain(ostream& ss, StuckPG type, utime_t cutoff) const;
 
   void dump(ostream& ss) const;
+  void dump_basic(ostream& ss) const;
+  void dump_pg_stats(ostream& ss, bool brief) const;
+  void dump_pg_sum_stats(ostream& ss, bool header) const;
+  void dump_pool_stats(ostream& ss, bool header) const;
+  void dump_osd_stats(ostream& ss) const;
+  void dump_osd_sum_stats(ostream& ss) const;
 
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;

@@ -644,6 +644,9 @@ static void crush_choose_indep(const struct crush_map *map,
 			out2[rep] = CRUSH_ITEM_NONE;
 		}
 	}
+        if (map->choose_tries && ftotal <= map->choose_total_tries)
+          map->choose_tries[ftotal]++;
+
 #ifdef DEBUG_INDEP
 	if (out2) {
 		printf("%u %d a: ", ftotal, left);

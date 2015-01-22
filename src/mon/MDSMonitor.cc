@@ -647,7 +647,7 @@ bool MDSMonitor::preprocess_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = m->get_session();
   if (!session) {
@@ -874,8 +874,9 @@ int MDSMonitor::fail_mds(std::ostream &ss, const std::string &arg)
     // Try to interpret the arg as an MDS name
     const MDSMap::mds_info_t *mds_info = mdsmap.find_by_name(arg);
     if (!mds_info) {
-      ss << "Can't find any MDS named '" << arg << "'";
-      return -ENOENT;
+      ss << "MDS named '" << arg
+         << "' does not exist, or is not up";
+      return 0;
     }
     if (mds_info->rank >= 0) {
       dout(10) << __func__ << ": resolved MDS name '" << arg << "' to rank " << rank_or_gid << dendl;

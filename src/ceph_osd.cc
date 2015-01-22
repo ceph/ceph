@@ -31,7 +31,6 @@ using namespace std;
 
 #include "mon/MonMap.h"
 
-
 #include "msg/Messenger.h"
 
 #include "common/Timer.h"
@@ -431,7 +430,7 @@ int main(int argc, const char **argv)
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
 			Messenger::Policy::stateless_server(0,0));
-  
+
   ms_cluster->set_default_policy(Messenger::Policy::stateless_server(0, 0));
   ms_cluster->set_policy(entity_name_t::TYPE_MON, Messenger::Policy::lossy_client(0,0));
   ms_cluster->set_policy(entity_name_t::TYPE_OSD,
@@ -488,16 +487,17 @@ int main(int argc, const char **argv)
     return -1;
 
   osd = new OSD(g_ceph_context,
-		store,
-		whoami,
-		ms_cluster,
-		ms_public,
-		ms_hbclient,
-		ms_hb_front_server,
-		ms_hb_back_server,
-		ms_objecter,
-		&mc,
-		g_conf->osd_data, g_conf->osd_journal);
+                store,
+                whoami,
+                ms_cluster,
+                ms_public,
+                ms_hbclient,
+                ms_hb_front_server,
+                ms_hb_back_server,
+                ms_objecter,
+                &mc,
+                g_conf->osd_data,
+                g_conf->osd_journal);
 
   int err = osd->pre_init();
   if (err < 0) {
@@ -552,6 +552,7 @@ int main(int argc, const char **argv)
   delete ms_hb_back_server;
   delete ms_cluster;
   delete ms_objecter;
+
   client_byte_throttler.reset();
   client_msg_throttler.reset();
   g_ceph_context->put();

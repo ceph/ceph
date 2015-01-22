@@ -178,6 +178,8 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   paxos_service(PAXOS_NUM),
   admin_hook(NULL),
+  health_tick_event(NULL),
+  health_interval_event(NULL),
   routed_request_tid(0)
 {
   rank = -1;
@@ -267,7 +269,7 @@ void Monitor::do_admin_command(string command, cmdmap_t& cmdmap, string format,
 {
   Mutex::Locker l(lock);
 
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string args;
   for (cmdmap_t::iterator p = cmdmap.begin();
@@ -341,18 +343,24 @@ void Monitor::handle_signal(int signum)
   shutdown();
 }
 
-CompatSet Monitor::get_supported_features()
+CompatSet Monitor::get_initial_supported_features()
 {
   CompatSet::FeatureSet ceph_mon_feature_compat;
   CompatSet::FeatureSet ceph_mon_feature_ro_compat;
   CompatSet::FeatureSet ceph_mon_feature_incompat;
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_BASE);
   ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
-  ceph_mon_feature_incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
   return CompatSet(ceph_mon_feature_compat, ceph_mon_feature_ro_compat,
 		   ceph_mon_feature_incompat);
+}
+
+CompatSet Monitor::get_supported_features()
+{
+  CompatSet compat = get_initial_supported_features();
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSD_ERASURE_CODES);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_OSDMAP_ENC);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_ERASURE_CODE_PLUGINS_V2);
+  return compat;
 }
 
 CompatSet Monitor::get_legacy_features()
@@ -431,6 +439,10 @@ const char** Monitor::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
+    // periodic health to clog
+    "mon_health_to_clog",
+    "mon_health_to_clog_interval",
+    "mon_health_to_clog_tick_interval",
     NULL
   };
   return KEYS;
@@ -448,6 +460,12 @@ void Monitor::handle_conf_change(const struct md_config_t *conf,
       changed.count("clog_to_syslog_level") ||
       changed.count("clog_to_syslog_facility")) {
     update_log_clients();
+  }
+
+  if (changed.count("mon_health_to_clog") ||
+      changed.count("mon_health_to_clog_interval") ||
+      changed.count("mon_health_to_clog_tick_interval")) {
+    health_to_clog_update_conf(changed);
   }
 }
 
@@ -968,6 +986,7 @@ void Monitor::_reset()
 
   cancel_probe_timeout();
   timecheck_finish();
+  health_events_cleanup();
 
   leader_since = utime_t();
   if (!quorum.empty()) {
@@ -1827,8 +1846,11 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
   finish_election();
   if (monmap->size() > 1 &&
-      monmap->get_epoch() > 0)
+      monmap->get_epoch() > 0) {
     timecheck_start();
+    health_tick_start();
+    do_health_to_clog_interval();
+  }
 }
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features) 
@@ -2044,8 +2066,170 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   }
 }
 
-void Monitor::get_health(list<string>& status, bufferlist *detailbl,
-			 Formatter *f)
+
+// health status to clog
+
+void Monitor::health_tick_start()
+{
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_tick_interval <= 0)
+    return;
+
+  dout(15) << __func__ << dendl;
+
+  health_tick_stop();
+  health_tick_event = new C_HealthToClogTick(this);
+
+  timer.add_event_after(cct->_conf->mon_health_to_clog_tick_interval,
+                        health_tick_event);
+}
+
+void Monitor::health_tick_stop()
+{
+  dout(15) << __func__ << dendl;
+
+  if (health_tick_event) {
+    timer.cancel_event(health_tick_event);
+    health_tick_event = NULL;
+  }
+}
+
+utime_t Monitor::health_interval_calc_next_update()
+{
+  utime_t now = ceph_clock_now(cct);
+
+  time_t secs = now.sec();
+  int remainder = secs % cct->_conf->mon_health_to_clog_interval;
+  int adjustment = cct->_conf->mon_health_to_clog_interval - remainder;
+  utime_t next = utime_t(secs + adjustment, 0);
+
+  dout(20) << __func__
+    << " now: " << now << ","
+    << " next: " << next << ","
+    << " interval: " << cct->_conf->mon_health_to_clog_interval
+    << dendl;
+
+  return next;
+}
+
+void Monitor::health_interval_start()
+{
+  dout(15) << __func__ << dendl;
+
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_interval <= 0) {
+    return;
+  }
+
+  health_interval_stop();
+  utime_t next = health_interval_calc_next_update();
+  health_interval_event = new C_HealthToClogInterval(this);
+  timer.add_event_at(next, health_interval_event);
+}
+
+void Monitor::health_interval_stop()
+{
+  dout(15) << __func__ << dendl;
+  if (health_interval_event) {
+    timer.cancel_event(health_interval_event);
+  }
+  health_interval_event = NULL;
+}
+
+void Monitor::health_events_cleanup()
+{
+  health_tick_stop();
+  health_interval_stop();
+  health_status_cache.reset();
+}
+
+void Monitor::health_to_clog_update_conf(const std::set<std::string> &changed)
+{
+  dout(20) << __func__ << dendl;
+
+  if (changed.count("mon_health_to_clog")) {
+    if (!cct->_conf->mon_health_to_clog) {
+      health_events_cleanup();
+    } else {
+      if (!health_tick_event) {
+        health_tick_start();
+      }
+      if (!health_interval_event) {
+        health_interval_start();
+      }
+    }
+  }
+
+  if (changed.count("mon_health_to_clog_interval")) {
+    if (cct->_conf->mon_health_to_clog_interval <= 0) {
+      health_interval_stop();
+    } else {
+      health_interval_start();
+    }
+  }
+
+  if (changed.count("mon_health_to_clog_tick_interval")) {
+    if (cct->_conf->mon_health_to_clog_tick_interval <= 0) {
+      health_tick_stop();
+    } else {
+      health_tick_start();
+    }
+  }
+}
+
+void Monitor::do_health_to_clog_interval()
+{
+  // outputting to clog may have been disabled in the conf
+  // since we were scheduled.
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_interval <= 0)
+    return;
+
+  dout(10) << __func__ << dendl;
+
+  // do we have a cached value for next_clog_update?  if not,
+  // do we know when the last update was?
+
+  do_health_to_clog(true);
+  health_interval_start();
+}
+
+void Monitor::do_health_to_clog(bool force)
+{
+  // outputting to clog may have been disabled in the conf
+  // since we were scheduled.
+  if (!cct->_conf->mon_health_to_clog ||
+      cct->_conf->mon_health_to_clog_interval <= 0)
+    return;
+
+  dout(10) << __func__ << (force ? " (force)" : "") << dendl;
+
+  list<string> status;
+  health_status_t overall = get_health(status, NULL, NULL);
+
+  dout(25) << __func__
+           << (force ? " (force)" : "")
+           << dendl;
+
+  string summary = joinify(status.begin(), status.end(), string("; "));
+
+  if (!force &&
+      overall == health_status_cache.overall &&
+      !health_status_cache.summary.empty() &&
+      health_status_cache.summary == summary) {
+    // we got a dup!
+    return;
+  }
+
+  clog->info() << summary;
+
+  health_status_cache.overall = overall;
+  health_status_cache.summary = summary;
+}
+
+health_status_t Monitor::get_health(list<string>& status,
+                                    bufferlist *detailbl,
+                                    Formatter *f)
 {
   list<pair<health_status_t,string> > summary;
   list<pair<health_status_t,string> > detail;
@@ -2165,6 +2349,8 @@ void Monitor::get_health(list<string>& status, bufferlist *detailbl,
 
   if (f)
     f->close_section();
+
+  return overall;
 }
 
 void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
@@ -2371,7 +2557,7 @@ void Monitor::handle_command(MMonCommand *m)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
   if (prefix == "get_command_descriptions") {
     bufferlist rdata;
-    Formatter *f = new_formatter("json");
+    Formatter *f = Formatter::create("json");
     format_command_descriptions(leader_supported_mon_commands,
 				leader_supported_mon_commands_size, f, &rdata);
     delete f;
@@ -2386,7 +2572,7 @@ void Monitor::handle_command(MMonCommand *m)
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   get_str_vec(prefix, fullcmd);
   module = fullcmd[0];
@@ -2587,7 +2773,7 @@ void Monitor::handle_command(MMonCommand *m)
 
     // this must be formatted, in its current form
     if (!f)
-      f.reset(new_formatter("json-pretty"));
+      f.reset(Formatter::create("json-pretty"));
     f->open_object_section("report");
     f->dump_stream("cluster_fingerprint") << fingerprint;
     f->dump_string("version", ceph_version_to_str());
@@ -2771,6 +2957,25 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     session->put();
 }
 
+// fake connection attached to forwarded messages
+struct AnonConnection : public Connection {
+  AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
+
+  int send_message(Message *m) {
+    assert(!"send_message on anonymous connection");
+  }
+  void send_keepalive() {
+    assert(!"send_keepalive on anonymous connection");
+  }
+  void mark_down() {
+    // silently ignore
+  }
+  void mark_disposable() {
+    // silengtly ignore
+  }
+  bool is_connected() { return false; }
+};
+
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MForward *m)
 {
@@ -2785,7 +2990,7 @@ void Monitor::handle_forward(MForward *m)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
-    ConnectionRef c = messenger->create_anon_connection();
+    ConnectionRef c(new AnonConnection(cct));
     MonSession *s = new MonSession(m->msg->get_source_inst(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
@@ -2955,7 +3160,7 @@ void Monitor::resend_routed_requests()
     RoutedRequest *rr = p->second;
 
     bufferlist::iterator q = rr->request_bl.begin();
-    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, q);
+    PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, 0, q);
 
     if (mon == rank) {
       dout(10) << " requeue for self tid " << rr->tid << " " << *req << dendl;
@@ -4144,11 +4349,9 @@ void Monitor::tick()
 
   if (is_leader() && paxos->is_active() && fingerprint.is_zero()) {
     // this is only necessary on upgraded clusters.
-    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
     prepare_new_fingerprint(t);
-    bufferlist tbl;
-    t->encode(tbl);
-    paxos->propose_new_value(tbl, new C_NoopContext);
+    paxos->trigger_propose();
   }
 
   new_tick();
@@ -4237,7 +4440,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
   t->put(MONITOR_NAME, "magic", magicbl);
 
 
-  features = get_supported_features();
+  features = get_initial_supported_features();
   write_features(t);
 
   // save monmap, osdmap, keyring.
@@ -4441,388 +4644,4 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     isvalid = true;
   }
   return true;
-}
-
-#undef dout_prefix
-#define dout_prefix *_dout
-
-void Monitor::StoreConverter::_convert_finish_features(
-    MonitorDBStore::TransactionRef t)
-{
-  dout(20) << __func__ << dendl;
-
-  assert(db->exists(MONITOR_NAME, COMPAT_SET_LOC));
-  bufferlist features_bl;
-  db->get(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
-  assert(features_bl.length());
-
-  CompatSet features;
-  bufferlist::iterator p = features_bl.begin();
-  features.decode(p);
-
-  assert(features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
-  features.incompat.remove(CEPH_MON_FEATURE_INCOMPAT_GV);
-  assert(!features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
-
-  features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS);
-  assert(features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_SINGLE_PAXOS));
-
-  features_bl.clear();
-  features.encode(features_bl);
-
-  dout(20) << __func__ << " new features " << features << dendl;
-  t->put(MONITOR_NAME, COMPAT_SET_LOC, features_bl);
-}
-
-
-bool Monitor::StoreConverter::_check_gv_store()
-{
-  dout(20) << __func__ << dendl;
-  if (!store->exists_bl_ss(COMPAT_SET_LOC, 0))
-    return false;
-
-  bufferlist features_bl;
-  store->get_bl_ss_safe(features_bl, COMPAT_SET_LOC, 0);
-  if (!features_bl.length()) {
-    dout(20) << __func__ << " on-disk features length is zero" << dendl;
-    return false;
-  }
-  CompatSet features;
-  bufferlist::iterator p = features_bl.begin();
-  features.decode(p);
-  return (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_GV));
-}
-
-int Monitor::StoreConverter::needs_conversion()
-{
-  bufferlist magicbl;
-  int ret = 0;
-
-  dout(10) << "check if store needs conversion from legacy format" << dendl;
-  _init();
-
-  int err = store->mount();
-  if (err < 0) {
-    if (err == -ENOENT) {
-      derr << "unable to mount monitor store: "
-	   << cpp_strerror(err) << dendl;
-    } else {
-      derr << "it appears that another monitor is running: "
-	   << cpp_strerror(err) << dendl;
-    }
-    ret = err;
-    goto out;
-  }
-  assert(err == 0);
-
-  if (store->exists_bl_ss("magic", 0)) {
-    if (_check_gv_store()) {
-      dout(1) << "found old GV monitor store format "
-	      << "-- should convert!" << dendl;
-      ret = 1;
-    } else {
-      dout(0) << "Existing monitor store has not been converted "
-	      << "to 0.52 (bobtail) format" << dendl;
-      assert(0 == "Existing store has not been converted to 0.52 format");
-    }
-  }
-  assert(!store->umount());
-
-out:
-  _deinit();
-  return ret;
-}
-
-int Monitor::StoreConverter::convert()
-{
-  _init();
-  assert(!store->mount());
-  if (db->exists("mon_convert", "on_going")) {
-    dout(0) << __func__ << " found a mon store in mid-convertion; abort!"
-      << dendl;
-    return -EEXIST;
-  }
-
-  _mark_convert_start();
-  _convert_monitor();
-  _convert_machines();
-  _convert_paxos();
-  _mark_convert_finish();
-
-  store->umount();
-  _deinit();
-
-  dout(0) << __func__ << " finished conversion" << dendl;
-
-  return 0;
-}
-
-void Monitor::StoreConverter::_convert_monitor()
-{
-  dout(10) << __func__ << dendl;
-
-  assert(store->exists_bl_ss("magic"));
-  assert(store->exists_bl_ss("keyring"));
-  assert(store->exists_bl_ss("feature_set"));
-  assert(store->exists_bl_ss("election_epoch"));
-
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-
-  if (store->exists_bl_ss("joined")) {
-    version_t joined = store->get_int("joined");
-    tx->put(MONITOR_NAME, "joined", joined);
-  }
-
-  vector<string> keys;
-  keys.push_back("magic");
-  keys.push_back("feature_set");
-  keys.push_back("cluster_uuid");
-
-  vector<string>::iterator it;
-  for (it = keys.begin(); it != keys.end(); ++it) {
-    if (!store->exists_bl_ss((*it).c_str()))
-      continue;
-
-    bufferlist bl;
-    int r = store->get_bl_ss(bl, (*it).c_str(), 0);
-    assert(r > 0);
-    tx->put(MONITOR_NAME, *it, bl);
-  }
-  version_t election_epoch = store->get_int("election_epoch");
-  tx->put(MONITOR_NAME, "election_epoch", election_epoch);
-
-  assert(!tx->empty());
-  db->apply_transaction(tx);
-  dout(10) << __func__ << " finished" << dendl;
-}
-
-void Monitor::StoreConverter::_convert_machines(string machine)
-{
-  dout(10) << __func__ << " " << machine << dendl;
-
-  version_t first_committed =
-    store->get_int(machine.c_str(), "first_committed");
-  version_t last_committed =
-    store->get_int(machine.c_str(), "last_committed");
-
-  version_t accepted_pn = store->get_int(machine.c_str(), "accepted_pn");
-  version_t last_pn = store->get_int(machine.c_str(), "last_pn");
-
-  if (accepted_pn > highest_accepted_pn)
-    highest_accepted_pn = accepted_pn;
-  if (last_pn > highest_last_pn)
-    highest_last_pn = last_pn;
-
-  string machine_gv(machine);
-  machine_gv.append("_gv");
-  bool has_gv = true;
-
-  if (!store->exists_bl_ss(machine_gv.c_str())) {
-    dout(1) << __func__ << " " << machine
-      << " no gv dir '" << machine_gv << "'" << dendl;
-    has_gv = false;
-  }
-
-  for (version_t ver = first_committed; ver <= last_committed; ver++) {
-    if (!store->exists_bl_sn(machine.c_str(), ver)) {
-      dout(20) << __func__ << " " << machine
-	       << " ver " << ver << " dne" << dendl;
-      continue;
-    }
-
-    bufferlist bl;
-    int r = store->get_bl_sn(bl, machine.c_str(), ver);
-    assert(r >= 0);
-    dout(20) << __func__ << " " << machine
-	     << " ver " << ver << " bl " << bl.length() << dendl;
-
-    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-    tx->put(machine, ver, bl);
-    tx->put(machine, "last_committed", ver);
-
-    if (has_gv && store->exists_bl_sn(machine_gv.c_str(), ver)) {
-      stringstream s;
-      s << ver;
-      string ver_str = s.str();
-
-      version_t gv = store->get_int(machine_gv.c_str(), ver_str.c_str());
-      dout(20) << __func__ << " " << machine
-	       << " ver " << ver << " -> " << gv << dendl;
-
-      MonitorDBStore::TransactionRef paxos_tx(new MonitorDBStore::Transaction);
-
-      if (gvs.count(gv) == 0) {
-        gvs.insert(gv);
-      } else {
-	dout(0) << __func__ << " " << machine
-		<< " gv " << gv << " already exists"
-		<< dendl;
-
-        // Duplicates aren't supposed to happen, but an old bug introduced
-	// them and the mds state machine wasn't ever trimmed, so many users
-	// will see them.  So we'll just merge them all in one
-        // single paxos version.
-        // We know that they are either from another paxos machine or
-        // they are from the same paxos machine but their version is
-        // lower than ours -- given that we are iterating all versions
-        // from the lowest to the highest, duh!
-        // We'll just append our stuff to the existing paxos transaction
-        // as if nothing had happened.
-
-        // Just make sure we are correct. This shouldn't take long and
-        // should never be triggered!
-        set<pair<string,version_t> >& s = gv_map[gv];
-        for (set<pair<string,version_t> >::iterator it = s.begin();
-             it != s.end(); ++it) {
-          if (it->first == machine)
-            assert(it->second + 1 == ver);
-        }
-
-        bufferlist paxos_bl;
-        int r = db->get("paxos", gv, paxos_bl);
-        assert(r >= 0);
-        paxos_tx->append_from_encoded(paxos_bl);
-      }
-      gv_map[gv].insert(make_pair(machine,ver));
-
-      bufferlist tx_bl;
-      tx->encode(tx_bl);
-      paxos_tx->append_from_encoded(tx_bl);
-      bufferlist paxos_bl;
-      paxos_tx->encode(paxos_bl);
-      tx->put("paxos", gv, paxos_bl);
-    }
-    db->apply_transaction(tx);
-  }
-
-  version_t lc = db->get(machine, "last_committed");
-  dout(20) << __func__ << " lc " << lc << " last_committed " << last_committed << dendl;
-  assert(lc == last_committed);
-
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-  tx->put(machine, "first_committed", first_committed);
-  tx->put(machine, "last_committed", last_committed);
-  tx->put(machine, "conversion_first", first_committed);
-
-  if (store->exists_bl_ss(machine.c_str(), "latest")) {
-    bufferlist latest_bl_raw;
-    int r = store->get_bl_ss(latest_bl_raw, machine.c_str(), "latest");
-    assert(r >= 0);
-    if (!latest_bl_raw.length()) {
-      dout(20) << __func__ << " machine " << machine
-	       << " skip latest with size 0" << dendl;
-      goto out;
-    }
-
-    tx->put(machine, "latest", latest_bl_raw);
-
-    bufferlist::iterator lbl_it = latest_bl_raw.begin();
-    bufferlist latest_bl;
-    version_t latest_ver;
-    ::decode(latest_ver, lbl_it);
-    ::decode(latest_bl, lbl_it);
-
-    dout(20) << __func__ << " machine " << machine
-	     << " latest ver " << latest_ver << dendl;
-
-    tx->put(machine, "full_latest", latest_ver);
-    stringstream os;
-    os << "full_" << latest_ver;
-    tx->put(machine, os.str(), latest_bl);
-  }
-out:
-  db->apply_transaction(tx);
-  dout(10) << __func__ << " machine " << machine << " finished" << dendl;
-}
-
-void Monitor::StoreConverter::_convert_osdmap_full()
-{
-  dout(10) << __func__ << dendl;
-  version_t first_committed =
-    store->get_int("osdmap", "first_committed");
-  version_t last_committed =
-    store->get_int("osdmap", "last_committed");
-
-  int err = 0;
-  for (version_t ver = first_committed; ver <= last_committed; ver++) {
-    if (!store->exists_bl_sn("osdmap_full", ver)) {
-      dout(20) << __func__ << " osdmap_full  ver " << ver << " dne" << dendl;
-      err++;
-      continue;
-    }
-
-    bufferlist bl;
-    int r = store->get_bl_sn(bl, "osdmap_full", ver);
-    assert(r >= 0);
-    dout(20) << __func__ << " osdmap_full ver " << ver
-             << " bl " << bl.length() << " bytes" << dendl;
-
-    string full_key = "full_" + stringify(ver);
-    MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-    tx->put("osdmap", full_key, bl);
-    db->apply_transaction(tx);
-  }
-  dout(10) << __func__ << " found " << err << " conversion errors!" << dendl;
-  assert(err == 0);
-}
-
-void Monitor::StoreConverter::_convert_paxos()
-{
-  dout(10) << __func__ << dendl;
-  assert(!gvs.empty());
-
-  set<version_t>::reverse_iterator rit = gvs.rbegin();
-  version_t highest_gv = *rit;
-  version_t last_gv = highest_gv;
-
-  int n = 0;
-  int max_versions = (g_conf->paxos_max_join_drift*2);
-  for (; (rit != gvs.rend()) && (n < max_versions); ++rit, ++n) {
-    version_t gv = *rit;
-
-    if (last_gv == gv)
-      continue;
-    if ((last_gv - gv) > 1) {
-      // we are done; we found a gap and we are only interested in keeping
-      // contiguous paxos versions.
-      break;
-    }
-    last_gv = gv;
-  }
-
-  // erase all paxos versions between [first, last_gv[, with first being the
-  // first gv in the map.
-  MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-  set<version_t>::iterator it = gvs.begin();
-  dout(1) << __func__ << " first gv " << (*it)
-	  << " last gv " << last_gv << dendl;
-  for (; it != gvs.end() && (*it < last_gv); ++it) {
-    tx->erase("paxos", *it);
-  }
-  tx->put("paxos", "first_committed", last_gv);
-  tx->put("paxos", "last_committed", highest_gv);
-  tx->put("paxos", "accepted_pn", highest_accepted_pn);
-  tx->put("paxos", "last_pn", highest_last_pn);
-  tx->put("paxos", "conversion_first", last_gv);
-  db->apply_transaction(tx);
-
-  dout(10) << __func__ << " finished" << dendl;
-}
-
-void Monitor::StoreConverter::_convert_machines()
-{
-  dout(10) << __func__ << dendl;
-  set<string> machine_names = _get_machines_names();
-  set<string>::iterator it = machine_names.begin();
-
-  for (; it != machine_names.end(); ++it) {
-    _convert_machines(*it);
-  }
-  // convert osdmap full versions
-  // this stays here as these aren't really an independent paxos
-  // machine, but rather machine-specific and don't fit on the
-  // _convert_machines(string) function.
-  _convert_osdmap_full();
-
-  dout(10) << __func__ << " finished" << dendl;
 }

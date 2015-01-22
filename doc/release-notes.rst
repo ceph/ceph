@@ -2,6 +2,128 @@
  Release Notes
 ===============
 
+v0.91
+=====
+
+We are quickly approaching the Hammer feature freeze but have a few
+more dev releases to go before we get there.  The headline items are
+subtree-based quota support in CephFS (ceph-fuse/libcephfs client
+support only for now), a rewrite of the watch/notify librados API used
+by RBD and RGW, OSDMap checksums to ensure that maps are always
+consistent inside the cluster, new API calls in librados and librbd
+for IO hinting modeled after posix_fadvise, and improved storage of
+per-PG state.
+
+We expect two more releases before the Hammer feature freeze (v0.93).
+
+Upgrading
+---------
+
+* The 'category' field for objects has been removed.  This was originally added
+  to track PG stat summations over different categories of objects for use by
+  radosgw.  It is no longer has any known users and is prone to abuse because it
+  can lead to a pg_stat_t structure that is unbounded.  The librados API calls
+  that accept this field now ignore it, and the OSD no longers tracks the
+  per-category summations.
+
+* The output for 'rados df' has changed.  The 'category' level has been
+  eliminated, so there is now a single stat object per pool.  The structure of
+  the JSON output is different, and the plaintext output has one less column.
+
+* The 'rados create <objectname> [category]' optional category argument is no
+  longer supported or recognized.
+
+* rados.py's Rados class no longer has a __del__ method; it was causing
+  problems on interpreter shutdown and use of threads.  If your code has
+  Rados objects with limited lifetimes and you're concerned about locked
+  resources, call Rados.shutdown() explicitly.
+
+* There is a new version of the librados watch/notify API with vastly
+  improved semantics.  Any applications using this interface are
+  encouraged to migrate to the new API.  The old API calls are marked
+  as deprecated and will eventually be removed.
+
+* The librados rados_unwatch() call used to be safe to call on an
+  invalid handle.  The new version has undefined behavior when passed
+  a bogus value (for example, when rados_watch() returns an error and
+  handle is not defined).
+
+* The structure of the formatted 'pg stat' command is changed for the
+  portion that counts states by name to avoid using the '+' character
+  (which appears in state names) as part of the XML token (it is not
+  legal).
+
+Notable Changes
+---------------
+
+* asyncmsgr: misc fixes (Haomai Wang)
+* buffer: add 'shareable' construct (Matt Benjamin)
+* build: aarch64 build fixes (Noah Watkins, Haomai Wang)
+* build: support for jemalloc (Shishir Gowda)
+* ceph-disk: allow journal partition re-use (#10146 Loic Dachary, Dav van der Ster)
+* ceph-disk: misc fixes (Christos Stavrakakis)
+* ceph-fuse: fix kernel cache trimming (#10277 Yan, Zheng)
+* ceph-objectstore-tool: many many improvements (David Zafman)
+* common: support new gperftools header locations (Key Dreyer)
+* crush: straw bucket weight calculation fixes (#9998 Sage Weil)
+* doc: misc improvements (Nilamdyuti Goswami, John Wilkins, Chris Holcombe)
+* libcephfs,ceph-fuse: add 'status' asok (John Spray)
+* librados, osd: new watch/notify implementation (Sage Weil)
+* librados: drop 'category' feature (Sage Weil)
+* librados: fix pool deletion handling (#10372 Sage Weil)
+* librados: new fadvise API (Ma Jianpeng)
+* libradosstriper: fix remove() (Dongmao Zhang)
+* librbd: complete pending ops before closing image (#10299 Josh Durgin)
+* librbd: fadvise API (Ma Jianpeng)
+* mds: ENOSPC and OSDMap epoch barriers (#7317 John Spray)
+* mds: dirfrag buf fix (Yan, Zheng)
+* mds: disallow most commands on inactive MDS's (Greg Farnum)
+* mds: drop dentries, leases on deleted directories (#10164 Yan, Zheng)
+* mds: handle zero-size xattr (#10335 Yan, Zheng)
+* mds: subtree quota support (Yunchuan Wen)
+* memstore: free space tracking (John Spray)
+* misc cleanup (Danny Al-Gaaf, David Anderson)
+* mon: 'osd crush reweight-all' command (Sage Weil)
+* mon: allow full flag to be manually cleared (#9323 Sage Weil)
+* mon: delay failure injection (Joao Eduardo Luis)
+* mon: fix paxos timeouts (#10220 Joao Eduardo Luis)
+* mon: get canonical OSDMap from leader (#10422 Sage Weil)
+* msgr: fix RESETSESSION bug (#10080 Greg Farnum)
+* objectstore: deprecate collection attrs (Sage Weil)
+* osd, mon: add checksums to all OSDMaps (Sage Weil)
+* osd: allow deletion of objects with watcher (#2339 Sage Weil)
+* osd: allow sparse read for Push/Pull (Haomai Wang)
+* osd: cache reverse_nibbles hash value (Dong Yuan)
+* osd: drop upgrade support for pre-dumpling (Sage Weil)
+* osd: enable and use posix_fadvise (Sage Weil)
+* osd: erasure-code: enforce chunk size alignment (#10211 Loic Dachary)
+* osd: erasure-code: jerasure support for NEON (Loic Dachary)
+* osd: erasure-code: relax cauchy w restrictions (#10325 David Zhang, Loic Dachary)
+* osd: erasure-code: update gf-complete to latest upstream (Loic Dachary)
+* osd: fix WBTHrottle perf counters (Haomai Wang)
+* osd: fix backfill bug (#10150 Samuel Just)
+* osd: fix occasional peering stalls (#10431 Sage Weil)
+* osd: fix scrub vs try-flush bug (#8011 Samuel Just)
+* osd: fix stderr with -f or -d (Dan Mick)
+* osd: misc FIEMAP fixes (Ma Jianpeng)
+* osd: optimize Finisher (Xinze Chi)
+* osd: store PG metadata in per-collection objects for better concurrency (Sage Weil)
+* pyrados: add object lock support (#6114 Mehdi Abaakouk)
+* pyrados: fix misnamed wait_* routings (#10104 Dan Mick)
+* pyrados: misc cleanups (Kefu Chai)
+* qa: add large auth ticket tests (Ilya Dryomov)
+* qa: many 'make check' improvements (Loic Dachary)
+* qa: misc tests (Loic Dachary, Yan, Zheng)
+* rgw: conditional PUT on ETag (#8562 Ray Lv)
+* rgw: fix error codes (#10334 #10329 Yehuda Sadeh)
+* rgw: index swift keys appropriately (#10471 Yehuda Sadeh)
+* rgw: prevent illegal bucket policy that doesn't match placement rule (Yehuda Sadeh)
+* rgw: run radosgw as apache with systemd (#10125 Loic Dachary)
+* rgw: support X-Storage-Policy header for Swift storage policy compat (Yehuda Sadeh)
+* rgw: use \r\n for http headers (#9254 Yehuda Sadeh)
+* rpm: misc fixes (Key Dreyer)
+
+
 v0.90
 =====
 
@@ -1403,6 +1525,88 @@ Notable Changes
 * rgw: prevent multiobject PUT race (Yehuda Sadeh)
 * rgw: send user manifest header (Yehuda Sadeh)
 * test_librbd_fsx: test krbd as well as librbd (Ilya Dryomov)
+
+
+v0.80.8 Firefly
+===============
+
+This is a long-awaited bugfix release for firefly.  It has several
+imporant (but relatively rare) OSD peering fixes, performance issues
+when snapshots are trimmed, several RGW fixes, a paxos corner case
+fix, and some packaging updates.
+
+We recommend that all users for v0.80.x firefly upgrade when it is
+convenient to do so.
+
+Notable Changes
+---------------
+
+* build: remove stack-execute bit from assembled code sections (#10114 Dan Mick)
+* ceph-disk: fix dmcrypt key permissions (#9785 Loic Dachary)
+* ceph-disk: fix keyring location (#9653 Loic Dachary)
+* ceph-disk: make partition checks more robust (#9721 #9665 Loic Dachary)
+* ceph: cleanly shut down librados context on shutdown (#8797 Dan Mick)
+* common: add $cctid config metavariable (#6228 Adam Crume)
+* crush: align rule and ruleset ids (#9675 Xiaoxi Chen)
+* crush: fix negative weight bug during create_or_move_item (#9998 Pawel Sadowski)
+* crush: fix potential buffer overflow in erasure rules (#9492 Johnu George)
+* debian: fix python-ceph -> ceph file movement (Sage Weil)
+* libcephfs,ceph-fuse: fix flush tid wraparound bug (#9869 Greg Farnum, Yan, Zheng)
+* libcephfs: close fd befure umount (#10415 Yan, Zheng)
+* librados: fix crash from C API when read timeout is enabled (#9582 Sage Weil)
+* librados: handle reply race with pool deletion (#10372 Sage Weil)
+* librbd: cap memory utilization for read requests (Jason Dillaman)
+* librbd: do not close a closed parent image on failure (#10030 Jason Dillaman)
+* librbd: fix diff tests (#10002 Josh Durgin)
+* librbd: protect list_children from invalid pools (#10123 Jason Dillaman)
+* make check improvemens (Loic Dachary)
+* mds: fix ctime updates (#9514 Greg Farnum)
+* mds: fix journal import tool (#10025 John Spray)
+* mds: fix rare NULL deref in cap flush handler (Greg Farnum)
+* mds: handle unknown lock messages (Yan, Zheng)
+* mds: store backtrace for straydir (Yan, Zheng)
+* mon: abort startup if disk is full (#9502 Joao Eduardo Luis)
+* mon: add paxos instrumentation (Sage Weil)
+* mon: fix double-free in rare OSD startup path (Sage Weil)
+* mon: fix osdmap trimming (#9987 Sage Weil)
+* mon: fix paxos corner cases (#9301 #9053 Sage Weil)
+* osd: cancel callback on blacklisted watchers (#8315 Samuel Just)
+* osd: cleanly abort set-alloc-hint operations during upgrade (#9419 David Zafman)
+* osd: clear rollback PG metadata on PG deletion (#9293 Samuel Just)
+* osd: do not abort deep scrub if hinfo is missing (#10018 Loic Dachary)
+* osd: erasure-code regression tests (Loic Dachary)
+* osd: fix distro metadata reporting for SUSE (#8654 Danny Al-Gaaf)
+* osd: fix full OSD checks during backfill (#9574 Samuel Just)
+* osd: fix ioprio parsing (#9677 Loic Dachary)
+* osd: fix journal direct-io shutdown (#9073 Mark Kirkwood, Ma Jianpeng, Somnath Roy)
+* osd: fix journal dump (Ma Jianpeng)
+* osd: fix occasional stall during peering or activation (Sage Weil)
+* osd: fix past_interval display bug (#9752 Loic Dachary)
+* osd: fix rare crash triggered by admin socket dump_ops_in_filght (#9916 Dong Lei)
+* osd: fix snap trimming performance issues (#9487 #9113 Samuel Just, Sage Weil, Dan van der Ster, Florian Haas)
+* osd: fix snapdir handling on cache eviction (#8629 Sage Weil)
+* osd: handle map gaps in map advance code (Sage Weil)
+* osd: handle undefined CRUSH results in interval check (#9718 Samuel Just)
+* osd: include shard in JSON dump of ghobject (#10063 Loic Dachary)
+* osd: make backfill reservation denial handling more robust (#9626 Samuel Just)
+* osd: make misdirected op checks handle EC + primary affinity (#9835 Samuel Just, Sage Weil)
+* osd: mount XFS with inode64 by default (Sage Weil)
+* osd: other misc bugs (#9821 #9875 Samuel Just)
+* rgw: add .log to default log path (#9353 Alexandre Marangone)
+* rgw: clean up fcgi request context (#10194 Yehuda Sadeh)
+* rgw: convet header underscores to dashes (#9206 Yehuda Sadeh)
+* rgw: copy object data if copy target is in different pool (#9039 Yehuda Sadeh)
+* rgw: don't try to authenticate CORS peflight request (#8718 Robert Hubbard, Yehuda Sadeh)
+* rgw: fix civetweb URL decoding (#8621 Yehuda Sadeh)
+* rgw: fix hash calculation during PUT (Yehuda Sadeh)
+* rgw: fix misc bugs (#9089 #9201 Yehuda Sadeh)
+* rgw: fix object tail test (#9226 Sylvain Munaut, Yehuda Sadeh)
+* rgw: make sysvinit script run rgw under systemd context as needed (#10125 Loic Dachary)
+* rgw: separate civetweb log from rgw log (Yehuda Sadeh)
+* rgw: set length for keystone token validations (#7796 Mark Kirkwood, Yehuda Sadeh)
+* rgw: subuser creation fixes (#8587 Yehuda Sadeh)
+* rpm: misc packaging improvements (Sandon Van Ness, Dan Mick, Erik Logthenberg, Boris Ranto)
+* rpm: use standard udev rules for CentOS7/RHEL7 (#9747 Loic Dachary)
 
 
 v0.80.7 Firefly

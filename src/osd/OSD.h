@@ -1682,8 +1682,7 @@ protected:
   PG   *_lookup_lock_pg(spg_t pgid);
   PG   *_lookup_pg(spg_t pgid);
   PG   *_open_lock_pg(OSDMapRef createmap,
-		      spg_t pg, bool no_lockdep_check=false,
-		      bool hold_map_lock=false);
+		      spg_t pg, bool no_lockdep_check=false);
   enum res_result {
     RES_PARENT,    // resurrected a parent
     RES_SELF,      // resurrected self
@@ -2088,6 +2087,7 @@ protected:
   void sched_scrub();
   bool scrub_random_backoff();
   bool scrub_should_schedule();
+  bool scrub_time_permit(utime_t now);
 
   xlist<PG*> scrub_queue;
 
