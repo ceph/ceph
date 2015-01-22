@@ -928,7 +928,7 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   s->info.effective_uri = "/" + s->bucket_name_str;
 
   if (req.size()) {
-    s->object = rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID")); /* rgw swift extension */
+    s->object = rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
     s->info.effective_uri.append("/" + s->object.name);
   }
 
