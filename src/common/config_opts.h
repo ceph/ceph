@@ -643,6 +643,8 @@ OPTION(osd_target_transaction_size, OPT_INT, 30)     // to adjust various transa
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT, .97) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_failsafe_nearfull_ratio, OPT_FLOAT, .90) // what % full makes an OSD near full (failsafe)
 
+OPTION(osd_pg_object_context_cache_count, OPT_INT, 64)
+
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL, false)
 

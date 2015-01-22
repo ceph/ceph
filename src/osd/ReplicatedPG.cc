@@ -1232,6 +1232,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   pgbackend(
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
+  object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   new_backfill(false),
   temp_seq(0),
@@ -7903,10 +7904,13 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       pg_log.get_log().objects.find(soid)->second->op ==
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
+  osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
+    osd->logger->inc(l_osd_object_ctx_cache_hit);
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
   } else {
+    dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
     bufferlist bv;
     if (attrs) {
@@ -10281,9 +10285,13 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     hit_set_clear();
   }
 
+  // we don't want to cache object_contexts through the interval change
+  // NOTE: we actually assert that all currently live references are dead
+  // by the time the flush for the next interval completes.
+  object_contexts.clear();
+
   // requeue everything in the reverse order they should be
   // reexamined.
-
   clear_scrub_reserved();
   scrub_clear_state();
 
