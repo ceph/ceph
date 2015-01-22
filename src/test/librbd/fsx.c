@@ -435,7 +435,7 @@ librbd_resize(struct rbd_ctx *ctx, uint64_t size)
 int
 __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	       const char *dst_imagename, int *order, int stripe_unit,
-	       int stripe_count)
+	       int stripe_count, bool krbd)
 {
 	int ret;
 
@@ -453,8 +453,12 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 	}
 
+	uint64_t features = RBD_FEATURES_ALL;
+	if (krbd) {
+		features &= ~RBD_FEATURE_EXCLUSIVE_LOCK;
+	}
 	ret = rbd_clone2(ioctx, ctx->name, src_snapname, ioctx,
-			 dst_imagename, RBD_FEATURES_ALL, order,
+			 dst_imagename, features, order,
 			 stripe_unit, stripe_count);
 	if (ret < 0) {
 		prt("rbd_clone2(%s@%s -> %s) failed\n", ctx->name,
@@ -471,7 +475,7 @@ librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 	     int stripe_count)
 {
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count);
+			      stripe_unit, stripe_count, false);
 }
 
 int
@@ -692,7 +696,7 @@ krbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 
 	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
-			      stripe_unit, stripe_count);
+			      stripe_unit, stripe_count, true);
 }
 
 int
