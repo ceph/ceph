@@ -32,7 +32,6 @@ struct librados::IoCtxImpl {
   atomic_t ref_cnt;
   RadosClient *client;
   int64_t poolid;
-  string pool_name;
   snapid_t snap_seq;
   ::SnapContext snapc;
   uint64_t assert_ver;
@@ -47,17 +46,19 @@ struct librados::IoCtxImpl {
   xlist<AioCompletionImpl*> aio_write_list;
   map<ceph_tid_t, std::list<AioCompletionImpl*> > aio_write_waiters;
 
+  Mutex cached_pool_names_lock;
+  std::list<std::string> cached_pool_names;
+
   Objecter *objecter;
 
   IoCtxImpl();
   IoCtxImpl(RadosClient *c, Objecter *objecter,
-	    int64_t poolid, const char *pool_name, snapid_t s);
+	    int64_t poolid, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
     // Copy everything except the ref count
     client = rhs.client;
     poolid = rhs.poolid;
-    pool_name = rhs.pool_name;
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
     assert_ver = rhs.assert_ver;
@@ -88,6 +89,8 @@ struct librados::IoCtxImpl {
   int64_t get_id() {
     return poolid;
   }
+
+  const string& get_cached_pool_name();
 
   uint32_t get_object_hash_position(const std::string& oid);
   uint32_t get_object_pg_hash_position(const std::string& oid);
