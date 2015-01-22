@@ -700,6 +700,8 @@ std::string pg_state_string(int state)
     oss << "creating+";
   if (state & PG_STATE_ACTIVE)
     oss << "active+";
+  if (state & PG_STATE_ACTIVATING)
+    oss << "activating+";
   if (state & PG_STATE_CLEAN)
     oss << "clean+";
   if (state & PG_STATE_RECOVERY_WAIT)
@@ -1631,6 +1633,33 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_bytes_hit_set_archive -= o.num_bytes_hit_set_archive;
 }
 
+bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
+{
+  return
+    l.num_bytes == r.num_bytes &&
+    l.num_objects == r.num_objects &&
+    l.num_object_clones == r.num_object_clones &&
+    l.num_object_copies == r.num_object_copies &&
+    l.num_objects_missing_on_primary == r.num_objects_missing_on_primary &&
+    l.num_objects_degraded == r.num_objects_degraded &&
+    l.num_objects_misplaced == r.num_objects_misplaced &&
+    l.num_objects_unfound == r.num_objects_unfound &&
+    l.num_rd == r.num_rd &&
+    l.num_rd_kb == r.num_rd_kb &&
+    l.num_wr == r.num_wr &&
+    l.num_wr_kb == r.num_wr_kb &&
+    l.num_scrub_errors == r.num_scrub_errors &&
+    l.num_shallow_scrub_errors == r.num_shallow_scrub_errors &&
+    l.num_deep_scrub_errors == r.num_deep_scrub_errors &&
+    l.num_objects_recovered == r.num_objects_recovered &&
+    l.num_bytes_recovered == r.num_bytes_recovered &&
+    l.num_keys_recovered == r.num_keys_recovered &&
+    l.num_objects_dirty == r.num_objects_dirty &&
+    l.num_whiteouts == r.num_whiteouts &&
+    l.num_objects_omap == r.num_objects_omap &&
+    l.num_objects_hit_set_archive == r.num_objects_hit_set_archive &&
+    l.num_bytes_hit_set_archive == r.num_bytes_hit_set_archive;
+}
 
 // -- object_stat_collection_t --
 
@@ -1960,6 +1989,47 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   o.push_back(new pg_stat_t(a));
 }
 
+bool operator==(const pg_stat_t& l, const pg_stat_t& r)
+{
+  return
+    l.version == r.version &&
+    l.reported_seq == r.reported_seq &&
+    l.reported_epoch == r.reported_epoch &&
+    l.state == r.state &&
+    l.last_fresh == r.last_fresh &&
+    l.last_change == r.last_change &&
+    l.last_active == r.last_active &&
+    l.last_clean == r.last_clean &&
+    l.last_unstale == r.last_unstale &&
+    l.last_undegraded == r.last_undegraded &&
+    l.last_fullsized == r.last_fullsized &&
+    l.log_start == r.log_start &&
+    l.ondisk_log_start == r.ondisk_log_start &&
+    l.created == r.created &&
+    l.last_epoch_clean == r.last_epoch_clean &&
+    l.parent == r.parent &&
+    l.parent_split_bits == r.parent_split_bits &&
+    l.last_scrub == r.last_scrub &&
+    l.last_deep_scrub == r.last_deep_scrub &&
+    l.last_scrub_stamp == r.last_scrub_stamp &&
+    l.last_deep_scrub_stamp == r.last_deep_scrub_stamp &&
+    l.last_clean_scrub_stamp == r.last_clean_scrub_stamp &&
+    l.stats == r.stats &&
+    l.stats_invalid == r.stats_invalid &&
+    l.log_size == r.log_size &&
+    l.ondisk_log_size == r.ondisk_log_size &&
+    l.up == r.up &&
+    l.acting == r.acting &&
+    l.mapping_epoch == r.mapping_epoch &&
+    l.blocked_by == r.blocked_by &&
+    l.last_became_active == r.last_became_active &&
+    l.dirty_stats_invalid == r.dirty_stats_invalid &&
+    l.omap_stats_invalid == r.omap_stats_invalid &&
+    l.hitset_stats_invalid == r.hitset_stats_invalid &&
+    l.hitset_bytes_stats_invalid == r.hitset_bytes_stats_invalid &&
+    l.up_primary == r.up_primary &&
+    l.acting_primary == r.acting_primary;
+}
 
 // -- pool_stat_t --
 

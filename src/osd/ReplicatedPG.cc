@@ -62,7 +62,9 @@
 #include "include/rados/rados_types.hpp"
 
 #ifdef WITH_LTTNG
-#include "tracing/osd.h"
+#include "tracing/osd.h" // ??
+#else
+#define tracepoint(...)
 #endif
 
 #define dout_subsys ceph_subsys_osd
@@ -603,10 +605,7 @@ int ReplicatedPG::do_command(cmdmap_t cmdmap, ostream& ss,
   string format;
 
   cmd_getval(cct, cmdmap, "format", format);
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
-  // demand that we have a formatter
-  if (!f)
-    f.reset(new_formatter("json"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json"));
 
   string command;
   cmd_getval(cct, cmdmap, "cmd", command);
@@ -1741,6 +1740,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 				      bool must_promote,
 				      bool in_hit_set)
 {
+  // return quickly if caching is not enabled
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)
+    return false;
+
   if (obc)
     dout(25) << __func__ << " " << obc->obs.oi << " "
 	     << (obc->obs.exists ? "exists" : "DNE")
@@ -1770,15 +1773,12 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
-  if (must_promote) {
+  if (must_promote || op->need_promote()) {
     promote_object(obc, missing_oid, oloc, op);
     return true;
   }
 
   switch (pool.info.cache_mode) {
-  case pg_pool_t::CACHEMODE_NONE:
-    return false;
-
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
@@ -1791,7 +1791,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       waiting_for_cache_not_full.push_back(op);
       return true;
     }
-    if (can_skip_promote(op, obc)) {
+    if (can_skip_promote(op)) {
       return false;
     }
     if (op->may_write() || write_ordered || !hit_set) {
@@ -1840,7 +1840,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
 
   case pg_pool_t::CACHEMODE_FORWARD:
-    do_cache_redirect(op, obc);
+    do_cache_redirect(op);
     return true;
 
   case pg_pool_t::CACHEMODE_READONLY:
@@ -1851,7 +1851,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
     if (!r) { // it must be a write
-      do_cache_redirect(op, obc);
+      do_cache_redirect(op);
       return true;
     }
     // crap, there was a failure of some kind
@@ -1866,7 +1866,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op, obc)) {
+      if (can_skip_promote(op)) {
 	return false;
       }
       promote_object(obc, missing_oid, oloc, op);
@@ -1874,7 +1874,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     }
 
     // If it is a read, we can read, we need to forward it
-    do_cache_redirect(op, obc);
+    do_cache_redirect(op);
     return true;
 
   case pg_pool_t::CACHEMODE_READPROXY:
@@ -1886,7 +1886,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op, obc)) {
+      if (can_skip_promote(op)) {
 	return false;
       }
       promote_object(obc, missing_oid, oloc, op);
@@ -1903,7 +1903,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   return false;
 }
 
-bool ReplicatedPG::can_skip_promote(OpRequestRef op, ObjectContextRef obc)
+bool ReplicatedPG::can_skip_promote(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   if (m->ops.empty())
@@ -1917,7 +1917,7 @@ bool ReplicatedPG::can_skip_promote(OpRequestRef op, ObjectContextRef obc)
   return false;
 }
 
-void ReplicatedPG::do_cache_redirect(OpRequestRef op, ObjectContextRef obc)
+void ReplicatedPG::do_cache_redirect(OpRequestRef op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   int flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
@@ -2067,13 +2067,17 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   }
 
   if (requeue) {
-    for (map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.begin();
-	p != in_progress_proxy_reads.end(); p++) {
+    map<hobject_t, list<OpRequestRef> >::iterator p =
+      in_progress_proxy_reads.begin();
+    while (p != in_progress_proxy_reads.end()) {
       list<OpRequestRef>& ls = p->second;
-      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size() << " requests" << dendl;
+      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size()
+	       << " requests" << dendl;
       requeue_ops(ls);
-      in_progress_proxy_reads.erase(p);
+      in_progress_proxy_reads.erase(p++);
     }
+  } else {
+    in_progress_proxy_reads.clear();
   }
 }
 
@@ -7185,14 +7189,14 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
     fop->objecter_tid = 0;
   }
+  if (fop->blocking) {
+    fop->obc->stop_block();
+    kick_object_context_blocked(fop->obc);
+  }
   if (requeue) {
     if (fop->op)
       requeue_op(fop->op);
     requeue_ops(fop->dup_ops);
-  }
-  if (fop->blocking) {
-    fop->obc->stop_block();
-    kick_object_context_blocked(fop->obc);
   }
   if (fop->on_flush) {
     Context *on_flush = fop->on_flush;
@@ -8443,14 +8447,14 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   
   op->mark_started();
 
-  rm->opt.append(rm->localt);
-  rm->opt.register_on_commit(
+  rm->localt.append(rm->opt);
+  rm->localt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->opt.register_on_applied(
+  rm->localt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
-  parent->queue_transaction(&(rm->opt), op);
+  parent->queue_transaction(&(rm->localt), op);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
@@ -9433,8 +9437,19 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       dout(10) << " extent " << p.get_start() << "~" << p.get_len()
 	       << " is actually " << p.get_start() << "~" << bit.length()
 	       << dendl;
-      p.set_len(bit.length());
+      interval_set<uint64_t>::iterator save = p++;
+      if (bit.length() == 0)
+        out_op->data_included.erase(save);     //Remove this empty interval
+      else
+        save.set_len(bit.length());
+      // Remove any other intervals present
+      while (p != out_op->data_included.end()) {
+        interval_set<uint64_t>::iterator save = p++;
+        out_op->data_included.erase(save);
+      }
       new_progress.data_complete = true;
+      out_op->data.claim_append(bit);
+      break;
     }
     out_op->data.claim_append(bit);
   }
@@ -12268,7 +12283,7 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
 	     << ", evict_effort " << agent_state->evict_effort
 	     << dendl;
     dout(30) << "agent_state:\n";
-    Formatter *f = new_formatter("");
+    Formatter *f = Formatter::create("");
     f->open_object_section("agent_state");
     agent_state->dump(f);
     f->close_section();
@@ -12803,6 +12818,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	   scrubber.missing_digest.begin();
 	 p != scrubber.missing_digest.end();
 	 ++p) {
+      if (p->first.is_snapdir())
+	continue;
       dout(10) << __func__ << " recording digests for " << p->first << dendl;
       ObjectContextRef obc = get_object_context(p->first, false);
       assert(obc);

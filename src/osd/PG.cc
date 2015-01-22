@@ -46,6 +46,8 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/pg.h"
+#else
+#define tracepoint(...)
 #endif
 
 #include <sstream>
@@ -625,7 +627,7 @@ bool PG::needs_backfill() const
   return ret;
 }
 
-bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
+bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map)
 {
   *end = info.history.same_interval_since;
 
@@ -642,7 +644,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
 
   *start = MAX(MAX(info.history.epoch_created,
 		   info.history.last_epoch_clean),
-	       osd->get_superblock().oldest_map);
+	       oldest_map);
   if (*start >= *end) {
     dout(10) << __func__ << " start epoch " << *start << " >= end epoch " << *end
 	     << ", nothing to do" << dendl;
@@ -656,7 +658,8 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
 void PG::generate_past_intervals()
 {
   epoch_t cur_epoch, end_epoch;
-  if (!_calc_past_interval_range(&cur_epoch, &end_epoch)) {
+  if (!_calc_past_interval_range(&cur_epoch, &end_epoch,
+      osd->get_superblock().oldest_map)) {
     return;
   }
 
@@ -681,8 +684,8 @@ void PG::generate_past_intervals()
 
     cur_map = osd->get_map(cur_epoch);
     pg_t pgid = get_pgid().pgid;
-    if (cur_map->get_pools().count(pgid.pool()))
-      pgid = pgid.get_ancestor(cur_map->get_pg_num(pgid.pool()));
+    if (last_map->get_pools().count(pgid.pool()))
+      pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
     cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
     std::stringstream debug;
@@ -1685,6 +1688,8 @@ void PG::activate(ObjectStore::Transaction& t,
       state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
     }
+
+    state_set(PG_STATE_ACTIVATING);
   }
 }
 
@@ -1847,13 +1852,13 @@ void PG::all_activated_and_committed()
   assert(is_primary());
   assert(peer_activated.size() == actingbackfill.size());
   assert(!actingbackfill.empty());
+  assert(blocked_by.empty());
 
   // info.last_epoch_started is set during activate()
   info.history.last_epoch_started = info.last_epoch_started;
   state_clear(PG_STATE_CREATING);
 
   share_pg_info();
-  publish_stats_to_osd();
 
   queue_peering_event(
     CephPeeringEvtRef(
@@ -2351,26 +2356,41 @@ void PG::_update_blocked_by()
 
 void PG::publish_stats_to_osd()
 {
+  if (!is_primary())
+    return;
+
   pg_stats_publish_lock.Lock();
-  if (is_primary()) {
-    // update our stat summary
+
+  if (info.stats.stats.sum.num_scrub_errors)
+    state_set(PG_STATE_INCONSISTENT);
+  else
+    state_clear(PG_STATE_INCONSISTENT);
+
+  utime_t now = ceph_clock_now(cct);
+  if (info.stats.state != state) {
+    info.stats.state = state;
+    info.stats.last_change = now;
+    if ((state & PG_STATE_ACTIVE) &&
+	!(info.stats.state & PG_STATE_ACTIVE))
+      info.stats.last_became_active = now;
+  }
+
+  _update_calc_stats();
+  _update_blocked_by();
+
+  bool publish = false;
+  utime_t cutoff = now;
+  cutoff -= g_conf->osd_pg_stat_report_interval_max;
+  if (pg_stats_publish_valid && info.stats == pg_stats_publish &&
+      info.stats.last_fresh > cutoff) {
+    dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
+	     << ": no change since" << dendl;
+  } else {
+    // update our stat summary and timestamps
     info.stats.reported_epoch = get_osdmap()->get_epoch();
     ++info.stats.reported_seq;
 
-    if (info.stats.stats.sum.num_scrub_errors)
-      state_set(PG_STATE_INCONSISTENT);
-    else
-      state_clear(PG_STATE_INCONSISTENT);
-
-    utime_t now = ceph_clock_now(cct);
     info.stats.last_fresh = now;
-    if (info.stats.state != state) {
-      info.stats.state = state;
-      info.stats.last_change = now;
-      if ((state & PG_STATE_ACTIVE) &&
-	  !(info.stats.state & PG_STATE_ACTIVE))
-	info.stats.last_became_active = now;
-    }
     if (info.stats.state & PG_STATE_CLEAN)
       info.stats.last_clean = now;
     if (info.stats.state & PG_STATE_ACTIVE)
@@ -2381,22 +2401,17 @@ void PG::publish_stats_to_osd()
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
       info.stats.last_fullsized = now;
 
-    _update_calc_stats();
-    _update_blocked_by();
-
+    publish = true;
     pg_stats_publish_valid = true;
     pg_stats_publish = info.stats;
     pg_stats_publish.stats.add(unstable_stats);
 
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
 	     << ":" << pg_stats_publish.reported_seq << dendl;
-  } else {
-    pg_stats_publish_valid = false;
-    dout(15) << "publish_stats_to_osd -- not primary" << dendl;
   }
   pg_stats_publish_lock.Unlock();
 
-  if (is_primary())
+  if (publish)
     osd->pg_stat_queue_enqueue(this);
 }
 
@@ -4636,6 +4651,10 @@ void PG::start_peering_interval(
     info.stats.mapping_epoch = info.history.same_interval_since;
   }
 
+  pg_stats_publish_lock.Lock();
+  pg_stats_publish_valid = false;
+  pg_stats_publish_lock.Unlock();
+
   // This will now be remapped during a backfill in cases
   // that it would not have been before.
   if (up != acting)
@@ -6254,6 +6273,17 @@ PG::RecoveryState::Active::Active(my_context ctx)
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map(),
 	       context< RecoveryMachine >().get_recovery_ctx());
+
+  // everyone has to commit/ack before we are truly active
+  pg->blocked_by.clear();
+  for (set<pg_shard_t>::iterator p = pg->actingbackfill.begin();
+       p != pg->actingbackfill.end();
+       ++p) {
+    if (p->shard != pg->pg_whoami.shard) {
+      pg->blocked_by.insert(p->shard);
+    }
+  }
+  pg->publish_stats_to_osd();
   dout(10) << "Activate Finished" << dendl;
 }
 
@@ -6383,7 +6413,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
     dout(10) << " peer osd." << infoevt.from << " activated and committed" 
 	     << dendl;
     pg->peer_activated.insert(infoevt.from);
-
+    pg->blocked_by.erase(infoevt.from.shard);
+    pg->publish_stats_to_osd();
     if (pg->peer_activated.size() == pg->actingbackfill.size()) {
       pg->all_activated_and_committed();
     }
@@ -6469,7 +6500,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 {
   PG *pg = context< RecoveryMachine >().pg;
   all_replicas_activated = true;
-
+  pg->state_clear(PG_STATE_ACTIVATING);
   pg->state_set(PG_STATE_ACTIVE);
 
   pg->check_local();
@@ -6490,8 +6521,10 @@ void PG::RecoveryState::Active::exit()
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 
+  pg->blocked_by.clear();
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
+  pg->state_clear(PG_STATE_ACTIVATING);
   pg->state_clear(PG_STATE_DEGRADED);
   pg->state_clear(PG_STATE_UNDERSIZED);
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);

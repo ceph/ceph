@@ -4225,9 +4225,7 @@ Objecter::RequestStateHook::RequestStateHook(Objecter *objecter) :
 bool Objecter::RequestStateHook::call(std::string command, cmdmap_t& cmdmap,
 				      std::string format, bufferlist& out)
 {
-  Formatter *f = new_formatter(format);
-  if (!f)
-    f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   RWLock::RLocker rl(m_objecter->rwlock);
   m_objecter->dump_requests(f);
   f->flush(out);

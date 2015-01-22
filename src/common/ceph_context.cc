@@ -225,9 +225,7 @@ public:
 void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 			     std::string format, bufferlist *out)
 {
-  Formatter *f = new_formatter(format);
-  if (!f)
-    f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   stringstream ss;
   for (cmdmap_t::iterator it = cmdmap.begin(); it != cmdmap.end(); ++it) {
     if (it->first != "prefix") {

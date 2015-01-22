@@ -522,6 +522,31 @@ fi
 AM_CONDITIONAL(HAVE_JUNIT4, [test "$have_junit4" = "1"])
 
 #
+# Accelio and OFED
+#
+AC_ARG_ENABLE(xio,
+    [AC_HELP_STRING([--enable-xio], [build Ceph Accelio transport])],
+    [], [enable_xio=no])
+
+AM_CONDITIONAL(ENABLE_XIO, [test "x$enable_xio" = "xyes"])
+
+if test "x$enable_xio" = x"yes"; then
+   AC_CHECK_HEADER([libxio.h], [], AC_MSG_ERROR([Cannot find header 'libxio.h'.]))
+   AC_CHECK_LIB([xio], [xio_init], [], AC_MSG_FAILURE([Accelio not found]))
+   AC_CHECK_LIB([ibverbs], [ibv_query_device], [], AC_MSG_FAILURE([OFED not found]))
+   AC_CHECK_LIB([rdmacm], [rdma_connect], [], AC_MSG_FAILURE([OFED not found]))
+
+   # Also require boost-regex, used in address_helper
+   AC_CHECK_LIB(boost_regex, main, [],
+      AC_MSG_FAILURE(["Boost regex library not found."]))
+
+   AC_DEFINE([HAVE_XIO], [1], [Accelio conditional compilation])
+
+   XIO_LIBS="-lxio -libverbs -lrdmacm"
+   AC_SUBST(XIO_LIBS)
+fi
+
+#
 # FreeBSD has it in base.
 #
 if test x"$freebsd" != x"yes"; then
@@ -838,6 +863,24 @@ return fdatasync(0);
 ]])], [
 AC_MSG_RESULT([yes])
 AC_DEFINE([HAVE_FDATASYNC], 1, [Define to 1 if you have fdatasync.])
+], [
+AC_MSG_RESULT([no])
+])
+
+AC_MSG_CHECKING([for sched.h])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#define _GNU_SOURCE
+#include <sched.h>
+]], [[
+cpu_set_t cpuset;
+CPU_ZERO(&cpuset);
+CPU_SET(sched_getcpu(), &cpuset);
+sched_setaffinity(0, sizeof(cpuset), &cpuset);
+sched_yield();
+return 0;
+]])], [
+AC_MSG_RESULT([yes])
+AC_DEFINE([HAVE_SCHED], 1, [Define to 1 if you have sched.h.])
 ], [
 AC_MSG_RESULT([no])
 ])

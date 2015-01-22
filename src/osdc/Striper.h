@@ -25,7 +25,7 @@ class CephContext;
   class Striper {
   public:
     /*
-     * map (ino, layout, offset, len) to a (list of) OSDExtents (byte
+     * map (ino, layout, offset, len) to a (list of) ObjectExtents (byte
      * ranges in objects on (primary) osds)
      */
     static void file_to_extents(CephContext *cct, const char *object_format,

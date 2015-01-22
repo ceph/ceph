@@ -557,7 +557,6 @@ public:
       case OP_WRITE:
       case OP_ZERO:
       case OP_TRUNCATE:
-      case OP_CLONERANGE2:
       case OP_SETALLOCHINT:
         assert(op->cid < cm.size());
         assert(op->oid < om.size());
@@ -565,6 +564,7 @@ public:
         op->oid = om[op->oid];
         break;
 
+      case OP_CLONERANGE2:
       case OP_CLONE:
         assert(op->cid < cm.size());
         assert(op->oid < om.size());
@@ -665,16 +665,23 @@ public:
            object_index_p != other.object_index.end();
            object_index_p++) {
         om[object_index_p->second] = _get_object_id(object_index_p->first);
-      }
+      }      
 
-      //update other.op_bl with cm & om
+      //the other.op_bl SHOULD NOT be changes during append operation,
+      //we use additional bufferlist to avoid this problem
+      bufferptr other_op_bl_ptr(other.op_bl.length());
+      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+      bufferlist other_op_bl;
+      other_op_bl.append(other_op_bl_ptr);
+
+      //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
       //object_index in other.op_buffer should be updated by new index of the
       //combined transaction
-      _update_op_bl(other.op_bl, cm, om);
+      _update_op_bl(other_op_bl, cm, om);
 
       //append op_bl
-      op_bl.append(other.op_bl);
+      op_bl.append(other_op_bl);
       //append data_bl
       data_bl.append(other.data_bl);
     }

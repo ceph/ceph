@@ -273,9 +273,9 @@ function test_run_mon() {
     setup $dir || return 1
 
     run_mon $dir a || return 1
-    local size=$(CEPH_ARGS='' ceph daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
-    test "$size" = '{ "osd_pool_default_size": "3"}' || return 1
+    test "$size" = '{"osd_pool_default_size":"3"}' || return 1
 
     ! CEPH_ARGS='' ceph status || return 1
     CEPH_ARGS='' ceph --conf $dir/ceph.conf status || return 1
@@ -283,16 +283,16 @@ function test_run_mon() {
     kill_daemons $dir
 
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    local size=$(CEPH_ARGS='' ceph daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
-    test "$size" = '{ "osd_pool_default_size": "1"}' || return 1
+    test "$size" = '{"osd_pool_default_size":"1"}' || return 1
     kill_daemons $dir
 
     CEPH_ARGS="$CEPH_ARGS --osd_pool_default_size=2" \
         run_mon $dir a || return 1
-    local size=$(CEPH_ARGS='' ceph daemon $dir/ceph-mon.a.asok \
+    local size=$(CEPH_ARGS='' ceph --format=json daemon $dir/ceph-mon.a.asok \
         config get osd_pool_default_size)
-    test "$size" = '{ "osd_pool_default_size": "2"}' || return 1
+    test "$size" = '{"osd_pool_default_size":"2"}' || return 1
     kill_daemons $dir
 
     teardown $dir || return 1
@@ -359,19 +359,19 @@ function test_run_osd() {
     run_mon $dir a || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
-    test "$backfills" = '{ "osd_max_backfills": "10"}' || return 1
+    test "$backfills" = '{"osd_max_backfills":"10"}' || return 1
 
     run_osd $dir 1 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph daemon $dir//ceph-osd.1.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.1.asok \
         config get osd_max_backfills)
-    test "$backfills" = '{ "osd_max_backfills": "20"}' || return 1
+    test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
     CEPH_ARGS="$CEPH_ARGS --osd-max-backfills 30" run_osd $dir 2 || return 1
-    local backfills=$(CEPH_ARGS='' ceph daemon $dir//ceph-osd.2.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.2.asok \
         config get osd_max_backfills)
-    test "$backfills" = '{ "osd_max_backfills": "30"}' || return 1
+    test "$backfills" = '{"osd_max_backfills":"30"}' || return 1
 
     teardown $dir || return 1
 }
@@ -463,7 +463,7 @@ function activate_osd() {
     return $status
 }
 
-function test_run_osd() {
+function test_activate_osd() {
     local dir=$1
 
     setup $dir || return 1
@@ -471,16 +471,16 @@ function test_run_osd() {
     run_mon $dir a || return 1
 
     run_osd $dir 0 || return 1
-    local backfills=$(CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
-    test "$backfills" = '{ "osd_max_backfills": "10"}' || return 1
+    test "$backfills" = '{"osd_max_backfills":"10"}' || return 1
 
     kill_daemons $dir TERM osd
 
     activate_osd $dir 0 --osd-max-backfills 20 || return 1
-    local backfills=$(CEPH_ARGS='' ceph daemon $dir//ceph-osd.0.asok \
+    local backfills=$(CEPH_ARGS='' ceph --format=json daemon $dir//ceph-osd.0.asok \
         config get osd_max_backfills)
-    test "$backfills" = '{ "osd_max_backfills": "20"}' || return 1
+    test "$backfills" = '{"osd_max_backfills":"20"}' || return 1
 
     teardown $dir || return 1
 }
@@ -574,7 +574,7 @@ function test_get_config() {
 
     setup $dir || return 1
     run_mon $dir a --osd_pool_default_size=1 || return 1
-    test $(get_config mon a ms_nocrc) = false || return 1
+    test $(get_config mon a ms_crc_header) = true || return 1
     teardown $dir || return 1
 }
 

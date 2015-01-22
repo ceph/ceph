@@ -27,6 +27,7 @@
 
 #include "crush/CrushWrapper.h"
 #include "crush/CrushTester.h"
+#include "crush/CrushTreeDumper.h"
 
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
@@ -41,6 +42,7 @@
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
 
+#include "common/TextTable.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/perf_counters.h"
@@ -604,6 +606,268 @@ int OSDMonitor::reweight_by_utilization(int oload, std::string& out_str,
   out_str = oss.str();
   dout(10) << "reweight_by_utilization: finished with " << out_str << dendl;
   return changed;
+}
+
+template <typename F>
+class OSDUtilizationDumper : public CrushTreeDumper::Dumper<F> {
+public:
+  typedef CrushTreeDumper::Dumper<F> Parent;
+
+  OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
+		       const PGMap *pgm_, bool tree_) :
+    Parent(crush),
+    osdmap(osdmap_),
+    pgm(pgm_),
+    tree(tree_),
+    average_util(100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb),
+    min_var(-1),
+    max_var(-1),
+    stddev(0),
+    sum(0) {}
+
+protected:
+  void dump_stray(F *f) {
+    for (int i = 0; i <= osdmap->get_max_osd(); i++) {
+      if (osdmap->exists(i) && !this->is_touched(i))
+	dump_item(CrushTreeDumper::Item(i, 0, 0), f);
+    }
+  }
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, F *f) {
+    if (!tree && qi.is_bucket())
+      return;
+
+    float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
+    int64_t kb = 0, kb_used = 0, kb_avail = 0;
+    double util = get_bucket_utilization(qi.id, kb, kb_used, kb_avail) ?
+      100.0 * (double)kb_used / (double)kb : 0;
+    double var = 1.0;
+    if (average_util)
+      var = util / average_util;
+
+    dump_item(qi, reweight, kb, kb_used, kb_avail, util, var, f);
+
+    if (!qi.is_bucket()) {
+      if (min_var < 0 || var < min_var) min_var = var;
+      if (max_var < 0 || var > max_var) max_var = var;
+
+      double dev = util - average_util;
+      dev *= dev;
+      stddev += reweight * dev;
+      sum += reweight;
+    }
+  }
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, F *f) = 0;
+
+  double dev() {
+    return sum > 0 ? sqrt(stddev / sum) : 0;
+  }
+
+  bool get_bucket_utilization(int id, int64_t& kb, int64_t& kb_used,
+			      int64_t& kb_avail) const {
+    if (id >= 0) {
+      typedef ceph::unordered_map<int32_t,osd_stat_t> OsdStat;
+
+      OsdStat::const_iterator p = pgm->osd_stat.find(id);
+
+      if (p == pgm->osd_stat.end())
+	return false;
+
+      kb = p->second.kb;
+      kb_used = p->second.kb_used;
+      kb_avail = p->second.kb_avail;
+      return true;
+    }
+
+    kb = 0;
+    kb_used = 0;
+    kb_avail = 0;
+
+    for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
+      int item = osdmap->crush->get_bucket_item(id, k);
+      int64_t kb_i = 0, kb_used_i = 0, kb_avail_i;
+      if (!get_bucket_utilization(item, kb_i, kb_used_i, kb_avail_i))
+	return false;
+      kb += kb_i;
+      kb_used += kb_used_i;
+      kb_avail += kb_avail_i;
+    }
+    return true;
+  }
+
+protected:
+  const OSDMap *osdmap;
+  const PGMap *pgm;
+  bool tree;
+  double average_util;
+  double min_var;
+  double max_var;
+  double stddev;
+  double sum;
+};
+
+class OSDUtilizationPlainDumper : public OSDUtilizationDumper<TextTable> {
+public:
+  typedef OSDUtilizationDumper<TextTable> Parent;
+
+  OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
+		     const PGMap *pgm, bool tree) :
+    Parent(crush, osdmap, pgm, tree) {}
+
+  void dump(TextTable *tbl) {
+    tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
+    if (tree)
+      tbl->define_column("TYPE NAME", TextTable::LEFT, TextTable::LEFT);
+
+    Parent::dump(tbl);
+
+    dump_stray(tbl);
+
+    *tbl << "" << "" << "TOTAL"
+	 << si_t(pgm->osd_sum.kb)
+	 << si_t(pgm->osd_sum.kb_used << 10)
+	 << si_t(pgm->osd_sum.kb_avail << 10)
+	 << lowprecision_t(average_util)
+	 << ""
+	 << TextTable::endrow;
+  }
+
+protected:
+  struct lowprecision_t {
+    float v;
+    lowprecision_t(float _v) : v(_v) {}
+  };
+  friend std::ostream &operator<<(ostream& out, const lowprecision_t& v);
+
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, TextTable *tbl) {
+    *tbl << qi.id
+	 << weightf_t(qi.weight)
+	 << weightf_t(reweight)
+	 << si_t(kb << 10)
+	 << si_t(kb_used << 10)
+	 << si_t(kb_avail << 10)
+	 << lowprecision_t(util)
+	 << lowprecision_t(var);
+
+    if (tree) {
+      ostringstream name;
+      for (int k = 0; k < qi.depth; k++)
+	name << "    ";
+      if (qi.is_bucket()) {
+	int type = crush->get_bucket_type(qi.id);
+	name << crush->get_type_name(type) << " "
+	     << crush->get_item_name(qi.id);
+      } else {
+	name << "osd." << qi.id;
+      }
+      *tbl << name.str();
+    }
+
+    *tbl << TextTable::endrow;
+  }
+
+public:
+  string summary() {
+    ostringstream out;
+    out << "MIN/MAX VAR: " << lowprecision_t(min_var)
+	<< "/" << lowprecision_t(max_var) << "  "
+	<< "STDDEV: " << lowprecision_t(dev());
+    return out.str();
+  }
+};
+
+ostream& operator<<(ostream& out,
+		    const OSDUtilizationPlainDumper::lowprecision_t& v)
+{
+  if (v.v < -0.01) {
+    return out << "-";
+  } else if (v.v < 0.001) {
+    return out << "0";
+  } else {
+    std::streamsize p = out.precision();
+    return out << std::fixed << std::setprecision(2) << v.v << std::setprecision(p);
+  }
+}
+
+class OSDUtilizationFormatDumper : public OSDUtilizationDumper<Formatter> {
+public:
+  typedef OSDUtilizationDumper<Formatter> Parent;
+
+  OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
+			     const PGMap *pgm, bool tree) :
+    Parent(crush, osdmap, pgm, tree) {}
+
+  void dump(Formatter *f) {
+    f->open_array_section("nodes");
+    Parent::dump(f);
+    f->close_section();
+
+    f->open_array_section("stray");
+    dump_stray(f);
+    f->close_section();
+  }
+
+protected:
+  virtual void dump_item(const CrushTreeDumper::Item &qi, float &reweight,
+			 int64_t kb, int64_t kb_used, int64_t kb_avail,
+			 double& util, double& var, Formatter *f) {
+    f->open_object_section("item");
+    CrushTreeDumper::dump_item_fields(crush, qi, f);
+    f->dump_float("reweight", reweight);
+    f->dump_int("kb", kb);
+    f->dump_int("kb_used", kb_used);
+    f->dump_int("kb_avail", kb_avail);
+    f->dump_float("utilization", util);
+    f->dump_float("var", var);
+    CrushTreeDumper::dump_bucket_children(crush, qi, f);
+    f->close_section();
+  }
+
+public:
+  void summary(Formatter *f) {
+    f->open_object_section("summary");
+    f->dump_int("total_kb", pgm->osd_sum.kb);
+    f->dump_int("total_kb_used", pgm->osd_sum.kb_used);
+    f->dump_int("total_kb_avail", pgm->osd_sum.kb_avail);
+    f->dump_float("average_utilization", average_util);
+    f->dump_float("min_var", min_var);
+    f->dump_float("max_var", max_var);
+    f->dump_float("dev", dev());
+    f->close_section();
+  }
+};
+
+void OSDMonitor::print_utilization(ostream &out, Formatter *f, bool tree) const
+{
+  const PGMap *pgm = &mon->pgmon()->pg_map;
+  const CrushWrapper *crush = osdmap.crush.get();
+
+  if (f) {
+    f->open_object_section("df");
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgm, tree);
+    d.dump(f);
+    d.summary(f);
+    f->close_section();
+    f->flush(out);
+  } else {
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgm, tree);
+    TextTable tbl;
+    d.dump(&tbl);
+    out << tbl
+	<< d.summary() << "\n";
+  }
 }
 
 void OSDMonitor::create_pending()
@@ -1889,10 +2153,11 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     osd_epoch[osd] = last;
 }
 
-void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool onetime)
+void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
+				  bool onetime)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << dest << dendl;
+	  << " to " << session->inst << dendl;
 
   if (first < get_first_committed()) {
     first = get_first_committed();
@@ -1908,14 +2173,14 @@ void OSDMonitor::send_incremental(epoch_t first, entity_inst_t& dest, bool oneti
     m->oldest_map = first;
     m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
-    mon->messenger->send_message(m, dest);
+    session->con->send_message(m);
     first++;
   }
 
   while (first <= osdmap.get_epoch()) {
     epoch_t last = MIN(first + g_conf->osd_map_message_max, osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
-    mon->messenger->send_message(m, dest);
+    session->con->send_message(m);
     first = last + 1;
     if (onetime)
       break;
@@ -1953,7 +2218,7 @@ void OSDMonitor::check_sub(Subscription *sub)
 	   << (sub->onetime ? " (onetime)":" (ongoing)") << dendl;
   if (sub->next <= osdmap.get_epoch()) {
     if (sub->next >= 1)
-      send_incremental(sub->next, sub->session->inst, sub->incremental_onetime);
+      send_incremental(sub->next, sub->session, sub->incremental_onetime);
     else
       sub->session->con->send_message(build_latest_full());
     if (sub->onetime)
@@ -2334,7 +2599,7 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
     osdmap.print_summary(f.get(), ds);
@@ -2453,6 +2718,11 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     }
     if (p != &osdmap)
       delete p;
+  } else if (prefix == "osd df") {
+    string method;
+    cmd_getval(g_ceph_context, cmdmap, "output_method", method);
+    print_utilization(ds, f ? f.get() : NULL, method == "tree");
+    rdata.append(ds);
   } else if (prefix == "osd getmaxosd") {
     if (f) {
       f->open_object_section("getmaxosd");
@@ -2478,11 +2748,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
-    if (!f)
-      f.reset(new_formatter("json-pretty"));
-
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
     f->dump_stream("ip") << osdmap.get_addr(osd);
@@ -2507,10 +2774,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    boost::scoped_ptr<Formatter> f(new_formatter(format));
-    if (!f)
-      f.reset(new_formatter("json-pretty"));
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_metadata");
     r = dump_osd_metadata(osd, f.get(), &ss);
     if (r < 0)
@@ -3006,11 +3271,8 @@ stats_out:
   } else if (prefix == "osd crush rule list" ||
 	     prefix == "osd crush rule ls") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_array_section("rules");
     osdmap.crush->list_rules(f.get());
     f->close_section();
@@ -3022,11 +3284,8 @@ stats_out:
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name == "") {
       f->open_array_section("rules");
       osdmap.crush->dump_rules(f.get());
@@ -3046,11 +3305,8 @@ stats_out:
     rdata.append(rs.str());
   } else if (prefix == "osd crush dump") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
     f->close_section();
@@ -3060,11 +3316,8 @@ stats_out:
     rdata.append(rs.str());
   } else if (prefix == "osd crush show-tunables") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-    Formatter *fp = new_formatter(format);
-    if (!fp)
-      fp = new_formatter("json-pretty");
-    boost::scoped_ptr<Formatter> f(fp);
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map_tunables");
     osdmap.crush->dump_tunables(f.get());
     f->close_section();
@@ -3705,7 +3958,13 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->type = pool_type;
   pi->flags = g_conf->osd_pool_default_flags;
   if (g_conf->osd_pool_default_flag_hashpspool)
-    pi->flags |= pg_pool_t::FLAG_HASHPSPOOL;
+    pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  if (g_conf->osd_pool_default_flag_nodelete)
+    pi->set_flag(pg_pool_t::FLAG_NODELETE);
+  if (g_conf->osd_pool_default_flag_nopgchange)
+    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+  if (g_conf->osd_pool_default_flag_nosizechange)
+    pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
 
   pi->size = size;
   pi->min_size = min_size;
@@ -3852,6 +4111,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   }
 
   if (var == "size") {
+    if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+      ss << "pool size change is disabled; you must unset nosizechange flag for the pool first";
+      return -EPERM;
+    }
     if (p.type == pg_pool_t::TYPE_ERASURE) {
       ss << "can not change the size of an erasure-coded pool";
       return -ENOTSUP;
@@ -3860,7 +4123,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
     }
-    if (n == 0 || n > 10) {
+    if (n <= 0 || n > 10) {
       ss << "pool size must be between 1 and 10";
       return -EINVAL;
     }
@@ -3868,9 +4131,36 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (n < p.min_size)
       p.min_size = n;
   } else if (var == "min_size") {
+    if (p.has_flag(pg_pool_t::FLAG_NOSIZECHANGE)) {
+      ss << "pool min size change is disabled; you must unset nosizechange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
+    }
+
+    if (p.type != pg_pool_t::TYPE_ERASURE) {
+      if (n < 1 || n > p.size) {
+	ss << "pool min_size must be between 1 and " << (int)p.size;
+	return -EINVAL;
+      }
+    } else {
+       ErasureCodeInterfaceRef erasure_code;
+       int k;
+       stringstream tmp;
+       int err = get_erasure_code(p.erasure_code_profile, &erasure_code, tmp);
+       if (err == 0) {
+	 k = erasure_code->get_data_chunk_count();
+       } else {
+	 ss << __func__ << " get_erasure_code failed: " << tmp;
+	 return err;;
+       }
+
+       if (n < k || n > p.size) {
+	 ss << "pool min_size must be between " << k << " and " << (int)p.size;
+	 return -EINVAL;
+       }
     }
     p.min_size = n;
   } else if (var == "auid") {
@@ -3886,6 +4176,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.crash_replay_interval = n;
   } else if (var == "pg_num") {
+    if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
+      ss << "pool pg_num change is disabled; you must unset nopgchange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -3923,6 +4217,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     }
     p.set_pg_num(n);
   } else if (var == "pgp_num") {
+    if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
+      ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
+      return -EPERM;
+    }
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
@@ -3954,12 +4252,14 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
     p.crush_ruleset = n;
-  } else if (var == "hashpspool") {
+  } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
+	     var == "nosizechange") {
+    uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
-      p.flags |= pg_pool_t::FLAG_HASHPSPOOL;
+      p.set_flag(flag);
     } else if (val == "false" || (interr.empty() && n == 0)) {
-      p.flags &= ~pg_pool_t::FLAG_HASHPSPOOL;
+      p.unset_flag(flag);
     } else {
       ss << "expecting value 'true', 'false', '0', or '1'";
       return -EINVAL;
@@ -4102,7 +4402,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
@@ -6470,6 +6770,17 @@ int OSDMonitor::_check_remove_pool(int64_t pool, const pg_pool_t *p,
     }
     return -EBUSY;
   }
+
+  if (!g_conf->mon_allow_pool_delete) {
+    *ss << "pool deletion is disabled; you must first set the mon_allow_pool_delete config option to true before you can destroy a pool";
+    return -EPERM;
+  }
+
+  if (p->has_flag(pg_pool_t::FLAG_NODELETE)) {
+    *ss << "pool deletion is disabled; you must unset nodelete flag for the pool first";
+    return -EPERM;
+  }
+
   *ss << "pool '" << poolstr << "' removed";
   return 0;
 }

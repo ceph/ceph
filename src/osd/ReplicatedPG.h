@@ -615,6 +615,7 @@ public:
               vector<OSDOp>& _ops, ReplicatedPG *_pg) :
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_evict(false),
+      ignore_cache(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       op_t(NULL),
@@ -1132,7 +1133,7 @@ protected:
   /**
    * This helper function tells the client to redirect their request elsewhere.
    */
-  void do_cache_redirect(OpRequestRef op, ObjectContextRef obc);
+  void do_cache_redirect(OpRequestRef op);
   /**
    * This function starts up a copy from
    */
@@ -1144,7 +1145,7 @@ protected:
   /**
    * Check if the op is such that we can skip promote (e.g., DELETE)
    */
-  bool can_skip_promote(OpRequestRef op, ObjectContextRef obc);
+  bool can_skip_promote(OpRequestRef op);
 
   int prepare_transaction(OpContext *ctx);
   list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;

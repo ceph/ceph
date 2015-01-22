@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_FORMATTER_H
 #define CEPH_FORMATTER_H
 
@@ -25,6 +27,17 @@ namespace ceph {
 
   class Formatter {
   public:
+    static Formatter *create(const std::string& type,
+			     const std::string& default_type,
+			     const std::string& fallback);
+    static Formatter *create(const std::string& type,
+			     const std::string& default_type) {
+      return create(type, default_type, "");
+    }
+    static Formatter *create(const std::string& type) {
+      return create(type, "json-pretty", "");
+    }
+
     Formatter();
     virtual ~Formatter();
 
@@ -71,8 +84,6 @@ namespace ceph {
       dump_string(name, s);
     }
   };
-
-  Formatter *new_formatter(const std::string &type);
 
   class JSONFormatter : public Formatter {
   public:

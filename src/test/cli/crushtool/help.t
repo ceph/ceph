@@ -1,6 +1,7 @@
   $ crushtool --help
   usage: crushtool ...
      --decompile|-d map    decompile a crush map to source
+     --tree                print map summary as a tree
      --compile|-c map.txt  compile a map from source
      [-o outfile [--clobber]]
                            specify output for for (de)compilation

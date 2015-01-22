@@ -338,7 +338,8 @@ uint64_t AuthMonitor::assign_global_id(MAuth *m, bool should_increase_max)
 
   // bump the max?
   while (mon->is_leader() &&
-	 next_global_id >= max_global_id - g_conf->mon_globalid_prealloc / 2) {
+	 (max_global_id < g_conf->mon_globalid_prealloc ||
+	  next_global_id >= max_global_id - g_conf->mon_globalid_prealloc / 2)) {
     increase_max_global_id();
   }
 
@@ -557,7 +558,7 @@ bool AuthMonitor::preprocess_command(MMonCommand *m)
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "auth export") {
     KeyRing keyring;
@@ -685,7 +686,7 @@ bool AuthMonitor::prepare_command(MMonCommand *m)
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(new_formatter(format));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   MonSession *session = m->get_session();
   if (!session) {

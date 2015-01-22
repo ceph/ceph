@@ -108,7 +108,7 @@ Delete a Snapshot
 -----------------
 
 To delete a snapshot with ``rbd``, specify the ``snap rm`` option, the pool
-name, the image name and the username. ::
+name, the image name and the snap name. ::
 
 	rbd --pool {pool-name} snap rm --snap {snap-name} {image-name}
 	rbd snap rm {pool-name}/{image-name}@{snap-name}
@@ -254,7 +254,7 @@ snapshot; and, the child pool and image name. You must protect the snapshot
 before  you can clone it. ::
 
    rbd --pool {pool-name} --image {parent-image} --snap {snap-name} --dest-pool {pool-name} --dest {child-image}
-	rbd clone {pool-name}/{parent-image}@{snap-name} {pool-name}/{child-image-name}
+   rbd clone {pool-name}/{parent-image}@{snap-name} {pool-name}/{child-image-name}
 	
 For example:: 
 

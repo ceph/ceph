@@ -50,7 +50,7 @@ class AsyncConnection : public Connection {
   // the main usage is avoid error happen outside messenger threads
   int _try_send(bufferlist bl, bool send=true);
   int _send(Message *m);
-  int read_until(uint64_t needed, bufferptr &p);
+  int read_until(uint64_t needed, char *p);
   int _process_connection();
   void _connect();
   void _stop();
@@ -125,34 +125,7 @@ class AsyncConnection : public Connection {
   int send_message(Message *m);
 
   void send_keepalive();
-  // mark_down need to ensure all events completely finished. So we introduce
-  // a separator impl:
-  //
-  // Thread A             Event loop N          Event loop N+1
-  // mark_down()
-  // dispatch
-  // wait
-  //  \                   C_handle_stop
-  //  \                   stop()
-  //  \                   _stop()
-  //  \                   dispatch
-  //  \                                         C_handle_signal
-  //  \                                         wakeup_stop()
-  //  \                                         signal
-  // finished
-  //
-  // The above flow only happen when the caller isn't the pthread own center,
-  // if the owner of center is self, it's safe to call _stop() directly;
-  void mark_down() {
-    Mutex::Locker l(stop_lock);
-    if (center->get_owner() == pthread_self()) {
-      stop();
-    } else {
-      stopping.set(1);
-      center->dispatch_event_external(stop_handler);
-      stop_cond.Wait(stop_lock);
-    }
-  }
+  void mark_down();
   void mark_disposable() {
     Mutex::Locker l(lock);
     policy.lossy = true;
@@ -184,7 +157,6 @@ class AsyncConnection : public Connection {
     STATE_CONNECTING_WAIT_ACK_SEQ,
     STATE_CONNECTING_READY,
     STATE_ACCEPTING,
-    STATE_ACCEPTING_HANDLE_CONNECT,
     STATE_ACCEPTING_WAIT_BANNER_ADDR,
     STATE_ACCEPTING_WAIT_CONNECT_MSG,
     STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH,
@@ -195,6 +167,7 @@ class AsyncConnection : public Connection {
     STATE_WAIT,       // just wait for racing connection
   };
 
+  static const int TCP_PREFETCH_MIN_SIZE;
   static const char *get_state_name(int state) {
       const char* const statenames[] = {"STATE_NONE",
                                         "STATE_OPEN",
@@ -220,7 +193,6 @@ class AsyncConnection : public Connection {
                                         "STATE_CONNECTING_WAIT_ACK_SEQ",
                                         "STATE_CONNECTING_READY",
                                         "STATE_ACCEPTING",
-                                        "STATE_ACCEPTING_HANDLE_CONNECT",
                                         "STATE_ACCEPTING_WAIT_BANNER_ADDR",
                                         "STATE_ACCEPTING_WAIT_CONNECT_MSG",
                                         "STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH",
@@ -228,8 +200,7 @@ class AsyncConnection : public Connection {
                                         "STATE_ACCEPTING_READY",
                                         "STATE_STANDBY",
                                         "STATE_CLOSED",
-                                        "STATE_WAIT",
-                                        "STATE_FAULT"};
+                                        "STATE_WAIT"};
       return statenames[state];
   }
 
@@ -263,6 +234,10 @@ class AsyncConnection : public Connection {
   EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
+  char *recv_buf;
+  uint32_t recv_max_prefetch;
+  uint32_t recv_start;
+  uint32_t recv_end;
   Mutex stop_lock; // used to protect `mark_down_cond`
   Cond stop_cond;
   set<uint64_t> register_time_events; // need to delete it if stop
@@ -291,10 +266,11 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
+  bool once_session_reset;
   atomic_t stopping;
 
   // used only for local state, it will be overwrite when state transition
-  bufferptr state_buffer;
+  char *state_buffer;
   // used only by "read_until"
   uint64_t state_offset;
   bufferlist outcoming_bl;
@@ -307,16 +283,20 @@ class AsyncConnection : public Connection {
   void handle_write();
   void process();
   void wakeup_from(uint64_t id);
-  // Helper: only called by C_handle_stop
-  void stop() {
-    Mutex::Locker l(lock);
-    _stop();
-  }
-  void wakeup_stop() {
-    Mutex::Locker l(stop_lock);
-    stop_cond.Signal();
-  }
   void local_deliver();
+  void stop() {
+    center->dispatch_event_external(reset_handler);
+    mark_down();
+  }
+  void cleanup_handler() {
+    read_handler.reset();
+    write_handler.reset();
+    reset_handler.reset();
+    remote_reset_handler.reset();
+    connect_handler.reset();
+    accept_handler.reset();
+    local_deliver_handler.reset();
+  }
 }; /* AsyncConnection */
 
 typedef boost::intrusive_ptr<AsyncConnection> AsyncConnectionRef;

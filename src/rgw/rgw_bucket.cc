@@ -236,6 +236,32 @@ int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersi
   return store->meta_mgr->remove_entry(bucket_instance_meta_handler, entry, objv_tracker);
 }
 
+int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id)
+{
+  ssize_t pos = bucket_instance.rfind(':');
+  if (pos < 0) {
+    return -EINVAL;
+  }
+
+  string first = bucket_instance.substr(0, pos);
+  string second = bucket_instance.substr(pos + 1);
+
+  if (first.find(':') == string::npos) {
+    *shard_id = -1;
+    *target_bucket_instance = bucket_instance;
+    return 0;
+  }
+
+  *target_bucket_instance = first;
+  string err;
+  *shard_id = strict_strtol(second.c_str(), 10, &err);
+  if (!err.empty()) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
                          map<string, bufferlist>* rmattrs,
@@ -364,7 +390,7 @@ int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& b
   bufferlist bl;
   RGWObjectCtx obj_ctx(store);
 
-  uint64_t bucket_ver, master_ver;
+  string bucket_ver, master_ver;
 
   ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, NULL);
   if (ret < 0)
@@ -741,10 +767,9 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   while (is_truncated) {
     map<string, RGWObjEnt> result;
 
-    int r = store->cls_bucket_list(bucket, marker, prefix, 1000, true, result,
-             &is_truncated, &marker,
-             bucket_object_check_filter);
-
+    int r = store->cls_bucket_list(bucket, marker, prefix, 1000, true,
+                                   result, &is_truncated, &marker,
+                                   bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
@@ -974,7 +999,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
 
   bucket = bucket_info.bucket;
 
-  uint64_t bucket_ver, master_ver;
+  string bucket_ver, master_ver;
   string max_marker;
   int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
@@ -989,8 +1014,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_string("owner", bucket_info.owner);
-  formatter->dump_int("ver", bucket_ver);
-  formatter->dump_int("master_ver", master_ver);
+  formatter->dump_string("ver", bucket_ver);
+  formatter->dump_string("master_ver", master_ver);
   formatter->dump_int("mtime", mtime);
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
@@ -1093,9 +1118,10 @@ void rgw_data_change::dump(Formatter *f) const
 }
 
 
-int RGWDataChangesLog::choose_oid(rgw_bucket& bucket) {
-    string& name = bucket.name;
-    uint32_t r = ceph_str_hash_linux(name.c_str(), name.size()) % num_shards;
+int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
+    const string& name = bs.bucket.name;
+    int shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
+    uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) + shard_shift) % num_shards;
 
     return (int)r;
 }
@@ -1107,19 +1133,22 @@ int RGWDataChangesLog::renew_entries()
 
   /* we can't keep the bucket name as part of the cls_log_entry, and we need
    * it later, so we keep two lists under the map */
-  map<int, pair<list<string>, list<cls_log_entry> > > m;
+  map<int, pair<list<rgw_bucket_shard>, list<cls_log_entry> > > m;
 
   lock.Lock();
-  map<string, rgw_bucket> entries;
+  map<rgw_bucket_shard, bool> entries;
   entries.swap(cur_cycle);
   lock.Unlock();
 
-  map<string, rgw_bucket>::iterator iter;
+  map<rgw_bucket_shard, bool>::iterator iter;
   string section;
   utime_t ut = ceph_clock_now(cct);
   for (iter = entries.begin(); iter != entries.end(); ++iter) {
-    rgw_bucket& bucket = iter->second;
-    int index = choose_oid(bucket);
+    const rgw_bucket_shard& bs = iter->first;
+    const rgw_bucket& bucket = bs.bucket;
+    int shard_id = bs.shard_id;
+
+    int index = choose_oid(bs);
 
     cls_log_entry entry;
 
@@ -1127,16 +1156,21 @@ int RGWDataChangesLog::renew_entries()
     bufferlist bl;
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bucket.name + ":" + bucket.bucket_id;
+    if (shard_id >= 0) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), ":%d", shard_id);
+      change.key += buf;
+    }
     change.timestamp = ut;
     ::encode(change, bl);
 
     store->time_log_prepare_entry(entry, ut, section, bucket.name, bl);
 
-    m[index].first.push_back(bucket.name);
+    m[index].first.push_back(bs);
     m[index].second.push_back(entry);
   }
 
-  map<int, pair<list<string>, list<cls_log_entry> > >::iterator miter;
+  map<int, pair<list<rgw_bucket_shard>, list<cls_log_entry> > >::iterator miter;
   for (miter = m.begin(); miter != m.end(); ++miter) {
     list<cls_log_entry>& entries = miter->second.second;
 
@@ -1153,8 +1187,8 @@ int RGWDataChangesLog::renew_entries()
     utime_t expiration = now;
     expiration += utime_t(cct->_conf->rgw_data_log_window, 0);
 
-    list<string>& buckets = miter->second.first;
-    list<string>::iterator liter;
+    list<rgw_bucket_shard>& buckets = miter->second.first;
+    list<rgw_bucket_shard>::iterator liter;
     for (liter = buckets.begin(); liter != buckets.end(); ++liter) {
       update_renewed(*liter, expiration);
     }
@@ -1163,39 +1197,41 @@ int RGWDataChangesLog::renew_entries()
   return 0;
 }
 
-void RGWDataChangesLog::_get_change(string& bucket_name, ChangeStatusPtr& status)
+void RGWDataChangesLog::_get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status)
 {
   assert(lock.is_locked());
-  if (!changes.find(bucket_name, status)) {
+  if (!changes.find(bs, status)) {
     status = ChangeStatusPtr(new ChangeStatus);
-    changes.add(bucket_name, status);
+    changes.add(bs, status);
   }
 }
 
-void RGWDataChangesLog::register_renew(rgw_bucket& bucket)
+void RGWDataChangesLog::register_renew(rgw_bucket_shard& bs)
 {
   Mutex::Locker l(lock);
-  cur_cycle[bucket.name] = bucket;
+  cur_cycle[bs] = true;
 }
 
-void RGWDataChangesLog::update_renewed(string& bucket_name, utime_t& expiration)
+void RGWDataChangesLog::update_renewed(rgw_bucket_shard& bs, utime_t& expiration)
 {
   Mutex::Locker l(lock);
   ChangeStatusPtr status;
-  _get_change(bucket_name, status);
+  _get_change(bs, status);
 
-  ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name=" << bucket_name << " expiration=" << expiration << dendl;
+  ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name=" << bs.bucket.name << " shard_id=" << bs.shard_id << " expiration=" << expiration << dendl;
   status->cur_expiration = expiration;
 }
 
-int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
+int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
   if (!store->need_to_log_data())
     return 0;
+
+  rgw_bucket_shard bs(bucket, shard_id);
 
   lock.Lock();
 
   ChangeStatusPtr status;
-  _get_change(bucket.name, status);
+  _get_change(bs, status);
 
   lock.Unlock();
 
@@ -1203,13 +1239,13 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
 
   status->lock->Lock();
 
-  ldout(cct, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name << " now=" << now << " cur_expiration=" << status->cur_expiration << dendl;
+  ldout(cct, 20) << "RGWDataChangesLog::add_entry() bucket.name=" << bucket.name << " shard_id=" << shard_id << " now=" << now << " cur_expiration=" << status->cur_expiration << dendl;
 
   if (now < status->cur_expiration) {
     /* no need to send, recently completed */
     status->lock->Unlock();
 
-    register_renew(bucket);
+    register_renew(bs);
     return 0;
   }
 
@@ -1226,7 +1262,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     int ret = cond->wait();
     cond->put();
     if (!ret) {
-      register_renew(bucket);
+      register_renew(bs);
     }
     return ret;
   }
@@ -1234,7 +1270,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
   status->cond = new RefCountedCond;
   status->pending = true;
 
-  string& oid = oids[choose_oid(bucket)];
+  string& oid = oids[choose_oid(bs)];
   utime_t expiration;
 
   int ret;
@@ -1251,6 +1287,11 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket) {
     rgw_data_change change;
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bucket.name + ":" + bucket.bucket_id;
+    if (shard_id >= 0) {
+      char buf[16];
+      snprintf(buf, sizeof(buf), ":%d", shard_id);
+      change.key += buf;
+    }
     change.timestamp = now;
     ::encode(change, bl);
     string section;
@@ -1710,7 +1751,7 @@ public:
 
     objv_tracker = bci.info.objv_tracker;
 
-    ret = store->init_bucket_index(bci.info.bucket);
+    ret = store->init_bucket_index(bci.info.bucket, bci.info.num_shards);
     if (ret < 0)
       return ret;
 

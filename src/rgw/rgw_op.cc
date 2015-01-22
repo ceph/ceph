@@ -35,7 +35,8 @@ using ceph::crypto::MD5;
 static string mp_ns = RGW_OBJ_NS_MULTIPART;
 static string shadow_ns = RGW_OBJ_NS_SHADOW;
 
-#define MULTIPART_UPLOAD_ID_PREFIX "2/" // must contain a unique char that may not come up in gen_rand_alpha()
+#define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
+#define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
 
 class MultipartMetaFilter : public RGWAccessListFilter {
 public:
@@ -340,7 +341,14 @@ static int rgw_build_policies(RGWRados *store, struct req_state *s, bool only_bu
   RGWUserInfo bucket_owner_info;
   RGWObjectCtx& obj_ctx = *(RGWObjectCtx *)s->obj_ctx;
 
-  s->bucket_instance_id = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
+  string bi = s->info.args.get(RGW_SYS_PARAM_PREFIX "bucket-instance");
+  if (!bi.empty()) {
+    int shard_id;
+    ret = rgw_bucket_parse_bucket_instance(bi, &s->bucket_instance_id, &shard_id);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   s->bucket_acl = new RGWAccessControlPolicy(s->cct);
 
@@ -1540,6 +1548,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
   }
 
   head_obj = manifest_gen.get_cur_obj();
+  head_obj.index_hash_source = obj_str;
   cur_obj = head_obj;
 
   return 0;
@@ -1549,7 +1558,8 @@ static bool is_v2_upload_id(const string& upload_id)
 {
   const char *uid = upload_id.c_str();
 
-  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0);
+  return (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX, sizeof(MULTIPART_UPLOAD_ID_PREFIX) - 1) == 0) ||
+         (strncmp(uid, MULTIPART_UPLOAD_ID_PREFIX_LEGACY, sizeof(MULTIPART_UPLOAD_ID_PREFIX_LEGACY) - 1) == 0);
 }
 
 int RGWPutObjProcessor_Multipart::do_complete(string& etag, time_t *mtime, time_t set_mtime,
@@ -2706,7 +2716,7 @@ void RGWInitMultipart::execute()
   do {
     char buf[33];
     gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    upload_id = "2/"; /* v2 upload id */
+    upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
     upload_id.append(buf);
 
     string tmp_obj_name;
@@ -2716,6 +2726,7 @@ void RGWInitMultipart::execute()
     obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
     // the meta object will be indexed with 0 size, we c
     obj.set_in_extra_data(true);
+    obj.index_hash_source = s->object_str;
 
     RGWRados::Object op_target(store, s->bucket_info, *(RGWObjectCtx *)s->obj_ctx, obj);
     op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
@@ -2943,6 +2954,7 @@ void RGWCompleteMultipart::execute()
 
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object_str;
 
   ret = get_obj_attrs(store, s, meta_obj, attrs);
   if (ret < 0) {
@@ -3106,6 +3118,7 @@ void RGWAbortMultipart::execute()
         string oid = mp.get_part(obj_iter->second.num);
         rgw_obj obj;
         obj.init_ns(s->bucket, oid, mp_ns);
+        obj.index_hash_source = s->object_str;
         ret = store->delete_obj(*obj_ctx, s->bucket_info, obj, 0);
         if (ret < 0 && ret != -ENOENT)
           return;
@@ -3114,6 +3127,7 @@ void RGWAbortMultipart::execute()
         RGWObjManifest::obj_iterator oiter;
         for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
           rgw_obj loc = oiter.get_location();
+          loc.index_hash_source = s->object_str;
           ret = store->delete_obj(*obj_ctx, s->bucket_info, loc, 0);
           if (ret < 0 && ret != -ENOENT)
             return;
@@ -3125,6 +3139,7 @@ void RGWAbortMultipart::execute()
   // and also remove the metadata obj
   meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
   meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object_str;
   ret = store->delete_obj(*obj_ctx, s->bucket_info, meta_obj, 0);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;

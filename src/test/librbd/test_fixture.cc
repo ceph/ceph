@@ -40,7 +40,7 @@ std::string TestFixture::_pool_name;
 librados::Rados TestFixture::_rados;
 uint64_t TestFixture::_image_number = 0;
 
-TestFixture::TestFixture() {
+TestFixture::TestFixture() : m_image_size(0) {
 }
 
 void TestFixture::SetUpTestCase() {

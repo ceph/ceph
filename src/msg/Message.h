@@ -169,10 +169,35 @@
 #define MSG_TIMECHECK             0x600
 #define MSG_MON_HEALTH            0x601
 
+// *** Message::encode() crcflags bits ***
+#define MSG_CRC_DATA           1
+#define MSG_CRC_HEADER         2
+
+// Xio Testing
+#define MSG_DATA_PING		  0x602
+
+// Xio intends to define messages 0x603..0x606
+
+// Special
+#define MSG_NOP                   0x607
 
 // ======================================================
 
 // abstract Message class
+
+namespace bi = boost::intrusive;
+
+// XioMessenger conditional trace flags
+#define MSG_MAGIC_XIO          0x0002
+#define MSG_MAGIC_TRACE_XCON   0x0004
+#define MSG_MAGIC_TRACE_DTOR   0x0008
+#define MSG_MAGIC_TRACE_HDR    0x0010
+#define MSG_MAGIC_TRACE_XIO    0x0020
+#define MSG_MAGIC_TRACE_XMSGR  0x0040
+#define MSG_MAGIC_TRACE_CTR    0x0080
+
+// XioMessenger diagnostic "ping pong" flag (resend msg when send completes)
+#define MSG_MAGIC_REDUPE       0x0100
 
 class Message : public RefCountedObject {
 protected:
@@ -197,6 +222,8 @@ protected:
 
   uint32_t magic;
 
+  bi::list_member_hook<> dispatch_q;
+
 public:
   class CompletionHook : public Context {
   protected:
@@ -205,9 +232,12 @@ public:
   public:
     CompletionHook(Message *_m) : m(_m) {}
     virtual void set_message(Message *_m) { m = _m; }
-    virtual void finish(int r) = 0;
-    virtual ~CompletionHook() {}
   };
+
+  typedef bi::list< Message,
+		    bi::member_hook< Message,
+				     bi::list_member_hook<>,
+				     &Message::dispatch_q > > Queue;
 
 protected:
   CompletionHook* completion_hook; // owned by Messenger
@@ -288,6 +318,7 @@ public:
   void set_header(const ceph_msg_header &e) { header = e; }
   void set_footer(const ceph_msg_footer &e) { footer = e; }
   ceph_msg_footer &get_footer() { return footer; }
+  void set_src(const entity_name_t& src) { header.src = src; }
 
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
@@ -422,11 +453,12 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, bool datacrc);
+  void encode(uint64_t features, int crcflags);
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 
-extern Message *decode_message(CephContext *cct, ceph_msg_header &header,
+extern Message *decode_message(CephContext *cct, int crcflags,
+			       ceph_msg_header &header,
 			       ceph_msg_footer& footer, bufferlist& front,
 			       bufferlist& middle, bufferlist& data);
 inline ostream& operator<<(ostream& out, Message& m) {
@@ -437,6 +469,7 @@ inline ostream& operator<<(ostream& out, Message& m) {
 }
 
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
-extern Message *decode_message(CephContext *cct, bufferlist::iterator& bl);
+extern Message *decode_message(CephContext *cct, int crcflags,
+                               bufferlist::iterator& bl);
 
 #endif

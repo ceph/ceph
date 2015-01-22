@@ -123,7 +123,7 @@ COMMAND("pg dump_json " \
 COMMAND("pg dump_pools_json", "show pg pools info in json only",\
 	"pg", "r", "cli,rest")
 COMMAND("pg dump_stuck " \
-	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale,n=N,req=false " \
+	"name=stuckops,type=CephChoices,strings=inactive|unclean|stale|undersized|degraded,n=N,req=false " \
 	"name=threshold,type=CephInt,req=false",
 	"show information about stuck pgs",\
 	"pg", "r", "cli,rest")
@@ -606,7 +606,7 @@ COMMAND("osd pool get " \
 	"get pool parameter <var>", "osd", "r", "cli,rest")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote " \
+	"name=var,type=CephChoices,strings=size|min_size|crash_replay_interval|pg_num|pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|min_read_recency_for_promote " \
 	"name=val,type=CephString " \
 	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set pool parameter <var> to <val>", "osd", "rw", "cli,rest")
@@ -638,6 +638,9 @@ COMMAND("osd reweight-by-pg " \
 COMMAND("osd thrash " \
 	"name=num_epochs,type=CephInt,range=0", \
 	"thrash OSDs for <num_epochs>", "osd", "rw", "cli,rest")
+COMMAND("osd df " \
+	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
+	"show OSD utilization", "osd", "r", "cli,rest")
 
 // tiering
 COMMAND("osd tier add " \
