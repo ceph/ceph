@@ -82,9 +82,6 @@ class EventDriver {
 
 /*
  * EventCenter maintain a set of file descriptor and handle registered events.
- *
- * EventCenter is aimed to used by one thread, other threads access EventCenter
- * only can use dispatch_event_external method which is protected by lock.
  */
 class EventCenter {
   struct FileEvent {
@@ -104,13 +101,14 @@ class EventCenter {
   CephContext *cct;
   int nevent;
   // Used only to external event
-  Mutex lock;
+  Mutex external_lock, file_lock, time_lock;
   deque<EventCallbackRef> external_events;
   FileEvent *file_events;
   EventDriver *driver;
   map<utime_t, list<TimeEvent> > time_events;
   uint64_t time_event_next_id;
   time_t last_time; // last time process time event
+  utime_t next_time; // next wake up time
   int notify_receive_fd;
   int notify_send_fd;
   NetHandler net;
@@ -118,6 +116,7 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
+    assert(fd < nevent);
     FileEvent *p = &file_events[fd];
     if (!p->mask)
       new(p) FileEvent();
@@ -127,13 +126,17 @@ class EventCenter {
  public:
   EventCenter(CephContext *c):
     cct(c), nevent(0),
-    lock("AsyncMessenger::lock"),
+    external_lock("AsyncMessenger::external_lock"),
+    file_lock("AsyncMessenger::file_lock"),
+    time_lock("AsyncMessenger::time_lock"),
     file_events(NULL),
     driver(NULL), time_event_next_id(0),
     notify_receive_fd(-1), notify_send_fd(-1), net(c), owner(0) {
     last_time = time(NULL);
   }
   ~EventCenter();
+  ostream& _event_prefix(std::ostream *_dout);
+
   int init(int nevent);
   void set_owner(pthread_t p) { owner = p; }
   pthread_t get_owner() { return owner; }

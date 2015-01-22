@@ -241,6 +241,7 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
   CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
+  CEPH_OSD_RMW_FLAG_PROMOTE     = (1 << 7),
 };
 
 
@@ -766,6 +767,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
 #define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
 #define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
+#define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
 
 std::string pg_state_string(int state);
 
@@ -821,6 +823,9 @@ struct pg_pool_t {
     FLAG_FULL       = 1<<1, // pool is full
     FLAG_DEBUG_FAKE_EC_POOL = 1<<2, // require ReplicatedPG to act like an EC pg
     FLAG_INCOMPLETE_CLONES = 1<<3, // may have incomplete clones (bc we are/were an overlay)
+    FLAG_NODELETE = 1<<4, // pool can't be deleted
+    FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
+    FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
   };
 
   static const char *get_flag_name(int f) {
@@ -829,6 +834,9 @@ struct pg_pool_t {
     case FLAG_FULL: return "full";
     case FLAG_DEBUG_FAKE_EC_POOL: return "require_local_rollback";
     case FLAG_INCOMPLETE_CLONES: return "incomplete_clones";
+    case FLAG_NODELETE: return "nodelete";
+    case FLAG_NOPGCHANGE: return "nopgchange";
+    case FLAG_NOSIZECHANGE: return "nosizechange";
     default: return "???";
     }
   }
@@ -845,6 +853,23 @@ struct pg_pool_t {
   }
   string get_flags_string() const {
     return get_flags_string(flags);
+  }
+  static uint64_t get_flag_by_name(const string& name) {
+    if (name == "hashpspool")
+      return FLAG_HASHPSPOOL;
+    if (name == "full")
+      return FLAG_FULL;
+    if (name == "require_local_rollback")
+      return FLAG_DEBUG_FAKE_EC_POOL;
+    if (name == "incomplete_clones")
+      return FLAG_INCOMPLETE_CLONES;
+    if (name == "nodelete")
+      return FLAG_NODELETE;
+    if (name == "nopgchange")
+      return FLAG_NOPGCHANGE;
+    if (name == "nosizechange")
+      return FLAG_NOSIZECHANGE;
+    return 0;
   }
 
   typedef enum {
@@ -1019,6 +1044,8 @@ public:
 
   uint64_t get_flags() const { return flags; }
   bool has_flag(uint64_t f) const { return flags & f; }
+  void set_flag(uint64_t f) { flags |= f; }
+  void unset_flag(uint64_t f) { flags &= ~f; }
 
   /// This method will later return true for ec pools as well
   bool ec_pool() const {
@@ -1172,6 +1199,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p);
  * This is just a container for object stats; we don't know what for.
  */
 struct object_stat_sum_t {
+  /**************************************************************************
+   * WARNING: be sure to update operator==, floor, and split when
+   * adding/removing fields!
+   **************************************************************************/
   int64_t num_bytes;    // in bytes
   int64_t num_objects;
   int64_t num_object_clones;
@@ -1180,8 +1211,10 @@ struct object_stat_sum_t {
   int64_t num_objects_degraded;
   int64_t num_objects_misplaced;
   int64_t num_objects_unfound;
-  int64_t num_rd, num_rd_kb;
-  int64_t num_wr, num_wr_kb;
+  int64_t num_rd;
+  int64_t num_rd_kb;
+  int64_t num_wr;
+  int64_t num_wr_kb;
   int64_t num_scrub_errors;	// total deep and shallow scrub errors
   int64_t num_shallow_scrub_errors;
   int64_t num_deep_scrub_errors;
@@ -1299,12 +1332,17 @@ struct object_stat_sum_t {
 };
 WRITE_CLASS_ENCODER(object_stat_sum_t)
 
+bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r);
+
 /**
  * a collection of object stat sums
  *
  * This is a collection of stat sums over different categories.
  */
 struct object_stat_collection_t {
+  /**************************************************************************
+   * WARNING: be sure to update the operator== when adding/removing fields! *
+   **************************************************************************/
   object_stat_sum_t sum;
 
   void calc_copies(int nrep) {
@@ -1341,10 +1379,19 @@ struct object_stat_collection_t {
 };
 WRITE_CLASS_ENCODER(object_stat_collection_t)
 
+inline bool operator==(const object_stat_collection_t& l,
+		       const object_stat_collection_t& r) {
+  return l.sum == r.sum;
+}
+
+
 /** pg_stat
  * aggregate stats for a single PG.
  */
 struct pg_stat_t {
+  /**************************************************************************
+   * WARNING: be sure to update the operator== when adding/removing fields! *
+   **************************************************************************/
   eversion_t version;
   version_t reported_seq;  // sequence number
   epoch_t reported_epoch;  // epoch of this report
@@ -1452,6 +1499,8 @@ struct pg_stat_t {
   static void generate_test_instances(list<pg_stat_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_stat_t)
+
+bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 
 /*
  * summation over an entire pool

@@ -221,9 +221,7 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
-  Formatter *f = new_formatter(format);
-  if (!f)
-    f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (command == "status") {
 
     const OSDMap *osdmap = objecter->get_osdmap_read();
@@ -706,6 +704,7 @@ void MDS::create_logger()
 
   mdlog->create_logger();
   server->create_logger();
+  mdcache->register_perfcounters();
 }
 
 
@@ -1770,6 +1769,10 @@ void MDS::boot_create()
 
   mdcache->init_layouts();
 
+  snapserver->set_rank(whoami);
+  inotable->set_rank(whoami);
+  sessionmap.set_rank(whoami);
+
   // start with a fresh journal
   dout(10) << "boot_create creating fresh journal" << dendl;
   mdlog->create(fin.new_sub());
@@ -1851,9 +1854,11 @@ void MDS::boot_start(BootStep step, int r)
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_OPEN_ROOT));
         dout(2) << "boot_start " << step << ": opening inotable" << dendl;
+        inotable->set_rank(whoami);
         inotable->load(gather.new_sub());
 
         dout(2) << "boot_start " << step << ": opening sessionmap" << dendl;
+        sessionmap.set_rank(whoami);
         sessionmap.load(gather.new_sub());
 
         dout(2) << "boot_start " << step << ": opening mds log" << dendl;
@@ -1861,6 +1866,7 @@ void MDS::boot_start(BootStep step, int r)
 
         if (mdsmap->get_tableserver() == whoami) {
           dout(2) << "boot_start " << step << ": opening snap table" << dendl;
+          snapserver->set_rank(whoami);
           snapserver->load(gather.new_sub());
         }
 
@@ -2942,7 +2948,14 @@ void MDS::set_want_state(MDSMap::DaemonState newstate)
  */
 void MDS::heartbeat_reset()
 {
-  assert(hb != NULL);
+  // Any thread might jump into mds_lock and call us immediately
+  // after a call to suicide() completes, in which case MDS::hb
+  // has been freed and we are a no-op.
+  if (!hb) {
+      assert(state == CEPH_MDS_STATE_DNE);
+      return;
+  }
+
   // NB not enabling suicide grace, because the mon takes care of killing us
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.

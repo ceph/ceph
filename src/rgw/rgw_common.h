@@ -148,6 +148,10 @@ using ceph::crypto::MD5;
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 
+#ifndef UINT32_MAX
+#define UINT32_MAX (4294967295)
+#endif
+
 typedef void *RGWAccessHandle;
 
 
@@ -688,6 +692,25 @@ inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
   return out;
 }
 
+struct rgw_bucket_shard {
+  rgw_bucket bucket;
+  int shard_id;
+
+  rgw_bucket_shard() : shard_id(-1) {}
+  rgw_bucket_shard(rgw_bucket& _b, int _sid) : bucket(_b), shard_id(_sid) {}
+
+  bool operator<(const rgw_bucket_shard& b) const {
+    if (bucket < b.bucket) {
+      return true;
+    }
+    if (b.bucket < bucket) {
+      return false;
+    }
+    return shard_id < b.shard_id;
+  }
+};
+
+
 struct RGWObjVersionTracker {
   obj_version read_version;
   obj_version write_version;
@@ -734,6 +757,10 @@ enum RGWBucketFlags {
 
 struct RGWBucketInfo
 {
+  enum BIShardsHashType {
+    MOD = 0
+  };
+
   rgw_bucket bucket;
   string owner;
   uint32_t flags;
@@ -745,8 +772,20 @@ struct RGWBucketInfo
   obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
 
+  // Represents the number of bucket index object shards:
+  //   - value of 0 indicates there is no sharding (this is by default before this
+  //     feature is implemented).
+  //   - value of UINT32_T::MAX indicates this is a blind bucket.
+  uint32_t num_shards;
+
+  // Represents the bucket index shard hash type.
+  uint8_t bucket_index_shard_hash_type;
+
+  // Represents the shard number for blind bucket.
+  const static uint32_t NUM_SHARDS_BLIND_BUCKET;
+
   void encode(bufferlist& bl) const {
-     ENCODE_START(9, 4, bl);
+     ENCODE_START(11, 4, bl);
      ::encode(bucket, bl);
      ::encode(owner, bl);
      ::encode(flags, bl);
@@ -756,6 +795,8 @@ struct RGWBucketInfo
      ::encode(placement_rule, bl);
      ::encode(has_instance_obj, bl);
      ::encode(quota, bl);
+     ::encode(num_shards, bl);
+     ::encode(bucket_index_shard_hash_type, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -778,6 +819,10 @@ struct RGWBucketInfo
        ::decode(has_instance_obj, bl);
      if (struct_v >= 9)
        ::decode(quota, bl);
+     if (struct_v >= 10)
+       ::decode(num_shards, bl);
+     if (struct_v >= 11)
+       ::decode(bucket_index_shard_hash_type, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -789,7 +834,7 @@ struct RGWBucketInfo
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
   bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
 
-  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false) {}
+  RGWBucketInfo() : flags(0), creation_time(0), has_instance_obj(false), num_shards(0), bucket_index_shard_hash_type(MOD) {}
 };
 WRITE_CLASS_ENCODER(RGWBucketInfo)
 
@@ -1123,6 +1168,9 @@ public:
 
   bool in_extra_data; /* in-memory only member, does not serialize */
 
+  // Represents the hash index source for this object once it is set (non-empty)
+  std::string index_hash_source;
+
   rgw_obj() : in_extra_data(false) {}
   rgw_obj(rgw_bucket& b, const std::string& o) : in_extra_data(false) {
     init(b, o);
@@ -1243,6 +1291,9 @@ public:
     }
   }
 
+  string& get_hash_object() {
+    return index_hash_source.empty() ? object : index_hash_source;
+  }
   /**
    * Translate a namespace-mangled object name to the user-facing name
    * existing in the given namespace.
@@ -1492,7 +1543,7 @@ extern bool verify_object_permission(struct req_state *s, RGWAccessControlPolicy
 extern bool verify_object_permission(struct req_state *s, int perm);
 /** Convert an input URL into a sane object name
  * by converting %-escaped strings into characters, etc*/
-extern bool url_decode(string& src_str, string& dest_str);
+extern bool url_decode(string& src_str, string& dest_str, bool in_query = false);
 extern void url_encode(const string& src, string& dst);
 
 extern void calc_hmac_sha1(const char *key, int key_len,

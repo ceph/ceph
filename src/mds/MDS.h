@@ -76,11 +76,6 @@ enum {
   l_mds_last,
 };
 
-enum {
-  l_mdc_first = 3000,
-  l_mdc_last,
-};
-
 // memory utilization
 enum {
   l_mdm_first = 2500,

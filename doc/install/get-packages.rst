@@ -124,6 +124,10 @@ Add our Ceph Extras package repository to your system's list of APT sources. ::
 RPM Packages
 ------------
 
+.. note:: ceph-extras on RPM-based systems is only needed on EL6-based
+   distributions (RHEL 6, CentOS 6, Scientific Linux 6). It is not needed
+   for Fedora or RHEL 7+.
+
 For RPM packages, add our package repository to your ``/etc/yum.repos.d`` repos (e.g.,
 ``ceph-extras.repo``). Some Ceph packages (e.g., QEMU) must take priority over standard 
 packages, so you must ensure that you set ``priority=2``. ::

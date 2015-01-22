@@ -48,19 +48,21 @@ int ConfigKeyService::store_get(string key, bufferlist &bl)
 void ConfigKeyService::store_put(string key, bufferlist &bl, Context *cb)
 {
   bufferlist proposal_bl;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   t->put(STORE_PREFIX, key, bl);
-  t->encode(proposal_bl);
-  paxos->propose_new_value(proposal_bl, cb);
+  if (cb)
+    paxos->queue_pending_finisher(cb);
+  paxos->trigger_propose();
 }
 
 void ConfigKeyService::store_delete(string key, Context *cb)
 {
   bufferlist proposal_bl;
-  MonitorDBStore::Transaction t;
-  t.erase(STORE_PREFIX, key);
-  t.encode(proposal_bl);
-  paxos->propose_new_value(proposal_bl, cb);
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+  t->erase(STORE_PREFIX, key);
+  if (cb)
+    paxos->queue_pending_finisher(cb);
+  paxos->trigger_propose();
 }
 
 bool ConfigKeyService::store_exists(string key)

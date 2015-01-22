@@ -195,6 +195,14 @@ Commands
   metadata about image size changes, and the start and end snapshots.  It efficiently represents
   discarded or 'zero' regions of the image.
 
+:command:`merge-diff` [*first-diff-path*] [*second-diff-path*] [*merged-diff-path*]
+  Merge two continuous incremental diffs of an image into one single diff. The
+  first diff's end snapshot must be equal with the second diff's start snapshot.
+  The first diff could be - for stdin, and merged diff could be - for stdout, which
+  enables multiple diff files to be merged using something like
+  'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
+  currently only support the source incremental diff with stripe_count == 1
+
 :command:`import-diff` [*src-path*] [*image-name*]
   Imports an incremental diff of an image and applies it to the current image.  If the diff
   was generated relative to a start snapshot, we verify that snapshot already exists before

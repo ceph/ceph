@@ -181,15 +181,15 @@ void PaxosService::propose_pending()
   }
 
   /**
-   * @note The value we propose is encoded in a bufferlist, passed to 
-   *	   Paxos::propose_new_value and it is obtained by calling a 
-   *	   function that must be implemented by the class implementing us.
-   *	   I.e., the function encode_pending will be the one responsible
-   *	   to encode whatever is pending on the implementation class into a
-   *	   bufferlist, so we can then propose that as a value through Paxos.
+   * @note What we contirbute to the pending Paxos transaction is
+   *	   obtained by calling a function that must be implemented by
+   *	   the class implementing us.  I.e., the function
+   *	   encode_pending will be the one responsible to encode
+   *	   whatever is pending on the implementation class into a
+   *	   bufferlist, so we can then propose that as a value through
+   *	   Paxos.
    */
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
-  bufferlist bl;
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
 
   if (should_stash_full())
     encode_full(t);
@@ -201,17 +201,10 @@ void PaxosService::propose_pending()
     t->put(get_service_name(), "format_version", format_version);
   }
 
-  dout(30) << __func__ << " transaction dump:\n";
-  JSONFormatter f(true);
-  t->dump(&f);
-  f.flush(*_dout);
-  *_dout << dendl;
-
-  t->encode(bl);
-
   // apply to paxos
   proposing = true;
-  paxos->propose_new_value(bl, new C_Committed(this));
+  paxos->queue_pending_finisher(new C_Committed(this));
+  paxos->trigger_propose();
 }
 
 bool PaxosService::should_stash_full()
@@ -351,16 +344,14 @@ void PaxosService::maybe_trim()
   }
 
   dout(10) << __func__ << " trimming to " << trim_to << ", " << to_remove << " states" << dendl;
-  MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+  MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
 
-  bufferlist bl;
-  t->encode(bl);
-  paxos->propose_new_value(bl, NULL);
+  paxos->trigger_propose();
 }
 
 void PaxosService::trim(MonitorDBStore::TransactionRef t,

@@ -550,7 +550,7 @@ public:
     return quorum_features;
   }
   uint64_t get_required_features() const {
-    return quorum_features;
+    return required_features;
   }
   void apply_quorum_to_compatset_features();
   void apply_compatset_features_to_quorum_requirements();
@@ -653,12 +653,65 @@ public:
   void handle_route(MRoute *m);
 
   /**
+   *
+   */
+  struct health_cache_t {
+    health_status_t overall;
+    string summary;
+
+    void reset() {
+      // health_status_t doesn't really have a NONE value and we're not
+      // okay with setting something else (say, HEALTH_ERR).  so just
+      // leave it be.
+      summary.clear();
+    }
+  } health_status_cache;
+
+  struct C_HealthToClogTick : public Context {
+    Monitor *mon;
+    C_HealthToClogTick(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      if (r < 0)
+        return;
+      mon->do_health_to_clog();
+      mon->health_tick_start();
+    }
+  };
+
+  struct C_HealthToClogInterval : public Context {
+    Monitor *mon;
+    C_HealthToClogInterval(Monitor *m) : mon(m) { }
+    void finish(int r) {
+      if (r < 0)
+        return;
+      mon->do_health_to_clog_interval();
+    }
+  };
+
+  Context *health_tick_event;
+  Context *health_interval_event;
+
+  void health_tick_start();
+  void health_tick_stop();
+  utime_t health_interval_calc_next_update();
+  void health_interval_start();
+  void health_interval_stop();
+  void health_events_cleanup();
+
+  void health_to_clog_update_conf(const std::set<std::string> &changed);
+
+  void do_health_to_clog_interval();
+  void do_health_to_clog(bool force = false);
+
+  /**
    * Generate health report
    *
    * @param status one-line status summary
    * @param detailbl optional bufferlist* to fill with a detailed report
+   * @returns health status
    */
-  void get_health(list<string>& status, bufferlist *detailbl, Formatter *f);
+  health_status_t get_health(list<string>& status, bufferlist *detailbl,
+                             Formatter *f);
   void get_cluster_status(stringstream &ss, Formatter *f);
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
@@ -796,6 +849,7 @@ public:
   void extract_save_mon_key(KeyRing& keyring);
 
   // features
+  static CompatSet get_initial_supported_features();
   static CompatSet get_supported_features();
   static CompatSet get_legacy_features();
   /// read the ondisk features into the CompatSet pointed to by read_features
@@ -852,83 +906,6 @@ private:
   Monitor& operator=(const Monitor &rhs);
 
 public:
-  class StoreConverter {
-    const string path;
-    MonitorDBStore *db;
-    boost::scoped_ptr<MonitorStore> store;
-
-    set<version_t> gvs;
-    map<version_t, set<pair<string,version_t> > > gv_map;
-
-    version_t highest_last_pn;
-    version_t highest_accepted_pn;
-
-   public:
-    StoreConverter(string path, MonitorDBStore *d)
-      : path(path), db(d), store(NULL),
-	highest_last_pn(0), highest_accepted_pn(0)
-    { }
-
-    /**
-     * Check if store needs to be converted from old format to a
-     * k/v store.
-     *
-     * @returns 0 if store doesn't need conversion; 1 if it does; <0 if error
-     */
-    int needs_conversion();
-    int convert();
-
-    bool is_converting() {
-      return db->exists("mon_convert", "on_going");
-    }
-
-   private:
-
-    bool _check_gv_store();
-
-    void _init() {
-      assert(!store);
-      MonitorStore *store_ptr = new MonitorStore(path);
-      store.reset(store_ptr);
-    }
-
-    void _deinit() {
-      store.reset(NULL);
-    }
-
-    set<string> _get_machines_names() {
-      set<string> names;
-      names.insert("auth");
-      names.insert("logm");
-      names.insert("mdsmap");
-      names.insert("monmap");
-      names.insert("osdmap");
-      names.insert("pgmap");
-
-      return names;
-    }
-
-    void _mark_convert_start() {
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-      tx->put("mon_convert", "on_going", 1);
-      db->apply_transaction(tx);
-    }
-
-    void _convert_finish_features(MonitorDBStore::TransactionRef t);
-    void _mark_convert_finish() {
-      MonitorDBStore::TransactionRef tx(new MonitorDBStore::Transaction);
-      tx->erase("mon_convert", "on_going");
-      _convert_finish_features(tx);
-      db->apply_transaction(tx);
-    }
-
-    void _convert_monitor();
-    void _convert_machines(string machine);
-    void _convert_osdmap_full();
-    void _convert_machines();
-    void _convert_paxos();
-  };
-
   static void format_command_descriptions(const MonCommand *commands,
 					  unsigned commands_size,
 					  Formatter *f,

@@ -119,9 +119,7 @@ Client::CommandHook::CommandHook(Client *client) :
 bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
 			       std::string format, bufferlist& out)
 {
-  Formatter *f = new_formatter(format);
-  if (!f)
-    f = new_formatter("json-pretty");
+  Formatter *f = Formatter::create(format);
   f->open_object_section("result");
   m_client->client_lock.Lock();
   if (command == "mds_requests")
@@ -8379,7 +8377,7 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
     r = -ENODATA;
     if (in->xattrs.count(n)) {
       r = in->xattrs[n].length();
-      if (size != 0) {
+      if (r > 0 && size != 0) {
 	if (size >= (unsigned)r)
 	  memcpy(value, in->xattrs[n].c_str(), r);
 	else

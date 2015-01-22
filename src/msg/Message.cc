@@ -90,7 +90,7 @@ using namespace std;
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonHealth.h"
-
+#include "messages/MDataPing.h"
 #include "messages/MAuth.h"
 #include "messages/MAuthReply.h"
 #include "messages/MMonSubscribe.h"
@@ -173,7 +173,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, bool datacrc)
+void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -184,17 +184,19 @@ void Message::encode(uint64_t features, bool datacrc)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
-  calc_front_crc();
+  if (crcflags & MSG_CRC_HEADER)
+    calc_front_crc();
 
   // update envelope
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
-  calc_header_crc();
+  if (crcflags & MSG_CRC_HEADER)
+    calc_header_crc();
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
 
-  if (datacrc) {
+  if (crcflags & MSG_CRC_DATA) {
     calc_data_crc();
 
 #ifdef ENCODE_DUMP
@@ -246,11 +248,14 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& middle, bufferlist& data)
+Message *decode_message(CephContext *cct, int crcflags,
+			ceph_msg_header& header,
+			ceph_msg_footer& footer,
+			bufferlist& front, bufferlist& middle,
+			bufferlist& data)
 {
   // verify crc
-  if (!cct || !cct->_conf->ms_nocrc) {
+  if (crcflags & MSG_CRC_HEADER) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
@@ -691,7 +696,11 @@ Message *decode_message(CephContext *cct, ceph_msg_header& header, ceph_msg_foot
   case MSG_MON_HEALTH:
     m = new MMonHealth();
     break;
-
+#if defined(HAVE_XIO)
+  case MSG_DATA_PING:
+    m = new MDataPing();
+    break;
+#endif
     // -- simple messages without payload --
 
   case CEPH_MSG_SHUTDOWN:
@@ -788,7 +797,7 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 // We've slipped in a 0 signature at this point, so any signature checking after this will
 // fail.  PLR
 
-Message *decode_message(CephContext *cct, bufferlist::iterator& p)
+Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
 {
   ceph_msg_header h;
   ceph_msg_footer_old fo;
@@ -804,6 +813,6 @@ Message *decode_message(CephContext *cct, bufferlist::iterator& p)
   ::decode(fr, p);
   ::decode(mi, p);
   ::decode(da, p);
-  return decode_message(cct, h, f, fr, mi, da);
+  return decode_message(cct, crcflags, h, f, fr, mi, da);
 }
 

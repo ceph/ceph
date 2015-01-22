@@ -47,7 +47,7 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config get", cmdmap, "UNSUPPORTED", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("{ \"key\": \"value\"}", s);
+    EXPECT_EQ("{\n    \"key\": \"value\"\n}\n", s);
   }
 
   cct->put();

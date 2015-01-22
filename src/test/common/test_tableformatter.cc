@@ -195,7 +195,7 @@ TEST(tableformatter, extendingheader)
 TEST(tableformatter, stream)
 {
   std::stringstream sout;
-  TableFormatter* formatter = (TableFormatter*) new_formatter("table");
+  TableFormatter* formatter = (TableFormatter*) Formatter::create("table");
   formatter->dump_stream("integer") << 10;
   formatter->dump_stream("float") << 10.0;
   formatter->dump_stream("string") << "string";
@@ -215,7 +215,7 @@ TEST(tableformatter, stream)
 TEST(tableformatter, multiline_keyval)
 {
   std::stringstream sout;
-  TableFormatter* formatter = (TableFormatter*) new_formatter("table-kv");
+  TableFormatter* formatter = (TableFormatter*) Formatter::create("table-kv");
   formatter->dump_int("integer", 10);
   formatter->dump_float("float", 10.0);
   formatter->dump_string("string", "string");

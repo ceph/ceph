@@ -7,6 +7,9 @@
 #include <utility>
 #include <vector>
 
+void register_test_internal() {
+}
+
 class TestInternal : public TestFixture {
 public:
 

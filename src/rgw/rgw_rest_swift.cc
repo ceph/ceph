@@ -560,7 +560,6 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
 int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
   const char *content_type = NULL;
-  int orig_ret = ret;
   map<string, string> response_attrs;
   map<string, string>::iterator riter;
 
@@ -602,11 +601,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
     }
   }
 
-  if (partial_content && !ret)
-    ret = -STATUS_PARTIAL_CONTENT;
-
-  if (ret)
-    set_req_state_err(s, ret);
+  set_req_state_err(s, (partial_content && !ret) ? STATUS_PARTIAL_CONTENT : ret);
   dump_errno(s);
 
   for (riter = response_attrs.begin(); riter != response_attrs.end(); ++riter) {
@@ -620,7 +615,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
   sent_header = true;
 
 send_data:
-  if (get_data && !orig_ret) {
+  if (get_data && !ret) {
     int r = s->cio->write(bl.c_str() + bl_ofs, bl_len);
     if (r < 0)
       return r;
