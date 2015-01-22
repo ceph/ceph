@@ -9073,8 +9073,10 @@ void ReplicatedBackend::submit_push_data(
     off += p.get_len();
   }
 
-  t->omap_setkeys(target_coll, target_oid, omap_entries);
-  t->setattrs(target_coll, target_oid, attrs);
+  if (!omap_entries.empty())
+    t->omap_setkeys(target_coll, target_oid, omap_entries);
+  if (!attrs.empty())
+    t->setattrs(target_coll, target_oid, attrs);
 
   if (complete) {
     if (!first) {
