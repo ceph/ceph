@@ -182,7 +182,7 @@ Remove a bucket::
 
 Show the logs of a bucket from April 1st, 2012::
 
-        $ radosgw-admin log show --bucket=foo --date=2012=04-01
+        $ radosgw-admin log show --bucket=foo --date=2012-04-01
 
 Show usage information for user from March 1st to (but not including) April 1st, 2012::
 
