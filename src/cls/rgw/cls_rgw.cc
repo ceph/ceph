@@ -814,8 +814,6 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
 
   map<string, bufferlist> keys;
   string filter_prefix, end_key;
-  bufferlist start_bl;
-  bool start_key_added = false;
   uint32_t i = 0;
   string key;
 
@@ -829,10 +827,6 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     key.append(marker);
 
     start_key = key;
-    int ret = cls_cxx_map_get_val(hctx, start_key, &start_bl);
-    if ((ret < 0) && (ret != -ENOENT)) {
-        return ret;
-    } 
   } else {
     start_key = key_iter;
   }
@@ -856,10 +850,6 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     if (ret < 0)
       return ret;
 
-    if ((start_bl.length() > 0) && (!start_key_added)) {
-      keys[start_key] = start_bl;
-      start_key_added = true;
-    }
     map<string, bufferlist>::iterator iter = keys.begin();
     if (iter == keys.end())
       break;
