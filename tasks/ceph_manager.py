@@ -87,11 +87,6 @@ def mount_osd_data(ctx, remote, osd):
             )
 
 
-def cmd_exists(cmd):
-    return subprocess.call("type " + cmd, shell=True,
-                           stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0
-
-
 class Thrasher:
     """
     Object used to thrash Ceph
@@ -112,10 +107,6 @@ class Thrasher:
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
-        if cmd_exists("ceph-objectstore-tool"):
-            self.ceph_objectstore_tool = self.config.get('ceph_objectstore_tool', False)
-        else:
-            self.ceph_objectstore_tool = False
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
 
         num_osds = self.in_osds + self.out_osds
@@ -140,6 +131,28 @@ class Thrasher:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
+        if self.cmd_exists_on_osds("ceph-objectstore-tool"):
+            self.ceph_objectstore_tool = \
+                self.config.get('ceph_objectstore_tool', True)
+            self.test_rm_past_intervals = \
+                self.config.get('test_rm_past_intervals', True)
+        else:
+            self.ceph_objectstore_tool = False
+            self.test_rm_past_intervals = False
+            self.log("Unable to test ceph_objectstore_tool, "
+                     "not available on all OSD nodes")
+
+    def cmd_exists_on_osds(self, cmd):
+        allremotes = self.ceph_manager.ctx.cluster.only(\
+            teuthology.is_type('osd')).remotes.keys()
+        allremotes = list(set(allremotes))
+        for remote in allremotes:
+            proc = remote.run(args=['type', cmd], wait=True,
+                              check_status=False, stdout=StringIO(),
+                              stderr=StringIO())
+            if proc.exitstatus != 0:
+                return False;
+        return True;
 
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
         """
@@ -177,7 +190,7 @@ class Thrasher:
                     self.ceph_manager.ctx.ceph.conf['osd']):
                 prefix = ("sudo ceph-objectstore-tool "
                           "--data-path {fpath} --journal-path {jpath} "
-                          "--type keyvaluestore-dev "
+                          "--type keyvaluestore "
                           "--log-file="
                           "/var/log/ceph/objectstore_tool.\\$pid.log ".
                           format(fpath=FSPATH, jpath=JPATH))
@@ -189,7 +202,7 @@ class Thrasher:
                           format(fpath=FSPATH, jpath=JPATH))
             cmd = (prefix + "--op list-pgs").format(id=exp_osd)
             proc = exp_remote.run(args=cmd, wait=True,
-                                  check_status=True, stdout=StringIO())
+                                  check_status=False, stdout=StringIO())
             if proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "exp list-pgs failure with status {ret}".
@@ -224,7 +237,7 @@ class Thrasher:
                 # If pg isn't already on this osd, then we will move it there
                 cmd = (prefix + "--op list-pgs").format(id=imp_osd)
                 proc = imp_remote.run(args=cmd, wait=True,
-                                      check_status=True, stdout=StringIO())
+                                      check_status=False, stdout=StringIO())
                 if proc.exitstatus:
                     raise Exception("ceph-objectstore-tool: "
                                     "imp list-pgs failure with status {ret}".
@@ -247,8 +260,11 @@ class Thrasher:
             # import
             cmd = (prefix + "--op import --file {file}")
             cmd = cmd.format(id=imp_osd, file=exp_path)
-            imp_remote.run(args=cmd)
-            if proc.exitstatus:
+            proc = imp_remote.run(args=cmd, wait=True, check_status=False)
+            if proc.exitstatus == 10:
+                self.log("Pool went away before processing an import"
+                         "...ignored");
+            elif proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "import failure with status {ret}".
                                 format(ret=proc.exitstatus))
@@ -257,6 +273,51 @@ class Thrasher:
             if imp_remote != exp_remote:
                 imp_remote.run(args=cmd)
 
+    def rm_past_intervals(self, osd=None):
+        """
+        :param osd: Osd to find pg to remove past intervals
+        """
+        if self.test_rm_past_intervals:
+            if osd is None:
+                osd = random.choice(self.dead_osds)
+            self.log("Use ceph_objectstore_tool to remove past intervals")
+            (remote,) = self.ceph_manager.ctx.\
+                cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            FSPATH = self.ceph_manager.get_filepath()
+            JPATH = os.path.join(FSPATH, "journal")
+            if ('keyvaluestore_backend' in
+                    self.ceph_manager.ctx.ceph.conf['osd']):
+                prefix = ("sudo ceph-objectstore-tool "
+                          "--data-path {fpath} --journal-path {jpath} "
+                          "--type keyvaluestore "
+                          "--log-file="
+                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
+                          format(fpath=FSPATH, jpath=JPATH))
+            else:
+                prefix = ("sudo ceph-objectstore-tool "
+                          "--data-path {fpath} --journal-path {jpath} "
+                          "--log-file="
+                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
+                          format(fpath=FSPATH, jpath=JPATH))
+            cmd = (prefix + "--op list-pgs").format(id=osd)
+            proc = remote.run(args=cmd, wait=True,
+                              check_status=False, stdout=StringIO())
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: "
+                                "exp list-pgs failure with status {ret}".
+                                format(ret=proc.exitstatus))
+            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            if len(pgs) == 0:
+                self.log("No PGs found for osd.{osd}".format(osd=osd))
+                return
+            pg = random.choice(pgs)
+            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
+                format(id=osd, pg=pg)
+            proc = remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: "
+                                "rm-past-intervals failure with status {ret}".
+                                format(ret=proc.exitstatus))
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -518,6 +579,8 @@ class Thrasher:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
+        if len(self.dead_osds) > 1:
+            actions.append((self.rm_past_intervals, 1.0,))
         if len(self.out_osds) > minout:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
