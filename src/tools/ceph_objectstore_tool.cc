@@ -2333,6 +2333,33 @@ struct do_fix_lost : public action_on_object_t {
   }
 };
 
+int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter* formatter)
+{
+  bufferlist attr;
+  int r = store->getattr(coll, ghobj, OI_ATTR, attr);
+  if (r < 0) {
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+       << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  object_info_t oi;
+  bufferlist::iterator bp = attr.begin();
+  try {
+    ::decode(oi, bp);
+  } catch (...) {
+    r = -EINVAL;
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  formatter->open_object_section("info");
+  oi.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
+
 void usage(po::options_description &desc)
 {
     cerr << std::endl;
@@ -2348,6 +2375,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> list-attrs" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> list-omap" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> dump-info" << std::endl;
     cerr << std::endl;
     cerr << "ceph-objectstore-tool import-rados <pool> [file]" << std::endl;
     cerr << std::endl;
@@ -3185,6 +3213,9 @@ int main(int argc, char **argv)
 	if (fd != STDIN_FILENO)
 	  close(fd);
         goto out;
+      } else if (objcmd == "dump-info") {
+	ret = print_obj_info(fs, coll, ghobj, formatter);
+	goto out;
       }
       cerr << "Unknown object command '" << objcmd << "'" << std::endl;
       usage(desc);
