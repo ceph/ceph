@@ -586,7 +586,9 @@ void ReplicatedBackend::submit_transaction(
     trim_rollback_to,
     true,
     &local_t);
-  (*op_t).append(local_t);
+
+  local_t.append(*op_t);
+  local_t.swap(*op_t);
   
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
