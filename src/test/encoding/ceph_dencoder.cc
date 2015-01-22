@@ -23,6 +23,8 @@
 #undef TYPE_NOCOPY
 #undef MESSAGE
 
+#define MB(m) ((m) * 1024 * 1024)
+
 void usage(ostream &out)
 {
   out << "usage: ceph-dencoder [commands ...]" << std::endl;
@@ -358,7 +360,14 @@ int main(int argc, const char **argv)
 	usage(cerr);
 	exit(1);
       }
-      int r = encbl.read_file(*i, &err);
+      int r;
+      if (*i == string("-")) {
+        *i = "stdin";
+	// Read up to 1mb if stdin specified
+	r = encbl.read_fd(0, MB(1));
+      } else {
+	r = encbl.read_file(*i, &err);
+      }
       if (r < 0) {
         cerr << "error reading " << *i << ": " << err << std::endl;
         exit(1);
