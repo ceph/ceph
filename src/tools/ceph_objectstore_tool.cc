@@ -100,6 +100,8 @@ bool outistty;
 //can be added to the export format.
 struct super_header {
   static const uint32_t super_magic = (shortmagic << 16) | shortmagic;
+  // ver = 1, Initial version
+  // ver = 2, Add OSDSuperblock to pg_begin
   static const uint32_t super_ver = 2;
   static const uint32_t FIXED_LENGTH = 16;
   uint32_t magic;
@@ -204,6 +206,11 @@ struct pg_begin {
 
 struct object_begin {
   ghobject_t hoid;
+
+  // Duplicate what is in the OI_ATTR so we have it at the start
+  // of object processing.
+  object_info_t oi;
+
   object_begin(const ghobject_t &hoid): hoid(hoid) { }
   object_begin() { }
 
@@ -211,14 +218,15 @@ struct object_begin {
   // generation will be NO_GEN, shard_id will be NO_SHARD for a replicated
   // pool.  This means we will allow the decode by struct_v 1.
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(hoid.hobj, bl);
     ::encode(hoid.generation, bl);
     ::encode(hoid.shard_id, bl);
+    ::encode(oi, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(hoid.hobj, bl);
     if (struct_v > 1) {
       ::decode(hoid.generation, bl);
@@ -226,6 +234,9 @@ struct object_begin {
     } else {
       hoid.generation = ghobject_t::NO_GEN;
       hoid.shard_id = shard_id_t::NO_SHARD;
+    }
+    if (struct_v > 2) {
+      ::decode(oi, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -314,6 +325,8 @@ struct metadata_section {
   pg_info_t info;
   pg_log_t log;
   map<epoch_t,pg_interval_t> past_intervals;
+  OSDMap osdmap;
+  bufferlist osdmap_bl;  // Used in lieu of encoding osdmap due to crc checking
 
   metadata_section(__u8 struct_ver, epoch_t map_epoch, const pg_info_t &info,
 		   const pg_log_t &log, map<epoch_t,pg_interval_t> &past_intervals)
@@ -327,16 +340,19 @@ struct metadata_section {
       map_epoch(0) { }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     ::encode(struct_ver, bl);
     ::encode(map_epoch, bl);
     ::encode(info, bl);
     ::encode(log, bl);
     ::encode(past_intervals, bl);
+    // Equivalent to osdmap.encode(bl, features); but
+    // preserving exact layout for CRC checking.
+    bl.append(osdmap_bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     ::decode(struct_ver, bl);
     ::decode(map_epoch, bl);
     ::decode(info, bl);
@@ -345,6 +361,11 @@ struct metadata_section {
       ::decode(past_intervals, bl);
     } else {
       cout << "NOTICE: Older export without past_intervals" << std::endl;
+    }
+    if (struct_v > 2) {
+      osdmap.decode(bl);
+    } else {
+      cout << "WARNING: Older export without OSDMap information" << std::endl;
     }
     DECODE_FINISH(bl);
   }
@@ -692,9 +713,9 @@ int finish_remove_pgs(ObjectStore *store)
     }
 
     uint64_t seq;
-    coll_t coll(pgid);
-    if (it->is_removal(&seq, &pgid) ||
-	PG::_has_removal_flag(store, pgid)) {
+    snapid_t snap;
+    if (it->is_removal(&seq, &pgid) || (it->is_pg(pgid, snap) &&
+	PG::_has_removal_flag(store, pgid))) {
       cout << "finish_remove_pgs removing " << *it
 	   << " pgid is " << pgid << std::endl;
       remove_coll(store, *it);
@@ -855,6 +876,23 @@ int export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
     cerr << "size=" << total << std::endl;
 
   object_begin objb(obj);
+
+  {
+    bufferptr bp;
+    bufferlist bl;
+    ret = store->getattr(cid, obj, OI_ATTR, bp);
+    if (ret < 0) {
+      cerr << "getattr failure object_info " << ret << std::endl;
+      return ret;
+    }
+    bl.push_back(bp);
+    decode(objb.oi, bl);
+    if (debug)
+      cerr << "object_info: " << objb.oi << std::endl;
+  }
+
+  // XXX: Should we be checking for WHITEOUT or LOST in objb.oi.flags and skip?
+
   ret = write_section(TYPE_OBJECT_BEGIN, objb, file_fd);
   if (ret < 0)
     return ret;
@@ -964,9 +1002,8 @@ int export_files(ObjectStore *store, coll_t coll)
   return 0;
 }
 
-int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
+int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
 {
-  bufferlist bl;
   bool found = store->read(
       META_COLL, OSD::get_osdmap_pobject_name(e), 0, 0, bl) >= 0;
   if (!found) {
@@ -977,6 +1014,11 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap)
   if (debug)
     cerr << osdmap << std::endl;
   return 0;
+}
+
+int add_osdmap(ObjectStore *store, metadata_section &ms)
+{
+  return get_osdmap(store, ms.map_epoch, ms.osdmap, ms.osdmap_bl);
 }
 
 //Write super_header with its fixed 16 byte length
@@ -1026,16 +1068,21 @@ int do_export(ObjectStore *fs, coll_t coll, spg_t pgid, pg_info_t &info,
   if (ret)
     return ret;
 
+  // The metadata_section is now before files, so import can detect
+  // errors and abort without wasting time.
+  metadata_section ms(struct_ver, map_epoch, info, log, past_intervals);
+  ret = add_osdmap(fs, ms);
+  if (ret)
+    return ret;
+  ret = write_section(TYPE_PG_METADATA, ms, file_fd);
+  if (ret)
+    return ret;
+
   ret = export_files(fs, coll);
   if (ret) {
     cerr << "export_files error " << ret << std::endl;
     return ret;
   }
-
-  metadata_section ms(struct_ver, map_epoch, info, log, past_intervals);
-  ret = write_section(TYPE_PG_METADATA, ms, file_fd);
-  if (ret)
-    return ret;
 
   ret = write_simple(TYPE_PG_END, file_fd);
   if (ret)
@@ -1114,6 +1161,8 @@ int get_attrs(ObjectStore *store, coll_t coll, ghobject_t hoid,
     cerr << "\tattrs: len " << as.data.size() << std::endl;
   t->setattrs(coll, hoid, as.data);
 
+  // This could have been handled in the caller if we didn't need to
+  // support exports that didn't include object_info_t in object_begin.
   if (hoid.hobj.snap < CEPH_MAXSNAP && hoid.generation == ghobject_t::NO_GEN) {
     map<string,bufferptr>::iterator mi = as.data.find(OI_ATTR);
     if (mi != as.data.end()) {
@@ -1160,6 +1209,40 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
   return 0;
 }
 
+int skip_object(bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  bufferlist ebl;
+  bool done = false;
+  while(!done) {
+    sectiontype_t type;
+    int ret = read_section(file_fd, &type, &ebl);
+    if (ret)
+      return ret;
+
+    ebliter = ebl.begin();
+    if (type >= END_OF_TYPES) {
+      cout << "Skipping unknown object section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_DATA:
+    case TYPE_ATTRS:
+    case TYPE_OMAP_HDR:
+    case TYPE_OMAP:
+      if (debug)
+        cerr << "Skip type " << (int)type << std::endl;
+      break;
+    case TYPE_OBJECT_END:
+      done = true;
+      break;
+    default:
+      return EFAULT;
+    }
+  }
+  return 0;
+}
+
 int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 {
   bufferlist::iterator ebliter = bl.begin();
@@ -1173,8 +1256,17 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   omap_hdr_section oh;
   omap_section os;
 
+  assert(g_ceph_context);
+  if (ob.hoid.hobj.nspace == g_ceph_context->_conf->osd_hit_set_namespace) {
+    cout << "Skipping internal object " << ob.hoid << std::endl;
+    skip_object(bl);
+    return 0;
+  }
+
   if (!ob.hoid.hobj.is_head()) {
     cout << "Skipping non-head for " << ob.hoid << std::endl;
+    skip_object(bl);
+    return 0;
   }
 
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
@@ -1329,7 +1421,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   return 0;
 }
 
-int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
+int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
@@ -1343,6 +1435,34 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
   spg_t pg;
   coll.is_pg_prefix(pg);
   SnapMapper mapper(&driver, 0, 0, 0, pg.shard);
+
+  assert(g_ceph_context);
+  if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
+    object_t oid = ob.hoid.hobj.oid;
+    object_locator_t loc(ob.hoid.hobj);
+    // XXX: Do we need to set the hash?
+    // loc.hash = ob.hoid.hash;
+    pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
+    pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
+  
+    spg_t coll_pgid;
+    snapid_t coll_snap;
+    if (coll.is_pg(coll_pgid, coll_snap) == false) {
+      cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
+      return 1;
+    }
+    if (coll_pgid.shard != ob.hoid.shard_id) {
+      cerr << "INTERNAL ERROR: Importing shard " << coll_pgid.shard 
+        << " but object shard is " << ob.hoid.shard_id << std::endl;
+      return 1;
+    }
+     
+    if (coll_pgid.pgid != pgid) {
+      cerr << "Skipping object '" << ob.hoid << "' which no longer belongs in exported pg" << std::endl;
+      skip_object(bl);
+      return 0;
+    }
+  }
 
   t->touch(coll, ob.hoid);
 
@@ -1390,18 +1510,30 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl)
   return 0;
 }
 
-int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
+int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
+    const OSDSuperblock& sb, OSDMap& curmap)
 {
-  ObjectStore::Transaction tran;
-  ObjectStore::Transaction *t = &tran;
   bufferlist::iterator ebliter = bl.begin();
-  metadata_section ms;
   ms.decode(ebliter);
 
 #if DIAGNOSTIC
   Formatter *formatter = new JSONFormatter(true);
   cout << "struct_v " << (int)ms.struct_ver << std::endl;
-  cout << "epoch " << ms.map_epoch << std::endl;
+  cout << "map epoch " << ms.map_epoch << std::endl;
+
+  formatter->open_object_section("importing OSDMap");
+  ms.osdmap.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+
+  cout << "osd current epoch " << sb.current_epoch << std::endl;
+  formatter->open_object_section("current OSDMap");
+  curmap.dump(formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+
   formatter->open_object_section("info");
   ms.info.dump(formatter);
   formatter->close_section();
@@ -1415,10 +1547,45 @@ int get_pg_metadata(ObjectStore *store, coll_t coll, bufferlist &bl)
   cout << std::endl;
 #endif
 
-  int ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
-  if (ret) return ret;
+  if (ms.map_epoch > sb.current_epoch) {
+    cerr << "ERROR: Export map_epoch " << ms.map_epoch << " > osd epoch " << sb.current_epoch << std::endl;
+    return 1;
+  }
 
-  store->apply_transaction(*t);
+  // If the osdmap was present in the metadata we can check for splits.
+  // Pool verified to exist for call to get_pg_num().
+  if (ms.map_epoch < sb.current_epoch) {
+    bool found_map = false;
+    OSDMap findmap;
+    bufferlist findmap_bl;
+    int ret = get_osdmap(store, ms.map_epoch, findmap, findmap_bl);
+    if (ret == 0)
+      found_map = true;
+
+    // Old export didn't include OSDMap
+    if (ms.osdmap.get_epoch() == 0) {
+      // If we found the map locally and an older export didn't have it,
+      // then we'll use the local one.
+      if (found_map) {
+        ms.osdmap = findmap;
+      } else {
+        cerr << "WARNING: No OSDMap in old export,"
+             " some objects may be ignored due to a split" << std::endl;
+      }
+    }
+
+    // If OSDMap is available check for splits
+    if (ms.osdmap.get_epoch()) {
+      spg_t parent(ms.info.pgid);
+      if (parent.is_split(ms.osdmap.get_pg_num(ms.info.pgid.pgid.m_pool),
+          curmap.get_pg_num(ms.info.pgid.pgid.m_pool), NULL)) {
+        cerr << "WARNING: Split occurred, some objects may be ignored" << std::endl;
+      }
+    }
+  }
+
+  ms.past_intervals.clear();
+  ms.info.history.same_interval_since = ms.map_epoch = sb.current_epoch;
 
   return 0;
 }
@@ -1507,6 +1674,7 @@ int do_import_rados(string pool)
 
   bool done = false;
   bool found_metadata = false;
+  metadata_section ms;
   while(!done) {
     ret = read_section(file_fd, &type, &ebl);
     if (ret)
@@ -1578,6 +1746,13 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
 
+  if (!pgb.superblock.cluster_fsid.is_zero()
+      && pgb.superblock.cluster_fsid != sb.cluster_fsid) {
+    cerr << "Export came from different cluster with fsid "
+         << pgb.superblock.cluster_fsid << std::endl;
+    return 1;
+  }
+
   if (debug) {
     cerr << "Exported features: " << pgb.superblock.compat_features << std::endl;
   }
@@ -1599,6 +1774,20 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
     }
     return 1;
+  }
+
+  // Don't import if pool no longer exists
+  OSDMap curmap;
+  bufferlist bl;
+  ret = get_osdmap(store, sb.current_epoch, curmap, bl);
+  if (ret) {
+    cerr << "Can't find local OSDMap" << std::endl;
+    return ret;
+  }
+  if (!curmap.have_pg_pool(pgid.pgid.m_pool)) {
+    cerr << "Pool " << pgid.pgid.m_pool << " no longer exists" << std::endl;
+    // Special exit code for this error, used by test code
+    return 10;
   }
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
@@ -1628,6 +1817,7 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
 
   bool done = false;
   bool found_metadata = false;
+  metadata_section ms;
   while(!done) {
     ret = read_section(file_fd, &type, &ebl);
     if (ret)
@@ -1640,11 +1830,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl);
+      ret = get_object(store, coll, ebl, curmap);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
-      ret = get_pg_metadata(store, coll, ebl);
+      ret = get_pg_metadata(store, ebl, ms, sb, curmap);
       if (ret) return ret;
       found_metadata = true;
       break;
@@ -1661,9 +1851,12 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
     return EFAULT;
   }
 
+  t = new ObjectStore::Transaction;
+  ret = write_pg(*t, ms.map_epoch, ms.info, ms.log, ms.past_intervals);
+  if (ret) return ret;
+
   // done, clear removal flag
   cout << "done, clearing removal flag flag" << std::endl;
-  t = new ObjectStore::Transaction;
   set<string> remove;
   remove.insert("_remove");
   t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
@@ -2068,18 +2261,24 @@ void usage(po::options_description &desc)
     exit(1);
 }
 
+bool ends_with(const string& check, const string& ending)
+{
+    return check.size() >= ending.size() && check.rfind(ending) == (check.size() - ending.size());
+}
+
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   ghobject_t ghobj;
-  bool pretty_format, human_readable;
+  bool human_readable;
+  Formatter *formatter;
 
   po::options_description desc("Allowed options");
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [filestore (default), memstore, keyvaluestore-dev]")
+     "Arg is one of [filestore (default), memstore, keyvaluestore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
@@ -2090,10 +2289,8 @@ int main(int argc, char **argv)
      "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
-    ("pretty-format", po::value<bool>(&pretty_format)->default_value(true),
-     "Make json or xml output more readable")
-    ("format", po::value<string>(&format)->default_value("json"),
-     "Output format which may be xml or json")
+    ("format", po::value<string>(&format)->default_value("json-pretty"),
+     "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
@@ -2138,6 +2335,15 @@ int main(int argc, char **argv)
     debug = true;
   }
 
+  vector<const char *> ceph_options;
+  env_to_vec(ceph_options);
+  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
+  for (vector<string>::iterator i = ceph_option_strings.begin();
+       i != ceph_option_strings.end();
+       ++i) {
+    ceph_options.push_back(i->c_str());
+  }
+
   // Handle completely different operation "import-rados"
   if (object == "import-rados") {
     if (vm.count("objcmd") == 0) {
@@ -2167,6 +2373,10 @@ int main(int argc, char **argv)
         return 1;
       }
     }
+
+    global_init(NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+    common_init_finish(g_ceph_context);
+
     int ret = do_import_rados(pool);
     if (ret == 0)
       cout << "Import successful" << std::endl;
@@ -2236,15 +2446,6 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  vector<const char *> ceph_options;
-  env_to_vec(ceph_options);
-  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
-  for (vector<string>::iterator i = ceph_option_strings.begin();
-       i != ceph_option_strings.end();
-       ++i) {
-    ceph_options.push_back(i->c_str());
-  }
-
   osflagbits_t flags = 0;
   if (vm.count("skip-journal-replay"))
     flags |= SKIP_JOURNAL_REPLAY;
@@ -2292,9 +2493,14 @@ int main(int argc, char **argv)
     }
   }
 
+  if (op == "import" && pgidstr.length()) {
+    cerr << "--pgid option invalid with import" << std::endl;
+    return 1;
+  }
+
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
-    cerr << "Must provide --type (filestore, memstore, keyvaluestore-dev)" << std::endl;
+    cerr << "Must provide --type (filestore, memstore, keyvaluestore)" << std::endl;
     exit(1);
   }
 
@@ -2333,6 +2539,10 @@ int main(int argc, char **argv)
   p = bl.begin();
   ::decode(superblock, p);
 
+  if (debug) {
+    cerr << "Cluster fsid=" << superblock.cluster_fsid << std::endl;
+  }
+
 #ifdef INTERNAL_TEST2
   fs->set_allow_sharded_objects();
   assert(fs->get_allow_sharded_objects());
@@ -2353,11 +2563,6 @@ int main(int argc, char **argv)
 
   if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    return 1;
-  }
-
-  if (op == "import" && pgidstr.length()) {
-    cerr << "--pgid option invalid with import" << std::endl;
     return 1;
   }
 
@@ -2423,6 +2628,11 @@ int main(int argc, char **argv)
 	  ss << "Decode object json error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
+        if ((uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
+          cerr << "Object pool and pgid pool don't match" << std::endl;
+          ret = 1;
+          goto out;
+        }
       }
     } catch (std::runtime_error& e) {
       cerr << e.what() << std::endl;
@@ -2452,7 +2662,8 @@ int main(int argc, char **argv)
       goto out;
     }
     OSDMap curmap;
-    ret = get_osdmap(fs, superblock.current_epoch, curmap);
+    bufferlist bl;
+    ret = get_osdmap(fs, superblock.current_epoch, curmap, bl);
     if (ret) {
         cerr << "Can't find local OSDMap" << std::endl;
         goto out;
@@ -2493,7 +2704,7 @@ int main(int argc, char **argv)
 
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
     ObjectStore::Transaction t;
-    bufferlist bl;
+    bl.clear();
     ::encode(superblock, bl);
     t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
     r = fs->apply_transaction(t);
@@ -2575,17 +2786,14 @@ int main(int argc, char **argv)
 
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.
-  human_readable = pretty_format;
-  if (op == "list") {
-    pretty_format = false;
+  human_readable = ends_with(format, "-pretty");
+  if (op == "list" && human_readable) {
+    // Remove -pretty from end of format which we know is there
+    format = format.substr(0, format.size() - strlen("-pretty"));
   }
 
-  Formatter *formatter;
-  if (format == "xml") {
-    formatter = new XMLFormatter(pretty_format);
-  } else if (format == "json") {
-    formatter = new JSONFormatter(pretty_format);
-  } else {
+  formatter = Formatter::create(format);
+  if (formatter == NULL) {
     cerr << "unrecognized format: " << format << std::endl;
     ret = 1;
     goto out;
@@ -2691,6 +2899,12 @@ int main(int argc, char **argv)
         } else {
           int fd;
           if (vm.count("arg1") == 0 || arg1 == "-") {
+            // Since read_fd() doesn't handle ^D from a tty stdin, don't allow it.
+            if (isatty(STDIN_FILENO)) {
+                cerr << "stdin is a tty and no file specified" << std::endl;
+                ret = 1;
+                goto out;
+            }
             fd = STDIN_FILENO;
 	  } else {
             fd = open(arg1.c_str(), O_RDONLY|O_LARGEFILE, 0666);
@@ -2720,6 +2934,12 @@ int main(int argc, char **argv)
 
 	int fd;
 	if (vm.count("arg2") == 0 || arg2 == "-") {
+          // Since read_fd() doesn't handle ^D from a tty stdin, don't allow it.
+          if (isatty(STDIN_FILENO)) {
+            cerr << "stdin is a tty and no file specified" << std::endl;
+            ret = 1;
+            goto out;
+          }
 	  fd = STDIN_FILENO;
 	} else {
 	  fd = open(arg2.c_str(), O_RDONLY|O_LARGEFILE, 0666);
@@ -2755,6 +2975,12 @@ int main(int argc, char **argv)
 
 	int fd;
 	if (vm.count("arg2") == 0 || arg2 == "-") {
+          // Since read_fd() doesn't handle ^D from a tty stdin, don't allow it.
+          if (isatty(STDIN_FILENO)) {
+            cerr << "stdin is a tty and no file specified" << std::endl;
+            ret = 1;
+            goto out;
+          }
 	  fd = STDIN_FILENO;
 	} else {
 	  fd = open(arg2.c_str(), O_RDONLY|O_LARGEFILE, 0666);
@@ -2790,6 +3016,12 @@ int main(int argc, char **argv)
 	  usage(desc);
 	int fd;
 	if (vm.count("arg1") == 0 || arg1 == "-") {
+          // Since read_fd() doesn't handle ^D from a tty stdin, don't allow it.
+          if (isatty(STDIN_FILENO)) {
+            cerr << "stdin is a tty and no file specified" << std::endl;
+            ret = 1;
+            goto out;
+          }
 	  fd = STDIN_FILENO;
 	} else {
 	  fd = open(arg1.c_str(), O_RDONLY|O_LARGEFILE, 0666);
@@ -2897,5 +3129,5 @@ out:
     return 1;
   }
 
-  return (ret != 0);
+  return ret;
 }
