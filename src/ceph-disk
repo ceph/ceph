@@ -1051,6 +1051,9 @@ def prepare_journal_dev(
     reusing_partition = False
 
     if is_partition(journal):
+        if journal_dm_keypath:
+            raise Error(journal + ' partition already exists'
+                        ' and --dmcrypt specified')
         LOG.debug('Journal %s is a partition', journal)
         LOG.warning('OSD will not be hot-swappable if journal is not the same device as the osd data')
         if get_partition_type(journal) == JOURNAL_UUID:
