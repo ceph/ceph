@@ -32,8 +32,6 @@ extern int rgw_bucket_instance_store_info(RGWRados *store, string& oid, bufferli
                                  map<string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker,
                                  time_t mtime);
 
-extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id);
-
 extern int rgw_bucket_instance_remove_entry(RGWRados *store, string& entry, RGWObjVersionTracker *objv_tracker);
 
 extern int rgw_bucket_delete_bucket_obj(RGWRados *store, string& bucket_name, RGWObjVersionTracker& objv_tracker);
@@ -316,13 +314,13 @@ class RGWDataChangesLog {
 
   typedef ceph::shared_ptr<ChangeStatus> ChangeStatusPtr;
 
-  lru_map<rgw_bucket_shard, ChangeStatusPtr> changes;
+  lru_map<string, ChangeStatusPtr> changes;
 
-  map<rgw_bucket_shard, bool> cur_cycle;
+  map<string, rgw_bucket> cur_cycle;
 
-  void _get_change(const rgw_bucket_shard& bs, ChangeStatusPtr& status);
-  void register_renew(rgw_bucket_shard& bs);
-  void update_renewed(rgw_bucket_shard& bs, utime_t& expiration);
+  void _get_change(string& bucket_name, ChangeStatusPtr& status);
+  void register_renew(rgw_bucket& bucket);
+  void update_renewed(string& bucket_name, utime_t& expiration);
 
   class ChangesRenewThread : public Thread {
     CephContext *cct;
@@ -364,8 +362,8 @@ public:
 
   ~RGWDataChangesLog();
 
-  int choose_oid(const rgw_bucket_shard& bs);
-  int add_entry(rgw_bucket& bucket, int shard_id);
+  int choose_oid(rgw_bucket& bucket);
+  int add_entry(rgw_bucket& bucket);
   int renew_entries();
   int list_entries(int shard, utime_t& start_time, utime_t& end_time, int max_entries,
 		   list<rgw_data_change>& entries,

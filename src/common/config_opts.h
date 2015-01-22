@@ -883,22 +883,6 @@ OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 OPTION(rgw_max_chunk_size, OPT_INT, 512 * 1024)
 
-/**
- * override max bucket index shards in zone configuration (if not zero)
- *
- * Represents the number of shards for the bucket index object, a value of zero
- * indicates there is no sharding. By default (no sharding, the name of the object
- * is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
- * sharding_id is zero-based value. It is not recommended to set a too large value
- * (e.g. thousand) as it increases the cost for bucket listing.
- */
-OPTION(rgw_override_bucket_index_max_shards, OPT_U32, 0)
-
-/**
- * Represents the maximum AIO pending requests for the bucket index object shards.
- */
-OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
-
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
