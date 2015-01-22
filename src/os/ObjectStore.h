@@ -557,7 +557,6 @@ public:
       case OP_WRITE:
       case OP_ZERO:
       case OP_TRUNCATE:
-      case OP_CLONERANGE2:
       case OP_SETALLOCHINT:
         assert(op->cid < cm.size());
         assert(op->oid < om.size());
@@ -565,6 +564,7 @@ public:
         op->oid = om[op->oid];
         break;
 
+      case OP_CLONERANGE2:
       case OP_CLONE:
         assert(op->cid < cm.size());
         assert(op->oid < om.size());
