@@ -1582,9 +1582,24 @@ public:
       rgw_obj obj;
       RGWObjState *obj_state;
       uint16_t bilog_flags;
+      BucketShard bs;
+      bool bs_initialized;
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0) {}
+      UpdateIndex(RGWRados::Bucket *_target, rgw_obj& _obj, RGWObjState *_state) : target(_target), obj(_obj), obj_state(_state), bilog_flags(0),
+                                                                                   bs(target->get_store()), bs_initialized(false) {}
+
+      int get_bucket_shard(BucketShard **pbs) {
+        if (!bs_initialized) {
+          int r = bs.init(target->get_bucket(), obj);
+          if (r < 0) {
+            return r;
+          }
+          bs_initialized = true;
+        }
+        *pbs = &bs;
+        return 0;
+      }
 
       void set_bilog_flags(uint16_t flags) {
         bilog_flags = flags;

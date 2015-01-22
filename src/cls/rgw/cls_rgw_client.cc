@@ -178,7 +178,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 }
 
 static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
-    const string& oid, const string& start_obj, const string& filter_prefix,
+    const string& oid, const cls_rgw_obj_key& start_obj, const string& filter_prefix,
     uint32_t num_entries, bool list_versions, BucketIndexAioManager *manager,
     struct rgw_cls_list_ret *pdata) {
   bufferlist in;
@@ -196,7 +196,7 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 
 int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, &manager, &result[shard_id]);
+  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, list_versions, &manager, &result[shard_id]);
 }
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
@@ -469,7 +469,8 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
 
 int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, "", "", 0, &manager, &result[shard_id]);
+  cls_rgw_obj_key nokey;
+  return issue_bucket_list_op(io_ctx, oid, nokey, "", 0, false, &manager, &result[shard_id]);
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
