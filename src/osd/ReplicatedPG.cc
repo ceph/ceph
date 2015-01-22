@@ -6087,6 +6087,7 @@ int ReplicatedPG::fill_in_copy_get(
     reply_obj.flags |= object_copy_data_t::FLAG_OMAP_DIGEST;
     reply_obj.omap_digest = oi.omap_digest;
   }
+  reply_obj.op_log = oi.op_log;
 
   // attrs
   map<string,bufferlist>& out_attrs = reply_obj.attrs;
@@ -6267,6 +6268,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results.flags,
 	      &cop->results.source_data_digest,
 	      &cop->results.source_omap_digest,
+	      &cop->results.op_log,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -6564,6 +6566,9 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   obs.oi.set_data_digest(cb->results->data_digest);
   obs.oi.set_omap_digest(cb->results->omap_digest);
 
+  // Copy the object op log from results
+  obs.oi.op_log = cb->results->op_log;
+
   // cache: clear whiteout?
   if (obs.oi.is_whiteout()) {
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
@@ -6738,6 +6743,9 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
       tctx->delta_stats.num_bytes += results->object_size;
     }
   }
+
+  // Copy the object op log from results
+  tctx->new_obs.oi.op_log = results->op_log;
 
   if (results->mirror_snapset) {
     assert(tctx->new_obs.oi.soid.snap == CEPH_NOSNAP);

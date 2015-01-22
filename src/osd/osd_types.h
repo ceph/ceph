@@ -2559,6 +2559,7 @@ struct object_copy_data_t {
   bufferlist data;
   bufferlist omap_header;
   bufferlist omap_data;
+  deque<osd_reqid_t> op_log;
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
