@@ -336,7 +336,8 @@ function create_image() {
 	fi
 
 	rbd create "${image_name}" --image-format "${FORMAT}" \
-		--size "${IMAGE_SIZE}" --order "${OBJECT_ORDER}"
+		--size "${IMAGE_SIZE}" --order "${OBJECT_ORDER}" \
+		--image-shared
 }
 
 function destroy_image() {
@@ -476,7 +477,8 @@ function create_snap_clone() {
 	fi
 
 	rbd snap protect "${image_snap}"
-	rbd clone --order "${clone_order}" "${image_snap}" "${clone_name}"
+	rbd clone --order "${clone_order}" --image-shared \
+		"${image_snap}" "${clone_name}"
 }
 
 function destroy_snap_clone() {
