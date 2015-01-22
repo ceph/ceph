@@ -415,11 +415,12 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         pkglist=", ".join(rpm), arch=baseparms['arch']))
     host = teuth_config.gitbuilder_host
     dist_release = baseparms['dist_release']
-    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
-        host=host, **baseparms)
-    ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
-        release=RELEASE, dist_release=dist_release)
-    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
+    project = config.get('project', 'ceph')
+    start_of_url = 'http://{host}/{proj}-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
+        proj=project, host=host, **baseparms)
+    proj_release = '{proj}-release-{release}.{dist_release}.noarch'.format(
+        proj=project, release=RELEASE, dist_release=dist_release)
+    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
     base_url = "{start_of_url}/noarch/{rpm_name}".format(
         start_of_url=start_of_url, rpm_name=rpm_name)
     # When this was one command with a pipe, it would sometimes
@@ -430,7 +431,6 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     remote.run(args=['rm', '-f', rpm_name])
 
     uri = baseparms['uri']
-    project = config.get('project', 'ceph')
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
 
