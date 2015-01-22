@@ -3,7 +3,6 @@
 
 #include "include/types.h"
 #include "cls/rgw/cls_rgw_client.h"
-#include "cls/rgw/cls_rgw_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
@@ -11,7 +10,6 @@
 #include <errno.h>
 #include <string>
 #include <vector>
-#include <map>
 
 using namespace librados;
 
@@ -68,20 +66,12 @@ public:
 
 void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_entries, uint64_t total_size)
 {
-  map<int, struct rgw_cls_list_ret> results;
-  map<int, string> oids;
-  oids[0] = oid;
-  ASSERT_EQ(0, CLSRGWIssueGetDirHeader(ioctx, oids, results, 8)());
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, cls_rgw_get_dir_header(ioctx, oid, &header));
 
-  uint64_t entries = 0;
-  uint64_t size = 0;
-  map<int, struct rgw_cls_list_ret>::iterator iter = results.begin();
-  for (; iter != results.end(); ++iter) {
-    entries += (iter->second).dir.header.stats[category].num_entries;
-    size += (iter->second).dir.header.stats[category].total_size;
-  }
-  ASSERT_EQ(total_size, size);
-  ASSERT_EQ(num_entries, entries);
+  rgw_bucket_category_stats& stats = header.stats[category];
+  ASSERT_EQ(total_size, stats.total_size);
+  ASSERT_EQ(num_entries, stats.num_entries);
 }
 
 void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, string& obj, string& loc)
@@ -349,10 +339,9 @@ TEST(cls_rgw, index_suggest)
     cls_rgw_encode_suggestion(suggest_op, dirent, updates);
   }
 
-  map<int, string> bucket_objs;
-  bucket_objs[0] = bucket_oid;
-  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
-  ASSERT_EQ(0, r);
+  op = mgr.write_op();
+  cls_rgw_bucket_set_tag_timeout(*op, 1); // short tag timeout
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
 
   sleep(1);
 
