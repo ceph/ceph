@@ -1566,6 +1566,21 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // dup/replay check in the per object op logs
+  if (op->may_write() || op->may_cache()) {
+    for (deque<osd_reqid_t>::iterator it = obc->obs.oi.op_log.begin();
+         it != obc->obs.oi.op_log.end(); it++) {
+      if (*it == m->get_reqid()) {
+        dout(3) << __func__ << " dup " << m->get_reqid() << dendl;
+        MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
+        reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+        reply->set_reply_versions(eversion_t(), obc->obs.oi.user_version);
+        osd->send_message_osd_client(reply, m->get_connection());
+	return;
+      }
+    }
+  }
+
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
 
   // are writes blocked by another object?
