@@ -2067,13 +2067,17 @@ void ReplicatedPG::cancel_proxy_read_ops(bool requeue)
   }
 
   if (requeue) {
-    for (map<hobject_t, list<OpRequestRef> >::iterator p = in_progress_proxy_reads.begin();
-	p != in_progress_proxy_reads.end(); p++) {
+    map<hobject_t, list<OpRequestRef> >::iterator p =
+      in_progress_proxy_reads.begin();
+    while (p != in_progress_proxy_reads.end()) {
       list<OpRequestRef>& ls = p->second;
-      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size() << " requests" << dendl;
+      dout(10) << __func__ << " " << p->first << " requeuing " << ls.size()
+	       << " requests" << dendl;
       requeue_ops(ls);
-      in_progress_proxy_reads.erase(p);
+      in_progress_proxy_reads.erase(p++);
     }
+  } else {
+    in_progress_proxy_reads.clear();
   }
 }
 
@@ -8443,14 +8447,14 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   
   op->mark_started();
 
-  rm->opt.append(rm->localt);
-  rm->opt.register_on_commit(
+  rm->localt.append(rm->opt);
+  rm->localt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->opt.register_on_applied(
+  rm->localt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
-  parent->queue_transaction(&(rm->opt), op);
+  parent->queue_transaction(&(rm->localt), op);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
@@ -12814,6 +12818,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	   scrubber.missing_digest.begin();
 	 p != scrubber.missing_digest.end();
 	 ++p) {
+      if (p->first.is_snapdir())
+	continue;
       dout(10) << __func__ << " recording digests for " << p->first << dendl;
       ObjectContextRef obc = get_object_context(p->first, false);
       assert(obc);
