@@ -12818,6 +12818,8 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
 	   scrubber.missing_digest.begin();
 	 p != scrubber.missing_digest.end();
 	 ++p) {
+      if (p->first.is_snapdir())
+	continue;
       dout(10) << __func__ << " recording digests for " << p->first << dendl;
       ObjectContextRef obc = get_object_context(p->first, false);
       assert(obc);
