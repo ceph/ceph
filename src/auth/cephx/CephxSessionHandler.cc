@@ -28,25 +28,32 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
 {
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
-
-  bufferlist bl_plaintext;
-  ::encode(header.crc, bl_plaintext);
-  ::encode(footer.front_crc, bl_plaintext);
-  ::encode(footer.middle_crc, bl_plaintext);
-  ::encode(footer.data_crc, bl_plaintext);
-
-  bufferlist bl_encrypted;
   std::string error;
-  if (encode_encrypt(cct, bl_plaintext, key, bl_encrypted, error)) {
-    ldout(cct, 0) << "error encrypting message signature: " << error << dendl;
-    ldout(cct, 0) << "no signature put on message" << dendl;
-    return SESSION_SIGNATURE_FAILURE;
-  }
 
-  bufferlist::iterator ci = bl_encrypted.begin();
-  // Skip the magic number up front. PLR
-  ci.advance(4);
+  // optimized signature calculation
+  // - avoid temporary allocated buffers from encode_encrypt[_enc_bl]
+  // - skip the leading 4 byte wrapper from encode_encrypt
+  struct {
+    __u8 v;
+    __le64 magic;
+    __le32 len;
+    __le32 header_crc;
+    __le32 front_crc;
+    __le32 middle_crc;
+    __le32 data_crc;
+  } __attribute__ ((packed)) sigblock = {
+    1, AUTH_ENC_MAGIC, 4*4,
+    header.crc, footer.front_crc, footer.middle_crc, footer.data_crc
+  };
+  bufferlist bl_plaintext;
+  bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
+
+  bufferlist bl_ciphertext;
+  key.encrypt(cct, bl_plaintext, bl_ciphertext, error);
+
+  bufferlist::iterator ci = bl_ciphertext.begin();
   ::decode(*psig, ci);
+
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
 		 << " front_crc_ = " << footer.front_crc
 		 << " middle_crc = " << footer.middle_crc
