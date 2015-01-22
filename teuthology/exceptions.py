@@ -21,6 +21,13 @@ class BootstrapError(RuntimeError):
     pass
 
 
+class ConfigError(RuntimeError):
+    """
+    Meant to be used when an invalid config entry is found.
+    """
+    pass
+
+
 class CommandFailedError(Exception):
 
     """
