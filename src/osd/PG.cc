@@ -1688,6 +1688,8 @@ void PG::activate(ObjectStore::Transaction& t,
       state_set(PG_STATE_DEGRADED);
       state_set(PG_STATE_UNDERSIZED);
     }
+
+    state_set(PG_STATE_ACTIVATING);
   }
 }
 
@@ -1856,7 +1858,6 @@ void PG::all_activated_and_committed()
   state_clear(PG_STATE_CREATING);
 
   share_pg_info();
-  publish_stats_to_osd();
 
   queue_peering_event(
     CephPeeringEvtRef(
@@ -6486,7 +6487,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 {
   PG *pg = context< RecoveryMachine >().pg;
   all_replicas_activated = true;
-
+  pg->state_clear(PG_STATE_ACTIVATING);
   pg->state_set(PG_STATE_ACTIVE);
 
   pg->check_local();
@@ -6509,6 +6510,7 @@ void PG::RecoveryState::Active::exit()
 
   pg->backfill_reserved = false;
   pg->backfill_reserving = false;
+  pg->state_clear(PG_STATE_ACTIVATING);
   pg->state_clear(PG_STATE_DEGRADED);
   pg->state_clear(PG_STATE_UNDERSIZED);
   pg->state_clear(PG_STATE_BACKFILL_TOOFULL);
