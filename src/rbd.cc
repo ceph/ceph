@@ -1369,11 +1369,12 @@ public:
     : m_throttle(simple_throttle),
       m_aio_completion(
         new librbd::RBD::AioCompletion(this, &AioImportContext::aio_callback)),
-      m_offset(offset)
+      m_bufferlist(bl), m_offset(offset)
   {
     m_throttle.start_op();
 
-    int r = image.aio_write(m_offset, bl.length(), bl, m_aio_completion);
+    int r = image.aio_write(m_offset, m_bufferlist.length(), m_bufferlist,
+			    m_aio_completion);
     if (r < 0) {
       cerr << "rbd: error requesting write to destination image" << std::endl;
       m_throttle.end_op(r);
@@ -1405,6 +1406,7 @@ public:
 private:
   SimpleThrottle &m_throttle;
   librbd::RBD::AioCompletion *m_aio_completion;
+  bufferlist m_bufferlist;
   uint64_t m_offset;
 };
 
