@@ -68,6 +68,9 @@ public:
   virtual TestIoCtxImpl *create_ioctx(int64_t pool_id,
                                       const std::string &pool_name);
 
+  virtual void object_list(int64_t pool_id, 
+			   std::list<librados::TestRadosClient::Object> *list);
+
   virtual int pool_create(const std::string &pool_name);
   virtual int pool_delete(const std::string &pool_name);
   virtual int pool_get_base_tier(int64_t pool_id, int64_t* base_tier);

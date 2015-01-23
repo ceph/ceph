@@ -47,6 +47,8 @@ namespace librbd {
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       aio_lock("librbd::ImageCtx::aio_lock"),
+      copyup_list_lock("librbd::ImageCtx::copyup_list_lock"),
+      copyup_list_cond(),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -55,7 +57,7 @@ namespace librbd {
       stripe_unit(0), stripe_count(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
-      total_bytes_read(0),
+      total_bytes_read(0), copyup_finisher(NULL),
       pending_aio(0)
   {
     md_ctx.dup(p);
@@ -101,6 +103,11 @@ namespace librbd {
       object_set->return_enoent = true;
       object_cacher->start();
     }
+
+    if (cct->_conf->rbd_clone_copy_on_read) {
+      copyup_finisher = new Finisher(cct);
+      copyup_finisher->start();
+    }
   }
 
   ImageCtx::~ImageCtx() {
@@ -116,6 +123,10 @@ namespace librbd {
     if (object_set) {
       delete object_set;
       object_set = NULL;
+    }
+    if (copyup_finisher != NULL) {
+      delete copyup_finisher;
+      copyup_finisher = NULL;
     }
     delete[] format_string;
   }
@@ -661,6 +672,14 @@ namespace librbd {
     Mutex::Locker l(aio_lock);
     while (pending_aio > 0) {
       pending_aio_cond.Wait(aio_lock);
+    }
+  }
+
+  void ImageCtx::wait_for_pending_copyup() {
+    Mutex::Locker l(copyup_list_lock);
+    while (!copyup_list.empty()) {
+      ldout(cct, 20) << __func__ << " waiting CopyupRequest to be completed" << dendl;
+      copyup_list_cond.Wait(copyup_list_lock);
     }
   }
 }

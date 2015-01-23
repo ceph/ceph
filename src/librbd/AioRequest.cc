@@ -11,6 +11,7 @@
 #include "librbd/internal.h"
 
 #include "librbd/AioRequest.h"
+#include "librbd/CopyupRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -25,13 +26,15 @@ namespace librbd {
     m_hide_enoent(false) {}
   AioRequest::AioRequest(ImageCtx *ictx, const std::string &oid,
 			 uint64_t objectno, uint64_t off, uint64_t len,
-			 librados::snap_t snap_id,
+			 const ::SnapContext &snapc, librados::snap_t snap_id,
 			 Context *completion,
 			 bool hide_enoent) :
     m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
     m_completion(completion), m_parent_completion(NULL),
-    m_hide_enoent(hide_enoent) {}
+    m_hide_enoent(hide_enoent) {
+    m_snaps.insert(m_snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
+  }
 
   AioRequest::~AioRequest() {
     if (m_parent_completion) {
@@ -52,37 +55,141 @@ namespace librbd {
 	     m_parent_completion, 0);
   }
 
+  static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
+    assert(ictx->snap_lock.is_locked());
+    return (ictx->cct->_conf->rbd_clone_copy_on_read) &&
+           (!ictx->read_only) && (snap_id == CEPH_NOSNAP);
+  }
+
   /** read **/
+
+  AioRead::AioRead(ImageCtx *ictx, const std::string &oid,
+                   uint64_t objectno, uint64_t offset, uint64_t len,
+                   vector<pair<uint64_t,uint64_t> >& be,
+                   const ::SnapContext &snapc,
+                   librados::snap_t snap_id, bool sparse,
+                   Context *completion, int op_flags)
+    : AioRequest(ictx, oid, objectno, offset, len, snapc, snap_id, completion,
+		 false),
+      m_buffer_extents(be), m_tried_parent(false),
+      m_sparse(sparse), m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
+    RWLock::RLocker l(m_ictx->snap_lock);
+    RWLock::RLocker l2(m_ictx->parent_lock);
+
+    Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+                            m_object_no, 0, m_ictx->layout.fl_object_size,
+                            m_image_extents);
+
+    guard_read();
+  }
+
+  void AioRead::guard_read()
+  {
+    assert(m_ictx->snap_lock.is_locked());
+
+    uint64_t image_overlap = 0;
+    m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+    uint64_t object_overlap =
+      m_ictx->prune_parent_extents(m_image_extents, image_overlap);
+    if (object_overlap) {
+      ldout(m_ictx->cct, 20) << __func__ << " guarding read" << dendl;
+      m_state = LIBRBD_AIO_READ_GUARD;
+    }
+  }
 
   bool AioRead::should_complete(int r)
   {
     ldout(m_ictx->cct, 20) << "should_complete " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
-			   << " r = " << r << dendl;
+                           << " r = " << r << dendl;
 
-    if (!m_tried_parent && r == -ENOENT) {
-      RWLock::RLocker l(m_ictx->snap_lock);
-      RWLock::RLocker l2(m_ictx->parent_lock);
+    bool finished = true;
 
-      // calculate reverse mapping onto the image
-      vector<pair<uint64_t,uint64_t> > image_extents;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			    m_object_no, m_object_off, m_object_len,
-			    image_extents);
+    switch (m_state) {
+    case LIBRBD_AIO_READ_GUARD:
+      ldout(m_ictx->cct, 20) << "should_complete " << this
+                             << " READ_CHECK_GUARD" << dendl;
 
-      uint64_t image_overlap = 0;
-      r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
-      if (r < 0) {
-	assert(0 == "FIXME");
+      // This is the step to read from parent
+      if (!m_tried_parent && r == -ENOENT) {
+        RWLock::RLocker l(m_ictx->snap_lock);
+        RWLock::RLocker l2(m_ictx->parent_lock);
+
+        if (m_ictx->parent == NULL) {
+	  ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
+	  m_state = LIBRBD_AIO_READ_FLAT;
+	  finished = false;
+	  break;
+	}
+
+        // calculate reverse mapping onto the image
+        vector<pair<uint64_t,uint64_t> > image_extents;
+        Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			        m_object_no, m_object_off, m_object_len,
+			        image_extents);
+
+        uint64_t image_overlap = 0;
+        r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+        if (r < 0) {
+          assert(0 == "FIXME");
+        }
+        uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
+        if (object_overlap) {
+          m_tried_parent = true;
+          if (is_copy_on_read(m_ictx, m_snap_id)) {
+            m_state = LIBRBD_AIO_READ_COPYUP; 
+	  }
+
+          read_from_parent(image_extents);
+          finished = false;
+        }
       }
-      uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
-      if (object_overlap) {
-	m_tried_parent = true;
-	read_from_parent(image_extents);
-	return false;
+      break;
+    case LIBRBD_AIO_READ_COPYUP:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_COPYUP" << dendl;
+      // This is the extra step for copy-on-read: kick off an asynchronous copyup.
+      // It is different from copy-on-write as asynchronous copyup will finish
+      // by itself so state won't go back to LIBRBD_AIO_READ_GUARD.
+
+      assert(m_tried_parent);
+      if (r > 0) {
+        // If read entire object from parent success and CoR is possible, kick
+        // off a asynchronous copyup. This approach minimizes the latency
+        // impact.
+        Mutex::Locker copyup_locker(m_ictx->copyup_list_lock);
+        map<uint64_t, CopyupRequest*>::iterator it =
+          m_ictx->copyup_list.find(m_object_no);
+        if (it == m_ictx->copyup_list.end()) {
+          RWLock::RLocker l(m_ictx->snap_lock);
+          RWLock::RLocker l2(m_ictx->parent_lock);
+          if (m_ictx->parent == NULL) {
+            ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
+            break;
+          }
+
+          // If parent still exists, overlap might also have changed.
+          uint64_t newlen = m_ictx->prune_parent_extents(
+            m_image_extents, m_ictx->parent_md.overlap);
+          if (newlen != 0) {
+            // create and kick off a CopyupRequest
+            CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
+                                                       m_object_no,
+						       m_image_extents);
+            m_ictx->copyup_list[m_object_no] = new_req;
+            new_req->queue_read_from_parent();
+          }
+        }
       }
+      break;
+    case LIBRBD_AIO_READ_FLAT:
+      ldout(m_ictx->cct, 20) << "should_complete " << this << " READ_FLAT" << dendl;
+      // The read content should be deposit in m_read_data
+      break;
+    default:
+      lderr(m_ictx->cct) << "invalid request state: " << m_state << dendl;
+      assert(0);
     }
 
-    return true;
+    return finished;
   }
 
   int AioRead::send() {
@@ -120,18 +227,12 @@ namespace librbd {
 			       const ::SnapContext &snapc, librados::snap_t snap_id,
 			       Context *completion,
 			       bool hide_enoent)
-    : AioRequest(ictx, oid, object_no, object_off, len, snap_id, completion,
-		 hide_enoent),
-      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val)
+    : AioRequest(ictx, oid, object_no, object_off, len, snapc, snap_id, 
+                 completion, hide_enoent),
+      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val), m_entire_object(NULL)
   {
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
-
-    // TODO: find a way to make this less stupid
-    for (std::vector<snapid_t>::const_iterator it = snapc.snaps.begin();
-	 it != snapc.snaps.end(); ++it) {
-      m_snaps.push_back(it->val);
-    }
   }
 
   void AbstractWrite::guard_write()
@@ -148,13 +249,13 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "write " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len
 			   << " should_complete: r = " << r << dendl;
 
+    map<uint64_t, CopyupRequest*>::iterator it;
     bool finished = true;
     switch (m_state) {
     case LIBRBD_AIO_WRITE_GUARD:
       ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
       if (r == -ENOENT) {
-
 	RWLock::RLocker l(m_ictx->snap_lock);
 	RWLock::RLocker l2(m_ictx->parent_lock);
 
@@ -187,7 +288,30 @@ namespace librbd {
 				 << m_object_image_extents << dendl;
 
 	  m_state = LIBRBD_AIO_WRITE_COPYUP;
-	  read_from_parent(m_object_image_extents);
+
+          if (is_copy_on_read(m_ictx, m_snap_id)) {
+            m_ictx->copyup_list_lock.Lock();
+            it = m_ictx->copyup_list.find(m_object_no);
+            if (it == m_ictx->copyup_list.end()) {
+              // If it is not in the list, create a CopyupRequest and wait for it.
+              CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
+                                                         m_object_no,
+							 m_object_image_extents);
+              // make sure to wait on this CopyupRequest
+              new_req->append_request(this);
+              m_ictx->copyup_list[m_object_no] = new_req;
+
+              m_entire_object = &(new_req->get_copyup_data());
+              m_ictx->copyup_list_lock.Unlock();
+              new_req->read_from_parent();
+            } else {
+              it->second->append_request(this);
+              m_entire_object = &it->second->get_copyup_data();
+              m_ictx->copyup_list_lock.Unlock();
+            }
+          } else {
+            read_from_parent(m_object_image_extents);
+          }
 	} else {
 	  ldout(m_ictx->cct, 20) << "should_complete(" << this
 				 << "): parent overlap now 0" << dendl;
@@ -209,6 +333,17 @@ namespace librbd {
       m_state = LIBRBD_AIO_WRITE_GUARD;
       if (r < 0)
 	return should_complete(r);
+
+      // Read data from waiting list safely. If this AioWrite created a
+      // CopyupRequest, m_read_data should be empty.
+      if (m_entire_object != NULL) {
+	assert(m_ictx->copyup_list_lock.is_locked());
+	assert(m_ictx->copyup_list.find(m_object_no) !=
+	       m_ictx->copyup_list.end());
+	assert(m_read_data.length() == 0);
+	m_read_data.append(*m_entire_object);
+      }
+
       send_copyup();
       finished = false;
       break;

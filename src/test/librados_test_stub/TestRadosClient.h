@@ -11,6 +11,7 @@
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include <boost/function.hpp>
 #include <boost/functional/hash.hpp>
+#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -25,6 +26,12 @@ class TestRadosClient {
 public:
 
   typedef boost::function<int()> AioFunction;
+
+  struct Object {
+    std::string oid;
+    std::string locator;
+    std::string nspace;
+  };
 
   TestRadosClient(CephContext *cct);
 
@@ -45,6 +52,9 @@ public:
   virtual int mon_command(const std::vector<std::string>& cmd,
                           const bufferlist &inbl,
                           bufferlist *outbl, std::string *outs);
+
+  virtual void object_list(int64_t pool_id,
+			   std::list<librados::TestRadosClient::Object> *list) = 0;
 
   virtual int pool_create(const std::string &pool_name) = 0;
   virtual int pool_delete(const std::string &pool_name) = 0;
