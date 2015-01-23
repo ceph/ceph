@@ -184,6 +184,7 @@ public:
   AttrGenerator attr_gen;
   const bool no_omap;
   bool pool_snaps;
+  bool write_fadvise_dontneed;
   int snapname_num;
 
   RadosTestContext(const string &pool_name, 
@@ -193,6 +194,7 @@ public:
 		   uint64_t max_stride_size,
 		   bool no_omap,
 		   bool pool_snaps,
+		   bool write_fadvise_dontneed,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -208,6 +210,7 @@ public:
     attr_gen(2000, 20000),
     no_omap(no_omap),
     pool_snaps(pool_snaps),
+    write_fadvise_dontneed(write_fadvise_dontneed),
     snapname_num(0)
   {
   }
@@ -227,6 +230,15 @@ public:
     if (r < 0)
       return r;
     r = rados.ioctx_create(pool_name.c_str(), io_ctx);
+    if (r < 0) {
+      rados.shutdown();
+      return r;
+    }
+    bufferlist inbl;
+    r = rados.mon_command(
+      "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+      "\", \"var\", \"write_fadvise_dontneed\", \"val\": \"" + (write_fadvise_dontneed ? "true" : "false") + "\"}",
+      inbl, NULL, NULL);
     if (r < 0) {
       rados.shutdown();
       return r;
