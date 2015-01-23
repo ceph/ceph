@@ -1292,7 +1292,7 @@ public:
   }
 
   string& get_hash_object() {
-    return index_hash_source.empty() ? object : index_hash_source;
+    return index_hash_source.empty() ? orig_obj : index_hash_source;
   }
   /**
    * Translate a namespace-mangled object name to the user-facing name
