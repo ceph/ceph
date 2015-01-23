@@ -10,4 +10,4 @@ tasks:
 - admin_socket:
     client.0:
       objecter_requests:
-        test: "http://ceph.newdream.net/git/?p=ceph.git;a=blob_plain;f=src/test/admin_socket/objecter_requests;hb={branch}"
+        test: "http://ceph.com/git/?p=ceph.git;a=blob_plain;f=src/test/admin_socket/objecter_requests;hb={branch}"
