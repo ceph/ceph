@@ -500,7 +500,6 @@ fi
 %endif
 %config %{_sysconfdir}/bash_completion.d/ceph
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
-%config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-disk.8*
 %{_mandir}/man8/ceph-mon.8*
@@ -618,6 +617,7 @@ fi
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
 %{_sbindir}/rcceph-radosgw
+%config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
 
