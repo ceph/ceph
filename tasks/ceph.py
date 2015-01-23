@@ -1057,7 +1057,6 @@ def restart(ctx, config):
     for i in daemons:
         type_ = i.split('.', 1)[0]
         id_ = i.split('.', 1)[1]
-        ctx.daemons.get_daemon(type_, id_).stop()
         ctx.daemons.get_daemon(type_, id_).restart()
 
     if config.get('wait-for-healthy', True):
