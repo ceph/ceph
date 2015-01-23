@@ -29,7 +29,6 @@ namespace librbd {
     assert(m_ictx->copyup_list_lock.is_locked());
     assert(m_pending_requests.empty());
 
-    ldout(m_ictx->cct, 20) << __func__ << " removing the slot " << dendl;
     map<uint64_t, CopyupRequest*>::iterator it =
       m_ictx->copyup_list.find(m_object_no);
     assert(it != m_ictx->copyup_list.end());
@@ -38,10 +37,6 @@ namespace librbd {
     if (m_ictx->copyup_list.empty()) {
       m_ictx->copyup_list_cond.Signal();
     }
-
-    ldout(m_ictx->cct, 20) <<  __func__ << " remove the slot " << m_object_no
-                           << " in copyup_list, size = " << m_ictx->copyup_list.size()
-                           << dendl;
   }
 
   ceph::bufferlist& CopyupRequest::get_copyup_data() {
