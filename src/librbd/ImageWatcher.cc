@@ -611,6 +611,7 @@ void ImageWatcher::reregister_watch() {
         return;
       }
     }
+    handle_header_update();
 
     if (lock_owner) {
       r = try_lock();
