@@ -991,6 +991,8 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
     return ret;
   }
 
+  utime_t ut(mtime, 0);
+
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("pool", bucket.data_pool);
@@ -1000,7 +1002,7 @@ static int bucket_stats(RGWRados *store, std::string&  bucket_name, Formatter *f
   formatter->dump_string("owner", bucket_info.owner);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
-  formatter->dump_int("mtime", mtime);
+  formatter->dump_stream("mtime") << ut;
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
