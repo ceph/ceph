@@ -11793,6 +11793,7 @@ void ReplicatedPG::hit_set_persist()
   obc->obs.oi.mtime = now;
   obc->obs.oi.size = bl.length();
   obc->obs.exists = true;
+  obc->obs.oi.set_data_digest(bl.crc32c(-1));
 
   ctx->new_obs = obc->obs;
   ctx->new_snapset.head_exists = true;
