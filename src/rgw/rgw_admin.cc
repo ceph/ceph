@@ -680,6 +680,31 @@ static int read_decode_json(const string& infile, T& t)
   return 0;
 }
     
+template <class T, class K>
+static int read_decode_json(const string& infile, T& t, K *k)
+{
+  bufferlist bl;
+  int ret = read_input(infile, bl);
+  if (ret < 0) {
+    cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+  JSONParser p;
+  ret = p.parse(bl.c_str(), bl.length());
+  if (ret < 0) {
+    cout << "failed to parse JSON" << std::endl;
+    return ret;
+  }
+
+  try {
+    t.decode_json(&p, k);
+  } catch (JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.message << std::endl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 static int parse_date_str(const string& date_str, utime_t& ut)
 {
   uint64_t epoch = 0;
@@ -2030,12 +2055,16 @@ next:
     }
 
     rgw_cls_bi_entry entry;
-    ret = read_decode_json(infile, entry);
+    cls_rgw_obj_key key;
+    ret = read_decode_json(infile, entry, &key);
     if (ret < 0) {
       return 1;
     }
 
-    ret = store->bi_put(bucket, entry);
+    rgw_obj obj(bucket, key.name);
+    obj.set_instance(key.instance);
+
+    ret = store->bi_put(bucket, obj, entry);
     if (ret < 0) {
       cerr << "ERROR: bi_put(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
