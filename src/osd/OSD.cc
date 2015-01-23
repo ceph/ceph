@@ -2104,12 +2104,6 @@ void OSD::load_pgs()
       continue;
     }
 
-    if (!osdmap->have_pg_pool(pgid.pool())) {
-      dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
-	       << pgid.pool() << dendl;
-      continue;
-    }
-
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
       // FIXME: delete it too, eventually
