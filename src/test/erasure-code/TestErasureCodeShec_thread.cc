@@ -39,7 +39,11 @@ public:
 
 TEST(ErasureCodeShec, thread)
 {
-  __erasure_code_init("shec", "");
+//  ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
+
+//  Mutex::Locker l(registry.lock);
+
+//  __erasure_code_init("shec", "");
 
   TestParam param1,param2,param3,param4,param5;
   param1.k = "6";
@@ -75,8 +79,8 @@ TEST(ErasureCodeShec, thread)
   //	std::cout << "thread2 start " << std::endl;
   //	pthread_create(&tid3,NULL,thread1,(void*)&param3);
   //	std::cout << "thread3 start " << std::endl;
-  //	pthread_create(&tid4,NULL,thread1,(void*)&param4);
-  //	std::cout << "thread4 start " << std::endl;
+  pthread_create(&tid4,NULL,thread1,(void*)&param4);
+  std::cout << "thread4 start " << std::endl;
   //	pthread_create(&tid5,NULL,thread1,(void*)&param5);
   //	std::cout << "thread5 start " << std::endl;
   //ƒXƒŒƒbƒh‚Ì’âŽ~‘Ò‚¿
@@ -105,6 +109,12 @@ void* thread1(void* pParam)
 
   time_t start,end;
   int r;
+
+  ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
+
+  Mutex::Locker l(registry.lock);
+
+  __erasure_code_init("shec", "");
 
   //encode
   bufferlist in;
