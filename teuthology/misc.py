@@ -1155,13 +1155,11 @@ def get_distro(ctx):
     Get the name of the distro that we are using (usually the os_type).
     """
     os_type = None
-    # first, try to get the os_type from the config or --os-type
-    # FIXME: checking for ctx.os_type here should not be needed as
-    # ctx.os_type is assigned to ctx.config["os_type"] if provided
-    # in teuthology.run. We're gonna leave it here for now until we
-    # have the time to fully investigate and test it's removal.
+    if ctx.os_type:
+        return ctx.os_type
+
     try:
-        os_type = ctx.config.get('os_type', ctx.os_type)
+        os_type = ctx.config.get('os_type', None)
     except AttributeError:
         pass
     # next, look for an override in the downburst config for os_type

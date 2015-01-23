@@ -13,6 +13,8 @@ class TestGetDistroVersion(object):
         self.fake_ctx_noarg = Mock()
         self.fake_ctx_noarg.config = {}
         self.fake_ctx_noarg.os_version = None
+        self.fake_ctx.os_type = None
+        self.fake_ctx_noarg.os_type = None
 
     def test_default_distro_version(self):
         #Default distro is ubuntu, default version of ubuntu is 12.04
