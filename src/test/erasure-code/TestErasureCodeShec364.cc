@@ -38,6 +38,7 @@ class ParameterTest : public ::testing::TestWithParam<struct _param> {
 
 TEST_P(ParameterTest, parameter364)
 {
+	int result;
 	//パラメータを受け取る
 	char* k = GetParam().k;
 	char* m = GetParam().m;
@@ -48,7 +49,8 @@ TEST_P(ParameterTest, parameter364)
 	int i_c = atoi(c);
 
 	//initの準備
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -58,7 +60,7 @@ TEST_P(ParameterTest, parameter364)
 	(*parameters)["m"] = m;
 	(*parameters)["c"] = c;
 	//initの実行
-	shec->init(*parameters);
+	result = shec->init(*parameters);
 
 	//パラメータ(k,m,l)を表示
 //	cout<< "k = " << shec->k << ", m = " << shec->m << ", c = " << shec->c << "\n";
@@ -68,10 +70,10 @@ TEST_P(ParameterTest, parameter364)
 	EXPECT_EQ(i_m, shec->m);
 	EXPECT_EQ(i_c, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,result);
 
 	//k+m個の中から1～c個を選ぶ組合せ
 	//minimum_to_decodeの引数宣言
@@ -105,7 +107,8 @@ TEST_P(ParameterTest, parameter364)
 			std::cout << "want_to_decode:" << want_to_decode << std::endl;
 			std::cout << "available_chunks:" << available_chunks << std::endl;
 			//minimum_to_decodeの実行
-			EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+			result = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+			EXPECT_EQ(0,result);
 			EXPECT_TRUE(minimum_chunks.size());
 			want_to_decode.clear();
 			available_chunks.clear();
@@ -130,7 +133,8 @@ TEST_P(ParameterTest, parameter364)
 		available_chunks_with_cost[i] = i;
 
 	//minimum_to_decode_with_costの実行
-	EXPECT_EQ(0,shec->minimum_to_decode_with_cost(want_to_decode_with_cost,available_chunks_with_cost,&minimum_chunks_with_cost));
+	result = shec->minimum_to_decode_with_cost(want_to_decode_with_cost,available_chunks_with_cost,&minimum_chunks_with_cost);
+	EXPECT_EQ(0,result);
 	EXPECT_TRUE(minimum_chunks_with_cost.size());
 
 	//encodeの引数宣言
@@ -148,7 +152,8 @@ TEST_P(ParameterTest, parameter364)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	result = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, result);
 	EXPECT_EQ(i_k+i_m, encoded.size());
 	EXPECT_EQ(c_size, encoded[0].length());
 
@@ -168,7 +173,8 @@ TEST_P(ParameterTest, parameter364)
 			want_to_decode2[i] = i;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode2, want_to_decode2+2), encoded, &decoded));
+		result = shec->decode(set<int>(want_to_decode2, want_to_decode2+2), encoded, &decoded);
+		EXPECT_EQ(0,result);
 		EXPECT_EQ(2u, decoded.size());
 		EXPECT_EQ(c_size, decoded[0].length());
 
@@ -224,7 +230,8 @@ TEST_P(ParameterTest, parameter364)
 	stringstream ss;
 
 	//create_rulesetの実行
-	EXPECT_EQ(0, shec->create_ruleset("myrule", *crush, &ss));
+	result = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_EQ(0, result);
 	EXPECT_STREQ("myrule",crush->rule_name_map[0].c_str());
 
 	//rulesetの一覧を画面に表示
@@ -244,6 +251,7 @@ TEST_P(ParameterTest, parameter364)
 	EXPECT_EQ(c_size, shec->get_chunk_size(192));
 
 	delete shec;
+	delete crush;
 }
 
 

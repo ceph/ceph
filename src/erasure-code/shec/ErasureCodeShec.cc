@@ -26,8 +26,8 @@
 #include "osd/osd_types.h"
 #include "shec.h"
 extern "C" {
-#include "jerasure/jerasure.h"
-#include "jerasure/galois.h"
+#include "jerasure/include/jerasure.h"
+#include "jerasure/include/galois.h"
 }
 
 #define dout_subsys ceph_subsys_osd
@@ -91,10 +91,10 @@ int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_decode,
   int minimum[k + m];
   int dm_ids[k];
 
-  if (!minimum_chunks) return -EIO;
+  if (!minimum_chunks) return -EINVAL;
 
   for (set<int>::iterator it = available_chunks.begin(); it != available_chunks.end(); it++){
-    if (*it < 0 || k+m <= *it) return -EIO;
+    if (*it < 0 || k+m <= *it) return -EINVAL;
   }
 
   if (includes(available_chunks.begin(), available_chunks.end(),
@@ -149,7 +149,7 @@ int ErasureCodeShec::encode(const set<int> &want_to_encode,
   bufferlist out;
 
   if (!encoded || !encoded->empty()){
-    return -EIO;
+    return -EINVAL;
   }
 
   int err = encode_prepare(in, *encoded);
@@ -181,7 +181,7 @@ int ErasureCodeShec::decode(const set<int> &want_to_read,
   vector<int> have;
 
   if (!decoded || !decoded->empty()){
-    return -EIO;
+    return -EINVAL;
   }
 
   have.reserve(chunks.size());
@@ -290,7 +290,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::stri
 	     parameters.find("m") == parameters.end() ||
 	     parameters.find("c") == parameters.end()){
     dout(10) << "(k, m, c) must be choosed" << dendl;
-    err = -ENOENT;
+    err = -EINVAL;
   } else {
     std::string err_k, err_m, err_c, value_k, value_m, value_c;
     value_k = parameters.find("k")->second;
@@ -312,31 +312,31 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::stri
     } else if (k <= 0){
       derr << "k=" << k
 	   << " must be a positive number" << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (m <= 0){
       derr << "m=" << m
 	   << " must be a positive number" << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (c <= 0){
       derr << "c=" << c
 	   << " must be a positive number" << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (m < c){
       derr << "c=" << c
 	   << " must be less than or equal to m=" << m << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (k > 12){
       derr << "k=" << k
 	   << " must be less than or equal to 12" << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (k+m > 20){
       derr << "k+m=" << k+m
 	   << " must be less than or equal to 20" << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (k<m){
       derr << "m=" << m
 	   << " must be less than or equal to k=" << k << dendl;
-      err = -ENOENT;
+      err = -EINVAL;
     }
   }
 
@@ -378,51 +378,27 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::stri
 
 void ErasureCodeShecReedSolomonVandermonde::prepare()
 {
-  static int pre_k=-1;
-  static int pre_m=-1;
-  static int pre_c=-1;
-  static int pre_w=-1;
-  static std::string pre_technique="-1";
-  static int *pre_matrix=0;
+  // setup shared encoding table
+  int** p_enc_table =
+    tcache.getEncodingTable(technique, k, m, c, w);
 
-  dout(10) << "prepare is called." << dendl;
-  if (pre_k != k || pre_m != m || pre_c != c || pre_w != w ||
-      pre_technique != std::string(technique)) {
-    dout(10) << "this is first call of prepare." << dendl;
-    matrix = shec_reedsolomon_coding_matrix(k, m, c, w, std::string(technique) == "single");
+  if (!*p_enc_table) {
+    dout(10) << "[ cache tables ] creating coeff for k=" <<
+      k << " m=" << m << " c=" << c << " w=" << w << dendl;
 
-    free(pre_matrix);
-    pre_matrix = talloc(int, m*k);
-    for (int i=0; i<k*m; i++){
-      pre_matrix[i] = matrix[i];
-    }
-    pre_k = k;
-    pre_m = m;
-    pre_c = c;
-    pre_w = w;
-    pre_technique = std::string(technique);
+    matrix = shec_reedsolomon_coding_matrix(k, m, c, w, technique);
 
-    int i,j;
-    char mat[16];
-
-    dout(10) << "matrix = " << dendl;
-    for (i=0;i<m;i++) {
-      for (j=0;j<k;j++) {
-	if (matrix[i*k+j] > 0) {
-	  mat[j] = '1';
-	} else {
-	  mat[j] = '0';
-	}
-      }
-      mat[k] = '\0';
-      dout(10) << mat << dendl;
-    }
+    // either our new created table is stored or if it has been
+    // created in the meanwhile the locally allocated table will be
+    // freed by setEncodingTable
+    matrix = tcache.setEncodingTable(technique, k, m, c, w, matrix);
   } else {
-    dout(10) << "prepare is already called." << dendl;
-    matrix = talloc(int, m*k);
-
-    for (int i=0; i<k*m; i++){
-      matrix[i] = pre_matrix[i];
-    }
+    matrix = *p_enc_table;
   }
+
+  dout(10) << " [ technique ] = " <<
+    ((technique == MULTIPLE) ? "multiple" : "single") << dendl;
+
+  assert((technique == SINGLE) || (technique == MULTIPLE));
+
 }

@@ -31,8 +31,8 @@
 #include "shec.h"
 
 extern "C"{
-#include "jerasure/jerasure.h"
-#include "jerasure/reed_sol.h"
+#include "jerasure/include/jerasure.h"
+#include "jerasure/include/reed_sol.h"
 
 #define talloc(type, num) (type *) malloc(sizeof(type)*(num))
 
@@ -170,6 +170,10 @@ int shec_make_decoding_matrix(bool prepare, int k, int m, int w, int *matrix, in
   for (i = 0; i < k-ek; i++) {
     for (j = 0; j < k; j++) tmpmat[i*k+j] = 0;
     tmpmat[i*k+dm_ids[i]] = 1;
+  }
+
+  if (ek > m){
+    return -1;
   }
 
   mindup = k+1;

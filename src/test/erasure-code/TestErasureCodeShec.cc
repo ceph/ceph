@@ -27,11 +27,13 @@ void* thread3(void* pParam);
 void* thread4(void* pParam);
 void* thread5(void* pParam);
 
+static int flag = 0;
 
 TEST(ErasureCodeShec, init_1)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -41,25 +43,27 @@ TEST(ErasureCodeShec, init_1)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
+	delete parameters;
 }
 
 TEST(ErasureCodeShec, init_2)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -70,17 +74,17 @@ TEST(ErasureCodeShec, init_2)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "8";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("test", shec->ruleset_root.c_str());
 	EXPECT_STREQ("host", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -88,7 +92,8 @@ TEST(ErasureCodeShec, init_2)
 TEST(ErasureCodeShec, init_3)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -98,17 +103,17 @@ TEST(ErasureCodeShec, init_3)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "16";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(16u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -116,7 +121,8 @@ TEST(ErasureCodeShec, init_3)
 TEST(ErasureCodeShec, init_4)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -126,24 +132,25 @@ TEST(ErasureCodeShec, init_4)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "32";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(32u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_5)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	//plugin指定なし
 	(*parameters)["technique"] = "";
@@ -152,17 +159,18 @@ TEST(ErasureCodeShec, init_5)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_6)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "jerasure";	//異常値
 	(*parameters)["technique"] = "";
@@ -171,17 +179,18 @@ TEST(ErasureCodeShec, init_6)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_7)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "abc";	//異常値
 	(*parameters)["technique"] = "";
@@ -190,17 +199,18 @@ TEST(ErasureCodeShec, init_7)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_8)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["directory"] = "/usr/lib64/";	//異常値
@@ -210,17 +220,18 @@ TEST(ErasureCodeShec, init_8)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_9)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -230,17 +241,18 @@ TEST(ErasureCodeShec, init_9)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_10)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -249,17 +261,18 @@ TEST(ErasureCodeShec, init_10)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_11)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "abc";		//異常値
@@ -268,17 +281,18 @@ TEST(ErasureCodeShec, init_11)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_12)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -287,17 +301,18 @@ TEST(ErasureCodeShec, init_12)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_13)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -306,17 +321,18 @@ TEST(ErasureCodeShec, init_13)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_14)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -325,17 +341,18 @@ TEST(ErasureCodeShec, init_14)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_15)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -344,17 +361,18 @@ TEST(ErasureCodeShec, init_15)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_16)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -363,17 +381,18 @@ TEST(ErasureCodeShec, init_16)
 	(*parameters)["m"] = "-1";		//異常値
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_17)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -382,17 +401,18 @@ TEST(ErasureCodeShec, init_17)
 	(*parameters)["m"] = "0.1";		//異常値
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_18)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -401,17 +421,18 @@ TEST(ErasureCodeShec, init_18)
 	(*parameters)["m"] = "a";		//異常値
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_19)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -420,17 +441,18 @@ TEST(ErasureCodeShec, init_19)
 	//m　指定なし
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_20)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -439,17 +461,18 @@ TEST(ErasureCodeShec, init_20)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "-1";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_21)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -458,17 +481,18 @@ TEST(ErasureCodeShec, init_21)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "0.1";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_22)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -477,17 +501,18 @@ TEST(ErasureCodeShec, init_22)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "a";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_23)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -496,17 +521,18 @@ TEST(ErasureCodeShec, init_23)
 	(*parameters)["m"] = "4";
 	//c 指定なし
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_24)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -516,10 +542,10 @@ TEST(ErasureCodeShec, init_24)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "1";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cに指定した値が代入されていることを確認
 	EXPECT_EQ(6u,shec->k);
 	EXPECT_EQ(4u,shec->m);
@@ -531,7 +557,8 @@ TEST(ErasureCodeShec, init_24)
 
 TEST(ErasureCodeShec, init_25)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -541,10 +568,10 @@ TEST(ErasureCodeShec, init_25)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "-1";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cに指定した値が代入されていることを確認
 	EXPECT_EQ(6u,shec->k);
 	EXPECT_EQ(4u,shec->m);
@@ -556,7 +583,8 @@ TEST(ErasureCodeShec, init_25)
 
 TEST(ErasureCodeShec, init_26)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -566,10 +594,10 @@ TEST(ErasureCodeShec, init_26)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "0.1";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cに指定した値が代入されていることを確認
 	EXPECT_EQ(6u,shec->k);
 	EXPECT_EQ(4u,shec->m);
@@ -581,7 +609,8 @@ TEST(ErasureCodeShec, init_26)
 
 TEST(ErasureCodeShec, init_27)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -591,10 +620,10 @@ TEST(ErasureCodeShec, init_27)
 	(*parameters)["c"] = "3";
 	(*parameters)["w"] = "a";		//異常値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cに指定した値が代入されていることを確認
 	EXPECT_EQ(6u,shec->k);
 	EXPECT_EQ(4u,shec->m);
@@ -607,7 +636,8 @@ TEST(ErasureCodeShec, init_27)
 
 TEST(ErasureCodeShec, init_28)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -616,17 +646,18 @@ TEST(ErasureCodeShec, init_28)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "10";	//mより大きい値
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_29)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -635,10 +666,10 @@ TEST(ErasureCodeShec, init_29)
 	//m　指定なし
 	//c　指定なし
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cにデフォルト値が代入されていることを確認
 	EXPECT_EQ(2u,shec->k);
 	EXPECT_EQ(1u,shec->m);
@@ -649,7 +680,8 @@ TEST(ErasureCodeShec, init_29)
 
 TEST(ErasureCodeShec, init_30)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -658,10 +690,10 @@ TEST(ErasureCodeShec, init_30)
 	(*parameters)["m"] = "8";
 	(*parameters)["c"] = "8";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていることを確認
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 	//k,m,cにデフォルト値が代入されていることを確認
 	EXPECT_EQ(12u,shec->k);
 	EXPECT_EQ(8u,shec->m);
@@ -672,7 +704,8 @@ TEST(ErasureCodeShec, init_30)
 
 TEST(ErasureCodeShec, init_31)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -681,17 +714,18 @@ TEST(ErasureCodeShec, init_31)
 	(*parameters)["m"] = "7";
 	(*parameters)["c"] = "7";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_32)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -700,17 +734,18 @@ TEST(ErasureCodeShec, init_32)
 	(*parameters)["m"] = "13";
 	(*parameters)["c"] = "13";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_33)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -719,17 +754,18 @@ TEST(ErasureCodeShec, init_33)
 	(*parameters)["m"] = "9";
 	(*parameters)["c"] = "8";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
 
 TEST(ErasureCodeShec, init_34)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -738,10 +774,10 @@ TEST(ErasureCodeShec, init_34)
 	(*parameters)["m"] = "12";
 	(*parameters)["c"] = "12";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//matrixが作られていないことを確認
-	EXPECT_TRUE(shec->matrix == NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -749,7 +785,8 @@ TEST(ErasureCodeShec, init_34)
 TEST(ErasureCodeShec, init2_1)	//OSD数の指定ができない
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -758,17 +795,17 @@ TEST(ErasureCodeShec, init2_1)	//OSD数の指定ができない
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -776,7 +813,8 @@ TEST(ErasureCodeShec, init2_1)	//OSD数の指定ができない
 TEST(ErasureCodeShec, init2_2)	//OSD数の指定ができない
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -785,17 +823,17 @@ TEST(ErasureCodeShec, init2_2)	//OSD数の指定ができない
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -804,7 +842,8 @@ TEST(ErasureCodeShec, init2_2)	//OSD数の指定ができない
 TEST(ErasureCodeShec, init2_3)	//OSD数の指定ができない
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -813,13 +852,13 @@ TEST(ErasureCodeShec, init2_3)	//OSD数の指定ができない
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//k,m,cにデフォルト値が代入されていることを確認
 	EXPECT_EQ(2u,shec->k);
 	EXPECT_EQ(1u,shec->m);
 	EXPECT_EQ(1u,shec->c);
-
+	EXPECT_EQ(0,r);
 	delete shec;
 }
 */
@@ -827,7 +866,8 @@ TEST(ErasureCodeShec, init2_3)	//OSD数の指定ができない
 TEST(ErasureCodeShec, init2_4)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -836,17 +876,17 @@ TEST(ErasureCodeShec, init2_4)
 	(*parameters)["m"] = "4";
 	(*parameters)["c"] = "3";
 	shec->init(*parameters);
-	shec->init(*parameters);	//initを2回起動
+	int r = shec->init(*parameters);	//initを2回起動
 
 	//パラメータ確認
 	EXPECT_EQ(6u, shec->k);
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -854,7 +894,8 @@ TEST(ErasureCodeShec, init2_4)
 TEST(ErasureCodeShec, init2_5)
 {
 	//全て正常値
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	map<std::string, std::string> *parameters2 = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -865,7 +906,7 @@ TEST(ErasureCodeShec, init2_5)
 	(*parameters)["c"] = "5";
 	(*parameters)["w"] = "16";
 	//init実行
-	shec->init(*parameters);
+	int r = shec->init(*parameters);
 
 	//値を変えてinit再実行
 	(*parameters2)["plugin"] = "shec";
@@ -881,10 +922,10 @@ TEST(ErasureCodeShec, init2_5)
 	EXPECT_EQ(4u, shec->m);
 	EXPECT_EQ(3u, shec->c);
 	EXPECT_EQ(8u, shec->w);
-	EXPECT_STREQ("", shec->technique);
+	EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
 	EXPECT_STREQ("default", shec->ruleset_root.c_str());
 	EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-	EXPECT_TRUE(shec->matrix != NULL);
+	EXPECT_EQ(0,r);
 
 	delete shec;
 }
@@ -892,7 +933,8 @@ TEST(ErasureCodeShec, init2_5)
 TEST(ErasureCodeShec, minimum_to_decode_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -914,7 +956,8 @@ TEST(ErasureCodeShec, minimum_to_decode_1)
 	available_chunks.insert(2);
 
 	//minimum_to_decodeの実行
-	EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_TRUE(minimum_chunks.size());
 
 	delete shec;
@@ -923,7 +966,8 @@ TEST(ErasureCodeShec, minimum_to_decode_1)
 TEST(ErasureCodeShec, minimum_to_decode_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -945,7 +989,8 @@ TEST(ErasureCodeShec, minimum_to_decode_2)
 	}
 
 	//minimum_to_decodeの実行
-	EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_TRUE(minimum_chunks.size());
 
 	delete shec;
@@ -954,7 +999,8 @@ TEST(ErasureCodeShec, minimum_to_decode_2)
 TEST(ErasureCodeShec, minimum_to_decode_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -976,15 +1022,17 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
 	}
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
-	EXPECT_NE(want_to_decode,minimum_chunks);
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(-EINVAL,r);
+	EXPECT_EQ(0,minimum_chunks.size());
 	delete shec;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_4)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1008,7 +1056,8 @@ TEST(ErasureCodeShec, minimum_to_decode_4)
 	available_chunks.insert(100);	//k+m-1より大きい値
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -1016,7 +1065,8 @@ TEST(ErasureCodeShec, minimum_to_decode_4)
 TEST(ErasureCodeShec, minimum_to_decode_5)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1040,7 +1090,8 @@ TEST(ErasureCodeShec, minimum_to_decode_5)
 	}
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -1048,7 +1099,8 @@ TEST(ErasureCodeShec, minimum_to_decode_5)
 TEST(ErasureCodeShec, minimum_to_decode_6)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1071,7 +1123,8 @@ TEST(ErasureCodeShec, minimum_to_decode_6)
 	available_chunks.insert(100);		//k+m-1より大きい値
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -1079,7 +1132,8 @@ TEST(ErasureCodeShec, minimum_to_decode_6)
 TEST(ErasureCodeShec, minimum_to_decode_7)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1103,7 +1157,8 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
 	available_chunks.insert(6);
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -1112,7 +1167,8 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
 TEST(ErasureCodeShec, minimum_to_decode_8)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1134,7 +1190,8 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
 	}
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,NULL));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,NULL);
+	EXPECT_EQ(-EINVAL,r);
 
 	delete shec;
 }
@@ -1143,7 +1200,8 @@ TEST(ErasureCodeShec, minimum_to_decode_8)
 TEST(ErasureCodeShec, minimum_to_decode_9)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1170,7 +1228,8 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
 	}
 
 	//minimum_to_decodeの実行
-	EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(minimum,minimum_chunks);	//正常値と比較
 
 	delete shec;
@@ -1179,7 +1238,8 @@ TEST(ErasureCodeShec, minimum_to_decode_9)
 TEST(ErasureCodeShec, minimum_to_decode2_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1201,7 +1261,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
 	available_chunks.insert(2);
 
 	//minimum_to_decodeの実行
-	EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_TRUE(minimum_chunks.size());
 
 	delete shec;
@@ -1211,7 +1272,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
 TEST(ErasureCodeShec, minimum_to_decode2_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1233,7 +1295,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_2)
 	available_chunks.insert(2);
 
 	//minimum_to_decodeの実行
-	EXPECT_NE(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_NE(0,r);
 
 	delete shec;
 }
@@ -1242,7 +1305,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_2)
 TEST(ErasureCodeShec, minimum_to_decode2_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1267,14 +1331,20 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
 
 	//スレッド起動
 	pthread_t tid;
+	flag = 0;
 	pthread_create(&tid,NULL,thread1,shec);
+	while(flag == 0){
+		usleep(1);
+	}
 	sleep(1);
 	printf("*** test start ***\n");
 	//minimum_to_decodeの実行
-	EXPECT_EQ(0,shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(want_to_decode,minimum_chunks);
 	printf("*** test end ***\n");
 	//スレッドの停止待ち
+	flag = 0;
 	pthread_join(tid,NULL);
 
 	delete shec;
@@ -1284,7 +1354,8 @@ TEST(ErasureCodeShec, minimum_to_decode2_3)
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1306,7 +1377,8 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
 	available_chunks[2] = 2;
 
 	//minimum_to_decode_with_costの実行
-	EXPECT_EQ(0,shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_TRUE(minimum_chunks.size());
 
 	delete shec;
@@ -1316,7 +1388,8 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1338,7 +1411,8 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_2)
 	available_chunks[2] = 2;
 
 	minimum_to_decode_with_costの実行
-	EXPECT_NE(0,shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_NE(0,r);
 	delete shec;
 }
 */
@@ -1346,7 +1420,8 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_2)
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1371,14 +1446,20 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
 
 	//スレッドの起動
 	pthread_t tid;
+	flag = 0;
 	pthread_create(&tid,NULL,thread2,shec);
+	while(flag == 0){
+		usleep(1);
+	}
 	sleep(1);
 	printf("*** test start ***\n");
 	//minimum_to_decode_with_costの実行
-	EXPECT_EQ(0,shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks));
+	int r = shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(want_to_decode,minimum_chunks);
 	printf("*** test end ***\n");
 	//スレッドの停止待ち
+	flag = 0;
 	pthread_join(tid,NULL);
 
 	delete shec;
@@ -1388,7 +1469,8 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
 TEST(ErasureCodeShec, encode_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1413,10 +1495,10 @@ TEST(ErasureCodeShec, encode_1)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
-
 
 	//encodedを画面に表示
 	map<int,bufferlist>::iterator itr;
@@ -1431,7 +1513,8 @@ TEST(ErasureCodeShec, encode_1)
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
 	decoded.clear();
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(32u, decoded[0].length());
 /*
@@ -1448,19 +1531,17 @@ TEST(ErasureCodeShec, encode_1)
 	for (unsigned int i = 0; i < encoded.size(); i++)
 	  out1.append(encoded[i]);
 	//docode結果をout2にまとめる
-	int r = shec->decode_concat(encoded, &out2);
+	r = shec->decode_concat(encoded, &out2);
 	std::cout << "r:" << r << std::endl;
 	//out2をpadding前のデータ長に合わせる
 	usable.substr_of(out2, 0, in.length());
 	EXPECT_FALSE(out1 == in); //元データとencode後のデータ比較
 	EXPECT_TRUE(usable == in); //元データとdecode後のデータ比較
 
-
 //	std::cout << "in:" << in << std::endl;			//元データを表示
 //	std::cout << "out1:" << out1 << std::endl;		//encode後のデータを表示
 //	std::cout << "out2:" << out2 << std::endl;
 //	std::cout << "usable:" << usable << std::endl;	//decode後のデータを表示
-
 
 	delete shec;
 }
@@ -1468,7 +1549,8 @@ TEST(ErasureCodeShec, encode_1)
 TEST(ErasureCodeShec, encode_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1492,7 +1574,8 @@ TEST(ErasureCodeShec, encode_2)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -1508,7 +1591,8 @@ TEST(ErasureCodeShec, encode_2)
 	//decode
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(32u, decoded[0].length());
 
@@ -1534,7 +1618,8 @@ TEST(ErasureCodeShec, encode_2)
 
 TEST(ErasureCodeShec, encode_3)
 {
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1555,7 +1640,8 @@ TEST(ErasureCodeShec, encode_3)
 	want_to_encode.insert(10);
 	want_to_encode.insert(11);
 	map<int, bufferlist> encoded;
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -1572,7 +1658,8 @@ TEST(ErasureCodeShec, encode_3)
 	//decode
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
@@ -1598,7 +1685,8 @@ TEST(ErasureCodeShec, encode_3)
 TEST(ErasureCodeShec, encode_4)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1623,7 +1711,8 @@ TEST(ErasureCodeShec, encode_4)
 	want_to_encode.insert(100);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count()-1, encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -1640,7 +1729,8 @@ TEST(ErasureCodeShec, encode_4)
 	//decode
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
@@ -1667,7 +1757,8 @@ TEST(ErasureCodeShec, encode_4)
 TEST(ErasureCodeShec, encode_6)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1684,7 +1775,8 @@ TEST(ErasureCodeShec, encode_6)
 	//引数の値を代入
 	for(unsigned int i = 0; i < shec->get_chunk_count(); i++)
 		want_to_encode.insert(i);
-	EXPECT_EQ(0, shec->encode(want_to_encode, NULL, &encoded)); //inbuf=NULL
+	int r = shec->encode(want_to_encode, NULL, &encoded) //inbuf=NULL
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(0, encoded[0].length());
 
@@ -1704,7 +1796,8 @@ TEST(ErasureCodeShec, encode_6)
 TEST(ErasureCodeShec, encode_8)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1727,7 +1820,8 @@ TEST(ErasureCodeShec, encode_8)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_NE(0, shec->encode(want_to_encode, in, NULL));	//encoded = NULL
+	int r = shec->encode(want_to_encode, in, NULL);	//encoded = NULL
+	EXPECT_EQ(-EINVAL, r);
 
 	delete shec;
 }
@@ -1737,7 +1831,8 @@ TEST(ErasureCodeShec, encode_8)
 TEST(ErasureCodeShec, encode_9)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1766,7 +1861,8 @@ TEST(ErasureCodeShec, encode_9)
 //	std::cout << "encoded:" << encoded << std::endl;
 
 	//encodeの実行
-	EXPECT_NE(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(-EINVAL, r);
 
 	delete shec;
 }
@@ -1775,7 +1871,8 @@ TEST(ErasureCodeShec, encode_9)
 TEST(ErasureCodeShec, encode2_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1800,7 +1897,8 @@ TEST(ErasureCodeShec, encode2_1)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -1814,7 +1912,8 @@ TEST(ErasureCodeShec, encode2_1)
 	//decode
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(32u, decoded[0].length());
 
@@ -1840,7 +1939,8 @@ TEST(ErasureCodeShec, encode2_1)
 TEST(ErasureCodeShec, encode2_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1865,7 +1965,8 @@ TEST(ErasureCodeShec, encode2_2)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_NE(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(-EINVAL, r);
 
 	//encodedを画面に表示
 	map<int,bufferlist>::iterator itr;
@@ -1881,7 +1982,8 @@ TEST(ErasureCodeShec, encode2_2)
 TEST(ErasureCodeShec, encode2_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1907,15 +2009,21 @@ TEST(ErasureCodeShec, encode2_3)
 
 	//スレッドの起動
 	pthread_t tid;
+	flag = 0;
 	pthread_create(&tid,NULL,thread4,shec);
+	while(flag == 0){
+		usleep(1);
+	}
 	sleep(1);
 	printf("*** test start ***\n");
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 	printf("*** test end ***\n");
 	//スレッドの停止待ち
+	flag = 0;
 	pthread_join(tid,NULL);
 
 	//encodedを画面に表示
@@ -1929,7 +2037,8 @@ TEST(ErasureCodeShec, encode2_3)
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
 	map<int, bufferlist> decoded;
 
-	EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+	EXPECT_EQ(0,r);
 	EXPECT_EQ(2u, decoded.size());
 	EXPECT_EQ(32u, decoded[0].length());
 
@@ -1954,7 +2063,8 @@ TEST(ErasureCodeShec, encode2_3)
 TEST(ErasureCodeShec, decode_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -1979,7 +2089,8 @@ TEST(ErasureCodeShec, decode_1)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -1990,7 +2101,8 @@ TEST(ErasureCodeShec, decode_1)
 		map<int, bufferlist> decoded;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(2u, decoded.size());
 
 		//結果の確認
@@ -2007,7 +2119,8 @@ TEST(ErasureCodeShec, decode_1)
 TEST(ErasureCodeShec, decode_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2032,7 +2145,8 @@ TEST(ErasureCodeShec, decode_2)
 		want_to_encode.insert(i);
 
 	//encodeを実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2043,7 +2157,8 @@ TEST(ErasureCodeShec, decode_2)
 		map<int, bufferlist> decoded;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(2u, decoded.size());
 
 		//結果の確認
@@ -2060,7 +2175,8 @@ TEST(ErasureCodeShec, decode_2)
 TEST(ErasureCodeShec, decode_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2085,7 +2201,8 @@ TEST(ErasureCodeShec, decode_3)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2096,7 +2213,8 @@ TEST(ErasureCodeShec, decode_3)
 		map<int, bufferlist> decoded;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+11), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+11), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(10u, decoded.size());
 		EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
@@ -2118,7 +2236,8 @@ TEST(ErasureCodeShec, decode_3)
 TEST(ErasureCodeShec, decode_4)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2143,7 +2262,8 @@ TEST(ErasureCodeShec, decode_4)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2154,7 +2274,8 @@ TEST(ErasureCodeShec, decode_4)
 		map<int, bufferlist> decoded;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+9), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+9), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(10u, decoded.size());
 		EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
@@ -2177,7 +2298,8 @@ TEST(ErasureCodeShec, decode_4)
 TEST(ErasureCodeShec, decode_6)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2202,7 +2324,8 @@ TEST(ErasureCodeShec, decode_6)
 TEST(ErasureCodeShec, decode_7)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2227,7 +2350,8 @@ TEST(ErasureCodeShec, decode_7)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2243,7 +2367,8 @@ TEST(ErasureCodeShec, decode_7)
 		encoded[100] = buf;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(2u, decoded.size());
 		EXPECT_EQ(shec->get_chunk_size(in.length()), decoded[0].length());
 
@@ -2266,7 +2391,8 @@ TEST(ErasureCodeShec, decode_7)
 TEST(ErasureCodeShec, decode_8)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2291,7 +2417,8 @@ TEST(ErasureCodeShec, decode_8)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2302,7 +2429,8 @@ TEST(ErasureCodeShec, decode_8)
 
 		//decodeの実行
 		 //decoded = NULL
-		EXPECT_NE(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, NULL));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, NULL);
+		EXPECT_NE(0,r);
 	}
 
 	delete shec;
@@ -2312,7 +2440,8 @@ TEST(ErasureCodeShec, decode_8)
 TEST(ErasureCodeShec, decode_9)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2337,7 +2466,8 @@ TEST(ErasureCodeShec, decode_9)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2356,7 +2486,8 @@ TEST(ErasureCodeShec, decode_9)
 		}
 
 		//decodeの実行
-		EXPECT_NE(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_NE(0,r);
 /*
 		//decodedを画面に表示
 		map<int,bufferlist>::iterator itr;
@@ -2373,7 +2504,8 @@ TEST(ErasureCodeShec, decode_9)
 TEST(ErasureCodeShec, decode2_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2398,7 +2530,8 @@ TEST(ErasureCodeShec, decode2_1)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2409,7 +2542,8 @@ TEST(ErasureCodeShec, decode2_1)
 		map<int, bufferlist> decoded;
 
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(2u, decoded.size());
 
 		//結果の確認
@@ -2427,7 +2561,8 @@ TEST(ErasureCodeShec, decode2_1)
 TEST(ErasureCodeShec, decode2_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2461,7 +2596,8 @@ TEST(ErasureCodeShec, decode2_2)
 TEST(ErasureCodeShec, decode2_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2486,7 +2622,8 @@ TEST(ErasureCodeShec, decode2_3)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2498,14 +2635,20 @@ TEST(ErasureCodeShec, decode2_3)
 
 		//スレッドの起動
 		pthread_t tid;
+		flag = 0;
 		pthread_create(&tid,NULL,thread4,shec);
+		while(flag == 0){
+			usleep(1);
+		}
 		sleep(1);
 		printf("*** test start ***\n");
 		//decodeの実行
-		EXPECT_EQ(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded));
+		r = shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
+		EXPECT_EQ(0,r);
 		EXPECT_EQ(2u, decoded.size());
 		printf("*** test end ***\n");
 		//スレッドの停止待ち
+		flag = 0;
 		pthread_join(tid,NULL);
 
 		//結果の確認
@@ -2523,7 +2666,8 @@ TEST(ErasureCodeShec, decode2_3)
 TEST(ErasureCodeShec, decode2_4)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map<std::string, std::string> *parameters = new map<std::string, std::string>();
 	(*parameters)["plugin"] = "shec";
 	(*parameters)["technique"] = "";
@@ -2548,7 +2692,8 @@ TEST(ErasureCodeShec, decode2_4)
 		want_to_encode.insert(i);
 
 	//encodeの実行
-	EXPECT_EQ(0, shec->encode(want_to_encode, in, &encoded));
+	int r = shec->encode(want_to_encode, in, &encoded);
+	EXPECT_EQ(0, r);
 	EXPECT_EQ(shec->get_chunk_count(), encoded.size());
 	EXPECT_EQ(shec->get_chunk_size(in.length()), encoded[0].length());
 
@@ -2562,7 +2707,8 @@ TEST(ErasureCodeShec, decode2_4)
 	degraded[0] = encoded[0];
 
 	//decodeの実行
-	EXPECT_EQ(-1, shec->decode(set<int>(want_to_decode, want_to_decode+2), degraded, &decoded));
+	r = shec->decode(set<int>(want_to_decode, want_to_decode+2), degraded, &decoded);
+	EXPECT_EQ(-1, r);
 
 	delete shec;
 }
@@ -2594,7 +2740,8 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
 	}
 
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2609,7 +2756,8 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
 	stringstream ss;
 
 	//create_rulesetの実行
-	EXPECT_EQ(0, shec->create_ruleset("myrule", *crush, &ss));
+	int r = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_EQ(0, r);
 	EXPECT_STREQ("myrule",crush->rule_name_map[0].c_str());
 
 	//rule_name_mapを画面に表示
@@ -2620,7 +2768,8 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
 	}
 
 	//同名で再実行
-	EXPECT_EQ(-EEXIST, shec->create_ruleset("myrule", *crush, &ss));
+	r = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_EQ(-EEXIST, r);
 
 	delete shec,crush;
 }
@@ -2629,7 +2778,8 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
 TEST(ErasureCodeShec, create_ruleset_3)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2643,7 +2793,8 @@ TEST(ErasureCodeShec, create_ruleset_3)
 	//create_rulesetの引数宣言
 	stringstream ss;
 	CrushWrapper *crush = NULL;
-	EXPECT_NE(0, shec->create_ruleset("myrule", *crush, &ss));	//crush = NULL
+	int r = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_NE(0, r);	//crush = NULL
 
 	delete shec;
 }
@@ -2677,7 +2828,8 @@ TEST(ErasureCodeShec, create_ruleset_4)
 	}
 
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2689,7 +2841,8 @@ TEST(ErasureCodeShec, create_ruleset_4)
 	shec->init(*parameters);
 
 	//create_rulesetの実行
-	EXPECT_EQ(0, shec->create_ruleset("myrule", *crush, NULL));	//ss = NULL
+	int r = shec->create_ruleset("myrule", *crush, NULL);	//ss = NULL
+	EXPECT_EQ(0, r);
 
 	delete shec,crush;
 }
@@ -2722,7 +2875,8 @@ TEST(ErasureCodeShec, create_ruleset2_1)
 	}
 
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2737,7 +2891,8 @@ TEST(ErasureCodeShec, create_ruleset2_1)
 	stringstream ss;
 
 	//create_rulesetの実行
-	EXPECT_EQ(0, shec->create_ruleset("myrule", *crush, &ss));
+	int r = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_EQ(0, r);
 	EXPECT_STREQ("myrule",crush->rule_name_map[0].c_str());
 
 	//rule_name_mapを画面に表示
@@ -2777,7 +2932,8 @@ TEST(ErasureCodeShec, create_ruleset2_2)
 	}
 
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2792,7 +2948,8 @@ TEST(ErasureCodeShec, create_ruleset2_2)
 	stringstream ss;
 
 	//create_rulesetの実行
-	EXPECT_EQ(0, shec->create_ruleset("myrule", *crush, &ss));
+	int r = shec->create_ruleset("myrule", *crush, &ss);
+	EXPECT_EQ(0, r);
 
 	delete shec,crush;
 }
@@ -2829,7 +2986,8 @@ TEST(ErasureCodeShec, create_ruleset2_3)
 	}
 
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2845,13 +3003,19 @@ TEST(ErasureCodeShec, create_ruleset2_3)
 
 	//スレッドの起動
 	pthread_t tid;
+	flag = 0;
 	pthread_create(&tid,NULL,thread3,shec);
+	while(flag == 0){
+		usleep(1);
+	}
 	sleep(1);
 	printf("*** test start ***\n");
 	//create_rulesetの実行
-	EXPECT_TRUE((shec->create_ruleset("myrule", *crush, &ss)) >= 0);
+	int r = (shec->create_ruleset("myrule", *crush, &ss));
+	EXPECT_TRUE(r >= 0);
 	printf("*** test end ***\n");
 	//スレッドの停止待ち
+	flag = 0;
 	pthread_join(tid,NULL);
 
 	//rule_name_mapを画面に表示
@@ -2867,7 +3031,8 @@ TEST(ErasureCodeShec, create_ruleset2_3)
 TEST(ErasureCodeShec, get_chunk_count_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2887,7 +3052,8 @@ TEST(ErasureCodeShec, get_chunk_count_1)
 TEST(ErasureCodeShec, get_chunk_count_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2899,7 +3065,7 @@ TEST(ErasureCodeShec, get_chunk_count_2)
 	//init未実行
 
 	//get_chunk_countの実行
-	EXPECT_EQ(10u, shec->get_chunk_count());
+	EXPECT_NE(10u, shec->get_chunk_count());
 
 	delete shec;
 }
@@ -2907,7 +3073,8 @@ TEST(ErasureCodeShec, get_chunk_count_2)
 TEST(ErasureCodeShec, get_data_chunk_count_1)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2927,7 +3094,8 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
 TEST(ErasureCodeShec, get_data_chunk_count_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2939,7 +3107,7 @@ TEST(ErasureCodeShec, get_data_chunk_count_2)
 	//init未実行
 
 	//get_data_chunk_countの実行
-	EXPECT_EQ(6u, shec->get_data_chunk_count());
+	EXPECT_NE(6u, shec->get_data_chunk_count());
 
 	delete shec;
 }
@@ -2947,7 +3115,8 @@ TEST(ErasureCodeShec, get_data_chunk_count_2)
 TEST(ErasureCodeShec, get_chunk_size_1_2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2961,7 +3130,7 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
 
 	//k*w*4で割り切れる数（192=6*8*4）を渡してget_chunk_sizeを実行
 	EXPECT_EQ(32u, shec->get_chunk_size(192));
-	//k*w*4で割り切れない数(192=6*8*4-2)を渡してget_chunk_sizeを実行
+	//k*w*4で割り切れない数(190=6*8*4-2)を渡してget_chunk_sizeを実行
 	EXPECT_EQ(32u, shec->get_chunk_size(190));
 
 	delete shec;
@@ -2971,7 +3140,8 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
 TEST(ErasureCodeShec, get_chunk_size2)
 {
 	//init
-	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde("");
+	ErasureCodeShecTableCache tcache;
+	ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(tcache,ErasureCodeShec::MULTIPLE);
 	map < std::string, std::string > *parameters = new map<std::string,
 			std::string>();
 	(*parameters)["plugin"] = "shec";
@@ -2985,170 +3155,11 @@ TEST(ErasureCodeShec, get_chunk_size2)
 
 	//k*w*4で割り切れる数（192=6*8*4）を渡してget_chunk_sizeを実行
 	EXPECT_EQ(32u, shec->get_chunk_size(192));
-	//k*w*4で割り切れない数(192=6*8*4-2)を渡してget_chunk_sizeを実行
+	//k*w*4で割り切れない数(190=6*8*4-2)を渡してget_chunk_sizeを実行
 	EXPECT_EQ(32u, shec->get_chunk_size(190));
 
 	delete shec;
 }
-*/
-
-
-/*
-TEST(ErasureCodeShec, init)
-{
-	ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-//	ErasureCodePlugin* plugin;
-	ErasureCodePlugin* plugin = new ErasureCodePlugin();
-
-	map<std::string, std::string> *parameters = new map<std::string, std::string>();
-	(*parameters)["plugin"] = "shec";
-	(*parameters)["technique"] = "";
-	(*parameters)["directory"] = "/usr/lib64/ceph/erasure-code";
-	(*parameters)["ruleset-root"] = "default";
-	(*parameters)["ruleset-failure-domain"] = "osd";
-	(*parameters)["k"] = "6";
-	(*parameters)["m"] = "4";
-	(*parameters)["c"] = "3";
-	(*parameters)["w"] = "8";
-	string plugin_name = "shec";
-	stringstream ss;
-	instance.load(plugin_name,*parameters,&plugin,ss);
-	ErasureCodeInterfaceRef *erasure_code2;
-	plugin->factory(*parameters,erasure_code2);
-	EXPECT_EQ(10u, (*erasure_code2)->get_chunk_count());
-	delete parameters;
-}
-*/
-
-
-/*
-
-TEST(ErasureCodeShec, encode_decode)
-{
-  ErasureCodeShec shec;
-
-  bufferlist in;
-  in.append("ABCDE");
-  set<int> want_to_encode;
-  for(unsigned int i = 0; i < shec.get_chunk_count(); i++)
-    want_to_encode.insert(i);
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, shec.encode(want_to_encode, in, &encoded));
-  EXPECT_EQ(shec.get_chunk_count(), encoded.size());
-  EXPECT_EQ(shec.get_chunk_size(in.length()), encoded[0].length());
-  EXPECT_EQ('A', encoded[0][0]);
-  EXPECT_EQ('B', encoded[0][1]);
-  EXPECT_EQ('C', encoded[0][2]);
-  EXPECT_EQ('D', encoded[1][0]);
-  EXPECT_EQ('E', encoded[1][1]);
-  EXPECT_EQ('A'^'D', encoded[2][0]);
-  EXPECT_EQ('B'^'E', encoded[2][1]);
-  EXPECT_EQ('C'^0, encoded[2][2]);
-
-  // all chunks are available
-  {
-    int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, shec.decode(set<int>(want_to_decode, want_to_decode+2),
-                                encoded,
-                                &decoded));
-    EXPECT_EQ(2u, decoded.size());
-    EXPECT_EQ(3u, decoded[0].length());
-    EXPECT_EQ('A', decoded[0][0]);
-    EXPECT_EQ('B', decoded[0][1]);
-    EXPECT_EQ('C', decoded[0][2]);
-    EXPECT_EQ('D', decoded[1][0]);
-    EXPECT_EQ('E', decoded[1][1]);
-  }
-
-  // one chunk is missing
-  {
-    map<int, bufferlist> degraded = encoded;
-    degraded.erase(0);
-    EXPECT_EQ(2u, degraded.size());
-    int want_to_decode[] = { 0, 1 };
-    map<int, bufferlist> decoded;
-    EXPECT_EQ(0, shec.decode(set<int>(want_to_decode, want_to_decode+2),
-                                degraded,
-                                &decoded));
-    EXPECT_EQ(2u, decoded.size());
-    EXPECT_EQ(3u, decoded[0].length());
-    EXPECT_EQ('A', decoded[0][0]);
-    EXPECT_EQ('B', decoded[0][1]);
-    EXPECT_EQ('C', decoded[0][2]);
-    EXPECT_EQ('D', decoded[1][0]);
-    EXPECT_EQ('E', decoded[1][1]);
-  }
-}
-
-TEST(ErasureCodeShec, decode)
-{
-  ErasureCodeShec shec;
-
-#define LARGE_ENOUGH 2048
-  bufferptr in_ptr(buffer::create_page_aligned(LARGE_ENOUGH));
-  in_ptr.zero();
-  in_ptr.set_length(0);
-  const char *payload =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  in_ptr.append(payload, strlen(payload));
-  bufferlist in;
-  in.push_front(in_ptr);
-  int want_to_encode[] = { 0, 1, 2 };
-  map<int, bufferlist> encoded;
-  EXPECT_EQ(0, shec.encode(set<int>(want_to_encode, want_to_encode+3),
-                              in,
-                              &encoded));
-  EXPECT_EQ(3u, encoded.size());
-
-  // successfull decode
-  bufferlist out;
-  EXPECT_EQ(0, shec.decode_concat(encoded, &out));
-  bufferlist usable;
-  usable.substr_of(out, 0, in.length());
-  EXPECT_TRUE(usable == in);
-
-  // cannot recover
-  map<int, bufferlist> degraded;
-  degraded[0] = encoded[0];
-  EXPECT_EQ(-ERANGE, shec.decode_concat(degraded, &out));
-}
-
-TEST(ErasureCodeShec, create_ruleset)
-{
-  CrushWrapper *c = new CrushWrapper;
-  c->create();
-  c->set_type_name(2, "root");
-  c->set_type_name(1, "host");
-  c->set_type_name(0, "osd");
-
-  int rootno;
-  c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-		5, 0, NULL, NULL, &rootno);
-  c->set_item_name(rootno, "default");
-
-  map<string,string> loc;
-  loc["root"] = "default";
-
-  int num_host = 2;
-  int num_osd = 5;
-  int osd = 0;
-  for (int h=0; h<num_host; ++h) {
-    loc["host"] = string("host-") + stringify(h);
-    for (int o=0; o<num_osd; ++o, ++osd) {
-      c->insert_item(g_ceph_context, osd, 1.0, string("osd.") + stringify(osd), loc);
-    }
-  }
-
-  stringstream ss;
-  ErasureCodeShec shec;
-  EXPECT_EQ(0, shec.create_ruleset("myrule", *c, &ss));
-}
-
 */
 
 int main(int argc, char **argv) {
@@ -3164,7 +3175,6 @@ int main(int argc, char **argv) {
 
 void* thread1(void* pParam)
 {
-	clock_t start,end;
 	ErasureCodeShec* shec = (ErasureCodeShec*)pParam;
 	set<int> want_to_decode;
 	set<int> available_chunks;
@@ -3176,23 +3186,17 @@ void* thread1(void* pParam)
 	available_chunks.insert(1);
 	available_chunks.insert(2);
 
-	start = clock();
-	start = start / CLOCKS_PER_SEC;
-	end = clock();
-	end = end / CLOCKS_PER_SEC;
 	printf("*** thread loop start ***\n");
-	while ((start+3)>end)
+	flag = 1;
+	while(flag == 1)
 	{
 		shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
-		end = clock();
-		end = end / CLOCKS_PER_SEC;
 	}
 	printf("*** thread loop end ***\n");
 }
 
 void* thread2(void* pParam)
 {
-	clock_t start,end;
 	ErasureCodeShec* shec = (ErasureCodeShec*)pParam;
 	set<int> want_to_decode;
 	map<int,int> available_chunks;
@@ -3204,23 +3208,18 @@ void* thread2(void* pParam)
 	available_chunks[1] = 1;
 	available_chunks[2] = 2;
 
-	start = clock();
-	start = start / CLOCKS_PER_SEC;
-	end = clock();
-	end = end / CLOCKS_PER_SEC;
 	printf("*** thread loop start ***\n");
-	while ((start+3)>end)
+	flag = 1;
+	while(flag == 1)
 	{
 		shec->minimum_to_decode_with_cost(want_to_decode,available_chunks,&minimum_chunks);
-		end = clock();
-		end = end / CLOCKS_PER_SEC;
+		minimum_chunks.clear();
 	}
 	printf("*** thread loop end ***\n");
 }
 
 void* thread3(void* pParam)
 {
-	clock_t start,end;
 	ErasureCodeShec* shec = (ErasureCodeShec*)pParam;
 
 	CrushWrapper *crush = new CrushWrapper;
@@ -3249,17 +3248,13 @@ void* thread3(void* pParam)
 	stringstream ss;
 	int i = 0;
 	char name[30];
-	start = clock();
-	start = start / CLOCKS_PER_SEC;
-	end = clock();
-	end = end / CLOCKS_PER_SEC;
+
 	printf("*** thread loop start ***\n");
-	while ((start+3)>end)
+	flag = 1;
+	while(flag == 1)
 	{
 		sprintf(name,"myrule%d",i);
 		shec->create_ruleset(name,*crush,&ss);
-		end = clock();
-		end = end / CLOCKS_PER_SEC;
 		i++;
 	}
 	printf("*** thread loop end ***\n");
@@ -3267,7 +3262,6 @@ void* thread3(void* pParam)
 
 void* thread4(void* pParam)
 {
-	clock_t start,end;
 	ErasureCodeShec* shec = (ErasureCodeShec*)pParam;
 
 	bufferlist in;
@@ -3282,16 +3276,11 @@ void* thread4(void* pParam)
 
 	map<int, bufferlist> encoded;
 
-	start = clock();
-	start = start / CLOCKS_PER_SEC;
-	end = clock();
-	end = end / CLOCKS_PER_SEC;
 	printf("*** thread loop start ***\n");
-	while ((start+3)>end)
+	flag = 1;
+	while(flag == 1)
 	{
 		shec->encode(want_to_encode, in, &encoded);
-		end = clock();
-		end = end / CLOCKS_PER_SEC;
 		encoded.clear();
 	}
 	printf("*** thread loop end ***\n");
@@ -3299,7 +3288,6 @@ void* thread4(void* pParam)
 
 void* thread5(void* pParam)
 {
-	clock_t start,end;
 	ErasureCodeShec* shec = (ErasureCodeShec*)pParam;
 
 	bufferlist in;
@@ -3318,16 +3306,11 @@ void* thread5(void* pParam)
 	int want_to_decode[] = { 0, 1, 2, 3, 4, 5};
 	map<int, bufferlist> decoded;
 
-	start = clock();
-	start = start / CLOCKS_PER_SEC;
-	end = clock();
-	end = end / CLOCKS_PER_SEC;
 	printf("*** thread loop start ***\n");
-	while ((start+3)>end)
+	flag = 1;
+	while(flag == 1)
 	{
 		shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded, &decoded);
-		end = clock();
-		end = end / CLOCKS_PER_SEC;
 		decoded.clear();
 	}
 	printf("*** thread loop end ***\n");

@@ -21,11 +21,20 @@
 #ifndef CEPH_ERASURE_CODE_SHEC_H
 #define CEPH_ERASURE_CODE_SHEC_H
 
+#include "common/Mutex.h"
 #include "erasure-code/ErasureCode.h"
+#include "ErasureCodeShecTableCache.h"
+#include <list>
 
 class ErasureCodeShec : public ErasureCode {
 
 public:
+  enum {
+    MULTIPLE = 0,
+    SINGLE = 1
+  };
+
+  ErasureCodeShecTableCache &tcache;
   int k;
   int DEFAULT_K;
   int m;
@@ -34,12 +43,14 @@ public:
   int DEFAULT_C;
   int w;
   int DEFAULT_W;
-  const char *technique;
+  int technique;
   string ruleset_root;
   string ruleset_failure_domain;
   int *matrix;
 
-  ErasureCodeShec(const char *_technique) :
+  ErasureCodeShec(const int _technique,
+		  ErasureCodeShecTableCache &_tcache) :
+    tcache(_tcache),
     DEFAULT_K(2),
     DEFAULT_M(1),
     DEFAULT_C(1),
@@ -103,13 +114,13 @@ public:
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
 public:
-  ErasureCodeShecReedSolomonVandermonde(const std::string &_technique) :
-    ErasureCodeShec(_technique.c_str())
+
+  ErasureCodeShecReedSolomonVandermonde(ErasureCodeShecTableCache &_tcache,
+					int technique = MULTIPLE) :
+    ErasureCodeShec(technique, _tcache)
   {}
 
   virtual ~ErasureCodeShecReedSolomonVandermonde() {
-    if (matrix)
-      free(matrix);
   }
 
   virtual void shec_encode(char **data,

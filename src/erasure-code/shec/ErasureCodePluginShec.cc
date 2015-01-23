@@ -21,6 +21,7 @@
 #include "ceph_ver.h"
 #include "common/debug.h"
 #include "erasure-code/ErasureCodePlugin.h"
+#include "ErasureCodeShecTableCache.h"
 #include "ErasureCodeShec.h"
 
 #define dout_subsys ceph_subsys_osd
@@ -34,17 +35,21 @@ static ostream& _prefix(std::ostream* _dout)
 
 class ErasureCodePluginShec : public ErasureCodePlugin {
 public:
+  ErasureCodeShecTableCache tcache;
+
   virtual int factory(const map<std::string,std::string> &parameters,
 		      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodeShec *interface;
-    std::string t = "";
+    std::string t = "multiple";
 
     if (parameters.find("technique") != parameters.end()){
       t = parameters.find("technique")->second;
     }
 
-    if (t == "" || t == "single" || t == "multiple") {
-      interface = new ErasureCodeShecReedSolomonVandermonde(t);
+    if (t == "single"){
+      interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::SINGLE);
+    } else if (t == "multiple"){
+      interface = new ErasureCodeShecReedSolomonVandermonde(tcache, ErasureCodeShec::MULTIPLE);
     } else {
       derr << "technique=" << t << " is not a valid coding technique. "
 	   << " Choose one of the following: "
@@ -64,17 +69,25 @@ public:
   }
 };
 
-const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+extern "C" {
+#include "jerasure/include/galois.h"
 
-
-int __erasure_code_init(char *plugin_name, char *directory)
-{
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
-  return instance.add(plugin_name, new ErasureCodePluginShec());
+extern gf_t *gfp_array[];
+extern int  gfp_is_composite[];
 }
 
-int __erasure_code_init(char *plugin_name)
+const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
+
+int __erasure_code_init(char *plugin_name, char *directory = "")
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  int w[] = { 8, 16, 32 };
+  for(int i = 0; i < 3; i++) {
+    int r = galois_init_default_field(w[i]);
+    if (r) {
+      derr << "failed to gf_init_easy(" << w[i] << ")" << dendl;
+      return -r;
+    }
+  }
   return instance.add(plugin_name, new ErasureCodePluginShec());
 }
