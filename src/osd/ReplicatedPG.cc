@@ -11796,7 +11796,9 @@ void ReplicatedPG::hit_set_persist()
   obc->obs.oi.set_data_digest(bl.crc32c(-1));
 
   ctx->new_obs = obc->obs;
-  ctx->new_snapset.head_exists = true;
+
+  obc->ssc->snapset.head_exists = true;
+  ctx->new_snapset = obc->ssc->snapset;
 
   ctx->delta_stats.num_objects++;
   ctx->delta_stats.num_objects_hit_set_archive++;
