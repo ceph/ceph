@@ -2144,7 +2144,9 @@ struct pg_log_entry_t {
 
   /// describes state for a locally-rollbackable entry
   ObjectModDesc mod_desc;
-      
+
+  vector<osd_reqid_t> extra_reqids;
+
   pg_log_entry_t()
     : op(0), user_version(0),
       invalid_hash(false), invalid_pool(false), offset(0) {}
