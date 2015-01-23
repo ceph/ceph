@@ -364,7 +364,7 @@ int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperatio
  return r;
 }
 
-void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, string& oid, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
+void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
 {
   bufferlist in;
   struct rgw_cls_trim_olh_log_op call;
