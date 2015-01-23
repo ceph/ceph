@@ -92,6 +92,7 @@ const uint16_t shortmagic = 0xffce;	//goes into stream as "ceff"
 const mymagic_t endmagic = (0xecff << 16) | shortmagic;
 const int fd_none = INT_MIN;
 bool outistty;
+bool dry_run = false;
 
 //The first FIXED_LENGTH bytes are a fixed
 //portion of the export output.  This includes the overall
@@ -555,6 +556,8 @@ uint64_t testalign;
 
 template <typename T>
 int write_section(sectiontype_t type, const T& obj, int fd) {
+  if (dry_run)
+    return 0;
   bufferlist blhdr, bl, blftr;
   obj.encode(bl);
   header hdr(type, bl.length());
@@ -595,6 +598,8 @@ static void cleanbin(string &str)
 
 int write_simple(sectiontype_t type, int fd)
 {
+  if (dry_run)
+    return 0;
   bufferlist hbl;
 
   header hdr(type, 0);
@@ -790,10 +795,14 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
 
 int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
 {
+  if (!dry_run)
+    finish_remove_pgs(store);
   if (!store->collection_exists(coll_t(r_pgid)))
     return -ENOENT;
 
   cout << " marking collection for removal" << std::endl;
+  if (dry_run)
+    return 0;
   ObjectStore::Transaction *rmt = new ObjectStore::Transaction;
   int r = mark_pg_for_removal(store, r_pgid, rmt);
   if (r < 0) {
@@ -801,6 +810,7 @@ int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
     return r;
   }
   store->apply_transaction(*rmt);
+  finish_remove_pgs(store);
   return r;
 }
 
@@ -1044,6 +1054,8 @@ int add_osdmap(ObjectStore *store, metadata_section &ms)
 //Write super_header with its fixed 16 byte length
 void write_super()
 {
+  if (dry_run)
+    return;
   bufferlist superbl;
   super_header sh;
   footer ft;
@@ -1295,23 +1307,30 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
 
   string msg("Write");
-  int ret = ioctx.create(ob.hoid.hobj.oid.name, true);
-  if (ret && ret != -EEXIST) {
-    cerr << "create failed: " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-  if (ret == -EEXIST) {
-    msg = "***Overwrite***";
-    ret = ioctx.remove(ob.hoid.hobj.oid.name);
-    if (ret < 0) {
-      cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
-      return ret;
-    }
-    ret = ioctx.create(ob.hoid.hobj.oid.name, true);
-    if (ret < 0) {
+  if (dry_run) {
+    uint64_t psize;
+    time_t pmtime;
+    int ret = ioctx.stat(ob.hoid.hobj.oid.name, &psize, &pmtime);
+    if (ret == 0)
+      msg = "***Overwrite***";
+  } else {
+    int ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+    if (ret && ret != -EEXIST) {
       cerr << "create failed: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
+    if (ret == -EEXIST) {
+      msg = "***Overwrite***";
+      ret = ioctx.remove(ob.hoid.hobj.oid.name);
+      if (ret < 0) {
+        cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
+        return ret;
+      }
+      ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+      if (ret < 0) {
+        cerr << "create failed: " << cpp_strerror(ret) << std::endl;
+        return ret;
+      }
   }
 
   cout << msg << " " << ob.hoid << std::endl;
@@ -1361,10 +1380,12 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
         if (databl.length() >= alignment) {
           uint64_t rndlen = uint64_t(databl.length() / alignment) * alignment;
           if (debug) cerr << "write offset=" << out_offset << " len=" << rndlen << std::endl;
-          ret = ioctx.write(ob.hoid.hobj.oid.name, databl, rndlen, out_offset);
-          if (ret) {
-            cerr << "write failed: " << cpp_strerror(ret) << std::endl;
-            return ret;
+          if (!dry_run) {
+            ret = ioctx.write(ob.hoid.hobj.oid.name, databl, rndlen, out_offset);
+            if (ret) {
+              cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+              return ret;
+            }
           }
           out_offset += rndlen;
           bufferlist n;
@@ -1376,10 +1397,12 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
         }
         break;
       }
-      ret = ioctx.write(ob.hoid.hobj.oid.name, ds.databl, ds.len, ds.offset);
-      if (ret) {
-        cerr << "write failed: " << cpp_strerror(ret) << std::endl;
-        return ret;
+      if (!dry_run) {
+        ret = ioctx.write(ob.hoid.hobj.oid.name, ds.databl, ds.len, ds.offset);
+        if (ret) {
+          cerr << "write failed: " << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
       }
       break;
     case TYPE_ATTRS:
@@ -1387,6 +1410,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
       if (debug)
         cerr << "\tattrs: len " << as.data.size() << std::endl;
+      if (dry_run)
+        break;
       for (i = as.data.begin(); i != as.data.end(); ++i) {
         if (i->first == "_" || i->first == "snapset")
           continue;
@@ -1406,6 +1431,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
       if (debug)
         cerr << "\tomap header: " << string(oh.hdr.c_str(), oh.hdr.length())
           << std::endl;
+      if (dry_run)
+        break;
       ret = ioctx.omap_set_header(ob.hoid.hobj.oid.name, oh.hdr);
       if (ret) {
         cerr << "omap_set_header failed: " << cpp_strerror(ret) << std::endl;
@@ -1418,6 +1445,8 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
       if (debug)
         cerr << "\tomap: size " << os.omap.size() << std::endl;
+      if (dry_run)
+        break;
       ret = ioctx.omap_set(ob.hoid.hobj.oid.name, os.omap);
       if (ret) {
         cerr << "omap_set failed: " << cpp_strerror(ret) << std::endl;
@@ -1426,16 +1455,18 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
       }
       break;
     case TYPE_OBJECT_END:
+      done = true;
       if (need_align && databl.length() > 0) {
         assert(databl.length() < alignment);
         if (debug) cerr << "END write offset=" << out_offset << " len=" << databl.length() << std::endl;
+        if (dry_run)
+          break;
         ret = ioctx.write(ob.hoid.hobj.oid.name, databl, databl.length(), out_offset);
         if (ret) {
            cerr << "write failed: " << cpp_strerror(ret) << std::endl;
           return ret;
         }
       }
-      done = true;
       break;
     default:
       return -EFAULT;
@@ -1485,7 +1516,8 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
     }
   }
 
-  t->touch(coll, ob.hoid);
+  if (!dry_run)
+    t->touch(coll, ob.hoid);
 
   cout << "Write " << ob.hoid << std::endl;
 
@@ -1505,18 +1537,22 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
     }
     switch(type) {
     case TYPE_DATA:
+      if (dry_run) break;
       ret = get_data(store, coll, ob.hoid, t, ebl);
       if (ret) return ret;
       break;
     case TYPE_ATTRS:
+      if (dry_run) break;
       ret = get_attrs(store, coll, ob.hoid, t, ebl, driver, mapper);
       if (ret) return ret;
       break;
     case TYPE_OMAP_HDR:
+      if (dry_run) break;
       ret = get_omap_hdr(store, coll, ob.hoid, t, ebl);
       if (ret) return ret;
       break;
     case TYPE_OMAP:
+      if (dry_run) break;
       ret = get_omap(store, coll, ob.hoid, t, ebl);
       if (ret) return ret;
       break;
@@ -1528,7 +1564,8 @@ int get_object(ObjectStore *store, coll_t coll, bufferlist &bl, OSDMap &curmap)
       return -EFAULT;
     }
   }
-  store->apply_transaction(*t);
+  if (!dry_run)
+    store->apply_transaction(*t);
   return 0;
 }
 
@@ -1783,7 +1820,8 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
   pg_info_t info;
   PGLog::IndexedLog log;
 
-  finish_remove_pgs(store);
+  if (!dry_run)
+    finish_remove_pgs(store);
 
   int ret = sh.read_super();
   if (ret)
@@ -1871,17 +1909,19 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
     return -EEXIST;
   }
 
-  ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  PG::_create(*t, pgid);
-  PG::_init(*t, pgid, NULL);
+  if (!dry_run) {
+    ObjectStore::Transaction *t = new ObjectStore::Transaction;
+    PG::_create(*t, pgid);
+    PG::_init(*t, pgid, NULL);
 
-  // mark this coll for removal until we're done
-  map<string,bufferlist> values;
-  ::encode((char)1, values["_remove"]);
-  t->omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
+    // mark this coll for removal until we're done
+    map<string,bufferlist> values;
+    ::encode((char)1, values["_remove"]);
+    t->omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
-  store->apply_transaction(*t);
-  delete t;
+    store->apply_transaction(*t);
+    delete t;
+  }
 
   cout << "Importing pgid " << pgid << std::endl;
 
@@ -1922,43 +1962,47 @@ int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
     return -EFAULT;
   }
 
-  pg_log_t newlog, reject;
-  pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
-    ms.log, newlog, reject);
-  if (debug) {
-    for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
-         i != newlog.log.end(); ++i)
-      cerr << "Keeping log entry " << *i << std::endl;
-    for (list<pg_log_entry_t>::iterator i = reject.log.begin();
-         i != reject.log.end(); ++i)
-      cerr << "Skipping log entry " << *i << std::endl;
-  }
+  ObjectStore::Transaction t;
+  if (!dry_run) {
+    pg_log_t newlog, reject;
+    pg_log_t::filter_log(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+      ms.log, newlog, reject);
+    if (debug) {
+      for (list<pg_log_entry_t>::iterator i = newlog.log.begin();
+           i != newlog.log.end(); ++i)
+        cerr << "Keeping log entry " << *i << std::endl;
+      for (list<pg_log_entry_t>::iterator i = reject.log.begin();
+           i != reject.log.end(); ++i)
+        cerr << "Skipping log entry " << *i << std::endl;
+    }
 
-  divergent_priors_t newdp, rejectdp;
-  filter_divergent_priors(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
-    ms.divergent_priors, newdp, rejectdp);
-  ms.divergent_priors = newdp;
-  if (debug) {
-    for (divergent_priors_t::iterator i = newdp.begin();
-         i != newdp.end(); ++i)
-      cerr << "Keeping divergent_prior " << *i << std::endl;
-    for (divergent_priors_t::iterator i = rejectdp.begin();
-         i != rejectdp.end(); ++i)
-      cerr << "Skipping divergent_prior " << *i << std::endl;
-  }
+    divergent_priors_t newdp, rejectdp;
+    filter_divergent_priors(pgid, curmap, g_ceph_context->_conf->osd_hit_set_namespace,
+      ms.divergent_priors, newdp, rejectdp);
+    ms.divergent_priors = newdp;
+    if (debug) {
+      for (divergent_priors_t::iterator i = newdp.begin();
+           i != newdp.end(); ++i)
+        cerr << "Keeping divergent_prior " << *i << std::endl;
+      for (divergent_priors_t::iterator i = rejectdp.begin();
+           i != rejectdp.end(); ++i)
+        cerr << "Skipping divergent_prior " << *i << std::endl;
+    }
 
-  t = new ObjectStore::Transaction;
-  ret = write_pg(*t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
-  if (ret) return ret;
+    ret = write_pg(t, ms.map_epoch, ms.info, newlog, ms.past_intervals, ms.divergent_priors);
+    if (ret) return ret;
+  }
 
   // done, clear removal flag
   if (debug)
     cerr << "done, clearing removal flag" << std::endl;
-  set<string> remove;
-  remove.insert("_remove");
-  t->omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
-  store->apply_transaction(*t);
-  delete t;
+
+  if (!dry_run) {
+    set<string> remove;
+    remove.insert("_remove");
+    t.omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
+    store->apply_transaction(t);
+  }
 
   return 0;
 }
@@ -1999,9 +2043,11 @@ int do_remove_object(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
     return r;
   }
 
+  cout << "remove " << ghobj << std::endl;
+  if (dry_run)
+    return 0;
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
   OSDriver::OSTransaction _t(driver.get_transaction(t));
-  cout << "remove " << ghobj << std::endl;
   r = mapper.remove_oid(ghobj.hobj, &_t);
   if (r < 0 && r != -ENOENT) {
     cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
@@ -2108,8 +2154,10 @@ int do_set_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   if (debug)
     cerr << "Write " << ghobj << std::endl;
 
-  t->touch(coll, ghobj);
-  t->truncate(coll, ghobj, 0);
+  if (!dry_run) {
+    t->touch(coll, ghobj);
+    t->truncate(coll, ghobj, 0);
+  }
 
   uint64_t offset = 0;
   bufferlist rawdatabl;
@@ -2126,13 +2174,15 @@ int do_set_bytes(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
 
     if (debug)
       cerr << "\tdata: offset " << offset << " bytes " << bytes << std::endl;
-    t->write(coll, ghobj, offset, bytes,  rawdatabl);
+    if (!dry_run)
+      t->write(coll, ghobj, offset, bytes,  rawdatabl);
 
     offset += bytes;
     // XXX: Should we apply_transaction() every once in a while for very large files
   } while(true);
 
-  store->apply_transaction(*t);
+  if (!dry_run)
+    store->apply_transaction(*t);
   return 0;
 }
 
@@ -2316,6 +2366,8 @@ struct do_fix_lost : public action_on_object_t {
   virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
     if (oi.is_lost()) {
       cout << coll << "/" << ghobj << " is lost, fixing" << std::endl;
+      if (dry_run)
+        return 0;
       oi.clear_flag(object_info_t::FLAG_LOST);
       bufferlist bl;
       ::encode(oi, bl);
@@ -2439,6 +2491,7 @@ int main(int argc, char **argv)
     ("force", "Ignore some types of errors and proceed with operation - USE WITH CAUTION: CORRUPTION POSSIBLE NOW OR IN THE FUTURE")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
+    ("dry-run", "Don't modify the objectstore")
     ;
 
   po::options_description positional("Positional options");
@@ -2486,6 +2539,14 @@ int main(int argc, char **argv)
   } else {
     force = true;
   }
+
+  if (vm.count("dry-run"))
+    dry_run = true;
+  osflagbits_t flags = 0;
+  if (dry_run || vm.count("skip-journal-replay"))
+    flags |= SKIP_JOURNAL_REPLAY;
+  if (vm.count("skip-mount-omap"))
+    flags |= SKIP_MOUNT_OMAP;
 
   vector<const char *> ceph_options;
   env_to_vec(ceph_options);
@@ -2567,7 +2628,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO);
 
   file_fd = fd_none;
-  if (op == "export") {
+  if (op == "export" && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -2589,7 +2650,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (vm.count("file") && file_fd == fd_none) {
+  if (vm.count("file") && file_fd == fd_none && !dry_run) {
     cerr << "--file option only applies to import or export" << std::endl;
     myexit(1);
   }
@@ -2598,12 +2659,6 @@ int main(int argc, char **argv)
     perror("open");
     myexit(1);
   }
-
-  osflagbits_t flags = 0;
-  if (vm.count("skip-journal-replay"))
-    flags |= SKIP_JOURNAL_REPLAY;
-  if (vm.count("skip-mount-omap"))
-    flags |= SKIP_MOUNT_OMAP;
 
   global_init(
     NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
@@ -2889,19 +2944,20 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
-    ObjectStore::Transaction t;
-    bl.clear();
-    ::encode(superblock, bl);
-    t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
-    ret = fs->apply_transaction(t);
-    if (ret < 0) {
-      cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;
-      goto out;
+    if (!dry_run) {
+      superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SHARDS);
+      ObjectStore::Transaction t;
+      bl.clear();
+      ::encode(superblock, bl);
+      t.write(META_COLL, OSD_SUPERBLOCK_POBJECT, 0, bl.length(), bl);
+      ret = fs->apply_transaction(t);
+      if (ret < 0) {
+        cerr << "Error writing OSD superblock: " << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+
+      fs->set_allow_sharded_objects();
     }
-
-    fs->set_allow_sharded_objects();
-
     cout << "Enabled on-disk sharded objects" << std::endl;
 
     ret = 0;
@@ -2958,13 +3014,11 @@ int main(int argc, char **argv)
   biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   if (op == "remove") {
-    finish_remove_pgs(fs);
     ret = initiate_new_remove_pg(fs, pgid);
     if (ret < 0) {
       cerr << "PG '" << pgid << "' not found" << std::endl;
       goto out;
     }
-    finish_remove_pgs(fs);
     cout << "Remove successful" << std::endl;
     goto out;
   }
@@ -3329,6 +3383,14 @@ out:
     // If no previous error, then use umount() error
     if (ret == 0)
       ret = r;
+  }
+
+  if (dry_run) {
+    // Export output can go to stdout, so put this message on stderr
+    if (op == "export")
+      cerr << "dry-run: Nothing changed" << std::endl;
+    else
+      cout << "dry-run: Nothing changed" << std::endl;
   }
 
   if (ret < 0)
