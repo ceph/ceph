@@ -2291,13 +2291,15 @@ reprotect_and_return_err:
     }
 
     if (ictx->image_watcher) {
-      RWLock::WLocker l(ictx->owner_lock);
-      if (ictx->image_watcher->is_lock_owner()) {
-        int r = ictx->image_watcher->unlock();
-        if (r < 0) {
-	  lderr(ictx->cct) << "error unlocking object map: " << cpp_strerror(r)
-			   << dendl;
-        }
+      {
+	RWLock::WLocker l(ictx->owner_lock);
+	if (ictx->image_watcher->is_lock_owner()) {
+	  int r = ictx->image_watcher->unlock();
+	  if (r < 0) {
+	    lderr(ictx->cct) << "error unlocking image: " << cpp_strerror(r)
+			     << dendl;
+	  }
+	}
       }
       ictx->unregister_watch();
     }
