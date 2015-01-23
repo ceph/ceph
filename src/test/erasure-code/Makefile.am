@@ -203,16 +203,16 @@ unittest_erasure_code_shec_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_shec
 
-unittest_erasure_code_shec364_SOURCES = \
-        test/erasure-code/TestErasureCodeShec364.cc \
-        ${libec_shec_la_SOURCES}
-unittest_erasure_code_shec364_CFLAGS = ${libec_shec_la_CFLAGS}
-unittest_erasure_code_shec364_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
-unittest_erasure_code_shec364_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
-if LINUX
-unittest_erasure_code_shec364_LDADD += -ldl
-endif
-check_PROGRAMS += unittest_erasure_code_shec364
+# unittest_erasure_code_shec364_SOURCES = \
+#         test/erasure-code/TestErasureCodeShec364.cc \
+#         ${libec_shec_la_SOURCES}
+# unittest_erasure_code_shec364_CFLAGS = ${libec_shec_la_CFLAGS}
+# unittest_erasure_code_shec364_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+# unittest_erasure_code_shec364_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+# if LINUX
+# unittest_erasure_code_shec364_LDADD += -ldl
+# endif
+# check_PROGRAMS += unittest_erasure_code_shec364
 
 unittest_erasure_code_shec_thread_SOURCES = \
         test/erasure-code/TestErasureCodeShec_thread.cc \
