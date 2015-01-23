@@ -9,14 +9,20 @@ import re
 import shlex
 import urllib2
 import urlparse
-import ast
 
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..config import config as teuth_config
 from ..exceptions import UnsupportedPackageTypeError, ConfigError
+from ..packaging import (
+    install_package,
+    get_koji_build_info,
+    get_kojiroot_base_url,
+    get_koji_package_name,
+)
 
 log = logging.getLogger(__name__)
+
 
 def normalize_config(ctx, config):
     """
@@ -59,7 +65,7 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb', 'rpm', 'brew'],
+                                       'deb', 'rpm', 'koji'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
@@ -262,23 +268,16 @@ def download_kernel(ctx, config):
 
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
         if isinstance(src, dict):
-            # we're downloading a kernel from brew, the src dict here
-            # is the build_info retrieved from brew using koji
+            # we're downloading a kernel from koji, the src dict here
+            # is the build_info retrieved from koji using get_koji_build_info
             build_id = src["id"]
             log.info("Downloading kernel with build_id {build_id} on {role}...".format(
                 build_id=build_id,
                 role=role
             ))
             needs_download = True
-            baseurl = "{brewroot}/kernel/{ver}/{rel}/x86_64/".format(
-                brewroot="http://download.devel.redhat.com/brewroot/packages",
-                ver=src["version"],
-                rel=src["release"],
-            )
-            pkg_name = "kernel-{ver}-{rel}.x86_64.rpm".format(
-                ver=src["version"],
-                rel=src["release"],
-            )
+            baseurl = get_kojiroot_base_url(src)
+            pkg_name = get_koji_package_name("kernel", src)
         elif src.find('/') >= 0:
             # local package - src is path
             log.info('Copying kernel package {path} to {role}...'.format(
@@ -1066,41 +1065,10 @@ def task(ctx, config):
 
             # FIXME: this install should probably happen somewhere else
             # but I'm not sure where, so we'll leave it here for now.
-            log.info("Installing koji on {0}".format(role))
-            role_remote.run(
-                args=["sudo", "yum", "-y", "install", "koji"],
-            )
+            install_package('koji', role_remote)
 
-            # put all this in it's own function
-            py_cmd = ('import koji; '
-                      'hub = koji.ClientSession("{brewhub_url}"); '
-                      'print hub.getBuild({build_id})')
-            py_cmd = py_cmd.format(
-                build_id=build_id,
-                brewhub_url="http://brewhub.devel.redhat.com/brewhub"
-            )
-            proc = role_remote.run(
-                args=[
-                    'python', '-c', py_cmd
-                ],
-                stdout=StringIO(), stderr=StringIO(), check_status=False
-            )
-            if proc.exitstatus == 0:
-                # returns the __repr__ of a python dict
-                stdout = proc.stdout.getvalue().strip()
-                # take the __repr__ and makes it a python dict again
-                build_info = ast.literal_eval(stdout)
-            else:
-                # this should explode
-                msg = "Failed to query koji for build {0}".format(build_id)
-                log.error(msg)
-                log.error("stdout: {0}".format(proc.stdout.getvalue().strip()))
-                log.error("stderr: {0}".format(proc.stderr.getvalue().strip()))
-                ctx.summary["failure_reason"] = msg
-                ctx.summary["status"] = "dead"
-                raise RuntimeError(msg)
-
-            # end, things in a new function
+            # get information about this build from koji
+            build_info = get_koji_build_info(build_id, role_remote, ctx)
 
             need_install[role] = build_info
             need_version[role] = "{ver}-{rel}.x86_64".format(
