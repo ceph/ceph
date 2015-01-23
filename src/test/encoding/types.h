@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "include/util.h"
+TYPE(ceph_data_stats)
+
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
@@ -125,6 +128,9 @@ TYPE_FEATUREFUL(MonMap)
 
 #include "mon/MonCap.h"
 TYPE(MonCap)
+
+#include "mon/mon_types.h"
+TYPE(LevelDBStoreStats)
 
 #include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
