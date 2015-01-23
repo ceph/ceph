@@ -3071,6 +3071,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        f->dump_string("erasure_code_profile", p->erasure_code_profile);
       } else if (var == "min_read_recency_for_promote") {
 	f->dump_int("min_read_recency_for_promote", p->min_read_recency_for_promote);
+      } else if (var == "write_fadvise_dontneed") {
+	f->dump_string("write_fadvise_dontneed", p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
       }
 
       f->close_section();
@@ -3122,6 +3124,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        ss << "erasure_code_profile: " << p->erasure_code_profile;
       } else if (var == "min_read_recency_for_promote") {
 	ss << "min_read_recency_for_promote: " << p->min_read_recency_for_promote;
+      } else if (var == "write_fadvise_dontneed") {
+	ss << "write_fadvise_dontneed: " <<  (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
       }
 
       rdata.append(ss);
@@ -4362,6 +4366,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
+  } else if (var == "write_fadvise_dontneed") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.flags &= ~pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
