@@ -5821,16 +5821,15 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
     return r;
   }
 
-  librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj_instance);
   if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_link_olh(index_ctx, oid, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
+  ret = cls_rgw_bucket_link_olh(bs.index_ctx, bs.bucket_obj, key, olh_state.olh_tag, delete_marker, op_tag, meta, olh_epoch,
                                 zone_public_config.log_data);
   if (ret < 0) {
     return ret;
@@ -5854,16 +5853,15 @@ int RGWRados::bucket_index_unlink_instance(rgw_obj& obj_instance, const string& 
     return r;
   }
 
-  librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj_instance);
   if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), obj_instance.get_instance());
-  ret = cls_rgw_bucket_unlink_instance(index_ctx, oid, key, op_tag, olh_epoch, zone_public_config.log_data);
+  ret = cls_rgw_bucket_unlink_instance(bs.index_ctx, bs.bucket_obj, key, op_tag, olh_epoch, zone_public_config.log_data);
   if (ret < 0) {
     return ret;
   }
@@ -5882,11 +5880,10 @@ int RGWRados::bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instanc
     return r;
   }
 
-  librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj_instance);
   if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -5896,7 +5893,7 @@ int RGWRados::bucket_index_read_olh_log(RGWObjState& state, rgw_obj& obj_instanc
 
   ObjectReadOperation op;
 
-  ret = cls_rgw_get_olh_log(index_ctx, oid, op, key, ver_marker, olh_tag, log, is_truncated);
+  ret = cls_rgw_get_olh_log(bs.index_ctx, bs.bucket_obj, op, key, ver_marker, olh_tag, log, is_truncated);
   if (ret < 0)
     return ret;
 
@@ -5912,11 +5909,10 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
     return r;
   }
 
-  librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj_instance);
   if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -5926,9 +5922,9 @@ int RGWRados::bucket_index_trim_olh_log(RGWObjState& state, rgw_obj& obj_instanc
 
   ObjectWriteOperation op;
 
-  cls_rgw_trim_olh_log(op, oid, key, ver, olh_tag);
+  cls_rgw_trim_olh_log(op, key, ver, olh_tag);
 
-  ret = index_ctx.operate(oid, &op);
+  ret = bs.index_ctx.operate(bs.bucket_obj, &op);
   if (ret < 0)
     return ret;
 
@@ -5944,11 +5940,10 @@ int RGWRados::bucket_index_clear_olh(RGWObjState& state, rgw_obj& obj_instance)
     return r;
   }
 
-  librados::IoCtx index_ctx;
-  string oid;
-
-  int ret = open_bucket_index(bucket, index_ctx, oid);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj_instance);
   if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -5956,7 +5951,7 @@ int RGWRados::bucket_index_clear_olh(RGWObjState& state, rgw_obj& obj_instance)
 
   cls_rgw_obj_key key(obj_instance.get_index_key_name(), string());
 
-  ret = cls_rgw_clear_olh(index_ctx, oid, key, olh_tag);
+  ret = cls_rgw_clear_olh(bs.index_ctx, bs.bucket_obj, key, olh_tag);
   if (ret < 0) {
     ldout(cct, 5) << "cls_rgw_clear_olh() returned ret=" << ret << dendl;
     return ret;
