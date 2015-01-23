@@ -1,3 +1,6 @@
+# we currently can't install Samba on RHEL; need a gitbuilder and code updates
+os_type: ubuntu
+
 tasks:
 - install:
 - install:
