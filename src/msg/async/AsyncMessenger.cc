@@ -616,7 +616,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
                                     const entity_addr_t& dest_addr, int dest_type)
 {
   if (cct->_conf->ms_dump_on_send) {
-    m->encode(-1, true);
+    m->encode(-1, MSG_CRC_ALL);
     ldout(cct, 0) << __func__ << "submit_message " << *m << "\n";
     m->get_payload().hexdump(*_dout);
     if (m->get_data().length() > 0) {

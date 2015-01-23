@@ -277,7 +277,8 @@ Message *decode_message(CephContext *cct, int crcflags,
       }
       return 0;
     }
-
+  }
+  if (crcflags & MSG_CRC_DATA) {
     if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
       __u32 data_crc = data.crc32c(0);
       if (data_crc != footer.data_crc) {
@@ -290,7 +291,7 @@ Message *decode_message(CephContext *cct, int crcflags,
 	return 0;
       }
     }
-  } 
+  }
 
   // make message
   Message *m = 0;
@@ -775,7 +776,7 @@ void encode_message(Message *msg, uint64_t features, bufferlist& payload)
   bufferlist front, middle, data;
   ceph_msg_footer_old old_footer;
   ceph_msg_footer footer;
-  msg->encode(features, true);
+  msg->encode(features, MSG_CRC_ALL);
   ::encode(msg->get_header(), payload);
 
   // Here's where we switch to the old footer format.  PLR
