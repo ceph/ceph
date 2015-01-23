@@ -16,6 +16,7 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
+#include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 
@@ -1622,12 +1623,15 @@ reprotect_and_return_err:
     }
 
     RWLock::WLocker l2(ictx->md_lock);
-    if (size < ictx->size && ictx->object_cacher) {
-      // need to invalidate since we're deleting objects, and
-      // ObjectCacher doesn't track non-existent objects
-      r = ictx->invalidate_cache();
-      if (r < 0) {
-	return r;
+    if (size < ictx->size) {
+      ictx->wait_for_pending_copyup();
+      if (ictx->object_cacher) {
+	// need to invalidate since we're deleting objects, and
+	// ObjectCacher doesn't track non-existent objects
+	r = ictx->invalidate_cache();
+	if (r < 0) {
+	  return r;
+	}
       }
     }
     resize_helper(ictx, size, prog_ctx);
@@ -2203,9 +2207,11 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
 			 << (snap_name ? snap_name : "NULL") << dendl;
+
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
+    ictx->wait_for_pending_copyup();
     if (ictx->image_watcher != NULL) {
       ictx->image_watcher->flush_aio_operations();
     }
@@ -2284,6 +2290,12 @@ reprotect_and_return_err:
       flush(ictx);
       ictx->wait_for_pending_aio();
     }
+
+    if (ictx->copyup_finisher != NULL) {
+      ictx->copyup_finisher->wait_for_empty();
+      ictx->copyup_finisher->stop();
+    }
+    ictx->wait_for_pending_copyup();
 
     if (ictx->parent) {
       close_image(ictx->parent);
@@ -3385,6 +3397,7 @@ reprotect_and_return_err:
 
     ictx->snap_lock.get_read();
     snap_t snap_id = ictx->snap_id;
+    ::SnapContext snapc = ictx->snapc;
     ictx->snap_lock.put_read();
 
     // readahead
@@ -3429,7 +3442,7 @@ reprotect_and_return_err:
 	C_AioRead *req_comp = new C_AioRead(ictx->cct, c);
 	AioRead *req = new AioRead(ictx, q->oid.name, 
 				   q->objectno, q->offset, q->length,
-				   q->buffer_extents,
+				   q->buffer_extents, snapc,
 				   snap_id, true, req_comp, op_flags);
 	req_comp->set_req(req);
 	c->add_request();
