@@ -7234,30 +7234,32 @@ int RGWRados::bi_get_instance(rgw_obj& obj, rgw_bucket_dir_entry *dirent)
 
 int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
-  librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
-  if (r < 0)
-    return r;
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj);
+  if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    return ret;
+  }
 
   cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
   
-  int ret = cls_rgw_bi_get(index_ctx, oid, index_type, key, entry);
+  ret = cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
   if (ret < 0)
     return ret;
 
   return 0;
 }
 
-int RGWRados::bi_put(rgw_bucket& bucket, rgw_cls_bi_entry& entry)
+int RGWRados::bi_put(rgw_bucket& bucket, rgw_obj& obj, rgw_cls_bi_entry& entry)
 {
-  librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
-  if (r < 0)
-    return r;
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj);
+  if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    return ret;
+  }
 
-  int ret = cls_rgw_bi_put(index_ctx, oid, entry);
+  ret = cls_rgw_bi_put(bs.index_ctx, bs.bucket_obj, entry);
   if (ret < 0)
     return ret;
 
@@ -7266,13 +7268,15 @@ int RGWRados::bi_put(rgw_bucket& bucket, rgw_cls_bi_entry& entry)
 
 int RGWRados::bi_list(rgw_bucket& bucket, const string& obj_name, const string& marker, uint32_t max, list<rgw_cls_bi_entry> *entries, bool *is_truncated)
 {
-  librados::IoCtx index_ctx;
-  string oid;
-  int r = open_bucket_index(bucket, index_ctx, oid);
-  if (r < 0)
-    return r;
+  rgw_obj obj(bucket, obj_name);
+  BucketShard bs(this);
+  int ret = bs.init(bucket, obj);
+  if (ret < 0) {
+    ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
+    return ret;
+  }
 
-  int ret = cls_rgw_bi_list(index_ctx, oid, obj_name, marker, max, entries, is_truncated);
+  ret = cls_rgw_bi_list(bs.index_ctx, bs.bucket_obj, obj_name, marker, max, entries, is_truncated);
   if (ret < 0)
     return ret;
 
