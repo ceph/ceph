@@ -170,8 +170,9 @@
 #define MSG_MON_HEALTH            0x601
 
 // *** Message::encode() crcflags bits ***
-#define MSG_CRC_DATA           1
-#define MSG_CRC_HEADER         2
+#define MSG_CRC_DATA           (1 << 0)
+#define MSG_CRC_HEADER         (1 << 1)
+#define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
 // Xio Testing
 #define MSG_DATA_PING		  0x602
