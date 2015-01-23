@@ -374,11 +374,12 @@ struct rgw_cls_bi_entry {
   }
 
   void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
+  void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
 
 enum OLHLogOp {
+  CLS_RGW_OLH_OP_UNKNOWN         = 0,
   CLS_RGW_OLH_OP_LINK_OLH        = 1,
   CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
   CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
@@ -391,7 +392,7 @@ struct rgw_bucket_olh_log_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
 
-  rgw_bucket_olh_log_entry() : delete_marker(false) {}
+  rgw_bucket_olh_log_entry() : op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
 
   void encode(bufferlist &bl) const {
@@ -416,6 +417,7 @@ struct rgw_bucket_olh_log_entry {
   }
   static void generate_test_instances(list<rgw_bucket_olh_log_entry*>& o);
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
 
@@ -453,6 +455,7 @@ struct rgw_bucket_olh_entry {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
 
