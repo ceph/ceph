@@ -2479,17 +2479,17 @@ int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
 
       /* only remove it if it's a different bucket instance */
       if (info.bucket.bucket_id != bucket.bucket_id) {
-        /* remove bucket meta instance */
-        string entry;
-        get_bucket_instance_entry(bucket, entry);
-        r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
-        if (r < 0)
-          return r;
-
         /* remove bucket index */
         librados::IoCtx index_ctx; // context for new bucket
         map<int, string> bucket_objs;
         int r = open_bucket_index(bucket, index_ctx, bucket_objs);
+        if (r < 0)
+          return r;
+
+        /* remove bucket meta instance */
+        string entry;
+        get_bucket_instance_entry(bucket, entry);
+        r = rgw_bucket_instance_remove_entry(this, entry, &instance_ver);
         if (r < 0)
           return r;
 
