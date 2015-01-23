@@ -169,7 +169,7 @@ static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *form
   }
 }
 
-void rgw_cls_bi_entry::decode_json(JSONObj *obj) {
+void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key) {
   JSONDecoder::decode_json("idx", idx, obj);
   string s;
   JSONDecoder::decode_json("type", s, obj);
@@ -189,13 +189,21 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj) {
         rgw_bucket_dir_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
         ::encode(entry, data);
+
+        if (effective_key) {
+          *effective_key = entry.key;
+        }
       }
       break;
     case OLHIdx:
       {
-        rgw_bucket_dir_entry entry;
+        rgw_bucket_olh_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
         ::encode(entry, data);
+
+        if (effective_key) {
+          *effective_key = entry.key;
+        }
       }
       break;
     default:
@@ -235,6 +243,17 @@ void rgw_bucket_olh_entry::dump(Formatter *f) const
   encode_json("pending_removal", pending_removal, f);
 }
 
+void rgw_bucket_olh_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("delete_marker", delete_marker, obj);
+  JSONDecoder::decode_json("epoch", epoch, obj);
+  JSONDecoder::decode_json("pending_log", pending_log, obj);
+  JSONDecoder::decode_json("tag", tag, obj);
+  JSONDecoder::decode_json("exists", exists, obj);
+  JSONDecoder::decode_json("pending_removal", pending_removal, obj);
+}
+
 void rgw_bucket_olh_log_entry::generate_test_instances(list<rgw_bucket_olh_log_entry*>& o)
 {
   rgw_bucket_olh_log_entry *entry = new rgw_bucket_olh_log_entry;
@@ -270,6 +289,24 @@ void rgw_bucket_olh_log_entry::dump(Formatter *f) const
   encode_json("delete_marker", delete_marker, f);
 }
 
+void rgw_bucket_olh_log_entry::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("epoch", epoch, obj);
+  string op_str;
+  JSONDecoder::decode_json("op", op_str, obj);
+  if (op_str == "link_olh") {
+    op = CLS_RGW_OLH_OP_LINK_OLH;
+  } else if (op_str == "unlink_olh") {
+    op = CLS_RGW_OLH_OP_UNLINK_OLH;
+  } else if (op_str == "remove_instance") {
+    op = CLS_RGW_OLH_OP_REMOVE_INSTANCE;
+  } else {
+    op = CLS_RGW_OLH_OP_UNKNOWN;
+  }
+  JSONDecoder::decode_json("op_tag", op_tag, obj);
+  JSONDecoder::decode_json("key", key, obj);
+  JSONDecoder::decode_json("delete_marker", delete_marker, obj);
+}
 void rgw_bi_log_entry::dump(Formatter *f) const
 {
   f->dump_string("op_id", id);
