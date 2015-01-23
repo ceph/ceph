@@ -132,6 +132,7 @@ Patch0022:      0022-ceph-osd-prestart.sh-check-OSD-exis.patch
 Patch0023:      0023-Fixes-to-rcceph-script.patch
 Patch0024:      0024-radosgw-systemd-support.patch
 Patch0025:      0025-rgw-swift-GET-HEAD-object-returns-X.patch
+Patch0026:      0026-Changed-prestart-script-path.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -392,6 +393,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0023 -p1
 %patch0024 -p1
 %patch0025 -p1
+%patch0026 -p1
 
 %build
 
@@ -492,15 +494,15 @@ install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}
 install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
-mkdir -p $RPM_BUILD_ROOT/usr/libexec/ceph/
-install -m 0755 -D src/ceph-osd-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
-install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/libexec/ceph/
+mkdir -p $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
+install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
 %else
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 %endif
+mkdir -p $RPM_BUILD_ROOT/srv/www/radosgw
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
@@ -609,9 +611,6 @@ fi
 %{_sbindir}/rcceph
 %dir /usr/lib/ceph
 /usr/lib/ceph/ceph-osd-prestart.sh
-%dir /usr/libexec
-%dir /usr/libexec/ceph
-/usr/libexec/ceph/ceph-osd-prestart.sh
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mds@.service
@@ -733,12 +732,13 @@ fi
 %{_docdir}/ceph-deploy/rgw.conf
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph-radosgw
+%dir /srv/www/radosgw
 %if 0%{?suse_version} >= 1310
 %dir %{_tmpfilesdir}/
 %{_tmpfilesdir}/ceph-radosgw.conf
 %{_unitdir}/ceph-radosgw@.service
-%dir /usr/libexec/ceph
-/usr/libexec/ceph/ceph-radosgw-prestart.sh
+%dir /usr/lib/ceph-radosgw
+/usr/lib/ceph-radosgw/ceph-radosgw-prestart.sh
 %else
 %ghost %dir %{_localstatedir}/run/ceph-radosgw/
 %{_initrddir}/ceph-radosgw

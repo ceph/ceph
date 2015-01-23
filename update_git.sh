@@ -14,7 +14,7 @@
 GIT_TREE=https://github.com/SUSE/ceph.git
 # Downloaded repos are cached here. Must be writable by you.
 GIT_LOCAL_TREE=/var/tmp/osbuild-packagecache/ceph
-GIT_BRANCH=distro/suse-0-80-8
+GIT_BRANCH=distro/suse-0-80-8b
 GIT_UPSTREAM_TAG=v0.80.8
 GIT_DIR=/dev/shm/ceph-git-dir
 CMP_DIR=/dev/shm/ceph-cmp-dir

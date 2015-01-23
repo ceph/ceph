@@ -1,0 +1,26 @@
+From: Owen Synge <osynge@suse.com>
+Date: Fri, 23 Jan 2015 12:04:37 +0100
+Subject: [PATCH] Changed prestart script path
+
+Ceph was teh only application I could find in suse which used the path
+/usr/libexec so I changed this to the /usr/lib/ patch for
+/usr/lib/ceph/ceph-osd-prestart.sh
+
+Signed-off-by: Owen Synge <osynge@suse.com>
+---
+ systemd/ceph-osd@.service | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/systemd/ceph-osd@.service b/systemd/ceph-osd@.service
+index edb24ad..6e27b91 100644
+--- a/systemd/ceph-osd@.service
++++ b/systemd/ceph-osd@.service
+@@ -8,7 +8,7 @@ PartOf=ceph.target
+ EnvironmentFile=-/etc/sysconfig/ceph
+ Environment=CLUSTER=ceph
+ ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i
+-ExecStartPre=/usr/libexec/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
++ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ 
+ [Install]
+ WantedBy=ceph.target

@@ -1,4 +1,16 @@
 -------------------------------------------------------------------
+Fri Jan 23 13:51:07 UTC 2015 - osynge@suse.com
+
+- Updated patch :radosgw-systemd-support.patch
+  * Removed extra name message when name was incorrect.
+  * Changed paths of *prestart.sh scripts
+    + /usr/lib/ceph-radosgw/ceph-radosgw-prestart.sh
+  * More robust on bad "PATH" settings.
+  * Added cluster parmater to ceph-radosgw-prestart.sh
+- Readded directory /srv/www/radosgw
+  * Fixes #914485
+
+-------------------------------------------------------------------
 Thu Jan 22 11:06:37 UTC 2015 - osynge@suse.com
 
 - Moved rgw.conf and s3gw.fcgi to documentation directory.
