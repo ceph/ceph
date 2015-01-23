@@ -49,6 +49,7 @@ class TestFlush(CephFSTestCase):
                              """
                              Events by type:
                                SUBTREEMAP: 1
+                             Errors: 0
                              """
                          ).strip())
 
