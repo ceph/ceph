@@ -287,7 +287,7 @@ int Pipe::accept()
   int removed; // single-use down below
 
   // this should roughly mirror pseudocode at
-  //  http://ceph.newdream.net/wiki/Messaging_protocol
+  //  http://ceph.com/wiki/Messaging_protocol
   int reply_tag = 0;
   uint64_t existing_seq = -1;
 
