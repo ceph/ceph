@@ -290,7 +290,7 @@ namespace librbd {
 	  m_state = LIBRBD_AIO_WRITE_COPYUP;
 
           if (is_copy_on_read(m_ictx, m_snap_id)) {
-	    m_ictx->copyup_list_lock.Lock();
+            m_ictx->copyup_list_lock.Lock();
             it = m_ictx->copyup_list.find(m_object_no);
             if (it == m_ictx->copyup_list.end()) {
               // If it is not in the list, create a CopyupRequest and wait for it.
@@ -302,16 +302,12 @@ namespace librbd {
               m_ictx->copyup_list[m_object_no] = new_req;
 
               m_entire_object = &(new_req->get_copyup_data());
-              ldout(m_ictx->cct, 20) << __func__ << " creating new Copyup for AioWrite, obj-"
-                                     << m_object_no << dendl;
-	      m_ictx->copyup_list_lock.Unlock();
+              m_ictx->copyup_list_lock.Unlock();
               new_req->read_from_parent();
-              ldout(m_ictx->cct, 20) << __func__ << " issuing read_from_parent" << dendl;
             } else {
-              ldout(m_ictx->cct, 20) << __func__ << " someone is reading back from parent" << dendl;
               it->second->append_request(this);
               m_entire_object = &it->second->get_copyup_data();
-	      m_ictx->copyup_list_lock.Unlock();
+              m_ictx->copyup_list_lock.Unlock();
             }
           } else {
             read_from_parent(m_object_image_extents);
@@ -342,8 +338,6 @@ namespace librbd {
       // CopyupRequest, m_read_data should be empty.
       if (m_entire_object != NULL) {
 	assert(m_ictx->copyup_list_lock.is_locked());
-	ldout(m_ictx->cct, 20) << __func__ << " releasing self pending, obj-"
-			       << m_object_no << dendl;
 	assert(m_ictx->copyup_list.find(m_object_no) !=
 	       m_ictx->copyup_list.end());
 	assert(m_read_data.length() == 0);
