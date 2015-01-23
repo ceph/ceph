@@ -367,17 +367,15 @@ def _yum_fix_repo_priority(remote, project, uri):
     :param remote: the teuthology.orchestra.remote.Remote object
     :param project: the project whose repos need modification
     """
+    repo_path = '/etc/yum.repos.d/%s.repo' % project
     remote.run(
         args=[
-            'sudo',
-            'sed',
-            '-i',
-            '-e',
-            run.Raw(
-                '\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
+            'if', 'test', '-f', repo_path, run.Raw(';'), 'then',
+            'sudo', 'sed', '-i', '-e',
+            run.Raw('\':a;N;$!ba;s/enabled=1\\ngpg/enabled=1\\npriority=1\\ngpg/g\''),
             '-e',
             run.Raw("'s;ref/[a-zA-Z0-9_-]*/;{uri}/;g'".format(uri=uri)),
-            '/etc/yum.repos.d/%s.repo' % project,
+            repo_path, run.Raw(';'), 'fi'
         ]
     )
 
@@ -390,10 +388,13 @@ def _yum_fix_repo_host(remote, project):
     new_host = teuth_config.gitbuilder_host
     if new_host == old_host:
         return
+    repo_path = '/etc/yum.repos.d/%s.repo' % project
     host_sed_expr = "'s/{0}/{1}/'".format(old_host, new_host)
     remote.run(
-        args=['sudo', 'sed', '-i', '-e', run.Raw(host_sed_expr),
-              '/etc/yum.repos.d/%s.repo' % project]
+        args=[
+            'if', 'test', '-f', repo_path, run.Raw(';'), 'then',
+            'sudo', 'sed', '-i', '-e', run.Raw(host_sed_expr),
+            repo_path, run.Raw(';'), 'fi']
     )
 
 
@@ -414,22 +415,22 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         pkglist=", ".join(rpm), arch=baseparms['arch']))
     host = teuth_config.gitbuilder_host
     dist_release = baseparms['dist_release']
-    start_of_url = 'http://{host}/ceph-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
-        host=host, **baseparms)
-    ceph_release = 'ceph-release-{release}.{dist_release}.noarch'.format(
-        release=RELEASE, dist_release=dist_release)
-    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=ceph_release)
+    project = config.get('project', 'ceph')
+    start_of_url = 'http://{host}/{proj}-rpm-{distro_release}-{arch}-{flavor}/{uri}'.format(
+        proj=project, host=host, **baseparms)
+    proj_release = '{proj}-release-{release}.{dist_release}.noarch'.format(
+        proj=project, release=RELEASE, dist_release=dist_release)
+    rpm_name = "{rpm_nm}.rpm".format(rpm_nm=proj_release)
     base_url = "{start_of_url}/noarch/{rpm_name}".format(
         start_of_url=start_of_url, rpm_name=rpm_name)
     # When this was one command with a pipe, it would sometimes
     # fail with the message 'rpm: no packages given for install'
     remote.run(args=['wget', base_url, ],)
-    remote.run(args=['sudo', 'rpm', '-i', rpm_name, ],)
+    remote.run(args=['sudo', 'yum', '-y', 'localinstall', rpm_name])
 
     remote.run(args=['rm', '-f', rpm_name])
 
     uri = baseparms['uri']
-    project = config.get('project', 'ceph')
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
 
