@@ -6232,7 +6232,7 @@ void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
 #define OBJ_INSTANCE_LEN 32
   char buf[OBJ_INSTANCE_LEN + 1];
 
-  gen_rand_base64(cct, buf, OBJ_INSTANCE_LEN);
+  gen_rand_alphanumeric(cct, buf, OBJ_INSTANCE_LEN); /* don't want it to get url escaped */
 
   target_obj->set_instance(buf);
 }
