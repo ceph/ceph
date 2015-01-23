@@ -2624,7 +2624,7 @@ TEST(LibRadosAioEC, RoundTripWriteFullPP2)
   bl.append(buf);
 
   op.write_full(bl);
-  op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
+  op.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOREUSE);
   ioctx.aio_operate("test_obj", my_completion1.get(), &op);
   {
     TestAlarm alarm;
@@ -2636,7 +2636,7 @@ TEST(LibRadosAioEC, RoundTripWriteFullPP2)
   bl.clear();
   ObjectReadOperation op1;
   op1.read(0, sizeof(buf), &bl, NULL);
-  op1.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
+  op1.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOREUSE|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ioctx.aio_operate("test_obj", my_completion2.get(), &op1, 0);
   {
     TestAlarm alarm;
