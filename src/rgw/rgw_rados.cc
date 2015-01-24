@@ -5711,6 +5711,8 @@ int RGWRados::olh_init_modification_impl(RGWObjState& state, rgw_obj& olh_obj, s
 
   if (!state.exists) {
     op.create(true);
+  } else {
+    op.assert_exists();
   }
 
   /*
