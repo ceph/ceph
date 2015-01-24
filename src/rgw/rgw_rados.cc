@@ -6075,12 +6075,15 @@ int RGWRados::apply_olh_log(RGWObjectCtx& obj_ctx, RGWObjState& state, RGWBucket
     r = ref.ioctx.operate(ref.oid, &rm_op);
     if (r == -ECANCELED) {
       return 0; /* someone else won this race */
-    }
-
-    r = bucket_index_clear_olh(state, obj);
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
-      return r;
+    } else {
+      /* 
+       * only clear if was successful, otherwise we might clobber pending operations on this object
+       */
+      r = bucket_index_clear_olh(state, obj);
+      if (r < 0) {
+        ldout(cct, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
+        return r;
+      }
     }
   }
 
