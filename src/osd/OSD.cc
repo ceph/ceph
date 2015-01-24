@@ -4164,6 +4164,10 @@ void OSD::RemoveWQ::_process(
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
        ++i) {
+    if (g_conf->osd_inject_failure_on_pg_removal) {
+      generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
+      exit(1);
+    }
     t->remove_collection(*i);
   }
 
