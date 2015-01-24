@@ -46,6 +46,8 @@ libec_shec_la_CFLAGS = ${AM_CFLAGS} \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
 libec_shec_la_CXXFLAGS= ${AM_CXXFLAGS} \
+	-I$(srcdir)/erasure-code/jerasure/jerasure/include \
+	-I$(srcdir)/erasure-code/jerasure/gf-complete/include \
 	-I$(srcdir)/erasure-code/jerasure \
 	-I$(srcdir)/erasure-code/shec
 libec_shec_la_LIBADD = $(LIBCRUSH) $(PTHREAD_LIBS) $(EXTRALIBS)
