@@ -287,6 +287,8 @@ public:
       : inode(in), xattrs(xp), snapnode(sn) {}
   };
   std::list<projected_inode_t*> projected_nodes;   // projected values (only defined while dirty)
+  int num_projected_xattrs;
+  int num_projected_srnodes;
   
   inode_t *project_inode(std::map<std::string,bufferptr> *px=0);
   void pop_and_dirty_projected_inode(LogSegment *ls);
@@ -331,11 +333,13 @@ public:
   }
 
   std::map<std::string,bufferptr> *get_projected_xattrs() {
-    for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-	 p != projected_nodes.rend();
-	 ++p)
-      if ((*p)->xattrs)
-	return (*p)->xattrs;
+    if (num_projected_xattrs > 0) {
+      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
+	   p != projected_nodes.rend();
+	   ++p)
+	if ((*p)->xattrs)
+	  return (*p)->xattrs;
+    }
     return &xattrs;
   }
   std::map<std::string,bufferptr> *get_previous_projected_xattrs() {
@@ -350,34 +354,30 @@ public:
 
   sr_t *project_snaprealm(snapid_t snapid=0);
   const sr_t *get_projected_srnode() const {
-    if (projected_nodes.empty()) {
-      if (snaprealm)
-	return &snaprealm->srnode;
-      else
-	return NULL;
-    } else {
+    if (num_projected_srnodes > 0) {
       for (std::list<projected_inode_t*>::const_reverse_iterator p = projected_nodes.rbegin();
-          p != projected_nodes.rend();
-          ++p)
-        if ((*p)->snapnode)
-          return (*p)->snapnode;
+	  p != projected_nodes.rend();
+	  ++p)
+	if ((*p)->snapnode)
+	  return (*p)->snapnode;
     }
-    return &snaprealm->srnode;
+    if (snaprealm)
+      return &snaprealm->srnode;
+    else
+      return NULL;
   }
   sr_t *get_projected_srnode() {
-    if (projected_nodes.empty()) {
-      if (snaprealm)
-	return &snaprealm->srnode;
-      else
-	return NULL;
-    } else {
+    if (num_projected_srnodes > 0) {
       for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-          p != projected_nodes.rend();
-          ++p)
-        if ((*p)->snapnode)
-          return (*p)->snapnode;
+	   p != projected_nodes.rend();
+	   ++p)
+	if ((*p)->snapnode)
+	  return (*p)->snapnode;
     }
-    return &snaprealm->srnode;
+    if (snaprealm)
+      return &snaprealm->srnode;
+    else
+      return NULL;
   }
   void project_past_snaprealm_parent(SnapRealm *newparent);
 
@@ -538,6 +538,8 @@ public:
     first(f), last(l),
     last_journaled(0), //last_open_journaled(0), 
     //hack_accessed(true),
+    num_projected_xattrs(0),
+    num_projected_srnodes(0),
     stickydir_ref(0),
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
@@ -573,6 +575,8 @@ public:
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
+    assert(num_projected_xattrs == 0);
+    assert(num_projected_srnodes == 0);
   }
   
 
