@@ -1,10 +1,9 @@
-#!/bin/bash
+#!/bin/bash -ex
 
 pool=rbd
 gen=$pool/gen
 out=$pool/out
-
-set -x
+testno=1
 
 mkdir -p merge_diff_test
 pushd merge_diff_test
@@ -16,27 +15,21 @@ function expect_false()
 
 function clear_all()
 {
-  umount mnt || true
-  while [ 1 ];
-  do
-    rbd snap purge $gen 2>/dev/null >/dev/null
-    rbd rm $gen 2>/dev/null >/dev/null
-    rbd snap purge $out 2>/dev/null >/dev/null
-    rbd rm $out 2>/dev/null >/dev/null
+  fusermount -u mnt || true
 
-    sleep 5
+  rbd snap purge --no-progress $gen || true
+  rbd rm --no-progress $gen || true
+  rbd snap purge --no-progress $out || true
+  rbd rm --no-progress $out || true
 
-    rbd info $gen 2>/dev/null >/dev/null && continue
-    rbd info $out 2>/dev/null >/dev/null && continue
-
-    break
-  done
-  rm -rf diffs
+  rm -rf diffs || true
 }
 
 function rebuild()
 {
   clear_all
+  echo Starting test $testno
+  ((testno++))
   rbd create $gen --size 100 --order $1 --stripe_unit $2 --stripe_count $3 --image-format $4
   rbd create $out --size 1 --order 19
   mkdir -p mnt diffs
@@ -55,7 +48,7 @@ function snap()
 
 function resize()
 {
-  rbd resize $gen --size $1 --allow-shrink
+  rbd resize --no-progress $gen --size $1 --allow-shrink
 }
 
 function export_diff()
@@ -66,9 +59,9 @@ function export_diff()
     target="$gen@$2"
   fi
   if [ $1 == "null" ]; then
-    rbd export-diff $target diffs/$1.$2
+    rbd export-diff --no-progress $target diffs/$1.$2
   else
-    rbd export-diff $target --from-snap $1 diffs/$1.$2
+    rbd export-diff --no-progress $target --from-snap $1 diffs/$1.$2
   fi
 }
 
@@ -79,7 +72,7 @@ function merge_diff()
 
 function check()
 {
-  rbd import-diff diffs/$1.$2 $out || return -1
+  rbd import-diff --no-progress diffs/$1.$2 $out || return -1
   if [ "$2" == "head" ]; then
     sum1=`rbd export $gen - | md5sum`
   else
@@ -472,4 +465,4 @@ clear_all
 popd
 rm -rf merge_diff_test
 
-exit 0
+echo OK
