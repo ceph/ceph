@@ -14,11 +14,10 @@
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-
 if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
-
+export LC_ALL=C# the following is vulnerable to i18n
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
         $SUDO apt-get install -y dpkg-dev
