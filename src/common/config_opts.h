@@ -855,6 +855,7 @@ OPTION(rbd_readahead_trigger_requests, OPT_INT, 10) // number of sequential requ
 OPTION(rbd_readahead_max_bytes, OPT_LONGLONG, 512 * 1024) // set to 0 to disable readahead
 OPTION(rbd_readahead_disable_after_bytes, OPT_LONGLONG, 50 * 1024 * 1024) // how many bytes are read in total before readahead is disabled
 OPTION(rbd_clone_copy_on_read, OPT_BOOL, false)
+OPTION(rbd_object_map, OPT_BOOL, false) // whether to enable the RBD object map
 
 /*
  * The following options change the behavior for librbd's image creation methods that
