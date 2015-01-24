@@ -347,7 +347,10 @@ inode_t *CInode::project_inode(map<string,bufferptr> *px)
     if (px)
       *px = *get_projected_xattrs();
   }
-  projected_nodes.back()->xattrs = px;
+  if (px) {
+    projected_nodes.back()->xattrs = px;
+    ++num_projected_xattrs;
+  }
   dout(15) << "project_inode " << projected_nodes.back()->inode << dendl;
   return projected_nodes.back()->inode;
 }
@@ -367,12 +370,15 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
   map<string,bufferptr> *px = projected_nodes.front()->xattrs;
   if (px) {
+    --num_projected_xattrs;
     xattrs = *px;
     delete px;
   }
 
-  if (projected_nodes.front()->snapnode)
+  if (projected_nodes.front()->snapnode) {
     pop_projected_snaprealm(projected_nodes.front()->snapnode);
+    --num_projected_srnodes;
+  }
 
   delete projected_nodes.front()->inode;
   delete projected_nodes.front();
@@ -394,6 +400,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
   }
   dout(10) << "project_snaprealm " << new_srnode << dendl;
   projected_nodes.back()->snapnode = new_srnode;
+  ++num_projected_srnodes;
   return new_srnode;
 }
 
