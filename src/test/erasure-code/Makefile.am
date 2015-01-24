@@ -212,7 +212,7 @@ unittest_erasure_code_shec364_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $
 if LINUX
 unittest_erasure_code_shec364_LDADD += -ldl
 endif
-check_PROGRAMS += unittest_erasure_code_shec364
+# check_PROGRAMS += unittest_erasure_code_shec364
 
 unittest_erasure_code_shec_thread_SOURCES = \
         test/erasure-code/TestErasureCodeShec_thread.cc \
