@@ -191,10 +191,13 @@ void Message::encode(uint64_t features, int crcflags)
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
-  if (crcflags & MSG_CRC_HEADER)
-    calc_header_crc();
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;
+
+  if (crcflags & MSG_CRC_HEADER)
+    calc_header_crc();
+  else
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOHEADERCRC;
 
   if (crcflags & MSG_CRC_DATA) {
     calc_data_crc();
@@ -237,7 +240,7 @@ void Message::encode(uint64_t features, int crcflags)
     }
 #endif
   } else {
-    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NODATACRC;
   }
 }
 
@@ -255,7 +258,8 @@ Message *decode_message(CephContext *cct, int crcflags,
 			bufferlist& data)
 {
   // verify crc
-  if (crcflags & MSG_CRC_HEADER) {
+  if ((crcflags & MSG_CRC_HEADER) != 0 &&
+      (footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
     __u32 front_crc = front.crc32c(0);
     __u32 middle_crc = middle.crc32c(0);
 
@@ -278,18 +282,17 @@ Message *decode_message(CephContext *cct, int crcflags,
       return 0;
     }
   }
-  if (crcflags & MSG_CRC_DATA) {
-    if ((footer.flags & CEPH_MSG_FOOTER_NOCRC) == 0) {
-      __u32 data_crc = data.crc32c(0);
-      if (data_crc != footer.data_crc) {
-	if (cct) {
-	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
-	  ldout(cct, 20) << " ";
-	  data.hexdump(*_dout);
-	  *_dout << dendl;
-	}
-	return 0;
+  if ((crcflags & MSG_CRC_DATA) != 0 &&
+      (footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0) {
+    __u32 data_crc = data.crc32c(0);
+    if (data_crc != footer.data_crc) {
+      if (cct) {
+	ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	ldout(cct, 20) << " ";
+	data.hexdump(*_dout);
+	*_dout << dendl;
       }
+      return 0;
     }
   }
 
