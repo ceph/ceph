@@ -1,0 +1,12 @@
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd.sh
+    env:
+      RBD_FEATURES: "5"
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd clone copy on read: true
