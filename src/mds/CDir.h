@@ -249,6 +249,9 @@ protected:
 
 
   // lock nesting, freeze
+  static int num_frozen_trees;
+  static int num_freezing_trees;
+
   int auth_pins;
 #ifdef MDS_AUTHPIN_SET
   multiset<void*> auth_pin_set;

@@ -40,7 +40,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 
-
+int CDir::num_frozen_trees = 0;
+int CDir::num_freezing_trees = 0;
 
 class CDirContext : public MDSInternalContextBase
 {
@@ -2511,6 +2512,7 @@ bool CDir::freeze_tree()
     return true;
   } else {
     state_set(STATE_FREEZINGTREE);
+    ++num_freezing_trees;
     dout(10) << "freeze_tree waiting " << *this << dendl;
     return false;
   }
@@ -2522,8 +2524,12 @@ void CDir::_freeze_tree()
   assert(is_freezeable(true));
 
   // twiddle state
-  state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+  if (state_test(STATE_FREEZINGTREE)) {
+    state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+    --num_freezing_trees;
+  }
   state_set(STATE_FROZENTREE);
+  ++num_frozen_trees;
   get(PIN_FROZEN);
 
   // auth_pin inode for duration of freeze, if we are not a subtree root.
@@ -2538,6 +2544,8 @@ void CDir::unfreeze_tree()
   if (state_test(STATE_FROZENTREE)) {
     // frozen.  unfreeze.
     state_clear(STATE_FROZENTREE);
+    --num_frozen_trees;
+
     put(PIN_FROZEN);
 
     // unpin  (may => FREEZEABLE)   FIXME: is this order good?
@@ -2552,6 +2560,7 @@ void CDir::unfreeze_tree()
     // freezing.  stop it.
     assert(state_test(STATE_FREEZINGTREE));
     state_clear(STATE_FREEZINGTREE);
+    --num_freezing_trees;
     auth_unpin(this);
     
     finish_waiting(WAIT_UNFREEZE);
@@ -2560,6 +2569,8 @@ void CDir::unfreeze_tree()
 
 bool CDir::is_freezing_tree() const
 {
+  if (num_freezing_trees == 0)
+    return false;
   const CDir *dir = this;
   while (1) {
     if (dir->is_freezing_tree_root()) return true;
@@ -2573,6 +2584,8 @@ bool CDir::is_freezing_tree() const
 
 bool CDir::is_frozen_tree() const
 {
+  if (num_frozen_trees == 0)
+    return false;
   const CDir *dir = this;
   while (1) {
     if (dir->is_frozen_tree_root()) return true;
