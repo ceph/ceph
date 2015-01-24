@@ -308,7 +308,7 @@ int ErasureCodeShecReedSolomonVandermonde::parse(const map<std::string,std::stri
       } else if (!err_c.empty()){
 	derr << "could not convert c=" << value_c << "to int" << dendl;
       }
-      err = -ENOENT;
+      err = -EINVAL;
     } else if (k <= 0){
       derr << "k=" << k
 	   << " must be a positive number" << dendl;

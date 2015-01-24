@@ -1,6 +1,6 @@
 /******************************************************************************
 
-  SUMMARY: TestErasureCodeShec
+  SUMMARY: TestErasureCodeShec_thread
 
    COPYRIGHT(C) 2014 FUJITSU LIMITED.
 
@@ -9,6 +9,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <iostream>
 
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
@@ -22,15 +23,7 @@
 #include "global/global_context.h"
 #include "gtest/gtest.h"
 
-//extern "C" {
-//#include "jerasure/include/galois.h"
-//
-//extern gf_t *gfp_array[];
-//extern int  gfp_is_composite[];
-//}
-
 void* thread1(void* pParam);
-
 
 class TestParam{
 public:
@@ -39,12 +32,6 @@ public:
 
 TEST(ErasureCodeShec, thread)
 {
-//  ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
-
-//  Mutex::Locker l(registry.lock);
-
-//  __erasure_code_init("shec", "");
-
   TestParam param1,param2,param3,param4,param5;
   param1.k = "6";
   param1.m = "4";
@@ -75,22 +62,21 @@ TEST(ErasureCodeShec, thread)
   pthread_t tid1,tid2,tid3,tid4,tid5;
   pthread_create(&tid1,NULL,thread1,(void*)&param1);
   std::cout << "thread1 start " << std::endl;
-  //	pthread_create(&tid2,NULL,thread1,(void*)&param2);
-  //	std::cout << "thread2 start " << std::endl;
-  //	pthread_create(&tid3,NULL,thread1,(void*)&param3);
-  //	std::cout << "thread3 start " << std::endl;
+  pthread_create(&tid2,NULL,thread1,(void*)&param2);
+  std::cout << "thread2 start " << std::endl;
+  pthread_create(&tid3,NULL,thread1,(void*)&param3);
+  std::cout << "thread3 start " << std::endl;
   pthread_create(&tid4,NULL,thread1,(void*)&param4);
   std::cout << "thread4 start " << std::endl;
-  //	pthread_create(&tid5,NULL,thread1,(void*)&param5);
-  //	std::cout << "thread5 start " << std::endl;
+  pthread_create(&tid5,NULL,thread1,(void*)&param5);
+  std::cout << "thread5 start " << std::endl;
   //ƒXƒŒƒbƒh‚Ì’âŽ~‘Ò‚¿
   pthread_join(tid1,NULL);
-  //	pthread_join(tid2,NULL);
-  //	pthread_join(tid3,NULL);
-  //	pthread_join(tid4,NULL);
-  //	pthread_join(tid5,NULL);
+  pthread_join(tid2,NULL);
+  pthread_join(tid3,NULL);
+  pthread_join(tid4,NULL);
+  pthread_join(tid5,NULL);
 }
-
 
 int main(int argc, char **argv) {
   vector<const char*> args;
@@ -110,11 +96,14 @@ void* thread1(void* pParam)
   time_t start,end;
   int r;
 
-  ErasureCodePluginRegistry &registry = ErasureCodePluginRegistry::instance();
+  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
 
-  Mutex::Locker l(registry.lock);
-
-  __erasure_code_init("shec", "");
+  instance.disable_dlclose = true;
+  {
+    Mutex::Locker l(instance.lock);
+    __erasure_code_init((char*)"shec", (char*)"");
+  }
+  std::cout << "__erasure_code_init finish " << std::endl;
 
   //encode
   bufferlist in;
@@ -233,4 +222,6 @@ void* thread1(void* pParam)
 
       time(&end);
     }
+
+  return NULL;
 }

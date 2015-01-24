@@ -78,7 +78,7 @@ extern int  gfp_is_composite[];
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory = "")
+int __erasure_code_init(char *plugin_name, char *directory = (char *)"")
 {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   int w[] = { 8, 16, 32 };

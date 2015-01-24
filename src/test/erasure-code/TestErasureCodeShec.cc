@@ -1158,7 +1158,7 @@ TEST(ErasureCodeShec, minimum_to_decode_7)
 
 	//minimum_to_decodeの実行
 	int r = shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
-	EXPECT_EQ(-EINVAL,r);
+	EXPECT_EQ(-EIO,r);
 
 	delete shec;
 }
@@ -2771,7 +2771,8 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
 	r = shec->create_ruleset("myrule", *crush, &ss);
 	EXPECT_EQ(-EEXIST, r);
 
-	delete shec,crush;
+	delete shec;
+	delete crush;
 }
 
 /*
@@ -2844,7 +2845,8 @@ TEST(ErasureCodeShec, create_ruleset_4)
 	int r = shec->create_ruleset("myrule", *crush, NULL);	//ss = NULL
 	EXPECT_EQ(0, r);
 
-	delete shec,crush;
+	delete shec;
+	delete crush;
 }
 
 
@@ -2902,7 +2904,8 @@ TEST(ErasureCodeShec, create_ruleset2_1)
 		std::cout <<"+++ rule_name_map[" << itr->first << "]: " << itr->second << " +++\n";
 	}
 
-	delete shec,crush;
+	delete shec;
+	delete crush;
 }
 
 TEST(ErasureCodeShec, create_ruleset2_2)
@@ -2951,7 +2954,8 @@ TEST(ErasureCodeShec, create_ruleset2_2)
 	int r = shec->create_ruleset("myrule", *crush, &ss);
 	EXPECT_EQ(0, r);
 
-	delete shec,crush;
+	delete shec;
+	delete crush;
 }
 
 struct Create_ruleset2_3_Param{
@@ -3025,7 +3029,8 @@ TEST(ErasureCodeShec, create_ruleset2_3)
 		std::cout <<"+++ rule_name_map[" << itr->first << "]: " << itr->second << " +++\n";
 	}
 
-	delete shec,crush;
+	delete shec;
+	delete crush;
 }
 
 TEST(ErasureCodeShec, get_chunk_count_1)
@@ -3065,7 +3070,7 @@ TEST(ErasureCodeShec, get_chunk_count_2)
 	//init未実行
 
 	//get_chunk_countの実行
-	EXPECT_NE(10u, shec->get_chunk_count());
+	EXPECT_EQ(10u, shec->get_chunk_count());
 
 	delete shec;
 }
@@ -3107,7 +3112,7 @@ TEST(ErasureCodeShec, get_data_chunk_count_2)
 	//init未実行
 
 	//get_data_chunk_countの実行
-	EXPECT_NE(6u, shec->get_data_chunk_count());
+	EXPECT_EQ(6u, shec->get_data_chunk_count());
 
 	delete shec;
 }
@@ -3193,6 +3198,8 @@ void* thread1(void* pParam)
 		shec->minimum_to_decode(want_to_decode,available_chunks,&minimum_chunks);
 	}
 	printf("*** thread loop end ***\n");
+
+	return NULL;
 }
 
 void* thread2(void* pParam)
@@ -3216,6 +3223,8 @@ void* thread2(void* pParam)
 		minimum_chunks.clear();
 	}
 	printf("*** thread loop end ***\n");
+
+	return NULL;
 }
 
 void* thread3(void* pParam)
@@ -3258,6 +3267,8 @@ void* thread3(void* pParam)
 		i++;
 	}
 	printf("*** thread loop end ***\n");
+
+	return NULL;
 }
 
 void* thread4(void* pParam)
@@ -3284,6 +3295,8 @@ void* thread4(void* pParam)
 		encoded.clear();
 	}
 	printf("*** thread loop end ***\n");
+
+	return NULL;
 }
 
 void* thread5(void* pParam)
@@ -3314,4 +3327,6 @@ void* thread5(void* pParam)
 		decoded.clear();
 	}
 	printf("*** thread loop end ***\n");
+
+	return NULL;
 }

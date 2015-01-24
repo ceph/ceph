@@ -23,22 +23,6 @@
 #include "common/debug.h"
 // -----------------------------------------------------------------------------
 
-// -----------------------------------------------------------------------------
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix _tc_prefix(_dout)
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-
-static ostream&
-_tc_prefix(std::ostream* _dout)
-{
-  return *_dout << "ErasureCodeShecTableCache: ";
-}
-
-// -----------------------------------------------------------------------------
-
 ErasureCodeShecTableCache::~ErasureCodeShecTableCache()
 {
   Mutex::Locker lock(codec_tables_guard);
