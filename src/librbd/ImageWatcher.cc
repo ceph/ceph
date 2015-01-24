@@ -12,10 +12,31 @@
 #include <sstream>
 #include <boost/bind.hpp>
 #include <boost/function.hpp>
+#include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ImageWatcher: "
+
+static void decode(librbd::RemoteAsyncRequest &request,
+		   bufferlist::iterator &iter) {
+  ::decode(request.gid, iter);
+  ::decode(request.handle, iter);
+  ::decode(request.request_id, iter);
+}
+
+static void encode(const librbd::RemoteAsyncRequest &request, bufferlist &bl) {
+  ::encode(request.gid, bl);
+  ::encode(request.handle, bl);
+  ::encode(request.request_id, bl);
+}
+
+static std::ostream &operator<<(std::ostream &out,
+				const librbd::RemoteAsyncRequest &request) {
+  out << "[" << request.gid << "," << request.handle << ","
+      << request.request_id << "]";
+  return out;
+}
 
 namespace librbd {
 
@@ -27,10 +48,15 @@ static const uint8_t	NOTIFY_VERSION = 1;
 static const double	RETRY_DELAY_SECONDS = 1.0;
 
 enum {
-  NOTIFY_OP_ACQUIRED_LOCK = 0,
-  NOTIFY_OP_RELEASED_LOCK = 1,
-  NOTIFY_OP_REQUEST_LOCK  = 2,
-  NOTIFY_OP_HEADER_UPDATE = 3
+  NOTIFY_OP_ACQUIRED_LOCK  = 0,
+  NOTIFY_OP_RELEASED_LOCK  = 1,
+  NOTIFY_OP_REQUEST_LOCK   = 2,
+  NOTIFY_OP_HEADER_UPDATE  = 3,
+  NOTIFY_OP_ASYNC_PROGRESS = 4,
+  NOTIFY_OP_ASYNC_COMPLETE = 5,
+  NOTIFY_OP_FLATTEN 	   = 6,
+  NOTIFY_OP_RESIZE 	   = 7,
+  NOTIFY_OP_SNAP_CREATE    = 8
 };
 
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
@@ -40,6 +66,8 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
     m_timer_lock("librbd::ImageWatcher::m_timer_lock"),
     m_timer(new SafeTimer(image_ctx.cct, m_timer_lock)),
     m_watch_lock("librbd::ImageWatcher::m_watch_lock"), m_watch_error(0),
+    m_async_request_lock("librbd::ImageWatcher::m_async_request_lock"),
+    m_async_request_id(0),
     m_aio_request_lock("librbd::ImageWatcher::m_aio_request_lock"),
     m_retrying_aio_requests(false), m_retry_aio_context(NULL)
 {
@@ -89,6 +117,8 @@ int ImageWatcher::unregister_watch() {
     Mutex::Locker l(m_aio_request_lock);
     assert(m_aio_requests.empty());
   }
+
+  cancel_async_requests(-ESHUTDOWN);
 
   RWLock::WLocker l(m_watch_lock);
   return m_image_ctx.md_ctx.unwatch2(m_handle);
@@ -185,12 +215,21 @@ int ImageWatcher::request_lock(
 }
 
 bool ImageWatcher::try_request_lock() {
-  RWLock::WLocker l(m_image_ctx.owner_lock);
+  assert(m_image_ctx.owner_lock.is_locked());
   if (is_lock_owner()) {
     return true;
   }
 
-  int r = try_lock();
+  int r = 0;
+  m_image_ctx.owner_lock.put_read();
+  {
+    RWLock::WLocker l(m_image_ctx.owner_lock);
+    if (!is_lock_owner()) {
+      r = try_lock();
+    }
+  }
+  m_image_ctx.owner_lock.get_read();
+
   if (r < 0) {
     ldout(m_image_ctx.cct, 5) << "failed to acquire exclusive lock:"
 			      << cpp_strerror(r) << dendl;
@@ -210,8 +249,14 @@ bool ImageWatcher::try_request_lock() {
 void ImageWatcher::finalize_request_lock() {
   cancel_retry_aio_requests();
 
-  if (try_request_lock()) {
+  bool owned_lock;
+  {
+    RWLock::RLocker l(m_image_ctx.owner_lock);
+    owned_lock = try_request_lock();
+  }
+  if (owned_lock) {
     retry_aio_requests();
+    
   } else {
     schedule_retry_aio_requests();
   }
@@ -321,6 +366,102 @@ void ImageWatcher::release_lock()
   unlock();
 }
 
+void ImageWatcher::finalize_header_update() {
+  librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
+			&m_image_ctx);
+}
+
+void ImageWatcher::assert_header_locked(librados::ObjectWriteOperation *op) {
+  rados::cls::lock::assert_locked(op, RBD_LOCK_NAME, LOCK_EXCLUSIVE,
+                                  encode_lock_cookie(), WATCHER_LOCK_TAG);
+}
+
+int ImageWatcher::notify_async_progress(const RemoteAsyncRequest &request,
+					uint64_t offset, uint64_t total) {
+  ldout(m_image_ctx.cct, 20) << "remote async request progress: "
+			     << request << " @ " << offset
+			     << "/" << total << dendl;
+
+  bufferlist bl;
+  ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
+  ::encode(NOTIFY_OP_ASYNC_PROGRESS, bl);
+  ::encode(request, bl);
+  ::encode(offset, bl);
+  ::encode(total, bl);
+  ENCODE_FINISH(bl);
+
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+
+  RWLock::WLocker l(m_async_request_lock);
+  m_async_progress.erase(request);
+  return 0;
+}
+
+int ImageWatcher::notify_async_complete(const RemoteAsyncRequest &request,
+					int r) {
+  ldout(m_image_ctx.cct, 20) << "remote async request finished: "
+			     << request << " = " << r << dendl;
+
+  bufferlist bl;
+  ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
+  ::encode(NOTIFY_OP_ASYNC_COMPLETE, bl);
+  ::encode(request, bl);
+  ::encode(r, bl);
+  ENCODE_FINISH(bl);
+
+  librbd::notify_change(m_image_ctx.md_ctx, m_image_ctx.header_oid,
+			&m_image_ctx);
+  m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT, NULL);
+  return 0;
+}
+
+int ImageWatcher::notify_flatten(ProgressContext &prog_ctx) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  uint64_t async_request_id;
+  ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
+  ::encode(NOTIFY_OP_FLATTEN, bl);
+  async_request_id = encode_async_request(bl);
+  ENCODE_FINISH(bl);
+
+  return notify_async_request(async_request_id, bl, prog_ctx);
+}
+
+int ImageWatcher::notify_resize(uint64_t size, ProgressContext &prog_ctx) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  uint64_t async_request_id;
+  ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
+  ::encode(NOTIFY_OP_RESIZE, bl);
+  ::encode(size, bl);
+  async_request_id = encode_async_request(bl);
+  ENCODE_FINISH(bl);
+
+  return notify_async_request(async_request_id, bl, prog_ctx);
+}
+
+int ImageWatcher::notify_snap_create(const std::string &snap_name) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  bufferlist bl;
+  ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
+  ::encode(NOTIFY_OP_SNAP_CREATE, bl);
+  ::encode(snap_name, bl);
+  ENCODE_FINISH(bl);
+
+  bufferlist response;
+  int r = notify_lock_owner(bl, response);
+  if (r < 0) {
+    return r;
+  }
+  return decode_response_code(response);
+}
+
 void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 				        const std::string &oid)
 {
@@ -334,6 +475,7 @@ void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 }
 
 std::string ImageWatcher::encode_lock_cookie() const {
+  RWLock::RLocker l(m_watch_lock);
   std::ostringstream ss;
   ss << WATCHER_LOCK_COOKIE_PREFIX << " " << m_handle;
   return ss.str();
@@ -393,12 +535,53 @@ void ImageWatcher::retry_aio_requests() {
   m_aio_request_cond.Signal();
 }
 
+void ImageWatcher::cancel_aio_requests(int result) {
+  Mutex::Locker l(m_aio_request_lock);
+  for (std::vector<AioRequest>::iterator iter = m_aio_requests.begin();
+       iter != m_aio_requests.end(); ++iter) {
+    AioCompletion *c = iter->second;
+    c->get();
+    c->lock.Lock();
+    c->rval = result;
+    c->lock.Unlock();
+    c->finish_adding_requests(m_image_ctx.cct);
+    c->put();
+  }
+  m_aio_requests.clear();
+  m_aio_request_cond.Signal();
+}
+
+void ImageWatcher::cancel_async_requests(int result) {
+  RWLock::WLocker l(m_async_request_lock);
+  for (std::map<uint64_t, AsyncRequest>::iterator iter = m_async_requests.begin();
+       iter != m_async_requests.end(); ++iter) {
+    iter->second.first->complete(result);
+  }
+  m_async_requests.clear();
+}
+
+uint64_t ImageWatcher::encode_async_request(bufferlist &bl) {
+  RWLock::WLocker l(m_async_request_lock);
+  ++m_async_request_id;
+
+  RemoteAsyncRequest request(m_image_ctx.md_ctx.get_instance_id(),
+			     m_handle, m_async_request_id);
+  ::encode(request, bl);
+
+  ldout(m_image_ctx.cct, 20) << "async request: " << request << dendl;
+  return m_async_request_id;
+}
+
 int ImageWatcher::decode_response_code(bufferlist &bl) {
   int r;
-  bufferlist::iterator iter = bl.begin();
-  DECODE_START(NOTIFY_VERSION, iter);
-  ::decode(r, iter);
-  DECODE_FINISH(iter);
+  try {
+    bufferlist::iterator iter = bl.begin();
+    DECODE_START(NOTIFY_VERSION, iter);
+    ::decode(r, iter);
+    DECODE_FINISH(iter);
+  } catch (const buffer::error &err) {
+    r = -EINVAL;
+  }
   return r;
 }
 
@@ -413,7 +596,9 @@ void ImageWatcher::notify_released_lock() {
 void ImageWatcher::notify_request_lock() {
   cancel_retry_aio_requests();
 
+  m_image_ctx.owner_lock.get_read();
   if (try_request_lock()) {
+    m_image_ctx.owner_lock.put_read();
     retry_aio_requests();
     return;
   }
@@ -425,6 +610,8 @@ void ImageWatcher::notify_request_lock() {
 
   bufferlist response;
   int r = notify_lock_owner(bl, response);
+  m_image_ctx.owner_lock.put_read();
+
   if (r == -ETIMEDOUT) {
     ldout(m_image_ctx.cct, 5) << "timed out requesting lock: retrying" << dendl;
     retry_aio_requests();
@@ -436,9 +623,15 @@ void ImageWatcher::notify_request_lock() {
 }
 
 int ImageWatcher::notify_lock_owner(bufferlist &bl, bufferlist& response) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  // since we need to ack our own notifications, release the owner lock just in
+  // case another notification occurs before this one and it requires the lock
   bufferlist response_bl;
+  m_image_ctx.owner_lock.put_read();
   int r = m_image_ctx.md_ctx.notify2(m_image_ctx.header_oid, bl, NOTIFY_TIMEOUT,
 				     &response_bl);
+  m_image_ctx.owner_lock.get_read();
   if (r < 0 && r != -ETIMEDOUT) {
     lderr(m_image_ctx.cct) << "lock owner notification failed: "
 			   << cpp_strerror(r) << dendl;
@@ -476,6 +669,58 @@ int ImageWatcher::notify_lock_owner(bufferlist &bl, bufferlist& response) {
   return 0;
 }
 
+int ImageWatcher::notify_async_request(uint64_t async_request_id,
+				       bufferlist &in,
+				       ProgressContext& prog_ctx) {
+  assert(m_image_ctx.owner_lock.is_locked());
+
+  Mutex my_lock("librbd::ImageWatcher::notify_async_request::my_lock");
+  Cond cond;
+  bool done = false;
+  int r;
+  Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+
+  {
+    RWLock::WLocker l(m_async_request_lock);
+    m_async_requests[async_request_id] = AsyncRequest(ctx, &prog_ctx);
+  }
+
+  BOOST_SCOPE_EXIT( (ctx)(async_request_id)(&m_async_requests)
+		    (&m_async_request_lock)(&done) ) {
+    RWLock::WLocker l(m_async_request_lock);
+    m_async_requests.erase(async_request_id);
+    if (!done) {
+      delete ctx;
+    }
+  } BOOST_SCOPE_EXIT_END
+
+  bufferlist response;
+  r = notify_lock_owner(in, response);
+  if (r < 0) {
+    return r;
+  }
+
+  my_lock.Lock();
+  while (!done) {
+    cond.Wait(my_lock);
+  }
+  my_lock.Unlock();
+  return r;
+}
+
+void ImageWatcher::schedule_update_progress(
+    const RemoteAsyncRequest &remote_async_request,
+    uint64_t offset, uint64_t total) {
+  RWLock::WLocker l(m_async_request_lock);
+  if (m_async_progress.count(remote_async_request) == 0) {
+    m_async_progress.insert(remote_async_request);
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_async_progress,
+		  this, remote_async_request, offset, total));
+    m_finisher->queue(ctx);
+  }
+}
+
 void ImageWatcher::handle_header_update() {
   ldout(m_image_ctx.cct, 1) << "image header updated" << dendl;
 
@@ -486,17 +731,23 @@ void ImageWatcher::handle_header_update() {
 
 void ImageWatcher::handle_acquired_lock() {
   ldout(m_image_ctx.cct, 1) << "image exclusively locked announcement" << dendl;
+  FunctionContext *ctx = new FunctionContext(
+    boost::bind(&ImageWatcher::cancel_async_requests, this, -ERESTART));
+  m_finisher->queue(ctx);
 }
 
 void ImageWatcher::handle_released_lock() {
   ldout(m_image_ctx.cct, 20) << "exclusive lock released" << dendl;
+  FunctionContext *ctx = new FunctionContext(
+    boost::bind(&ImageWatcher::cancel_async_requests, this, -ERESTART));
+  m_finisher->queue(ctx);
 
   Mutex::Locker l(m_aio_request_lock);
   if (!m_aio_requests.empty()) {
     ldout(m_image_ctx.cct, 20) << "queuing lock request" << dendl;
-    FunctionContext *ctx = new FunctionContext(
+    FunctionContext *req_ctx = new FunctionContext(
       boost::bind(&ImageWatcher::finalize_request_lock, this));
-    m_finisher->queue(ctx);
+    m_finisher->queue(req_ctx);
   }
 }
 
@@ -514,6 +765,122 @@ void ImageWatcher::handle_request_lock(bufferlist *out) {
     FunctionContext *ctx = new FunctionContext(
       boost::bind(&ImageWatcher::release_lock, this));
     m_finisher->queue(ctx);
+  }
+}
+
+void ImageWatcher::handle_async_progress(bufferlist::iterator iter) {
+  RemoteAsyncRequest request;
+  ::decode(request, iter);
+
+  uint64_t offset;
+  uint64_t total;
+  ::decode(offset, iter);
+  ::decode(total, iter);
+  if (request.gid == m_image_ctx.md_ctx.get_instance_id() &&
+      request.handle == m_handle) {
+    RWLock::RLocker l(m_async_request_lock);
+    std::map<uint64_t, AsyncRequest>::iterator iter =
+      m_async_requests.find(request.request_id);
+    if (iter != m_async_requests.end()) {
+      ldout(m_image_ctx.cct, 20) << "request progress: "
+				 << request << " @ " << offset
+				 << "/" << total << dendl;
+      iter->second.second->update_progress(offset, total);
+    }
+  }
+}
+
+void ImageWatcher::handle_async_complete(bufferlist::iterator iter) {
+  RemoteAsyncRequest request;
+  ::decode(request, iter);
+
+  int r;
+  ::decode(r, iter);
+  if (request.gid == m_image_ctx.md_ctx.get_instance_id() &&
+      request.handle == m_handle) {
+    Context *ctx = NULL;
+    {
+      RWLock::RLocker l(m_async_request_lock);
+      std::map<uint64_t, AsyncRequest>::iterator iter =
+        m_async_requests.find(request.request_id);
+      if (iter != m_async_requests.end()) {
+	ctx = iter->second.first;
+      }
+    }
+    if (ctx != NULL) {
+      ldout(m_image_ctx.cct, 20) << "request finished: "
+                                 << request << " = " << r << dendl;
+      ctx->complete(r);
+    }
+  }
+}
+
+void ImageWatcher::handle_flatten(bufferlist::iterator iter, bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (is_lock_owner()) {
+    RemoteAsyncRequest request;
+    ::decode(request, iter);
+
+    RemoteProgressContext *prog_ctx = new RemoteProgressContext(*this,
+							        request);
+    RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
+
+    ldout(m_image_ctx.cct, 20) << "remote flatten request: " << request << dendl;
+    int r = librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
+    if (r < 0) {
+      delete ctx;
+    }
+
+    ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, *out);
+    ::encode(r, *out);
+    ENCODE_FINISH(*out);
+  }
+}
+
+void ImageWatcher::handle_resize(bufferlist::iterator iter, bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (is_lock_owner()) {
+    uint64_t size;
+    ::decode(size, iter);
+
+    RemoteAsyncRequest request;
+    ::decode(request, iter);
+
+    RemoteProgressContext *prog_ctx = new RemoteProgressContext(*this,
+								request);
+    RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
+
+    ldout(m_image_ctx.cct, 20) << "remote resize request: " << request
+			       << " " << size << dendl;
+    int r = librbd::async_resize(&m_image_ctx, ctx, size, *prog_ctx);
+    if (r < 0) {
+      delete ctx;
+    }
+
+    ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, *out);
+    ::encode(r, *out);
+    ENCODE_FINISH(*out);
+  }
+}
+
+void ImageWatcher::handle_snap_create(bufferlist::iterator iter, bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (is_lock_owner()) {
+    std::string snap_name;
+    ::decode(snap_name, iter);
+
+    ldout(m_image_ctx.cct, 20) << "remote snap_create request: " << snap_name << dendl;
+    int r = librbd::snap_create(&m_image_ctx, snap_name.c_str(), false);
+    ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, *out);
+    ::encode(r, *out);
+    ENCODE_FINISH(*out);
+
+    if (r == 0) {
+      // cannot notify within a notificiation
+      FunctionContext *ctx = new FunctionContext(
+	boost::bind(&ImageWatcher::finalize_header_update, this));
+      m_finisher->queue(ctx);
+    }
   }
 }
 
@@ -557,10 +924,30 @@ void ImageWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
       acknowledge_notify(notify_id, handle, out);
       handle_header_update();
       break;
+    case NOTIFY_OP_ASYNC_PROGRESS:
+      acknowledge_notify(notify_id, handle, out);
+      handle_async_progress(iter);
+      break;
+    case NOTIFY_OP_ASYNC_COMPLETE:
+      acknowledge_notify(notify_id, handle, out);
+      handle_async_complete(iter);
+      break;
 
     // lock owner-only ops
     case NOTIFY_OP_REQUEST_LOCK:
       handle_request_lock(&out);
+      acknowledge_notify(notify_id, handle, out);
+      break;
+    case NOTIFY_OP_FLATTEN:
+      handle_flatten(iter, &out);
+      acknowledge_notify(notify_id, handle, out);
+      break;
+    case NOTIFY_OP_RESIZE:
+      handle_resize(iter, &out);
+      acknowledge_notify(notify_id, handle, out);
+      break;
+    case NOTIFY_OP_SNAP_CREATE:
+      handle_snap_create(iter, &out);
       acknowledge_notify(notify_id, handle, out);
       break;
 
@@ -608,6 +995,7 @@ void ImageWatcher::reregister_watch() {
         lderr(m_image_ctx.cct) << "failed to re-register image watch: "
                                << cpp_strerror(m_watch_error) << dendl;
 	schedule_retry_aio_requests();
+        cancel_async_requests(m_watch_error);
         return;
       }
     }
@@ -646,6 +1034,13 @@ void ImageWatcher::WatchCtx::handle_failed_notify(uint64_t notify_id,
 
 void ImageWatcher::WatchCtx::handle_error(uint64_t handle, int err) {
   image_watcher.handle_error(handle, err);
+}
+
+void ImageWatcher::RemoteContext::finish(int r) {
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::notify_async_complete,
+		  &m_image_watcher, m_remote_async_request, r));
+    m_image_watcher.m_finisher->queue(ctx);
 }
 
 }
