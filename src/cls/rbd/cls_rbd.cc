@@ -1972,7 +1972,14 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   size_t orig_object_map_size = object_map.size();
-  if (orig_object_map_size != object_count) {
+  if (object_count < orig_object_map_size) {
+    for (uint64_t i = object_count; i < orig_object_map_size; ++i) {
+      if (object_map[i] != default_state) {
+	return -ESTALE;
+      }
+    }
+    object_map.resize(object_count);
+  } else if (object_count > orig_object_map_size) {
     object_map.resize(object_count);
     for (uint64_t i = orig_object_map_size; i < object_count; ++i) {
       object_map[i] = default_state;

@@ -960,11 +960,16 @@ TEST_F(TestClsRbd, object_map_resize)
   ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
   ASSERT_EQ(ref_bit_vector, osd_bit_vector);
 
-  ref_bit_vector.resize(16);
+  ref_bit_vector.resize(32);
 
   librados::ObjectWriteOperation op3;
   object_map_resize(&op3, ref_bit_vector.size(), 1);
-  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+  ASSERT_EQ(-ESTALE, ioctx.operate(oid, &op3));
+
+  librados::ObjectWriteOperation op4;
+  object_map_resize(&op4, ref_bit_vector.size(), 2);
+  ASSERT_EQ(0, ioctx.operate(oid, &op4));
+
   ASSERT_EQ(0, object_map_load(&ioctx, oid, &osd_bit_vector));
   ASSERT_EQ(ref_bit_vector, osd_bit_vector);
 
