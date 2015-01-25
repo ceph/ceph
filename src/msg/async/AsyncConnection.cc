@@ -200,7 +200,8 @@ AsyncConnection::~AsyncConnection()
 {
   assert(out_q.empty());
   assert(sent.empty());
-  assert(!authorizer);
+  if(authorizer)
+    delete authorizer;
   if (recv_buf)
     delete[] recv_buf;
   if (state_buffer)
