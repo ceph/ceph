@@ -60,6 +60,10 @@ void TestIoCtxImpl::put() {
   }
 }
 
+uint64_t TestIoCtxImpl::get_instance_id() const {
+  return 0;
+}
+
 int64_t TestIoCtxImpl::get_id() {
   return m_pool_id;
 }
