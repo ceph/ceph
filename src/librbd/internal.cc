@@ -1814,7 +1814,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
-	r = -ERESTART;
+	m_ctx->complete(-ERESTART);
 	return;
       }
 
