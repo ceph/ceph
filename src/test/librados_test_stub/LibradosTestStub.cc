@@ -379,6 +379,11 @@ void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(ctx);
 }
 
+uint64_t IoCtx::get_instance_id() const {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->get_instance_id();
+}
+
 int64_t IoCtx::get_id() {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->get_id();
