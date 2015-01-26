@@ -124,39 +124,11 @@ public:
 		      bufferlist& out, std::string &error) const = 0;
   virtual void decrypt(const bufferptr& secret, const bufferlist& in,
 		      bufferlist& out, std::string &error) const = 0;
+
+  static CryptoHandler *create(int type);
 };
 
 extern int get_random_bytes(char *buf, int len);
 extern uint64_t get_random(uint64_t min_val, uint64_t max_val);
-
-class CryptoNone : public CryptoHandler {
-public:
-  CryptoNone() { }
-  ~CryptoNone() {}
-  int get_type() const {
-    return CEPH_CRYPTO_NONE;
-  }
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-};
-
-class CryptoAES : public CryptoHandler {
-public:
-  CryptoAES() { }
-  ~CryptoAES() {}
-  int get_type() const {
-    return CEPH_CRYPTO_AES;
-  }
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	       bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in, 
-	      bufferlist& out, std::string &error) const;
-};
 
 #endif
