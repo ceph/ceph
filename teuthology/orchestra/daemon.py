@@ -46,6 +46,23 @@ class DaemonState(object):
         self.proc = None
         self.log.info('Stopped')
 
+        """
+        Wait for daemon to exit
+
+        Wait for daemon to stop (but don't trigger the stop).  Pass up
+        any exception.  Mark the daemon as not running.
+        """
+    def wait(self, timeout=300):
+        self.log.debug('waiting for process to exit')
+        try:
+            run.wait([self.proc], timeout=timeout)
+            self.log.info('Stopped')
+        except:
+            self.log.info('Failed')
+            raise
+        finally:
+            self.proc = None
+
     def restart(self, *args, **kwargs):
         """
         Restart with a new command passed in the arguments
