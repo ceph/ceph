@@ -663,7 +663,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 		<< " outstanding reads " << reads_outstanding
 		<< dendl;
 
-  if (bl.length() < length) {
+  if (r >= 0 && bl.length() < length) {
     bufferptr bp(length - bl.length());
     bp.zero();
     ldout(cct, 7) << "bh_read_finish " << oid << " padding " << start << "~" << length 
