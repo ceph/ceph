@@ -1069,12 +1069,14 @@ def task(ctx, config):
 
             # get information about this build from koji
             build_info = get_koji_build_info(build_id, role_remote, ctx)
-
-            need_install[role] = build_info
-            need_version[role] = "{ver}-{rel}.x86_64".format(
+            version = "{ver}-{rel}.x86_64".format(
                 ver=build_info["version"],
                 rel=build_info["release"]
             )
+
+            if need_to_install(ctx, role, version):
+                need_install[role] = build_info
+                need_version[role] = version
         else:
             package_type = role_remote.os.package_type
             larch = role_remote.arch
