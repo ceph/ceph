@@ -630,6 +630,124 @@ def write_one_line(parent, name, text):
     os.rename(tmp, path)
 
 
+def init_database():
+    # Helper function for init_get()
+    # Note only return the init system when its known.
+    # - raises Error when init system is unknown
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - fails on debian
+    #   + This is intentional as debian suports multiple init systems
+
+    distro, release, codename = platform_information()
+    if distro.startswith(('SUSE')):
+        # tested on SLE12
+        major_version = int(release.split('.')[0])
+        if major_version >= 12:
+            return "systemd"
+        if major_version < 12:
+            return "sysvinit"
+    if distro.startswith(('openSUSE')):
+        # tested on openSUSE 13.1
+        major_version = int(release.split('.')[0])
+        if major_version >= 13:
+            return "systemd"
+        else:
+            return "sysvinit"
+    if distro.startswith(('Scientific')):
+        # Only tested on Scientific 6,4
+        major_version = int(release.split('.')[0])
+        if major_version > 6:
+            return "systemd"
+        if major_version == 6:
+            return "upstart"
+        if major_version < 6:
+            return "sysvinit"
+    if distro.startswith(('debian')):
+        # older versions of debian suport multiple init systems
+        raise Error("debian suport multiple init systems")
+    if distro.startswith(('Ubuntu')):
+        # This was the previous code asssumption
+        # With Ubuntu moving to systemd this will need chnaging
+        # when details are known.
+        return 'upstart'
+    raise Error("No init system found in database for this operating system.")
+
+def init_detect():
+    # Helper function for init_get()
+    # Note only return the init system when its known.
+    # - raises Error when init system is unknown
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - works on debian 7.7 (wheezy)
+    # - works on debian 8 (jessie)
+    scr = {
+        "upstart" : 0,
+        "sysvinit" : 0,
+        "systemd" : 0}
+    # Detect init management tools
+    if None != which("initctl"):
+        scr["upstart"]     =+ 2
+    else:
+        scr["upstart"]     =- 2
+    if None != which("systemctl"):
+        scr["systemd"]     =+ 2
+    else:
+        scr["systemd"]     =- 2
+    # Only add 1 as 'service' maybe provided for compatability
+    if None != which("service"):
+        scr["sysvinit"]    =+ 1
+    else:
+        scr["sysvinit"]    =- 1
+    # find the minum score and keep removing"
+    maxvalue = max(scr, key=scr.get)
+    minvalue = min(scr, key=scr.get)
+    while scr[minvalue] != scr[maxvalue]:
+        del scr[minvalue]
+        maxvalue = max(scr, key=scr.get)
+        minvalue = min(scr, key=scr.get)
+    # Now scr only includes the higest scoring init systems.
+    if len(scr) == 1:
+        return  max(scr, key=scr.get)
+    if len(scr) == 0:
+        raise Error("No init system found")
+    if len(scr) > 1:
+        raise Error("Detect more than one init system, choices:%s" % (",".join(scr)))
+
+
+def init_get():
+    # use this function rather than directly using helper fuinctions:
+    # - init_detect
+    # - init_database
+    # Testing notes:
+    # - works on SLE12
+    # - works on openSUSE 13.1
+    # - works on Scientific 6.4
+    # - works on debian 7.7 (wheezy)
+    # - works on debian 8 (jessie)
+
+    init_results = set()
+    try:
+        init_results.add(init_detect())
+    except Error, e:
+        LOG.info(e)
+        LOG.info("Failed to detect init system")
+    try:
+        init_results.add(init_database())
+    except Error, e:
+        LOG.info(e)
+        LOG.info("Failed to lookup init system")
+    if len(init_results) == 1:
+        return init_results.pop()
+    if len(init_results) > 1:
+        raise Error("Failed to find init system detection and DB agreed on : %s" % (",".join(init_results)))
+    raise Error("Failed to find an init system for this platform")
+
+
 def check_osd_magic(path):
     """
     Check that this path has the Ceph OSD magic.
@@ -2195,11 +2313,7 @@ def activate(
             if conf_val is not None:
                 init = conf_val
             else:
-                (distro, release, codename) = platform.dist()
-                if distro == 'Ubuntu':
-                    init = 'upstart'
-                else:
-                    init = 'sysvinit'
+                init = init_get()
 
         LOG.debug('Marking with init system %s', init)
         with file(os.path.join(path, init), 'w'):
