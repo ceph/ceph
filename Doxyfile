@@ -7,7 +7,7 @@ SYMBOL_CACHE_SIZE = 2
 WARN_IF_UNDOCUMENTED = NO
 INPUT = src
 RECURSIVE = YES
-EXCLUDE = src/gtest \
+EXCLUDE = src/gmock \
 	src/test/virtualenv \
 	src/out
 VERBATIM_HEADERS = NO
