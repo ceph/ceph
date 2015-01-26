@@ -91,6 +91,16 @@ struct LevelDBStoreStats {
     ::decode(last_update, p);
     DECODE_FINISH(p);
   }
+
+  static void generate_test_instances(list<LevelDBStoreStats*>& ls) {
+    ls.push_back(new LevelDBStoreStats);
+    ls.push_back(new LevelDBStoreStats);
+    ls.back()->bytes_total = 1024*1024;
+    ls.back()->bytes_sst = 512*1024;
+    ls.back()->bytes_log = 256*1024;
+    ls.back()->bytes_misc = 256*1024;
+    ls.back()->last_update = utime_t();
+  }
 };
 WRITE_CLASS_ENCODER(LevelDBStoreStats)
 
