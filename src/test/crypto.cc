@@ -3,7 +3,10 @@
 
 #include "include/types.h"
 #include "auth/Crypto.h"
+#include "common/Clock.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 
 #include "test/unit.h"
 
@@ -145,4 +148,28 @@ TEST(AES, Loop) {
   plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
   err = memcmp(plaintext_s, orig_plaintext_s, sizeof(orig_plaintext_s));
   ASSERT_EQ(0, err);
+}
+
+TEST(AES, LoopKey) {
+  bufferptr k(16);
+  get_random_bytes(k.c_str(), k.length());
+  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(NULL), k);
+
+  bufferlist data;
+  bufferptr r(128);
+  get_random_bytes(r.c_str(), r.length());
+  data.append(r);
+
+  utime_t start = ceph_clock_now(NULL);
+  int n = 100000;
+
+  for (int i=0; i<n; ++i) {
+    bufferlist encoded;
+    string error;
+    key.encrypt(g_ceph_context, data, encoded, error);
+  }
+
+  utime_t end = ceph_clock_now(NULL);
+  utime_t dur = end - start;
+  cout << n << " encoded in " << dur << std::endl;
 }
