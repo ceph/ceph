@@ -11,6 +11,8 @@ my $isdst;
 my $PASS_CNT = 0;
 my $FAIL_CNT = 0;
 
+our $radosgw_admin = $ENV{RGW_ADMIN}||"sudo radosgw-admin";
+
 # function to get the current time stamp from the test set up
 sub get_timestamp {
    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
@@ -89,7 +91,7 @@ sub print_border2 {
 sub get_user_info
 {
     my ($rgw_user) = @_;
-    my $cmd = "sudo radosgw-admin user create --uid=$rgw_user --display-name=$rgw_user";
+    my $cmd = "$radosgw_admin user create --uid=$rgw_user --display-name=$rgw_user";
     my $cmd_op = get_command_output($cmd);
     if ($cmd_op !~ /keys/){
         return (0,0);
@@ -121,7 +123,7 @@ sub get_user_info
 sub purge_data
 {
     my ($rgw_user) = @_;
-    my $cmd = "sudo radosgw-admin user rm --uid=$rgw_user --purge-data";
+    my $cmd = "$radosgw_admin user rm --uid=$rgw_user --purge-data";
     my $cmd_op = get_command_output($cmd);
     if ($cmd_op !~ /./){
         print "user $rgw_user deleted\n";
