@@ -6378,9 +6378,16 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   filepath path(relpath);
   Inode *in;
   bool created = false;
-  int r = path_walk(path, &in);
+  /* O_CREATE with O_EXCL enforces O_NOFOLLOW. */
+  bool followsym = !((flags & O_NOFOLLOW) || ((flags & O_CREAT) && (flags & O_EXCL)));
+  int r = path_walk(path, &in, followsym);
+
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
+
+  if (r == 0 && in->is_symlink() && (flags & O_NOFOLLOW))
+    return -ELOOP;
+
   if (r == -ENOENT && (flags & O_CREAT)) {
     filepath dirpath = path;
     string dname = dirpath.last_dentry();
