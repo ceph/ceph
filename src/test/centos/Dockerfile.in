@@ -27,5 +27,6 @@ RUN yum install -y yum-utils && yum-config-manager --add-repo https://dl.fedorap
 # build dependencies
 RUN cd /root ; ./install-deps.sh
 # development tools
-RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq sudo xmlstarlet parted
+# nc is required to run make check on firefly only (giant+ do not use nc)
+RUN yum install -y ccache valgrind gdb git python-virtualenv gdisk kpartx hdparm jq sudo xmlstarlet parted nc
 RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
