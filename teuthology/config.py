@@ -138,6 +138,8 @@ class TeuthologyConfig(YamlConfig):
         'src_base_path': os.path.expanduser('~/src'),
         'verify_host_keys': True,
         'watchdog_interval': 120,
+        'kojihub_url': 'http://koji.fedoraproject.org/kojihub',
+        'kojiroot_url': 'http://kojipkgs.fedoraproject.org/packages',
     }
 
     def __init__(self, yaml_path=None):

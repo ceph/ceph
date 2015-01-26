@@ -13,9 +13,16 @@ import urlparse
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..config import config as teuth_config
-from ..exceptions import UnsupportedPackageTypeError
+from ..exceptions import UnsupportedPackageTypeError, ConfigError
+from ..packaging import (
+    install_package,
+    get_koji_build_info,
+    get_kojiroot_base_url,
+    get_koji_package_name,
+)
 
 log = logging.getLogger(__name__)
+
 
 def normalize_config(ctx, config):
     """
@@ -58,7 +65,7 @@ def normalize_config(ctx, config):
     """
     if config is None or \
             len(filter(lambda x: x in ['tag', 'branch', 'sha1', 'kdb',
-                                       'deb', 'rpm'],
+                                       'deb', 'rpm', 'koji'],
                        config.keys())) == len(config.keys()):
         new_config = {}
         if config is None:
@@ -177,7 +184,7 @@ def install_firmware(ctx, config):
     fw_dir = '/lib/firmware/updates'
 
     for role in config.iterkeys():
-        if config[role].find('distro') >= 0:
+        if isinstance(config[role], str) and config[role].find('distro') >= 0:
             log.info('Skipping firmware on distro kernel');
             return
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
@@ -252,13 +259,26 @@ def download_kernel(ctx, config):
     """
     procs = {}
     for role, src in config.iteritems():
+        needs_download = False
+
         if src == 'distro':
             # don't need to download distro kernels
             log.debug("src is distro, skipping download");
             continue
 
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        if src.find('/') >= 0:
+        if isinstance(src, dict):
+            # we're downloading a kernel from koji, the src dict here
+            # is the build_info retrieved from koji using get_koji_build_info
+            build_id = src["id"]
+            log.info("Downloading kernel with build_id {build_id} on {role}...".format(
+                build_id=build_id,
+                role=role
+            ))
+            needs_download = True
+            baseurl = get_kojiroot_base_url(src)
+            pkg_name = get_koji_package_name("kernel", src)
+        elif src.find('/') >= 0:
             # local package - src is path
             log.info('Copying kernel package {path} to {role}...'.format(
                 path=src, role=role))
@@ -277,6 +297,7 @@ def download_kernel(ctx, config):
             # gitbuilder package - src is sha1
             log.info('Downloading kernel {sha1} on {role}...'.format(sha1=src,
                                                                      role=role))
+            needs_download = True
             package_type = role_remote.os.package_type
             if package_type == 'rpm':
                 system_type, system_ver = teuthology.get_system_type(
@@ -300,13 +321,17 @@ def download_kernel(ctx, config):
                 dist=ldist,
                 )
 
+            pkg_name = gitbuilder_pkg_name(role_remote)
+
             log.info("fetching, gitbuilder baseurl is %s", baseurl)
+
+        if needs_download:
             proc = role_remote.run(
                 args=[
                     'rm', '-f', remote_pkg_path(role_remote),
                     run.Raw('&&'),
                     'echo',
-                    gitbuilder_pkg_name(role_remote),
+                    pkg_name,
                     run.Raw('|'),
                     'wget',
                     '-nv',
@@ -359,7 +384,7 @@ def install_and_reboot(ctx, config):
     kernel_title = ''
     for role, src in config.iteritems():
         (role_remote,) = ctx.cluster.only(role).remotes.keys()
-        if src.find('distro') >= 0:
+        if isinstance(src, str) and src.find('distro') >= 0:
             log.info('Installing distro kernel on {role}...'.format(role=role))
             install_kernel(role_remote)
             continue
@@ -1004,6 +1029,9 @@ def task(ctx, config):
     need_version = {}  # utsrelease or sha1
     kdb = {}
     for role, role_config in config.iteritems():
+        # gather information about this remote
+        (role_remote,) = ctx.cluster.only(role).remotes.keys()
+        system_type, system_ver = role_remote.os.name, role_remote.os.version
         if role_config.get('rpm') or role_config.get('deb'):
             # We only care about path - deb: vs rpm: is meaningless,
             # rpm: just happens to be parsed first.  Nothing is stopping
@@ -1021,11 +1049,37 @@ def task(ctx, config):
             if need_to_install_distro(ctx, role):
                 need_install[role] = 'distro'
                 need_version[role] = 'distro'
+        elif role_config.get("koji", None):
+            # installing a kernel from koji
+            build_id = role_config.get("koji")
+            if role_remote.os.package_type != "rpm":
+                msg = (
+                    "Installing a kernel from koji is only supported "
+                    "on rpm based systems. System type is {system_type}."
+                )
+                msg = msg.format(system_type=system_type)
+                log.error(msg)
+                ctx.summary["failure_reason"] = msg
+                ctx.summary["status"] = "dead"
+                raise ConfigError(msg)
+
+            # FIXME: this install should probably happen somewhere else
+            # but I'm not sure where, so we'll leave it here for now.
+            install_package('koji', role_remote)
+
+            # get information about this build from koji
+            build_info = get_koji_build_info(build_id, role_remote, ctx)
+            version = "{ver}-{rel}.x86_64".format(
+                ver=build_info["version"],
+                rel=build_info["release"]
+            )
+
+            if need_to_install(ctx, role, version):
+                need_install[role] = build_info
+                need_version[role] = version
         else:
-            (role_remote,) = ctx.cluster.only(role).remotes.keys()
-            larch = role_remote.arch
             package_type = role_remote.os.package_type
-            system_type, system_ver = role_remote.os.name, role_remote.os.version
+            larch = role_remote.arch
             if package_type == 'rpm':
                 if '.' in system_ver:
                     system_ver = system_ver.split('.')[0]
