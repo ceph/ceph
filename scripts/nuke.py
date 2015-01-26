@@ -5,7 +5,7 @@ import teuthology.nuke
 doc = """
 usage: teuthology-nuke --help
        teuthology-nuke [-v] [--owner OWNER] [-n NAME] [-u] [-i] [-r] [-s]
-                            [-t CONFIG...] [-a DIR] [-p PID]
+                            [-p PID] (-t CONFIG... | -a DIR)
        teuthology-nuke [-v] [-u] [-i] [-r] [-s] --owner OWNER --stale
 
 Reset test machines
