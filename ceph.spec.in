@@ -448,15 +448,22 @@ mkdir -p $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
 install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
 install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph 
 %else
+install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 mkdir -p $RPM_BUILD_ROOT/%{_sbindir}
+ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 %endif
 mkdir -p $RPM_BUILD_ROOT/srv/www/radosgw
 
 # udev rules
+%if 0%{?suse_version} >= 1310
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
+%else
+install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
+install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
+%endif
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/osd
@@ -556,15 +563,17 @@ fi
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk-udev
 
+%{_sbindir}/rcceph
 # systemd
 %if 0%{?suse_version} >= 1310
-%{_sbindir}/rcceph
 %dir /usr/lib/ceph
 /usr/lib/ceph/ceph-osd-prestart.sh
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mds@.service
 %{_unitdir}/ceph.target
+%else
+%{_initrddir}/ceph
 %endif
 
 %dir %{_libdir}/rados-classes
@@ -581,10 +590,17 @@ fi
 %{_libdir}/rados-classes/libcls_user.so*
 
 %{_libdir}/ceph
+%if 0%{?suse_version} >= 1310
 %dir /usr/lib/udev
 %dir /usr/lib/udev/rules.d
 /usr/lib/udev/rules.d/50-rbd.rules
 /usr/lib/udev/rules.d/95-ceph-osd.rules
+%else
+%dir /lib/udev
+%dir /lib/udev/rules.d
+/lib/udev/rules.d/50-rbd.rules
+/lib/udev/rules.d/95-ceph-osd.rules
+%endif
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-mds.8*

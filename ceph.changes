@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Fri Jan 23 15:24:39 UTC 2015 - lmb@suse.com
+
+- Restore init script for SLE 11 based systems
+
+-------------------------------------------------------------------
 Fri Jan 23 13:51:07 UTC 2015 - osynge@suse.com
 
 - Updated patch :radosgw-systemd-support.patch
