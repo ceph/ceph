@@ -244,6 +244,15 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     if (!s->bucket_info.placement_rule.empty()) {
       s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
     }
+    // Dump user-defined metadata items
+    const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
+    map<string, bufferlist>::iterator iter;
+    for (iter = s->bucket_attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != s->bucket_attrs.end(); ++iter) {
+      const char *name = iter->first.c_str();
+      if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+        s->cio->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+      }
+    }
   }
 }
 
@@ -586,15 +595,15 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
       const char *name = iter->first.c_str();
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
-	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-	  content_type = iter->second.c_str();
-	  continue;
+        if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
+          content_type = iter->second.c_str();
+          continue;
         }
         response_attrs[aiter->second] = iter->second.c_str();
       } else {
         if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
           name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-          s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+          s->cio->print("X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
         }
       }
     }
