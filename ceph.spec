@@ -133,6 +133,7 @@ Patch0023:      0023-Fixes-to-rcceph-script.patch
 Patch0024:      0024-radosgw-systemd-support.patch
 Patch0025:      0025-rgw-swift-GET-HEAD-object-returns-X.patch
 Patch0026:      0026-Changed-prestart-script-path.patch
+Patch0027:      0027-New-rich-init-system-detection.patch
 # Please do not add patches manually here, run update_git.sh.
 
 #################################################################################
@@ -394,6 +395,7 @@ This package contains Ceph benchmarks and test tools.
 %patch0024 -p1
 %patch0025 -p1
 %patch0026 -p1
+%patch0027 -p1
 
 %build
 

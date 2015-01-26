@@ -1,4 +1,19 @@
 -------------------------------------------------------------------
+Mon Jan 26 16:24:07 UTC 2015 - osynge@suse.com
+
+- ceph-disk New rich init system detection.
+  * Fixes #914458 where sysV init was incorrectly assumed.
+  * Uses both a database and detecting management commands to find init system. 
+  * Logs error is one of these two systems fails.
+  * Raises error if both systems disagree.
+  * Testing notes:
+    + tested on SLE12
+    + tested on openSUSE 13.1
+    + tested on Scientific 6.4
+    + tested on debian 7.7 (wheezy)
+    + tested on debian 8 (jessie)
+
+-------------------------------------------------------------------
 Fri Jan 23 15:24:39 UTC 2015 - lmb@suse.com
 
 - Restore init script for SLE 11 based systems
