@@ -442,7 +442,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const string name() { return "put_obj_metadata"; }
+  virtual const string name() { return "put_metadata"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
