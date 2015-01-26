@@ -1684,12 +1684,18 @@ reprotect_and_return_err:
 	ldout(m_ictx->cct, 2) << "async_resize_helper finished ("
 			      << r << ")" << dendl;
 
-	RWLock::WLocker l(m_ictx->md_lock);
-        if (r < 0 && m_ictx->size == m_new_size) {
-	  m_ictx->size = m_original_size;
-        }
-        m_ctx->complete(r);
+	if (r < 0) {
+	  RWLock::WLocker l(m_ictx->md_lock);
+	  if (m_ictx->size == m_new_size) {
+	    m_ictx->size = m_original_size;
+	  }
+	  m_ctx->complete(r);
+	}
       } BOOST_SCOPE_EXIT_END
+
+      if (r < 0) {
+	return;
+      }
 
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
@@ -1700,24 +1706,29 @@ reprotect_and_return_err:
 
       RWLock::WLocker l2(m_ictx->md_lock);
       m_ictx->size = m_new_size;
+
+      librados::ObjectWriteOperation op;
       if (m_ictx->old_format) {
 	// rewrite header
 	bufferlist bl;
 	m_ictx->header.image_size = m_new_size;
 	bl.append((const char *)&m_ictx->header, sizeof(m_ictx->header));
-	r = m_ictx->md_ctx.write(m_ictx->header_oid, bl, bl.length(), 0);
+	op.write(0, bl);
       } else {
-	librados::ObjectWriteOperation op;
         if (m_ictx->image_watcher->is_lock_supported()) {
 	  m_ictx->image_watcher->assert_header_locked(&op);
         }
 	cls_client::set_size(&op, m_new_size);
-	r = m_ictx->md_ctx.operate(m_ictx->header_oid, &op);
       }
 
+      librados::AioCompletion *rados_completion =
+	librados::Rados::aio_create_completion(m_ctx, NULL, rados_ctx_cb);
+      r = m_ictx->md_ctx.aio_operate(m_ictx->header_oid, rados_completion, &op);
+      rados_completion->release();
       if (r < 0) {
 	lderr(m_ictx->cct) << "error writing header: " << cpp_strerror(r)
 			   << dendl;
+	return;
       }
     }
 
