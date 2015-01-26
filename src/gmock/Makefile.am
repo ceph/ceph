@@ -21,7 +21,7 @@ if HAVE_PTHREADS
 endif
 
 # Build rules for libraries.
-lib_LTLIBRARIES = lib/libgmock.la lib/libgmock_main.la
+noinst_LTLIBRARIES = lib/libgmock.la lib/libgmock_main.la
 
 lib_libgmock_la_SOURCES = src/gmock-all.cc
 

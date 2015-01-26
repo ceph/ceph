@@ -336,8 +336,8 @@ target_link_libraries(bench_log global pthread rt ${CMAKE_DL_LIBS} ${TCMALLOC_LI
 
 ## Unit tests
 
-set(UNITTEST_LIBS gtest_main ${PTHREAD_LIBS})
-set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gtest/include -I${CMAKE_BINARY_DIR}/src/gtest/include -fno-strict-aliasing")
+set(UNITTEST_LIBS gmock_main gmock gtest ${PTHREAD_LIBS})
+set(UNITTEST_CXX_FLAGS "-I${CMAKE_SOURCE_DIR}/src/gmock/include -I${CMAKE_BINARY_DIR}/src/gmock/include -I${CMAKE_SOURCE_DIR}/src/gmock/gtest/include -I${CMAKE_BINARY_DIR}/src/gmock/gtest/include -fno-strict-aliasing")
   
 # unittest_encoding
 set(unittest_encoding_srcs
