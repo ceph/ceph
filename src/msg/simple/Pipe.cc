@@ -2313,14 +2313,17 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
     msglen += sizeof(footer);
     msg.msg_iovlen++;
   } else {
-    if (msgr->crcflags & MSG_CRC_HEADER) {
+    if ((footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
     } else {
-	old_footer.front_crc = old_footer.middle_crc = 0;
+      old_footer.front_crc = old_footer.middle_crc = 0;
     }
-    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;   
+    if ((footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0)
+      old_footer.data_crc = footer.data_crc;
+    else
+      old_footer.data_crc = 0;
+    old_footer.flags = footer.flags;
     msgvec[msg.msg_iovlen].iov_base = (char*)&old_footer;
     msgvec[msg.msg_iovlen].iov_len = sizeof(old_footer);
     msglen += sizeof(old_footer);
