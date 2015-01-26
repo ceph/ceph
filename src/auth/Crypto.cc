@@ -137,6 +137,8 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
   // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
   bufferptr out_tmp(in.length()+16);
 
+  bufferlist incopy;
+
   PK11SlotInfo *slot;
 
   slot = PK11_GetBestSlot(mechanism, NULL);
@@ -194,18 +196,13 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
 
   SECStatus ret;
   int written;
-  // in is const, and PK11_CipherOp is not; C++ makes this hard to cheat,
-  // so just copy it to a temp buffer, at least for now
-  unsigned in_len;
   unsigned char *in_buf;
-  in_len = in.length();
-  in_buf = (unsigned char*)malloc(in_len);
-  if (!in_buf)
-    throw std::bad_alloc();
-  in.copy(0, in_len, (char*)in_buf);
-  ret = PK11_CipherOp(ctx, (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
+
+  incopy = in;  // it's a shallow copy!
+  in_buf = (unsigned char*)incopy.c_str();
+  ret = PK11_CipherOp(ctx,
+		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
 		      in_buf, in.length());
-  free(in_buf);
   if (ret != SECSuccess) {
     ostringstream oss;
     oss << "NSS AES failed: " << PR_GetError();
