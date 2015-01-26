@@ -1057,7 +1057,6 @@ def restart(ctx, config):
     for i in daemons:
         type_ = i.split('.', 1)[0]
         id_ = i.split('.', 1)[1]
-        ctx.daemons.get_daemon(type_, id_).stop()
         ctx.daemons.get_daemon(type_, id_).restart()
 
     if config.get('wait-for-healthy', True):
@@ -1094,6 +1093,42 @@ def stop(ctx, config):
         type_ = i.split('.', 1)[0]
         id_ = i.split('.', 1)[1]
         ctx.daemons.get_daemon(type_, id_).stop()
+
+    yield
+
+@contextlib.contextmanager
+def wait_for_failure(ctx, config):
+    """
+    Wait for a failure of a ceph daemon
+
+    For example::
+      tasks:
+      - ceph.wait_for_failure: [mds.*]
+
+      tasks:
+      - ceph.wait_for_failure: [osd.0, osd.2]
+
+      tasks:
+      - ceph.wait_for_failure:
+          daemons: [osd.0, osd.2]
+
+    """
+    if config is None:
+        config = {}
+    elif isinstance(config, list):
+        config = {'daemons': config}
+
+    daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES)
+    for i in daemons:
+        type_ = i.split('.', 1)[0]
+        id_ = i.split('.', 1)[1]
+        try:
+            ctx.daemons.get_daemon(type_, id_).wait()
+        except:
+            log.info('Saw expected daemon failure.  Continuing.')
+            pass
+        else:
+            raise RuntimeError('daemon %s did not fail' % i)
 
     yield
 
