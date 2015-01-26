@@ -64,6 +64,21 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
 
 // ---------------------------------------------------
 
+class CryptoNone : public CryptoHandler {
+public:
+  CryptoNone() { }
+  ~CryptoNone() {}
+  int get_type() const {
+    return CEPH_CRYPTO_NONE;
+  }
+  int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
+  void encrypt(const bufferptr& secret, const bufferlist& in,
+	      bufferlist& out, std::string &error) const;
+  void decrypt(const bufferptr& secret, const bufferlist& in,
+	      bufferlist& out, std::string &error) const;
+};
+
 int CryptoNone::create(bufferptr& secret)
 {
   return 0;
@@ -88,6 +103,23 @@ void CryptoNone::decrypt(const bufferptr& secret, const bufferlist& in,
 
 
 // ---------------------------------------------------
+
+class CryptoAES : public CryptoHandler {
+public:
+  CryptoAES() { }
+  ~CryptoAES() {}
+  int get_type() const {
+    return CEPH_CRYPTO_AES;
+  }
+  int create(bufferptr& secret);
+  int validate_secret(bufferptr& secret);
+  void encrypt(const bufferptr& secret, const bufferlist& in,
+	       bufferlist& out, std::string &error) const;
+  void decrypt(const bufferptr& secret, const bufferlist& in,
+	      bufferlist& out, std::string &error) const;
+};
+
+
 #ifdef USE_CRYPTOPP
 # define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
 # define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
@@ -395,4 +427,19 @@ void CryptoKey::encode_formatted(string label, Formatter *f, bufferlist &bl)
 void CryptoKey::encode_plaintext(bufferlist &bl)
 {
   bl.append(encode_base64());
+}
+
+
+// ------------------
+
+CryptoHandler *CryptoHandler::create(int type)
+{
+  switch (type) {
+  case CEPH_CRYPTO_NONE:
+    return new CryptoNone;
+  case CEPH_CRYPTO_AES:
+    return new CryptoAES;
+  default:
+    return NULL;
+  }
 }

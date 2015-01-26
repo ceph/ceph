@@ -32,8 +32,6 @@ class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
 class CephContextObs;
-class CryptoNone;
-class CryptoAES;
 class CryptoHandler;
 
 namespace ceph {
@@ -163,8 +161,8 @@ private:
   std::map<std::string, AssociatedSingletonObject*> _associated_objs;
 
   // crypto
-  CryptoNone *_crypto_none;
-  CryptoAES *_crypto_aes;
+  CryptoHandler *_crypto_none;
+  CryptoHandler *_crypto_aes;
 
   // experimental
   CephContextObs *_cct_obs;
