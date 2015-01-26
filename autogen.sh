@@ -44,6 +44,6 @@ aclocal -I m4 --install
 autoconf
 autoheader
 automake -a --add-missing -Wall
-( cd src/gtest && autoreconf -fvi; )
+( cd src/gmock && autoreconf -fvi; )
 ( cd src/rocksdb && autoreconf -fvi; )
 exit

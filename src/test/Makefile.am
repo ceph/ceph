@@ -287,11 +287,14 @@ unittests:: $(check_PROGRAMS)
 
 UNITTEST_CXXFLAGS = \
 	$(AM_CXXFLAGS) \
-	-I$(top_srcdir)/src/gtest/include \
-	-I$(top_builddir)/src/gtest/include
+	-I$(top_srcdir)/src/gmock/include \
+	-I$(top_builddir)/src/gmock/include \
+	-I$(top_srcdir)/src/gmock/gtest/include \
+	-I$(top_builddir)/src/gmock/gtest/include
 UNITTEST_LDADD = \
-	$(top_builddir)/src/gtest/lib/libgtest.a \
-	$(top_builddir)/src/gtest/lib/libgtest_main.a \
+	$(top_builddir)/src/gmock/lib/libgmock_main.la \
+	$(top_builddir)/src/gmock/lib/libgmock.la \
+	$(top_builddir)/src/gmock/gtest/lib/libgtest.la \
 	$(PTHREAD_LIBS)
 
 unittest_encoding_SOURCES = test/encoding.cc
