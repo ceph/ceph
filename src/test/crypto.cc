@@ -3,7 +3,10 @@
 
 #include "include/types.h"
 #include "auth/Crypto.h"
+#include "common/Clock.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 
 #include "test/unit.h"
 
