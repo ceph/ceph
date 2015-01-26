@@ -65,7 +65,7 @@ To replay workload1 but use test_image instead of prod_image::
 Availability
 ============
 
-**rbd-replay** is part of the Ceph distributed storage system. Please refer to
+**rbd-replay** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 
