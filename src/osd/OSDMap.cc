@@ -1177,7 +1177,16 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (pending_inc->new_pg_temp.count(p->first) == 0) {
+
+    // if pool does not exist, remove any existing pg_temps associated with
+    // it.  we don't care about pg_temps on the pending_inc either; if there
+    // are new_pg_temp entries on the pending, clear them out just as well.
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      ldout(cct, 10) << " removing pg_temp " << p->first
+        << " for inexistent pool " << p->first.pool() << dendl;
+      pending_inc->new_pg_temp[p->first].clear();
+
+    } else if (pending_inc->new_pg_temp.count(p->first) == 0) {
       vector<int> raw_up;
       int primary;
       osdmap.pg_to_raw_up(p->first, &raw_up, &primary);
