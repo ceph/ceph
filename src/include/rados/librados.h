@@ -78,6 +78,8 @@ enum {
   LIBRADOS_OP_FLAG_FADVISE_WILLNEED   = 0x10,
   // indicate read/write data will not accessed int the near future
   LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20,
+  // indicate read/write data will not accessed just once by this client
+  LIBRADOS_OP_FLAG_FADVISE_NOREUSE   = 0x40,
 };
 
 #if __GNUC__ >= 4
