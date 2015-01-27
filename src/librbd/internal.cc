@@ -23,6 +23,7 @@
 #include "librbd/ImageWatcher.h"
 
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
 #include "include/util.h"
 
@@ -1775,8 +1776,10 @@ reprotect_and_return_err:
 	return;
       }
 
-      m_ictx->size = m_new_size;
-      m_ictx->resize_object_map(OBJECT_NONEXISTENT);
+      if (m_ictx->object_map != NULL) {
+	m_ictx->size = m_new_size;
+	m_ictx->object_map->resize(OBJECT_NONEXISTENT);
+      }
     }
 
   private:
@@ -1832,14 +1835,18 @@ reprotect_and_return_err:
     }
 
     virtual int send() {
+      {
+	RWLock::RLocker l(m_ictx->md_lock);
+	if (m_ictx->object_map != NULL &&
+	    !m_ictx->object_map->object_may_exist(m_object_no)) {
+	  return 1;
+	}
+      }
+
       RWLock::RLocker l(m_ictx->owner_lock);
       if (m_ictx->image_watcher->is_lock_supported() &&
           !m_ictx->image_watcher->is_lock_owner()) {
         return -ERESTART;
-      }
-
-      if (!m_ictx->object_may_exist(m_object_no)) {
-	return 1;
       }
 
       string oid = m_ictx->get_object_name(m_object_no);
@@ -1880,8 +1887,12 @@ reprotect_and_return_err:
 	return;
       }
 
-      m_ictx->update_object_map(m_delete_start, m_num_objects,
-				OBJECT_NONEXISTENT, OBJECT_PENDING);
+      RWLock::RLocker l2(m_ictx->md_lock);
+      if (m_ictx->object_map != NULL) {
+	m_ictx->object_map->update(m_delete_start, m_num_objects,
+				   OBJECT_NONEXISTENT, OBJECT_PENDING);
+      }
+
       if (m_delete_offset <= m_new_size) {
 	m_ctx->complete(r);
 	return;
@@ -1904,20 +1915,25 @@ reprotect_and_return_err:
 	bool flag_nonexistent = false;
 	if (p->offset == 0) {
 	  flag_nonexistent = true;
-	  m_ictx->update_object_map(p->objectno, p->objectno + 1,
-				    OBJECT_PENDING, OBJECT_EXISTS);
+	  if (m_ictx->object_map != NULL) {
+	    m_ictx->object_map->update(p->objectno, OBJECT_PENDING,
+				       OBJECT_EXISTS);
+	  }
 	  m_ictx->data_ctx.aio_remove(p->oid.name, rados_completion);
 	} else {
-	  m_ictx->update_object_map(p->objectno, OBJECT_EXISTS);
+	  if (m_ictx->object_map != NULL) {
+	    m_ictx->object_map->update(p->objectno, OBJECT_EXISTS,
+				       boost::optional<uint8_t>());
+	  }
 	  librados::ObjectWriteOperation op;
 	  op.truncate(p->offset);
 	  m_ictx->data_ctx.aio_operate(p->oid.name, rados_completion, &op);
 	}
 	rados_completion->release();
 
-	if (flag_nonexistent) {
-	  m_ictx->update_object_map(p->objectno, p->objectno + 1,
-				    OBJECT_NONEXISTENT, OBJECT_PENDING);
+	if (flag_nonexistent && m_ictx->object_map != NULL) {
+	  m_ictx->object_map->update(p->objectno, OBJECT_NONEXISTENT,
+				     OBJECT_PENDING);
 	}
       }
       completion->finish_adding_requests();
@@ -1958,8 +1974,13 @@ reprotect_and_return_err:
       ldout(cct, 2) << "trim_image objects " << delete_start << " to "
 		    << (num_objects - 1) << dendl;
 
-      ictx->update_object_map(delete_start, num_objects, OBJECT_PENDING,
-			      OBJECT_EXISTS);
+      {
+	RWLock::RLocker l(ictx->md_lock);
+	if (ictx->object_map != NULL) {
+	  ictx->object_map->update(delete_start, num_objects, OBJECT_PENDING,
+				   OBJECT_EXISTS);
+	}
+      }
 
       AsyncObjectThrottle::ContextFactory context_factory(
         boost::lambda::bind(boost::lambda::new_ptr<AsyncTrimObjectContext>(),
@@ -2302,10 +2323,13 @@ reprotect_and_return_err:
 	ictx->snap_exists = false;
       }
 
-      if (ictx->snap_exists) {
-	r = ictx->refresh_object_map();
-	if (r < 0) {
-	  return r;
+      if ((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) {
+	delete ictx->object_map;
+	ictx->object_map = NULL;
+      } else {
+	ictx->object_map = new ObjectMap(*ictx);
+	if (ictx->snap_exists) {
+	  ictx->object_map->refresh();
 	}
       }
 
@@ -2591,7 +2615,9 @@ reprotect_and_return_err:
       return r;
     }
 
-    ictx->refresh_object_map();
+    if (ictx->object_map != NULL) {
+      ictx->object_map->refresh();
+    }
     refresh_parent(ictx);
     return 0;
   }
@@ -3698,9 +3724,15 @@ reprotect_and_return_err:
 	bl.append(buf + q->first, q->second);
       }
 
-      r = ictx->update_object_map(p->objectno, OBJECT_EXISTS);
-      if (r < 0) {
-	goto done;
+      {
+	RWLock::RLocker l(ictx->md_lock);
+	if (ictx->object_map != NULL) {
+	  r = ictx->object_map->update(p->objectno, OBJECT_EXISTS,
+				       boost::optional<uint8_t>());
+	  if (r < 0) {
+	    goto done;
+	  }
+	}
       }
 
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
@@ -3802,13 +3834,13 @@ reprotect_and_return_err:
 	object_overlap = ictx->prune_parent_extents(objectx, overlap);
       }
 
+      RWLock::RLocker l(ictx->md_lock);
       bool flag_nonexistent = false;
       if (p->offset == 0 && p->length == ictx->layout.fl_object_size) {
 	req = new AioRemove(ictx, p->oid.name, p->objectno, objectx, object_overlap,
 			    snapc, snap_id, req_comp);
-	if (!req->has_parent()) {
-          ictx->update_object_map(p->objectno, p->objectno + 1, OBJECT_PENDING,
-				  OBJECT_EXISTS);
+	if (!req->has_parent() && ictx->object_map != NULL) {
+          ictx->object_map->update(p->objectno, OBJECT_PENDING, OBJECT_EXISTS);
 	  flag_nonexistent = true;
 	}
       } else if (p->offset + p->length == ictx->layout.fl_object_size) {
@@ -3820,17 +3852,18 @@ reprotect_and_return_err:
 			  snapc, snap_id, req_comp);
       }
 
-      if (!flag_nonexistent) {
-	ictx->update_object_map(p->objectno, OBJECT_EXISTS);
+      if (!flag_nonexistent && ictx->object_map != NULL) {
+	ictx->object_map->update(p->objectno, OBJECT_EXISTS,
+				 boost::optional<uint8_t>());
       }
 
       r = req->send();
       if (r < 0)
 	goto done;
 
-      if (flag_nonexistent) {
-	ictx->update_object_map(p->objectno, p->objectno + 1, OBJECT_NONEXISTENT,
-				OBJECT_PENDING);
+      if (flag_nonexistent && ictx->object_map != NULL) {
+	ictx->object_map->update(p->objectno, OBJECT_NONEXISTENT,
+				 OBJECT_PENDING);
       }
     }
     r = 0;

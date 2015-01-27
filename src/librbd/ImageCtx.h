@@ -15,7 +15,6 @@
 #include "common/Mutex.h"
 #include "common/Readahead.h"
 #include "common/RWLock.h"
-#include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
@@ -36,6 +35,7 @@ namespace librbd {
 
   class ImageWatcher;
   class CopyupRequest;
+  class ObjectMap;
 
   struct ImageCtx {
     CephContext *cct;
@@ -113,7 +113,7 @@ namespace librbd {
     Cond pending_aio_cond;
     uint64_t pending_aio;
 
-    ceph::BitVector<2> object_map;
+    ObjectMap *object_map;
 
     /**
      * Either image_name or image_id must be set.
@@ -181,18 +181,6 @@ namespace librbd {
 				  uint64_t overlap);
     void wait_for_pending_aio();
     void wait_for_pending_copyup();
-
-    /* object map */
-    int lock_object_map();
-    int unlock_object_map();
-    bool object_may_exist(uint64_t object_no) const;
-    int refresh_object_map();
-    int resize_object_map(uint8_t default_object_state);
-    int update_object_map(uint64_t object_no, uint8_t object_state);
-    int update_object_map(uint64_t start_object_no, uint64_t end_object_no,
-			  uint8_t new_state,
-			  const boost::optional<uint8_t> &current_state);
-    void invalidate_object_map();
   };
 }
 

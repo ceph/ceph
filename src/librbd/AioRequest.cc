@@ -12,6 +12,7 @@
 
 #include "librbd/AioRequest.h"
 #include "librbd/CopyupRequest.h"
+#include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -196,9 +197,13 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
 
     // send read request to parent if the object doesn't exist locally
-    if (!m_ictx->object_may_exist(m_object_no)) {
-      complete(-ENOENT);
-      return 0;
+    {
+      RWLock::RLocker l(m_ictx->md_lock);
+      if (m_ictx->object_map != NULL &&
+	  !m_ictx->object_map->object_may_exist(m_object_no)) {
+	complete(-ENOENT);
+	return 0;
+      }
     }
 
     librados::AioCompletion *rados_completion =
