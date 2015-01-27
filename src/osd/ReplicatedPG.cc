@@ -11263,8 +11263,8 @@ int ReplicatedPG::recover_backfill(
     dout(20) << *i << " is still in flight" << dendl;
   }
 
-  hobject_t next_backfill_to_complete = backfills_in_flight.size() ?
-    *(backfills_in_flight.begin()) : backfill_pos;
+  hobject_t next_backfill_to_complete = backfills_in_flight.empty() ?
+    backfill_pos : *(backfills_in_flight.begin());
   hobject_t new_last_backfill = earliest_backfill();
   dout(10) << "starting new_last_backfill at " << new_last_backfill << dendl;
   for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
