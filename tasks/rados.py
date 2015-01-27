@@ -30,6 +30,9 @@ def task(ctx, config):
           ec_pool: use an ec pool
           erasure_code_profile: profile to use with the erasure coded pool
           pool_snaps: use pool snapshots instead of selfmanaged snapshots
+	  write_fadvise_dontneed: write behavior like with LIBRADOS_OP_FLAG_FADVISE_DONTNEED.
+	                          This mean data don't access in the near future.
+				  Let osd backend don't keep data in cache.
 
     For example::
 
@@ -58,6 +61,7 @@ def task(ctx, config):
               m: 1
               ruleset-failure-domain: osd
             pool_snaps: true
+	    write_fadvise_dontneed: true
             runs: 10
         - interactive:
 
@@ -100,6 +104,8 @@ def task(ctx, config):
         'ceph_test_rados']
     if config.get('ec_pool', False):
         args.extend(['--ec-pool'])
+    if config.get('write_fadvise_dontneed', False):
+        args.extend(['--write-fadvise-dontneed'])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([
