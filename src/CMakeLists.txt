@@ -174,6 +174,7 @@ set(libcommon_files
   common/TrackedOp.cc
   common/SloppyCRCMap.cc
   common/types.cc
+  common/TextTable.cc
   log/Log.cc
   log/SubsystemMap.cc
   mon/MonCap.cc
@@ -643,14 +644,17 @@ endif(WITH_LIBCEPHFS)
 
 if(${WITH_RBD})
   set(librbd_srcs
-    librbd/librbd.cc
     krbd.cc
+    common/ContextCompletion.cc
     librbd/AioCompletion.cc
     librbd/AioRequest.cc
+    librbd/AsyncObjectThrottle.cc
+    librbd/CopyupRequest.cc
     librbd/ImageCtx.cc
+    librbd/ImageWatcher.cc
     librbd/internal.cc
-    librbd/LibrbdWriteback.cc
-    librbd/ImageWatcher.cc)
+    librbd/librbd.cc
+    librbd/LibrbdWriteback.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
