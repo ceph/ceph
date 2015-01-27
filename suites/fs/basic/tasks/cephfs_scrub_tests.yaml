@@ -7,7 +7,7 @@ overrides:
 tasks:
 - ceph-fuse:
 - mds_scrub_checks:
-    mds_id: a
+    mds_rank: 0
     path: /scrub/test/path
     client: 0
     run_seq: 0
@@ -15,7 +15,7 @@ tasks:
     clients:
       client.0: [suites/pjd.sh]
 - mds_scrub_checks:
-    mds_id: a
+    mds_rank: 0
     path: /scrub/test/path
     client: 0
     run_seq: 1
