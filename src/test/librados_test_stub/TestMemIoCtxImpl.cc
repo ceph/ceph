@@ -555,7 +555,6 @@ TestMemRadosClient::SharedFile TestMemIoCtxImpl::get_file(
             file->snaps.push_back(*seq_it);
           }
         }
-        file->snap_id = file->snaps.back();
 
         uint64_t prev_size = file->data.length();
         file = TestMemRadosClient::SharedFile(
