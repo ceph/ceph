@@ -6,7 +6,8 @@ librbd_internal_la_SOURCES = \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
-	librbd/LibrbdWriteback.cc
+	librbd/LibrbdWriteback.cc \
+	librbd/ObjectMap.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
 librbd_api_la_SOURCES = \
@@ -43,5 +44,6 @@ noinst_HEADERS += \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/LibrbdWriteback.h \
+	librbd/ObjectMap.h \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h

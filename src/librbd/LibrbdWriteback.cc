@@ -15,6 +15,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
+#include "librbd/ObjectMap.h"
 
 #include "include/assert.h"
 
@@ -104,9 +105,14 @@ namespace librbd {
   {
     // on completion, take the mutex and then call onfinish.
     Context *req = new C_Request(m_ictx->cct, onfinish, &m_lock);
-    if (!m_ictx->object_may_exist(object_no)) {
-      m_finisher->queue(req, -ENOENT);
-      return;
+
+    {
+      RWLock::RLocker l(m_ictx->md_lock);
+      if (m_ictx->object_map != NULL &&
+	  !m_ictx->object_map->object_may_exist(object_no)) {
+	m_finisher->queue(req, -ENOENT);
+	return;
+      }
     }
 
     librados::AioCompletion *rados_completion =

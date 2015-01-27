@@ -11,6 +11,7 @@
 
 #include "librbd/AioRequest.h"
 #include "librbd/CopyupRequest.h"
+#include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -72,12 +73,18 @@ namespace librbd {
     std::vector<librados::snap_t> snaps;
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
 
-    r = m_ictx->update_object_map(m_object_no, OBJECT_EXISTS);
-    if (r < 0) {
-      lderr(m_ictx->cct) << __func__ << " " << this
-		         << ": failed to update object map:"
-			 << cpp_strerror(r) << dendl;
-      return;
+    {
+      RWLock::RLocker l(m_ictx->md_lock);
+      if (m_ictx->object_map != NULL) {
+	r = m_ictx->object_map->update(m_object_no, OBJECT_EXISTS,
+				       boost::optional<uint8_t>());
+	if (r < 0) {
+	  lderr(m_ictx->cct) << __func__ << " " << this
+			     << ": failed to update object map:"
+			     << cpp_strerror(r) << dendl;
+	  return;
+	}
+      }
     }
 
     librados::ObjectWriteOperation copyup_op;
