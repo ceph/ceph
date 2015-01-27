@@ -1021,13 +1021,15 @@ struct RGWRegion {
   map<string, RGWRegionPlacementTarget> placement_targets;
   string default_placement;
 
+  list<string> hostnames;
+
   CephContext *cct;
   RGWRados *store;
 
   RGWRegion() : is_master(false), cct(NULL), store(NULL) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(name, bl);
     ::encode(api_name, bl);
     ::encode(is_master, bl);
@@ -1036,11 +1038,12 @@ struct RGWRegion {
     ::encode(zones, bl);
     ::encode(placement_targets, bl);
     ::encode(default_placement, bl);
+    ::encode(hostnames, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(name, bl);
     ::decode(api_name, bl);
     ::decode(is_master, bl);
@@ -1049,6 +1052,9 @@ struct RGWRegion {
     ::decode(zones, bl);
     ::decode(placement_targets, bl);
     ::decode(default_placement, bl);
+    if (struct_v >= 2) {
+      ::decode(hostnames, bl);
+    }
     DECODE_FINISH(bl);
   }
 
