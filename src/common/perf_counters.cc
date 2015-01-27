@@ -102,17 +102,30 @@ bool PerfCountersCollection::reset(const std::string &name)
 }
 
 
-void PerfCountersCollection::dump_formatted(Formatter *f, bool schema)
+/**
+ * Serialize current values of performance counters.  Optionally
+ * output the schema instead, or filter output to a particular
+ * PerfCounters or particular named counter.
+ *
+ * @param logger name of subsystem logger, e.g. "mds_cache", may be empty
+ * @param counter name of counter within subsystem, e.g. "num_strays",
+ *                may be empty.
+ * @param schema if true, output schema instead of current data.
+ */
+void PerfCountersCollection::dump_formatted(
+    Formatter *f,
+    bool schema,
+    const std::string &logger,
+    const std::string &counter)
 {
   Mutex::Locker lck(m_lock);
   f->open_object_section("perfcounter_collection");
-  perf_counters_set_t::iterator l = m_loggers.begin();
-  perf_counters_set_t::iterator l_end = m_loggers.end();
-  if (l != l_end) {
-    while (true) {
-      (*l)->dump_formatted(f, schema);
-      if (++l == l_end)
-	break;
+  
+  for (perf_counters_set_t::iterator l = m_loggers.begin();
+       l != m_loggers.end(); ++l) {
+    // Optionally filter on logger name, pass through counter filter
+    if (logger.empty() || (*l)->get_name() == logger) {
+      (*l)->dump_formatted(f, schema, counter);
     }
   }
   f->close_section();
@@ -264,16 +277,18 @@ void PerfCounters::reset()
   }
 }
 
-void PerfCounters::dump_formatted(Formatter *f, bool schema)
+void PerfCounters::dump_formatted(Formatter *f, bool schema,
+    const std::string &counter)
 {
   f->open_object_section(m_name.c_str());
-  perf_counter_data_vec_t::const_iterator d = m_data.begin();
-  perf_counter_data_vec_t::const_iterator d_end = m_data.end();
-  if (d == d_end) {
-    f->close_section();
-    return;
-  }
-  while (true) {
+  
+  for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
+       d != m_data.end(); ++d) {
+    if (!counter.empty() && counter != d->name) {
+      // Optionally filter on counter name
+      continue;
+    }
+
     if (schema) {
       f->open_object_section(d->name);
       f->dump_int("type", d->type);
@@ -307,9 +322,6 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema)
 	}
       }
     }
-
-    if (++d == d_end)
-      break;
   }
   f->close_section();
 }
