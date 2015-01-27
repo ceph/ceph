@@ -1501,13 +1501,13 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_lock("OSD::osd_lock"),
   tick_timer(cct, osd_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.length() ?
-								      cct->_conf->auth_supported :
-								      cct->_conf->auth_cluster_required)),
+								      cct->_conf->auth_supported.empty() ?
+								      cct->_conf->auth_cluster_required :
+								      cct->_conf->auth_supported)),
   authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.length() ?
-								      cct->_conf->auth_supported :
-								      cct->_conf->auth_service_required)),
+								      cct->_conf->auth_supported.empty() ?
+								      cct->_conf->auth_service_required :
+								      cct->_conf->auth_supported)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),

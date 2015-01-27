@@ -91,13 +91,13 @@ MDS::MDS(const std::string &n, Messenger *m, MonClient *mc) :
   hb(NULL),
   beacon(m->cct, mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
-								      m->cct->_conf->auth_supported.length() ?
-								      m->cct->_conf->auth_supported :
-								      m->cct->_conf->auth_cluster_required)),
+								      m->cct->_conf->auth_supported.empty() ?
+								      m->cct->_conf->auth_cluster_required :
+								      m->cct->_conf->auth_supported)),
   authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(m->cct,
-								      m->cct->_conf->auth_supported.length() ?
-								      m->cct->_conf->auth_supported :
-								      m->cct->_conf->auth_service_required)),
+								      m->cct->_conf->auth_supported.empty() ?
+								      m->cct->_conf->auth_service_required :
+								      m->cct->_conf->auth_supported)),
   name(n),
   whoami(MDS_RANK_NONE), incarnation(0),
   standby_for_rank(MDSMap::MDS_NO_STANDBY_PREF),
