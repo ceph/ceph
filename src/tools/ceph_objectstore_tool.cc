@@ -2355,6 +2355,8 @@ void usage(po::options_description &desc)
     cerr << "by --op list." << std::endl;
     cerr << "<object> can be an object name which will be looked up in all" << std::endl;
     cerr << "the OSD's PGs." << std::endl;
+    cerr << "<object> can be the empty string ('') which with a provided pgid " << std::endl;
+    cerr << "specifies the pgmeta object" << std::endl;
     cerr << std::endl;
     cerr << "The optional [file] argument will read stdin or write stdout" << std::endl;
     cerr << "if not specified or if '-' specified." << std::endl;
@@ -2413,7 +2415,7 @@ int main(int argc, char **argv)
 
   po::options_description positional("Positional options");
   positional.add_options()
-    ("object", po::value<string>(&object), "object name or ghobject in json")
+    ("object", po::value<string>(&object), "'' for pgmeta_oid, object name or ghobject in json")
     ("objcmd", po::value<string>(&objcmd), "command [(get|set)-bytes, (get|set|rm)-(attr|omap), (get|set)-omaphdr, list-attrs, list-omap, remove]")
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
@@ -2716,6 +2718,11 @@ int main(int argc, char **argv)
   }
 
   if (op != "list" && vm.count("object")) {
+    // Special case: Create pgmeta_oid if empty string specified
+    // This can't conflict with any actual object names.
+    if (object == "") {
+      ghobj = pgid.make_pgmeta_oid();
+    } else {
     json_spirit::Value v;
     try {
       if (!json_spirit::read(object, v)) {
@@ -2787,6 +2794,7 @@ int main(int argc, char **argv)
       cerr << e.what() << std::endl;
       ret = 1;
       goto out;
+    }
     }
   }
 
