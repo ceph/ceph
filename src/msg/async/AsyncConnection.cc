@@ -750,7 +750,7 @@ void AsyncConnection::process()
           ceph_msg_footer_old old_footer;
           int len;
           // footer
-          if (has_feature(CEPH_FEATURE_MSG_AUTH))
+          if (has_feature(CEPH_FEATURE_MSG_AUTH) || has_feature(CEPH_FEATURE_MSG_COMPRESS))
             len = sizeof(footer);
           else
             len = sizeof(old_footer);
@@ -763,7 +763,7 @@ void AsyncConnection::process()
             break;
           }
 
-          if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+          if (has_feature(CEPH_FEATURE_MSG_AUTH) || has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
             footer = *((ceph_msg_footer*)state_buffer);
           } else {
             old_footer = *((ceph_msg_footer_old*)state_buffer);
@@ -2125,7 +2125,7 @@ int AsyncConnection::_send(Message *m)
                          << features << " " << m << " " << *m << dendl;
 
   // encode and copy out of *m
-  m->encode(features, async_msgr->crcflags);
+  m->encode(features, async_msgr->crcflags, async_msgr->cct->_conf->ms_compress_all);
 
   // prepare everything
   ceph_msg_header& header = m->get_header();
@@ -2200,9 +2200,10 @@ int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& foo
 
   bl.claim_append(blist);
 
-  // send footer; if receiver doesn't support signatures, use the old footer format
+  // send footer; if receiver doesn't support signatures and compression,
+  // use the old footer format
   ceph_msg_footer_old old_footer;
-  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+  if (has_feature(CEPH_FEATURE_MSG_AUTH) || has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
     bl.append((char*)&footer, sizeof(footer));
   } else {
     if (msgr->crcflags & MSG_CRC_HEADER) {

@@ -173,7 +173,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags)
+void Message::encode(uint64_t features, int crcflags, bool compression)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -184,6 +184,16 @@ void Message::encode(uint64_t features, int crcflags)
     if (header.compat_version == 0)
       header.compat_version = header.version;
   }
+
+  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
+
+  // if receiver supports compression, and this message does need compression
+  if ((features & CEPH_FEATURE_MSG_COMPRESS) &&
+      ((footer.flags & CEPH_MSG_FOOTER_COMPRESS) || (compression))) {
+    compress();
+    footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_COMPRESS;
+  }
+
   if (crcflags & MSG_CRC_HEADER)
     calc_front_crc();
 
@@ -191,8 +201,6 @@ void Message::encode(uint64_t features, int crcflags)
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
-
-  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
 
   if (crcflags & MSG_CRC_HEADER)
     calc_header_crc();
@@ -249,6 +257,89 @@ void Message::dump(Formatter *f) const
   stringstream ss;
   print(ss);
   f->dump_string("summary", ss.str());
+}
+
+void Message::compress()
+{
+  // update footer to keep track of original length
+  footer.orig_front_len = payload.length();
+  footer.orig_middle_len = middle.length();
+  footer.orig_data_len = data.length();
+
+  // update footer to keep track of original crc
+  footer.orig_front_crc = payload.crc32c(0);
+  footer.orig_middle_crc = middle.crc32c(0);
+  footer.orig_data_crc = data.crc32c(0);
+
+  bufferlist compressed_payload, compressed_middle, compressed_data;
+  payload.compress(buffer::ALG_LZ4, compressed_payload);
+  middle.compress(buffer::ALG_LZ4, compressed_middle);
+  data.compress(buffer::ALG_LZ4, compressed_data);
+
+  // to preserve buffer flag
+  set_payload(compressed_payload);
+  set_middle(compressed_middle);
+  set_data(compressed_data);
+}
+
+int Message::decompress(CephContext *cct)
+{
+  // decompression
+
+  bufferlist decompressed_payload, decompressed_middle, decompressed_data;
+  payload.decompress(buffer::ALG_LZ4, decompressed_payload, footer.orig_front_len);
+  middle.decompress(buffer::ALG_LZ4, decompressed_middle, footer.orig_middle_len);
+  data.decompress(buffer::ALG_LZ4, decompressed_data, footer.orig_data_len);
+
+  // to preserve buffer flag
+  set_payload(decompressed_payload);
+  set_middle(decompressed_middle);
+  set_data(decompressed_data);
+
+  // verify orig_xyz_crc after decompression
+  __u32 orig_front_crc = payload.crc32c(0);
+  __u32 orig_middle_crc = middle.crc32c(0);
+
+  if (orig_front_crc != footer.orig_front_crc) {
+    if (cct) {
+      ldout(cct, 0) << "bad crc in front after decompression " << orig_front_crc
+                    << " != exp " << footer.orig_front_crc << dendl;
+      ldout(cct, 20) << " ";
+      payload.hexdump(*_dout);
+      *_dout << dendl;
+    }
+    return -EBADMSG;
+  }
+  if (orig_middle_crc != footer.orig_middle_crc) {
+    if (cct) {
+      ldout(cct, 0) << "bad crc in middle after decompression " << orig_middle_crc
+                    << " != exp " << footer.orig_middle_crc << dendl;
+      ldout(cct, 20) << " ";
+      middle.hexdump(*_dout);
+      *_dout << dendl;
+    }
+    return -EBADMSG;
+  }
+
+  if ((footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0) {
+    __u32 orig_data_crc = data.crc32c(0);
+    if (orig_data_crc != footer.orig_data_crc) {
+      if (cct) {
+        ldout(cct, 0) << "bad crc in data after decompression " << orig_data_crc
+                      << " != exp " << footer.orig_data_crc << dendl;
+        ldout(cct, 20) << " ";
+        data.hexdump(*_dout);
+        *_dout << dendl;
+      }
+      return -EBADMSG;
+    }
+  }
+
+  assert(payload.length() == footer.orig_front_len);
+  assert(middle.length() == footer.orig_middle_len);
+  assert(data.length() == footer.orig_data_len);
+
+  return 0;
 }
 
 Message *decode_message(CephContext *cct, int crcflags,
@@ -744,6 +835,11 @@ Message *decode_message(CephContext *cct, int crcflags,
   m->set_payload(front);
   m->set_middle(middle);
   m->set_data(data);
+
+  if (footer.flags & CEPH_MSG_FOOTER_COMPRESS) {
+    ldout(cct, 20) << "decompressing incoming message" << dendl;
+    m->decompress(cct);
+  }
 
   try {
     m->decode_payload();

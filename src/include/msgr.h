@@ -180,6 +180,8 @@ struct ceph_msg_footer_old {
 
 struct ceph_msg_footer {
 	__le32 front_crc, middle_crc, data_crc;
+        __le32 orig_front_crc, orig_middle_crc, orig_data_crc;
+        __le32 orig_front_len, orig_middle_len, orig_data_len;
 	// sig holds the 64 bits of the digital signature for the message PLR
 	__le64  sig;
 	__u8 flags;
@@ -189,6 +191,7 @@ struct ceph_msg_footer {
 #define CEPH_MSG_FOOTER_NODATACRC   (1<<1)   /* no data crc */
 #define CEPH_MSG_FOOTER_SIGNED      (1<<2)   /* msg was signed */
 #define CEPH_MSG_FOOTER_NOHEADERCRC (1<<3)   /* no header crc */
+#define CEPH_MSG_FOOTER_COMPRESS    (1<<4)   /* msg was compressed */
 
 
 #endif

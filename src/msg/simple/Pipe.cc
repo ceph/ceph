@@ -1794,8 +1794,30 @@ void Pipe::writer()
 	  ldout(msgr->cct,20) << "writer half-reencoding " << m->get_seq() << " features " << features
 			      << " " << m << " " << *m << dendl;
 
+        ldout(msgr->cct, 20) << __func__ << " BEFORE encoding:\n"
+                             << " front_len=" << m->get_payload().length()
+                             << " header.front_len=" << m->get_header().front_len
+                             << " footer.orig_front_len=" << m->get_footer().orig_front_len
+                             << " middle_len=" << m->get_middle().length()
+                             << " header.middle_len=" << m->get_header().middle_len
+                             << " footer.orig_middle_len=" << m->get_footer().orig_middle_len
+                             << " data_len=" << m->get_data().length()
+                             << " header.data_len=" << m->get_header().data_len
+                             << " footer.orig_data_len=" << m->get_footer().orig_data_len
+                             << dendl;
 	// encode and copy out of *m
-	m->encode(features, msgr->crcflags);
+	m->encode(features, msgr->crcflags, msgr->cct->_conf->ms_compress_all);
+        ldout(msgr->cct, 20) << __func__ << " AFTER encoding:\n"
+                             << " front_len=" << m->get_payload().length()
+                             << " header.front_len=" << m->get_header().front_len
+                             << " footer.orig_front_len=" << m->get_footer().orig_front_len
+                             << " middle_len=" << m->get_middle().length()
+                             << " header.middle_len=" << m->get_header().middle_len
+                             << " footer.orig_middle_len=" << m->get_footer().orig_middle_len
+                             << " data_len=" << m->get_data().length()
+                             << " header.data_len=" << m->get_header().data_len
+                             << " footer.orig_data_len=" << m->get_footer().orig_data_len
+                             << dendl;
 
 	// prepare everything
 	ceph_msg_header& header = m->get_header();
@@ -1946,6 +1968,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     policy.throttler_messages->get();
   }
 
+  uint64_t new_message_size;
   uint64_t message_size = header.front_len + header.middle_len + header.data_len;
   if (message_size) {
     if (policy.throttler_bytes) {
@@ -2046,7 +2069,11 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
 
   // footer
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH) ||
+      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
+    ldout(msgr->cct, 20) << __func__ << " has feature "
+                         << connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)
+                         << dendl;
     if (tcp_read((char*)&footer, sizeof(footer)) < 0)
       goto out_dethrottle;
   } else {
@@ -2069,12 +2096,47 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     goto out_dethrottle;
   }
 
+  ldout(msgr->cct, 20) << __func__ << " BEFORE decoding:\n"
+                       << " front_len=" << front.length()
+                       << " header.front_len=" << header.front_len
+                       << " footer.orig_front_len=" << footer.orig_front_len
+                       << " middle_len=" << middle.length()
+                       << " header.middle_len=" << header.middle_len
+                       << " footer.orig_middle_len=" << footer.orig_middle_len
+                       << " data_len=" << data.length()
+                       << " header.data_len=" << header.data_len
+                       << " footer.orig_data_len=" << footer.orig_data_len
+                       << dendl;
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
   message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
+  }
+  ldout(msgr->cct, 20) << __func__ << " AFTER decoding:\n"
+                       << " front_len=" << front.length()
+                       << " header.front_len=" << header.front_len
+                       << " footer.orig_front_len=" << footer.orig_front_len
+                       << " middle_len=" << middle.length()
+                       << " header.middle_len=" << header.middle_len
+                       << " footer.orig_middle_len=" << footer.orig_middle_len
+                       << " data_len=" << data.length()
+                       << " header.data_len=" << header.data_len
+                       << " footer.orig_data_len=" << footer.orig_data_len
+                       << dendl;
+
+  // reset policy.throttler_bytes;
+  new_message_size = message->get_payload().length() +
+    message->get_middle().length() + message->get_data().length();
+  if (message_size != new_message_size) {
+    if (policy.throttler_bytes) {
+      ldout(msgr->cct,10) << "reader wants to reclaim" << new_message_size - message_size << " bytes from policy throttler "
+	       << policy.throttler_bytes->get_current() << "/"
+	       << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->put(message_size);
+      policy.throttler_bytes->get(new_message_size);
+    }
   }
 
   //
@@ -2326,10 +2388,12 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
   }
   assert(left == 0);
 
-  // send footer; if receiver doesn't support signatures, use the old footer format
+  // send footer; if receiver doesn't support signatures and compression,
+  // use the old footer format
 
   ceph_msg_footer_old old_footer;
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH) ||
+      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
     msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
     msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
     msglen += sizeof(footer);
