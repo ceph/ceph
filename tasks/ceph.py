@@ -145,6 +145,16 @@ def valgrind_post(ctx, config):
         if valgrind_exception is not None:
             raise valgrind_exception
 
+@contextlib.contextmanager
+def crush_setup(ctx, config):
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon_remote,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+
+    profile = config.get('crush_tunables', 'default')
+    log.info('Setting crush tunables to %s', profile)
+    mon_remote.run(
+        args=['sudo', 'ceph', 'osd', 'crush', 'tunables', profile])
+    yield
 
 @contextlib.contextmanager
 def cephfs_setup(ctx, config):
@@ -1266,6 +1276,7 @@ def task(ctx, config):
                 cpu_profile=set(config.get('cpu_profile', [])),
                 )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
+        lambda: crush_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
