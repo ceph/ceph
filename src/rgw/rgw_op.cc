@@ -1901,8 +1901,6 @@ void RGWPutMetadata::pre_exec()
 
 void RGWPutMetadata::execute()
 {
-  const char *meta_prefix = RGW_ATTR_META_PREFIX;
-  int meta_prefix_len = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
   bufferlist bl, cors_bl;
@@ -1939,7 +1937,11 @@ void RGWPutMetadata::execute()
   /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
     const string& name = iter->first;
-    if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
+    if (rmattr_names.find(name) != rmattr_names.end()) {
+      map<string, bufferlist>::iterator aiter = attrs.find(name);
+      if (aiter != attrs.end()) {
+        attrs.erase(aiter);
+      }
       rmattrs[name] = iter->second;
     } else if (attrs.find(name) == attrs.end()) {
       attrs[name] = iter->second;

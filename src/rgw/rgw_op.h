@@ -14,6 +14,7 @@
 #include <limits.h>
 
 #include <string>
+#include <set>
 #include <map>
 
 #include "rgw_common.h"
@@ -419,7 +420,7 @@ public:
 class RGWPutMetadata : public RGWOp {
 protected:
   int ret;
-  map<string, bufferlist> attrs;
+  set<string> rmattr_names;
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
@@ -442,7 +443,7 @@ public:
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
-  virtual const string name() { return "put_obj_metadata"; }
+  virtual const string name() { return "put_metadata"; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 

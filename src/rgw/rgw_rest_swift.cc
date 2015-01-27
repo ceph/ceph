@@ -244,6 +244,15 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
     if (!s->bucket_info.placement_rule.empty()) {
       s->cio->print("X-Storage-Policy: %s\r\n", s->bucket_info.placement_rule.c_str());
     }
+    // Dump user-defined metadata items
+    const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
+    map<string, bufferlist>::iterator iter;
+    for (iter = s->bucket_attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != s->bucket_attrs.end(); ++iter) {
+      const char *name = iter->first.c_str();
+      if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+        s->cio->print("X-Container-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+      }
+    }
   }
 }
 
@@ -435,12 +444,49 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
   if (s->has_bad_meta)
     return -EINVAL;
 
-  if (!s->object) {
+  const char *rm_attr_prefix, *put_attr_prefix; 
+
+  if (s->object) {
+    rm_attr_prefix = "HTTP_X_REMOVE_OBJECT_META_";
+    put_attr_prefix = "HTTP_X_OBJECT_META_";
+  } else {
     int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
     if (r < 0) {
       return r;
     }
+    rm_attr_prefix = "HTTP_X_REMOVE_CONTAINER_META_";
+    put_attr_prefix = "HTTP_X_CONTAINER_META_";
   }
+
+  const size_t RM_ATTR_PREFIX_LEN = strlen(rm_attr_prefix);
+  const size_t PUT_ATTR_PREFIX_LEN = strlen(put_attr_prefix);
+
+  rmattr_names.clear();
+
+  map<string, string, ltstr_nocase>& m = s->info.env->get_map();
+  map<string, string, ltstr_nocase>::iterator iter;
+
+  for (iter = m.begin(); iter != m.end(); ++iter) {
+    size_t prefix_len = 0;
+    const char *p = iter->first.c_str();
+    if (strncmp(p, rm_attr_prefix, RM_ATTR_PREFIX_LEN) == 0) {
+      // Explicitly requested removal
+      prefix_len = RM_ATTR_PREFIX_LEN;
+    } else if ((strncmp(p, put_attr_prefix, PUT_ATTR_PREFIX_LEN) == 0) && iter->second.empty()) {
+      // Removal requested by putting an empty value
+      prefix_len = PUT_ATTR_PREFIX_LEN;
+    }
+    if (prefix_len > 0) {
+      string name(RGW_ATTR_META_PREFIX);
+      name.resize(name.size() + iter->first.size() - prefix_len);
+      p += prefix_len;
+      for (size_t i = sizeof(RGW_ATTR_META_PREFIX) - 1; i < name.size(); ++i, ++p) {
+        name[i] = ((*p == '_') ? '-' : tolower(*p));
+      }
+      rmattr_names.insert(name);
+    }
+  }
+
   placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
 
   return 0;
@@ -586,15 +632,15 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
       const char *name = iter->first.c_str();
       map<string, string>::iterator aiter = rgw_to_http_attrs.find(name);
       if (aiter != rgw_to_http_attrs.end()) {
-	if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
-	  content_type = iter->second.c_str();
-	  continue;
+        if (aiter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) { // special handling for content_type
+          content_type = iter->second.c_str();
+          continue;
         }
         response_attrs[aiter->second] = iter->second.c_str();
       } else {
         if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
           name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-          s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+          s->cio->print("X-Object-Meta-%s: %s\r\n", name, iter->second.c_str());
         }
       }
     }
