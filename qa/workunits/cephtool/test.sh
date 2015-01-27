@@ -1087,6 +1087,7 @@ function test_mon_pg()
   #
   ceph tell osd.0 version
   expect_false ceph tell osd.9999 version 
+  expect_false ceph tell osd.foo version
 
   # back to pg stuff
 
