@@ -6466,7 +6466,7 @@ done:
     }
     string out_str;
     err = reweight_by_utilization(oload, out_str, true,
-				  pools.size() ? &pools : NULL);
+				  pools.empty() ? NULL : &pools);
     if (err < 0) {
       ss << "FAILED reweight-by-pg: " << out_str;
     } else if (err == 0) {
