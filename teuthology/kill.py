@@ -22,7 +22,7 @@ def main(args):
     jobspec = args['--jobspec']
     archive_base = args['--archive']
     owner = args['--owner']
-    machine_type = args['--machine_type']
+    machine_type = args['--machine-type']
     preserve_queue = args['--preserve-queue']
 
     if jobspec:

@@ -29,7 +29,7 @@ optional arguments:
                         both the name of the run and the job_id, separated by a
                         '/'. e.g. 'my-test-run/1234'
   -o, --owner OWNER     The owner of the job(s)
-  -m, --machine_type MACHINE_TYPE
+  -m, --machine-type MACHINE_TYPE
                         The type of machine the job(s) are running on.
                         This is required if killing a job that is still
                         entirely in the queue.
