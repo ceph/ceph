@@ -191,6 +191,8 @@ void Message::encode(uint64_t features, int crcflags, bool force_compression)
   if ((features & CEPH_FEATURE_MSG_COMPRESS) &&
       ((header.flags != 0) || (force_compression))) {
     compress();
+  } else {
+    header.flags = 0;
   }
 
   if (crcflags & MSG_CRC_HEADER)
@@ -370,6 +372,12 @@ int Message::decompress(CephContext *cct)
 
     set_data(orig_data);
   }
+
+  // populate decompressed length and clear flags
+  header.front_len = get_payload().length();
+  header.middle_len = get_middle().length();
+  header.data_len = get_data().length();
+  header.flags = 0;
 
   return 0;
 }
