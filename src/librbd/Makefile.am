@@ -1,7 +1,11 @@
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
 	librbd/AioRequest.cc \
+	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
+	librbd/AsyncRequest.cc \
+	librbd/AsyncResizeRequest.cc \
+	librbd/AsyncTrimRequest.cc \
 	librbd/CopyupRequest.cc \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
@@ -38,7 +42,11 @@ lib_LTLIBRARIES += librbd.la
 noinst_HEADERS += \
 	librbd/AioCompletion.h \
 	librbd/AioRequest.h \
+	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
+	librbd/AsyncRequest.h \
+	librbd/AsyncResizeRequest.h \
+	librbd/AsyncTrimRequest.h \
 	librbd/CopyupRequest.h \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \

@@ -71,10 +71,12 @@ class ObjectCacher {
     bufferlist bl;
     utime_t mtime;
     int flags;
-    OSDWrite(const SnapContext& sc, bufferlist& b, utime_t mt, int f) : snapc(sc), bl(b), mtime(mt), flags(f) {}
+    OSDWrite(const SnapContext& sc, const bufferlist& b, utime_t mt, int f)
+      : snapc(sc), bl(b), mtime(mt), flags(f) {}
   };
 
-  OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, utime_t mt, int f) { 
+  OSDWrite *prepare_write(const SnapContext& sc, const bufferlist &b,
+			  utime_t mt, int f) { 
     return new OSDWrite(sc, b, mt, f); 
   }
 
