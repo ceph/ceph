@@ -14,6 +14,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
+#include "librbd/AioCompletion.h"
 
 #include "include/assert.h"
 
@@ -101,6 +102,10 @@ namespace librbd {
       librados::Rados::aio_create_completion(req, context_cb, NULL);
     librados::ObjectReadOperation op;
     op.read(off, len, pbl, NULL);
+    {
+      AioRead *req = (static_cast<C_AioRead *>(onfinish))->get_req();
+      op.set_op_flags2((uint32_t)req->get_op_flags());
+    }
     int flags = m_ictx->get_read_flags(snapid);
     int r = m_ictx->data_ctx.aio_operate(oid.name, rados_completion, &op,
 					 flags, NULL);
