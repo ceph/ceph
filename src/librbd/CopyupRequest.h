@@ -21,33 +21,50 @@ namespace librbd {
 
     ceph::bufferlist& get_copyup_data();
     void append_request(AioRequest *req);
-    void read_from_parent();
-    void queue_read_from_parent();
+
+    void send();
+    void queue_send();
 
   private:
-    class C_ReadFromParent : public Context {
-    public:
-      C_ReadFromParent(CopyupRequest *c) : m_req(c) {}
-
-      virtual void finish(int r) {
-        m_req->read_from_parent();
-      }
-
-    private:
-      CopyupRequest *m_req;
+    /**
+     * Copyup requests go through the following state machine to read from the
+     * parent image, update the object map, and copyup the object:
+     *
+     * <start>
+     *    |
+     *    v
+     * STATE_READ_FROM_PARENT ---> STATE_OBJECT_MAP
+     *    .                           |
+     *    . . . . . . . . . . . . .   |
+     *                            .   |
+     *                            v   v
+     *                           <finish>
+     * The _OBJECT_MAP state is skipped if the object map isn't enabled.
+     */
+    enum State {
+      STATE_READ_FROM_PARENT,
+      STATE_OBJECT_MAP
     };
 
     ImageCtx *m_ictx;
     std::string m_oid;
     uint64_t m_object_no;
     vector<pair<uint64_t,uint64_t> > m_image_extents;
+    State m_state;
     ceph::bufferlist m_copyup_data;
     vector<AioRequest *> m_pending_requests;
 
-    void complete_all(int r);
-    void send_copyup(int r);
-    static void read_from_parent_cb(completion_t cb, void *arg);
+    bool complete_requests(int r);
 
+    void complete(int r);
+    bool should_complete(int r);
+
+    void remove_from_list();
+
+    bool send_object_map(); 
+    void send_copyup();
+
+    Context *create_callback_context();
   };
 }
 

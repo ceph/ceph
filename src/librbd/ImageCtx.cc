@@ -505,7 +505,7 @@ namespace librbd {
       onfinish->complete(r);
   }
 
-  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
+  void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
