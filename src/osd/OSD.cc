@@ -2776,12 +2776,6 @@ void OSD::load_pgs()
       continue;
     }
 
-    if (!osdmap->have_pg_pool(pgid.pool())) {
-      dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
-	       << pgid.pool() << dendl;
-      continue;
-    }
-
     if (pgid.preferred() >= 0) {
       dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
       // FIXME: delete it too, eventually
@@ -4170,6 +4164,10 @@ void OSD::RemoveWQ::_process(
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
        ++i) {
+    if (g_conf->osd_inject_failure_on_pg_removal) {
+      generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
+      exit(1);
+    }
     t->remove_collection(*i);
   }
 
