@@ -455,7 +455,9 @@ public:
   virtual void dump(Formatter *f) const;
 
   void encode(uint64_t features, int crcflags, bool compression = false);
+  void _compress(bufferlist &in_bl, bufferlist &out_bl);
   void compress();
+  int _decompress(bufferlist &in_bl, bufferlist &out_bl);
   int decompress(CephContext *cct);
 };
 typedef boost::intrusive_ptr<Message> MessageRef;

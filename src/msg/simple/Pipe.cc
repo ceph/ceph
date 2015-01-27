@@ -1797,26 +1797,20 @@ void Pipe::writer()
         ldout(msgr->cct, 20) << __func__ << " BEFORE encoding:\n"
                              << " front_len=" << m->get_payload().length()
                              << " header.front_len=" << m->get_header().front_len
-                             << " footer.orig_front_len=" << m->get_footer().orig_front_len
                              << " middle_len=" << m->get_middle().length()
                              << " header.middle_len=" << m->get_header().middle_len
-                             << " footer.orig_middle_len=" << m->get_footer().orig_middle_len
                              << " data_len=" << m->get_data().length()
                              << " header.data_len=" << m->get_header().data_len
-                             << " footer.orig_data_len=" << m->get_footer().orig_data_len
                              << dendl;
 	// encode and copy out of *m
 	m->encode(features, msgr->crcflags, msgr->cct->_conf->ms_compress_all);
         ldout(msgr->cct, 20) << __func__ << " AFTER encoding:\n"
                              << " front_len=" << m->get_payload().length()
                              << " header.front_len=" << m->get_header().front_len
-                             << " footer.orig_front_len=" << m->get_footer().orig_front_len
                              << " middle_len=" << m->get_middle().length()
                              << " header.middle_len=" << m->get_header().middle_len
-                             << " footer.orig_middle_len=" << m->get_footer().orig_middle_len
                              << " data_len=" << m->get_data().length()
                              << " header.data_len=" << m->get_header().data_len
-                             << " footer.orig_data_len=" << m->get_footer().orig_data_len
                              << dendl;
 
 	// prepare everything
@@ -1921,7 +1915,8 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ceph_msg_footer footer;
   __u32 header_crc = 0;
 
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
+  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR) ||
+      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
     if (tcp_read((char*)&header, sizeof(header)) < 0)
       return -1;
     if (msgr->crcflags & MSG_CRC_HEADER) {
@@ -2069,11 +2064,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
 
   // footer
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH) ||
-      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
-    ldout(msgr->cct, 20) << __func__ << " has feature "
-                         << connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)
-                         << dendl;
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
     if (tcp_read((char*)&footer, sizeof(footer)) < 0)
       goto out_dethrottle;
   } else {
@@ -2099,13 +2090,10 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ldout(msgr->cct, 20) << __func__ << " BEFORE decoding:\n"
                        << " front_len=" << front.length()
                        << " header.front_len=" << header.front_len
-                       << " footer.orig_front_len=" << footer.orig_front_len
                        << " middle_len=" << middle.length()
                        << " header.middle_len=" << header.middle_len
-                       << " footer.orig_middle_len=" << footer.orig_middle_len
                        << " data_len=" << data.length()
                        << " header.data_len=" << header.data_len
-                       << " footer.orig_data_len=" << footer.orig_data_len
                        << dendl;
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
@@ -2117,13 +2105,13 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ldout(msgr->cct, 20) << __func__ << " AFTER decoding:\n"
                        << " front_len=" << front.length()
                        << " header.front_len=" << header.front_len
-                       << " footer.orig_front_len=" << footer.orig_front_len
+                       << " m.payload_len=" << message->get_payload().length()
                        << " middle_len=" << middle.length()
                        << " header.middle_len=" << header.middle_len
-                       << " footer.orig_middle_len=" << footer.orig_middle_len
+                       << " m.middle_len=" << message->get_middle().length()
                        << " data_len=" << data.length()
                        << " header.data_len=" << header.data_len
-                       << " footer.orig_data_len=" << footer.orig_data_len
+                       << " m.data_len=" << message->get_data().length()
                        << dendl;
 
   // reset policy.throttler_bytes;
@@ -2318,7 +2306,8 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
 
   // send envelope
   ceph_msg_header_old oldheader;
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
+  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR) ||
+      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
     msgvec[msg.msg_iovlen].iov_base = (char*)&header;
     msgvec[msg.msg_iovlen].iov_len = sizeof(header);
     msglen += sizeof(header);
@@ -2392,8 +2381,7 @@ int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, buffer
   // use the old footer format
 
   ceph_msg_footer_old old_footer;
-  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH) ||
-      connection_state->has_feature(CEPH_FEATURE_MSG_COMPRESS)) {
+  if (connection_state->has_feature(CEPH_FEATURE_MSG_AUTH)) {
     msgvec[msg.msg_iovlen].iov_base = (void*)&footer;
     msgvec[msg.msg_iovlen].iov_len = sizeof(footer);
     msglen += sizeof(footer);
