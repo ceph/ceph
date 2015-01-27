@@ -287,6 +287,12 @@ public:
    */
   int scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout);
   /**
+   * Get the currently scrubbing dentries. When returned, the passed-in
+   * list will be filled with all CDentry * which have been returned
+   * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
+   */
+  void scrub_dentries_scrubbing(list<CDentry*> *out_dentries);
+  /**
    * Report to the CDir that a CDentry has been scrubbed. Call this
    * for every CDentry returned from scrub_dentry_next().
    * @param dn The CDentry which has been scrubbed.
