@@ -422,6 +422,7 @@ void ReplicatedPG::wait_for_unreadable_object(
 void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
 {
   waiting_for_all_missing.push_back(op);
+  op->mark_delayed("waiting for all missing");
 }
 
 bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
@@ -1267,6 +1268,7 @@ void ReplicatedPG::do_request(
 	     << " flushes_in_progress pending "
 	     << "waiting for active on " << op << dendl;
     waiting_for_active.push_back(op);
+    op->mark_delayed("waiting for flushes");
     return;
   }
 
@@ -1278,6 +1280,7 @@ void ReplicatedPG::do_request(
       return;
     } else {
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for active");
       return;
     }
   }
@@ -1291,6 +1294,7 @@ void ReplicatedPG::do_request(
     if (is_replay()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for replay end");
       return;
     }
     // verify client features
@@ -8422,8 +8426,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
-  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
-
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
