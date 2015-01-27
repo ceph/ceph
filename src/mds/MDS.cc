@@ -2383,7 +2383,14 @@ void MDS::set_want_state(MDSMap::DaemonState newstate)
  */
 void MDS::heartbeat_reset()
 {
-  assert(hb != NULL);
+  // Any thread might jump into mds_lock and call us immediately
+  // after a call to suicide() completes, in which case MDS::hb
+  // has been freed and we are a no-op.
+  if (!hb) {
+      assert(state == CEPH_MDS_STATE_DNE);
+      return;
+  }
+
   // NB not enabling suicide grace, because the mon takes care of killing us
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
