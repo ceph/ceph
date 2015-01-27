@@ -389,23 +389,6 @@ AS_IF([test "x$with_fuse" != xno],
                    [no FUSE found (use --without-fuse to disable)])])])
 AM_CONDITIONAL(WITH_FUSE, [test "$HAVE_LIBFUSE" = "1"])
 
-# tcmalloc?
-AC_ARG_WITH([tcmalloc],
-	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
-	    [],
-	    [with_tcmalloc=yes])
-TCMALLOC=
-AS_IF([test "x$with_tcmalloc" != xno],
-	    [AC_CHECK_LIB([tcmalloc], [malloc],
-	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
-	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
-	       		 [Define if you have tcmalloc])
-	       HAVE_LIBTCMALLOC=1
-	     ],
-	    [AC_MSG_FAILURE(
-		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
-AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
-
 # jemalloc?
 AC_ARG_WITH([jemalloc],
 	    [AS_HELP_STRING([--with-jemalloc], [enable jemalloc for memory allocations])],
@@ -422,6 +405,26 @@ AS_IF([test "x$with_jemalloc" = xyes],
 	    [AC_MSG_FAILURE(
 		  [no jemalloc found (do not use --with-jemalloc)])])])
 AM_CONDITIONAL(WITH_JEMALLOC, [test "$HAVE_LIBJEMALLOC" = "1"])
+
+# tcmalloc?
+AC_ARG_WITH([tcmalloc],
+	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
+	    [],
+	    [with_tcmalloc=yes])
+
+AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc=no],[])
+
+TCMALLOC=
+AS_IF([test "x$with_tcmalloc" != xno],
+	    [AC_CHECK_LIB([tcmalloc], [malloc],
+	     [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc"])
+	       AC_DEFINE([HAVE_LIBTCMALLOC], [1],
+	       		 [Define if you have tcmalloc])
+	       HAVE_LIBTCMALLOC=1
+	     ],
+	    [AC_MSG_FAILURE(
+		  [no tcmalloc found (use --without-tcmalloc to disable)])])])
+AM_CONDITIONAL(WITH_TCMALLOC, [test "$HAVE_LIBTCMALLOC" = "1"])
 
 # error out if --with-jemalloc and ! --without-tcmalloc
 if test "x$with_jemalloc" = "xyes"; then
