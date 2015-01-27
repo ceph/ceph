@@ -42,8 +42,5 @@ fi
 set -e
 ceph osd blacklist rm $clientaddr
 rbd lock remove $IMAGE $LOCKID "$clientid"
-# rbdrw will have exited with an existing watch, so, until #3527 is fixed,
-# hang out until the watch expires
-sleep 30
 rbd rm $IMAGE
 echo OK
