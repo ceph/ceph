@@ -3930,6 +3930,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  const uint64_t expected_num_objects,
 				 stringstream &ss)
 {
+  if (name.length() == 0)
+    return -EINVAL;
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
