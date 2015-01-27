@@ -5587,6 +5587,10 @@ int Client::fchmod(int fd, mode_t mode)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   struct stat attr;
   attr.st_mode = mode;
   return _setattr(f->inode, &attr, CEPH_SETATTR_MODE);
@@ -5640,6 +5644,10 @@ int Client::fchown(int fd, int uid, int gid)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   struct stat attr;
   attr.st_uid = uid;
   attr.st_gid = gid;
@@ -6375,6 +6383,14 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 
   Fh *fh = NULL;
 
+#if defined(__linux__)
+  /* When the O_PATH is being specified, others flags than O_DIRECTORY
+   * and O_NOFOLLOW are ignored. Please refer do_entry_open() function
+   * in kernel (fs/open.c). */
+  if (flags & O_PATH)
+    flags &= O_DIRECTORY | O_NOFOLLOW | O_PATH;
+#endif
+
   filepath path(relpath);
   Inode *in;
   bool created = false;
@@ -6385,7 +6401,11 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
 
+#if defined(__linux__)
+  if (r == 0 && in->is_symlink() && (flags & O_NOFOLLOW) && !(flags & O_PATH))
+#else
   if (r == 0 && in->is_symlink() && (flags & O_NOFOLLOW))
+#endif
     return -ELOOP;
 
   if (r == -ENOENT && (flags & O_CREAT)) {
@@ -6700,6 +6720,10 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   return _lseek(f, offset, whence);
 }
 
@@ -6819,6 +6843,10 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   bufferlist bl;
   int r = _read(f, offset, size, &bl);
   ldout(cct, 3) << "read(" << fd << ", " << (void*)buf << ", " << size << ", " << offset << ") = " << r << dendl;
@@ -7140,6 +7168,10 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
+#if defined(__linux__)
+  if (fh->flags & O_PATH)
+    return -EBADF;
+#endif
   int r = _write(fh, offset, size, buf);
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
@@ -7385,6 +7417,10 @@ int Client::ftruncate(int fd, loff_t length)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   struct stat attr;
   attr.st_size = length;
   return _setattr(f->inode, &attr, CEPH_SETATTR_SIZE);
@@ -7400,6 +7436,10 @@ int Client::fsync(int fd, bool syncdataonly)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   int r = _fsync(f, syncdataonly);
   ldout(cct, 3) << "fsync(" << fd << ", " << syncdataonly << ") = " << r << dendl;
   return r;
@@ -9984,6 +10024,10 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
+#if defined(__linux__)
+  if (fh->flags & O_PATH)
+    return -EBADF;
+#endif
   return _fallocate(fh, mode, offset, length);
 }
 
