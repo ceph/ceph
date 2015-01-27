@@ -28,11 +28,13 @@ public:
 			map<TestOpType, unsigned int> op_weights,
 			TestOpStat *stats,
 			int max_seconds,
-			bool ec_pool) :
+			bool ec_pool,
+			bool balance_reads) :
     m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
     m_objects(objects), m_stats(stats),
     m_total_weight(0),
-    m_ec_pool(ec_pool)
+    m_ec_pool(ec_pool),
+    m_balance_reads(balance_reads)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -99,7 +101,7 @@ private:
     switch (type) {
     case TEST_OP_READ:
       oid = *(rand_choose(context.oid_not_in_use));
-      return new ReadOp(m_op, &context, oid, m_stats);
+      return new ReadOp(m_op, &context, oid, m_balance_reads, m_stats);
 
     case TEST_OP_WRITE:
       oid = *(rand_choose(context.oid_not_in_use));
@@ -237,6 +239,7 @@ private:
   map<TestOpType, unsigned int> m_weight_sums;
   unsigned int m_total_weight;
   bool m_ec_pool;
+  bool m_balance_reads;
 };
 
 int main(int argc, char **argv)
@@ -281,6 +284,7 @@ int main(int argc, char **argv)
   string pool_name = "rbd";
   bool ec_pool = false;
   bool no_omap = false;
+  bool balance_reads = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -301,6 +305,8 @@ int main(int argc, char **argv)
       max_stride_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--no-omap") == 0)
       no_omap = true;
+    else if (strcmp(argv[i], "--balance_reads") == 0)
+      balance_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
     else if (strcmp(argv[i], "--write-fadvise-dontneed") == 0)
@@ -407,7 +413,7 @@ int main(int argc, char **argv)
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool);
+    ec_pool, balance_reads);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "
