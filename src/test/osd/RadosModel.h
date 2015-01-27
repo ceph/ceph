@@ -978,6 +978,7 @@ public:
   string oid;
   ObjectDesc old_value;
   int snap;
+  bool balance_reads;
 
   ceph::shared_ptr<int> in_use;
 
@@ -997,11 +998,13 @@ public:
   ReadOp(int n,
 	 RadosTestContext *context,
 	 const string &oid,
+	 bool balance_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completion(NULL),
       oid(oid),
       snap(0),
+      balance_reads(balance_reads),
       retval(0),
       attrretval(0)
   {}
@@ -1073,7 +1076,11 @@ public:
       op.omap_get_header(&header, 0);
     }
     op.getxattrs(&xattrs, 0);
-    assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op, 0));
+    unsigned flags = 0;
+    if (balance_reads)
+      flags |= librados::OPERATION_BALANCE_READS;
+    assert(!context->io_ctx.aio_operate(context->prefix+oid, completion, &op,
+					flags, NULL));
     if (snap >= 0) {
       context->io_ctx.snap_set_read(0);
     }
