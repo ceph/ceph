@@ -1432,6 +1432,22 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // degraded object?
+  
+  /* We continue to block writes on degraded objects for an EC pools because
+   * we have to reset can_rollback_to when we get a repop without the
+   * transaction.  If two replicas do that on sequential ops on different
+   * objects and then crash, other unstable objects before those two would
+   * also be unable to be rolled back, and would also wind up unfound.
+   * We can enable degraded writes on ec pools by blocking such a write
+   * to a peer until all previous writes have completed.  For now, we
+   * will simply block them.
+   */
+  if (pool.info.ec_pool() && write_ordered && is_degraded_object(head)) {
+    wait_for_degraded_object(head, op);
+    return;
+  }
+
   // missing snapdir?
   hobject_t snapdir(m->get_oid(), m->get_object_locator().key,
 		    CEPH_SNAPDIR, m->get_pg().ps(), info.pgid.pool(),
