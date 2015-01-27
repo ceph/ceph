@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    crush_tunables: hammer
     conf:
       client:
         debug ms: 1
