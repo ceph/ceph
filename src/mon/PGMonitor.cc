@@ -1482,7 +1482,9 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   // perhaps these would be better in the parsing, but it's weird
   if (prefix == "pg dump_json") {
     vector<string> v;
-    v.push_back(string("all"));
+    cmd_getval(g_ceph_context, cmdmap, "dumpcontents", v);
+    if (v.empty())
+      v.push_back(string("all"));
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
