@@ -1080,8 +1080,6 @@ void RGWGetBucketVersioning::execute()
 {
   versioned = s->bucket_info.versioned();
   versioning_enabled = s->bucket_info.versioning_enabled();
-
-  send_response();
 }
 
 int RGWSetBucketVersioning::verify_permission()
@@ -1102,7 +1100,7 @@ void RGWSetBucketVersioning::execute()
   ret = get_params();
 
   if (ret < 0)
-    goto done;
+    return;
 
   if (enable_versioning) {
     s->bucket_info.flags |= BUCKET_VERSIONED;
@@ -1114,11 +1112,8 @@ void RGWSetBucketVersioning::execute()
   ret = store->put_bucket_instance_info(s->bucket_info, false, 0, &s->bucket_attrs);
   if (ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << ret << dendl;
-    goto done;
+    return;
   }
-
-done:
-  send_response();
 }
 
 int RGWStatBucket::verify_permission()
