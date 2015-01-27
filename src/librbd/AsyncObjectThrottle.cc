@@ -17,14 +17,14 @@ AsyncObjectThrottle::AsyncObjectThrottle(const ContextFactory& context_factory,
 {
 }
 
-int AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
+void AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
   bool complete;
   {
     Mutex::Locker l(m_lock);
     for (uint64_t i = 0; i < max_concurrent; ++i) {
-      int r = start_next_op();
-      if (r < 0 && m_current_ops == 0) {
-        return r;
+      start_next_op();
+      if (m_ret < 0 && m_current_ops == 0) {
+	break;
       }
     }
     complete = (m_current_ops == 0);
@@ -33,7 +33,6 @@ int AsyncObjectThrottle::start_ops(uint64_t max_concurrent) {
     m_ctx->complete(m_ret);
     delete this;
   }
-  return 0;
 }
 
 void AsyncObjectThrottle::finish_op(int r) {
@@ -54,11 +53,11 @@ void AsyncObjectThrottle::finish_op(int r) {
   }
 }
 
-int AsyncObjectThrottle::start_next_op() {
+void AsyncObjectThrottle::start_next_op() {
   bool done = false;
   while (!done) {
     if (m_ret != 0 || m_object_no >= m_end_object_no) {
-      return m_ret;
+      return;
     }
 
     uint64_t ono = m_object_no++;
@@ -68,7 +67,7 @@ int AsyncObjectThrottle::start_next_op() {
     if (r < 0) {
       m_ret = r;
       delete ctx;
-      return m_ret;
+      return;
     } else if (r > 0) {
       // op completed immediately
       delete ctx;
@@ -78,7 +77,6 @@ int AsyncObjectThrottle::start_next_op() {
     }
     m_prog_ctx.update_progress(ono, m_end_object_no);
   }
-  return 0;
 }
 
 } // namespace librbd

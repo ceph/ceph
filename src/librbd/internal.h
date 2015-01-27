@@ -73,10 +73,6 @@ namespace librbd {
     }
   };
 
-  static const uint8_t OBJECT_NONEXISTENT = 0;
-  static const uint8_t OBJECT_EXISTS = 1;
-  static const uint8_t OBJECT_PENDING = 2;
-
   const std::string id_obj_name(const std::string &name);
   const std::string header_name(const std::string &image_id);
   const std::string old_header_name(const std::string &image_name);
@@ -197,10 +193,8 @@ namespace librbd {
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx);
-  int async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-			  uint64_t new_size, ProgressContext& prog_ctx);
-  int async_trim_image(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-		       uint64_t new_size, ProgressContext& prog_ctx);
+  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
+			   uint64_t new_size, ProgressContext& prog_ctx);
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c, int op_flags);

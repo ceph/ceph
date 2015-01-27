@@ -265,15 +265,13 @@ namespace librbd {
       return 0;
     }
 
-    int set_flags(librados::IoCtx *ioctx, const std::string &oid,
-                  uint64_t flags, uint64_t mask)
+    void set_flags(librados::ObjectWriteOperation *op, uint64_t flags,
+		   uint64_t mask)
     {
       bufferlist inbl;
       ::encode(flags, inbl);
       ::encode(mask, inbl);
-
-      bufferlist outbl;
-      return ioctx->exec(oid, "rbd", "set_flags", inbl, outbl);
+      op->exec("rbd", "set_flags", inbl);
     }
 
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
@@ -301,16 +299,23 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "add_child", in, out);
     }
 
-    int remove_child(librados::IoCtx *ioctx, const std::string &oid,
-		     parent_spec pspec, const std::string &c_imageid)
+    void remove_child(librados::ObjectWriteOperation *op,
+		      parent_spec pspec, const std::string &c_imageid)
     {
-      bufferlist in, out;
+      bufferlist in;
       ::encode(pspec.pool_id, in);
       ::encode(pspec.image_id, in);
       ::encode(pspec.snap_id, in);
       ::encode(c_imageid, in);
+      op->exec("rbd", "remove_child", in);
+    }
 
-      return ioctx->exec(oid, "rbd", "remove_child", in, out);
+    int remove_child(librados::IoCtx *ioctx, const std::string &oid,
+		     parent_spec pspec, const std::string &c_imageid)
+    {
+      librados::ObjectWriteOperation op;
+      remove_child(&op, pspec, c_imageid);
+      return ioctx->operate(oid, &op);
     }
 
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
