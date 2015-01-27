@@ -372,6 +372,10 @@ int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& b
 {
   RGWObjectCtx rctx(store);
 
+  if (key.instance.empty()) {
+    key.instance = "null";
+  }
+
   rgw_obj obj(bucket, key);
 
   int ret = store->delete_obj(rctx, bucket_info, obj, bucket_info.versioning_status());
