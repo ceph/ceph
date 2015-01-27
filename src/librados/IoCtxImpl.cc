@@ -1087,12 +1087,12 @@ int librados::IoCtxImpl::watch(const object_t& oid,
   C_SaferCond onfinish;
 
   Objecter::LingerOp *linger_op = objecter->linger_register(oid, oloc, 0);
-  *handle = linger_op->get_cookie();
+  uint64_t cookie = linger_op->get_cookie();
   linger_op->watch_context = new WatchInfo(this,
 					   oid, ctx, ctx2);
 
   prepare_assert_ops(&wr);
-  wr.watch(*handle, CEPH_OSD_WATCH_OP_WATCH);
+  wr.watch(cookie, CEPH_OSD_WATCH_OP_WATCH);
   bufferlist bl;
   objecter->linger_watch(linger_op, wr,
 			 snapc, ceph_clock_now(NULL), bl,
@@ -1105,6 +1105,9 @@ int librados::IoCtxImpl::watch(const object_t& oid,
 
   if (r < 0) {
     objecter->linger_cancel(linger_op);
+    *handle = 0;
+  } else {
+    *handle = cookie;
   }
 
   return r;
@@ -1132,6 +1135,9 @@ int librados::IoCtxImpl::watch_check(uint64_t cookie)
 
 int librados::IoCtxImpl::unwatch(uint64_t cookie)
 {
+  if (cookie == 0)
+    return 0;
+
   Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
   bufferlist inbl, outbl;
   C_SaferCond onfinish;
