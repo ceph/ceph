@@ -518,10 +518,6 @@ public:
 	return true;
     }
 
-    void set_fadvise_flags(uint32_t flags) {
-      data.fadvise_flags = flags;
-    }
-
     void set_fadvise_flags_all(uint32_t flag) {
       if (per_op_fadvise_flags) {
 	int ops = data.ops;
