@@ -1015,6 +1015,7 @@ void RGWStatAccount::execute()
   string marker;
   bool done;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  map<string, uint32_t> policy_container_count;
 
   do {
     RGWUserBuckets buckets;
@@ -1034,8 +1035,21 @@ void RGWStatAccount::execute()
         buckets_size_rounded += bucket.size_rounded;
         buckets_objcount += bucket.count;
 
+        RGWBucketInfo bucket_info;
+        map<string, bufferlist> bucket_attrs;
+        ret = store->get_bucket_info(NULL, iter->first, bucket_info, NULL, &bucket_attrs);
+        if (ret < 0) {
+          ldout(s->cct, 10) << "WARNING: could not get bucket info for bucket=" << iter->first << dendl;
+          continue;
+        }
+        policy_container_count[bucket_info.placement_rule] += 1;
+        policy_stats[bucket_info.placement_rule + "-Object-Count"] += bucket.count;
+        policy_stats[bucket_info.placement_rule + "-Bytes-Used"] += bucket.size;
+
         marker = iter->first;
       }
+      for (map<string, uint32_t>::iterator it=policy_container_count.begin(); it!=policy_container_count.end(); ++it)
+        policy_stats[it->first + "-Container-Count"] += it->second;
       buckets_count += m.size();
 
       done = (m.size() < max_buckets);

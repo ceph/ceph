@@ -180,6 +180,7 @@ protected:
   uint64_t buckets_objcount;
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
+  map<string, uint32_t> policy_stats;
 
 public:
   RGWStatAccount() {
