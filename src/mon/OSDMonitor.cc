@@ -3071,6 +3071,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        f->dump_string("erasure_code_profile", p->erasure_code_profile);
       } else if (var == "min_read_recency_for_promote") {
 	f->dump_int("min_read_recency_for_promote", p->min_read_recency_for_promote);
+      } else if (var == "object_max_op_log") {
+	f->dump_int("object_max_op_log", p->object_max_op_log);
       }
 
       f->close_section();
@@ -3122,6 +3124,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        ss << "erasure_code_profile: " << p->erasure_code_profile;
       } else if (var == "min_read_recency_for_promote") {
 	ss << "min_read_recency_for_promote: " << p->min_read_recency_for_promote;
+      } else if (var == "object_max_op_log") {
+	ss << "object_max_op_log: " << p->object_max_op_log;
       }
 
       rdata.append(ss);
@@ -4365,6 +4369,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
+  } else if (var == "object_max_op_log") {
+    if (interr.length()) {
+      ss << "error parsing integer value '" << val << "': " << interr;
+      return -EINVAL;
+    }
+    p.object_max_op_log = n;
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
@@ -6387,6 +6397,7 @@ done:
     ntp->hit_set_count = g_conf->osd_tier_default_cache_hit_set_count;
     ntp->hit_set_period = g_conf->osd_tier_default_cache_hit_set_period;
     ntp->min_read_recency_for_promote = g_conf->osd_tier_default_cache_min_read_recency_for_promote;
+    ntp->object_max_op_log = g_conf->osd_pool_default_object_max_op_log;
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";

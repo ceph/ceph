@@ -1014,6 +1014,8 @@ public:
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
 
+  uint32_t object_max_op_log;    ///< max number of logs to keep in object_info_t
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1037,7 +1039,8 @@ public:
       hit_set_count(0),
       min_read_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      object_max_op_log(0)
   { }
 
   void dump(Formatter *f) const;
@@ -2557,6 +2560,7 @@ struct object_copy_data_t {
   bufferlist data;
   bufferlist omap_header;
   bufferlist omap_data;
+  deque<osd_reqid_t> op_log;
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
@@ -2851,6 +2855,8 @@ struct object_info_t {
   // opportunistic checksums; may or may not be present
   __u32 data_digest;  ///< data crc32c
   __u32 omap_digest;  ///< omap crc32c
+
+  deque<osd_reqid_t> op_log;  // Per object write op logs
 
   void copy_user_bits(const object_info_t& other);
 
