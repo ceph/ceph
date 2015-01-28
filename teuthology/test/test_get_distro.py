@@ -40,3 +40,8 @@ class TestGetDistro(object):
         self.fake_ctx.os_type = None
         distro = get_distro(self.fake_ctx)
         assert distro == 'ubuntu'
+
+    def test_config_os_type_is_none(self):
+        self.fake_ctx.config["os_type"] = None
+        distro = get_distro(self.fake_ctx)
+        assert distro == 'ubuntu'

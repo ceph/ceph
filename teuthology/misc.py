@@ -1154,17 +1154,17 @@ def get_distro(ctx):
     """
     Get the name of the distro that we are using (usually the os_type).
     """
-    # ubuntu is our default distro choice
-    os_type = "ubuntu"
+    os_type = None
     if ctx.os_type:
         return ctx.os_type
 
     try:
-        os_type = ctx.config.get('os_type', os_type)
+        os_type = ctx.config.get('os_type', None)
     except AttributeError:
         pass
 
-    return os_type
+    # if os_type is None, return the default of ubuntu
+    return os_type or "ubuntu"
 
 
 def get_distro_version(ctx):
