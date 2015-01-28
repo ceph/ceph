@@ -32,7 +32,6 @@ struct librados::IoCtxImpl {
   atomic_t ref_cnt;
   RadosClient *client;
   int64_t poolid;
-  string pool_name;
   snapid_t snap_seq;
   ::SnapContext snapc;
   uint64_t assert_ver;
@@ -51,13 +50,12 @@ struct librados::IoCtxImpl {
 
   IoCtxImpl();
   IoCtxImpl(RadosClient *c, Objecter *objecter,
-	    int64_t poolid, const char *pool_name, snapid_t s);
+	    int64_t poolid, snapid_t s);
 
   void dup(const IoCtxImpl& rhs) {
     // Copy everything except the ref count
     client = rhs.client;
     poolid = rhs.poolid;
-    pool_name = rhs.pool_name;
     snap_seq = rhs.snap_seq;
     snapc = rhs.snapc;
     assert_ver = rhs.assert_ver;

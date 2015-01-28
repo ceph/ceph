@@ -623,7 +623,7 @@ namespace librados
 
     uint64_t get_instance_id() const;
 
-    std::string get_pool_name();
+    std::string get_pool_name() const;
 
     bool pool_requires_alignment();
     uint64_t pool_required_alignment();
@@ -1018,8 +1018,6 @@ namespace librados
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
     void set_assert_src_version(const std::string& o, uint64_t ver);
-
-    const std::string& get_pool_name() const;
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
