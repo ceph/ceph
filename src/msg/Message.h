@@ -283,6 +283,7 @@ public:
     header.compat_version = compat_version;
     header.priority = 0;  // undef
     header.data_off = 0;
+    header.flags = 0;
     memset(&footer, 0, sizeof(footer));
   }
 
@@ -454,11 +455,14 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags, bool compression = false);
-  void _compress(bufferlist &in_bl, bufferlist &out_bl);
-  void compress();
-  int _decompress(bufferlist &in_bl, bufferlist &out_bl);
-  int decompress(CephContext *cct);
+  void encode(uint64_t features, int crcflags);
+  static void _compress_encode(bufferlist &in_bl, bufferlist &out_bl);
+  void compress(int crcflags, ceph_msg_header &header, ceph_msg_footer& footer,
+                bufferlist& front, bufferlist& middle, bufferlist& data);
+  static int _decompress_decode(bufferlist &in_bl, bufferlist &out_bl);
+  static int decompress(CephContext *cct, int crcflags, ceph_msg_header &header,
+                        ceph_msg_footer &footer, bufferlist &front,
+                        bufferlist &middle, bufferlist &data);
 };
 typedef boost::intrusive_ptr<Message> MessageRef;
 

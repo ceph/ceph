@@ -173,7 +173,7 @@ using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags, bool force_compression)
+void Message::encode(uint64_t features, int crcflags)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -185,16 +185,6 @@ void Message::encode(uint64_t features, int crcflags, bool force_compression)
       header.compat_version = header.version;
   }
 
-  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
-
-  // if receiver supports compression, and this message does need compression
-  if ((features & CEPH_FEATURE_MSG_COMPRESS) &&
-      ((header.flags != 0) || (force_compression))) {
-    compress();
-  } else {
-    header.flags = 0;
-  }
-
   if (crcflags & MSG_CRC_HEADER)
     calc_front_crc();
 
@@ -202,6 +192,8 @@ void Message::encode(uint64_t features, int crcflags, bool force_compression)
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
+
+  footer.flags = CEPH_MSG_FOOTER_COMPLETE;
 
   if (crcflags & MSG_CRC_HEADER)
     calc_header_crc();
@@ -260,7 +252,7 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-void Message::_compress(bufferlist &in_bl, bufferlist &out_bl)
+void Message::_compress_encode(bufferlist &in_bl, bufferlist &out_bl)
 {
   bufferlist compressed_bl;
 
@@ -271,37 +263,42 @@ void Message::_compress(bufferlist &in_bl, bufferlist &out_bl)
   ::encode(compressed_bl, out_bl);
 }
 
-void Message::compress()
+void Message::compress(int crcflags, ceph_msg_header &header, ceph_msg_footer& footer,
+                       bufferlist& front, bufferlist& middle, bufferlist& data)
 {
-  // forced to compress all data
   if (header.flags == 0)
     header.flags = CEPH_MSG_HEADER_COMPRESS_FRONT |
                    CEPH_MSG_HEADER_COMPRESS_MIDDLE |
                    CEPH_MSG_HEADER_COMPRESS_DATA;
 
-  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_FRONT) != 0) {
-    bufferlist new_payload;
+  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_FRONT) != 0)
+    _compress_encode(this->payload, front);
 
-    _compress(payload, new_payload);
-    set_payload(new_payload);
+  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_MIDDLE) != 0)
+    _compress_encode(this->middle, middle);
+
+  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_DATA) != 0)
+    _compress_encode(this->data, data);
+
+  if (crcflags & MSG_CRC_HEADER) {
+    footer.front_crc = front.crc32c(0);
+    footer.middle_crc = middle.crc32c(0);
   }
 
-  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_MIDDLE) != 0) {
-    bufferlist new_middle;
+  // update envelope
+  header.front_len = front.length();
+  header.middle_len = middle.length();
+  header.data_len = data.length();
 
-    _compress(middle, new_middle);
-    set_middle(new_middle);
-  }
+  if (crcflags & MSG_CRC_HEADER)
+    header.crc = ceph_crc32c(0, (unsigned char*)&header,
+			     sizeof(header) - sizeof(header.crc));
 
-  if ((header.flags & CEPH_MSG_HEADER_COMPRESS_DATA) != 0) {
-    bufferlist new_data;
-
-    _compress(data, new_data);
-    set_data(new_data);
-  }
+  if (crcflags & MSG_CRC_DATA)
+    footer.data_crc = data.crc32c(0);
 }
 
-int Message::_decompress(bufferlist &in_bl, bufferlist &out_bl)
+int Message::_decompress_decode(bufferlist &in_bl, bufferlist &out_bl)
 {
   unsigned orig_len;
   __le32 orig_crc;
@@ -324,28 +321,27 @@ int Message::_decompress(bufferlist &in_bl, bufferlist &out_bl)
   return 0;
 }
 
-int Message::decompress(CephContext *cct)
+int Message::decompress(CephContext *cct, int crcflags,
+                        ceph_msg_header &header, ceph_msg_footer& footer,
+                        bufferlist& front, bufferlist& middle, bufferlist& data)
 {
-  // decompression
-
   if ((header.flags & CEPH_MSG_HEADER_COMPRESS_FRONT) != 0) {
-
-    bufferlist orig_payload;
-    if (_decompress(payload, orig_payload) < 0) {
+    bufferlist orig_front;
+    if (_decompress_decode(front, orig_front) < 0) {
       if (cct) {
         ldout(cct, 0) << __func__ << " failed to decompress payload" << dendl;
         ldout(cct, 20) << " ";
-        payload.hexdump(*_dout);
+        front.hexdump(*_dout);
         *_dout << dendl;
       }
       return -EBADMSG;
     }
-    set_payload(orig_payload);
+    front.claim(orig_front);
   }
 
   if ((header.flags & CEPH_MSG_HEADER_COMPRESS_MIDDLE) != 0) {
     bufferlist orig_middle;
-    if (_decompress(middle, orig_middle) < 0) {
+    if (_decompress_decode(middle, orig_middle) < 0) {
       if (cct) {
         ldout(cct, 0) << __func__ << " failed to decompress middle" << dendl;
         ldout(cct, 20) << " ";
@@ -355,12 +351,12 @@ int Message::decompress(CephContext *cct)
       return -EBADMSG;
     }
 
-    set_middle(orig_middle);
+    middle.claim(orig_middle);
   }
 
   if ((header.flags & CEPH_MSG_HEADER_COMPRESS_DATA) != 0) {
     bufferlist orig_data;
-    if (_decompress(data, orig_data) < 0) {
+    if (_decompress_decode(data, orig_data) < 0) {
       if (cct) {
         ldout(cct, 0) << __func__ << " failed to decompress data" << dendl;
         ldout(cct, 20) << " ";
@@ -370,14 +366,25 @@ int Message::decompress(CephContext *cct)
       return -EBADMSG;
     }
 
-    set_data(orig_data);
+    data.claim(orig_data);
   }
 
   // populate decompressed length and clear flags
-  header.front_len = get_payload().length();
-  header.middle_len = get_middle().length();
-  header.data_len = get_data().length();
+  header.front_len = front.length();
+  header.middle_len = middle.length();
+  header.data_len = data.length();
   header.flags = 0;
+
+  // recover crc
+  if ((crcflags & MSG_CRC_HEADER) != 0 &&
+      (footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
+    footer.front_crc = front.crc32c(0);
+    footer.middle_crc = middle.crc32c(0);
+  }
+
+  if ((crcflags & MSG_CRC_DATA) != 0 &&
+      (footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0)
+    footer.data_crc = data.crc32c(0);
 
   return 0;
 }
@@ -875,11 +882,6 @@ Message *decode_message(CephContext *cct, int crcflags,
   m->set_payload(front);
   m->set_middle(middle);
   m->set_data(data);
-
-  if (header.flags != 0) {
-    ldout(cct, 20) << "decompressing incoming message" << dendl;
-    m->decompress(cct);
-  }
 
   try {
     m->decode_payload();

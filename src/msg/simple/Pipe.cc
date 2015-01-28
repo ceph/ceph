@@ -1794,28 +1794,40 @@ void Pipe::writer()
 	  ldout(msgr->cct,20) << "writer half-reencoding " << m->get_seq() << " features " << features
 			      << " " << m << " " << *m << dendl;
 
-        ldout(msgr->cct, 20) << __func__ << " BEFORE encoding:\n"
-                             << " front_len=" << m->get_payload().length()
-                             << " header.front_len=" << m->get_header().front_len
-                             << " middle_len=" << m->get_middle().length()
-                             << " header.middle_len=" << m->get_header().middle_len
-                             << " data_len=" << m->get_data().length()
-                             << " header.data_len=" << m->get_header().data_len
-                             << dendl;
 	// encode and copy out of *m
-	m->encode(features, msgr->crcflags, msgr->cct->_conf->ms_compress_all);
-        ldout(msgr->cct, 20) << __func__ << " AFTER encoding:\n"
-                             << " front_len=" << m->get_payload().length()
-                             << " header.front_len=" << m->get_header().front_len
-                             << " middle_len=" << m->get_middle().length()
-                             << " header.middle_len=" << m->get_header().middle_len
-                             << " data_len=" << m->get_data().length()
-                             << " header.data_len=" << m->get_header().data_len
-                             << dendl;
+	m->encode(features, msgr->crcflags);
 
-	// prepare everything
-	ceph_msg_header& header = m->get_header();
-	ceph_msg_footer& footer = m->get_footer();
+	// prepare everything, the message has alread been signed
+	ceph_msg_header header = m->get_header();
+	ceph_msg_footer footer = m->get_footer();
+	bufferlist front, middle, data;
+
+	// if receiver supports compression, and this message does need compression
+	if ((features & CEPH_FEATURE_MSG_COMPRESS) &&
+            ((header.flags != 0) || msgr->cct->_conf->ms_compress_all)) {
+          ldout(msgr->cct, 20) << __func__ << " BEFORE compression:\n"
+                               << " front_len=" << m->get_payload().length()
+                               << " header.front_len=" << header.front_len
+                               << " middle_len=" << m->get_middle().length()
+                               << " header.middle_len=" << header.middle_len
+                               << " data_len=" << m->get_data().length()
+                               << " header.data_len=" << header.data_len
+                               << dendl;
+          m->compress(msgr->crcflags, header, footer, front, middle, data);
+          ldout(msgr->cct, 20) << __func__ << " AFTER compression:\n"
+                               << " front_len=" << m->get_payload().length()
+                               << " header.front_len=" << header.front_len
+                               << " middle_len=" << m->get_middle().length()
+                               << " header.middle_len=" << header.middle_len
+                               << " data_len=" << m->get_data().length()
+                               << " header.data_len=" << header.data_len
+                               << dendl;
+	} else {
+          header.flags = 0;
+          front = m->get_payload();
+          middle = m->get_middle();
+          data = m->get_data();
+	}
 
 	// Now that we have all the crcs calculated, handle the
 	// digital signature for the message, if the pipe has session
@@ -1834,9 +1846,9 @@ void Pipe::writer()
 	  }
 	}
 
-	bufferlist blist = m->get_payload();
-	blist.append(m->get_middle());
-	blist.append(m->get_data());
+	bufferlist blist = front;
+	blist.append(middle);
+	blist.append(data);
 
         pipe_lock.Unlock();
 
@@ -1963,7 +1975,6 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     policy.throttler_messages->get();
   }
 
-  uint64_t new_message_size;
   uint64_t message_size = header.front_len + header.middle_len + header.data_len;
   if (message_size) {
     if (policy.throttler_bytes) {
@@ -2079,6 +2090,74 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   }
   
   aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
+
+  // decompress message
+  if (header.flags != 0) {
+    // verify crc before inflating
+    if ((msgr->crcflags & MSG_CRC_HEADER) != 0 &&
+        (footer.flags & CEPH_MSG_FOOTER_NOHEADERCRC) == 0) {
+      __u32 front_crc = front.crc32c(0);
+      __u32 middle_crc = middle.crc32c(0);
+
+      if (front_crc != footer.front_crc) {
+        ldout(msgr->cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc << dendl;
+        ldout(msgr->cct, 20) << " ";
+        front.hexdump(*_dout);
+        *_dout << dendl;
+        ret = -EBADMSG;
+        goto out_dethrottle;
+      }
+      if (middle_crc != footer.middle_crc) {
+        ldout(msgr->cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc << dendl;
+        ldout(msgr->cct, 20) << " ";
+        middle.hexdump(*_dout);
+        *_dout << dendl;
+        ret = -EBADMSG;
+        goto out_dethrottle;
+      }
+    }
+    if ((msgr->crcflags & MSG_CRC_DATA) != 0 &&
+        (footer.flags & CEPH_MSG_FOOTER_NODATACRC) == 0) {
+      __u32 data_crc = data.crc32c(0);
+      if (data_crc != footer.data_crc) {
+	ldout(msgr->cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc << dendl;
+	ldout(msgr->cct, 20) << " ";
+	data.hexdump(*_dout);
+	*_dout << dendl;
+        ret = -EBADMSG;
+        goto out_dethrottle;
+      }
+    }
+
+    ldout(msgr->cct, 20) << "decompressing incoming message" << dendl;
+    ldout(msgr->cct, 20) << __func__ << " BEFORE decompression:\n"
+                         << " front_len=" << front.length()
+                         << " header.front_len=" << header.front_len
+                         << " middle_len=" << middle.length()
+                         << " header.middle_len=" << header.middle_len
+                         << " data_len=" << data.length()
+                         << " header.data_len=" << header.data_len
+                         << dendl;
+    aborted |= Message::decompress(msgr->cct, msgr->crcflags, header,
+                                   footer, front, middle, data);
+    ldout(msgr->cct, 20) << __func__ << " AFTER decompression:\n"
+                         << " front_len=" << front.length()
+                         << " header.front_len=" << header.front_len
+                         << " middle_len=" << middle.length()
+                         << " header.middle_len=" << header.middle_len
+                         << " data_len=" << data.length()
+                         << " header.data_len=" << header.data_len
+                         << dendl;
+    if (policy.throttler_bytes) {
+      ldout(msgr->cct,10) << "reader has to update policy throttler "
+                          << policy.throttler_bytes->get_current() << "/"
+                          << policy.throttler_bytes->get_max() << dendl;
+      policy.throttler_bytes->put(message_size);
+      // update message size after inflating
+      policy.throttler_bytes->get(header.front_len + header.middle_len + header.data_len);
+    }
+  }
+
   ldout(msgr->cct,10) << "aborted = " << aborted << dendl;
   if (aborted) {
     ldout(msgr->cct,0) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
@@ -2087,44 +2166,12 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     goto out_dethrottle;
   }
 
-  ldout(msgr->cct, 20) << __func__ << " BEFORE decoding:\n"
-                       << " front_len=" << front.length()
-                       << " header.front_len=" << header.front_len
-                       << " middle_len=" << middle.length()
-                       << " header.middle_len=" << header.middle_len
-                       << " data_len=" << data.length()
-                       << " header.data_len=" << header.data_len
-                       << dendl;
   ldout(msgr->cct,20) << "reader got " << front.length() << " + " << middle.length() << " + " << data.length()
 	   << " byte message" << dendl;
   message = decode_message(msgr->cct, msgr->crcflags, header, footer, front, middle, data);
   if (!message) {
     ret = -EINVAL;
     goto out_dethrottle;
-  }
-  ldout(msgr->cct, 20) << __func__ << " AFTER decoding:\n"
-                       << " front_len=" << front.length()
-                       << " header.front_len=" << header.front_len
-                       << " m.payload_len=" << message->get_payload().length()
-                       << " middle_len=" << middle.length()
-                       << " header.middle_len=" << header.middle_len
-                       << " m.middle_len=" << message->get_middle().length()
-                       << " data_len=" << data.length()
-                       << " header.data_len=" << header.data_len
-                       << " m.data_len=" << message->get_data().length()
-                       << dendl;
-
-  // reset policy.throttler_bytes;
-  new_message_size = message->get_payload().length() +
-    message->get_middle().length() + message->get_data().length();
-  if (message_size != new_message_size) {
-    if (policy.throttler_bytes) {
-      ldout(msgr->cct,10) << "reader wants to reclaim" << new_message_size - message_size << " bytes from policy throttler "
-	       << policy.throttler_bytes->get_current() << "/"
-	       << policy.throttler_bytes->get_max() << dendl;
-      policy.throttler_bytes->put(message_size);
-      policy.throttler_bytes->get(new_message_size);
-    }
   }
 
   //
