@@ -8,10 +8,12 @@ import logging
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 
+from tasks.cephfs.filesystem import Filesystem
+
 log = logging.getLogger(__name__)
 
 
-def task(ctx, config):
+def run_test(ctx, config, filesystem):
     """
     Run flush and scrub commands on the specified files in the filesystem. This
     task will run through a sequence of operations, but it is not comprehensive
@@ -22,7 +24,7 @@ def task(ctx, config):
 
     Usage:
     mds_scrub_checks:
-      mds_id: a
+      mds_rank: 0
       path: path/to/test/dir
       client: 0
       run_seq: [0-9]+
@@ -31,13 +33,13 @@ def task(ctx, config):
     it uses that value to generate unique folder and file names.
     """
 
-    mds_id = config.get("mds_id")
+    mds_rank = config.get("mds_rank")
     test_path = config.get("path")
     run_seq = config.get("run_seq")
     client_id = config.get("client")
 
-    if mds_id is None or test_path is None or run_seq is None:
-        raise ValueError("Must specify each of mds_id, test_path, run_seq,"
+    if mds_rank is None or test_path is None or run_seq is None:
+        raise ValueError("Must specify each of mds_rank, test_path, run_seq,"
                          "client_id in config!")
 
     teuthdir = teuthology.get_testdir(ctx)
@@ -51,7 +53,7 @@ def task(ctx, config):
 
     log.info("Initiating mds_scrub_checks on mds.{id_}, "
              "test_path {path}, run_seq {seq}".format(
-                 id_=mds_id, path=test_path, seq=run_seq))
+                 id_=mds_rank, path=test_path, seq=run_seq))
 
     def json_validator(json, rc, element, expected_value):
         if (rc != 0):
@@ -66,12 +68,14 @@ def task(ctx, config):
 
     nep = "{test_path}/i/dont/exist".format(test_path=test_path)
     command = "flush_path {nep}".format(nep=nep)
-    asok_command(ctx, mds_id, command,
-                 lambda j, r: json_validator(j, r, "return_code", -2))
+    asok_command(ctx, mds_rank, command,
+                 lambda j, r: json_validator(j, r, "return_code", -2),
+                 filesystem)
 
     command = "scrub_path {nep}".format(nep=nep)
-    asok_command(ctx, mds_id, command,
-                 lambda j, r: json_validator(j, r, "return_code", -2))
+    asok_command(ctx, mds_rank, command,
+                 lambda j, r: json_validator(j, r, "return_code", -2),
+                 filesystem)
 
     test_repo_path = "{test_path}/ceph-qa-suite".format(test_path=test_path)
     dirpath = "{repo_path}/suites".format(repo_path=test_repo_path)
@@ -79,32 +83,33 @@ def task(ctx, config):
     if (run_seq == 0):
         log.info("First run: flushing {dirpath}".format(dirpath=dirpath))
         command = "flush_path {dirpath}".format(dirpath=dirpath)
-        asok_command(ctx, mds_id, command, success_validator)
+        asok_command(ctx, mds_rank, command, success_validator, filesystem)
     command = "scrub_path {dirpath}".format(dirpath=dirpath)
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
     
     filepath = "{repo_path}/suites/fs/verify/validater/valgrind.yaml".format(
         repo_path=test_repo_path)
     if (run_seq == 0):
         log.info("First run: flushing {filepath}".format(filepath=filepath))
         command = "flush_path {filepath}".format(filepath=filepath)
-        asok_command(ctx, mds_id, command, success_validator)
+        asok_command(ctx, mds_rank, command, success_validator, filesystem)
     command = "scrub_path {filepath}".format(filepath=filepath)
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
 
     filepath = "{repo_path}/suites/fs/basic/clusters/fixed-3-cephfs.yaml".\
                format(repo_path=test_repo_path)
     command = "scrub_path {filepath}".format(filepath=filepath)
-    asok_command(ctx, mds_id, command,
+    asok_command(ctx, mds_rank, command,
                  lambda j, r: json_validator(j, r, "performed_validation",
-                                             False))
+                                             False),
+                 filesystem)
 
     if (run_seq == 0):
         log.info("First run: flushing base dir /")
         command = "flush_path /"
-        asok_command(ctx, mds_id, command, success_validator)
+        asok_command(ctx, mds_rank, command, success_validator, filesystem)
     command = "scrub_path /"
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
 
     client = ctx.manager.find_remote("client", client_id)
     new_dir = "{repo_path}/new_dir_{i}".format(repo_path=repo_path, i=run_seq)
@@ -113,7 +118,7 @@ def task(ctx, config):
     client.run(args=[
         "mkdir", new_dir])
     command = "flush_path {dir}".format(dir=test_new_dir)
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
 
     new_file = "{repo_path}/new_file_{i}".format(repo_path=repo_path,
                                                  i=run_seq)
@@ -122,7 +127,7 @@ def task(ctx, config):
     client.run(args=[
         "echo", "hello", run.Raw('>'), new_file])
     command = "flush_path {file}".format(file=test_new_file)
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
 
     # check that scrub fails on errors. First, get ino
     client = ctx.manager.find_remote("client", 0)
@@ -144,18 +149,18 @@ def task(ctx, config):
         ]
     )
     command = "scrub_path {file}".format(file=test_new_file)
-    asok_command(ctx, mds_id, command,
-                 lambda j, r: json_validator(j, r, "return_code", -61))
+    asok_command(ctx, mds_rank, command,
+                 lambda j, r: json_validator(j, r, "return_code", -61), filesystem)
     client.run(
         args=[
             "rados", "-p", "data", "rm", rados_obj_name
         ]
     )
-    asok_command(ctx, mds_id, command,
-                 lambda j, r: json_validator(j, r, "return_code", -2))
+    asok_command(ctx, mds_rank, command,
+                 lambda j, r: json_validator(j, r, "return_code", -2), filesystem)
 
     command = "flush_path /"
-    asok_command(ctx, mds_id, command, success_validator)
+    asok_command(ctx, mds_rank, command, success_validator, filesystem)
 
 
 class AsokCommandFailedError(Exception):
@@ -176,10 +181,13 @@ class AsokCommandFailedError(Exception):
             json=self.json, es=self.errstring)
 
 
-def asok_command(ctx, mds_id, command, validator):
+def asok_command(ctx, mds_rank, command, validator, filesystem):
     log.info("Running command '{command}'".format(command=command))
 
     command_list = command.split()
+
+    # we just assume there's an active mds for every rank
+    mds_id = filesystem.get_active_names()[mds_rank]
 
     proc = ctx.manager.admin_socket('mds', mds_id,
                                     command_list, check_status=False)
@@ -223,3 +231,9 @@ def clone_repo(ctx, client_id, path):
         )
 
     return repo_path
+
+
+def task(ctx, config):
+    fs = Filesystem(ctx)
+
+    run_test(ctx, config, fs)
