@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Wed Jan 28 00:26:48 UTC 2015 - tbehrens@suse.com
+
+- add %systemd_requires summarily, move python requirements into
+  ceph-common, alongside the move of /usr/bin/ceph 
+
+-------------------------------------------------------------------
 Mon Jan 26 16:24:07 UTC 2015 - osynge@suse.com
 
 - ceph-disk New rich init system detection.

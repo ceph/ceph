@@ -68,9 +68,7 @@ Requires:       librbd1 = %{version}-%{release}
 Requires:       hdparm
 Requires:       parted
 Requires:       python-Flask
-Requires:       python-argparse
 Requires:       python-ceph = %{version}-%{release}
-Requires:       python-requests
 Requires:       xfsprogs
 # util-linux because we need mount
 Requires:       util-linux
@@ -105,6 +103,7 @@ BuildRequires:  xfsprogs-devel
 BuildRequires:  xz
 %if 0%{?suse_version} >= 1310
 BuildRequires:  systemd
+%{?systemd_requires}
 %endif
 # This patch queue is auto-generated from https://github.com/SUSE/ceph
 PATCH_FILES
@@ -156,6 +155,7 @@ Requires:       librados2 = %{version}-%{release}
 Requires:       librbd1 = %{version}-%{release}
 Requires:       python-ceph = %{version}-%{release}
 Requires:       python-requests
+Requires:       python-argparse
 
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster
