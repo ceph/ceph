@@ -394,7 +394,7 @@ uint64_t IoCtx::get_last_version() {
   return ctx->get_last_version();
 }
 
-std::string IoCtx::get_pool_name() {
+std::string IoCtx::get_pool_name() const {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->get_pool_name();
 }
