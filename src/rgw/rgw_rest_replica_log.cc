@@ -146,7 +146,7 @@ void RGWOp_OBJLog_DeleteBounds::execute() {
   http_ret = rl.delete_bound(shard, daemon_id, purge_all);
 }
 
-static int bucket_instance_to_bucket(RGWRados *store, string& bucket_instance, rgw_bucket& bucket) {
+static int bucket_instance_to_bucket(RGWRados *store, const string& bucket_instance, rgw_bucket& bucket) {
   RGWBucketInfo bucket_info;
   time_t mtime;
   
@@ -162,10 +162,8 @@ static int bucket_instance_to_bucket(RGWRados *store, string& bucket_instance, r
   return 0;
 }
 
-static int get_bucket_for_bounds(RGWRados *store, XMLArgs& args, rgw_bucket& bucket, bool *index_by_instance)
+static int get_bucket_for_bounds(RGWRados *store, XMLArgs& args, const string& bucket_instance, rgw_bucket& bucket, bool *index_by_instance)
 {
-  string bucket_instance = args.get("bucket-instance");
-
   args.get_bool("index-by-instance", index_by_instance, true);
 
   if (*index_by_instance) {
@@ -235,7 +233,7 @@ void RGWOp_BILog_SetBounds::execute() {
   rgw_bucket bucket;
   bool index_by_instance;
 
-  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket_instance, bucket, &index_by_instance)) < 0) {
     return;
   }
   
@@ -256,14 +254,15 @@ void RGWOp_BILog_GetBounds::execute() {
   rgw_bucket bucket;
   bool index_by_instance;
 
-  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
-    return;
-  }
-
   int shard_id;
+
   http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
   if (http_ret < 0) {
     dout(5) << "failed to parse bucket instance" << dendl;
+    return;
+  }
+
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket_instance, bucket, &index_by_instance)) < 0) {
     return;
   }
 
@@ -309,10 +308,9 @@ void RGWOp_BILog_DeleteBounds::execute() {
   rgw_bucket bucket;
   bool index_by_instance;
 
-  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket, &index_by_instance)) < 0) {
+  if ((http_ret = get_bucket_for_bounds(store, s->info.args, bucket_instance, bucket, &index_by_instance)) < 0) {
     return;
   }
-
 
   RGWReplicaBucketLogger rl(store);
   http_ret = rl.delete_bound(bucket, shard_id, daemon_id, index_by_instance, purge_all);
