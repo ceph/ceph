@@ -830,8 +830,15 @@ void AsyncConnection::process()
             message->put();
             if (has_feature(CEPH_FEATURE_RECONNECT_SEQ) && async_msgr->cct->_conf->ms_die_on_old_message)
               assert(0 == "old msgs despite reconnect_seq feature");
-            goto fail;
+            break;
           }
+          if (message->get_seq() > in_seq + 1) {
+            ldout(async_msgr->cct, 0) << __func__ << " missed message?  skipped from seq "
+                                      << in_seq << " to " << message->get_seq() << dendl;
+            if (async_msgr->cct->_conf->ms_die_on_skipped_message)
+              assert(0 == "skipped incoming seq");
+          }
+
           message->set_connection(this);
 
           // note last received message.
