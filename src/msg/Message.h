@@ -421,6 +421,9 @@ public:
   unsigned get_priority() const { return header.priority; }
   void set_priority(__s16 p) { header.priority = p; }
 
+  uint8_t get_compression_flag() const { return header.flags; }
+  void set_compression_flag(uint8_t flags) { header.flags = flags; }
+
   // source/dest
   entity_inst_t get_source_inst() const {
     return entity_inst_t(get_source(), get_source_addr());
