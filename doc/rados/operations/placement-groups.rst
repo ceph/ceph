@@ -178,16 +178,16 @@ increased.
 
 No matter how short the recovery time is, there is a chance for a
 second OSD to fail while it is in progress. In the 10 OSDs cluster
-described above, if any of them fail, then ~8 placement groups
-(i.e. ~75 / 9 placement groups being recovered) will only have one
-surviving copy. And if any of the 8 remaining OSD fail, the last
-objects of one placement group are likely to be lost (i.e. ~8 / 8
+described above, if any of them fail, then ~17 placement groups
+(i.e. ~150 / 9 placement groups being recovered) will only have one
+surviving copy. And if any of the 17 remaining OSD fail, the last
+objects of two placement groups are likely to be lost (i.e. ~17 / 8
 placement groups with only one remaining copy being recovered).
 
 When the size of the cluster grows to 20 OSDs, the number of Placement
 Groups damaged by the loss of three OSDs drops. The second OSD lost
-will degrade ~2 (i.e. ~35 / 19 placement groups being recovered)
-instead of ~8 and the third OSD lost will only lose data if it is one
+will degrade ~4 (i.e. ~75 / 19 placement groups being recovered)
+instead of ~17 and the third OSD lost will only lose data if it is one
 of the two OSDs containing the surviving copy. In other words, if the
 probability of losing one OSD is 0.0001% during the recovery time
 frame, it goes from 8 * 0.0001% in the cluster with 10 OSDs to 2 *
