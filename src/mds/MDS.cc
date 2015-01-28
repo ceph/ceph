@@ -2991,7 +2991,8 @@ void MDS::ProgressThread::shutdown()
   stopping = true;
   cond.Signal();
   mds->mds_lock.Unlock();
-  join();
+  if (is_started())
+    join();
   mds->mds_lock.Lock();
 }
 
