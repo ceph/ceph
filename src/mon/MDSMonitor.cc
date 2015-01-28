@@ -1411,13 +1411,15 @@ int MDSMonitor::filesystem_command(
     }
 
   } else if (prefix == "mds set_state") {
+    int64_t tmp;
     mds_gid_t gid;
-    if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "gid", tmp)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
       return -EINVAL;
     }
-    int32_t state;
+    gid = tmp;
+    int64_t state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
          << cmd_vartype_stringify(cmdmap["state"]) << "'";
@@ -1441,12 +1443,14 @@ int MDSMonitor::filesystem_command(
     }
 
   } else if (prefix == "mds rm") {
+    int64_t tmp;
     mds_gid_t gid;
-    if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
+    if (!cmd_getval(g_ceph_context, cmdmap, "gid", tmp)) {
       ss << "error parsing 'gid' value '"
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
       return -EINVAL;
     }
+    gid = tmp;
     int state = pending_mdsmap.get_state_gid(gid);
     if (state == 0) {
       ss << "mds gid " << gid << " dne";
@@ -1462,7 +1466,7 @@ int MDSMonitor::filesystem_command(
       return 0;
     }
   } else if (prefix == "mds rmfailed") {
-    int w_i;
+    int64_t w_i;
     if (!cmd_getval(g_ceph_context, cmdmap, "who", w_i)) {
       ss << "error parsing 'who' value '"
          << cmd_vartype_stringify(cmdmap["who"]) << "'";
