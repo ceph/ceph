@@ -2430,7 +2430,7 @@ const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
   MonCommand *this_cmd = NULL;
   for (MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
-    if (cp->cmdstring.find(cmd_prefix) != string::npos) {
+    if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
       this_cmd = cp;
       break;
     }
