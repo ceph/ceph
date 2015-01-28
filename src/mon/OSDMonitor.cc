@@ -3609,7 +3609,10 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
 
 void OSDMonitor::prepare_adaptive_seed(pg_pool_t *pi, int64_t pool)
 {
+  dout(10) << __func__ << " pool " << pool << dendl;
   float min_stdev = 999999;
+  float avg_stdev = 0;
+  int num = 0;
   int balance_param = 1;
 
   for (int k = 1; k < 5; k++) {
@@ -3635,13 +3638,21 @@ void OSDMonitor::prepare_adaptive_seed(pg_pool_t *pi, int64_t pool)
     }
 
     float stdev = cal_stdev(pg_num, pg_num.size());
+    avg_stdev += stdev;
+    ++num;
     if (stdev < min_stdev) {
       min_stdev = stdev;
       balance_param = k;
     }
   }
+  if (num)
+    avg_stdev /= num;
 
   pi->set_seed(balance_param);
+  dout(10) << __func__ << " chose seed " << balance_param
+	   << " with stddev " << min_stdev
+	   << " vs average stddev " << avg_stdev
+	   << dendl;
 }
 
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
@@ -4051,7 +4062,9 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf->osd_pool_default_cache_min_evict_age;
 
-  prepare_adaptive_seed(pi, pool);
+  if (osdmap.crush->has_v4_buckets())
+    prepare_adaptive_seed(pi, pool);
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
