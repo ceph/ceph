@@ -399,8 +399,13 @@ public:
       __le32 hint_type;                 //OP_COLL_HINT
       __le64 expected_object_size;      //OP_SETALLOCHINT
       __le64 expected_write_size;       //OP_SETALLOCHINT
-      __le32 split_bits;                //OP_SPLIT_COLLECTION2
-      __le32 split_rem;                 //OP_SPLIT_COLLECTION2
+      union {
+	struct {
+	  __le32 split_bits;
+	  __le32 split_rem;
+	}; //OP_SPLIT_COLLECTION2
+	__le32 fadvise_flags;
+      };
     } __attribute__ ((packed)) ;
 
     struct TransactionData {
@@ -432,6 +437,10 @@ public:
 
     bool use_tbl;   //use_tbl for encode/decode
     bufferlist tbl;
+
+    //If ture mean fadvise_flags not for all write in a Transaction
+    //Write op with itself fadvise flags.
+    bool per_op_fadvise_flags;
 
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32> object_index;
@@ -501,19 +510,46 @@ public:
       return C_Contexts::list_to_context(on_applied_sync);
     }
 
+    bool can_set_fadvise_flag(__le32 op){
+      //because fadvise_flags and the field of this op share the the same space
+      if (op == OP_SPLIT_COLLECTION2)
+	return false;
+      else
+	return true;
+    }
+
     void set_fadvise_flags(uint32_t flags) {
       data.fadvise_flags = flags;
     }
-    void set_fadvise_flag(uint32_t flag) {
-      data.fadvise_flags = data.fadvise_flags | flag;
+
+    void set_fadvise_flags_all(uint32_t flag) {
+      if (per_op_fadvise_flags) {
+	int ops = data.ops;
+	char *buffer = op_bl.get_contiguous(0, ops * sizeof(Op));
+	for (int i = 0; i < ops; i++) {
+	  Op *_op = (Op *)buffer;
+	  if (can_set_fadvise_flag(_op->op))
+	    _op->fadvise_flags |= flag;
+	  buffer += sizeof(Op);
+	}
+      } else {
+        data.fadvise_flags = data.fadvise_flags | flag;
+      }
     }
-    uint32_t get_fadvise_flags() { return data.fadvise_flags; }
 
     void set_use_tbl(bool value) {
       use_tbl = value;
     }
     bool get_use_tbl() {
       return use_tbl;
+    }
+
+    bool get_per_op_fadvise_flags() {
+      return per_op_fadvise_flags;
+    }
+
+    void set_per_op_fadvise_flags(bool value) {
+      per_op_fadvise_flags = value;
     }
 
     void swap(Transaction& other) {
@@ -846,8 +882,11 @@ public:
         assert(cid_id < colls.size());
         return colls[cid_id];
       }
-      uint32_t get_fadvise_flags() const {
-	return t->get_fadvise_flags();
+      uint32_t get_fadvise_flags(Op *op) const {
+	if (t->per_op_fadvise_flags)
+	  return op->fadvise_flags;
+	else
+	  return t->data.fadvise_flags;
       }
     };
 
@@ -971,6 +1010,7 @@ public:
         _op->oid = _get_object_id(oid);
         _op->off = off;
         _op->len = len;
+	_op->fadvise_flags = flags;
         ::encode(write_data, data_bl);
       }
       assert(len == write_data.length());
@@ -1523,12 +1563,14 @@ public:
     Transaction() :
       osr(NULL),
       use_tbl(false),
+      per_op_fadvise_flags(true),
       coll_id(0),
       object_id(0) { }
 
     Transaction(bufferlist::iterator &dp) :
       osr(NULL),
       use_tbl(false),
+      per_op_fadvise_flags(true),
       coll_id(0),
       object_id(0) {
       decode(dp);
@@ -1537,6 +1579,7 @@ public:
     Transaction(bufferlist &nbl) :
       osr(NULL),
       use_tbl(false),
+      per_op_fadvise_flags(true),
       coll_id(0),
       object_id(0) {
       bufferlist::iterator dp = nbl.begin();
@@ -1562,7 +1605,7 @@ public:
         ENCODE_FINISH(bl);
       } else {
         //layout: data_bl + op_bl + coll_index + object_index + data
-        ENCODE_START(8, 5, bl);
+        ENCODE_START(9, 5, bl);
         ::encode(data_bl, bl);
         ::encode(op_bl, bl);
         ::encode(coll_index, bl);
@@ -1572,9 +1615,9 @@ public:
       }
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
       DECODE_OLDEST(2);
-      if (struct_v == 8) {
+      if (struct_v >= 8) {
         ::decode(data_bl, bl);
         ::decode(op_bl, bl);
         ::decode(coll_index, bl);
@@ -1583,6 +1626,9 @@ public:
         use_tbl = false;
         coll_id = coll_index.size();
         object_id = object_index.size();
+
+	if (struct_v == 8)
+	  per_op_fadvise_flags = false;
       } else {
         decode7_5(bl, struct_v);
         use_tbl = true;

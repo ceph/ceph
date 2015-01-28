@@ -810,6 +810,8 @@ void ECBackend::handle_sub_write(
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction *localt = new ObjectStore::Transaction;
   localt->set_use_tbl(op.t.get_use_tbl());
+  localt->set_per_op_fadvise_flags(op.t.get_per_op_fadvise_flags());
+
   if (!op.temp_added.empty()) {
     get_temp_coll(localt);
     add_temp_objs(op.temp_added);
@@ -839,7 +841,7 @@ void ECBackend::handle_sub_write(
 
   if (!(dynamic_cast<ReplicatedPG *>(get_parent())->is_undersized()) &&
       get_parent()->whoami_shard().shard >= ec_impl->get_data_chunk_count())
-    op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    op.t.set_fadvise_flags_all(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   localt->append(op.t);
   if (on_local_applied_sync) {
