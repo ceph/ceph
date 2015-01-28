@@ -2302,7 +2302,7 @@ unsigned FileStore::_do_transaction(
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
-        uint32_t fadvise_flags = i.get_fadvise_flags();
+        uint32_t fadvise_flags =  i.get_fadvise_flags(op);
         bufferlist bl;
         i.decode_bl(bl);
         tracepoint(objectstore, write_enter, osr_name, off, len);

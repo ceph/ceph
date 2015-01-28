@@ -1215,7 +1215,7 @@ unsigned KeyValueStore::_do_transaction(Transaction& transaction,
         ghobject_t oid = i.get_oid(op->oid);
         uint64_t off = op->off;
         uint64_t len = op->len;
-	uint32_t fadvise_flags = i.get_fadvise_flags();
+        uint32_t fadvise_flags = i.get_fadvise_flags(op);
         bufferlist bl;
         i.decode_bl(bl);
         r = _write(cid, oid, off, len, bl, t, fadvise_flags);
