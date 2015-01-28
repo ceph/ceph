@@ -11,6 +11,7 @@ import requests
 import pwd
 import subprocess
 import smtplib
+import socket
 import sys
 import yaml
 from email.mime.text import MIMEText
@@ -308,9 +309,12 @@ def schedule_fail(message, name=''):
         msg['Subject'] = subject
         msg['From'] = config.results_sending_email
         msg['To'] = email
-        smtp = smtplib.SMTP('localhost')
-        smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
-        smtp.quit()
+        try:
+            smtp = smtplib.SMTP('localhost')
+            smtp.sendmail(msg['From'], [msg['To']], msg.as_string())
+            smtp.quit()
+        except socket.error:
+            log.exception("Failed to connect to mail server!")
     raise ScheduleFailError(message, name)
 
 
