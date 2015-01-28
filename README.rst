@@ -339,7 +339,7 @@ machine.
 
 In order to get the right virtual machine associations, the following needs
 to be set in ~/.config/libvirt/libvirt.conf or for some older versions
-of libvirt (like ubuntu precise) in ~/libvirt/libvirt.conf::
+of libvirt (like ubuntu precise) in ~/.libvirt/libvirt.conf::
 
     uri_aliases = [
         'mira001=qemu+ssh://ubuntu@mira001.front.sepia.ceph.com/system?no_tty=1',
