@@ -13,6 +13,7 @@
  */
 
 #include <sys/socket.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
 #include <limits.h>
@@ -849,7 +850,17 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
-    int r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+    int iptos = IPTOS_CLASS_CS6;
+    int r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
+                         << ": " << cpp_strerror(errno) << dendl;
+    }
+
+    // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
+    // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
+    // We need to call setsockopt(SO_PRIORITY) after it.
+    r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
                          << ": " << cpp_strerror(errno) << dendl;
