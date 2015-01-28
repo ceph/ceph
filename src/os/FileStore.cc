@@ -3151,7 +3151,9 @@ int FileStore::_clone(coll_t cid, const ghobject_t& oldoid, const ghobject_t& ne
       goto out3;
 
     r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
-    if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+    if (r < 0)
+      goto out3;
+    if (!strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
       r = chain_fsetxattr(**n, XATTR_SPILL_OUT_NAME, XATTR_NO_SPILL_OUT,
                           sizeof(XATTR_NO_SPILL_OUT));
     } else {
@@ -3935,11 +3937,17 @@ int FileStore::getattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr>
   }
 
   r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
-  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
+  if (r < 0) {
+    dout(10) << __func__ << " could not get spill out xattr r = " << r << dendl;
+    lfn_close(fd);
+    goto out;
+  }
+  if (!strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
     spill_out = false;
 
   r = _fgetattrs(**fd, aset);
   if (r < 0) {
+    lfn_close(fd);
     goto out;
   }
   lfn_close(fd);
@@ -4008,7 +4016,11 @@ int FileStore::_setattrs(coll_t cid, const ghobject_t& oid, map<string,bufferptr
 
   char buf[2];
   r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
-  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
+  if (r < 0) {
+    dout(10) << __func__ << " could not get spill out xattr r = " << r << dendl;
+    goto out_close;
+  }
+  if (!strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT)))
     spill_out = 0;
   else
     spill_out = 1;
@@ -4105,7 +4117,11 @@ int FileStore::_rmattr(coll_t cid, const ghobject_t& oid, const char *name,
 
   char buf[2];
   r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
-  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+  if (r < 0) {
+    dout(10) << __func__ << " could not get spill out xattr r = " << r << dendl;
+    goto out_close;
+  }
+  if (!strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
     spill_out = false;
   }
 
@@ -4153,7 +4169,11 @@ int FileStore::_rmattrs(coll_t cid, const ghobject_t& oid,
 
   char buf[2];
   r = chain_fgetxattr(**fd, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
-  if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
+  if (r < 0) {
+    dout(10) << __func__ << " could not get spill out xattr r = " << r << dendl;
+    goto out_close;
+  }
+  if (!strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
     spill_out = false;
   }
 
