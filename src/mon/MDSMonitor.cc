@@ -48,6 +48,30 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, MDSMap const& mdsmap)
 }
 
 
+/*
+ * Specialized implementation of cmd_getval to allow us to parse
+ * out strongly-typedef'd types
+ */
+template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+                std::string k, mds_gid_t &val)
+{
+  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+}
+
+template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+                std::string k, mds_rank_t &val)
+{
+  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+}
+
+template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+                std::string k, MDSMap::DaemonState &val)
+{
+  return cmd_getval(cct, cmdmap, k, (int64_t&)val);
+}
+
+
+
 
 // my methods
 
@@ -1417,7 +1441,7 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap["gid"]) << "'";
       return -EINVAL;
     }
-    int32_t state;
+    MDSMap::DaemonState state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
          << cmd_vartype_stringify(cmdmap["state"]) << "'";
@@ -1425,7 +1449,7 @@ int MDSMonitor::filesystem_command(
     }
     if (!pending_mdsmap.is_dne_gid(gid)) {
       MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
-      info.state = MDSMap::DaemonState(state);
+      info.state = state;
       stringstream ss;
       ss << "set mds gid " << gid << " to state " << state << " " << ceph_mds_state_name(state);
       return 0;
@@ -1462,13 +1486,12 @@ int MDSMonitor::filesystem_command(
       return 0;
     }
   } else if (prefix == "mds rmfailed") {
-    int w_i;
-    if (!cmd_getval(g_ceph_context, cmdmap, "who", w_i)) {
+    mds_rank_t who;
+    if (!cmd_getval(g_ceph_context, cmdmap, "who", who)) {
       ss << "error parsing 'who' value '"
          << cmd_vartype_stringify(cmdmap["who"]) << "'";
       return -EINVAL;
     }
-    mds_rank_t who = mds_rank_t(w_i);
     pending_mdsmap.failed.erase(who);
     stringstream ss;
     ss << "removed failed mds." << who;
