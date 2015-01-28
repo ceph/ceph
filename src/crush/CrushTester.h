@@ -334,6 +334,7 @@ public:
   }
 
   int test();
+  int test_with_crushtool();
 };
 
 #endif
