@@ -1,4 +1,15 @@
 -------------------------------------------------------------------
+Wed Jan 28 11:14:53 UTC 2015 - tbehrens@suse.com
+
+- make platform- and systemd-related version checks consistent
+
+-------------------------------------------------------------------
+Wed Jan 28 10:14:53 UTC 2015 - tbehrens@suse.com
+
+- verify 95-ceph-osd-alt.rules on older suse versions is still
+  working, fix for bnc#890736 therefore still in
+
+-------------------------------------------------------------------
 Wed Jan 28 00:26:48 UTC 2015 - tbehrens@suse.com
 
 - add %systemd_requires summarily, move python requirements into
