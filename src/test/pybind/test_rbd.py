@@ -84,6 +84,17 @@ def require_features(required_features):
         return functools.wraps(fn)(_require_features)
     return wrapper
 
+def blacklist_features(blacklisted_features):
+    def wrapper(fn):
+        def _blacklist_features(*args, **kwargs):
+            global features
+            for feature in blacklisted_features:
+                if features is not None and feature & features == feature:
+                    raise SkipTest
+            return fn(*args, **kwargs)
+        return functools.wraps(fn)(_blacklist_features)
+    return wrapper
+
 def test_version():
     RBD().version()
 
@@ -406,11 +417,17 @@ class TestImage(object):
         assert_raises(ImageNotFound, self.image.unprotect_snap, 'snap1')
         assert_raises(ImageNotFound, self.image.is_protected_snap, 'snap1')
 
+    @require_features([RBD_FEATURE_EXCLUSIVE_LOCK])
+    def test_remove_with_exclusive_lock(self):
+        assert_raises(ImageBusy, remove_image)
+
+    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_remove_with_snap(self):
         self.image.create_snap('snap1')
         assert_raises(ImageHasSnapshots, remove_image)
         self.image.remove_snap('snap1')
 
+    @blacklist_features([RBD_FEATURE_EXCLUSIVE_LOCK])
     def test_remove_with_watcher(self):
         data = rand_data(256)
         self.image.write(data, 0)
