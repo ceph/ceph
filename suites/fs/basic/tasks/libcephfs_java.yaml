@@ -1,7 +1,7 @@
 overrides:
   install:
     ceph:
-      extra_packages: [libcephfs1, libcephfs-java, libcephfs-jni]
+      extra_packages: [libcephfs1, libcephfs-jni]
 tasks:
 - ceph-fuse:
 - workunit:
