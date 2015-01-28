@@ -183,7 +183,12 @@ function ceph_watch_wait()
     done
 
     kill $CEPH_WATCH_PID
-    grep "$regexp" $CEPH_WATCH_FILE
+
+    if ! grep "$regexp" $CEPH_WATCH_FILE; then
+	echo "pattern ${regexp} not found in watch file. Full watch file content:" >&2
+	cat $CEPH_WATCH_FILE >&2
+	return 1
+    fi
 }
 
 function test_mon_injectargs()
