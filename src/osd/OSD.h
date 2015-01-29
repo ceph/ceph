@@ -60,7 +60,6 @@ using namespace std;
 
 enum {
   l_osd_first = 10000,
-  l_osd_opq,
   l_osd_op_wip,
   l_osd_op,
   l_osd_op_inb,
