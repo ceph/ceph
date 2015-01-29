@@ -1157,7 +1157,12 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
         }
         bytes_not_in_cache += bh_it->second->length();
 	success = false;
-      }      
+      }
+
+      for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
+           bh_it != hits.end();  ++bh_it)
+	touch_bh(bh_it->second); //bump in lru, so we don't lose it when later read
+
     } else {
       assert(!hits.empty());
 
