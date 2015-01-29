@@ -4014,6 +4014,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         assert(scrubber.waiting_on == 0);
 
         scrub_compare_maps();
+	scrubber.start = scrubber.end;
 	scrubber.run_callbacks();
 
         // requeue the writes from the chunk that just finished
@@ -4033,9 +4034,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	}
 
 	if (scrubber.end < hobject_t::get_max()) {
-	  // schedule another leg of the scrub
-          scrubber.start = scrubber.end;
-
           scrubber.state = PG::Scrubber::NEW_CHUNK;
           osd->scrub_wq.queue(this);
           done = true;
