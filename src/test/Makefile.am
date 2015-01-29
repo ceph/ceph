@@ -254,7 +254,8 @@ check_SCRIPTS += \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
-	test/mon/mon-handle-forward.sh
+	test/mon/mon-handle-forward.sh \
+	test/libradosstriper/rados-striper.sh
 
 if ENABLE_ROOT_MAKE_CHECK
 check_SCRIPTS += test/ceph-disk-root.sh
