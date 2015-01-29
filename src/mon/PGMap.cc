@@ -10,6 +10,7 @@
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "mon/MonitorDBStore.h"
+#include "osd/osd_types.h"
 
 // --
 
@@ -1424,5 +1425,28 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
     o.back()->apply_incremental(NULL, *inc.front());
     delete inc.front();
     inc.pop_front();
+  }
+}
+
+void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+                                  bool primary, set<pg_t>& pgs)
+{
+  int type = 0;
+  if (state != "all") {
+    type = pg_string_state(state);
+    if (type == -1)
+      assert(0 == "invalid type");
+  }
+
+  for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    if ((poolid >= 0) && (uint64_t(poolid) != i->first.pool()))
+      continue;
+    if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
+      continue;
+    if ((state != "all") && !(i->second.state & type))
+      continue;
+    pgs.insert(i->first);
   }
 }
