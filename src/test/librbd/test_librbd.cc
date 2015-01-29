@@ -843,7 +843,7 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
 
   for (i = 0; i < 5; ++i)
     ASSERT_PASSED(write_test_data, image, test_data, TEST_IO_SIZE * i,
-		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOREUSE);
+		  TEST_IO_SIZE, LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
 
   for (i = 5; i < 10; ++i)
     ASSERT_PASSED(aio_write_test_data, image, test_data, TEST_IO_SIZE * i,
@@ -879,7 +879,7 @@ TEST_F(TestLibRBD, TestIOWithIOHint)
   ASSERT_EQ(-EINVAL, rbd_read(image, info.size, 1, test_data));
   // reading through end returns amount up to end
   ASSERT_EQ(10, rbd_read2(image, info.size - 10, 100, test_data,
-			  LIBRADOS_OP_FLAG_FADVISE_NOREUSE));
+			  LIBRADOS_OP_FLAG_FADVISE_NOCACHE));
   // writing through end returns amount up to end
   ASSERT_EQ(10, rbd_write2(image, info.size - 10, 100, test_data,
 			    LIBRADOS_OP_FLAG_FADVISE_DONTNEED));
@@ -1099,7 +1099,7 @@ TEST_F(TestLibRBD, TestIOPPWithIOHint)
 
     for (i = 0; i < 5; ++i)
       ASSERT_PASSED(write_test_data, image, test_data, strlen(test_data) * i,
-		    LIBRADOS_OP_FLAG_FADVISE_NOREUSE);
+		    LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
 
     for (i = 5; i < 10; ++i)
       ASSERT_PASSED(aio_write_test_data, image, test_data, strlen(test_data) * i,
