@@ -897,8 +897,6 @@ int main(int argc, char **argv)
 
   int sync_stats = false;
 
-  int replicalog_index_by_instance = true;
-
   uint64_t min_rewrite_size = 4 * 1024 * 1024;
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
@@ -1047,8 +1045,6 @@ int main(int argc, char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
-     // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &replicalog_index_by_instance, NULL, "--replicalog-index-by-instance", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
       caps = val;
@@ -2581,7 +2577,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, shard_id, bounds, replicalog_index_by_instance);
+      ret = logger.get_bounds(bucket, shard_id, bounds);
       if (ret < 0)
         return -ret;
     } else { // shouldn't get here
@@ -2632,7 +2628,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, shard_id, daemon_id, replicalog_index_by_instance, false);
+      ret = logger.delete_bound(bucket, shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
     }
@@ -2694,7 +2690,7 @@ next:
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.update_bound(bucket, shard_id, daemon_id, marker, time, &entries, replicalog_index_by_instance);
+      ret = logger.update_bound(bucket, shard_id, daemon_id, marker, time, &entries);
       if (ret < 0) {
         cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
         return -ret;
