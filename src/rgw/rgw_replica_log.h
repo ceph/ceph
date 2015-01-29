@@ -108,10 +108,9 @@ public:
   RGWReplicaBucketLogger(RGWRados *_store);
   int update_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id,
                    const string& marker, const utime_t& time,
-                   const list<RGWReplicaItemMarker> *entries,
-                   bool index_by_instance);
-  int delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id, bool index_by_instance, bool purge_all);
-  int get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds, bool index_by_instance);
+                   const list<RGWReplicaItemMarker> *entries);
+  int delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id, bool purge_all);
+  int get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds);
   int convert_old_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds);
 };
 
