@@ -191,8 +191,7 @@ string RGWReplicaBucketLogger::obj_name(const rgw_bucket& bucket, int shard_id, 
 
 int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id,
                    const string& marker, const utime_t& time,
-                   const list<RGWReplicaItemMarker> *entries,
-                   bool index_by_instance)
+                   const list<RGWReplicaItemMarker> *entries)
 {
   if (shard_id >= 0 ||
       !BucketIndexShardsManager::is_shards_marker(marker)) {
@@ -216,11 +215,11 @@ int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id,
 
   map<int, string>::iterator iter;
   for (iter = vals.begin(); iter != vals.end(); ++iter) {
-    bool need_to_exist = index_by_instance && no_shards; /*
-                                                          * don't need to exist if not indexing by instance,
-                                                          * also, we only care about non-sharded
+    bool need_to_exist = no_shards; /*
+                                                          * we only care about non-sharded
                                                           * buckets, as these are the ones that
-                                                          * might not be indexed by instance id
+                                                          * might not be indexed by instance id, and
+                                                          * might need conversion
                                                           */
     ldout(cct, 20) << "updating bound: bucket=" << bucket << " shard=" << iter->first << " marker=" << marker << dendl;
     int r = RGWReplicaLogger::update_bound(obj_name(bucket, iter->first, true), pool,
@@ -245,10 +244,10 @@ int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id,
   return ret;
 }
 
-int RGWReplicaBucketLogger::delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id, bool index_by_instance, bool purge_all)
+int RGWReplicaBucketLogger::delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id, bool purge_all)
 {
-  bool need_to_exist = index_by_instance; /* don't need to exist if not indexing by instance */
-  int r = RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, index_by_instance), pool, daemon_id, purge_all, need_to_exist);
+  bool need_to_exist = (shard_id < 0); /* don't need to exist if sharded */
+  int r = RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, true), pool, daemon_id, purge_all, need_to_exist);
   if (r != -ENOENT) {
     return r;
   }
@@ -261,12 +260,12 @@ int RGWReplicaBucketLogger::delete_bound(const rgw_bucket& bucket, int shard_id,
   if (r < 0 && r != -ENOENT) {
     return r;
   }
-  return RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, index_by_instance), pool, daemon_id, purge_all, false);
+  return RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, true), pool, daemon_id, purge_all, false);
 }
 
-int RGWReplicaBucketLogger::get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds, bool index_by_instance) {
-  int r = RGWReplicaLogger::get_bounds(obj_name(bucket, shard_id, index_by_instance), pool, bounds);
-  if (r != -ENOENT || !index_by_instance) {
+int RGWReplicaBucketLogger::get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds) {
+  int r = RGWReplicaLogger::get_bounds(obj_name(bucket, shard_id, true), pool, bounds);
+  if (r != -ENOENT || shard_id >= 0) {
     return r;
   }
 
@@ -275,7 +274,7 @@ int RGWReplicaBucketLogger::get_bounds(const rgw_bucket& bucket, int shard_id, R
     return r;
   }
 
-  return 0;
+  return RGWReplicaLogger::get_bounds(obj_name(bucket, shard_id, true), pool, bounds);
 }
 
 int RGWReplicaBucketLogger::convert_old_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds) {
