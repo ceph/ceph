@@ -625,6 +625,7 @@ struct ObjectOperation {
     uint32_t *out_flags;
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
+    vector<osd_reqid_t> *out_reqids;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -637,13 +638,14 @@ struct ObjectOperation {
 			      uint32_t *flags,
 			      uint32_t *dd,
 			      uint32_t *od,
+			      vector<osd_reqid_t> *oreqids,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
 	out_attrs(a), out_data(d), out_omap_header(oh),
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
-	prval(r) {}
+        out_reqids(oreqids), prval(r) {}
     void finish(int r) {
       if (r < 0)
 	return;
@@ -673,6 +675,8 @@ struct ObjectOperation {
 	  *out_data_digest = copy_reply.data_digest;
 	if (out_omap_digest)
 	  *out_omap_digest = copy_reply.omap_digest;
+	if (out_reqids)
+	  *out_reqids = copy_reply.reqids;
 	*cursor = copy_reply.cursor;
       } catch (buffer::error& e) {
 	if (prval)
@@ -694,6 +698,7 @@ struct ObjectOperation {
 		uint32_t *out_flags,
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
+		vector<osd_reqid_t> *out_reqids,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -706,7 +711,7 @@ struct ObjectOperation {
                                     out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest, out_omap_digest,
-				    prval);
+				    out_reqids, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
   }

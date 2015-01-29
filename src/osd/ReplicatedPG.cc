@@ -1451,6 +1451,11 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   // dup/replay?
   if (op->may_write() || op->may_cache()) {
+    // warning: we will get back *a* request for this reqid, but not
+    // necessarily the most recent.  this happens with flush and
+    // promote ops, but we can't possible have both in our log where
+    // the original request is still not stable on disk, so for our
+    // purposes here it doesn't matter which one we get.
     const pg_log_entry_t *entry = pg_log.get_log().get_request(m->get_reqid());
     if (entry) {
       const eversion_t& oldv = entry->version;
@@ -5923,6 +5928,10 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
   }
 
   ctx->log.back().mod_desc.claim(ctx->mod_desc);
+  if (!ctx->extra_reqids.empty()) {
+    dout(20) << __func__ << "  extra_reqids " << ctx->extra_reqids << dendl;
+    ctx->log.back().extra_reqids.swap(ctx->extra_reqids);
+  }
 
   // apply new object state.
   ctx->obc->obs = ctx->new_obs;
@@ -6169,12 +6178,20 @@ int ReplicatedPG::fill_in_copy_get(
     }
   }
 
+  if (cursor.is_complete()) {
+    // include reqids only in the final step.  this is a bit fragile
+    // but it works...
+    pg_log.get_log().get_object_reqids(ctx->obc->obs.oi.soid, 10, &reply_obj.reqids);
+    dout(20) << " got reqids" << dendl;
+  }
+
   dout(20) << " cursor.is_complete=" << cursor.is_complete()
 	   << " " << out_attrs.size() << " attrs"
 	   << " " << bl.length() << " bytes"
 	   << " " << reply_obj.omap_header.length() << " omap header bytes"
 	   << " " << reply_obj.omap_data.length() << " omap data bytes in "
 	   << omap_keys << " keys"
+	   << " " << reply_obj.reqids.size() << " reqids"
 	   << dendl;
   reply_obj.cursor = cursor;
   if (!async_read_started) {
@@ -6264,6 +6281,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results.flags,
 	      &cop->results.source_data_digest,
 	      &cop->results.source_omap_digest,
+	      &cop->results.reqids,
 	      &cop->rval);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
@@ -6561,6 +6579,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
   obs.oi.set_data_digest(cb->results->data_digest);
   obs.oi.set_omap_digest(cb->results->omap_digest);
 
+  ctx->extra_reqids = cb->results->reqids;
+
   // cache: clear whiteout?
   if (obs.oi.is_whiteout()) {
     dout(10) << __func__ << " clearing whiteout on " << obs.oi.soid << dendl;
@@ -6680,6 +6700,8 @@ void ReplicatedPG::finish_promote(int r, CopyResults *results,
   if (soid.snap < CEPH_NOSNAP)
     ++tctx->delta_stats.num_object_clones;
   tctx->new_obs.exists = true;
+
+  tctx->extra_reqids = results->reqids;
 
   if (whiteout) {
     // create a whiteout
