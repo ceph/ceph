@@ -780,6 +780,7 @@ struct cls_rgw_obj {
     ::encode(pool, bl);
     ::encode(key.name, bl);
     ::encode(loc, bl);
+    ::encode(key, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -789,7 +790,7 @@ struct cls_rgw_obj {
     ::decode(key.name, bl);
     ::decode(loc, bl);
     if (struct_v >= 2) {
-      ::decode(key.instance, bl);
+      ::decode(key, bl);
     }
     DECODE_FINISH(bl);
   }
