@@ -190,7 +190,7 @@ will degrade ~4 (i.e. ~75 / 19 placement groups being recovered)
 instead of ~17 and the third OSD lost will only lose data if it is one
 of the four OSDs containing the surviving copy. In other words, if the
 probability of losing one OSD is 0.0001% during the recovery time
-frame, it goes from 8 * 0.0001% in the cluster with 10 OSDs to 2 *
+frame, it goes from 17 * 10 * 0.0001% in the cluster with 10 OSDs to 4 * 20 * 
 0.0001% in the cluster with 20 OSDs.
 
 In a nutshell, more OSDs mean faster recovery and a lower risk of
