@@ -13,7 +13,9 @@ import urlparse
 from teuthology import misc as teuthology
 from ..orchestra import run
 from ..config import config as teuth_config
-from ..exceptions import UnsupportedPackageTypeError, ConfigError
+from ..exceptions import (UnsupportedPackageTypeError,
+                          ConfigError,
+                          VersionNotFoundError)
 from ..packaging import (
     install_package,
     get_koji_build_info,
@@ -1110,6 +1112,10 @@ def task(ctx, config):
                 except urllib2.HTTPError:
                     log.debug('failed to get utsrelease string using url {url}'.format(
                               url=version_url))
+
+                if not version:
+                    raise VersionNotFoundError("{url} is empty!".format(
+                        url=version_url))
 
                 need_install[role] = sha1
                 need_version[role] = version
