@@ -246,6 +246,8 @@ TYPE(rgw_bucket_category_stats)
 TYPE(rgw_bucket_dir_header)
 TYPE(rgw_bucket_dir)
 TYPE(rgw_bucket_entry_ver)
+TYPE(cls_rgw_obj_key)
+TYPE(rgw_bucket_olh_log_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_obj_prepare_op)
@@ -264,6 +266,13 @@ TYPE(rgw_cls_tag_timeout_op)
 TYPE(cls_rgw_bi_log_list_op)
 TYPE(cls_rgw_bi_log_trim_op)
 TYPE(cls_rgw_bi_log_list_ret)
+TYPE(rgw_cls_link_olh_op)
+TYPE(rgw_cls_unlink_instance_op)
+TYPE(rgw_cls_read_olh_log_op)
+TYPE(rgw_cls_read_olh_log_ret)
+TYPE(rgw_cls_trim_olh_log_op)
+TYPE(rgw_cls_bucket_clear_olh_op)
+TYPE(rgw_cls_check_index_ret)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
