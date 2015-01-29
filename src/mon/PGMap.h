@@ -1,4 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -267,6 +266,7 @@ public:
   void dump_pool_stats(Formatter *f) const;
   void dump_osd_stats(Formatter *f) const;
   void dump_delta(Formatter *f) const;
+  void dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const;
 
   void dump_pg_stats_plain(ostream& ss,
 			   const ceph::unordered_map<pg_t, pg_stat_t>& pg_stats,
@@ -283,6 +283,7 @@ public:
   void dump_pool_stats(ostream& ss, bool header) const;
   void dump_osd_stats(ostream& ss) const;
   void dump_osd_sum_stats(ostream& ss) const;
+  void dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const;
 
   void dump_osd_perf_stats(Formatter *f) const;
   void print_osd_perf_stats(std::ostream *ss) const;
