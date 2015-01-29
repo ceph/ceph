@@ -1034,6 +1034,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
   if (crush->has_nondefault_tunables3())
     features |= CEPH_FEATURE_CRUSH_TUNABLES3;
+  if (crush->has_v4_buckets())
+    features |= CEPH_FEATURE_CRUSH_V4;
   mask |= CEPH_FEATURES_CRUSH;
 
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
@@ -2739,7 +2741,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+  int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
@@ -2775,7 +2777,8 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+  int r = crush.add_bucket(0, 0,
+			   CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
