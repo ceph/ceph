@@ -211,22 +211,14 @@ int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id,
 
   ret = 0;
 
-  bool no_shards = (vals.size() == 1);
-
   map<int, string>::iterator iter;
   for (iter = vals.begin(); iter != vals.end(); ++iter) {
-    bool need_to_exist = no_shards; /*
-                                                          * we only care about non-sharded
-                                                          * buckets, as these are the ones that
-                                                          * might not be indexed by instance id, and
-                                                          * might need conversion
-                                                          */
     ldout(cct, 20) << "updating bound: bucket=" << bucket << " shard=" << iter->first << " marker=" << marker << dendl;
     int r = RGWReplicaLogger::update_bound(obj_name(bucket, iter->first, true), pool,
                                           daemon_id, iter->second, time, entries,
-                                          need_to_exist);
+                                          true /* need to exist */);
 
-    if (r == -ENOENT && need_to_exist) {
+    if (r == -ENOENT) {
       RGWReplicaBounds bounds;
       r = convert_old_bounds(bucket, -1, bounds);
       if (r < 0 && r != -ENOENT) {
@@ -246,8 +238,7 @@ int RGWReplicaBucketLogger::update_bound(const rgw_bucket& bucket, int shard_id,
 
 int RGWReplicaBucketLogger::delete_bound(const rgw_bucket& bucket, int shard_id, const string& daemon_id, bool purge_all)
 {
-  bool need_to_exist = (shard_id < 0); /* don't need to exist if sharded */
-  int r = RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, true), pool, daemon_id, purge_all, need_to_exist);
+  int r = RGWReplicaLogger::delete_bound(obj_name(bucket, shard_id, true), pool, daemon_id, purge_all, true /* need to exist */);
   if (r != -ENOENT) {
     return r;
   }
@@ -265,7 +256,7 @@ int RGWReplicaBucketLogger::delete_bound(const rgw_bucket& bucket, int shard_id,
 
 int RGWReplicaBucketLogger::get_bounds(const rgw_bucket& bucket, int shard_id, RGWReplicaBounds& bounds) {
   int r = RGWReplicaLogger::get_bounds(obj_name(bucket, shard_id, true), pool, bounds);
-  if (r != -ENOENT || shard_id >= 0) {
+  if (r != -ENOENT) {
     return r;
   }
 
