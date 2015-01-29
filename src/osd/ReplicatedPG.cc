@@ -2235,7 +2235,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // check for full
   if (ctx->delta_stats.num_bytes > 0 &&
-      pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
+      pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
     reply_ctx(ctx, -ENOSPC);
     return;
   }
@@ -4187,6 +4187,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
+	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
+	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
 	if (pool.info.requires_aligned_append() &&
 	    (op.extent.offset % pool.info.required_alignment() != 0)) {
 	  result = -EOPNOTSUPP;
@@ -4269,6 +4272,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
 	if (result < 0)
 	  break;
+
+	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
+	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
 	if (pool.info.require_rollback()) {
 	  if (obs.exists) {
