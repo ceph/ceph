@@ -39,6 +39,7 @@ BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 BuildRequires:  bzip2-devel
 BuildRequires:	cryptsetup
+BuildRequires: lz4-devel
 BuildRequires:	gdbm
 BuildRequires:	hdparm
 BuildRequires:	libaio-devel
