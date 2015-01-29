@@ -56,8 +56,8 @@ class ObjectCacher {
     snapid_t snap;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     bufferlist *bl;
-    int flags;
-    OSDRead(snapid_t s, bufferlist *b, int f) : snap(s), bl(b), flags(f) {}
+    int fadvise_flags;
+    OSDRead(snapid_t s, bufferlist *b, int f) : snap(s), bl(b), fadvise_flags(f) {}
   };
 
   OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) {
@@ -70,8 +70,8 @@ class ObjectCacher {
     SnapContext snapc;
     bufferlist bl;
     utime_t mtime;
-    int flags;
-    OSDWrite(const SnapContext& sc, bufferlist& b, utime_t mt, int f) : snapc(sc), bl(b), mtime(mt), flags(f) {}
+    int fadvise_flags;
+    OSDWrite(const SnapContext& sc, bufferlist& b, utime_t mt, int f) : snapc(sc), bl(b), mtime(mt), fadvise_flags(f) {}
   };
 
   OSDWrite *prepare_write(const SnapContext& sc, bufferlist &b, utime_t mt, int f) { 
