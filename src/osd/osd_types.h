@@ -770,6 +770,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
 
 std::string pg_state_string(int state);
+int pg_string_state(std::string state);
 
 
 /*
