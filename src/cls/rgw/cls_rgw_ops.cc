@@ -318,6 +318,27 @@ void rgw_cls_list_ret::dump(Formatter *f) const
   f->dump_int("is_truncated", (int)is_truncated);
 }
 
+void rgw_cls_check_index_ret::generate_test_instances(list<rgw_cls_check_index_ret*>& o)
+{
+  list<rgw_bucket_dir_header *> h;
+  rgw_bucket_dir_header::generate_test_instances(h);
+  rgw_cls_check_index_ret *r = new rgw_cls_check_index_ret;
+  r->existing_header = *(h.front());
+  r->calculated_header = *(h.front());
+  o.push_back(r);
+
+  for (list<rgw_bucket_dir_header *>::iterator iter = h.begin(); iter != h.end(); ++iter) {
+    delete *iter;
+  }
+  o.push_back(new rgw_cls_check_index_ret);
+}
+
+void rgw_cls_check_index_ret::dump(Formatter *f) const
+{
+  ::encode_json("existing_header", existing_header, f);
+  ::encode_json("calculated_header", calculated_header, f);
+}
+
 void cls_rgw_bi_log_list_op::dump(Formatter *f) const
 {
   f->dump_string("marker", marker);
