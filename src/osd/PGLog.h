@@ -142,6 +142,10 @@ struct PGLog {
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
 			   vector<osd_reqid_t> *pls) const {
+      // make sure object is present at least once before we do an
+      // O(n) search.
+      if (objects.count(oid) == 0)
+	return;
       for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
            i != log.rend();
            ++i) {
