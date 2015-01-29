@@ -286,7 +286,7 @@ inline void decode(T &o, bufferlist& bl)
 #include <deque>
 #include <vector>
 #include <string>
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 
 #ifndef _BACKWARD_BACKWARD_WARNING_H
 #define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*

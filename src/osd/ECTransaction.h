@@ -19,7 +19,7 @@
 #include "PGBackend.h"
 #include "osd_types.h"
 #include "ECUtil.h"
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 #include "erasure-code/ErasureCodeInterface.h"
 
 class ECTransaction : public PGBackend::PGTransaction {
