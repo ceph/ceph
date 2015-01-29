@@ -256,7 +256,7 @@ TEST_F(LibRadosIoPP, RoundTripPP2)
 
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);
-  read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOREUSE|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
+  read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOCACHE|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
@@ -327,7 +327,7 @@ TEST_F(LibRadosIoPP, WriteFullRoundTripPP2)
   bl.append("ceph");
   ObjectWriteOperation write;
   write.write_full(bl);
-  write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOREUSE);
+  write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
   ASSERT_EQ(0, ioctx.operate("foo", &write));
 
   ObjectReadOperation read;
