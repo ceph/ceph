@@ -340,102 +340,109 @@ private:
   vector<XioPortal*> portals;
   char **p_vec;
   int n;
+  int last_use;
 
 public:
   XioPortals(Messenger *msgr, int _n) : p_vec(NULL), n(_n)
-    {
-      /* portal0 */
-      portals.push_back(new XioPortal(msgr));
+  {
+    /* portal0 */
+    portals.push_back(new XioPortal(msgr));
+    last_use = 0;
 
-      /* additional portals allocated on bind() */
-    }
+    /* additional portals allocated on bind() */
+  }
 
   vector<XioPortal*>& get() { return portals; }
 
   const char **get_vec()
-    {
-      return (const char **) p_vec;
-    }
+  {
+    return (const char **) p_vec;
+  }
 
   int get_portals_len()
-    {
-      return n;
-    }
+  {
+    return n;
+  }
+
+  int get_last_use()
+  {
+    int pix = last_use;
+    if (++last_use == get_portals_len() - 2)
+      last_use = 0;
+    return pix;
+  }
 
   XioPortal* get_portal0()
-    {
-      return portals[0];
-    }
+  {
+    return portals[0];
+  }
 
   int bind(struct xio_session_ops *ops, const string& base_uri,
 	   uint16_t port, uint16_t *port0);
 
-    int accept(struct xio_session *session,
-		 struct xio_new_session_req *req,
-		 void *cb_user_context)
-    {
-      const char **portals_vec = get_vec();
-      int portals_len = get_portals_len()-1;
+  int accept(struct xio_session *session,
+	     struct xio_new_session_req *req,
+	     void *cb_user_context)
+  {
+    const char **portals_vec = get_vec();
+    int pix = get_last_use();
 
-      return xio_accept(session,
-			portals_vec,
-			portals_len,
-			NULL, 0);
-    }
+    return xio_accept(session, (const char **)&(portals_vec[pix]),
+		      2, NULL, 0);
+  }
 
   void start()
-    {
-      XioPortal *portal;
-      int p_ix, nportals = portals.size();
+  {
+    XioPortal *portal;
+    int p_ix, nportals = portals.size();
 
-      /* portal_0 is the new-session handler, portal_1+ terminate
-       * active sessions */
-
-      p_vec = new char*[(nportals-1)];
-      for (p_ix = 1; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	/* shift left */
-	p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
-	  portal->portal_id;
-      }
-
-      for (p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->create();
-      }
+    /* portal_0 is the new-session handler, portal_1+ terminate
+     * active sessions */
+    p_vec = new char*[(nportals-1)];
+    for (p_ix = 1; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      /* shift left */
+      p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
+      portal->portal_id;
     }
+
+    for (p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->create();
+    }
+  }
 
   void shutdown()
-    {
-      XioPortal *portal;
-      int nportals = portals.size();
-      for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->shutdown();
-      }
+  {
+    XioPortal *portal;
+    int nportals = portals.size();
+    for (int p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->shutdown();
     }
+  }
 
   void join()
-    {
-      XioPortal *portal;
-      int nportals = portals.size();
-      for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->join();
-      }
+  {
+    XioPortal *portal;
+    int nportals = portals.size();
+    for (int p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->join();
     }
+  }
 
   ~XioPortals()
-    {
-      int nportals = portals.size();
-      for (int ix = 0; ix < nportals; ++ix) {
-	delete(portals[ix]);
-      }
-      portals.clear();
-      if (p_vec) {
-	delete[] p_vec;
-      }
-    }
+  {
+    int nportals = portals.size();
+
+    for (int ix = 0; ix < nportals; ++ix)
+      delete(portals[ix]);
+
+    portals.clear();
+    if (p_vec)
+      delete[] p_vec;
+  }
 };
 
 #endif /* XIO_PORTAL_H */
