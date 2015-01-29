@@ -455,6 +455,12 @@ int main(int argc, const char **argv)
   if (r < 0)
     exit(1);
 
+  if (g_conf->osd_heartbeat_use_min_delay_socket) {
+    ms_hbclient->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hb_back_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+    ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
+  }
+
   // hb back should bind to same ip as cluster_addr (if specified)
   entity_addr_t hb_back_addr = g_conf->osd_heartbeat_addr;
   if (hb_back_addr.is_blank_ip()) {
