@@ -194,7 +194,6 @@ LIBOSD += $(LIBOSDC) $(LIBOS)
 # These have references to syms like ceph_using_tcmalloc(), glue libperfglue to them
 LIBMON += $(LIBPERFGLUE)
 LIBOSD += $(LIBPERFGLUE)
-LIBMDS += $(LIBPERFGLUE)
 
 # Always use system leveldb
 LIBOS += -lleveldb -lsnappy
