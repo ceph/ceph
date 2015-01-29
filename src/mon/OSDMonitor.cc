@@ -4510,9 +4510,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
     int bucketno;
-    err = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
-				       CRUSH_HASH_DEFAULT, type, 0, NULL,
-				       NULL, &bucketno);
+    err = newcrush.add_bucket(0, 0,
+			      CRUSH_HASH_DEFAULT, type, 0, NULL,
+			      NULL, &bucketno);
     if (err < 0) {
       ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
