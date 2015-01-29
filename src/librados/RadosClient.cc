@@ -434,7 +434,7 @@ int librados::RadosClient::wait_for_osdmap()
 {
   assert(!lock.is_locked_by_me());
 
-  if (objecter == NULL) {
+  if (state != CONNECTED) {
     return -ENOTCONN;
   }
 
