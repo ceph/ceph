@@ -30,6 +30,7 @@
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/Throttle.h"
+#include "common/QueueRing.h"
 #include "common/safe_io.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
@@ -152,7 +153,17 @@ public:
 
 
 struct RGWFCGXRequest : public RGWRequest {
-  FCGX_Request fcgx;
+  FCGX_Request *fcgx;
+  QueueRing<FCGX_Request *> *qr;
+
+  RGWFCGXRequest(QueueRing<FCGX_Request *> *_qr) : qr(_qr) {
+    qr->dequeue(&fcgx);
+  }
+
+  ~RGWFCGXRequest() {
+    FCGX_Finish_r(fcgx);
+    qr->enqueue(fcgx);
+  }
 };
 
 struct RGWProcessEnv {
@@ -252,9 +263,13 @@ public:
 
 
 class RGWFCGXProcess : public RGWProcess {
+  int max_connections;
 public:
   RGWFCGXProcess(CephContext *cct, RGWProcessEnv *pe, int num_threads, RGWFrontendConfig *_conf) :
-    RGWProcess(cct, pe, num_threads, _conf) {}
+    RGWProcess(cct, pe, num_threads, _conf),
+    max_connections(num_threads + (num_threads >> 3)) /* have a bit more connections than threads so that requests
+                                                       are still accepted even if we're still processing older requests */
+    {}
   void run();
   void handle_request(RGWRequest *req);
 };
@@ -306,13 +321,21 @@ void RGWFCGXProcess::run()
 
   m_tp.start();
 
+  FCGX_Request fcgx_reqs[max_connections];
+
+  QueueRing<FCGX_Request *> qr(max_connections);
+  for (int i = 0; i < max_connections; i++) {
+    FCGX_Request *fcgx = &fcgx_reqs[i];
+    FCGX_InitRequest(fcgx, sock_fd, 0);
+    qr.enqueue(fcgx);
+  }
+
   for (;;) {
-    RGWFCGXRequest *req = new RGWFCGXRequest;
+    RGWFCGXRequest *req = new RGWFCGXRequest(&qr);
     req->id = ++max_req_id;
     dout(10) << "allocated request req=" << hex << req << dec << dendl;
-    FCGX_InitRequest(&req->fcgx, sock_fd, 0);
     req_throttle.get(1);
-    int ret = FCGX_Accept_r(&req->fcgx);
+    int ret = FCGX_Accept_r(req->fcgx);
     if (ret < 0) {
       delete req;
       dout(0) << "ERROR: FCGX_Accept_r returned " << ret << dendl;
@@ -325,6 +348,12 @@ void RGWFCGXProcess::run()
 
   m_tp.drain(&req_wq);
   m_tp.stop();
+
+  dout(20) << "cleaning up fcgx connections" << dendl;
+
+  for (int i = 0; i < max_connections; i++) {
+    FCGX_Finish_r(&fcgx_reqs[i]);
+  }
 }
 
 struct RGWLoadGenRequest : public RGWRequest {
@@ -633,7 +662,7 @@ done:
 void RGWFCGXProcess::handle_request(RGWRequest *r)
 {
   RGWFCGXRequest *req = static_cast<RGWFCGXRequest *>(r);
-  FCGX_Request *fcgx = &req->fcgx;
+  FCGX_Request *fcgx = req->fcgx;
   RGWFCGX client_io(fcgx);
 
  
