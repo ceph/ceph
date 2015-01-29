@@ -1146,9 +1146,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
 
   // take a closer look at tracei, if it happens to be a remote link
   if (tracei && 
-      tracei->get_parent_dn() &&
-      tracei->get_parent_dn()->get_projected_linkage()->is_remote())
-    mdcache->eval_remote(tracei->get_parent_dn());
+      tracedn &&
+      tracedn->get_projected_linkage()->is_remote()) {
+    mdcache->eval_remote(tracedn);
+  }
 }
 
 
