@@ -1751,6 +1751,21 @@ void object_stat_collection_t::generate_test_instances(list<object_stat_collecti
 
 // -- pg_stat_t --
 
+bool pg_stat_t::is_acting_osd(int32_t osd, bool primary) const
+{
+  if (primary && osd == acting_primary) {
+    return true;
+  } else if (!primary) {
+    for(vector<int32_t>::const_iterator it = acting.begin();
+        it != acting.end(); it++)
+    {
+      if (*it == osd)
+        return true;
+    }
+  }
+  return false;
+}
+
 void pg_stat_t::dump(Formatter *f) const
 {
   f->dump_stream("version") << version;
