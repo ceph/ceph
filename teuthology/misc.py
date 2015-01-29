@@ -1162,19 +1162,9 @@ def get_distro(ctx):
         os_type = ctx.config.get('os_type', None)
     except AttributeError:
         pass
-    # next, look for an override in the downburst config for os_type
-    # FIXME: checking the downburst config for distro shouldn't be needed
-    # as it's only used in provision.create_if_vm and that function performs
-    # this check again while building the config for downburst. Leaving it
-    # here for now until we can fully investigate and test it's removal.
-    try:
-        os_type = ctx.config['downburst'].get('distro', os_type)
-    except (KeyError, AttributeError):
-        pass
-    if os_type is None:
-        # default to ubuntu if we can't find the os_type anywhere else
-        return "ubuntu"
-    return os_type
+
+    # if os_type is None, return the default of ubuntu
+    return os_type or "ubuntu"
 
 
 def get_distro_version(ctx):
@@ -1197,10 +1187,7 @@ def get_distro_version(ctx):
         os_version = ctx.config.get('os_version', default_os_version[distro])
     except AttributeError:
         os_version = default_os_version[distro]
-    try:
-        return ctx.config['downburst'].get('distroversion', os_version)
-    except (KeyError, AttributeError):
-        return os_version
+    return os_version
 
 
 def get_multi_machine_types(machinetype):

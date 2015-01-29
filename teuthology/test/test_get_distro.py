@@ -35,13 +35,13 @@ class TestGetDistro(object):
         distro = get_distro(self.fake_ctx)
         assert distro == 'centos'
 
-    def test_teuth_config_downburst(self):
-        self.fake_ctx.config = {'downburst' : {'distro': 'sles'}}
-        distro = get_distro(self.fake_ctx)
-        assert distro == 'sles'
-
     def test_no_config_or_os_type(self):
         self.fake_ctx = Mock()
         self.fake_ctx.os_type = None
+        distro = get_distro(self.fake_ctx)
+        assert distro == 'ubuntu'
+
+    def test_config_os_type_is_none(self):
+        self.fake_ctx.config["os_type"] = None
         distro = get_distro(self.fake_ctx)
         assert distro == 'ubuntu'

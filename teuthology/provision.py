@@ -49,32 +49,29 @@ def create_if_vm(ctx, machine_name):
 
     createMe = decanonicalize_hostname(machine_name)
     with tempfile.NamedTemporaryFile() as tmp:
-        if hasattr(ctx, 'config') and ctx.config is not None:
-            lcnfg = ctx.config.get('downburst', dict())
-        else:
-            lcnfg = {}
-        distro = lcnfg.get('distro', os_type.lower())
-        distroversion = lcnfg.get('distroversion', os_version)
+        has_config = hasattr(ctx, 'config') and ctx.config is not None
+        if has_config and 'downburst' in ctx.config:
+            log.warning(
+                'Usage of a custom downburst config has been deprecated.'
+            )
 
         log.info("Provisioning a {distro} {distroversion} vps".format(
-            distro=distro,
-            distroversion=distroversion
+            distro=os_type,
+            distroversion=os_version
         ))
 
-        file_info = {}
-        file_info['disk-size'] = lcnfg.get('disk-size', '100G')
-        file_info['ram'] = lcnfg.get('ram', '1.9G')
-        file_info['cpus'] = lcnfg.get('cpus', 1)
-        file_info['networks'] = lcnfg.get(
-            'networks',
-            [{'source': 'front', 'mac': status_info['mac_address']}])
-        file_info['distro'] = distro
-        file_info['distroversion'] = distroversion
-        file_info['additional-disks'] = lcnfg.get(
-            'additional-disks', 3)
-        file_info['additional-disks-size'] = lcnfg.get(
-            'additional-disks-size', '200G')
-        file_info['arch'] = lcnfg.get('arch', 'x86_64')
+        file_info = {
+            'disk-size': '100G',
+            'ram': '1.9G',
+            'cpus': 1,
+            'networks': [
+                {'source': 'front', 'mac': status_info['mac_address']}],
+            'distro': os_type.lower(),
+            'distroversion': os_version,
+            'additional-disks': 3,
+            'additional-disks-size': '200G',
+            'arch': 'x86_64',
+        }
         fqdn = machine_name.split('@')[1]
         file_out = {'downburst': file_info, 'local-hostname': fqdn}
         yaml.safe_dump(file_out, tmp)
@@ -89,13 +86,13 @@ def create_if_vm(ctx, machine_name):
         owt, err = p.communicate()
         if err:
             log.info("Downburst completed on %s: %s" %
-                    (machine_name, err))
+                     (machine_name, err))
         else:
             log.info("%s created: %s" % (machine_name, owt))
         # If the guest already exists first destroy then re-create:
         if 'exists' in err:
             log.info("Guest files exist. Re-creating guest: %s" %
-                    (machine_name))
+                     (machine_name))
             destroy_if_vm(ctx, machine_name)
             create_if_vm(ctx, machine_name)
     return True

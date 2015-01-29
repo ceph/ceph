@@ -34,19 +34,14 @@ class TestGetDistroVersion(object):
         distroversion = get_distro_version(self.fake_ctx)
         assert distroversion == '13.04'
 
-    def test_teuth_config_downburst_version(self):
-        #Argument takes precidence
-        self.fake_ctx.os_version = '13.10'
-        self.fake_ctx.config = {'downburst' : {'distroversion': '13.04'}}
-        distroversion = get_distro_version(self.fake_ctx)
-        assert distroversion == '13.10'
-
     def test_teuth_config_noarg_version(self):
         self.fake_ctx_noarg.config = {'os_version': '13.04'}
         distroversion = get_distro_version(self.fake_ctx_noarg)
         assert distroversion == '13.04'
 
-    def test_teuth_config_downburst_noarg_version(self):
-        self.fake_ctx_noarg.config = {'downburst' : {'distroversion': '13.04'}}
-        distroversion = get_distro_version(self.fake_ctx_noarg)
+    def test_no_teuth_config(self):
+        self.fake_ctx = Mock()
+        self.fake_ctx.os_type = None
+        self.fake_ctx.os_version = '13.04'
+        distroversion = get_distro_version(self.fake_ctx)
         assert distroversion == '13.04'
