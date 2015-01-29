@@ -127,6 +127,10 @@ COMMAND("pg dump_stuck " \
 	"name=threshold,type=CephInt,req=false",
 	"show information about stuck pgs",\
 	"pg", "r", "cli,rest")
+COMMAND("pg ls " \
+        "name=pool,type=CephInt,req=false " \
+	"name=states,type=CephChoices,strings=active|clean|down|replay|splitting|scrubbing|scrubq|degraded|inconsistent|peering|repair|recovery|backfill_wait|incomplete|stale|remapped|deep_scrub|backfill|backfill_toofull|recovery_wait|undersized,n=N,req=false ", \
+	"list pg with specific pool, osd, state", "pg", "r", "cli,rest")
 COMMAND("pg map name=pgid,type=CephPgid", "show mapping of pg to osds", \
 	"pg", "r", "cli,rest")
 COMMAND("pg scrub name=pgid,type=CephPgid", "start scrub on <pgid>", \
