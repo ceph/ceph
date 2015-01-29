@@ -1450,3 +1450,45 @@ void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
     pgs.insert(i->first);
   }
 }
+
+void PGMap::dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs)
+{
+  f->open_array_section("pg_stats");
+  for (set<pg_t>::iterator i = pgs.begin(); i != pgs.end(); i++) {
+    pg_stat_t& st = pg_stat[*i];
+    f->open_object_section("pg_stat");
+    f->dump_stream("pgid") << *i;
+    st.dump(f);
+    f->close_section();
+  } 
+  f->close_section();
+}  
+void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs)
+{
+  ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\t"
+    "state_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\t"
+    "last_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  for (set<pg_t>::iterator i = pgs.begin(); i != pgs.end(); i++) {
+    pg_stat_t& st = pg_stat[*i];
+    ss << *i
+       << "\t" << st.stats.sum.num_objects
+       << "\t" << st.stats.sum.num_objects_missing_on_primary
+       << "\t" << st.stats.sum.num_objects_degraded
+       << "\t" << st.stats.sum.num_objects_misplaced
+       << "\t" << st.stats.sum.num_objects_unfound
+       << "\t" << st.stats.sum.num_bytes
+       << "\t" << st.log_size
+       << "\t" << st.ondisk_log_size
+       << "\t" << pg_state_string(st.state)
+       << "\t" << st.last_change
+       << "\t" << st.version
+       << "\t" << st.reported_epoch << ":" << st.reported_seq
+       << "\t" << st.up
+       << "\t" << st.up_primary
+       << "\t" << st.acting
+       << "\t" << st.acting_primary
+       << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
+       << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
+       << std::endl;
+  }
+}

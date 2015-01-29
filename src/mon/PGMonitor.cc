@@ -1591,6 +1591,41 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     }
     ss << "dumped " << what << " in format " << format;
     r = 0;
+  } else if (prefix == "pg ls") {
+    int64_t osd = -1;
+    int64_t pool = -1;
+    vector<string>states;
+    set<pg_t> pgs;
+    set<string> what;
+    cmd_getval(g_ceph_context, cmdmap, "pool", pool);
+    cmd_getval(g_ceph_context, cmdmap, "osd", osd);
+    cmd_getval(g_ceph_context, cmdmap, "states", states);
+    if (pool >= 0 && !mon->osdmon()->osdmap.have_pg_pool(pool)) {
+      r = -ENOENT;
+      ss << "pool " << pool << " does not exist";
+      goto reply;
+    } 
+    if (osd >= 0 && !mon->osdmon()->osdmap.is_up(osd)) {
+      ss << "osd " << osd << " is not up";
+      r = -EAGAIN;
+      goto reply;
+    }
+    if (states.empty())
+      states.push_back("all");
+    while (!states.empty()) {
+      string state = states.back();
+      what.insert(state);
+      pg_map.get_filtered_pg_stats(state,pool,osd,false,pgs);
+      states.pop_back();
+    }
+    if (f && !pgs.empty()){
+      pg_map.dump_filtered_pg_stats(f.get(),pgs);
+      f->flush(ds);
+    } else if (!pgs.empty()){
+      pg_map.dump_filtered_pg_stats(ds,pgs);
+    }
+    ss << "list states " << what <<  " pool " << pool << " osd osd." << osd;
+    r = 0;
   } else if (prefix == "pg dump_stuck") {
     vector<string> stuckop_vec;
     cmd_getval(g_ceph_context, cmdmap, "stuckops", stuckop_vec);
