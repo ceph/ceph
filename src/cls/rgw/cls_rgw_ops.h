@@ -416,7 +416,7 @@ struct rgw_cls_check_index_ret
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<rgw_cls_list_ret*>& o);
+  static void generate_test_instances(list<rgw_cls_check_index_ret *>& o);
 };
 WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 
