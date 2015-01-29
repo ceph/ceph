@@ -3929,7 +3929,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  }
 	  scrubber.end = candidate_end;
         }
-        scrubber.block_writes = true;
 
         // walk the log to find the latest update that affects our chunk
         scrubber.subset_last_update = pg_log.get_tail();
@@ -4015,7 +4014,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         assert(scrubber.waiting_on == 0);
 
         scrub_compare_maps();
-        scrubber.block_writes = false;
 	scrubber.run_callbacks();
 
         // requeue the writes from the chunk that just finished
@@ -6447,7 +6445,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
     q.f->open_object_section("scrub");
     q.f->dump_stream("scrubber.epoch_start") << pg->scrubber.epoch_start;
     q.f->dump_int("scrubber.active", pg->scrubber.active);
-    q.f->dump_int("scrubber.block_writes", pg->scrubber.block_writes);
     q.f->dump_int("scrubber.waiting_on", pg->scrubber.waiting_on);
     {
       q.f->open_array_section("scrubber.waiting_on_whom");
