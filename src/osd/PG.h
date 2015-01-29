@@ -1025,7 +1025,7 @@ public:
     Scrubber() :
       reserved(false), reserve_failed(false),
       epoch_start(0),
-      block_writes(false), active(false), queue_snap_trim(false),
+      active(false), queue_snap_trim(false),
       waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
       active_rep_scrub(0),
       must_scrub(false), must_deep_scrub(false), must_repair(false),
@@ -1042,7 +1042,6 @@ public:
     epoch_t epoch_start;
 
     // common to both scrubs
-    bool block_writes;
     bool active;
     bool queue_snap_trim;
     int waiting_on;
@@ -1126,9 +1125,6 @@ public:
     // classic (non chunk) scrubs block all writes
     // chunky scrubs only block writes to a range
     bool write_blocked_by_scrub(const hobject_t &soid) {
-      if (!block_writes)
-	return false;
-
       if (soid >= start && soid < end)
 	return true;
 
@@ -1137,7 +1133,6 @@ public:
 
     // clear all state
     void reset() {
-      block_writes = false;
       active = false;
       queue_snap_trim = false;
       waiting_on = 0;
