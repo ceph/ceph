@@ -3601,7 +3601,7 @@ reprotect_and_return_err:
       C_AioWrite *req_comp = new C_AioWrite(cct, c);
       if (ictx->object_cacher) {
 	c->add_request();
-	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp);
+	ictx->write_to_cache(p->oid, bl, p->length, p->offset, req_comp, op_flags);
       } else {
 	// reverse map this object extent onto the parent
 	vector<pair<uint64_t,uint64_t> > objectx;
@@ -3797,7 +3797,7 @@ reprotect_and_return_err:
 	  ictx->readahead.inc_pending();
 	  ictx->aio_read_from_cache(q->oid, NULL,
 				    q->length, q->offset,
-				    req_comp);
+				    req_comp, 0);
 	}
       }
       ictx->perfcounter->inc(l_librbd_readahead);
@@ -3871,7 +3871,7 @@ reprotect_and_return_err:
 	  C_CacheRead *cache_comp = new C_CacheRead(req);
 	  ictx->aio_read_from_cache(q->oid, &req->data(),
 				    q->length, q->offset,
-				    cache_comp);
+				    cache_comp, op_flags);
 	} else {
 	  r = req->send();
 	  if (r == -ENOENT)
