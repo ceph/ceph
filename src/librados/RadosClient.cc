@@ -445,6 +445,10 @@ int librados::RadosClient::wait_for_osdmap()
 {
   assert(lock.is_locked());
 
+  if (state != CONNECTED) {
+    return -ENOTCONN;
+  }
+
   utime_t timeout;
   if (cct->_conf->rados_mon_op_timeout > 0)
     timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
