@@ -1039,7 +1039,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   mask |= CEPH_FEATURES_CRUSH;
 
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
-    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
+    if (p->second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
     if (p->second.is_erasure() &&
