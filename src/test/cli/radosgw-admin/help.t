@@ -67,6 +67,7 @@
     opstate renew              renew state on an entry (use client_id, op_id, object)
     opstate rm                 remove entry (use client_id, op_id, object)
     replicalog get             get replica metadata log entry
+    replicalog update          update replica metadata log entry
     replicalog delete          delete replica metadata log entry
   options:
      --uid=<id>                user id

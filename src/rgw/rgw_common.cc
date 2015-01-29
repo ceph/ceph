@@ -614,6 +614,15 @@ int XMLArgs::get_bool(const char *name, bool *val, bool *exists)
   return get_bool(s, val, exists);
 }
 
+void XMLArgs::get_bool(const char *name, bool *val, bool def_val)
+{
+  bool exists = false;
+  if ((get_bool(name, val, &exists) < 0) ||
+      !exists) {
+    *val = def_val;
+  }
+}
+
 bool verify_bucket_permission(struct req_state *s, int perm)
 {
   if (!s->bucket_acl)

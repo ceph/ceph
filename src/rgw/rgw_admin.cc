@@ -109,6 +109,7 @@ void _usage()
   cerr << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
   cerr << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cerr << "  replicalog get             get replica metadata log entry\n";
+  cerr << "  replicalog update          update replica metadata log entry\n";
   cerr << "  replicalog delete          delete replica metadata log entry\n";
   cerr << "options:\n";
   cerr << "   --uid=<id>                user id\n";
@@ -254,6 +255,7 @@ enum {
   OPT_OPSTATE_RENEW,
   OPT_OPSTATE_RM,
   OPT_REPLICALOG_GET,
+  OPT_REPLICALOG_UPDATE,
   OPT_REPLICALOG_DELETE,
 };
 
@@ -460,6 +462,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, bool *need_more)
   } else if (strcmp(prev_cmd, "replicalog") == 0) {
     if (strcmp(cmd, "get") == 0)
       return OPT_REPLICALOG_GET;
+    if (strcmp(cmd, "update") == 0)
+      return OPT_REPLICALOG_UPDATE;
     if (strcmp(cmd, "delete") == 0)
       return OPT_REPLICALOG_DELETE;
   }
@@ -553,10 +557,17 @@ public:
   }
 };
 
-static int init_bucket(string& bucket_name, RGWBucketInfo& bucket_info, rgw_bucket& bucket)
+static int init_bucket(const string& bucket_name, const string& bucket_id,
+                       RGWBucketInfo& bucket_info, rgw_bucket& bucket)
 {
   if (!bucket_name.empty()) {
-    int r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    int r;
+    if (bucket_id.empty()) {
+      r = store->get_bucket_info(NULL, bucket_name, bucket_info, NULL);
+    } else {
+      string bucket_instance_id = bucket_name + ":" + bucket_id;
+      r = store->get_bucket_instance_info(NULL, bucket_instance_id, bucket_info, NULL, NULL);
+    }
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
       return r;
@@ -619,7 +630,7 @@ static int read_decode_json(const string& infile, T& t)
   }
 
   try {
-    t.decode_json(&p);
+    decode_json_obj(t, &p);
   } catch (JSONDecoder::err& e) {
     cout << "failed to decode JSON input: " << e.message << std::endl;
     return -EINVAL;
@@ -1560,7 +1571,7 @@ int main(int argc, char **argv)
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_info, bucket);
+      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -1887,7 +1898,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_RM) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1911,7 +1922,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1943,7 +1954,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2037,7 +2048,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2053,7 +2064,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_STAT) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2337,7 +2348,7 @@ next:
       return -EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2377,7 +2388,7 @@ next:
       return -EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2524,7 +2535,8 @@ next:
     }
   }
 
-  if (opt_cmd == OPT_REPLICALOG_GET || opt_cmd == OPT_REPLICALOG_DELETE) {
+  if (opt_cmd == OPT_REPLICALOG_GET || opt_cmd == OPT_REPLICALOG_UPDATE ||
+      opt_cmd == OPT_REPLICALOG_DELETE) {
     if (replica_log_type_str.empty()) {
       cerr << "ERROR: need to specify --replica-log-type=<metadata | data | bucket>" << std::endl;
       return EINVAL;
@@ -2558,7 +2570,7 @@ next:
         return -EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_info, bucket);
+      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -2587,7 +2599,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id);
+      int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Data) {
@@ -2600,7 +2612,7 @@ next:
         return EINVAL;
       }
       RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id);
+      int ret = logger.delete_bound(shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
     } else if (replica_log_type == ReplicaLog_Bucket) {
@@ -2609,16 +2621,80 @@ next:
         return -EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(bucket_name, bucket_info, bucket);
+      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
 
       RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, shard_id, daemon_id);
+      ret = logger.delete_bound(bucket, shard_id, daemon_id, false);
       if (ret < 0)
         return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT_REPLICALOG_UPDATE) {
+    if (marker.empty()) {
+      cerr << "ERROR: marker was not specified" <<std::endl;
+      return EINVAL;
+    }
+    utime_t time = ceph_clock_now(NULL);
+    if (!date.empty()) {
+      ret = parse_date_str(date, time);
+      if (ret < 0) {
+        cerr << "ERROR: failed to parse start date" << std::endl;
+        return EINVAL;
+      }
+    }
+    list<RGWReplicaItemMarker> entries;
+    int ret = read_decode_json(infile, entries);
+    if (ret < 0) {
+      cerr << "ERROR: failed to decode entries" << std::endl;
+      return EINVAL;
+    }
+    RGWReplicaBounds bounds;
+    if (replica_log_type == ReplicaLog_Metadata) {
+      if (!specified_shard_id) {
+        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
+        return EINVAL;
+      }
+
+      RGWReplicaObjectLogger logger(store, pool_name, META_REPLICA_LOG_OBJ_PREFIX);
+      int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
+      if (ret < 0) {
+        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else if (replica_log_type == ReplicaLog_Data) {
+      if (!specified_shard_id) {
+        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
+        return EINVAL;
+      }
+      RGWReplicaObjectLogger logger(store, pool_name, DATA_REPLICA_LOG_OBJ_PREFIX);
+      int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
+      if (ret < 0) {
+        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else if (replica_log_type == ReplicaLog_Bucket) {
+      if (bucket_name.empty()) {
+        cerr << "ERROR: bucket not specified" << std::endl;
+        return -EINVAL;
+      }
+      RGWBucketInfo bucket_info;
+      int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
+      if (ret < 0) {
+        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      RGWReplicaBucketLogger logger(store);
+      ret = logger.update_bound(bucket, shard_id, daemon_id, marker, time, &entries);
+      if (ret < 0) {
+        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 
