@@ -392,7 +392,7 @@ struct rgw_bucket_olh_log_entry {
   cls_rgw_obj_key key;
   bool delete_marker;
 
-  rgw_bucket_olh_log_entry() : op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
+  rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
 
 
   void encode(bufferlist &bl) const {
