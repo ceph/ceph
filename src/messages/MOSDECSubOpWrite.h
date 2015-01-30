@@ -26,30 +26,35 @@ class MOSDECSubOpWrite : public Message {
 public:
   spg_t pgid;
   epoch_t map_epoch;
-  ECSubWrite op;
+  ECSubWrite *op;
 
   int get_cost() const {
     return 0;
   }
 
   MOSDECSubOpWrite()
-    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
-    {}
-  MOSDECSubOpWrite(ECSubWrite &op)
-  : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION),
-    op(op) {}
+    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION), op(NULL)
+  {}
+  MOSDECSubOpWrite(ECSubWrite *op)
+    : Message(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION), op(op)
+  {}
+  ~MOSDECSubOpWrite() {
+    delete op;
+  }
 
   virtual void decode_payload() {
     bufferlist::iterator p = payload.begin();
     ::decode(pgid, p);
     ::decode(map_epoch, p);
-    ::decode(op, p);
+    delete op;
+    op = new ECSubWrite;
+    ::decode(*op, p);
   }
 
   virtual void encode_payload(uint64_t features) {
     ::encode(pgid, payload);
     ::encode(map_epoch, payload);
-    ::encode(op, payload);
+    ::encode(*op, payload);
   }
 
   const char *get_type_name() const { return "MOSDECSubOpWrite"; }
@@ -57,13 +62,14 @@ public:
   void print(ostream& out) const {
     out << "MOSDECSubOpWrite(" << pgid
 	<< " " << map_epoch
-	<< " " << op;
+	<< " " << *op;
     out << ")";
   }
 
   void clear_buffers() {
-    op.t = ObjectStore::Transaction();
-    op.log_entries.clear();
+    delete op->t;
+    op->t = new ObjectStore::Transaction();
+    op->log_entries.clear();
   }
 };
 

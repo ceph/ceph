@@ -87,7 +87,7 @@ TYPE(PushReplyOp)
 TYPE(ECUtil::HashInfo)
 
 #include "osd/ECMsgTypes.h"
-TYPE(ECSubWrite)
+TYPE_NOCOPY(ECSubWrite)
 TYPE(ECSubWriteReply)
 TYPE_FEATUREFUL(ECSubRead)
 TYPE(ECSubReadReply)

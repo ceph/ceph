@@ -61,7 +61,7 @@ struct TransGenerator : public boost::static_visitor<void> {
   ErasureCodeInterfaceRef &ecimpl;
   const pg_t pgid;
   const ECUtil::stripe_info_t sinfo;
-  map<shard_id_t, ObjectStore::Transaction> *trans;
+  map<shard_id_t, ObjectStore::Transaction*> *trans;
   set<int> want;
   set<hobject_t> *temp_added;
   set<hobject_t> *temp_removed;
@@ -71,7 +71,7 @@ struct TransGenerator : public boost::static_visitor<void> {
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
-    map<shard_id_t, ObjectStore::Transaction> *trans,
+    map<shard_id_t, ObjectStore::Transaction*> *trans,
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     stringstream *out)
@@ -108,10 +108,10 @@ struct TransGenerator : public boost::static_visitor<void> {
   }
 
   void operator()(const ECTransaction::TouchOp &op) {
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.touch(
+      i->second->touch(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first));
     }
@@ -144,12 +144,12 @@ struct TransGenerator : public boost::static_visitor<void> {
       hbuf);
 
     assert(r == 0);
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
       assert(buffers.count(i->first));
       bufferlist &enc_bl = buffers[i->first];
-      i->second.write(
+      i->second->write(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	sinfo.logical_to_prev_chunk_offset(
@@ -157,7 +157,7 @@ struct TransGenerator : public boost::static_visitor<void> {
 	enc_bl.length(),
 	enc_bl,
 	op.fadvise_flags);
-      i->second.setattr(
+      i->second->setattr(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	ECUtil::get_hinfo_key(),
@@ -168,10 +168,10 @@ struct TransGenerator : public boost::static_visitor<void> {
     assert(hash_infos.count(op.source));
     assert(hash_infos.count(op.target));
     *(hash_infos[op.target]) = *(hash_infos[op.source]);
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.clone(
+      i->second->clone(
 	get_coll_ct(i->first, op.source),
 	ghobject_t(op.source, ghobject_t::NO_GEN, i->first),
 	ghobject_t(op.target, ghobject_t::NO_GEN, i->first));
@@ -182,10 +182,10 @@ struct TransGenerator : public boost::static_visitor<void> {
     assert(hash_infos.count(op.destination));
     *(hash_infos[op.destination]) = *(hash_infos[op.source]);
     hash_infos[op.source]->clear();
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.collection_move_rename(
+      i->second->collection_move_rename(
 	get_coll_rm(i->first, op.source),
 	ghobject_t(op.source, ghobject_t::NO_GEN, i->first),
 	get_coll_ct(i->first, op.destination),
@@ -195,11 +195,11 @@ struct TransGenerator : public boost::static_visitor<void> {
   void operator()(const ECTransaction::StashOp &op) {
     assert(hash_infos.count(op.oid));
     hash_infos[op.oid]->clear();
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
       coll_t cid(get_coll_rm(i->first, op.oid));
-      i->second.collection_move_rename(
+      i->second->collection_move_rename(
 	cid,
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	cid,
@@ -209,30 +209,30 @@ struct TransGenerator : public boost::static_visitor<void> {
   void operator()(const ECTransaction::RemoveOp &op) {
     assert(hash_infos.count(op.oid));
     hash_infos[op.oid]->clear();
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.remove(
+      i->second->remove(
 	get_coll_rm(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first));
     }
   }
   void operator()(const ECTransaction::SetAttrsOp &op) {
     map<string, bufferlist> attrs(op.attrs);
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.setattrs(
+      i->second->setattrs(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	attrs);
     }
   }
   void operator()(const ECTransaction::RmAttrOp &op) {
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
 	 i != trans->end();
 	 ++i) {
-      i->second.rmattr(
+      i->second->rmattr(
 	get_coll_ct(i->first, op.oid),
 	ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
 	op.key);
@@ -246,10 +246,10 @@ struct TransGenerator : public boost::static_visitor<void> {
     uint64_t write_size = sinfo.logical_to_next_chunk_offset(
                                                    op.expected_write_size);
 
-    for (map<shard_id_t, ObjectStore::Transaction>::iterator i = trans->begin();
+    for (map<shard_id_t,ObjectStore::Transaction*>::iterator i = trans->begin();
          i != trans->end();
          ++i) {
-      i->second.set_alloc_hint(
+      i->second->set_alloc_hint(
         get_coll_ct(i->first, op.oid),
         ghobject_t(op.oid, ghobject_t::NO_GEN, i->first),
         object_size, write_size);
@@ -264,7 +264,7 @@ void ECTransaction::generate_transactions(
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
   const ECUtil::stripe_info_t &sinfo,
-  map<shard_id_t, ObjectStore::Transaction> *transactions,
+  map<shard_id_t, ObjectStore::Transaction*> *transactions,
   set<hobject_t> *temp_added,
   set<hobject_t> *temp_removed,
   stringstream *out) const
