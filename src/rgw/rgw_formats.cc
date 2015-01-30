@@ -110,7 +110,7 @@ void RGWFormatter_Plain::dump_float(const char *name, double d)
   dump_value_int(name, "%f", d);
 }
 
-void RGWFormatter_Plain::dump_string(const char *name, std::string s)
+void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
 {
   dump_format(name, "%s", s.c_str());
 }

@@ -60,7 +60,7 @@ our $cnt;
 sub quota_set_max_size_per_user {
     my ($maxsize, $size1,$rgw_user) = @_;
     run_s3($rgw_user);
-    my $set_quota = `sudo radosgw-admin quota set --uid=$rgw_user --quota-scope=user --max-size=$maxsize`;
+    my $set_quota = `$radosgw_admin quota set --uid=$rgw_user --quota-scope=user --max-size=$maxsize`;
     if (($set_quota !~ /./)&&($maxsize == 0)){
       my $ret = test_max_objs($size1, $rgw_user);
       if ($ret == 1){
@@ -84,7 +84,7 @@ sub quota_set_max_size_per_user {
 sub max_size_per_user {
     my ($maxsize, $size1,$rgw_user) = @_;
     run_s3($rgw_user);
-    my $set_quota = `sudo radosgw-admin quota set --uid=$rgw_user --quota-scope=user --max-size=$maxsize`;
+    my $set_quota = `$radosgw_admin quota set --uid=$rgw_user --quota-scope=user --max-size=$maxsize`;
     if (($set_quota !~ /./) && ($maxsize != 0)) {
       my $ret = test_max_objs($size1, $rgw_user);
       if ($ret == 0){
@@ -98,7 +98,7 @@ sub quota_set_max_obj_per_user {
     # set max objects
     my ($maxobjs, $size1, $rgw_user) = @_;
     run_s3($rgw_user);
-    my $set_quota = `sudo radosgw-admin quota set --uid=$rgw_user --quota-scope=user --max-objects=$maxobjs`;
+    my $set_quota = `$radosgw_admin quota set --uid=$rgw_user --quota-scope=user --max-objects=$maxobjs`;
     if (($set_quota !~ /./) && ($maxobjs == 0)){
       my $ret = test_max_objs($size1, $rgw_user);
       if ($ret == 1){
@@ -120,7 +120,7 @@ sub quota_set_max_obj_per_user {
  
 sub quota_enable_user {
     my ($rgw_user) = @_;
-    my $en_quota = `sudo radosgw-admin quota enable --uid=$rgw_user --quota-scope=user`;
+    my $en_quota = `$radosgw_admin quota enable --uid=$rgw_user --quota-scope=user`;
     if ($en_quota !~ /./){
       print "quota enabled for the user $rgw_user \n";
     } else {
@@ -131,7 +131,7 @@ sub quota_enable_user {
 }
 
 sub quota_disable_user {
-    my $dis_quota = `sudo radosgw-admin quota disable --uid=$rgw_user --quota-scope=user`;
+    my $dis_quota = `$radosgw_admin quota disable --uid=$rgw_user --quota-scope=user`;
     if ($dis_quota !~ /./){
       print "quota disabled for the user $rgw_user \n";
     } else {

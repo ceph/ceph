@@ -11,6 +11,8 @@
 #define CEPH_RGW_UPDATE 'u'
 #define CEPH_RGW_TAG_TIMEOUT 60*60*24
 
+class JSONObj;
+
 namespace ceph {
   class Formatter;
 }
@@ -25,6 +27,13 @@ enum RGWModifyOp {
   CLS_RGW_OP_DEL     = 1,
   CLS_RGW_OP_CANCEL  = 2,
   CLS_RGW_OP_UNKNOWN = 3,
+  CLS_RGW_OP_LINK_OLH        = 4,
+  CLS_RGW_OP_LINK_OLH_DM     = 5, /* creation of delete marker */
+  CLS_RGW_OP_UNLINK_INSTANCE = 6,
+};
+
+enum RGWBILogFlags {
+  RGW_BILOG_FLAG_VERSIONED_OP = 0x1,
 };
 
 struct rgw_bucket_pending_info {
@@ -52,6 +61,7 @@ struct rgw_bucket_pending_info {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_pending_info*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_pending_info)
@@ -64,12 +74,13 @@ struct rgw_bucket_dir_entry_meta {
   string owner;
   string owner_display_name;
   string content_type;
+  uint64_t accounted_size;
 
   rgw_bucket_dir_entry_meta() :
-  category(0), size(0) { mtime.set_from_double(0); }
+  category(0), size(0), accounted_size(0) { mtime.set_from_double(0); }
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(category, bl);
     ::encode(size, bl);
     ::encode(mtime, bl);
@@ -77,10 +88,11 @@ struct rgw_bucket_dir_entry_meta {
     ::encode(owner, bl);
     ::encode(owner_display_name, bl);
     ::encode(content_type, bl);
+    ::encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
     ::decode(category, bl);
     ::decode(size, bl);
     ::decode(mtime, bl);
@@ -89,9 +101,14 @@ struct rgw_bucket_dir_entry_meta {
     ::decode(owner_display_name, bl);
     if (struct_v >= 2)
       ::decode(content_type, bl);
+    if (struct_v >= 4)
+      ::decode(accounted_size, bl);
+    else
+      accounted_size = size;
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry_meta)
@@ -189,13 +206,64 @@ struct rgw_bucket_entry_ver {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_entry_ver*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_entry_ver)
 
+struct cls_rgw_obj_key {
+  string name;
+  string instance;
+
+  cls_rgw_obj_key() {}
+  cls_rgw_obj_key(const string &_name) : name(_name) {}
+  cls_rgw_obj_key(const string& n, const string& i) : name(n), instance(i) {}
+
+  bool operator==(const cls_rgw_obj_key& k) const {
+    return (name.compare(k.name) == 0) &&
+           (instance.compare(k.instance) == 0);
+  }
+  bool operator<(const cls_rgw_obj_key& k) const {
+    int r = name.compare(k.name);
+    if (r == 0) {
+      r = instance.compare(k.instance);
+    }
+    return (r < 0);
+  }
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(name, bl);
+    ::encode(instance, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(name, bl);
+    ::decode(instance, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const {
+    f->dump_string("name", name);
+    f->dump_string("instance", instance);
+  }
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<cls_rgw_obj_key*>& ls) {
+    ls.push_back(new cls_rgw_obj_key);
+    ls.push_back(new cls_rgw_obj_key);
+    ls.back()->name = "name";
+    ls.back()->instance = "instance";
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_obj_key)
+
+
+#define RGW_BUCKET_DIRENT_FLAG_VER           0x1    /* a versioned object instance */
+#define RGW_BUCKET_DIRENT_FLAG_CURRENT       0x2    /* the last object instance of a versioned object */
+#define RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER 0x4    /* delete marker */
+#define RGW_BUCKET_DIRENT_FLAG_VER_MARKER    0x8    /* object is versioned, a placeholder for the plain entry */
 
 struct rgw_bucket_dir_entry {
-  std::string name;
+  cls_rgw_obj_key key;
   rgw_bucket_entry_ver ver;
   std::string locator;
   bool exists;
@@ -203,13 +271,15 @@ struct rgw_bucket_dir_entry {
   map<string, struct rgw_bucket_pending_info> pending_map;
   uint64_t index_ver;
   string tag;
+  uint16_t flags;
+  uint64_t versioned_epoch;
 
   rgw_bucket_dir_entry() :
-    exists(false), index_ver(0) {}
+    exists(false), index_ver(0), flags(0), versioned_epoch(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 3, bl);
-    ::encode(name, bl);
+    ENCODE_START(8, 3, bl);
+    ::encode(key.name, bl);
     ::encode(ver.epoch, bl);
     ::encode(exists, bl);
     ::encode(meta, bl);
@@ -218,11 +288,14 @@ struct rgw_bucket_dir_entry {
     ::encode(ver, bl);
     ::encode_packed_val(index_ver, bl);
     ::encode(tag, bl);
+    ::encode(key.instance, bl);
+    ::encode(flags, bl);
+    ::encode(versioned_epoch, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    ::decode(name, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+    ::decode(key.name, bl);
     ::decode(ver.epoch, bl);
     ::decode(exists, bl);
     ::decode(meta, bl);
@@ -239,27 +312,169 @@ struct rgw_bucket_dir_entry {
       ::decode_packed_val(index_ver, bl);
       ::decode(tag, bl);
     }
+    if (struct_v >= 6) {
+      ::decode(key.instance, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(flags, bl);
+    }
+    if (struct_v >= 8) {
+      ::decode(versioned_epoch, bl);
+    }
     DECODE_FINISH(bl);
   }
+
+  bool is_current() {
+    int test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
+    return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
+           (flags & test_flags) == test_flags;
+  }
+  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
+  bool is_visible() {
+    return is_current() && !is_delete_marker();
+  }
+  bool is_valid() { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
+
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
   static void generate_test_instances(list<rgw_bucket_dir_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
+enum BIIndexType {
+  InvalidIdx    = 0,
+  PlainIdx      = 1,
+  InstanceIdx   = 2,
+  OLHIdx        = 3,
+};
+
+struct rgw_cls_bi_entry {
+  BIIndexType type;
+  string idx;
+  bufferlist data;
+
+  rgw_cls_bi_entry() : type(InvalidIdx) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode((uint8_t)type, bl);
+    ::encode(idx, bl);
+    ::encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    type = (BIIndexType)c;
+    ::decode(idx, bl);
+    ::decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key = NULL);
+};
+WRITE_CLASS_ENCODER(rgw_cls_bi_entry)
+
+enum OLHLogOp {
+  CLS_RGW_OLH_OP_UNKNOWN         = 0,
+  CLS_RGW_OLH_OP_LINK_OLH        = 1,
+  CLS_RGW_OLH_OP_UNLINK_OLH      = 2, /* object does not exist */
+  CLS_RGW_OLH_OP_REMOVE_INSTANCE = 3,
+};
+
+struct rgw_bucket_olh_log_entry {
+  uint64_t epoch;
+  OLHLogOp op;
+  string op_tag;
+  cls_rgw_obj_key key;
+  bool delete_marker;
+
+  rgw_bucket_olh_log_entry() : epoch(0), op(CLS_RGW_OLH_OP_UNKNOWN), delete_marker(false) {}
+
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(epoch, bl);
+    ::encode((__u8)op, bl);
+    ::encode(op_tag, bl);
+    ::encode(key, bl);
+    ::encode(delete_marker, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(epoch, bl);
+    uint8_t c;
+    ::decode(c, bl);
+    op = (OLHLogOp)c;
+    ::decode(op_tag, bl);
+    ::decode(key, bl);
+    ::decode(delete_marker, bl);
+    DECODE_FINISH(bl);
+  }
+  static void generate_test_instances(list<rgw_bucket_olh_log_entry*>& o);
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_log_entry)
+
+struct rgw_bucket_olh_entry {
+  cls_rgw_obj_key key;
+  bool delete_marker;
+  uint64_t epoch;
+  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > pending_log;
+  string tag;
+  bool exists;
+  bool pending_removal;
+
+  rgw_bucket_olh_entry() : delete_marker(false), epoch(0), exists(false), pending_removal(false) {}
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(key, bl);
+    ::encode(delete_marker, bl);
+    ::encode(epoch, bl);
+    ::encode(pending_log, bl);
+    ::encode(tag, bl);
+    ::encode(exists, bl);
+    ::encode(pending_removal, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(key, bl);
+    ::decode(delete_marker, bl);
+    ::decode(epoch, bl);
+    ::decode(pending_log, bl);
+    ::decode(tag, bl);
+    ::decode(exists, bl);
+    ::decode(pending_removal, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
+
 struct rgw_bi_log_entry {
   string id;
   string object;
+  string instance;
   utime_t timestamp;
   rgw_bucket_entry_ver ver;
   RGWModifyOp op;
   RGWPendingState state;
   uint64_t index_ver;
   string tag;
+  uint16_t bilog_flags;
 
-  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0) {}
+  rgw_bi_log_entry() : op(CLS_RGW_OP_UNKNOWN), state(CLS_RGW_STATE_PENDING_MODIFY), index_ver(0), bilog_flags(0) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(id, bl);
     ::encode(object, bl);
     ::encode(timestamp, bl);
@@ -270,10 +485,12 @@ struct rgw_bi_log_entry {
     c = (uint8_t)state;
     ::encode(c, bl);
     encode_packed_val(index_ver, bl);
+    ::encode(instance, bl);
+    ::encode(bilog_flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(id, bl);
     ::decode(object, bl);
     ::decode(timestamp, bl);
@@ -285,6 +502,10 @@ struct rgw_bi_log_entry {
     ::decode(c, bl);
     state = (RGWPendingState)c;
     decode_packed_val(index_ver, bl);
+    if (struct_v >= 2) {
+      ::decode(instance, bl);
+      ::decode(bilog_flags, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -548,39 +769,44 @@ enum cls_rgw_gc_op {
 
 struct cls_rgw_obj {
   string pool;
-  string oid;
-  string key;
+  cls_rgw_obj_key key;
+  string loc;
 
   cls_rgw_obj() {}
-  cls_rgw_obj(string& _p, string& _o) : pool(_p), oid(_o) {}
+  cls_rgw_obj(string& _p, cls_rgw_obj_key& _k) : pool(_p), key(_k) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(pool, bl);
-    ::encode(oid, bl);
+    ::encode(key.name, bl);
+    ::encode(loc, bl);
     ::encode(key, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(pool, bl);
-    ::decode(oid, bl);
-    ::decode(key, bl);
+    ::decode(key.name, bl);
+    ::decode(loc, bl);
+    if (struct_v >= 2) {
+      ::decode(key, bl);
+    }
     DECODE_FINISH(bl);
   }
 
   void dump(Formatter *f) const {
     f->dump_string("pool", pool);
-    f->dump_string("oid", oid);
-    f->dump_string("key", key);
+    f->dump_string("oid", key.name);
+    f->dump_string("key", loc);
+    f->dump_string("instance", key.instance);
   }
   static void generate_test_instances(list<cls_rgw_obj*>& ls) {
     ls.push_back(new cls_rgw_obj);
     ls.push_back(new cls_rgw_obj);
     ls.back()->pool = "mypool";
-    ls.back()->oid = "myoid";
-    ls.back()->key = "mykey";
+    ls.back()->key.name = "myoid";
+    ls.back()->loc = "mykey";
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_obj)
@@ -590,11 +816,11 @@ struct cls_rgw_obj_chain {
 
   cls_rgw_obj_chain() {}
 
-  void push_obj(string& pool, string& oid, string& key) {
+  void push_obj(string& pool, cls_rgw_obj_key& key, string& loc) {
     cls_rgw_obj obj;
     obj.pool = pool;
-    obj.oid = oid;
     obj.key = key;
+    obj.loc = loc;
     objs.push_back(obj);
   }
 

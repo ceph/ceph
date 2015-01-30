@@ -110,7 +110,7 @@ extern int rgw_read_user_buckets(RGWRados *store, string user_id, RGWUserBuckets
 extern int rgw_link_bucket(RGWRados *store, string user_id, rgw_bucket& bucket, time_t creation_time, bool update_entrypoint = true);
 extern int rgw_unlink_bucket(RGWRados *store, string user_id, const string& bucket_name, bool update_entrypoint = true);
 
-extern int rgw_remove_object(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, std::string& object);
+extern int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
@@ -205,7 +205,7 @@ public:
   int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
-          list<std::string>& objs_to_unlink, std::string *err_msg = NULL);
+          list<rgw_obj_key>& objs_to_unlink, std::string *err_msg = NULL);
 
   int check_object_index(RGWBucketAdminOpState& op_state,
           map<string, RGWObjEnt> result, std::string *err_msg = NULL);

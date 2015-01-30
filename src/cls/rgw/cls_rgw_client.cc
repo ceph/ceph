@@ -139,32 +139,38 @@ int CLSRGWIssueSetTagTimeout::issue_op(int shard_id, const string& oid)
 }
 
 void cls_rgw_bucket_prepare_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                               string& name, string& locator, bool log_op)
+                               const cls_rgw_obj_key& key, const string& locator, bool log_op,
+                               uint16_t bilog_flags)
 {
   struct rgw_cls_obj_prepare_op call;
   call.op = op;
   call.tag = tag;
-  call.name = name;
+  call.key = key;
   call.locator = locator;
   call.log_op = log_op;
+  call.bilog_flags = bilog_flags;
   bufferlist in;
   ::encode(call, in);
   o.exec("rgw", "bucket_prepare_op", in);
 }
 
 void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string& tag,
-                                rgw_bucket_entry_ver& ver, string& name, rgw_bucket_dir_entry_meta& dir_meta,
-				list<string> *remove_objs, bool log_op)
+                                rgw_bucket_entry_ver& ver,
+                                const cls_rgw_obj_key& key,
+                                rgw_bucket_dir_entry_meta& dir_meta,
+				list<cls_rgw_obj_key> *remove_objs, bool log_op,
+                                uint16_t bilog_flags)
 {
 
   bufferlist in;
   struct rgw_cls_obj_complete_op call;
   call.op = op;
   call.tag = tag;
-  call.name = name;
+  call.key = key;
   call.ver = ver;
   call.meta = dir_meta;
   call.log_op = log_op;
+  call.bilog_flags = bilog_flags;
   if (remove_objs)
     call.remove_objs = *remove_objs;
   ::encode(call, in);
@@ -172,14 +178,15 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 }
 
 static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
-    const string& oid, const string& start_obj, const string& filter_prefix,
-    uint32_t num_entries, BucketIndexAioManager *manager,
+    const string& oid, const cls_rgw_obj_key& start_obj, const string& filter_prefix,
+    uint32_t num_entries, bool list_versions, BucketIndexAioManager *manager,
     struct rgw_cls_list_ret *pdata) {
   bufferlist in;
   struct rgw_cls_list_op call;
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
   call.num_entries = num_entries;
+  call.list_versions = list_versions;
   ::encode(call, in);
 
   librados::ObjectReadOperation op;
@@ -189,7 +196,200 @@ static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
 
 int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, &manager, &result[shard_id]);
+  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, list_versions, &manager, &result[shard_id]);
+}
+
+void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
+{
+  bufferlist in;
+  struct rgw_cls_obj_remove_op call;
+  call.keep_attr_prefixes = keep_attr_prefixes;
+  ::encode(call, in);
+  o.exec("rgw", "obj_remove", in);
+}
+
+void cls_rgw_obj_check_attrs_prefix(librados::ObjectOperation& o, const string& prefix, bool fail_if_exist)
+{
+  bufferlist in;
+  struct rgw_cls_obj_check_attrs_prefix call;
+  call.check_prefix = prefix;
+  call.fail_if_exist = fail_if_exist;
+  ::encode(call, in);
+  o.exec("rgw", "obj_check_attrs_prefix", in);
+}
+
+int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
+                   BIIndexType index_type, cls_rgw_obj_key& key,
+                   rgw_cls_bi_entry *entry)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_get_op call;
+  call.key = key;
+  call.type = index_type;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_get", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_bi_get_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  *entry = op_ret.entry;
+
+  return 0;
+}
+
+int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, rgw_cls_bi_entry& entry)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_put_op call;
+  call.entry = entry;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_put", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
+                   const string& name, const string& marker, uint32_t max,
+                   list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+{
+  bufferlist in, out;
+  struct rgw_cls_bi_list_op call;
+  call.name = name;
+  call.marker = marker;
+  call.max = max;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bi_list", in, out);
+  if (r < 0)
+    return r;
+
+  struct rgw_cls_bi_list_ret op_ret;
+  bufferlist::iterator iter = out.begin();
+  try {
+    ::decode(op_ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entries->swap(op_ret.entries);
+  *is_truncated = op_ret.is_truncated;
+
+  return 0;
+}
+
+int cls_rgw_bucket_link_olh(librados::IoCtx& io_ctx, const string& oid, const cls_rgw_obj_key& key, bufferlist& olh_tag,
+                            bool delete_marker, const string& op_tag, struct rgw_bucket_dir_entry_meta *meta,
+                            uint64_t olh_epoch, bool log_op)
+{
+  bufferlist in, out;
+  struct rgw_cls_link_olh_op call;
+  call.key = key;
+  call.olh_tag = string(olh_tag.c_str(), olh_tag.length());
+  call.op_tag = op_tag;
+  call.delete_marker = delete_marker;
+  if (meta) {
+    call.meta = *meta;
+  }
+  call.olh_epoch = olh_epoch;
+  call.log_op = log_op;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_link_olh", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
+                                   const cls_rgw_obj_key& key, const string& op_tag,
+                                   uint64_t olh_epoch, bool log_op)
+{
+  bufferlist in, out;
+  struct rgw_cls_unlink_instance_op call;
+  call.key = key;
+  call.op_tag = op_tag;
+  call.olh_epoch = olh_epoch;
+  call.log_op = log_op;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, "rgw", "bucket_unlink_instance", in, out);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+                        const string& olh_tag,
+                        map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > *log, bool *is_truncated)
+{
+  bufferlist in, out;
+  struct rgw_cls_read_olh_log_op call;
+  call.olh = olh;
+  call.ver_marker = ver_marker;
+  call.olh_tag = olh_tag;
+  ::encode(call, in);
+  int op_ret;
+  op.exec("rgw", "bucket_read_olh_log", in, &out, &op_ret);
+  int r = io_ctx.operate(oid, &op, NULL);
+  if (r < 0) {
+    return r;
+  }
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  struct rgw_cls_read_olh_log_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  if (log) {
+    *log = ret.log;
+  }
+  if (is_truncated) {
+    *is_truncated = ret.is_truncated;
+  }
+
+ return r;
+}
+
+void cls_rgw_trim_olh_log(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& olh, uint64_t ver, const string& olh_tag)
+{
+  bufferlist in;
+  struct rgw_cls_trim_olh_log_op call;
+  call.olh = olh;
+  call.ver = ver;
+  call.olh_tag = olh_tag;
+  ::encode(call, in);
+  op.exec("rgw", "bucket_trim_olh_log", in);
+}
+
+int cls_rgw_clear_olh(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, const string& olh_tag)
+{
+  bufferlist in, out;
+  struct rgw_cls_bucket_clear_olh_op call;
+  call.key = olh;
+  call.olh_tag = olh_tag;
+  ::encode(call, in);
+  librados::ObjectWriteOperation op;
+  int op_ret;
+  op.exec("rgw", "bucket_clear_olh", in, &out, &op_ret);
+  int r = io_ctx.operate(oid, &op);
+  if (r < 0) {
+    return r;
+  }
+  return op_ret;
 }
 
 static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, int shard_id,
@@ -269,7 +469,8 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
 
 int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, "", "", 0, &manager, &result[shard_id]);
+  cls_rgw_obj_key nokey;
+  return issue_bucket_list_op(io_ctx, oid, nokey, "", 0, false, &manager, &result[shard_id]);
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
@@ -410,7 +611,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
     return -EIO;
   }
 
-  entries = ret.entries;
+  entries.swap(ret.entries);
 
   if (truncated)
     *truncated = ret.truncated;

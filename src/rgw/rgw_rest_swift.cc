@@ -143,24 +143,25 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
     bool do_objs = false;
+    rgw_obj_key& key = iter->key;
     if (pref_iter == common_prefixes.end())
       do_objs = true;
     else if (iter == objs.end())
       do_pref = true;
-    else if (iter->name.compare(pref_iter->first) == 0) {
+    else if (key.name.compare(pref_iter->first) == 0) {
       do_objs = true;
       ++pref_iter;
-    } else if (iter->name.compare(pref_iter->first) <= 0)
+    } else if (key.name.compare(pref_iter->first) <= 0)
       do_objs = true;
     else
       do_pref = true;
 
-    if (do_objs && (marker.empty() || iter->name.compare(marker) > 0)) {
-      if (iter->name.compare(path) == 0)
+    if (do_objs && (marker.empty() || marker < key)) {
+      if (key.name.compare(path) == 0)
         goto next;
 
       s->formatter->open_object_section("object");
-      s->formatter->dump_string("name", iter->name);
+      s->formatter->dump_string("name", key.name);
       s->formatter->dump_string("hash", iter->etag);
       s->formatter->dump_int("bytes", iter->size);
       string single_content_type = iter->content_type;
@@ -180,7 +181,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
       s->formatter->close_section();
     }
 
-    if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker) > 0)) {
+    if (do_pref &&  (marker.empty() || pref_iter->first.compare(marker.name) > 0)) {
       const string& name = pref_iter->first;
       if (name.compare(delimiter) == 0)
         goto next;
@@ -231,7 +232,7 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size_rounded);
   s->cio->print("X-Container-Bytes-Used-Actual: %s\r\n", buf);
 
-  if (!s->object) {
+  if (s->object.empty()) {
     RGWAccessControlPolicy_SWIFT *swift_policy = static_cast<RGWAccessControlPolicy_SWIFT *>(s->bucket_acl);
     string read_acl, write_acl;
     swift_policy->to_str(read_acl, write_acl);
@@ -399,7 +400,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     dout(5) << "content type wasn't provided, trying to guess" << dendl;
-    const char *suffix = strrchr(s->object, '.');
+    const char *suffix = strrchr(s->object.name.c_str(), '.');
     if (suffix) {
       suffix++;
       if (*suffix) {
@@ -435,7 +436,7 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
   if (s->has_bad_meta)
     return -EINVAL;
 
-  if (!s->object) {
+  if (s->object.empty()) {
     int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
     if (r < 0) {
       return r;
@@ -515,7 +516,7 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   src_bucket_name = s->src_bucket_name;
   src_object = s->src_object;
   dest_bucket_name = s->bucket_name_str;
-  dest_object = s->object_str;
+  dest_object = s->object.name;
 
   return 0;
 }
@@ -594,7 +595,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
       } else {
         if (strncmp(name, RGW_ATTR_META_PREFIX, sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
           name += sizeof(RGW_ATTR_META_PREFIX) - 1;
-          s->cio->print("X-%s-Meta-%s: %s\r\n", (s->object ? "Object" : "Container"), name, iter->second.c_str());
+          s->cio->print("X-%s-Meta-%s: %s\r\n", (!s->object.empty() ? "Object" : "Container"), name, iter->second.c_str());
         }
       }
     }
@@ -922,9 +923,8 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
   s->info.effective_uri = "/" + s->bucket_name_str;
 
   if (req.size()) {
-    s->object_str = req;
-    s->object = strdup(s->object_str.c_str());
-    s->info.effective_uri.append("/" + s->object_str);
+    s->object = rgw_obj_key(req, s->info.env->get("HTTP_X_OBJECT_VERSION_ID", "")); /* rgw swift extension */
+    s->info.effective_uri.append("/" + s->object.name);
   }
 
   return 0;
@@ -932,12 +932,12 @@ int RGWHandler_ObjStore_SWIFT::init_from_header(struct req_state *s)
 
 int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWClientIO *cio)
 {
-  dout(10) << "s->object=" << (s->object ? s->object : "<NULL>") << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
+  dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>")) << " s->bucket=" << (!s->bucket_name_str.empty() ? s->bucket_name_str : "<NULL>") << dendl;
 
   int ret = validate_bucket_name(s->bucket_name_str.c_str());
   if (ret)
     return ret;
-  ret = validate_object_name(s->object_str);
+  ret = validate_object_name(s->object.name);
   if (ret)
     return ret;
 
@@ -956,11 +956,12 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
       return -ERR_BAD_URL;
 
     string dest_bucket_name;
-    string dest_object;
-    bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_object);
+    rgw_obj_key dest_obj_key;
+    bool result = RGWCopyObj::parse_copy_location(req_dest, dest_bucket_name, dest_obj_key);
     if (!result)
        return -ERR_BAD_URL;
 
+    string dest_object = dest_obj_key.name;
     if (dest_bucket_name != s->bucket_name_str) {
       ret = validate_bucket_name(dest_bucket_name.c_str());
       if (ret < 0)
@@ -969,9 +970,9 @@ int RGWHandler_ObjStore_SWIFT::init(RGWRados *store, struct req_state *s, RGWCli
 
     /* convert COPY operation into PUT */
     s->src_bucket_name = s->bucket_name_str;
-    s->src_object = s->object_str;
+    s->src_object = s->object;
     s->bucket_name_str = dest_bucket_name;
-    s->object_str = dest_object;
+    s->object = rgw_obj_key(dest_object);
     s->op = OP_PUT;
   }
 
@@ -987,7 +988,7 @@ RGWHandler *RGWRESTMgr_SWIFT::get_handler(struct req_state *s)
 
   if (s->bucket_name_str.empty())
     return new RGWHandler_ObjStore_Service_SWIFT;
-  if (!s->object)
+  if (s->object.empty())
     return new RGWHandler_ObjStore_Bucket_SWIFT;
 
   return new RGWHandler_ObjStore_Obj_SWIFT;

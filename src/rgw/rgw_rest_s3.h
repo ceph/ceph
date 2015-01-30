@@ -47,6 +47,7 @@ public:
 
   int get_params();
   void send_response();
+  void send_versioned_response();
 };
 
 class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
@@ -62,6 +63,23 @@ public:
   RGWGetBucketLocation_ObjStore_S3() {}
   ~RGWGetBucketLocation_ObjStore_S3() {}
 
+  void send_response();
+};
+
+class RGWGetBucketVersioning_ObjStore_S3 : public RGWGetBucketVersioning {
+public:
+  RGWGetBucketVersioning_ObjStore_S3() {}
+  ~RGWGetBucketVersioning_ObjStore_S3() {}
+
+  void send_response();
+};
+
+class RGWSetBucketVersioning_ObjStore_S3 : public RGWSetBucketVersioning {
+public:
+  RGWSetBucketVersioning_ObjStore_S3() {}
+  ~RGWSetBucketVersioning_ObjStore_S3() {}
+
+  int get_params();
   void send_response();
 };
 
@@ -266,7 +284,8 @@ public:
 
   void send_status();
   void begin_response();
-  void send_partial_response(pair<string,int>& result);
+  void send_partial_response(rgw_obj_key& key, bool delete_marker,
+                             const string& marker_version_id, int ret);
   void end_response();
 };
 

@@ -200,7 +200,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->bucket = "bucket";
   e->remote_addr = "1.2.3.4";
   e->user = "user";
-  e->obj = "obj";
+  e->obj = rgw_obj_key("obj");
   e->uri = "http://uri/bucket/obj";
   e->http_status = "200";
   e->error_code = "error_code";
@@ -212,16 +212,6 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->bucket_id = "10";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
-}
-
-void rgw_intent_log_entry::generate_test_instances(list<rgw_intent_log_entry*>& o)
-{
-  rgw_intent_log_entry *e = new rgw_intent_log_entry;
-  rgw_bucket b("bucket", "pool", ".index_pool", "marker", "10", "region");
-  e->obj = rgw_obj(b, "object");
-  e->intent = DEL_OBJ;
-  o.push_back(e);
-  o.push_back(new rgw_intent_log_entry);
 }
 
 void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
