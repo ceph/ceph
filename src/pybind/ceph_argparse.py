@@ -727,7 +727,10 @@ def matchnum(args, signature, partial=False):
             word = words.pop(0)
 
             try:
-                validate_one(word, desc, partial)
+                # only allow partial matching if we're on the last supplied
+                # word; avoid matching foo bar and foot bar just because
+                # partial is set
+                validate_one(word, desc, partial and (len(words) == 0))
                 valid = True
             except ArgumentError:
                 # matchnum doesn't care about type of error
