@@ -113,7 +113,7 @@ Requires:	python-ceph = %{epoch}:%{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
 %description -n ceph-common
-common utilities to mount and interact with a ceph storage cluster
+Common utilities to mount and interact with a ceph storage cluster.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -161,8 +161,8 @@ BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
 %endif
 %description radosgw
-radosgw is an S3 HTTP REST gateway for the RADOS object store. It is
-implemented as a FastCGI module using libfcgi, and can be used in
+This package is an S3 HTTP REST gateway for the RADOS object store. It
+is implemented as a FastCGI module using libfcgi, and can be used in
 conjunction with any FastCGI capable web server.
 
 %if %{with ocf}
@@ -515,8 +515,8 @@ fi
 %{_mandir}/man8/mount.ceph.8*
 %{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-debugpack.8*
-%{_mandir}/man8/ceph-clsinfo.8.gz
-%{_mandir}/man8/librados-config.8.gz
+%{_mandir}/man8/ceph-clsinfo.8*
+%{_mandir}/man8/librados-config.8*
 #set up placeholder directories
 %dir %{_localstatedir}/lib/ceph/
 %dir %{_localstatedir}/lib/ceph/tmp

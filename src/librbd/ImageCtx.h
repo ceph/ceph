@@ -27,11 +27,13 @@
 #include "librbd/parent_types.h"
 
 class CephContext;
+class Finisher;
 class PerfCounters;
 
 namespace librbd {
 
   class ImageWatcher;
+  class CopyupRequest;
 
   struct ImageCtx {
     CephContext *cct;
@@ -74,6 +76,9 @@ namespace librbd {
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
     Mutex aio_lock; // protects pending_aio and pending_aio_cond
+    Mutex copyup_list_lock; // protects copyup_waiting_list
+
+    Cond copyup_list_cond; // protected by copyup_waiting_list_lock
 
     unsigned extra_read_flags;
 
@@ -97,6 +102,9 @@ namespace librbd {
 
     Readahead readahead;
     uint64_t total_bytes_read;
+
+    Finisher *copyup_finisher;
+    std::map<uint64_t, CopyupRequest*> copyup_list;
 
     Cond pending_aio_cond;
     uint64_t pending_aio;
@@ -165,6 +173,7 @@ namespace librbd {
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
     void wait_for_pending_aio();
+    void wait_for_pending_copyup();
   };
 }
 

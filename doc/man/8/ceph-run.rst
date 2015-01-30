@@ -30,7 +30,7 @@ None
 Availability
 ============
 
-**ceph-run** is part of the Ceph distributed storage system. Please refer to
+**ceph-run** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 

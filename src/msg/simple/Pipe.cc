@@ -13,6 +13,7 @@
  */
 
 #include <sys/socket.h>
+#include <netinet/ip.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
 #include <limits.h>
@@ -287,7 +288,7 @@ int Pipe::accept()
   int removed; // single-use down below
 
   // this should roughly mirror pseudocode at
-  //  http://ceph.newdream.net/wiki/Messaging_protocol
+  //  http://ceph.com/wiki/Messaging_protocol
   int reply_tag = 0;
   uint64_t existing_seq = -1;
 
@@ -846,6 +847,25 @@ void Pipe::set_socket_options()
     ldout(msgr->cct,0) << "couldn't set SO_NOSIGPIPE: " << cpp_strerror(r) << dendl;
   }
 #endif
+
+  int prio = msgr->get_socket_priority();
+  if (prio >= 0) {
+    int iptos = IPTOS_CLASS_CS6;
+    int r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    if (r < 0) {
+      ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
+                         << ": " << cpp_strerror(errno) << dendl;
+    }
+
+    // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
+    // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
+    // We need to call setsockopt(SO_PRIORITY) after it.
+    r = ::setsockopt(sd, SOL_SOCKET, SO_PRIORITY, &prio, sizeof(prio));
+    if (r < 0) {
+      ldout(msgr->cct,0) << "couldn't set SO_PRIORITY to " << prio
+                         << ": " << cpp_strerror(errno) << dendl;
+    }
+  }
 }
 
 int Pipe::connect()

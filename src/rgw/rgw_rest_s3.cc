@@ -1705,8 +1705,8 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult",
 			  "http://s3.amazonaws.com/doc/2006-03-01/");
-    if (g_conf->rgw_dns_name.length())
-      s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), g_conf->rgw_dns_name.c_str());
+    if (s->info.domain.length())
+      s->formatter->dump_format("Location", "%s.%s", s->bucket_name_str.c_str(), s->info.domain.c_str());
     s->formatter->dump_string("Bucket", s->bucket_name_str);
     s->formatter->dump_string("Key", s->object.name);
     s->formatter->dump_string("ETag", etag);

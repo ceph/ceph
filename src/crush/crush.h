@@ -100,15 +100,26 @@ struct crush_rule {
  *  uniform         O(1)       poor         poor
  *  list            O(n)       optimal      poor
  *  tree            O(log n)   good         good
- *  straw           O(n)       optimal      optimal
+ *  straw           O(n)       better       better
+ *  straw2          O(n)       optimal      optimal
  */
 enum {
 	CRUSH_BUCKET_UNIFORM = 1,
 	CRUSH_BUCKET_LIST = 2,
 	CRUSH_BUCKET_TREE = 3,
-	CRUSH_BUCKET_STRAW = 4
+	CRUSH_BUCKET_STRAW = 4,
+	CRUSH_BUCKET_STRAW2 = 5,
 };
 extern const char *crush_bucket_alg_name(int alg);
+
+/*
+ * although tree was a legacy algorithm, it has been buggy, so
+ * exclude it.
+ */
+#define CRUSH_LEGACY_ALLOWED_BUCKET_ALGS (	\
+		(1 << CRUSH_BUCKET_UNIFORM) |	\
+		(1 << CRUSH_BUCKET_LIST) |	\
+		(1 << CRUSH_BUCKET_STRAW))
 
 struct crush_bucket {
 	__s32 id;        /* this'll be negative */
@@ -153,6 +164,11 @@ struct crush_bucket_straw {
 	__u32 *straws;         /* 16-bit fixed point */
 };
 
+struct crush_bucket_straw2 {
+	struct crush_bucket h;
+	__u32 *item_weights;   /* 16-bit fixed point */
+};
+
 
 
 /*
@@ -191,6 +207,15 @@ struct crush_map {
 	 */
 	__u8 straw_calc_version;
 
+	/*
+	 * allowed bucket algs is a bitmask, here the bit positions
+	 * are CRUSH_BUCKET_*.  note that these are *bits* and
+	 * CRUSH_BUCKET_* values are not, so we need to or together (1
+	 * << CRUSH_BUCKET_WHATEVER).  The 0th bit is not used to
+	 * minimize confusion (bucket type values start at 1).
+	 */
+	__u32 allowed_bucket_algs;
+
 	__u32 *choose_tries;
 };
 
@@ -203,6 +228,7 @@ extern void crush_destroy_bucket_uniform(struct crush_bucket_uniform *b);
 extern void crush_destroy_bucket_list(struct crush_bucket_list *b);
 extern void crush_destroy_bucket_tree(struct crush_bucket_tree *b);
 extern void crush_destroy_bucket_straw(struct crush_bucket_straw *b);
+extern void crush_destroy_bucket_straw2(struct crush_bucket_straw2 *b);
 extern void crush_destroy_bucket(struct crush_bucket *b);
 extern void crush_destroy_rule(struct crush_rule *r);
 extern void crush_destroy(struct crush_map *map);

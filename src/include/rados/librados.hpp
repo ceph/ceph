@@ -222,6 +222,7 @@ namespace librados
     OP_FADVISE_SEQUENTIAL = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL,
     OP_FADVISE_WILLNEED = LIBRADOS_OP_FLAG_FADVISE_WILLNEED,
     OP_FADVISE_DONTNEED = LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
+    OP_FADVISE_NOCACHE = LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
   };
 
   class CEPH_RADOS_API ObjectOperationCompletion {
@@ -619,6 +620,8 @@ namespace librados
 
     // get pool auid
     int get_auid(uint64_t *auid_);
+
+    uint64_t get_instance_id() const;
 
     std::string get_pool_name();
 

@@ -261,7 +261,10 @@ fi
 # export CEPH_ARGS="--lockdep 1"
 
 [ -z "$CEPH_BIN" ] && CEPH_BIN=.
-[ -z "$CEPH_PORT" ] && CEPH_PORT=6789
+if [ -z "$CEPH_PORT" ]; then
+    CEPH_PORT=6789
+    [ -e ".ceph.port" ] && CEPH_PORT=`cat .ceph_port`
+fi
 
 
 # sudo if btrfs
@@ -294,6 +297,7 @@ else
     echo ip $IP
 fi
 echo "ip $IP"
+echo "port $PORT"
 
 
 

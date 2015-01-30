@@ -322,6 +322,7 @@ TYPE(cls_lock_break_op)
 TYPE(cls_lock_get_info_op)
 TYPE(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
+TYPE(cls_lock_assert_op)
 
 #include "cls/replica_log/cls_replica_log_types.h"
 TYPE(cls_replica_log_item_marker)

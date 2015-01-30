@@ -40,14 +40,14 @@ namespace librbd {
 		 snapid_t snap_id, uint64_t *size, uint8_t *order);
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
-    int set_size(librados::IoCtx *ioctx, const std::string &oid,
-		 uint64_t size);
+    void set_size(librados::ObjectWriteOperation *op, uint64_t size);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, parent_spec *pspec,
 		   uint64_t *parent_overlap);
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   parent_spec pspec, uint64_t parent_overlap);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
+    void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
 		  parent_spec pspec, const std::string &c_imageid);
     int remove_child(librados::IoCtx *ioctx, const std::string &oid,
@@ -56,6 +56,8 @@ namespace librbd {
 		     parent_spec pspec, set<string>& children);
     int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
 		     snapid_t snap_id, const std::string &snap_name);
+    void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
+		      const std::string &snap_name);
     int snapshot_remove(librados::IoCtx *ioctx, const std::string &oid,
 			snapid_t snap_id);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,

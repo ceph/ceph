@@ -53,6 +53,8 @@ enum {
   l_librbd_last,
 };
 
+class Context;
+
 namespace librbd {
 
   struct AioCompletion;
@@ -105,8 +107,7 @@ namespace librbd {
   int remove(librados::IoCtx& io_ctx, const char *imgname,
 	     ProgressContext& prog_ctx);
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
-  int resize_helper(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx);
-  int snap_create(ImageCtx *ictx, const char *snap_name);
+  int snap_create(ImageCtx *ictx, const char *snap_name, bool notify);
   int snap_list(ImageCtx *ictx, std::vector<snap_info_t>& snaps);
   bool snap_exists(ImageCtx *ictx, const char *snap_name);
   int snap_rollback(ImageCtx *ictx, const char *snap_name,
@@ -184,6 +185,15 @@ namespace librbd {
 	       char *buf, bufferlist *pbl, int op_flags);
   ssize_t write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf, int op_flags);
   int discard(ImageCtx *ictx, uint64_t off, uint64_t len);
+
+  int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
+  int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
+		   ProgressContext &prog_ctx);
+  int async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
+			  uint64_t new_size, ProgressContext& prog_ctx);
+  int async_trim_image(ImageCtx *ictx, Context *ctx, uint64_t original_size,
+		       uint64_t new_size, ProgressContext& prog_ctx);
+
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c, int op_flags);
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c);

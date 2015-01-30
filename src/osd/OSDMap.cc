@@ -1034,10 +1034,12 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES2;
   if (crush->has_nondefault_tunables3())
     features |= CEPH_FEATURE_CRUSH_TUNABLES3;
+  if (crush->has_v4_buckets())
+    features |= CEPH_FEATURE_CRUSH_V4;
   mask |= CEPH_FEATURES_CRUSH;
 
   for (map<int64_t,pg_pool_t>::const_iterator p = pools.begin(); p != pools.end(); ++p) {
-    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL) {
+    if (p->second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
     if (p->second.is_erasure() &&
@@ -1177,7 +1179,16 @@ void OSDMap::remove_redundant_temporaries(CephContext *cct, const OSDMap& osdmap
   for (map<pg_t,vector<int32_t> >::iterator p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (pending_inc->new_pg_temp.count(p->first) == 0) {
+
+    // if pool does not exist, remove any existing pg_temps associated with
+    // it.  we don't care about pg_temps on the pending_inc either; if there
+    // are new_pg_temp entries on the pending, clear them out just as well.
+    if (!osdmap.have_pg_pool(p->first.pool())) {
+      ldout(cct, 10) << " removing pg_temp " << p->first
+        << " for inexistent pool " << p->first.pool() << dendl;
+      pending_inc->new_pg_temp[p->first].clear();
+
+    } else if (pending_inc->new_pg_temp.count(p->first) == 0) {
       vector<int> raw_up;
       int primary;
       osdmap.pg_to_raw_up(p->first, &raw_up, &primary);
@@ -2730,7 +2741,7 @@ int OSDMap::build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+  int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");
@@ -2766,7 +2777,8 @@ int OSDMap::build_simple_crush_map_from_conf(CephContext *cct,
   // root
   int root_type = _build_crush_types(crush);
   int rootid;
-  int r = crush.add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_DEFAULT,
+  int r = crush.add_bucket(0, 0,
+			   CRUSH_HASH_DEFAULT,
 			   root_type, 0, NULL, NULL, &rootid);
   assert(r == 0);
   crush.set_item_name(rootid, "default");

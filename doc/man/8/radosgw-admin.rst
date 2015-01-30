@@ -200,7 +200,7 @@ Trim usage information for user until March 1st, 2012::
 Availability
 ============
 
-**radosgw-admin** is part of the Ceph distributed storage system.  Please
+**radosgw-admin** is part of Ceph, a massively scalable, open-source, distributed storage system.  Please
 refer to the Ceph documentation at http://ceph.com/docs for more
 information.
 

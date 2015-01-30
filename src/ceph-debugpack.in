@@ -22,7 +22,7 @@ usage_exit() {
 wait_pid_exit() {
 	pid=$1
 
-	for i in {1..10}; do
+	for i in $(seq 10); do
 		[ -e /proc/$pid ] || return
 		sleep 1
 	done

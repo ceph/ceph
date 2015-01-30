@@ -1501,13 +1501,13 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_lock("OSD::osd_lock"),
   tick_timer(cct, osd_lock),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.length() ?
-								      cct->_conf->auth_supported :
-								      cct->_conf->auth_cluster_required)),
+								      cct->_conf->auth_supported.empty() ?
+								      cct->_conf->auth_cluster_required :
+								      cct->_conf->auth_supported)),
   authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.length() ?
-								      cct->_conf->auth_supported :
-								      cct->_conf->auth_service_required)),
+								      cct->_conf->auth_supported.empty() ?
+								      cct->_conf->auth_service_required :
+								      cct->_conf->auth_supported)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),
@@ -2062,7 +2062,6 @@ void OSD::create_logger()
 
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
 
-  osd_plb.add_u64(l_osd_opq, "opq");       // op queue length (waiting to be processed yet)
   osd_plb.add_u64(l_osd_op_wip, "op_wip");   // rep ops currently being processed (primary)
 
   osd_plb.add_u64_counter(l_osd_op,       "op");           // client ops
@@ -2145,6 +2144,9 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip");
   osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush");
   osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict");
+
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit");
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total");
 
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -2773,12 +2775,6 @@ void OSD::load_pgs()
     if (!head_pgs.count(pgid)) {
       dout(10) << __func__ << ": " << pgid << " has orphan snap collections " << i->second
 	       << " with no head" << dendl;
-      continue;
-    }
-
-    if (!osdmap->have_pg_pool(pgid.pool())) {
-      dout(10) << __func__ << ": skipping PG " << pgid << " because we don't have pool "
-	       << pgid.pool() << dendl;
       continue;
     }
 
@@ -4170,6 +4166,10 @@ void OSD::RemoveWQ::_process(
   for (list<coll_t>::iterator i = colls_to_remove.begin();
        i != colls_to_remove.end();
        ++i) {
+    if (g_conf->osd_inject_failure_on_pg_removal) {
+      generic_derr << "osd_inject_failure_on_pg_removal" << dendl;
+      exit(1);
+    }
     t->remove_collection(*i);
   }
 

@@ -1,7 +1,7 @@
 include Makefile-env.am
 
 SUBDIRS += ocf java tracing
-DIST_SUBDIRS += gtest ocf libs3 java tracing
+DIST_SUBDIRS += gmock ocf libs3 java tracing
 
 
 
