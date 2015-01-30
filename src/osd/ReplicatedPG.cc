@@ -3009,8 +3009,10 @@ void ReplicatedPG::snap_trimmer()
 int ReplicatedPG::do_xattr_cmp_u64(int op, __u64 v1, bufferlist& xattr)
 {
   __u64 v2;
-  if (xattr.length())
-    v2 = atoll(xattr.c_str());
+
+  string v2s(xattr.c_str(), xattr.length());
+  if (v2s.length())
+    v2 = strtoull(v2s.c_str(), NULL, 10);
   else
     v2 = 0;
 
