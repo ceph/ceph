@@ -343,11 +343,16 @@ private:
   int last_use;
 
 public:
-  XioPortals(Messenger *msgr, int _n) : p_vec(NULL), n(_n)
+  XioPortals(Messenger *msgr, int _n) : p_vec(NULL)
     {
       /* portal0 */
       portals.push_back(new XioPortal(msgr));
       last_use = 0;
+
+      /* enforce at least two portals if bind */
+      if (_n < 2)
+        _n = 2;
+      n = _n;
 
       /* additional portals allocated on bind() */
     }
@@ -367,7 +372,7 @@ public:
   int get_last_use()
   {
     int pix = last_use;
-    if (++last_use == get_portals_len() - 2)
+    if (++last_use >= get_portals_len() - 1)
       last_use = 0;
     return pix;
   }
@@ -389,7 +394,7 @@ public:
 
       return xio_accept(session,
 			(const char **)&(portals_vec[pix]),
-			2, NULL, 0);
+			1, NULL, 0);
     }
 
   void start()
