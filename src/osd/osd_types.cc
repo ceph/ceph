@@ -694,6 +694,22 @@ void coll_t::generate_test_instances(list<coll_t*>& o)
 
 // ---
 
+std::string pg_vector_string(const vector<int32_t> &a)
+{
+  ostringstream oss;
+  oss << "[";
+  for (vector<int32_t>::const_iterator i = a.begin(); i != a.end(); ++i) {
+    if (i != a.begin()) 
+      oss << ",";
+    if (*i != CRUSH_ITEM_NONE) 
+      oss << *i;
+    else 
+      oss << "NONE";
+  }
+  oss << "]";
+  return oss.str();
+}
+
 std::string pg_state_string(int state)
 {
   ostringstream oss;
