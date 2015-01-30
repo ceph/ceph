@@ -563,9 +563,9 @@ void ReplicatedBackend::submit_transaction(
     reqid,
     trim_to,
     trim_rollback_to,
-    t->get_temp_added().size() ? *(t->get_temp_added().begin()) : hobject_t(),
-    t->get_temp_cleared().size() ?
-      *(t->get_temp_cleared().begin()) :hobject_t(),
+    t->get_temp_added().empty() ? hobject_t() : *(t->get_temp_added().begin()),
+    t->get_temp_cleared().empty() ?
+      hobject_t() : *(t->get_temp_cleared().begin()),
     log_entries,
     hset_history,
     &op,
@@ -573,7 +573,7 @@ void ReplicatedBackend::submit_transaction(
 
   ObjectStore::Transaction local_t;
   local_t.set_use_tbl(op_t->get_use_tbl());
-  if (t->get_temp_added().size()) {
+  if (!(t->get_temp_added().empty())) {
     get_temp_coll(&local_t);
     add_temp_objs(t->get_temp_added());
   }

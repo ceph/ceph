@@ -47,6 +47,7 @@ public:
 
   virtual TestIoCtxImpl *clone() = 0;
 
+  virtual uint64_t get_instance_id() const;
   virtual int64_t get_id();
   virtual uint64_t get_last_version();
   virtual std::string get_pool_name();

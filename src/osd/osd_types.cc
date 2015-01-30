@@ -92,6 +92,9 @@ const char * ceph_osd_op_flag_name(unsigned flag)
     case CEPH_OSD_OP_FLAG_FADVISE_DONTNEED:
       name = "fadvise_dontneed";
       break;
+    case CEPH_OSD_OP_FLAG_FADVISE_NOCACHE:
+      name = "fadvise_nocache";
+      break;
     default:
       name = "???";
   };

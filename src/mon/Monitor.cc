@@ -145,11 +145,11 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   log_client(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
   auth_cluster_required(cct,
-			cct->_conf->auth_supported.length() ?
-			cct->_conf->auth_supported : cct->_conf->auth_cluster_required),
+			cct->_conf->auth_supported.empty() ?
+			cct->_conf->auth_cluster_required : cct->_conf->auth_supported),
   auth_service_required(cct,
-			cct->_conf->auth_supported.length() ?
-			cct->_conf->auth_supported : cct->_conf->auth_service_required),
+			cct->_conf->auth_supported.empty() ?
+			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
   leader_supported_mon_commands(NULL),
   leader_supported_mon_commands_size(0),
   store(s),
@@ -2504,10 +2504,10 @@ void Monitor::set_leader_supported_commands(const MonCommand *cmds, int size)
 
 bool Monitor::is_keyring_required()
 {
-  string auth_cluster_required = g_conf->auth_supported.length() ?
-    g_conf->auth_supported : g_conf->auth_cluster_required;
-  string auth_service_required = g_conf->auth_supported.length() ?
-    g_conf->auth_supported : g_conf->auth_service_required;
+  string auth_cluster_required = g_conf->auth_supported.empty() ?
+    g_conf->auth_cluster_required : g_conf->auth_supported;
+  string auth_service_required = g_conf->auth_supported.empty() ?
+    g_conf->auth_service_required : g_conf->auth_supported;
 
   return auth_service_required == "cephx" ||
     auth_cluster_required == "cephx";

@@ -159,7 +159,7 @@ To read a previously snapshotted version of an object::
 Availability
 ============
 
-**rados** is part of the Ceph distributed storage system. Please refer to
+**rados** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 

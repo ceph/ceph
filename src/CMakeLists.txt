@@ -520,7 +520,7 @@ endif(${WITH_MDS})
 add_subdirectory(erasure-code)
 
 # Support/Tools
-add_subdirectory(gtest)
+add_subdirectory(gmock)
 add_subdirectory(test)
 set(cephfs_srcs cephfs.cc)
 add_executable(cephfstool ${cephfs_srcs})

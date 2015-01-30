@@ -422,6 +422,7 @@ void ReplicatedPG::wait_for_unreadable_object(
 void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
 {
   waiting_for_all_missing.push_back(op);
+  op->mark_delayed("waiting for all missing");
 }
 
 bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
@@ -1232,6 +1233,7 @@ ReplicatedPG::ReplicatedPG(OSDService *o, OSDMapRef curmap,
   pgbackend(
     PGBackend::build_pg_backend(
       _pool.info, curmap, this, coll_t(p), coll_t::make_temp_coll(p), o->store, cct)),
+  object_contexts(o->cct, g_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("ReplicatedPG::snapset_contexts"),
   new_backfill(false),
   temp_seq(0),
@@ -1267,6 +1269,7 @@ void ReplicatedPG::do_request(
 	     << " flushes_in_progress pending "
 	     << "waiting for active on " << op << dendl;
     waiting_for_active.push_back(op);
+    op->mark_delayed("waiting for flushes");
     return;
   }
 
@@ -1278,6 +1281,7 @@ void ReplicatedPG::do_request(
       return;
     } else {
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for active");
       return;
     }
   }
@@ -1291,6 +1295,7 @@ void ReplicatedPG::do_request(
     if (is_replay()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
+      op->mark_delayed("waiting for replay end");
       return;
     }
     // verify client features
@@ -2230,7 +2235,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // check for full
   if (ctx->delta_stats.num_bytes > 0 &&
-      pool.info.get_flags() & pg_pool_t::FLAG_FULL) {
+      pool.info.has_flag(pg_pool_t::FLAG_FULL)) {
     reply_ctx(ctx, -ENOSPC);
     return;
   }
@@ -4182,6 +4187,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
+	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
+	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
 	if (pool.info.requires_aligned_append() &&
 	    (op.extent.offset % pool.info.required_alignment() != 0)) {
 	  result = -EOPNOTSUPP;
@@ -4264,6 +4272,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
 	if (result < 0)
 	  break;
+
+	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
+	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
 	if (pool.info.require_rollback()) {
 	  if (obs.exists) {
@@ -7903,10 +7914,13 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       pg_log.get_log().objects.find(soid)->second->op ==
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
+  osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
+    osd->logger->inc(l_osd_object_ctx_cache_hit);
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
   } else {
+    dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
     bufferlist bv;
     if (attrs) {
@@ -8422,8 +8436,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 
   p = m->logbl.begin();
   ::decode(log, p);
-  rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
-
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
@@ -10283,7 +10295,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   // requeue everything in the reverse order they should be
   // reexamined.
-
   clear_scrub_reserved();
   scrub_clear_state();
 
@@ -10345,6 +10356,11 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   debug_op_order.clear();
   unstable_stats.clear();
+
+  // we don't want to cache object_contexts through the interval change
+  // NOTE: we actually assert that all currently live references are dead
+  // by the time the flush for the next interval completes.
+  object_contexts.clear();
 }
 
 void ReplicatedPG::on_role_change()
@@ -11263,8 +11279,8 @@ int ReplicatedPG::recover_backfill(
     dout(20) << *i << " is still in flight" << dendl;
   }
 
-  hobject_t next_backfill_to_complete = backfills_in_flight.size() ?
-    *(backfills_in_flight.begin()) : backfill_pos;
+  hobject_t next_backfill_to_complete = backfills_in_flight.empty() ?
+    backfill_pos : *(backfills_in_flight.begin());
   hobject_t new_last_backfill = earliest_backfill();
   dout(10) << "starting new_last_backfill at " << new_last_backfill << dendl;
   for (map<hobject_t, pg_stat_t>::iterator i = pending_backfill_updates.begin();
@@ -11793,9 +11809,12 @@ void ReplicatedPG::hit_set_persist()
   obc->obs.oi.mtime = now;
   obc->obs.oi.size = bl.length();
   obc->obs.exists = true;
+  obc->obs.oi.set_data_digest(bl.crc32c(-1));
 
   ctx->new_obs = obc->obs;
-  ctx->new_snapset.head_exists = true;
+
+  obc->ssc->snapset.head_exists = true;
+  ctx->new_snapset = obc->ssc->snapset;
 
   ctx->delta_stats.num_objects++;
   ctx->delta_stats.num_objects_hit_set_archive++;

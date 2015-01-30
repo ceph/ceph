@@ -44,6 +44,25 @@ TestIoCtxImpl *TestMemRadosClient::create_ioctx(int64_t pool_id,
   return new TestMemIoCtxImpl(*this, pool_id, pool_name, iter->second);
 }
 
+void TestMemRadosClient::object_list(int64_t pool_id,
+ 				     std::list<librados::TestRadosClient::Object> *list) {
+  list->clear();
+
+  for (Pools::iterator p_it = m_pools.begin(); p_it != m_pools.end(); ++p_it) {
+    Pool *pool = p_it->second;
+    if (pool->pool_id == pool_id) {
+      RWLock::RLocker l(pool->file_lock);
+      for (Files::iterator it = pool->files.begin();
+	   it != pool->files.end(); ++it) {
+	Object obj;
+	obj.oid = it->first;
+	list->push_back(obj);
+      } 
+      break;
+    }
+  }
+} 
+
 int TestMemRadosClient::pool_create(const std::string &pool_name) {
   if (m_pools.find(pool_name) != m_pools.end()) {
     return -EEXIST;

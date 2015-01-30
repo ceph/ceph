@@ -1,12 +1,12 @@
 [submodule "ceph-object-corpus"]
 	path = ceph-object-corpus
-	url = git://github.com/ceph/ceph-object-corpus.git
+	url = https://github.com/ceph/ceph-object-corpus.git
 [submodule "src/libs3"]
 	path = src/libs3
-	url = git://github.com/ceph/libs3.git
+	url = https://github.com/ceph/libs3.git
 [submodule "src/civetweb"]
 	path = src/civetweb
-	url = git://github.com/ceph/civetweb
+	url = https://github.com/ceph/civetweb
 [submodule "src/erasure-code/jerasure/jerasure"]
 	path = src/erasure-code/jerasure/jerasure
 	url = https://github.com/ceph/jerasure.git
@@ -17,7 +17,7 @@
 	branch = v2-ceph
 [submodule "src/rocksdb"]
 	path = src/rocksdb
-	url = git://github.com/ceph/rocksdb
+	url = https://github.com/ceph/rocksdb
 	ignore = dirty
 [submodule "ceph-erasure-code-corpus"]
 	path = ceph-erasure-code-corpus

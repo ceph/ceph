@@ -181,9 +181,9 @@ public:
   }
   // This function maybe needs some work; assumes last event is completion time
   double get_duration() const {
-    return events.size() ?
-      (events.rbegin()->first - get_initiated()) :
-      0.0;
+    return events.empty() ?
+      0.0 :
+      (events.rbegin()->first - get_initiated());
   }
 
   void mark_event(const string &event);

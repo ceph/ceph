@@ -59,6 +59,7 @@
 #define CEPH_FEATURE_OSD_OBJECT_DIGEST  (1ULL<<46)  /* overlap with fadvise */
 #define CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT (1ULL<<46) /* overlap w/ fadvise */
 #define CEPH_FEATURE_MDS_QUOTA      (1ULL<<47)
+#define CEPH_FEATURE_CRUSH_V4      (1ULL<<48)  /* straw2 buckets */
 
 #define CEPH_FEATURE_RESERVED2 (1ULL<<61)  /* slow down, we are almost out... */
 #define CEPH_FEATURE_RESERVED  (1ULL<<62)  /* DO NOT USE THIS ... last bit! */
@@ -142,6 +143,7 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	 CEPH_FEATURE_OSD_OBJECT_DIGEST	|    \
          CEPH_FEATURE_OSD_TRANSACTION_MAY_LAYOUT |   \
 	 CEPH_FEATURE_MDS_QUOTA | \
+         CEPH_FEATURE_CRUSH_V4 |	     \
 	 0ULL)
 
 #define CEPH_FEATURES_SUPPORTED_DEFAULT  CEPH_FEATURES_ALL
@@ -153,7 +155,8 @@ static inline unsigned long long ceph_sanitize_features(unsigned long long f) {
 	(CEPH_FEATURE_CRUSH_TUNABLES |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES2 |		\
 	 CEPH_FEATURE_CRUSH_TUNABLES3 |		\
-	 CEPH_FEATURE_CRUSH_V2)
+	 CEPH_FEATURE_CRUSH_V2 |		\
+	 CEPH_FEATURE_CRUSH_V4)
 
 /*
  * make sure we don't try to use the reserved features

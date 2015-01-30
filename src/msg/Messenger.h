@@ -32,6 +32,8 @@ using namespace std;
 #include <errno.h>
 #include <sstream>
 
+#define SOCKET_PRIORITY_MIN_DELAY 6
+
 class MDS;
 class Timer;
 
@@ -48,6 +50,7 @@ protected:
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
   uint32_t magic;
+  int socket_priority;
 
 public:
   /**
@@ -128,7 +131,9 @@ public:
   Messenger(CephContext *cct_, entity_name_t w)
     : my_inst(),
       default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
-      magic(0), cct(cct_),
+      magic(0),
+      socket_priority(-1),
+      cct(cct_),
       crcflags(get_default_crc_flags(cct->_conf))
   {
     my_inst.name = w;
@@ -305,6 +310,27 @@ public:
   void set_default_send_priority(int p) {
     assert(!started);
     default_send_priority = p;
+  }
+  /**
+   * Set the priority(SO_PRIORITY) for all packets to be sent on this socket.
+   *
+   * Linux uses this value to order the networking queues: packets with a higher
+   * priority may be processed first depending on the selected device queueing
+   * discipline.
+   *
+   * @param prio The priority. Setting a priority outside the range 0 to 6
+   * requires the CAP_NET_ADMIN capability.
+   */
+  void set_socket_priority(int prio) {
+    socket_priority = prio;
+  }
+  /**
+   * Get the socket priority
+   *
+   * @return the socket priority
+   */
+  int get_socket_priority() {
+    return socket_priority;
   }
   /**
    * Add a new Dispatcher to the front of the list. If you add

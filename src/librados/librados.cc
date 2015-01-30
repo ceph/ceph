@@ -98,6 +98,8 @@ static void set_op_flags(::ObjectOperation *o, int flags)
     rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_WILLNEED;
   if (flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
     rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+  if (flags & LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
+    rados_flags |= CEPH_OSD_OP_FLAG_FADVISE_NOCACHE;
   o->set_last_op_flags(rados_flags);
 }
 
@@ -1035,6 +1037,11 @@ std::string librados::IoCtx::get_pool_name()
   std::string s;
   io_ctx_impl->client->pool_get_name(get_id(), &s);
   return s;
+}
+
+uint64_t librados::IoCtx::get_instance_id() const
+{
+  return io_ctx_impl->client->get_instance_id();
 }
 
 int librados::IoCtx::create(const std::string& oid, bool exclusive)
