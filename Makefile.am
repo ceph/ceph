@@ -1,7 +1,7 @@
 AUTOMAKE_OPTIONS = gnu
 ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = autogen.sh ceph.spec.in ceph.spec install-deps.sh
-# the "." here makes sure check-local builds gtest before it is used
+# the "." here makes sure check-local builds gtest and gmock before they are used
 SUBDIRS = . src man
 
 EXTRA_DIST += \
@@ -28,13 +28,15 @@ all-local:
 if WITH_DEBUG
 #	We need gtest to build the rados-api tests. We only build those in
 #	a debug build, though.
-	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.a lib/libgtest_main.a
+	@cd src/gmock/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 endif
 
 check-local: all
 #	We build gtest this way, instead of using SUBDIRS, because with that,
 #	gtest's own tests would be run and that would slow us down.
-	@cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.a lib/libgtest_main.a
+	@cd src/gmock/gtest && $(MAKE) $(AM_MAKEFLAGS) lib/libgtest.la lib/libgtest_main.la
+	@cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) lib/libgmock.la lib/libgmock_main.la
 #	exercise cli tools
 	$(srcdir)/src/test/run-cli-tests '$(top_builddir)/src/test'
 
@@ -42,9 +44,9 @@ check-local: all
 # gtest is in DIST_SUBDIRS. Take extra care to not fail when
 # effectively cleaned twice.
 clean-local:
-	@if test -e src/gtest/Makefile; then \
-	  echo "Making clean in src/gtest"; \
-	  cd src/gtest && $(MAKE) $(AM_MAKEFLAGS) clean; \
+	@if test -e src/gmock/Makefile; then \
+	  echo "Making clean in src/gmock"; \
+	  cd src/gmock && $(MAKE) $(AM_MAKEFLAGS) clean; \
 	fi
 
 	@rm -rf src/test/virtualenv

@@ -15,6 +15,7 @@
 #include "objclass/objclass.h"
 #include <boost/bind.hpp>
 #include <deque>
+#include <list>
 #include <vector>
 
 static librados::TestClassHandler *get_class_handler() {
@@ -207,6 +208,53 @@ extern "C" int rados_mon_command(rados_t cluster, const char **cmd,
   return ret;
 }
 
+extern "C" int rados_nobjects_list_open(rados_ioctx_t io,
+                                        rados_list_ctx_t *ctx) {
+  librados::TestIoCtxImpl *io_ctx =
+    reinterpret_cast<librados::TestIoCtxImpl*>(io);
+  librados::TestRadosClient *client = io_ctx->get_rados_client();
+
+  std::list<librados::TestRadosClient::Object> *list =
+    new std::list<librados::TestRadosClient::Object>();
+  
+  client->object_list(io_ctx->get_id(), list);
+  list->push_front(librados::TestRadosClient::Object());
+  *ctx = reinterpret_cast<rados_list_ctx_t>(list);
+  return 0;
+}
+
+extern "C" int rados_nobjects_list_next(rados_list_ctx_t ctx,
+                                        const char **entry,
+                                        const char **key,
+                                        const char **nspace) {
+  std::list<librados::TestRadosClient::Object> *list =
+    reinterpret_cast<std::list<librados::TestRadosClient::Object> *>(ctx);
+  if (!list->empty()) {
+    list->pop_front();
+  }
+  if (list->empty()) {
+    return -ENOENT;
+  }
+
+  librados::TestRadosClient::Object &obj = list->front();
+  if (entry != NULL) {
+    *entry = obj.oid.c_str();
+  }
+  if (key != NULL) {
+    *key = obj.locator.c_str();
+  }
+  if (nspace != NULL) {
+    *nspace = obj.nspace.c_str();
+  }
+  return 0;
+}
+
+extern "C" void rados_nobjects_list_close(rados_list_ctx_t ctx) {
+  std::list<librados::TestRadosClient::Object> *list =
+    reinterpret_cast<std::list<librados::TestRadosClient::Object> *>(ctx);
+  delete list;
+}
+
 extern "C" int rados_pool_create(rados_t cluster, const char *pool_name) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
@@ -329,6 +377,11 @@ void IoCtx::from_rados_ioctx_t(rados_ioctx_t p, IoCtx &io) {
 
   io.close();
   io.io_ctx_impl = reinterpret_cast<IoCtxImpl*>(ctx);
+}
+
+uint64_t IoCtx::get_instance_id() const {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->get_instance_id();
 }
 
 int64_t IoCtx::get_id() {

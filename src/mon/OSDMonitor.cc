@@ -3071,6 +3071,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        f->dump_string("erasure_code_profile", p->erasure_code_profile);
       } else if (var == "min_read_recency_for_promote") {
 	f->dump_int("min_read_recency_for_promote", p->min_read_recency_for_promote);
+      } else if (var == "write_fadvise_dontneed") {
+	f->dump_string("write_fadvise_dontneed", p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
       }
 
       f->close_section();
@@ -3122,6 +3124,8 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
        ss << "erasure_code_profile: " << p->erasure_code_profile;
       } else if (var == "min_read_recency_for_promote") {
 	ss << "min_read_recency_for_promote: " << p->min_read_recency_for_promote;
+      } else if (var == "write_fadvise_dontneed") {
+	ss << "write_fadvise_dontneed: " <<  (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
       }
 
       rdata.append(ss);
@@ -3411,7 +3415,7 @@ bool OSDMonitor::update_pools_status()
       (pool.quota_max_bytes > 0 && (uint64_t)sum.num_bytes >= pool.quota_max_bytes) ||
       (pool.quota_max_objects > 0 && (uint64_t)sum.num_objects >= pool.quota_max_objects);
 
-    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+    if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
       if (pool_is_full)
         continue;
 
@@ -3458,7 +3462,7 @@ void OSDMonitor::get_pools_health(
     const pg_pool_t &pool = it->second;
     const string& pool_name = osdmap.get_pool_name(it->first);
 
-    if (pool.get_flags() & pg_pool_t::FLAG_FULL) {
+    if (pool.has_flag(pg_pool_t::FLAG_FULL)) {
       // uncomment these asserts if/when we update the FULL flag on pg_stat update
       //assert((pool.quota_max_objects > 0) || (pool.quota_max_bytes > 0));
 
@@ -3477,7 +3481,7 @@ void OSDMonitor::get_pools_health(
       health_status_t status = HEALTH_OK;
       if ((uint64_t)sum.num_objects >= pool.quota_max_objects) {
 	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-        //assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+        //assert(pool.has_flag(pg_pool_t::FLAG_FULL));
       } else if (crit_threshold > 0 &&
 		 sum.num_objects >= pool.quota_max_objects*crit_threshold) {
         ss << "pool '" << pool_name
@@ -3504,7 +3508,7 @@ void OSDMonitor::get_pools_health(
       stringstream ss;
       if ((uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
 	// uncomment these asserts if/when we update the FULL flag on pg_stat update
-	//assert(pool.get_flags() & pg_pool_t::FLAG_FULL);
+	//assert(pool.has_flag(pg_pool_t::FLAG_FULL));
       } else if (crit_threshold > 0 &&
 		 sum.num_bytes >= pool.quota_max_bytes*crit_threshold) {
         ss << "pool '" << pool_name
@@ -3691,12 +3695,13 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   OSDMap newmap;
   newmap.deepish_copy_from(osdmap);
   newmap.apply_incremental(new_pending);
-  uint64_t features = newmap.get_features(CEPH_ENTITY_TYPE_MON, NULL);
+
+  uint64_t features =
+    newmap.get_features(CEPH_ENTITY_TYPE_MON, NULL) |
+    newmap.get_features(CEPH_ENTITY_TYPE_OSD, NULL);
 
   stringstream features_ss;
-
   int r = check_cluster_features(features, features_ss);
-
   if (!r)
     return true;
 
@@ -3929,6 +3934,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  const uint64_t expected_num_objects,
 				 stringstream &ss)
 {
+  if (name.length() == 0)
+    return -EINVAL;
   int r;
   r = prepare_pool_crush_ruleset(pool_type, erasure_code_profile,
 				 crush_ruleset_name, &crush_ruleset, ss);
@@ -4362,6 +4369,15 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -EINVAL;
     }
     p.min_read_recency_for_promote = n;
+  } else if (var == "write_fadvise_dontneed") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.flags |= pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.flags &= ~pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
   } else {
     ss << "unrecognized variable '" << var << "'";
     return -EINVAL;
@@ -4507,9 +4523,9 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       goto reply;
     }
     int bucketno;
-    err = newcrush.add_bucket(0, CRUSH_BUCKET_STRAW,
-				       CRUSH_HASH_DEFAULT, type, 0, NULL,
-				       NULL, &bucketno);
+    err = newcrush.add_bucket(0, 0,
+			      CRUSH_HASH_DEFAULT, type, 0, NULL,
+			      NULL, &bucketno);
     if (err < 0) {
       ss << "add_bucket error: '" << cpp_strerror(err) << "'";
       goto reply;
@@ -6466,7 +6482,7 @@ done:
     }
     string out_str;
     err = reweight_by_utilization(oload, out_str, true,
-				  pools.size() ? &pools : NULL);
+				  pools.empty() ? NULL : &pools);
     if (err < 0) {
       ss << "FAILED reweight-by-pg: " << out_str;
     } else if (err == 0) {

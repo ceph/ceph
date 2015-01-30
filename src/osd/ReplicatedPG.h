@@ -942,7 +942,7 @@ protected:
   friend struct C_OnPushCommit;
 
   // projected object info
-  SharedPtrRegistry<hobject_t, ObjectContext> object_contexts;
+  SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
   map<hobject_t, SnapSetContext*> snapset_contexts;
   Mutex snapset_contexts_lock;

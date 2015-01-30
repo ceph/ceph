@@ -74,10 +74,12 @@ enum {
   LIBRADOS_OP_FLAG_FADVISE_RANDOM     = 0x4,
   // indicate read/write op sequential
   LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8,
-  // indicate read/write data will be accessed in the near future
+  // indicate read/write data will be accessed in the near future (by someone)
   LIBRADOS_OP_FLAG_FADVISE_WILLNEED   = 0x10,
-  // indicate read/write data will not accessed int the near future
+  // indicate read/write data will not accessed in the near future (by anyone)
   LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20,
+  // indicate read/write data will not accessed again (by *this* client)
+  LIBRADOS_OP_FLAG_FADVISE_NOCACHE    = 0x40,
 };
 
 #if __GNUC__ >= 4

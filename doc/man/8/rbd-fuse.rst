@@ -43,7 +43,7 @@ Any options not recognized by rbd-fuse will be passed on to libfuse.
 Availability
 ============
 
-**rbd-fuse** is part of the Ceph distributed storage system. Please refer to
+**rbd-fuse** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
 the Ceph documentation at http://ceph.com/docs for more information.
 
 

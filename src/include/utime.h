@@ -278,7 +278,18 @@ public:
         }
       }
     } else {
-      return -EINVAL;
+      int sec, usec;
+      int r = sscanf(date.c_str(), "%d.%d", &sec, &usec);
+      if (r != 2) {
+        return -EINVAL;
+      }
+
+      time_t tt = sec;
+      gmtime_r(&tt, &tm);
+
+      if (nsec) {
+        *nsec = usec * 1000;
+      }
     }
     time_t t = timegm(&tm);
     if (epoch)

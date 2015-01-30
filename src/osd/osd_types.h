@@ -826,6 +826,7 @@ struct pg_pool_t {
     FLAG_NODELETE = 1<<4, // pool can't be deleted
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
     FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
+    FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
   };
 
   static const char *get_flag_name(int f) {
@@ -837,6 +838,7 @@ struct pg_pool_t {
     case FLAG_NODELETE: return "nodelete";
     case FLAG_NOPGCHANGE: return "nopgchange";
     case FLAG_NOSIZECHANGE: return "nosizechange";
+    case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
     default: return "???";
     }
   }
@@ -869,6 +871,8 @@ struct pg_pool_t {
       return FLAG_NOPGCHANGE;
     if (name == "nosizechange")
       return FLAG_NOSIZECHANGE;
+    if (name == "write_fadvise_dontneed")
+      return FLAG_WRITE_FADVISE_DONTNEED;
     return 0;
   }
 
