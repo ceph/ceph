@@ -1033,11 +1033,11 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   assert(lock.is_locked());
   bool success = true;
   int error = 0;
-  list<BufferHead*> hit_ls;
   uint64_t bytes_in_cache = 0;
   uint64_t bytes_not_in_cache = 0;
   uint64_t total_bytes_read = 0;
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
+  bool dontneed = rd->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
 
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
@@ -1170,11 +1170,20 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       for (map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
            bh_it != hits.end();
            ++bh_it) {
-	ldout(cct, 10) << "readx hit bh " << *bh_it->second << dendl;
-	if (bh_it->second->is_error() && bh_it->second->error)
-	  error = bh_it->second->error;
-        hit_ls.push_back(bh_it->second);
-        bytes_in_cache += bh_it->second->length();
+	BufferHead *bh = bh_it->second;
+	ldout(cct, 10) << "readx hit bh " << *bh << dendl;
+	if (bh->is_error() && bh->error)
+	  error = bh->error;
+        bytes_in_cache += bh->length();
+
+	touch_bh(bh);
+	//must be after touch_bh because touch_bh set dontneed false
+	if (dontneed &&
+	    ((loff_t)ex_it->offset <= bh->start() && (bh->end() <= (loff_t)(ex_it->offset + ex_it->length)))) {
+	  bh->set_dontneed(true); //if dirty
+	  if (bh->is_clean())
+	    bh_lru_rest.lru_bottouch(bh);
+	}
       }
 
       // create reverse map of buffer offset -> object for the eventual result.
@@ -1230,12 +1239,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     }
   }
   
-  // bump hits in lru
-  for (list<BufferHead*>::iterator bhit = hit_ls.begin();
-       bhit != hit_ls.end();
-       ++bhit) 
-    touch_bh(*bhit);
-  
   if (!success) {
     if (perfcounter && external_call) {
       perfcounter->inc(l_objectcacher_data_read, total_bytes_read);
@@ -1257,7 +1260,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   }
 
   // no misses... success!  do the read.
-  assert(!hit_ls.empty());
   ldout(cct, 10) << "readx has all buffers" << dendl;
 
   // ok, assemble into result buffer.
