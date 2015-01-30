@@ -1461,6 +1461,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   int r = -1;
   bufferlist rdata;
   stringstream ss, ds;
+  bool primary = false;
 
   map<string, cmd_vartype> cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -1492,7 +1493,11 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     cmd_putval(g_ceph_context, cmdmap, "format", string("json"));
     cmd_putval(g_ceph_context, cmdmap, "dumpcontents", v);
     prefix = "pg dump";
+  } else if (prefix == "pg ls-by-primary") {
+    primary = true;
+    prefix = "pg ls";
   }
+   
 
   string format;
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
@@ -1615,7 +1620,7 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     while (!states.empty()) {
       string state = states.back();
       what.insert(state);
-      pg_map.get_filtered_pg_stats(state,pool,osd,false,pgs);
+      pg_map.get_filtered_pg_stats(state,pool,osd,primary,pgs);
       if (f && !pgs.empty()){
         pg_map.dump_filtered_pg_stats(f.get(),pgs);
         f->flush(ds);
