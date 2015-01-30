@@ -1988,7 +1988,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2035,7 +2035,7 @@ next:
 
   if (opt_cmd == OPT_BI_GET) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2059,7 +2059,7 @@ next:
 
   if (opt_cmd == OPT_BI_PUT) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -2084,7 +2084,7 @@ next:
 
   if (opt_cmd == OPT_BI_LIST) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(bucket_name, bucket_info, bucket);
+    int ret = init_bucket(bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
