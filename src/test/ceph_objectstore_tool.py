@@ -739,6 +739,7 @@ def main(argv):
                     if ret != 0:
                         logging.error("Bad exit status {ret} from set-bytes to restore object".format(ret=ret))
                         ERRORS += 1
+                    fd.close()
 
     try:
         os.unlink(GETNAME)
