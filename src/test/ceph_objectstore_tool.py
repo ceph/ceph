@@ -393,7 +393,7 @@ def main(argv):
             logging.debug(cmd)
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
-                logging.critical("Replicated pool object creation failed with {ret}".format(ret=ret))
+                logging.critical("Rados put command failed with {ret}".format(ret=ret))
                 return 1
 
             db[nspace][NAME] = {}
