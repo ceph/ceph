@@ -1496,6 +1496,8 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
   } else if (prefix == "pg ls-by-primary") {
     primary = true;
     prefix = "pg ls";
+  } else if (prefix == "pg ls-by-osd") {
+    prefix = "pg ls";
   }
    
 
