@@ -1240,7 +1240,7 @@ int RGWREST::preprocess(struct req_state *s, RGWClientIO *cio)
       s->content_length = 0;
     } else {
       string err;
-      s->content_length = strict_strtol(s->length, 10, &err);
+      s->content_length = strict_strtoll(s->length, 10, &err);
       if (!err.empty()) {
         ldout(s->cct, 10) << "bad content length, aborting" << dendl;
         return -EINVAL;
