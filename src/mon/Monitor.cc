@@ -3667,7 +3667,7 @@ void Monitor::timecheck_start_round()
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
     utime_t curr_time = ceph_clock_now(g_ceph_context);
     double max = g_conf->mon_timecheck_interval*3;
-    if (curr_time - timecheck_round_start > max) {
+    if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
       goto out;
     } else {
