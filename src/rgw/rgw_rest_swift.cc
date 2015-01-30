@@ -449,8 +449,13 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
 
 void RGWPutMetadata_ObjStore_SWIFT::send_response()
 {
-  if (!ret)
-    ret = STATUS_ACCEPTED;
+  if (!ret) {
+    /* Return 204 when post metadata on a container */
+    if (s->object.empty())
+      ret = STATUS_NO_CONTENT;
+    else
+      ret = STATUS_ACCEPTED;
+  }
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s, this);
