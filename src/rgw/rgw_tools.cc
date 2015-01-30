@@ -37,25 +37,34 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, string& oid, cons
   return ret;
 }
 
-int rgw_get_system_obj(RGWRados *rgwstore, void *ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
+int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, time_t *pmtime, map<string, bufferlist> *pattrs,
                        rgw_cache_entry_info *cache_info)
 {
   struct rgw_err err;
-  void *handle = NULL;
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
   rgw_obj obj(bucket, key);
 
   do {
-    int ret = rgwstore->prepare_get_obj(ctx, obj, NULL, NULL, pattrs, NULL,
-                                        NULL, pmtime, NULL, NULL, NULL, NULL,
-                                        objv_tracker, &handle, &err);
+    RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
+    RGWRados::SystemObject::Read rop(&source);
+
+    rop.stat_params.attrs = pattrs;
+    rop.stat_params.lastmod = pmtime;
+    rop.stat_params.perr = &err;
+
+    int ret = rop.stat(objv_tracker);
     if (ret < 0)
       return ret;
 
-    ret = rgwstore->get_obj(ctx, objv_tracker, &handle, obj, bl, 0, request_len - 1, cache_info);
-    rgwstore->finish_get_obj(&handle);
+    rop.read_params.cache_info = cache_info;
+
+    ret = rop.read(0, request_len - 1, bl, objv_tracker);
+    if (ret == -ECANCELED) {
+      /* raced, restart */
+      continue;
+    }
     if (ret < 0)
       return ret;
 

@@ -295,6 +295,14 @@ void dump_errno(struct req_state *s, int err)
   dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
+void dump_string_header(struct req_state *s, const char *name, const char *val)
+{
+  int r = s->cio->print("%s: %s\r\n", name, val);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
+  }
+}
+
 void dump_content_length(struct req_state *s, uint64_t len)
 {
   int r = s->cio->send_content_length(len);
@@ -345,8 +353,8 @@ void dump_uri_from_state(struct req_state *s)
     if (!s->bucket_name_str.empty()) {
       location += s->bucket_name_str;
       location += "/";
-      if (!s->object_str.empty()) {
-        location += s->object_str;
+      if (!s->object.empty()) {
+        location += s->object.name;
         s->cio->print("Location: %s\r\n", location.c_str());
       }
     }
@@ -1162,7 +1170,7 @@ int RGWHandler_ObjStore::read_permissions(RGWOp *op_obj)
       break;
     }
     /* is it a 'create bucket' request? */
-    if ((s->op == OP_PUT) && s->object_str.size() == 0)
+    if (op_obj->get_type() == RGW_OP_CREATE_BUCKET)
       return 0;
     only_bucket = true;
     break;

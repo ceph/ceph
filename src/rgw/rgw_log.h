@@ -18,7 +18,7 @@ struct rgw_log_entry {
   utime_t time;
   string remote_addr;
   string user;
-  string obj;
+  rgw_obj_key obj;
   string op;
   string uri;
   string http_status;
@@ -32,14 +32,14 @@ struct rgw_log_entry {
   string bucket_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(6, 5, bl);
+    ENCODE_START(7, 5, bl);
     ::encode(object_owner, bl);
     ::encode(bucket_owner, bl);
     ::encode(bucket, bl);
     ::encode(time, bl);
     ::encode(remote_addr, bl);
     ::encode(user, bl);
-    ::encode(obj, bl);
+    ::encode(obj.name, bl);
     ::encode(op, bl);
     ::encode(uri, bl);
     ::encode(http_status, bl);
@@ -51,10 +51,11 @@ struct rgw_log_entry {
     ::encode(referrer, bl);
     ::encode(bytes_received, bl);
     ::encode(bucket_id, bl);
+    ::encode(obj, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, p);
     ::decode(object_owner, p);
     if (struct_v > 3)
       ::decode(bucket_owner, p);
@@ -62,7 +63,7 @@ struct rgw_log_entry {
     ::decode(time, p);
     ::decode(remote_addr, p);
     ::decode(user, p);
-    ::decode(obj, p);
+    ::decode(obj.name, p);
     ::decode(op, p);
     ::decode(uri, p);
     ::decode(http_status, p);
@@ -87,38 +88,18 @@ struct rgw_log_entry {
       } else {
         ::decode(bucket_id, p);
       }
-    } else
+    } else {
       bucket_id = "";
+    }
+    if (struct_v >= 7) {
+      ::decode(obj, p);
+    }
     DECODE_FINISH(p);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<rgw_log_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_log_entry)
-
-struct rgw_intent_log_entry {
-  rgw_obj obj;
-  utime_t op_time;
-  uint32_t intent;
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(2, 2, bl);
-    ::encode(obj, bl);
-    ::encode(op_time, bl);
-    ::encode(intent, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-    ::decode(obj, p);
-    ::decode(op_time, p);
-    ::decode(intent, p);
-    DECODE_FINISH(p);
-  }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<rgw_intent_log_entry*>& o);
-};
-WRITE_CLASS_ENCODER(rgw_intent_log_entry)
 
 class OpsLogSocket : public OutputDataSocket {
   Formatter *formatter;
@@ -137,8 +118,6 @@ public:
 };
 
 int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsLogSocket *olog);
-int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc);
-int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent);
 void rgw_log_usage_init(CephContext *cct, RGWRados *store);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter);

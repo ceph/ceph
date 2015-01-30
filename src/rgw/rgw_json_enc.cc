@@ -33,6 +33,16 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
 }
 
 
+void RGWOLHInfo::dump(Formatter *f) const
+{
+  encode_json("target", target, f);
+}
+
+void RGWOLHPendingInfo::dump(Formatter *f) const
+{
+  encode_json("time", time, f);
+}
+
 void RGWObjManifestPart::dump(Formatter *f) const
 {
   f->open_object_section("loc");
@@ -80,7 +90,9 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_stream("time") << time;
   f->dump_string("remote_addr", remote_addr);
   f->dump_string("user", user);
-  f->dump_string("obj", obj);
+  stringstream s;
+  s << obj;
+  f->dump_string("obj", s.str());
   f->dump_string("op", op);
   f->dump_string("uri", uri);
   f->dump_string("http_status", http_status);
@@ -93,16 +105,6 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("referrer", referrer);
   f->dump_string("bucket_id", bucket_id);
 }
-
-void rgw_intent_log_entry::dump(Formatter *f) const
-{
-  f->open_object_section("obj");
-  obj.dump(f);
-  f->close_section();
-  f->dump_stream("op_time") << op_time;
-  f->dump_unsigned("intent", intent);
-}
-
 
 void ACLPermission::dump(Formatter *f) const
 {
@@ -566,7 +568,8 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
 
 void RGWObjEnt::dump(Formatter *f) const
 {
-  encode_json("name", name, f);
+  encode_json("name", key.name, f);
+  encode_json("instance", key.instance, f);
   encode_json("namespace", ns, f);
   encode_json("owner", owner, f);
   encode_json("owner_display_name", owner_display_name, f);
@@ -575,6 +578,7 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("etag", etag, f);
   encode_json("content_type", content_type, f);
   encode_json("tag", tag, f);
+  encode_json("flags", flags, f);
 }
 
 void RGWBucketEnt::dump(Formatter *f) const
@@ -597,9 +601,10 @@ void RGWUploadPartInfo::dump(Formatter *f) const
 void rgw_obj::dump(Formatter *f) const
 {
   encode_json("bucket", bucket, f);
-  encode_json("key", key, f);
+  encode_json("key", loc, f);
   encode_json("ns", ns, f);
   encode_json("object", object, f);
+  encode_json("instance", instance, f);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
