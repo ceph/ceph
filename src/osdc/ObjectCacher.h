@@ -288,6 +288,7 @@ class ObjectCacher {
     void try_merge_bh(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len);
+    bool include_all_cached_data(loff_t off, loff_t len);
     int map_read(OSDRead *rd,
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
@@ -420,6 +421,9 @@ class ObjectCacher {
   }
   void touch_ob(Object *ob) {
     ob_lru.lru_touch(ob);
+  }
+  void bottouch_ob(Object *ob) {
+    ob_lru.lru_bottouch(ob);
   }
 
   // bh states

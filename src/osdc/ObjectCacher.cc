@@ -177,6 +177,22 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left)
 }
 
 /*
+ * all cached data in this range[off, off+len]
+ */
+bool ObjectCacher::Object::include_all_cached_data(loff_t off, loff_t len)
+{
+  assert(oc->lock.is_locked());
+  if (data.empty())
+      return true;
+  map<loff_t, BufferHead*>::iterator first = data.begin();
+  map<loff_t, BufferHead*>::reverse_iterator last = data.rbegin();
+  if (first->second->start() >= off && last->second->end() <= (off + len))
+    return true;
+  else
+    return false;
+}
+
+/*
  * map a range of bytes into buffer_heads.
  * - create missing buffer_heads as necessary.
  */
@@ -1096,6 +1112,8 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       if (allzero) {
 	ldout(cct, 10) << "readx  ob has all zero|rx, returning ENOENT" << dendl;
 	delete rd;
+	if (dontneed)
+	  bottouch_ob(o);
 	return -ENOENT;
       }
     }
@@ -1236,6 +1254,9 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       }
       assert(f_it == ex_it->buffer_extents.end());
       assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
+
+      if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length))
+	  bottouch_ob(o);
     }
   }
   
