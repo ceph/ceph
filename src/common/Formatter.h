@@ -58,7 +58,7 @@ namespace ceph {
     virtual void dump_unsigned(const char *name, uint64_t u) = 0;
     virtual void dump_int(const char *name, int64_t s) = 0;
     virtual void dump_float(const char *name, double d) = 0;
-    virtual void dump_string(const char *name, std::string s) = 0;
+    virtual void dump_string(const char *name, const std::string& s) = 0;
     virtual void dump_bool(const char *name, bool b)
     {
       dump_format_unquoted(name, "%s", (b ? "true" : "false"));
@@ -79,7 +79,7 @@ namespace ceph {
     {
       open_object_section(name);
     }
-    virtual void dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs)
+    virtual void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs)
     {
       dump_string(name, s);
     }
@@ -99,7 +99,7 @@ namespace ceph {
     void dump_unsigned(const char *name, uint64_t u);
     void dump_int(const char *name, int64_t u);
     void dump_float(const char *name, double d);
-    void dump_string(const char *name, std::string s);
+    void dump_string(const char *name, const std::string& s);
     std::ostream& dump_stream(const char *name);
     void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
     int get_len() const;
@@ -115,7 +115,7 @@ namespace ceph {
 
     bool m_pretty;
     void open_section(const char *name, bool is_array);
-    void print_quoted_string(const char *s);
+    void print_quoted_string(const std::string& s);
     void print_name(const char *name);
     void print_comma(json_formatter_stack_entry_d& entry);
     void finish_pending_string();
@@ -140,7 +140,7 @@ namespace ceph {
     void dump_unsigned(const char *name, uint64_t u);
     void dump_int(const char *name, int64_t u);
     void dump_float(const char *name, double d);
-    void dump_string(const char *name, std::string s);
+    void dump_string(const char *name, const std::string& s);
     std::ostream& dump_stream(const char *name);
     void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
     int get_len() const;
@@ -149,7 +149,7 @@ namespace ceph {
     /* with attrs */
     void open_array_section_with_attrs(const char *name, const FormatterAttrs& attrs);
     void open_object_section_with_attrs(const char *name, const FormatterAttrs& attrs);
-    void dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs);
+    void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
   private:
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
@@ -181,9 +181,9 @@ namespace ceph {
     void dump_unsigned(const char *name, uint64_t u);
     void dump_int(const char *name, int64_t u);
     void dump_float(const char *name, double d);
-    void dump_string(const char *name, std::string s);
+    void dump_string(const char *name, const std::string& s);
     void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap);
-    void dump_string_with_attrs(const char *name, std::string s, const FormatterAttrs& attrs);
+    void dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs);
     std::ostream& dump_stream(const char *name);
 
     int get_len() const;

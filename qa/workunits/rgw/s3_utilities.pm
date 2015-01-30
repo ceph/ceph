@@ -11,6 +11,8 @@ my $isdst;
 my $PASS_CNT = 0;
 my $FAIL_CNT = 0;
 
+our $radosgw_admin = $ENV{RGW_ADMIN}||"sudo radosgw-admin";
+
 # function to get the current time stamp from the test set up
 sub get_timestamp {
    ($sec,$min,$hour,$mday,$mon,$year,$wday,$yday,$isdst) = localtime(time);
@@ -89,12 +91,12 @@ sub print_border2 {
 sub get_user_info
 {
     my ($rgw_user) = @_;
-    my $cmd = "sudo radosgw-admin user create --uid=$rgw_user --display-name=$rgw_user";
+    my $cmd = "$radosgw_admin user create --uid=$rgw_user --display-name=$rgw_user";
     my $cmd_op = get_command_output($cmd);
     if ($cmd_op !~ /keys/){
         return (0,0);
     }
-    my @get_user = (split/,/,$cmd_op);
+    my @get_user = (split/\n/,$cmd_op);
     foreach (@get_user) {
         if ($_ =~ /access_key/ ){
             $get_acc_key = $_;
@@ -107,13 +109,13 @@ sub get_user_info
     $acc_key =~ s/\\//g;
     $acc_key =~ s/ //g;
     $acc_key =~ s/"//g;
+    $acc_key =~ s/,//g;
     my $secret_key = $get_sec_key;
     my $sec_key = (split /:/, $secret_key)[1];
-    chop($sec_key);
-    chop($sec_key);
     $sec_key =~ s/\\//g;
     $sec_key =~ s/ //g;
     $sec_key =~ s/"//g;
+    $sec_key =~ s/,//g;
     return ($acc_key, $sec_key);
 }
 
@@ -121,7 +123,7 @@ sub get_user_info
 sub purge_data
 {
     my ($rgw_user) = @_;
-    my $cmd = "sudo radosgw-admin user rm --uid=$rgw_user --purge-data";
+    my $cmd = "$radosgw_admin user rm --uid=$rgw_user --purge-data";
     my $cmd_op = get_command_output($cmd);
     if ($cmd_op !~ /./){
         print "user $rgw_user deleted\n";

@@ -143,8 +143,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   object_acl = NULL;
   expect_cont = false;
 
-  object = NULL;
-
   header_ended = false;
   obj_size = 0;
   prot_flags = 0;
@@ -155,7 +153,6 @@ req_state::req_state(CephContext *_cct, class RGWEnv *e) : cct(_cct), cio(NULL),
   time = ceph_clock_now(cct);
   perm_mask = 0;
   content_length = 0;
-  object = NULL;
   bucket_exists = false;
   has_bad_meta = false;
   length = NULL;
@@ -170,7 +167,6 @@ req_state::~req_state() {
   delete formatter;
   delete bucket_acl;
   delete object_acl;
-  free((void *)object);
 }
 
 struct str_len {
@@ -421,14 +417,14 @@ int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be th
   ret = get_random_bytes(buf, sizeof(buf));
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
     lderr(cct) << "ceph_armor failed" << dendl;
-    return -1;
+    return ret;
   }
   tmp_dest[ret] = '\0';
   memcpy(dest, tmp_dest, size);
@@ -444,7 +440,7 @@ int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size) /* size 
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   int i;
@@ -457,6 +453,36 @@ int gen_rand_alphanumeric_upper(CephContext *cct, char *dest, int size) /* size 
   return 0;
 }
 
+static const char alphanum_lower_table[]="0123456789abcdefghijklmnopqrstuvwxyz";
+
+int gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
+{
+  int ret = get_random_bytes(dest, size);
+  if (ret < 0) {
+    lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  int i;
+  for (i=0; i<size - 1; i++) {
+    int pos = (unsigned)dest[i];
+    dest[i] = alphanum_lower_table[pos % (sizeof(alphanum_lower_table) - 1)];
+  }
+  dest[i] = '\0';
+
+  return 0;
+}
+
+int gen_rand_alphanumeric_lower(CephContext *cct, string *str, int length)
+{
+  char buf[length + 1];
+  int ret = gen_rand_alphanumeric_lower(cct, buf, sizeof(buf));
+  if (ret < 0) {
+    return ret;
+  }
+  *str = buf;
+  return 0;
+}
 
 // this is basically a modified base64 charset, url friendly
 static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -466,13 +492,33 @@ int gen_rand_alphanumeric(CephContext *cct, char *dest, int size) /* size should
   int ret = get_random_bytes(dest, size);
   if (ret < 0) {
     lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
-    return -1;
+    return ret;
   }
 
   int i;
   for (i=0; i<size - 1; i++) {
     int pos = (unsigned)dest[i];
     dest[i] = alphanum_table[pos & 63];
+  }
+  dest[i] = '\0';
+
+  return 0;
+}
+
+static const char alphanum_no_underscore_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-.";
+
+int gen_rand_alphanumeric_no_underscore(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
+{
+  int ret = get_random_bytes(dest, size);
+  if (ret < 0) {
+    lderr(cct) << "cannot get random bytes: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  int i;
+  for (i=0; i<size - 1; i++) {
+    int pos = (unsigned)dest[i];
+    dest[i] = alphanum_no_underscore_table[pos & 63];
   }
   dest[i] = '\0';
 
@@ -496,7 +542,7 @@ int NameVal::parse()
   return ret; 
 }
 
-int XMLArgs::parse()
+int RGWHTTPArgs::parse()
 {
   int pos = 0;
   bool end = false;
@@ -533,6 +579,8 @@ int XMLArgs::parse()
           (name.compare("partNumber") == 0) ||
           (name.compare("uploadId") == 0) ||
           (name.compare("versionId") == 0) ||
+          (name.compare("versions") == 0) ||
+          (name.compare("versioning") == 0) ||
           (name.compare("torrent") == 0)) {
         sub_resources[name] = val;
       } else if (name[0] == 'r') { // root of all evil
@@ -566,7 +614,7 @@ int XMLArgs::parse()
   return 0;
 }
 
-string& XMLArgs::get(const string& name, bool *exists)
+string& RGWHTTPArgs::get(const string& name, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
@@ -578,14 +626,14 @@ string& XMLArgs::get(const string& name, bool *exists)
   return empty_str;
 }
 
-string& XMLArgs::get(const char *name, bool *exists)
+string& RGWHTTPArgs::get(const char *name, bool *exists)
 {
   string s(name);
   return get(s, exists);
 }
 
 
-int XMLArgs::get_bool(const string& name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const string& name, bool *val, bool *exists)
 {
   map<string, string>::iterator iter;
   iter = val_map.find(name);
@@ -608,13 +656,13 @@ int XMLArgs::get_bool(const string& name, bool *val, bool *exists)
   return 0;
 }
 
-int XMLArgs::get_bool(const char *name, bool *val, bool *exists)
+int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
 {
   string s(name);
   return get_bool(s, val, exists);
 }
 
-void XMLArgs::get_bool(const char *name, bool *val, bool def_val)
+void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
 {
   bool exists = false;
   if ((get_bool(name, val, &exists) < 0) ||

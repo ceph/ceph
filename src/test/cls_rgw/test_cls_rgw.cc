@@ -87,17 +87,19 @@ void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_
 void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, string& obj, string& loc)
 {
   ObjectWriteOperation *op = mgr.write_op();
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, obj, loc, true);
+  cls_rgw_obj_key key(obj, string());
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
 void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag, int epoch, string& obj, rgw_bucket_dir_entry_meta& meta)
 {
   ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_obj_key key(obj, string());
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, obj, meta, NULL, true);
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
@@ -340,7 +342,7 @@ TEST(cls_rgw, index_suggest)
     string loc = str_int("loc", i);
 
     rgw_bucket_dir_entry dirent;
-    dirent.name = obj;
+    dirent.key.name = obj;
     dirent.locator = loc;
     dirent.exists = (i < num_objs / 2); // we removed half the objects
     dirent.meta.size = 1024;
@@ -376,17 +378,17 @@ static void create_obj(cls_rgw_obj& obj, int i, int j)
   snprintf(buf, sizeof(buf), "-%d.%d", i, j);
   obj.pool = "pool";
   obj.pool.append(buf);
-  obj.oid = "oid";
-  obj.oid.append(buf);
-  obj.key = "key";
-  obj.key.append(buf);
+  obj.key.name = "oid";
+  obj.key.name.append(buf);
+  obj.loc = "loc";
+  obj.loc.append(buf);
 }
 
 static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
 {
   return (obj1.pool == obj2.pool) &&
-         (obj1.oid == obj2.oid) &&
-         (obj1.key == obj2.key);
+         (obj1.key == obj2.key) &&
+         (obj1.loc == obj2.loc);
 }
 
 

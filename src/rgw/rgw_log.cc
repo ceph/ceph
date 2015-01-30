@@ -293,10 +293,11 @@ int rgw_log_op(RGWRados *store, struct req_state *s, const string& op_name, OpsL
     return 0;
   }
 
-  if (s->object)
+  if (!s->object.empty()) {
     entry.obj = s->object;
-  else
-    entry.obj = "-";
+  } else {
+    entry.obj = rgw_obj_key("-");
+  }
 
   entry.obj_size = s->obj_size;
 
@@ -370,46 +371,3 @@ done:
   return ret;
 }
 
-int rgw_log_intent(RGWRados *store, rgw_obj& obj, RGWIntentEvent intent, const utime_t& timestamp, bool utc)
-{
-  rgw_bucket intent_log_bucket(store->zone.intent_log_pool);
-
-  rgw_intent_log_entry entry;
-  entry.obj = obj;
-  entry.intent = (uint32_t)intent;
-  entry.op_time = timestamp;
-
-  struct tm bdt;
-  time_t t = timestamp.sec();
-  if (utc)
-    gmtime_r(&t, &bdt);
-  else
-    localtime_r(&t, &bdt);
-
-  struct rgw_bucket& bucket = obj.bucket;
-
-  char buf[bucket.name.size() + bucket.bucket_id.size() + 16];
-  sprintf(buf, "%.4d-%.2d-%.2d-%s-%s", (bdt.tm_year+1900), (bdt.tm_mon+1), bdt.tm_mday,
-          bucket.bucket_id.c_str(), obj.bucket.name.c_str());
-  string oid(buf);
-  rgw_obj log_obj(intent_log_bucket, oid);
-
-  bufferlist bl;
-  ::encode(entry, bl);
-
-  int ret = store->append_async(log_obj, bl.length(), bl);
-  if (ret == -ENOENT) {
-    ret = store->create_pool(intent_log_bucket);
-    if (ret < 0)
-      goto done;
-    ret = store->append_async(log_obj, bl.length(), bl);
-  }
-
-done:
-  return ret;
-}
-
-int rgw_log_intent(RGWRados *store, struct req_state *s, rgw_obj& obj, RGWIntentEvent intent)
-{
-  return rgw_log_intent(store, obj, intent, s->time, s->cct->_conf->rgw_intent_log_object_name_utc);
-}
