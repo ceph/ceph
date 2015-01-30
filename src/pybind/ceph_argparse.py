@@ -910,7 +910,7 @@ def validate_command(sigdict, args, verbose=False):
         bestcmds = []
         for cmdtag, cmd in sigdict.iteritems():
             sig = cmd['sig']
-            matched = matchnum(args, sig, partial=True)
+            matched = matchnum(args, sig, partial=False)
             if (matched > best_match_cnt):
                 if verbose:
                     print >> sys.stderr, \
