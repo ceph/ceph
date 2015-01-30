@@ -510,6 +510,34 @@ TEST_F(LibRadosMiscPP, AssertExistsPP) {
   ASSERT_EQ(-EEXIST, ioctx.create("asdffoo", true));
 }
 
+TEST_F(LibRadosMiscPP, AssertVersionPP) {
+  char buf[64];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  // Create test object...
+  ASSERT_EQ(0, ioctx.create("asdfbar", true));
+  // ...then write it again to guarantee that the
+  // (unsigned) version must be at least 1 (not 0)
+  // since we want to decrement it by 1 later.
+  ASSERT_EQ(0, ioctx.write_full("asdfbar", bl));
+
+  uint64_t v = ioctx.get_last_version();
+  ObjectWriteOperation op1;
+  op1.assert_version(v+1);
+  op1.write(0, bl);
+  ASSERT_EQ(-EOVERFLOW, ioctx.operate("asdfbar", &op1));
+  ObjectWriteOperation op2;
+  op2.assert_version(v-1);
+  op2.write(0, bl);
+  ASSERT_EQ(-ERANGE, ioctx.operate("asdfbar", &op2));
+  ObjectWriteOperation op3;
+  op3.assert_version(v);
+  op3.write(0, bl);
+  ASSERT_EQ(0, ioctx.operate("asdfbar", &op3));
+}
+
 TEST_F(LibRadosMiscPP, BigAttrPP) {
   char buf[64];
   memset(buf, 0xcc, sizeof(buf));
