@@ -31,6 +31,10 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left, loff_t o
   
   // split off right
   ObjectCacher::BufferHead *right = new BufferHead(this);
+
+  //inherit and if later access, this auto clean.
+  right->set_dontneed(left->get_dontneed());
+
   right->last_write_tid = left->last_write_tid;
   right->last_read_tid = left->last_read_tid;
   right->set_state(left->get_state());
@@ -97,6 +101,8 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   // note: this is sorta busted, but should only be used for dirty buffers
   left->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
   left->last_write = MAX( left->last_write, right->last_write );
+
+  left->set_dontneed(right->get_dontneed() ? left->get_dontneed() : false);
 
   // waiters
   for (map<loff_t, list<Context*> >::iterator p = right->waitfor_read.begin();
@@ -2052,7 +2058,10 @@ void ObjectCacher::bh_set_state(BufferHead *bh, int s)
     bh_lru_dirty.lru_insert_top(bh);
   } else if (s != BufferHead::STATE_DIRTY && state == BufferHead::STATE_DIRTY) {
     bh_lru_dirty.lru_remove(bh);
-    bh_lru_rest.lru_insert_top(bh);
+    if (bh->get_dontneed())
+      bh_lru_rest.lru_insert_bot(bh);
+    else
+      bh_lru_rest.lru_insert_top(bh);
   }
 
   if ((s == BufferHead::STATE_TX ||
@@ -2086,7 +2095,10 @@ void ObjectCacher::bh_add(Object *ob, BufferHead *bh)
     bh_lru_dirty.lru_insert_top(bh);
     dirty_or_tx_bh.insert(bh);
   } else {
-    bh_lru_rest.lru_insert_top(bh);
+    if (bh->get_dontneed())
+      bh_lru_rest.lru_insert_bot(bh);
+    else
+      bh_lru_rest.lru_insert_top(bh);
   }
 
   if (bh->is_tx()) {
