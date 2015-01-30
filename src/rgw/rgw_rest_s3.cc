@@ -1142,31 +1142,32 @@ int RGWPostObj_ObjStore_S3::get_policy()
     if (ret < 0) {
       // Try keystone authentication as well
       int keystone_result = -EINVAL;
-      if (store->ctx()->_conf->rgw_s3_auth_use_keystone
-	  && !store->ctx()->_conf->rgw_keystone_url.empty()) {
-	dout(20) << "s3 keystone: trying keystone auth" << dendl;
+      if (!store->ctx()->_conf->rgw_s3_auth_use_keystone ||
+	  store->ctx()->_conf->rgw_keystone_url.empty()) {
+        return -EACCES;
+      }
+      dout(20) << "s3 keystone: trying keystone auth" << dendl;
 
-	RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
-	keystone_result = keystone_validator.validate_s3token(s3_access_key,string(encoded_policy.c_str(),encoded_policy.length()),received_signature_str);
+      RGW_Auth_S3_Keystone_ValidateToken keystone_validator(store->ctx());
+      keystone_result = keystone_validator.validate_s3token(s3_access_key,string(encoded_policy.c_str(),encoded_policy.length()),received_signature_str);
 
-	if (keystone_result < 0) {
-	  ldout(s->cct, 0) << "User lookup failed!" << dendl;
-	  err_msg = "Bad access key / signature";
-	  return -EACCES;
-	}
+      if (keystone_result < 0) {
+        ldout(s->cct, 0) << "User lookup failed!" << dendl;
+        err_msg = "Bad access key / signature";
+        return -EACCES;
+      }
 
-	user_info.user_id = keystone_validator.response.token.tenant.id;
-	user_info.display_name = keystone_validator.response.token.tenant.name;
+      user_info.user_id = keystone_validator.response.token.tenant.id;
+      user_info.display_name = keystone_validator.response.token.tenant.name;
 
-	/* try to store user if it not already exists */
-	if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
-	  int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
-	  if (ret < 0) {
-	    dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
-	  }
+      /* try to store user if it not already exists */
+      if (rgw_get_user_info_by_uid(store, keystone_validator.response.token.tenant.id, user_info) < 0) {
+        int ret = rgw_store_user_info(store, user_info, NULL, NULL, 0, true);
+        if (ret < 0) {
+          dout(10) << "NOTICE: failed to store new user's info: ret=" << ret << dendl;
+        }
 
-	  s->perm_mask = RGW_PERM_FULL_CONTROL;
-	}
+        s->perm_mask = RGW_PERM_FULL_CONTROL;
       }
     } else {
       map<string, RGWAccessKey> access_keys  = user_info.access_keys;
