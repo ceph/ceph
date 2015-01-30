@@ -662,7 +662,7 @@ int RGWHTTPArgs::get_bool(const char *name, bool *val, bool *exists)
   return get_bool(s, val, exists);
 }
 
-void XMLArgs::get_bool(const char *name, bool *val, bool def_val)
+void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
 {
   bool exists = false;
   if ((get_bool(name, val, &exists) < 0) ||
