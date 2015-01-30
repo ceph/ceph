@@ -674,6 +674,7 @@ def main(argv):
             GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
             TESTNAME = "/tmp/testbytes.{pid}".format(pid=pid)
             SETNAME = "/tmp/setbytes.{pid}".format(pid=pid)
+            BADNAME = "/tmp/badbytes.{pid}".format(pid=pid)
             for pg in OBJREPPGS:
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
@@ -730,6 +731,37 @@ def main(argv):
                         logging.debug("Expected:")
                         cat_file(logging.DEBUG, SETNAME)
                         ERRORS += 1
+
+                    # Use set-bytes with --dry-run and make sure contents haven't changed
+                    fd = open(BADNAME, "w")
+                    data = "Bad data for --dry-run in {file}\n".format(file=file)
+                    fd.write(data)
+                    fd.close()
+                    cmd = (CFSD_PREFIX + "--dry-run --pgid {pg} '{json}' set-bytes {sname}").format(osd=osd, pg=pg, json=JSON, sname=BADNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from set-bytes --dry-run".format(ret=ret))
+                        ERRORS += 1
+                    fd = open(TESTNAME, "w")
+                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-bytes -").format(osd=osd, pg=pg, json=JSON)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True, stdout=fd)
+                    fd.close()
+                    if ret != 0:
+                        logging.error("Bad exit status {ret} from get-bytes".format(ret=ret))
+                        ERRORS += 1
+                    cmd = "diff -q {setfile} {testfile}".format(setfile=SETNAME, testfile=TESTNAME)
+                    logging.debug(cmd)
+                    ret = call(cmd, shell=True)
+                    if ret != 0:
+                        logging.error("Data after set-bytes --dry-run changed!")
+                        logging.debug("Got:")
+                        cat_file(logging.DEBUG, TESTNAME)
+                        logging.debug("Expected:")
+                        cat_file(logging.DEBUG, SETNAME)
+                        ERRORS += 1
+
                     fd = open(file, "r")
                     cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' set-bytes").format(osd=osd, pg=pg, json=JSON)
                     logging.debug(cmd)
@@ -749,6 +781,10 @@ def main(argv):
         pass
     try:
         os.unlink(SETNAME)
+    except:
+        pass
+    try:
+        os.unlink(BADNAME)
     except:
         pass
 
@@ -893,11 +929,38 @@ def main(argv):
             logging.error("Got {pgs}".format(pgs=TEST_PGS))
             ERRORS += 1
 
-    print "Test pg export"
     EXP_ERRORS = 0
+    print "Test pg export --dry-run"
+    pg = ALLREPPGS[0]
+    osd = get_osds(pg, OSDDIR)[0]
+    fname = "/tmp/fname.{pid}".format(pid=pid)
+    cmd = (CFSD_PREFIX + "--dry-run --op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    if ret != 0:
+        logging.error("Exporting --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+        EXP_ERRORS += 1
+    elif os.path.exists(fname):
+        logging.error("Exporting --dry-run created file")
+        EXP_ERRORS += 1
+
+    cmd = (CFSD_PREFIX + "--dry-run --op export --pgid {pg} > {file}").format(osd=osd, pg=pg, file=fname)
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+    if ret != 0:
+        logging.error("Exporting --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+        EXP_ERRORS += 1
+    else:
+        outdata = get_lines(fname)
+        if len(outdata) > 0:
+            logging.error("Exporting --dry-run to stdout not empty")
+            logging.error("Data: " + outdata)
+            EXP_ERRORS += 1
+
     os.mkdir(TESTDIR)
     for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
         os.mkdir(os.path.join(TESTDIR, osd))
+    print "Test pg export"
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
             mydir = os.path.join(TESTDIR, osd)
@@ -920,6 +983,13 @@ def main(argv):
     RM_ERRORS = 0
     for pg in ALLREPPGS + ALLECPGS:
         for osd in get_osds(pg, OSDDIR):
+            # This should do nothing
+            cmd = (CFSD_PREFIX + "--op remove --pgid {pg} --dry-run").format(pg=pg, osd=osd)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Removing --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
+                RM_ERRORS += 1
             cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
@@ -937,6 +1007,13 @@ def main(argv):
             PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
             for pg in PGS:
                 file = os.path.join(dir, pg)
+                # This should do nothing
+                cmd = (CFSD_PREFIX + "--op import --file {file} --dry-run").format(osd=osd, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                    IMP_ERRORS += 1
                 if pg == PGS[0]:
                     cmd = ("cat {file} |".format(file=file) + CFSD_PREFIX + "--op import").format(osd=osd)
                 elif pg == PGS[1]:
@@ -1002,6 +1079,13 @@ def main(argv):
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
+                # This should do nothing
+                cmd = "./ceph-objectstore-tool --dry-run import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
                 cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
