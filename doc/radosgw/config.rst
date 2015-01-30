@@ -38,7 +38,7 @@ the node containing the gateway instance.
    of placement groups first. See `Pool Configuration`_ for details.
 
 
-See the `Cephx Guide`_ for additional details on Ceph authentication.
+See `User Management`_ for additional details on Ceph authentication.
 
 #. Create a keyring for the gateway. ::
 
@@ -441,7 +441,7 @@ Guide`_ for details.
 .. _Configuration Reference - Pools: ../config-ref#pools
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Pools: ../../rados/operations/pools
-.. _Cephx Guide: ../../rados/operations/authentication/#cephx-guide
+.. _User Management: ../../rados/operations/user-management
 .. _Operating a Cluster: ../../rados/rados/operations/operating
 .. _Admin Guide: ../admin
 .. _Add Wildcard to DNS: ../../install/install-ceph-gateway#add-wildcard-to-dns
