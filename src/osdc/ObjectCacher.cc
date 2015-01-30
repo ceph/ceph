@@ -1307,6 +1307,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
   utime_t now = ceph_clock_now(cct);
   uint64_t bytes_written = 0;
   uint64_t bytes_written_in_flush = 0;
+  bool dontneed = wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
   
   for (vector<ObjectExtent>::iterator ex_it = wr->extents.begin();
        ex_it != wr->extents.end();
@@ -1354,7 +1355,11 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
 
     // ok, now bh is dirty.
     mark_dirty(bh);
-    touch_bh(bh);
+    if (dontneed)
+      bh->set_dontneed(true);
+    else
+      touch_bh(bh);
+
     bh->last_write = now;
 
     o->try_merge_bh(bh);
