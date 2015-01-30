@@ -1498,6 +1498,27 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     prefix = "pg ls";
   } else if (prefix == "pg ls-by-osd") {
     prefix = "pg ls";
+  } else if (prefix == "pg ls-by-pool") {
+    prefix = "pg ls";
+    string poolstr;
+    cmd_getval(g_ceph_context, cmdmap, "poolstr", poolstr);
+    char *p;
+    int64_t pool = -2;
+    pool = mon->osdmon()->osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool == -ENOENT) {
+      pool = strtol(poolstr.c_str(),&p,10);
+      if (*p) {
+        r = -ENOENT;
+        ss << "pool " << poolstr << " does not exist";
+        string rs = ss.str();
+        mon->reply_command(m, r, rs, get_last_committed());
+        return true;
+      } else {
+        cmd_putval(g_ceph_context, cmdmap, "pool", pool);
+      }
+    } else {
+      cmd_putval(g_ceph_context, cmdmap, "pool", pool);
+    }
   }
    
 
