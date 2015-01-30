@@ -1074,6 +1074,8 @@ function test_mon_pg()
   ceph pg ls-by-osd osd.0 active
   ceph pg ls-by-osd osd.0 active stale
   ceph pg ls-by-osd osd.0 0 active stale
+  ceph pg ls-by-pool 0
+  ceph pg ls-by-pool 0 active stale
   # can't test this...
   # ceph pg force_create_pg
   ceph pg getmap -o $TMPDIR/map.$$
