@@ -99,7 +99,8 @@ class ObjectCacher {
     struct {
       loff_t start, length;   // bh extent in object
     } ex;
-        
+    bool dontneed; //indicate bh don't need by anyone
+
   public:
     Object *ob;
     bufferlist  bl;
@@ -115,6 +116,7 @@ class ObjectCacher {
     BufferHead(Object *o) : 
       state(STATE_MISSING),
       ref(0),
+      dontneed(false),
       ob(o),
       last_write_tid(0),
       last_read_tid(0),
@@ -157,6 +159,13 @@ class ObjectCacher {
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
+    }
+
+    void set_dontneed(bool v) {
+      dontneed = v;
+    }
+    bool get_dontneed() {
+      return dontneed;
     }
   };
 
@@ -405,6 +414,8 @@ class ObjectCacher {
       bh_lru_dirty.lru_touch(bh);
     else
       bh_lru_rest.lru_touch(bh);
+
+    bh->set_dontneed(false);
     touch_ob(bh->ob);
   }
   void touch_ob(Object *ob) {
