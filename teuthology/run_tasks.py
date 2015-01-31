@@ -85,10 +85,10 @@ def run_tasks(tasks, ctx):
 
             job_id = ctx.config.get('job_id')
             archive_path = ctx.config.get('archive_path')
-            extra = {
-                'config': config,
-                'logs': get_http_log_path(archive_path, job_id),
-            }
+            extra = dict(config=config)
+            if job_id:
+                extra['logs'] = get_http_log_path(archive_path, job_id)
+
             exc_id = sentry.get_ident(sentry.captureException(
                 tags=tags,
                 extra=extra,
