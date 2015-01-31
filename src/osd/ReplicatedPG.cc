@@ -2040,6 +2040,7 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
   ctx->user_at_version = prdop->user_version;
   ctx->data_off = prdop->data_offset;
+  ctx->ignore_log_op_stats = true;
   complete_read_ctx(r, ctx);
 }
 
@@ -5985,8 +5986,10 @@ void ReplicatedPG::complete_read_ctx(int result, OpContext *ctx)
   ctx->reply = NULL;
 
   if (result >= 0) {
-    log_op_stats(ctx);
-    publish_stats_to_osd();
+    if (!ctx->ignore_log_op_stats) {
+      log_op_stats(ctx);
+      publish_stats_to_osd();
+    }
 
     // on read, return the current object version
     if (ctx->obs) {
