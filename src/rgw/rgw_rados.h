@@ -1341,6 +1341,7 @@ class RGWRados
     v.push_back(info);
     return clone_objs(ctx, dst_obj, v, attrs, category, pmtime, true, false);
   }
+
   int complete_atomic_overwrite(RGWRadosCtx *rctx, RGWObjState *state, rgw_obj& obj);
 
   int update_placement_map();
@@ -1892,6 +1893,8 @@ public:
   /// clean up/process any temporary objects older than given date[/time]
   int remove_temp_objects(string date, string time);
 
+  void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
+  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
