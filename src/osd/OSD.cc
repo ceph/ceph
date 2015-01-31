@@ -95,6 +95,7 @@
 
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDRepScrub.h"
+#include "messages/MOSDFstrim.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MCommand.h"
@@ -5750,6 +5751,9 @@ void OSD::_dispatch(Message *m)
     handle_rep_scrub(static_cast<MOSDRepScrub*>(m));
     break;
 
+  case MSG_OSD_FSTRIM:
+    handle_fstrim(static_cast<MOSDFstrim*>(m));
+    break;
     // -- need OSDMap --
 
   default:
@@ -5842,6 +5846,21 @@ void OSD::handle_scrub(MOSDScrub *m)
     }
   }
   
+  m->put();
+}
+
+void OSD::handle_fstrim(MOSDFstrim *m)
+{
+  dout(10) << "handle_fstrim " << *m << dendl;
+  if (!require_mon_peer(m))
+    return;
+  if (m->fsid != monc->get_fsid()) {
+    dout(0) << "handle_fstrim fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
+    m->put();
+    return;
+  }
+ 
+  dout(10)<< __func__ << " return " << store->do_force_fstrim() << dendl;
   m->put();
 }
 

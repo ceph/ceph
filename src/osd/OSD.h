@@ -2310,6 +2310,7 @@ public:
 
   void handle_rep_scrub(MOSDRepScrub *m);
   void handle_scrub(struct MOSDScrub *m);
+  void handle_fstrim(struct MOSDFstrim *m);
   void handle_osd_ping(class MOSDPing *m);
   void handle_op(OpRequestRef& op, OSDMapRef& osdmap);
 

@@ -1765,14 +1765,20 @@ int FileStore::do_fstrim()
    return 0;
 }
 
-bool FileStore::check_do_fstrim()
+bool FileStore::check_do_fstrim(bool force)
 {
   if (fstrim) {
     utime_t now = ceph_clock_now(g_ceph_context);
+    if (force) {
+        dout(10) << "force do_fstrim" << dendl;
+        do_fstrim();
+        last_fstrim = now;
+        return true;
+    }
     struct tm bdt;
     time_t tt = now.sec();
     localtime_r(&tt, &bdt);
-    if (bdt.tm_hour == g_ceph_context->_conf->filestore_fstrim_at_hour) {
+    if (force || bdt.tm_hour == g_ceph_context->_conf->filestore_fstrim_at_hour) {
       utime_t diff = now - last_fstrim;
       dout(10) << "do_fstrim at " << now
         << ": " << (double)diff << " min (" << g_ceph_context->_conf->filestore_fstrim_interval << " seconds)" << dendl;
