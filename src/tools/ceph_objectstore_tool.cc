@@ -1278,13 +1278,14 @@ int skip_object(bufferlist &bl)
   return 0;
 }
 
-int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
+int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
 {
   bufferlist::iterator ebliter = bl.begin();
   object_begin ob;
   ob.decode(ebliter);
   map<string,bufferptr>::iterator i;
   bufferlist abl;
+  bool skipping;
 
   data_section ds;
   attr_section as;
@@ -1307,12 +1308,18 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
   ioctx.set_namespace(ob.hoid.hobj.get_namespace());
 
   string msg("Write");
+  skipping = false;
   if (dry_run) {
     uint64_t psize;
     time_t pmtime;
     int ret = ioctx.stat(ob.hoid.hobj.oid.name, &psize, &pmtime);
-    if (ret == 0)
-      msg = "***Overwrite***";
+    if (ret == 0) {
+      if (no_overwrite)
+        // Could set skipping, but dry-run doesn't change anything either
+        msg = "Skipping existing";
+      else
+        msg = "***Overwrite***";
+    }
   } else {
     int ret = ioctx.create(ob.hoid.hobj.oid.name, true);
     if (ret && ret != -EEXIST) {
@@ -1320,17 +1327,23 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
       return ret;
     }
     if (ret == -EEXIST) {
-      msg = "***Overwrite***";
-      ret = ioctx.remove(ob.hoid.hobj.oid.name);
-      if (ret < 0) {
-        cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
-        return ret;
+      if (no_overwrite) {
+        msg = "Skipping existing";
+        skipping = true;
+      } else {
+        msg = "***Overwrite***";
+        ret = ioctx.remove(ob.hoid.hobj.oid.name);
+        if (ret < 0) {
+          cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
+        ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+        if (ret < 0) {
+          cerr << "create failed: " << cpp_strerror(ret) << std::endl;
+          return ret;
+        }
       }
-      ret = ioctx.create(ob.hoid.hobj.oid.name, true);
-      if (ret < 0) {
-        cerr << "create failed: " << cpp_strerror(ret) << std::endl;
-        return ret;
-      }
+    }
   }
 
   cout << msg << " " << ob.hoid << std::endl;
@@ -1380,7 +1393,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
         if (databl.length() >= alignment) {
           uint64_t rndlen = uint64_t(databl.length() / alignment) * alignment;
           if (debug) cerr << "write offset=" << out_offset << " len=" << rndlen << std::endl;
-          if (!dry_run) {
+          if (!dry_run && !skipping) {
             ret = ioctx.write(ob.hoid.hobj.oid.name, databl, rndlen, out_offset);
             if (ret) {
               cerr << "write failed: " << cpp_strerror(ret) << std::endl;
@@ -1397,7 +1410,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
         }
         break;
       }
-      if (!dry_run) {
+      if (!dry_run && !skipping) {
         ret = ioctx.write(ob.hoid.hobj.oid.name, ds.databl, ds.len, ds.offset);
         if (ret) {
           cerr << "write failed: " << cpp_strerror(ret) << std::endl;
@@ -1410,7 +1423,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
       if (debug)
         cerr << "\tattrs: len " << as.data.size() << std::endl;
-      if (dry_run)
+      if (dry_run || skipping)
         break;
       for (i = as.data.begin(); i != as.data.end(); ++i) {
         if (i->first == "_" || i->first == "snapset")
@@ -1431,7 +1444,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
       if (debug)
         cerr << "\tomap header: " << string(oh.hdr.c_str(), oh.hdr.length())
           << std::endl;
-      if (dry_run)
+      if (dry_run || skipping)
         break;
       ret = ioctx.omap_set_header(ob.hoid.hobj.oid.name, oh.hdr);
       if (ret) {
@@ -1445,7 +1458,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
 
       if (debug)
         cerr << "\tomap: size " << os.omap.size() << std::endl;
-      if (dry_run)
+      if (dry_run || skipping)
         break;
       ret = ioctx.omap_set(ob.hoid.hobj.oid.name, os.omap);
       if (ret) {
@@ -1459,7 +1472,7 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl)
       if (need_align && databl.length() > 0) {
         assert(databl.length() < alignment);
         if (debug) cerr << "END write offset=" << out_offset << " len=" << databl.length() << std::endl;
-        if (dry_run)
+        if (dry_run || skipping)
           break;
         ret = ioctx.write(ob.hoid.hobj.oid.name, databl, databl.length(), out_offset);
         if (ret) {
@@ -1661,7 +1674,7 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   return 0;
 }
 
-int do_import_rados(string pool)
+int do_import_rados(string pool, bool no_overwrite)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1759,7 +1772,7 @@ int do_import_rados(string pool)
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object_rados(ioctx, ebl);
+      ret = get_object_rados(ioctx, ebl, no_overwrite);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -2461,7 +2474,7 @@ int main(int argc, char **argv)
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
   spg_t pgid;
   ghobject_t ghobj;
-  bool human_readable;
+  bool human_readable, no_overwrite;
   bool force;
   Formatter *formatter;
 
@@ -2487,6 +2500,7 @@ int main(int argc, char **argv)
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
     ("dry-run", "Don't modify the objectstore")
+    ("no-overwrite", "For import-rados don't overwrite existing files")
     ;
 
   po::options_description positional("Positional options");
@@ -2535,6 +2549,9 @@ int main(int argc, char **argv)
     force = true;
   }
 
+  no_overwrite = false;
+  if (vm.count("no-overwrite"))
+    no_overwrite = true;
   if (vm.count("dry-run"))
     dry_run = true;
   osflagbits_t flags = 0;
@@ -2585,7 +2602,7 @@ int main(int argc, char **argv)
     global_init(NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
     common_init_finish(g_ceph_context);
 
-    int ret = do_import_rados(pool);
+    int ret = do_import_rados(pool, no_overwrite);
     if (ret == 0)
       cout << "Import successful" << std::endl;
     myexit(ret != 0);
