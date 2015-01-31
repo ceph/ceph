@@ -1338,6 +1338,12 @@ int get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
           return ret;
         }
         ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+        // If object re-appeared after removal, let's just skip it
+        if (ret == -EEXIST) {
+          skipping = true;
+          msg = "Skipping in-use object";
+          ret = 0;
+        }
         if (ret < 0) {
           cerr << "create failed: " << cpp_strerror(ret) << std::endl;
           return ret;
