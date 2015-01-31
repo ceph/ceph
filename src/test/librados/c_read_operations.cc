@@ -170,6 +170,31 @@ TEST_F(CReadOpsTest, AssertExists) {
   remove_object();
 }
 
+TEST_F(CReadOpsTest, AssertVersion) {
+  write_object();
+  // Write to the object a second time to guarantee that its
+  // version number is greater than 0
+  write_object();
+  uint64_t v = rados_get_last_version(ioctx);
+
+  rados_read_op_t op = rados_create_read_op();
+  rados_read_op_assert_version(op, v+1);
+  ASSERT_EQ(-EOVERFLOW, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  op = rados_create_read_op();
+  rados_read_op_assert_version(op, v-1);
+  ASSERT_EQ(-ERANGE, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  op = rados_create_read_op();
+  rados_read_op_assert_version(op, v);
+  ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
+  rados_release_read_op(op);
+
+  remove_object();
+}
+
 TEST_F(CReadOpsTest, CmpXattr) {
   write_object();
 
