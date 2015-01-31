@@ -1323,6 +1323,7 @@ void RGWGetACLs_ObjStore_S3::send_response()
   dump_errno(s);
   end_header(s, this, "application/xml");
   dump_start(s);
+  rgw_flush_formatter(s, s->formatter);
   s->cio->write(acls.c_str(), acls.size());
 }
 
