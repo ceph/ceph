@@ -237,7 +237,7 @@ public:
     bufferlist inbl;
     r = rados.mon_command(
       "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
-      "\", \"var\", \"write_fadvise_dontneed\", \"val\": \"" + (write_fadvise_dontneed ? "true" : "false") + "\"}",
+      "\", \"var\": \"write_fadvise_dontneed\", \"val\": \"" + (write_fadvise_dontneed ? "true" : "false") + "\"}",
       inbl, NULL, NULL);
     if (r < 0) {
       rados.shutdown();
