@@ -126,6 +126,7 @@ public:
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
+    vector<osd_reqid_t> reqids;
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -530,6 +531,8 @@ public:
 
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
+
+    vector<osd_reqid_t> extra_reqids;
 
     CopyFromCallback *copy_cb;
 

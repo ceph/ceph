@@ -2148,7 +2148,9 @@ struct pg_log_entry_t {
 
   /// describes state for a locally-rollbackable entry
   ObjectModDesc mod_desc;
-      
+
+  vector<osd_reqid_t> extra_reqids;
+
   pg_log_entry_t()
     : op(0), user_version(0),
       invalid_hash(false), invalid_pool(false), offset(0) {}
@@ -2566,6 +2568,10 @@ struct object_copy_data_t {
   vector<snapid_t> snaps;
   ///< latest snap seq for the object (if head)
   snapid_t snap_seq;
+
+  ///< recent reqids on this object
+  vector<osd_reqid_t> reqids;
+
 public:
   object_copy_data_t() : size((uint64_t)-1), data_digest(-1),
 			 omap_digest(-1), flags(0) {}

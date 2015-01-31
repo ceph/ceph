@@ -9,6 +9,7 @@
 
 namespace ceph {
   using std::unordered_map;
+  using std::unordered_multimap;
 }
 
 #else
@@ -17,6 +18,7 @@ namespace ceph {
 
 namespace ceph {
   using std::tr1::unordered_map;
+  using std::tr1::unordered_multimap;
 }
 
 #endif

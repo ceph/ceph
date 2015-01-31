@@ -57,6 +57,7 @@ struct PGLog {
   struct IndexedLog : public pg_log_t {
     ceph::unordered_map<hobject_t,pg_log_entry_t*> objects;  // ptrs into log.  be careful!
     ceph::unordered_map<osd_reqid_t,pg_log_entry_t*> caller_ops;
+    ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*> extra_caller_ops;
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to;  // not inclusive of referenced item
@@ -123,18 +124,49 @@ struct PGLog {
       return objects.count(oid);
     }
     bool logged_req(const osd_reqid_t &r) const {
-      return caller_ops.count(r);
+      return caller_ops.count(r) || extra_caller_ops.count(r);
     }
     const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
-      ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p = caller_ops.find(r);
-      if (p == caller_ops.end())
-	return NULL;
-      return p->second;
+      ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
+      p = caller_ops.find(r);
+      if (p != caller_ops.end())
+	return p->second;
+      // warning: we will return *a* request for this reqid, but not
+      // necessarily the most recent.
+      p = extra_caller_ops.find(r);
+      if (p != extra_caller_ops.end())
+	return p->second;
+      return NULL;
+    }
+
+    /// get a (bounded) list of recent reqids for the given object
+    void get_object_reqids(const hobject_t& oid, unsigned max,
+			   vector<osd_reqid_t> *pls) const {
+      // make sure object is present at least once before we do an
+      // O(n) search.
+      if (objects.count(oid) == 0)
+	return;
+      for (list<pg_log_entry_t>::const_reverse_iterator i = log.rbegin();
+           i != log.rend();
+           ++i) {
+	if (i->soid == oid) {
+	  if (i->reqid_is_indexed())
+	    pls->push_back(i->reqid);
+	  pls->insert(pls->end(), i->extra_reqids.begin(), i->extra_reqids.end());
+	  if (pls->size() >= max) {
+	    if (pls->size() > max) {
+	      pls->resize(max);
+	    }
+	    return;
+	  }
+	}
+      }
     }
 
     void index() {
       objects.clear();
       caller_ops.clear();
+      extra_caller_ops.clear();
       for (list<pg_log_entry_t>::iterator i = log.begin();
            i != log.end();
            ++i) {
@@ -142,6 +174,11 @@ struct PGLog {
 	if (i->reqid_is_indexed()) {
 	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	  caller_ops[i->reqid] = &(*i);
+	}
+	for (vector<osd_reqid_t>::const_iterator j = i->extra_reqids.begin();
+	     j != i->extra_reqids.end();
+	     ++j) {
+	  extra_caller_ops.insert(make_pair(*j, &(*i)));
 	}
       }
 
@@ -159,19 +196,39 @@ struct PGLog {
 	//assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	caller_ops[e.reqid] = &e;
       }
+      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+	   j != e.extra_reqids.end();
+	   ++j) {
+	extra_caller_ops.insert(make_pair(*j, &e));
+      }
     }
     void unindex() {
       objects.clear();
       caller_ops.clear();
+      extra_caller_ops.clear();
     }
     void unindex(pg_log_entry_t& e) {
       // NOTE: this only works if we remove from the _tail_ of the log!
       if (objects.count(e.soid) && objects[e.soid]->version == e.version)
         objects.erase(e.soid);
-      if (e.reqid_is_indexed() &&
-	  caller_ops.count(e.reqid) &&  // divergent merge_log indexes new before unindexing old
-	  caller_ops[e.reqid] == &e)
-	caller_ops.erase(e.reqid);
+      if (e.reqid_is_indexed()) {
+	if (caller_ops.count(e.reqid) &&  // divergent merge_log indexes new before unindexing old
+	    caller_ops[e.reqid] == &e)
+	  caller_ops.erase(e.reqid);
+      }
+      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+	   j != e.extra_reqids.end();
+	   ++j) {
+	for (ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*>::iterator k =
+	       extra_caller_ops.find(*j);
+	     k != extra_caller_ops.end() && k->first == *j;
+	     ++k) {
+	  if (k->second == &e) {
+	    extra_caller_ops.erase(k);
+	    break;
+	  }
+	}
+      }
     }
 
     // actors
@@ -189,8 +246,14 @@ struct PGLog {
 
       // to our index
       objects[e.soid] = &(log.back());
-      if (e.reqid_is_indexed())
+      if (e.reqid_is_indexed()) {
 	caller_ops[e.reqid] = &(log.back());
+      }
+      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+	   j != e.extra_reqids.end();
+	   ++j) {
+	extra_caller_ops.insert(make_pair(*j, &(log.back())));
+      }
     }
 
     void trim(
