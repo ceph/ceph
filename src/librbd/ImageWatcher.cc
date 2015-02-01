@@ -3,6 +3,7 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ObjectMap.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"
 #include "include/encoding.h"
@@ -320,6 +321,15 @@ int ImageWatcher::lock() {
   ldout(m_image_ctx.cct, 20) << "acquired exclusive lock" << dendl;
   m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
 
+  if (m_image_ctx.object_map != NULL) {
+    r = m_image_ctx.object_map->lock();
+    if (r < 0 && r != -ENOENT) {
+      unlock();
+      return r;
+    }
+    m_image_ctx.object_map->refresh();
+  }
+
   bufferlist bl;
   ENCODE_START(NOTIFY_VERSION, NOTIFY_VERSION, bl);
   ::encode(NOTIFY_OP_ACQUIRED_LOCK, bl);
@@ -350,6 +360,9 @@ int ImageWatcher::unlock()
     return r;
   }
 
+  if (m_image_ctx.object_map != NULL) {
+    m_image_ctx.object_map->unlock();
+  }
   notify_released_lock();
   return 0;
 }
@@ -995,7 +1008,6 @@ void ImageWatcher::reregister_watch() {
         lderr(m_image_ctx.cct) << "failed to re-register image watch: "
                                << cpp_strerror(m_watch_error) << dendl;
 	schedule_retry_aio_requests();
-        cancel_async_requests(m_watch_error);
         return;
       }
     }

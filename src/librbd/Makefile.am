@@ -1,12 +1,17 @@
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
 	librbd/AioRequest.cc \
+	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
+	librbd/AsyncRequest.cc \
+	librbd/AsyncResizeRequest.cc \
+	librbd/AsyncTrimRequest.cc \
 	librbd/CopyupRequest.cc \
 	librbd/ImageCtx.cc \
 	librbd/ImageWatcher.cc \
 	librbd/internal.cc \
-	librbd/LibrbdWriteback.cc
+	librbd/LibrbdWriteback.cc \
+	librbd/ObjectMap.cc
 noinst_LTLIBRARIES += librbd_internal.la
 
 librbd_api_la_SOURCES = \
@@ -37,11 +42,16 @@ lib_LTLIBRARIES += librbd.la
 noinst_HEADERS += \
 	librbd/AioCompletion.h \
 	librbd/AioRequest.h \
+	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
+	librbd/AsyncRequest.h \
+	librbd/AsyncResizeRequest.h \
+	librbd/AsyncTrimRequest.h \
 	librbd/CopyupRequest.h \
 	librbd/ImageCtx.h \
 	librbd/ImageWatcher.h \
 	librbd/internal.h \
 	librbd/LibrbdWriteback.h \
+	librbd/ObjectMap.h \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h

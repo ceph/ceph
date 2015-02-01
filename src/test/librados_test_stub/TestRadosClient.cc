@@ -191,10 +191,18 @@ void TestRadosClient::flush_aio_operations() {
 }
 
 void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
+  c->get();
+
   WaitForFlush *wait_for_flush = new WaitForFlush();
   wait_for_flush->count.set(m_finishers.size());
   wait_for_flush->c = c;
-  add_aio_operation("", boost::bind(&WaitForFlush::flushed, wait_for_flush), NULL);
+
+  for (size_t i = 0; i < m_finishers.size(); ++i) {
+    AioFunctionContext *ctx = new AioFunctionContext(
+      boost::bind(&WaitForFlush::flushed, wait_for_flush),
+      NULL);
+    m_finishers[i]->queue(ctx);
+  }
 }
 
 Finisher *TestRadosClient::get_finisher(const std::string &oid) {

@@ -858,6 +858,7 @@ OPTION(rbd_readahead_trigger_requests, OPT_INT, 10) // number of sequential requ
 OPTION(rbd_readahead_max_bytes, OPT_LONGLONG, 512 * 1024) // set to 0 to disable readahead
 OPTION(rbd_readahead_disable_after_bytes, OPT_LONGLONG, 50 * 1024 * 1024) // how many bytes are read in total before readahead is disabled
 OPTION(rbd_clone_copy_on_read, OPT_BOOL, false)
+OPTION(rbd_object_map, OPT_BOOL, false) // whether to enable the RBD object map
 
 /*
  * The following options change the behavior for librbd's image creation methods that
@@ -881,7 +882,7 @@ OPTION(rbd_default_stripe_count, OPT_U64, 0) // changing requires stripingv2 fea
 OPTION(rbd_default_stripe_unit, OPT_U64, 0) // changing to non-object size requires stripingv2 feature
 OPTION(rbd_default_features, OPT_INT, 7) // only applies to format 2 images
 					 // +1 for layering, +2 for stripingv2,
-					 // +4 for exclusive lock
+					 // +4 for exclusive lock, +8 for object map
 
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
