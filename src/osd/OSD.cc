@@ -8212,6 +8212,30 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
   ShardData* sdata = shard_list[shard_index];
   assert(NULL != sdata);
   sdata->sdata_op_ordering_lock.Lock();
+
+  //keep wake for the next op for osd_op_worker_wake_time if it is not zero
+  //By default (osd_op_worker_wake_time = 0), the worker will sleep immediately
+  if (sdata->pqueue.empty()
+      && sdata->has_waiting_thread == false
+      && worker_thread_wake_time != (double)0) {
+    sdata->has_waiting_thread = true;
+    utime_t start_time = ceph_clock_now(osd->cct);
+    while (sdata->pqueue.empty()) {
+      //give chance for enqueue
+      sdata->sdata_op_ordering_lock.Unlock();
+
+      if (ceph_clock_now(osd->cct) - start_time >= worker_thread_wake_time) {
+        //time out, go to sleep
+        sdata->sdata_op_ordering_lock.Lock();
+        break;
+      } else {
+        //check the pqueue again
+        sdata->sdata_op_ordering_lock.Lock();
+      }
+    }
+    sdata->has_waiting_thread = false;
+  }
+
   if (sdata->pqueue.empty()) {
     sdata->sdata_op_ordering_lock.Unlock();
     osd->cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
@@ -8294,11 +8318,15 @@ void OSD::ShardedOpWQ::_enqueue(pair<PGRef, OpRequestRef> item) {
   else
     sdata->pqueue.enqueue(item.second->get_req()->get_source_inst(),
       priority, cost, item);
-  sdata->sdata_op_ordering_lock.Unlock();
 
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
+  if (sdata->has_waiting_thread) {
+    sdata->sdata_op_ordering_lock.Unlock();
+  } else {
+    sdata->sdata_op_ordering_lock.Unlock();
+    sdata->sdata_lock.Lock();
+    sdata->sdata_cond.SignalOne();
+    sdata->sdata_lock.Unlock();
+  }
 
 }
 
@@ -8323,11 +8351,14 @@ void OSD::ShardedOpWQ::_enqueue_front(pair<PGRef, OpRequestRef> item) {
     sdata->pqueue.enqueue_front(item.second->get_req()->get_source_inst(),
       priority, cost, item);
 
-  sdata->sdata_op_ordering_lock.Unlock();
-  sdata->sdata_lock.Lock();
-  sdata->sdata_cond.SignalOne();
-  sdata->sdata_lock.Unlock();
-
+  if (sdata->has_waiting_thread) {
+    sdata->sdata_op_ordering_lock.Unlock();
+  } else {
+    sdata->sdata_op_ordering_lock.Unlock();
+    sdata->sdata_lock.Lock();
+    sdata->sdata_cond.SignalOne();
+    sdata->sdata_lock.Unlock();
+  }
 }
 
 

@@ -543,6 +543,7 @@ OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
+OPTION(osd_op_worker_wake_time, OPT_INT, 0) //us, zero for sleep at once
 
 OPTION(osd_read_eio_on_bad_digest, OPT_BOOL, true) // return EIO if object digest is bad
 
