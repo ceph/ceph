@@ -617,7 +617,8 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(coll_t cid,
 int MemStore::queue_transactions(Sequencer *osr,
 				 list<Transaction*>& tls,
 				 TrackedOpRef op,
-				 ThreadPool::TPHandle *handle)
+				 ThreadPool::TPHandle *handle,
+                                 bool throttle)
 {
   // fixme: ignore the Sequencer and serialize everything.
   Mutex::Locker l(apply_lock);

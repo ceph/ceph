@@ -1886,7 +1886,7 @@ protected:
   PG::RecoveryCtx create_context();
   bool compat_must_dispatch_immediately(PG *pg);
   void dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
-                        ThreadPool::TPHandle *handle = NULL);
+                        ThreadPool::TPHandle *handle = NULL, bool throttle = true);
   void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                     ThreadPool::TPHandle *handle = NULL);
   void do_notifies(map<int,

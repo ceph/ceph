@@ -299,6 +299,7 @@ class KeyValueStore : public ObjectStore,
     Context *ondisk, *onreadable, *onreadable_sync;
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
+    bool throttle;
   };
   class OpSequencer : public Sequencer_impl {
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
@@ -463,7 +464,7 @@ class KeyValueStore : public ObjectStore,
   } op_wq;
 
   Op *build_op(list<Transaction*>& tls, Context *ondisk, Context *onreadable,
-               Context *onreadable_sync, TrackedOpRef osd_op);
+               Context *onreadable_sync, TrackedOpRef osd_op, bool throttle);
   void queue_op(OpSequencer *osr, Op *o);
   void op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle = NULL);
   void _do_op(OpSequencer *osr, ThreadPool::TPHandle &handle);
@@ -531,7 +532,8 @@ class KeyValueStore : public ObjectStore,
 
   int queue_transactions(Sequencer *osr, list<Transaction*>& tls,
                          TrackedOpRef op = TrackedOpRef(),
-                         ThreadPool::TPHandle *handle = NULL);
+                         ThreadPool::TPHandle *handle = NULL,
+                         bool throttle = true);
 
 
   // ------------------

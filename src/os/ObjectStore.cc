@@ -103,7 +103,8 @@ int ObjectStore::queue_transactions(
   Context *oncommit,
   Context *onreadable_sync,
   Context *oncomplete,
-  TrackedOpRef op = TrackedOpRef())
+  TrackedOpRef op,
+  bool throttle)
 {
   RunOnDeleteRef _complete(new RunOnDelete(oncomplete));
   Context *_onreadable = new Wrapper<RunOnDeleteRef>(
@@ -111,7 +112,7 @@ int ObjectStore::queue_transactions(
   Context *_oncommit = new Wrapper<RunOnDeleteRef>(
     oncommit, _complete);
   return queue_transactions(osr, tls, _onreadable, _oncommit,
-			    onreadable_sync, op);
+			    onreadable_sync, op, NULL, throttle);
 }
 
 int ObjectStore::collection_list(coll_t c, vector<hobject_t>& o)

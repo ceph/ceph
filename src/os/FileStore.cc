@@ -1688,7 +1688,8 @@ int FileStore::umount()
 FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
 				   Context *onreadable,
 				   Context *onreadable_sync,
-				   TrackedOpRef osd_op)
+				   TrackedOpRef osd_op,
+                                   bool throttle)
 {
   uint64_t bytes = 0, ops = 0;
   for (list<Transaction*>::iterator p = tls.begin();
@@ -1706,6 +1707,7 @@ FileStore::Op *FileStore::build_op(list<Transaction*>& tls,
   o->ops = ops;
   o->bytes = bytes;
   o->osd_op = osd_op;
+  o->throttle = throttle;
   return o;
 }
 
@@ -1732,6 +1734,11 @@ void FileStore::queue_op(OpSequencer *osr, Op *o)
 
 void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 {
+  if (!o->throttle) {
+    dout(20) << "op_queue_reserve_throttle no need to reserve throttle for op " << o << dendl;
+    return;
+  }
+
   // Do not call while holding the journal lock!
   uint64_t max_ops = m_filestore_queue_max_ops;
   uint64_t max_bytes = m_filestore_queue_max_bytes;
@@ -1771,6 +1778,10 @@ void FileStore::op_queue_reserve_throttle(Op *o, ThreadPool::TPHandle *handle)
 
 void FileStore::op_queue_release_throttle(Op *o)
 {
+  if (!o->throttle) {
+    dout(20) << "op_queue_release_throttle no need to release throttle for op " << o << dendl;
+    return;
+  }
   {
     Mutex::Locker l(op_throttle_lock);
     op_queue_len--;
@@ -1848,7 +1859,8 @@ struct C_JournaledAhead : public Context {
 
 int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
 				  TrackedOpRef osd_op,
-				  ThreadPool::TPHandle *handle)
+				  ThreadPool::TPHandle *handle,
+                                  bool throttle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -1883,7 +1895,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
-    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op, throttle);
     op_queue_reserve_throttle(o, handle);
     journal->throttle();
     uint64_t op_num = submit_manager.op_submit_start();
@@ -1915,7 +1927,7 @@ int FileStore::queue_transactions(Sequencer *posr, list<Transaction*> &tls,
   }
 
   if (!journal) {
-    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op, throttle);
     dout(5) << __func__ << " (no journal) " << o << " " << tls << dendl;
 
     op_queue_reserve_throttle(o, handle);

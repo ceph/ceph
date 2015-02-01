@@ -3098,7 +3098,7 @@ void OSD::handle_pg_peering_evt(
 	*rctx.transaction);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, pg, osdmap);
+      dispatch_context(rctx, pg, osdmap, NULL, false);
 
       dout(10) << *pg << " is new" << dendl;
 
@@ -3134,7 +3134,7 @@ void OSD::handle_pg_peering_evt(
 	*rctx.transaction);
       pg->handle_create(&rctx);
       pg->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, pg, osdmap);
+      dispatch_context(rctx, pg, osdmap, NULL, false);
 
       dout(10) << *pg << " is new (resurrected)" << dendl;
 
@@ -3172,7 +3172,7 @@ void OSD::handle_pg_peering_evt(
 	);
       parent->handle_create(&rctx);
       parent->write_if_dirty(*rctx.transaction);
-      dispatch_context(rctx, parent, osdmap);
+      dispatch_context(rctx, parent, osdmap, NULL, false);
 
       dout(10) << *parent << " is new" << dendl;
 
@@ -7118,7 +7118,7 @@ bool OSD::compat_must_dispatch_immediately(PG *pg)
 }
 
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
-                           ThreadPool::TPHandle *handle)
+                           ThreadPool::TPHandle *handle, bool throttle)
 {
   if (service.get_osdmap()->is_up(whoami) &&
       is_active()) {
@@ -7140,7 +7140,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     int tr = store->queue_transaction(
       pg->osr.get(),
       ctx.transaction, ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
-      handle);
+      handle, throttle);
     assert(tr == 0);
   }
 }
