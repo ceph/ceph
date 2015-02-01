@@ -17,20 +17,21 @@
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
-#include "librbd/AsyncObjectThrottle.h"
+#include "librbd/AsyncFlattenRequest.h"
+#include "librbd/AsyncResizeRequest.h"
+#include "librbd/AsyncTrimRequest.h"
 #include "librbd/CopyupRequest.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 
 #include "librbd/internal.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/parent_types.h"
 #include "include/util.h"
 
 #include "librados/snap_set_diff.h"
 
 #include <boost/bind.hpp>
-#include <boost/lambda/bind.hpp>
-#include <boost/lambda/construct.hpp>
 #include <boost/scope_exit.hpp>
 #include "include/assert.h"
 
@@ -66,6 +67,11 @@ namespace librbd {
   const string old_header_name(const string &image_name)
   {
     return image_name + RBD_SUFFIX;
+  }
+
+  const string object_map_name(const string &image_id)
+  {
+    return RBD_OBJECT_MAP_PREFIX + image_id;
   }
 
   int detect_format(IoCtx &io_ctx, const string &name,
@@ -161,30 +167,15 @@ namespace librbd {
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
 
-    Mutex my_lock("librbd::trim_image::my_lock");
-    Cond cond;
-    bool done;
-    int ret;
+    C_SaferCond *ctx = new C_SaferCond();
+    AsyncTrimRequest *req = new AsyncTrimRequest(*ictx, ctx, ictx->size,
+						 newsize, prog_ctx);
+    req->send();
 
-    CephContext *cct = ictx->cct;
-    Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &ret);
-    ret = async_trim_image(ictx, ctx, ictx->size, newsize, prog_ctx);
-    if (ret < 0) {
-      lderr(cct) << "warning: failed to remove object(s): "
-		 << cpp_strerror(ret) << dendl;
-      delete ctx;
-      return;
-    }
-
-    my_lock.Lock();
-    while (!done) {
-      cond.Wait(my_lock);
-    }
-    my_lock.Unlock();
-
-    if (ret < 0) {
-      lderr(cct) << "warning: failed to remove some object(s): "
-		 << cpp_strerror(ret) << dendl;
+    int r = ctx->wait();
+    if (r < 0) {
+      lderr(ictx->cct) << "warning: failed to remove some object(s): "
+		       << cpp_strerror(r) << dendl;
     }
   }
 
@@ -291,6 +282,20 @@ namespace librbd {
     return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   }
 
+  void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
+		       SimpleThrottle& throttle)
+  {
+    Context *req_comp = new C_SimpleThrottle(&throttle);
+    librados::AioCompletion *rados_completion =
+      librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
+    librados::ObjectWriteOperation op;
+    op.selfmanaged_snap_rollback(snap_id);
+    ictx->data_ctx.aio_operate(oid, rados_completion, &op);
+    ldout(ictx->cct, 10) << "scheduling selfmanaged_snap_rollback on "
+                         << oid << " to " << snap_id << dendl;
+    rados_completion->release();
+  }
+
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx)
   {
@@ -307,17 +312,10 @@ namespace librbd {
 
     for (uint64_t i = 0; i < numseg; i++) {
       string oid = ictx->get_object_name(i);
-      Context *req_comp = new C_SimpleThrottle(&throttle);
-      librados::AioCompletion *rados_completion =
-	librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
-      librados::ObjectWriteOperation op;
-      op.selfmanaged_snap_rollback(snap_id);
-      ictx->data_ctx.aio_operate(oid, rados_completion, &op);
-      ldout(cct, 10) << "scheduling selfmanaged_snap_rollback on "
-		     << oid << " to " << snap_id << dendl;
-      rados_completion->release();
+      rollback_object(ictx, snap_id, ictx->get_object_name(i), throttle);
       prog_ctx.update_progress(i * bsize, numseg * bsize);
     }
+    rollback_object(ictx, snap_id, object_map_name(ictx->id), throttle);
 
     r = throttle.wait_for_ret();
     if (r < 0) {
@@ -821,6 +819,8 @@ reprotect_and_return_err:
     ostringstream oss;
     CephContext *cct = (CephContext *)io_ctx.cct();
 
+    ceph_file_layout layout;
+
     id_obj = id_obj_name(imgname);
 
     int r = io_ctx.create(id_obj, true);
@@ -864,6 +864,31 @@ reprotect_and_return_err:
 	lderr(cct) << "error setting striping parameters: "
 		   << cpp_strerror(r) << dendl;
 	goto err_remove_header;
+      }
+    }
+
+    if ((features & RBD_FEATURE_OBJECT_MAP) != 0) {
+      if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+        lderr(cct) << "cannot use object map without exclusive lock" << dendl;
+        goto err_remove_header;
+      }
+
+      memset(&layout, 0, sizeof(layout));
+      layout.fl_object_size = 1ull << order;
+      if (stripe_unit == 0 || stripe_count == 0) {
+        layout.fl_stripe_unit = layout.fl_object_size;
+        layout.fl_stripe_count = 1;
+      } else {
+        layout.fl_stripe_unit = stripe_unit;
+        layout.fl_stripe_count = stripe_count;
+      }
+
+      librados::ObjectWriteOperation op;
+      cls_client::object_map_resize(&op, Striper::get_num_objects(layout, size),
+                                    OBJECT_NONEXISTENT);
+      r = io_ctx.operate(object_map_name(id), &op);
+      if (r < 0) {
+        goto err_remove_header;
       }
     }
 
@@ -1527,6 +1552,11 @@ reprotect_and_return_err:
       }
     }
     if (!old_format) {
+      r = io_ctx.remove(object_map_name(id));
+      if (r < 0 && r != -ENOENT) {
+	lderr(cct) << "error removing image object map" << dendl;
+      }
+
       ldout(cct, 2) << "removing id object..." << dendl;
       r = io_ctx.remove(id_obj_name(imgname));
       if (r < 0 && r != -ENOENT) {
@@ -1561,9 +1591,7 @@ reprotect_and_return_err:
 
     int r;
     do {
-      Mutex my_lock("librbd::resize::my_lock");
-      Cond cond;
-      bool done;
+      C_SaferCond *ctx;
       {
 	RWLock::RLocker l(ictx->owner_lock);
 	while (ictx->image_watcher->is_lock_supported()) {
@@ -1581,7 +1609,7 @@ reprotect_and_return_err:
 	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner" << dendl;
 	}
 
-	Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+	ctx = new C_SaferCond();
 	r = async_resize(ictx, ctx, size, prog_ctx);
 	if (r < 0) {
 	  delete ctx;
@@ -1589,40 +1617,17 @@ reprotect_and_return_err:
 	}
       }
 
-      my_lock.Lock();
-      while (!done) {
-	cond.Wait(my_lock);
-      }
-      my_lock.Unlock();
-
+      r = ctx->wait();
       if (r == -ERESTART) {
 	ldout(ictx->cct, 5) << "resize interrupted: restarting" << dendl;
       }
     } while (r == -ERESTART);
 
+    ictx->perfcounter->inc(l_librbd_resize);
     notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     ldout(cct, 2) << "resize finished" << dendl;
     return r;
   }
-
-  class AsyncResizeFinishContext : public Context {
-  public:
-    AsyncResizeFinishContext(ImageCtx *ictx, Context *ctx)
-      : m_ictx(ictx), m_ctx(ctx)
-    {
-    }
-
-    virtual void finish(int r) {
-      ldout(m_ictx->cct, 2) << "async_resize finished" << dendl;
-      m_ictx->perfcounter->inc(l_librbd_resize);
-      m_ctx->complete(r);
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    Context *m_ctx;
-  };
-
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx)
   {
@@ -1660,249 +1665,17 @@ reprotect_and_return_err:
       }
     }
 
-    AsyncResizeFinishContext *finish_ctx =
-      new AsyncResizeFinishContext(ictx, ctx);
-    r = async_resize_helper(ictx, finish_ctx, original_size, size, prog_ctx);
-    if (r < 0) {
-      delete ctx;
-      return r;
-    }
+    async_resize_helper(ictx, ctx, original_size, size, prog_ctx);
     return 0;
   }
 
-  class AsyncResizeHelperFinishContext : public Context {
-  public:
-    AsyncResizeHelperFinishContext(ImageCtx *ictx, Context *ctx,
-				   uint64_t original_size, uint64_t new_size)
-      : m_ictx(ictx), m_ctx(ctx), m_original_size(original_size),
-	m_new_size(new_size)
-    {
-    }
-
-    virtual void finish(int r) {
-      BOOST_SCOPE_EXIT((m_ctx) (m_ictx) (m_new_size) (m_original_size) (&r)) {
-	ldout(m_ictx->cct, 2) << "async_resize_helper finished ("
-			      << r << ")" << dendl;
-
-	if (r < 0) {
-	  RWLock::WLocker l(m_ictx->md_lock);
-	  if (m_ictx->size == m_new_size) {
-	    m_ictx->size = m_original_size;
-	  }
-	  m_ctx->complete(r);
-	}
-      } BOOST_SCOPE_EXIT_END
-
-      if (r < 0) {
-	return;
-      }
-
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (m_ictx->image_watcher->is_lock_supported() &&
-          !m_ictx->image_watcher->is_lock_owner()) {
-        r = -ERESTART;
-        return;
-      }
-
-      RWLock::WLocker l2(m_ictx->md_lock);
-      m_ictx->size = m_new_size;
-
-      librados::ObjectWriteOperation op;
-      if (m_ictx->old_format) {
-	// rewrite header
-	bufferlist bl;
-	m_ictx->header.image_size = m_new_size;
-	bl.append((const char *)&m_ictx->header, sizeof(m_ictx->header));
-	op.write(0, bl);
-      } else {
-        if (m_ictx->image_watcher->is_lock_supported()) {
-	  m_ictx->image_watcher->assert_header_locked(&op);
-        }
-	cls_client::set_size(&op, m_new_size);
-      }
-
-      librados::AioCompletion *rados_completion =
-	librados::Rados::aio_create_completion(m_ctx, NULL, rados_ctx_cb);
-      r = m_ictx->md_ctx.aio_operate(m_ictx->header_oid, rados_completion, &op);
-      rados_completion->release();
-      if (r < 0) {
-	lderr(m_ictx->cct) << "error writing header: " << cpp_strerror(r)
-			   << dendl;
-	return;
-      }
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    Context *m_ctx;
-    uint64_t m_original_size;
-    uint64_t m_new_size;
-  };
-
-  int async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-		          uint64_t new_size, ProgressContext& prog_ctx)
+  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
+		           uint64_t new_size, ProgressContext& prog_ctx)
   {
-    CephContext *cct = ictx->cct;
-    if (original_size == new_size) {
-      ldout(cct, 2) << "no change in size (" << original_size << " -> "
-		    << new_size << ")" << dendl;
-      ctx->complete(0);
-      return 0;
-    }
-
-    AsyncResizeHelperFinishContext *finish_ctx =
-      new AsyncResizeHelperFinishContext(ictx, ctx, original_size, new_size);
-    if (new_size > original_size) {
-      ldout(cct, 2) << "expanding image " << original_size << " -> "
-		    << new_size << dendl;
-      finish_ctx->complete(0);
-    } else {
-      ldout(cct, 2) << "shrinking image " << original_size << " -> "
-		    << new_size << dendl;
-
-      {
-        // update in-memory size to clip concurrent IO operations
-        RWLock::WLocker l(ictx->md_lock);
-        ictx->size = new_size;
-      }
-
-      int r = async_trim_image(ictx, finish_ctx, original_size, new_size,
-			       prog_ctx);
-      if (r < 0) {
-	delete finish_ctx;
-	return r;
-      }
-    }
-    return 0;
-  }
-
-  class AsyncTrimObjectContext : public C_AsyncObjectThrottle {
-  public:
-    AsyncTrimObjectContext(AsyncObjectThrottle &throttle, ImageCtx *ictx,
-        uint64_t object_no)
-      : C_AsyncObjectThrottle(throttle), m_ictx(ictx), m_object_no(object_no)
-    {
-    }
-
-    virtual int send() {
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (m_ictx->image_watcher->is_lock_supported() &&
-          !m_ictx->image_watcher->is_lock_owner()) {
-        return -ERESTART;
-      }
-
-      string oid = m_ictx->get_object_name(m_object_no);
-      librados::AioCompletion *rados_completion =
-	librados::Rados::aio_create_completion(this, NULL, rados_ctx_cb);
-      m_ictx->data_ctx.aio_remove(oid, rados_completion);
-      rados_completion->release();
-      return 0;
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    uint64_t m_object_no;
-  };
-
-  class AsyncTrimFinishContext : public Context {
-  public:
-
-    AsyncTrimFinishContext(ImageCtx *ictx, Context *ctx, uint64_t delete_start,
-         uint64_t num_objects, uint64_t delete_offset,
-         uint64_t new_size)
-      : m_ictx(ictx), m_ctx(ctx), m_delete_start(delete_start),
-	m_num_objects(num_objects), m_delete_offset(delete_offset),
-	m_new_size(new_size)
-    {
-    }
-
-    virtual void finish(int r) {
-      if (r < 0 || m_delete_offset <= m_new_size) {
-	m_ctx->complete(r);
-	return;
-      }
-
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (m_ictx->image_watcher->is_lock_supported() &&
-          !m_ictx->image_watcher->is_lock_owner()) {
-	m_ctx->complete(-ERESTART);
-	return;
-      }
-
-      // discard the weird boundary, if any
-      vector<ObjectExtent> extents;
-      Striper::file_to_extents(m_ictx->cct, m_ictx->format_string,
-             &m_ictx->layout, m_new_size,
-             m_delete_offset - m_new_size, 0, extents);
-
-      ContextCompletion *completion = new ContextCompletion(m_ctx, true);
-      for (vector<ObjectExtent>::iterator p = extents.begin();
-	   p != extents.end(); ++p) {
-	ldout(m_ictx->cct, 20) << " ex " << *p << dendl;
-	Context *req_comp = new C_ContextCompletion(*completion);
-	librados::AioCompletion *rados_completion =
-	  librados::Rados::aio_create_completion(req_comp, NULL, rados_ctx_cb);
-	if (p->offset == 0) {
-	  m_ictx->data_ctx.aio_remove(p->oid.name, rados_completion);
-	} else {
-	  librados::ObjectWriteOperation op;
-	  op.truncate(p->offset);
-	  m_ictx->data_ctx.aio_operate(p->oid.name, rados_completion, &op);
-	}
-	rados_completion->release();
-      }
-      completion->finish_adding_requests();
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    Context *m_ctx;
-    uint64_t m_delete_start;
-    uint64_t m_num_objects;
-    uint64_t m_delete_offset;
-    uint64_t m_new_size;
-  };
-
-  int async_trim_image(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-		       uint64_t new_size, ProgressContext& prog_ctx)
-  {
-    CephContext *cct = (CephContext *)ictx->data_ctx.cct();
-
-    uint64_t period = ictx->get_stripe_period();
-    uint64_t new_num_periods = ((new_size + period - 1) / period);
-    uint64_t delete_off = MIN(new_num_periods * period, original_size);
-    // first object we can delete free and clear
-    uint64_t delete_start = new_num_periods * ictx->get_stripe_count();
-    uint64_t num_objects = Striper::get_num_objects(ictx->layout, original_size);
-
-    ldout(cct, 10) << "trim_image " << original_size << " -> " << new_size
-		   << " periods " << new_num_periods
-		   << " discard to offset " << delete_off
-		   << " delete objects " << delete_start
-		   << " to " << (num_objects-1)
-		   << dendl;
-
-    AsyncTrimFinishContext *finish_ctx =
-      new AsyncTrimFinishContext(ictx, ctx, delete_start, num_objects,
-				 delete_off, new_size);
-    if (delete_start < num_objects) {
-      ldout(cct, 2) << "trim_image objects " << delete_start << " to "
-		    << (num_objects - 1) << dendl;
-
-      AsyncObjectThrottle::ContextFactory context_factory(
-        boost::lambda::bind(boost::lambda::new_ptr<AsyncTrimObjectContext>(),
-          boost::lambda::_1, ictx, boost::lambda::_2));
-      AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-        context_factory, finish_ctx, prog_ctx, delete_start, num_objects);
-      int r = throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
-      if (r < 0) {
-	delete throttle;
-	return r;
-      }
-    } else {
-      finish_ctx->complete(0);
-    }
-    return 0;
+    assert(ictx->owner_lock.is_locked());
+    AsyncResizeRequest *req = new AsyncResizeRequest(*ictx, ctx, original_size,
+						     new_size, prog_ctx);
+    req->send();
   }
 
   int snap_list(ImageCtx *ictx, vector<snap_info_t>& snaps)
@@ -2079,9 +1852,9 @@ reprotect_and_return_err:
     vector<parent_info> snap_parents;
     vector<uint8_t> snap_protection;
     {
+      int r;
       RWLock::WLocker l(ictx->snap_lock);
       {
-        int r;
 	RWLock::WLocker l2(ictx->parent_lock);
 	ictx->lockers.clear();
 	if (ictx->old_format) {
@@ -2144,6 +1917,26 @@ reprotect_and_return_err:
 			       << unsupported << dendl;
 	      return -ENOSYS;
 	    }
+
+            r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
+                                      ictx->snap_id, &ictx->flags);
+            if (r == -EOPNOTSUPP || r == -EIO) {
+              // Older OSD doesn't support RBD flags, need to assume the worst
+              ldout(ictx->cct, 10) << "OSD does not support RBD flags" << dendl;
+            } else if (r == -ENOENT) {
+              ldout(ictx->cct, 10) << "Image at invalid snapshot" << dendl;
+            } else if (r < 0 && r != -ENOENT) {
+              lderr(cct) << "Error reading flags: " << cpp_strerror(r) << dendl;
+              return r;
+            }
+            if (r < 0) {
+              ictx->flags = 0;
+              if ((ictx->features & RBD_FEATURE_OBJECT_MAP) != 0) {
+                ldout(ictx->cct, 10) << "disabling object map optimizations"
+                                     << dendl;
+                ictx->flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+              }
+            }
 
 	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 					  new_snapc.snaps, &snap_names,
@@ -2208,6 +2001,16 @@ reprotect_and_return_err:
 	lderr(cct) << "tried to read from a snapshot that no longer exists: "
 		   << ictx->snap_name << dendl;
 	ictx->snap_exists = false;
+      }
+
+      if ((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) {
+	delete ictx->object_map;
+	ictx->object_map = NULL;
+      } else {
+	ictx->object_map = new ObjectMap(*ictx);
+	if (ictx->snap_exists) {
+	  ictx->object_map->refresh();
+	}
       }
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
@@ -2280,25 +2083,12 @@ reprotect_and_return_err:
       }
     }
 
-    Mutex my_lock("librbd::snap_rollback::my_lock");
-    Cond cond;
-    bool done;
-    Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
-
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
-    r = async_resize_helper(ictx, ctx, original_size, new_size, no_op);
-    if (r < 0) {
-      delete ctx;
-      return r;
-    }
+    C_SaferCond *ctx = new C_SaferCond();
+    async_resize_helper(ictx, ctx, original_size, new_size, no_op);
 
-    my_lock.Lock();
-    while (!done) {
-      cond.Wait(my_lock);
-    }
-    my_lock.Unlock();
-
+    r = ctx->wait();
     if (r < 0) {
       lderr(cct) << "Error resizing to snapshot size: "
 		 << cpp_strerror(r) << dendl;
@@ -2492,6 +2282,9 @@ reprotect_and_return_err:
       return r;
     }
 
+    if (ictx->object_map != NULL) {
+      ictx->object_map->refresh();
+    }
     refresh_parent(ictx);
     return 0;
   }
@@ -2581,7 +2374,6 @@ reprotect_and_return_err:
       ictx->shutdown_cache(); // implicitly flushes
     } else {
       flush(ictx);
-      ictx->wait_for_pending_aio();
     }
 
     if (ictx->copyup_finisher != NULL) {
@@ -2612,140 +2404,6 @@ reprotect_and_return_err:
     delete ictx;
   }
 
-  class AsyncFlattenObjectContext : public C_AsyncObjectThrottle {
-  public:
-    AsyncFlattenObjectContext(AsyncObjectThrottle &throttle, ImageCtx *ictx,
-			      uint64_t object_size, ::SnapContext snapc,
-			      uint64_t object_no)
-      : C_AsyncObjectThrottle(throttle), m_ictx(ictx),
-	m_object_size(object_size), m_snapc(snapc), m_object_no(object_no)
-    {
-    }
-
-    virtual int send() {
-      int r = ictx_check(m_ictx);
-      if (r < 0) {
-        return r;
-      }
-
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (m_ictx->image_watcher->is_lock_supported() &&
-          !m_ictx->image_watcher->is_lock_owner()) {
-	return -ERESTART;
-      }
-
-      RWLock::RLocker l2(m_ictx->md_lock);
-      uint64_t overlap;
-      {
-        RWLock::RLocker l3(m_ictx->parent_lock);
-        // stop early if the parent went away - it just means
-        // another flatten finished first, so this one is useless.
-        if (!m_ictx->parent) {
-          return 1;
-        }
-
-	// resize might have occurred while flatten is running
-	overlap = min(m_ictx->size, m_ictx->parent_md.overlap);
-      }
-
-      // map child object onto the parent
-      vector<pair<uint64_t,uint64_t> > objectx;
-      Striper::extent_to_file(m_ictx->cct, &m_ictx->layout, m_object_no, 0,
-            m_object_size, objectx);
-      uint64_t object_overlap = m_ictx->prune_parent_extents(objectx, overlap);
-      assert(object_overlap <= m_object_size);
-      if (object_overlap == 0) {
-	// resize shrunk image while flattening
-	return 1;
-      }
-
-      bufferlist bl;
-      string oid = m_ictx->get_object_name(m_object_no);
-      AioWrite *req = new AioWrite(m_ictx, oid, m_object_no, 0, objectx,
-				   object_overlap, bl, m_snapc, CEPH_NOSNAP,
-				   this);
-      r = req->send();
-      if (r < 0) {
-	lderr(m_ictx->cct) << "failed to flatten object " << oid << dendl;
-	delete req;
-	return r;
-      }
-      return 0;
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    uint64_t m_object_size;
-    ::SnapContext m_snapc;
-    uint64_t m_object_no;
-
-  };
-
-  class AsyncFlattenFinishContext : public Context {
-  public:
-    AsyncFlattenFinishContext(ImageCtx *ictx, Context *ctx,
-			      uint64_t overlap_objects)
-      : m_ictx(ictx), m_ctx(ctx), m_overlap_objects(overlap_objects)
-    {
-    }
-
-    virtual void finish(int r) {
-      BOOST_SCOPE_EXIT((&m_ctx) (&r)) {
-	m_ctx->complete(r);
-      } BOOST_SCOPE_EXIT_END
-
-      CephContext *cct = m_ictx->cct;
-      if (r < 0) {
-        lderr(cct) << "failed to flatten at least one object: "
-		   << cpp_strerror(r) << dendl;
-        return;
-      }
-
-      RWLock::RLocker l(m_ictx->owner_lock);
-      if (m_ictx->image_watcher->is_lock_supported() &&
-          !m_ictx->image_watcher->is_lock_owner()) {
-	r = -ERESTART;
-        return;
-      }
-
-      // remove parent from this (base) image
-      librados::ObjectWriteOperation op;
-      if (m_ictx->image_watcher->is_lock_supported()) {
-	m_ictx->image_watcher->assert_header_locked(&op);
-      }
-      cls_client::remove_parent(&op);
-      r = m_ictx->md_ctx.operate(m_ictx->header_oid, &op);
-      if (r < 0) {
-        lderr(cct) << "error removing parent" << dendl;
-        return;
-      }
-
-      // and if there are no snaps, remove from the children object as well
-      // (if snapshots remain, they have their own parent info, and the child
-      // will be removed when the last snap goes away)
-      m_ictx->snap_lock.get_read();
-      if (m_ictx->snaps.empty()) {
-        ldout(cct, 2) << "removing child from children list..." << dendl;
-        int r = cls_client::remove_child(&m_ictx->md_ctx, RBD_CHILDREN,
-					 m_ictx->parent_md.spec, m_ictx->id);
-        if (r < 0) {
-	  lderr(cct) << "error removing child from children list" << dendl;
-	  m_ictx->snap_lock.put_read();
-	  return;
-        }
-      }
-      m_ictx->snap_lock.put_read();
-
-      ldout(cct, 20) << "finished flattening" << dendl;
-      return;
-    }
-
-  private:
-    ImageCtx *m_ictx;
-    Context *m_ctx;
-    uint64_t m_overlap_objects;
-  };
-
   // 'flatten' child image by copying all parent's blocks
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx)
   {
@@ -2758,9 +2416,7 @@ reprotect_and_return_err:
 
     int r;
     do {
-      Mutex my_lock("librbd::flatten:my_lock");
-      Cond cond;
-      bool done;
+      C_SaferCond *ctx;
       {
         RWLock::RLocker l(ictx->owner_lock);
         while (ictx->image_watcher->is_lock_supported()) {
@@ -2778,7 +2434,7 @@ reprotect_and_return_err:
           ldout(ictx->cct, 5) << "flatten timed out notifying lock owner" << dendl;
         }
 
-        Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+	ctx = new C_SaferCond();
         r = async_flatten(ictx, ctx, prog_ctx);
         if (r < 0) {
 	  delete ctx;
@@ -2786,12 +2442,7 @@ reprotect_and_return_err:
         }
       }
 
-      my_lock.Lock();
-      while (!done) {
-        cond.Wait(my_lock);
-      }
-      my_lock.Unlock();
-
+      r = ctx->wait();
       if (r == -ERESTART) {
 	ldout(ictx->cct, 5) << "flatten interrupted: restarting" << dendl;
       }
@@ -2851,20 +2502,10 @@ reprotect_and_return_err:
       overlap_objects = Striper::get_num_objects(ictx->layout, overlap); 
     }
 
-    AsyncObjectThrottle::ContextFactory context_factory(
-      boost::lambda::bind(boost::lambda::new_ptr<AsyncFlattenObjectContext>(),
-        boost::lambda::_1, ictx, object_size, snapc,
-        boost::lambda::_2));
-    AsyncFlattenFinishContext *finish_ctx =
-      new AsyncFlattenFinishContext(ictx, ctx, overlap_objects);
-    AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-      context_factory, finish_ctx, prog_ctx, 0, overlap_objects);
-    r = throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
-    if (r < 0) {
-      delete throttle;
-      return r;
-    }
-
+    AsyncFlattenRequest *req =
+      new AsyncFlattenRequest(*ictx, ctx, object_size, overlap_objects,
+			      snapc, prog_ctx);
+    req->send();
     return 0;
   }
 
@@ -3509,6 +3150,7 @@ reprotect_and_return_err:
       r = ictx->flush_cache();
     } else {
       r = ictx->data_ctx.aio_flush();
+      ictx->wait_for_pending_aio();
     }
 
     if (r)
@@ -3617,8 +3259,10 @@ reprotect_and_return_err:
 
 	req->set_op_flags(op_flags);
 	r = req->send();
-	if (r < 0)
+	if (r < 0) {
+	  req->complete(r);
 	  goto done;
+	}
       }
     }
   done:
@@ -3627,8 +3271,6 @@ reprotect_and_return_err:
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
     ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
-
-    /* FIXME: cleanup all the allocated stuff */
     return r;
   }
 
@@ -3710,8 +3352,10 @@ reprotect_and_return_err:
       }
 
       r = req->send();
-      if (r < 0)
+      if (r < 0) {
+	req->complete(r);
 	goto done;
+      }
     }
     r = 0;
   done:
@@ -3725,8 +3369,6 @@ reprotect_and_return_err:
 
     ictx->perfcounter->inc(l_librbd_aio_discard);
     ictx->perfcounter->inc(l_librbd_aio_discard_bytes, len);
-
-    /* FIXME: cleanup all the allocated stuff */
     return r;
   }
 
@@ -3795,7 +3437,7 @@ reprotect_and_return_err:
 
 	  Context *req_comp = new C_RBD_Readahead(ictx, q->oid, q->offset, q->length);
 	  ictx->readahead.inc_pending();
-	  ictx->aio_read_from_cache(q->oid, NULL,
+	  ictx->aio_read_from_cache(q->oid, q->objectno, NULL,
 				    q->length, q->offset,
 				    req_comp);
 	}
@@ -3870,7 +3512,7 @@ reprotect_and_return_err:
 
 	if (ictx->object_cacher) {
 	  C_CacheRead *cache_comp = new C_CacheRead(req);
-	  ictx->aio_read_from_cache(q->oid, &req->data(),
+	  ictx->aio_read_from_cache(q->oid, q->objectno, &req->data(),
 				    q->length, q->offset,
 				    cache_comp);
 	} else {

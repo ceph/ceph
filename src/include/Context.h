@@ -452,16 +452,16 @@ typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
 
 class FunctionContext : public Context {
 public:
-  FunctionContext(const boost::function<void()> &callback)
+  FunctionContext(const boost::function<void(int)> &callback)
     : m_callback(callback)
   {
   }
 
   virtual void finish(int r) {
-    m_callback();
+    m_callback(r);
   }
 private:
-  boost::function<void()> m_callback;
+  boost::function<void(int)> m_callback;
 };
 
 #undef mydout

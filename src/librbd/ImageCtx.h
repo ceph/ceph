@@ -9,6 +9,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <boost/optional.hpp>
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
@@ -34,6 +35,7 @@ namespace librbd {
 
   class ImageWatcher;
   class CopyupRequest;
+  class ObjectMap;
 
   struct ImageCtx {
     CephContext *cct;
@@ -65,7 +67,7 @@ namespace librbd {
     /**
      * Lock ordering:
      * owner_lock, md_lock, cache_lock, snap_lock, parent_lock, refresh_lock,
-     * aio_lock
+     * object_map_lock, aio_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -75,6 +77,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    RWLock object_map_lock; // protects object map updates
     Mutex aio_lock; // protects pending_aio and pending_aio_cond
     Mutex copyup_list_lock; // protects copyup_waiting_list
 
@@ -93,6 +96,7 @@ namespace librbd {
     parent_info parent_md;
     ImageCtx *parent;
     uint64_t stripe_unit, stripe_count;
+    uint64_t flags;
 
     ceph_file_layout layout;
 
@@ -108,6 +112,8 @@ namespace librbd {
 
     Cond pending_aio_cond;
     uint64_t pending_aio;
+
+    ObjectMap *object_map;
 
     /**
      * Either image_name or image_id must be set.
@@ -155,11 +161,12 @@ namespace librbd {
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;
     int get_parent_overlap(librados::snap_t in_snap_id,
 			   uint64_t *overlap) const;
-    void aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
-			     uint64_t off, Context *onfinish);
-    void write_to_cache(object_t o, bufferlist& bl, size_t len, uint64_t off,
-			Context *onfinish);
-    int read_from_cache(object_t o, bufferlist *bl, size_t len, uint64_t off);
+    void aio_read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+			     size_t len, uint64_t off, Context *onfinish);
+    void write_to_cache(object_t o, const bufferlist& bl, size_t len,
+			uint64_t off, Context *onfinish);
+    int read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+			size_t len, uint64_t off);
     void user_flushed();
     void flush_cache_aio(Context *onfinish);
     int flush_cache();
