@@ -185,51 +185,12 @@ public:
 # define AES_BLOCK_LEN   16
 
 static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			      const bufferptr& secret,
+			      CK_MECHANISM_TYPE mechanism,
+			      PK11SymKey *key,
+			      SECItem *param,
 			      const bufferlist& in, bufferlist& out,
-			      std::string& error)
+			      std::string &error)
 {
-  CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
-  PK11SlotInfo *slot;
-  PK11SymKey *key;
-  SECItem *param;
-
-  slot = PK11_GetBestSlot(mechanism, NULL);
-  if (!slot) {
-    ostringstream err;
-    err << "cannot find NSS slot to use: " << PR_GetError();
-    error = err.str();
-    return;
-  }
-
-  SECItem keyItem;
-  keyItem.type = siBuffer;
-  keyItem.data = (unsigned char*)secret.c_str();
-  keyItem.len = secret.length();
-  key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			  &keyItem, NULL);
-  if (!key) {
-    ostringstream err;
-    err << "cannot convert AES key for NSS: " << PR_GetError();
-    error = err.str();
-    return;
-  }
-
-  SECItem ivItem;
-  ivItem.type = siBuffer;
-  // losing constness due to SECItem.data; IV should never be
-  // modified, regardless
-  ivItem.data = (unsigned char*)CEPH_AES_IV;
-  ivItem.len = sizeof(CEPH_AES_IV);
-
-  param = PK11_ParamFromIV(mechanism, &ivItem);
-  if (!param) {
-    ostringstream err;
-    err << "cannot set NSS IV param: " << PR_GetError();
-    error = err.str();
-    return;
-  }
-
   // sample source said this has to be at least size of input + 8,
   // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
   bufferptr out_tmp(in.length()+16);
@@ -267,28 +228,73 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   }
 
   PK11_DestroyContext(ectx, PR_TRUE);
-  SECITEM_FreeItem(param, PR_TRUE);
-  PK11_FreeSymKey(key);
-  PK11_FreeSlot(slot);
 
   out_tmp.set_length(written + written2);
   out.append(out_tmp);
 }
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
+  CK_MECHANISM_TYPE mechanism;
+  PK11SlotInfo *slot;
+  PK11SymKey *key;
+  SECItem *param;
+  PK11Context *ctx;
+
 public:
+  CryptoAESKeyHandler()
+    : mechanism(CKM_AES_CBC_PAD),
+      slot(NULL),
+      key(NULL),
+      param(NULL) {}
+  ~CryptoAESKeyHandler() {
+    SECITEM_FreeItem(param, PR_TRUE);
+    PK11_FreeSymKey(key);
+    PK11_FreeSlot(slot);
+  }
+
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
+
+    slot = PK11_GetBestSlot(mechanism, NULL);
+    if (!slot) {
+      err << "cannot find NSS slot to use: " << PR_GetError();
+      return -1;
+    }
+
+    SECItem keyItem;
+    keyItem.type = siBuffer;
+    keyItem.data = (unsigned char*)secret.c_str();
+    keyItem.len = secret.length();
+    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
+			    &keyItem, NULL);
+    if (!key) {
+      err << "cannot convert AES key for NSS: " << PR_GetError();
+      return -1;
+    }
+
+    SECItem ivItem;
+    ivItem.type = siBuffer;
+    // losing constness due to SECItem.data; IV should never be
+    // modified, regardless
+    ivItem.data = (unsigned char*)CEPH_AES_IV;
+    ivItem.len = sizeof(CEPH_AES_IV);
+
+    param = PK11_ParamFromIV(mechanism, &ivItem);
+    if (!param) {
+      err << "cannot set NSS IV param: " << PR_GetError();
+      return -1;
+    }
+
     return 0;
   }
 
   void encrypt(const bufferlist& in,
 	       bufferlist& out, std::string &error) const {
-    nss_aes_operation(CKA_ENCRYPT, secret, in, out, error);
+    nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
   }
   void decrypt(const bufferlist& in,
 	       bufferlist& out, std::string &error) const {
-    nss_aes_operation(CKA_DECRYPT, secret, in, out, error);
+    nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
   }
 };
 
