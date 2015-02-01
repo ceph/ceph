@@ -55,7 +55,8 @@ TEST(AES, Encrypt) {
 
   bufferlist cipher;
   std::string error;
-  h->encrypt(secret, plaintext, cipher, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  kh->encrypt(plaintext, cipher, error);
   ASSERT_EQ(error, "");
 
   unsigned char want_cipher[] = {
@@ -99,7 +100,8 @@ TEST(AES, Decrypt) {
 
   std::string error;
   bufferlist plaintext;
-  h->decrypt(secret, cipher, plaintext, error);
+  CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+  kh->decrypt(cipher, plaintext, error);
   ASSERT_EQ(error, "");
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
@@ -131,7 +133,8 @@ TEST(AES, Loop) {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
 
       std::string error;
-      h->encrypt(secret, plaintext, cipher, error);
+      CryptoKeyHandler *kh = h->get_key_handler(secret, error);
+      kh->encrypt(plaintext, cipher, error);
       ASSERT_EQ(error, "");
     }
     plaintext.clear();
@@ -139,7 +142,8 @@ TEST(AES, Loop) {
     {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
       std::string error;
-      h->decrypt(secret, cipher, plaintext, error);
+      CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
+      ckh->decrypt(cipher, plaintext, error);
       ASSERT_EQ(error, "");
     }
   }
