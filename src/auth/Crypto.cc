@@ -62,7 +62,20 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
   return r;
 }
 
+
 // ---------------------------------------------------
+
+class CryptoNoneKeyHandler : public CryptoKeyHandler {
+public:
+  void encrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
+    out = in;
+  }
+  void decrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
+    out = in;
+  }
+};
 
 class CryptoNone : public CryptoHandler {
 public:
@@ -71,38 +84,20 @@ public:
   int get_type() const {
     return CEPH_CRYPTO_NONE;
   }
-  int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
+  int create(bufferptr& secret) {
+    return 0;
+  }
+  int validate_secret(const bufferptr& secret) {
+    return 0;
+  }
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) {
+    return new CryptoNoneKeyHandler;
+  }
 };
-
-int CryptoNone::create(bufferptr& secret)
-{
-  return 0;
-}
-
-int CryptoNone::validate_secret(bufferptr& secret)
-{
-  return 0;
-}
-
-void CryptoNone::encrypt(const bufferptr& secret, const bufferlist& in,
-			 bufferlist& out, std::string &error) const
-{
-  out = in;
-}
-
-void CryptoNone::decrypt(const bufferptr& secret, const bufferlist& in,
-			 bufferlist& out, std::string &error) const
-{
-  out = in;
-}
 
 
 // ---------------------------------------------------
+
 
 class CryptoAES : public CryptoHandler {
 public:
@@ -112,172 +107,29 @@ public:
     return CEPH_CRYPTO_AES;
   }
   int create(bufferptr& secret);
-  int validate_secret(bufferptr& secret);
-  void encrypt(const bufferptr& secret, const bufferlist& in,
-	       bufferlist& out, std::string &error) const;
-  void decrypt(const bufferptr& secret, const bufferlist& in,
-	      bufferlist& out, std::string &error) const;
+  int validate_secret(const bufferptr& secret);
+  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error);
 };
-
 
 #ifdef USE_CRYPTOPP
 # define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
 # define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
-#elif USE_NSS
-// when we say AES, we mean AES-128
-# define AES_KEY_LEN	16
-# define AES_BLOCK_LEN   16
 
-static void nss_aes_operation(CK_ATTRIBUTE_TYPE op, const bufferptr& secret,
-			     const bufferlist& in, bufferlist& out, std::string &error)
-{
-  const CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
-
-  // sample source said this has to be at least size of input + 8,
-  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
-  bufferptr out_tmp(in.length()+16);
-
-  bufferlist incopy;
-
-  PK11SlotInfo *slot;
-
-  slot = PK11_GetBestSlot(mechanism, NULL);
-  if (!slot) {
-    ostringstream oss;
-    oss << "cannot find NSS slot to use: " << PR_GetError();
-    error = oss.str();
-    goto err;
+class CryptoAESKeyHandler : public CryptoKeyHandler {
+public:
+  int init(const bufferptr& s, ostringstream& err) {
+    secret = s;
+    return 0;
   }
 
-  SECItem keyItem;
-
-  keyItem.type = siBuffer;
-  keyItem.data = (unsigned char*)secret.c_str();
-  keyItem.len = secret.length();
-
-  PK11SymKey *key;
-
-  key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			  &keyItem, NULL);
-  if (!key) {
-    ostringstream oss;
-    oss << "cannot convert AES key for NSS: " << PR_GetError();
-    error = oss.str();
-    goto err_slot;
-  }
-
-  SECItem ivItem;
-
-  ivItem.type = siBuffer;
-  // losing constness due to SECItem.data; IV should never be
-  // modified, regardless
-  ivItem.data = (unsigned char*)CEPH_AES_IV;
-  ivItem.len = sizeof(CEPH_AES_IV);
-
-  SECItem *param;
-
-  param = PK11_ParamFromIV(mechanism, &ivItem);
-  if (!param) {
-    ostringstream oss;
-    oss << "cannot set NSS IV param: " << PR_GetError();
-    error = oss.str();
-    goto err_key;
-  }
-
-  PK11Context *ctx;
-
-  ctx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  if (!ctx) {
-    ostringstream oss;
-    oss << "cannot create NSS context: " << PR_GetError();
-    error = oss.str();
-    goto err_param;
-  }
-
-  SECStatus ret;
-  int written;
-  unsigned char *in_buf;
-
-  incopy = in;  // it's a shallow copy!
-  in_buf = (unsigned char*)incopy.c_str();
-  ret = PK11_CipherOp(ctx,
-		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
-		      in_buf, in.length());
-  if (ret != SECSuccess) {
-    ostringstream oss;
-    oss << "NSS AES failed: " << PR_GetError();
-    error = oss.str();
-    goto err_op;
-  }
-
-  unsigned int written2;
-  ret = PK11_DigestFinal(ctx, (unsigned char*)out_tmp.c_str()+written, &written2,
-			 out_tmp.length()-written);
-  if (ret != SECSuccess) {
-    ostringstream oss;
-    oss << "NSS AES final round failed: " << PR_GetError();
-    error = oss.str();
-    goto err_op;
-  }
-
-  out_tmp.set_length(written + written2);
-  out.append(out_tmp);
-
-  PK11_DestroyContext(ctx, PR_TRUE);
-  SECITEM_FreeItem(param, PR_TRUE);
-  PK11_FreeSymKey(key);
-  PK11_FreeSlot(slot);
-  return;
-
- err_op:
-  PK11_DestroyContext(ctx, PR_TRUE);
- err_param:
-  SECITEM_FreeItem(param, PR_TRUE);
- err_key:
-  PK11_FreeSymKey(key);
- err_slot:
-  PK11_FreeSlot(slot);
- err:
-  ;
-}
-
-#else
-# error "No supported crypto implementation found."
-#endif
-
-int CryptoAES::create(bufferptr& secret)
-{
-  bufferlist bl;
-  int r = get_random_bytes(AES_KEY_LEN, bl);
-  if (r < 0)
-    return r;
-  secret = buffer::ptr(bl.c_str(), bl.length());
-  return 0;
-}
-
-int CryptoAES::validate_secret(bufferptr& secret)
-{
-  if (secret.length() < (size_t)AES_KEY_LEN) {
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
-void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlist& out,
-			std::string &error) const
-{
-  if (secret.length() < AES_KEY_LEN) {
-    error = "key is too short";
-    return;
-  }
-#ifdef USE_CRYPTOPP
-  {
+  void encrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
     const unsigned char *key = (const unsigned char *)secret.c_str();
 
     string ciphertext;
     CryptoPP::AES::Encryption aesEncryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption( aesEncryption, (const byte*)CEPH_AES_IV );
+    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbcEncryption(
+      aesEncryption, (const byte*)CEPH_AES_IV);
     CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
     CryptoPP::StreamTransformationFilter stfEncryptor(cbcEncryption, sink);
 
@@ -296,108 +148,274 @@ void CryptoAES::encrypt(const bufferptr& secret, const bufferlist& in, bufferlis
     }
     out.append((const char *)ciphertext.c_str(), ciphertext.length());
   }
-#elif USE_NSS
-  nss_aes_operation(CKA_ENCRYPT, secret, in, out, error);
-#else
-# error "No supported crypto implementation found."
-#endif
-}
 
-void CryptoAES::decrypt(const bufferptr& secret, const bufferlist& in, 
-			bufferlist& out, std::string &error) const
-{
-#ifdef USE_CRYPTOPP
-  const unsigned char *key = (const unsigned char *)secret.c_str();
+  void decrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
+    const unsigned char *key = (const unsigned char *)secret.c_str();
 
-  CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
-  CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption( aesDecryption, (const byte*)CEPH_AES_IV );
+    CryptoPP::AES::Decryption aesDecryption(key, CryptoPP::AES::DEFAULT_KEYLENGTH);
+    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbcDecryption(
+      aesDecryption, (const byte*)CEPH_AES_IV );
 
-  string decryptedtext;
-  CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
-  CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, sink);
-  for (std::list<bufferptr>::const_iterator it = in.buffers().begin(); 
-       it != in.buffers().end(); ++it) {
+    string decryptedtext;
+    CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
+    CryptoPP::StreamTransformationFilter stfDecryptor(cbcDecryption, sink);
+    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
+	 it != in.buffers().end(); ++it) {
       const unsigned char *in_buf = (const unsigned char *)it->c_str();
       stfDecryptor.Put(in_buf, it->length());
+    }
+
+    try {
+      stfDecryptor.MessageEnd();
+    } catch (CryptoPP::Exception& e) {
+      ostringstream oss;
+      oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
+      error = oss.str();
+      return;
+    }
+
+    out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
+  }
+};
+
+#elif USE_NSS
+// when we say AES, we mean AES-128
+# define AES_KEY_LEN	16
+# define AES_BLOCK_LEN   16
+
+static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
+			      const bufferptr& secret,
+			      const bufferlist& in, bufferlist& out,
+			      std::string& error)
+{
+  CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
+  PK11SlotInfo *slot;
+  PK11SymKey *key;
+  SECItem *param;
+
+  slot = PK11_GetBestSlot(mechanism, NULL);
+  if (!slot) {
+    ostringstream err;
+    err << "cannot find NSS slot to use: " << PR_GetError();
+    error = err.str();
+    return;
   }
 
-  try {
-    stfDecryptor.MessageEnd();
-  } catch (CryptoPP::Exception& e) {
+  SECItem keyItem;
+  keyItem.type = siBuffer;
+  keyItem.data = (unsigned char*)secret.c_str();
+  keyItem.len = secret.length();
+  key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
+			  &keyItem, NULL);
+  if (!key) {
+    ostringstream err;
+    err << "cannot convert AES key for NSS: " << PR_GetError();
+    error = err.str();
+    return;
+  }
+
+  SECItem ivItem;
+  ivItem.type = siBuffer;
+  // losing constness due to SECItem.data; IV should never be
+  // modified, regardless
+  ivItem.data = (unsigned char*)CEPH_AES_IV;
+  ivItem.len = sizeof(CEPH_AES_IV);
+
+  param = PK11_ParamFromIV(mechanism, &ivItem);
+  if (!param) {
+    ostringstream err;
+    err << "cannot set NSS IV param: " << PR_GetError();
+    error = err.str();
+    return;
+  }
+
+  // sample source said this has to be at least size of input + 8,
+  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
+  bufferptr out_tmp(in.length()+16);
+  bufferlist incopy;
+
+  SECStatus ret;
+  int written;
+  unsigned char *in_buf;
+
+  PK11Context *ectx;
+  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
+  assert(ectx);
+
+  incopy = in;  // it's a shallow copy!
+  in_buf = (unsigned char*)incopy.c_str();
+  ret = PK11_CipherOp(ectx,
+		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
+		      in_buf, in.length());
+  if (ret != SECSuccess) {
     ostringstream oss;
-    oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
+    oss << "NSS AES failed: " << PR_GetError();
     error = oss.str();
     return;
   }
 
-  out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
-#elif USE_NSS
-  nss_aes_operation(CKA_DECRYPT, secret, in, out, error);
+  unsigned int written2;
+  ret = PK11_DigestFinal(ectx,
+			 (unsigned char*)out_tmp.c_str()+written, &written2,
+			 out_tmp.length()-written);
+  if (ret != SECSuccess) {
+    ostringstream oss;
+    oss << "NSS AES final round failed: " << PR_GetError();
+    error = oss.str();
+    return;
+  }
+
+  PK11_DestroyContext(ectx, PR_TRUE);
+  SECITEM_FreeItem(param, PR_TRUE);
+  PK11_FreeSymKey(key);
+  PK11_FreeSlot(slot);
+
+  out_tmp.set_length(written + written2);
+  out.append(out_tmp);
+}
+
+class CryptoAESKeyHandler : public CryptoKeyHandler {
+public:
+  int init(const bufferptr& s, ostringstream& err) {
+    secret = s;
+    return 0;
+  }
+
+  void encrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
+    nss_aes_operation(CKA_ENCRYPT, secret, in, out, error);
+  }
+  void decrypt(const bufferlist& in,
+	       bufferlist& out, std::string &error) const {
+    nss_aes_operation(CKA_DECRYPT, secret, in, out, error);
+  }
+};
+
 #else
 # error "No supported crypto implementation found."
 #endif
+
+
+
+// ------------------------------------------------------------
+
+int CryptoAES::create(bufferptr& secret)
+{
+  bufferlist bl;
+  int r = get_random_bytes(AES_KEY_LEN, bl);
+  if (r < 0)
+    return r;
+  secret = buffer::ptr(bl.c_str(), bl.length());
+  return 0;
 }
+
+int CryptoAES::validate_secret(const bufferptr& secret)
+{
+  if (secret.length() < (size_t)AES_KEY_LEN) {
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
+					     string& error)
+{
+  CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
+  ostringstream oss;
+  if (ckh->init(secret, oss) < 0) {
+    error = oss.str();
+    return NULL;
+  }
+  return ckh;
+}
+
+
+
+
+// --
 
 
 // ---------------------------------------------------
 
-int CryptoKey::set_secret(CephContext *cct, int type, bufferptr& s)
+
+void CryptoKey::encode(bufferlist& bl) const
 {
-  this->type = type;
-  created = ceph_clock_now(cct);
+  ::encode(type, bl);
+  ::encode(created, bl);
+  __u16 len = secret.length();
+  ::encode(len, bl);
+  bl.append(secret);
+}
 
-  CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h) {
-    lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << type << ") returned NULL" << dendl;
-    return -EOPNOTSUPP;
+void CryptoKey::decode(bufferlist::iterator& bl)
+{
+  ::decode(type, bl);
+  ::decode(created, bl);
+  __u16 len;
+  ::decode(len, bl);
+  bufferptr tmp;
+  bl.copy(len, tmp);
+  if (_set_secret(type, tmp) < 0)
+    throw buffer::malformed_input("malformed secret");
+}
+
+int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
+{
+  int r = _set_secret(type, s);
+  if (r < 0)
+    return r;
+  this->created = c;
+  return 0;
+}
+
+int CryptoKey::_set_secret(int t, const bufferptr& s)
+{
+  if (s.length() == 0) {
+    secret = s;
+    ckh.reset();
+    return 0;
   }
-  int ret = h->validate_secret(s);
 
-  if (ret < 0)
-    return ret;
-
+  CryptoHandler *ch = CryptoHandler::create(t);
+  if (ch) {
+    int ret = ch->validate_secret(s);
+    if (ret < 0) {
+      delete ch;
+      return ret;
+    }
+    string error;
+    ckh.reset(ch->get_key_handler(s, error));
+    delete ch;
+    if (error.length()) {
+      return -EIO;
+    }
+  }
+  type = t;
   secret = s;
-
   return 0;
 }
 
 int CryptoKey::create(CephContext *cct, int t)
 {
-  type = t;
-  created = ceph_clock_now(cct);
-
-  CryptoHandler *h = cct->get_crypto_handler(type);
-  if (!h) {
-    lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << type << ") returned NULL" << dendl;
+  CryptoHandler *ch = CryptoHandler::create(t);
+  if (!ch) {
+    if (cct)
+      lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << t << ") returned NULL" << dendl;
     return -EOPNOTSUPP;
   }
-  return h->create(secret);
-}
+  bufferptr s;
+  int r = ch->create(s);
+  delete ch;
+  if (r < 0)
+    return r;
 
-void CryptoKey::encrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
-{
-  if (!ch || ch->get_type() != type) {
-    ch = cct->get_crypto_handler(type);
-    if (!ch) {
-      ostringstream oss;
-      oss << "CryptoKey::encrypt: key type " << type << " not supported.";
-      return;
-    }
-  }
-  ch->encrypt(this->secret, in, out, error);
-}
-
-void CryptoKey::decrypt(CephContext *cct, const bufferlist& in, bufferlist& out, std::string &error) const
-{
-  if (!ch || ch->get_type() != type) {
-    ch = cct->get_crypto_handler(type);
-    if (!ch) {
-      ostringstream oss;
-      oss << "CryptoKey::decrypt: key type " << type << " not supported.";
-      return;
-    }
-  }
-  ch->decrypt(this->secret, in, out, error);
+  r = _set_secret(t, s);
+  if (r < 0)
+    return r;
+  created = ceph_clock_now(cct);
+  return r;
 }
 
 void CryptoKey::print(std::ostream &out) const
