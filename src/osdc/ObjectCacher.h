@@ -56,8 +56,8 @@ class ObjectCacher {
     snapid_t snap;
     map<object_t, bufferlist*> read_data;  // bits of data as they come back
     bufferlist *bl;
-    int flags;
-    OSDRead(snapid_t s, bufferlist *b, int f) : snap(s), bl(b), flags(f) {}
+    int fadvise_flags;
+    OSDRead(snapid_t s, bufferlist *b, int f) : snap(s), bl(b), fadvise_flags(f) {}
   };
 
   OSDRead *prepare_read(snapid_t snap, bufferlist *b, int f) {
@@ -70,9 +70,9 @@ class ObjectCacher {
     SnapContext snapc;
     bufferlist bl;
     utime_t mtime;
-    int flags;
+    int fadvise_flags;
     OSDWrite(const SnapContext& sc, const bufferlist& b, utime_t mt, int f)
-      : snapc(sc), bl(b), mtime(mt), flags(f) {}
+      : snapc(sc), bl(b), mtime(mt), fadvise_flags(f) {}
   };
 
   OSDWrite *prepare_write(const SnapContext& sc, const bufferlist &b,
@@ -101,7 +101,8 @@ class ObjectCacher {
     struct {
       loff_t start, length;   // bh extent in object
     } ex;
-        
+    bool dontneed; //indicate bh don't need by anyone
+
   public:
     Object *ob;
     bufferlist  bl;
@@ -117,6 +118,7 @@ class ObjectCacher {
     BufferHead(Object *o) : 
       state(STATE_MISSING),
       ref(0),
+      dontneed(false),
       ob(o),
       last_write_tid(0),
       last_read_tid(0),
@@ -159,6 +161,13 @@ class ObjectCacher {
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
+    }
+
+    void set_dontneed(bool v) {
+      dontneed = v;
+    }
+    bool get_dontneed() {
+      return dontneed;
     }
   };
 
@@ -283,6 +292,7 @@ class ObjectCacher {
     void try_merge_bh(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len);
+    bool include_all_cached_data(loff_t off, loff_t len);
     int map_read(OSDRead *rd,
                  map<loff_t, BufferHead*>& hits,
                  map<loff_t, BufferHead*>& missing,
@@ -410,10 +420,15 @@ class ObjectCacher {
       bh_lru_dirty.lru_touch(bh);
     else
       bh_lru_rest.lru_touch(bh);
+
+    bh->set_dontneed(false);
     touch_ob(bh->ob);
   }
   void touch_ob(Object *ob) {
     ob_lru.lru_touch(ob);
+  }
+  void bottouch_ob(Object *ob) {
+    ob_lru.lru_bottouch(ob);
   }
 
   // bh states
