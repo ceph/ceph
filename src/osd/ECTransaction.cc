@@ -13,7 +13,7 @@
  */
 
 #include <boost/variant.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <iostream>
 #include <vector>
 #include <sstream>

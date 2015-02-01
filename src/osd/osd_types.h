@@ -22,7 +22,7 @@
 #include <stdio.h>
 #include <memory>
 #include <boost/scoped_ptr.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 
 #include "include/rados/rados_types.hpp"
 
