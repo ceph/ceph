@@ -40,7 +40,7 @@ namespace librbd {
       } else if (handle != rhs.handle) {
 	return handle < rhs.handle;
       } else {
-	return request_id < request_id;
+	return request_id < rhs.request_id;
       }
     }
   };
