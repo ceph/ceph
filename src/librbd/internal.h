@@ -54,6 +54,7 @@ enum {
 };
 
 class Context;
+class SimpleThrottle;
 
 namespace librbd {
 
@@ -75,6 +76,7 @@ namespace librbd {
   const std::string id_obj_name(const std::string &name);
   const std::string header_name(const std::string &image_id);
   const std::string old_header_name(const std::string &image_name);
+  const std::string object_map_name(const std::string &image_id);
 
   int detect_format(librados::IoCtx &io_ctx, const std::string &name,
 		    bool *old_format, uint64_t *size);
@@ -161,6 +163,8 @@ namespace librbd {
 		   ceph::bufferlist& header);
   int tmap_set(librados::IoCtx& io_ctx, const std::string& imgname);
   int tmap_rm(librados::IoCtx& io_ctx, const std::string& imgname);
+  void rollback_object(ImageCtx *ictx, uint64_t snap_id, const string& oid,
+                       SimpleThrottle& throttle);
   int rollback_image(ImageCtx *ictx, uint64_t snap_id,
 		     ProgressContext& prog_ctx);
   void image_info(const ImageCtx *ictx, image_info_t& info, size_t info_size);
@@ -189,10 +193,8 @@ namespace librbd {
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx);
-  int async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-			  uint64_t new_size, ProgressContext& prog_ctx);
-  int async_trim_image(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-		       uint64_t new_size, ProgressContext& prog_ctx);
+  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
+			   uint64_t new_size, ProgressContext& prog_ctx);
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c, int op_flags);

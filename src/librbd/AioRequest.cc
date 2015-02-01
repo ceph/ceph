@@ -3,15 +3,20 @@
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
+#include "common/errno.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 
 #include "librbd/AioRequest.h"
 #include "librbd/CopyupRequest.h"
+
+#include <boost/bind.hpp>
+#include <boost/optional.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -20,7 +25,7 @@
 namespace librbd {
 
   AioRequest::AioRequest() :
-    m_ictx(NULL), m_ioctx(NULL),
+    m_ictx(NULL),
     m_object_no(0), m_object_off(0), m_object_len(0),
     m_snap_id(CEPH_NOSNAP), m_completion(NULL), m_parent_completion(NULL),
     m_hide_enoent(false) {}
@@ -29,7 +34,7 @@ namespace librbd {
 			 const ::SnapContext &snapc, librados::snap_t snap_id,
 			 Context *completion,
 			 bool hide_enoent) :
-    m_ictx(ictx), m_ioctx(&ictx->data_ctx), m_oid(oid), m_object_no(objectno),
+    m_ictx(ictx), m_oid(oid), m_object_no(objectno),
     m_object_off(off), m_object_len(len), m_snap_id(snap_id),
     m_completion(completion), m_parent_completion(NULL),
     m_hide_enoent(hide_enoent) {
@@ -175,7 +180,7 @@ namespace librbd {
                                                        m_object_no,
 						       m_image_extents);
             m_ictx->copyup_list[m_object_no] = new_req;
-            new_req->queue_read_from_parent();
+            new_req->queue_send();
           }
         }
       }
@@ -195,6 +200,16 @@ namespace librbd {
   int AioRead::send() {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
 
+    // send read request to parent if the object doesn't exist locally
+    {
+      RWLock::RLocker l(m_ictx->md_lock);
+      if (m_ictx->object_map != NULL &&
+	  !m_ictx->object_map->object_may_exist(m_object_no)) {
+	complete(-ENOENT);
+	return 0;
+      }
+    }
+
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_req_cb, NULL);
     int r;
@@ -208,8 +223,7 @@ namespace librbd {
     }
     op.set_op_flags2(m_op_flags);
 
-    r = m_ioctx->aio_operate(m_oid, rados_completion, &op, flags, NULL);
-
+    r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &op, flags, NULL);
     rados_completion->release();
     return r;
   }
@@ -229,8 +243,12 @@ namespace librbd {
 			       bool hide_enoent)
     : AioRequest(ictx, oid, object_no, object_off, len, snapc, snap_id, 
                  completion, hide_enoent),
-      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val), m_entire_object(NULL)
+      m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val),
+      m_entire_object(NULL)
   {
+    m_io_ctx.dup(ictx->data_ctx);
+    m_io_ctx.snap_set_read(CEPH_NOSNAP);
+
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
   }
@@ -241,6 +259,8 @@ namespace librbd {
       m_state = LIBRBD_AIO_WRITE_GUARD;
       m_write.assert_exists();
       ldout(m_ictx->cct, 20) << __func__ << " guarding write" << dendl;
+    } else {
+      m_state = LIBRBD_AIO_WRITE_FLAT;
     }
   }
 
@@ -252,6 +272,21 @@ namespace librbd {
     map<uint64_t, CopyupRequest*>::iterator it;
     bool finished = true;
     switch (m_state) {
+    case LIBRBD_AIO_WRITE_PRE:
+      ldout(m_ictx->cct, 20) << "WRITE_PRE" << dendl;
+      if (r < 0) {
+	return true;
+      }
+
+      send_write();
+      finished = false;
+      break;
+
+    case LIBRBD_AIO_WRITE_POST:
+      ldout(m_ictx->cct, 20) << "WRITE_POST" << dendl;
+      finished = true;
+      break;
+
     case LIBRBD_AIO_WRITE_GUARD:
       ldout(m_ictx->cct, 20) << "WRITE_CHECK_GUARD" << dendl;
 
@@ -303,7 +338,7 @@ namespace librbd {
 
               m_entire_object = &(new_req->get_copyup_data());
               m_ictx->copyup_list_lock.Unlock();
-              new_req->read_from_parent();
+              new_req->send();
             } else {
               it->second->append_request(this);
               m_entire_object = &it->second->get_copyup_data();
@@ -321,25 +356,27 @@ namespace librbd {
 	}
 	finished = false;
 	break;
-      }
-      if (r < 0) {
-	ldout(m_ictx->cct, 20) << "error checking for object existence" << dendl;
+      } else if (r < 0) {
+        // pass the error code to the finish context
+        m_state = LIBRBD_AIO_WRITE_ERROR;
+        complete(r);
+	finished = false;
 	break;
       }
+
+      finished = send_post();
       break;
 
     case LIBRBD_AIO_WRITE_COPYUP:
       ldout(m_ictx->cct, 20) << "WRITE_COPYUP" << dendl;
       m_state = LIBRBD_AIO_WRITE_GUARD;
-      if (r < 0)
+      if (r < 0) {
 	return should_complete(r);
+      }
 
       // Read data from waiting list safely. If this AioWrite created a
       // CopyupRequest, m_read_data should be empty.
       if (m_entire_object != NULL) {
-	assert(m_ictx->copyup_list_lock.is_locked());
-	assert(m_ictx->copyup_list.find(m_object_no) !=
-	       m_ictx->copyup_list.end());
 	assert(m_read_data.length() == 0);
 	m_read_data.append(*m_entire_object);
       }
@@ -350,7 +387,14 @@ namespace librbd {
 
     case LIBRBD_AIO_WRITE_FLAT:
       ldout(m_ictx->cct, 20) << "WRITE_FLAT" << dendl;
-      // nothing to do
+
+      finished = send_post();
+      break;
+
+    case LIBRBD_AIO_WRITE_ERROR:
+      assert(r < 0);
+      lderr(m_ictx->cct) << "WRITE_ERROR: " << cpp_strerror(r)
+			 << dendl; 
       break;
 
     default:
@@ -362,32 +406,111 @@ namespace librbd {
   }
 
   int AbstractWrite::send() {
-    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
+    ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+
+    if (send_pre()) {
+      return 0;
+    } else {
+      send_write();
+    }
+    return 0;
+  }
+
+  bool AbstractWrite::send_pre() {
+    bool lost_exclusive_lock = false;
+    {
+      RWLock::RLocker l(m_ictx->owner_lock);
+      RWLock::RLocker l2(m_ictx->md_lock);
+      if (m_ictx->object_map == NULL) {
+	return false;
+      }
+
+      if (!m_ictx->image_watcher->is_lock_owner()) {
+	ldout(m_ictx->cct, 1) << "lost exclusive lock during write" << dendl;
+	lost_exclusive_lock = true;
+      } else {
+	ldout(m_ictx->cct, 20) << "send_pre " << this << " " << m_oid << " "
+			       << m_object_off << "~" << m_object_len << dendl;
+
+        uint8_t new_state;
+        boost::optional<uint8_t> current_state;
+        pre_object_map_update(&new_state);
+
+        m_state = LIBRBD_AIO_WRITE_PRE; 
+        FunctionContext *ctx = new FunctionContext(
+          boost::bind(&AioRequest::complete, this, _1));
+        m_ictx->object_map->aio_update(m_object_no, new_state,
+				       current_state, ctx);
+      }
+    }
+    
+    if (lost_exclusive_lock) {
+      complete(-ERESTART);
+    }
+    return true;
+  }
+
+  bool AbstractWrite::send_post() {
+    ldout(m_ictx->cct, 20) << "send_post " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+
+    RWLock::RLocker l(m_ictx->owner_lock);
+    RWLock::RLocker l2(m_ictx->md_lock);
+    if (m_ictx->object_map == NULL || !post_object_map_update()) {
+      return true;
+    }
+
+    if (m_ictx->image_watcher->is_lock_supported() &&
+        !m_ictx->image_watcher->is_lock_owner()) {
+      // leave the object flagged as pending
+      ldout(m_ictx->cct, 1) << "lost exclusive lock during write" << dendl;
+      return true;
+    }
+
+    m_state = LIBRBD_AIO_WRITE_POST;
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&AioRequest::complete, this, _1));
+    m_ictx->object_map->aio_update(m_object_no, OBJECT_NONEXISTENT,
+                                   OBJECT_PENDING, ctx);
+    return false;  
+  } 
+
+  void AbstractWrite::send_write() {
+    ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
+			   << m_object_off << "~" << m_object_len << dendl;
+
+    guard_write();
+    add_write_ops(&m_write);
+    assert(m_write.size() != 0);
+
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
-    int r;
-    assert(m_write.size());
-    r = m_ioctx->aio_operate(m_oid, rados_completion, &m_write,
-			     m_snap_seq, m_snaps);
+    int r = m_ictx->data_ctx.aio_operate(m_oid, rados_completion, &m_write,
+					 m_snap_seq, m_snaps);
+    assert(r == 0);
     rados_completion->release();
-    return r;
   }
 
   void AbstractWrite::send_copyup() {
     ldout(m_ictx->cct, 20) << "send_copyup " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
-    if (!m_read_data.is_zero())
-      m_copyup.exec("rbd", "copyup", m_read_data);
-    add_copyup_ops();
+    librados::ObjectWriteOperation op;
+    if (!m_read_data.is_zero()) {
+      op.exec("rbd", "copyup", m_read_data);
+    }
+    add_write_ops(&op);
+    assert(op.size() != 0);
 
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, NULL, rados_req_cb);
-    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &m_copyup,
+    m_ictx->md_ctx.aio_operate(m_oid, rados_completion, &op,
 			       m_snap_seq, m_snaps);
     rados_completion->release();
   }
 
-  void AioWrite::add_write_ops(librados::ObjectWriteOperation &wr) {
-    wr.set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
-    wr.write(m_object_off, m_write_data);
+  void AioWrite::add_write_ops(librados::ObjectWriteOperation *wr) {
+    wr->set_alloc_hint(m_ictx->get_object_size(), m_ictx->get_object_size());
+    wr->write(m_object_off, m_write_data);
+    wr->set_op_flags2(m_op_flags);
   }
 }

@@ -228,7 +228,8 @@ noinst_HEADERS += \
 	common/Readahead.h \
 	common/Cycles.h \
 	common/Initialize.h \
-	common/ContextCompletion.h
+	common/ContextCompletion.h \
+	common/bit_vector.hpp
 
 if ENABLE_XIO
 noinst_HEADERS += \

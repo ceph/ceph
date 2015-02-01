@@ -11,6 +11,7 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/ObjectMap.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -46,6 +47,7 @@ namespace librbd {
       snap_lock("librbd::ImageCtx::snap_lock"),
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
+      object_map_lock("librbd::ImageCtx::object_map_lock"),
       aio_lock("librbd::ImageCtx::aio_lock"),
       copyup_list_lock("librbd::ImageCtx::copyup_list_lock"),
       copyup_list_cond(),
@@ -54,11 +56,11 @@ namespace librbd {
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
-      stripe_unit(0), stripe_count(0),
+      stripe_unit(0), stripe_count(0), flags(0),
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      pending_aio(0)
+      pending_aio(0), object_map(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -128,6 +130,7 @@ namespace librbd {
       delete copyup_finisher;
       copyup_finisher = NULL;
     }
+    delete object_map;
     delete[] format_string;
   }
 
@@ -485,12 +488,13 @@ namespace librbd {
     return -ENOENT;
   }
 
-  void ImageCtx::aio_read_from_cache(object_t o, bufferlist *bl, size_t len,
+  void ImageCtx::aio_read_from_cache(object_t o, uint64_t object_no,
+				     bufferlist *bl, size_t len,
 				     uint64_t off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDRead *rd = object_cacher->prepare_read(snap_id, bl, 0);
     snap_lock.put_read();
-    ObjectExtent extent(o, 0 /* a lie */, off, len, 0);
+    ObjectExtent extent(o, object_no, off, len, 0);
     extent.oloc.pool = data_ctx.get_id();
     extent.buffer_extents.push_back(make_pair(0, len));
     rd->extents.push_back(extent);
@@ -501,7 +505,7 @@ namespace librbd {
       onfinish->complete(r);
   }
 
-  void ImageCtx::write_to_cache(object_t o, bufferlist& bl, size_t len,
+  void ImageCtx::write_to_cache(object_t o, const bufferlist& bl, size_t len,
 				uint64_t off, Context *onfinish) {
     snap_lock.get_read();
     ObjectCacher::OSDWrite *wr = object_cacher->prepare_write(snapc, bl,
@@ -519,14 +523,14 @@ namespace librbd {
     }
   }
 
-  int ImageCtx::read_from_cache(object_t o, bufferlist *bl, size_t len,
-				uint64_t off) {
+  int ImageCtx::read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
+				size_t len, uint64_t off) {
     int r;
     Mutex mylock("librbd::ImageCtx::read_from_cache");
     Cond cond;
     bool done;
     Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, bl, len, off, onfinish);
+    aio_read_from_cache(o, object_no, bl, len, off, onfinish);
     mylock.Lock();
     while (!done)
       cond.Wait(mylock);
@@ -577,9 +581,7 @@ namespace librbd {
   }
 
   void ImageCtx::shutdown_cache() {
-    md_lock.get_write();
     invalidate_cache();
-    md_lock.put_write();
     object_cacher->stop();
   }
 

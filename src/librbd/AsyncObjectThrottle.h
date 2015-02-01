@@ -46,7 +46,7 @@ public:
 		      ProgressContext &prog_ctx, uint64_t object_no,
 		      uint64_t end_object_no);
 
-  int start_ops(uint64_t max_concurrent);
+  void start_ops(uint64_t max_concurrent);
   virtual void finish_op(int r);
 
 private:
@@ -59,7 +59,7 @@ private:
   uint64_t m_current_ops;
   int m_ret;
 
-  int start_next_op();
+  void start_next_op();
 };
 
 } // namespace librbd
