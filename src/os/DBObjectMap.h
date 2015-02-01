@@ -17,7 +17,7 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/simple_cache.hpp"
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 
 /**
  * DBObjectMap: Implements ObjectMap in terms of KeyValueDB
