@@ -158,9 +158,13 @@ public:
   inline void release_xio_rsp(XioRsp* xrsp) {
     struct xio_msg *msg = xrsp->dequeue();
     struct xio_msg *next_msg = NULL;
+    int code;
     while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
-      int code = xio_release_msg(msg);
+      if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected()))
+        code = ENOTCONN;
+      else
+        code = xio_release_msg(msg);
       if (unlikely(code)) {
 	/* very unlikely, so log it */
 	xrsp->xcon->msg_release_fail(msg, code);
