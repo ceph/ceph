@@ -306,6 +306,8 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
     encode(p.get(), bl);
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuninitialized"
 template<typename T>
 inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 {
@@ -317,6 +319,7 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
     decode(p.get(), bp);
   }
 }
+#pragma GCC diagnostic pop
 
 //triple tuple
 template<class A, class B, class C>
