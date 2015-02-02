@@ -750,9 +750,9 @@ void PGMap::dump_pg_stats_plain(ostream& ss,
 	 << "\t" << st.last_change
 	 << "\t" << st.version
 	 << "\t" << st.reported_epoch << ":" << st.reported_seq
-	 << "\t" << st.up
+	 << "\t" << pg_vector_string(st.up)
 	 << "\t" << st.up_primary
-	 << "\t" << st.acting
+	 << "\t" << pg_vector_string(st.acting)
 	 << "\t" << st.acting_primary
 	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
 	 << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
