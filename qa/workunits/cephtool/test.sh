@@ -1369,6 +1369,13 @@ function test_mon_tell()
   ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
+function test_mon_ping()
+{
+  ceph ping mon.a
+  ceph ping mon.b
+  expect_false ceph ping mon.foo
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1403,6 +1410,7 @@ MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
+MON_TESTS+=" mon_ping"
 
 OSD_TESTS+=" osd_bench"
 
