@@ -2281,10 +2281,6 @@ reprotect_and_return_err:
     if (r < 0) {
       return r;
     }
-
-    if (ictx->object_map != NULL) {
-      ictx->object_map->refresh();
-    }
     refresh_parent(ictx);
     return 0;
   }

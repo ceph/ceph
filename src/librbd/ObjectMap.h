@@ -31,10 +31,10 @@ public:
 
   void aio_resize(uint64_t new_size, uint8_t default_object_state,
 		  Context *on_finish);
-  void aio_update(uint64_t object_no, uint8_t new_state,
-		 const boost::optional<uint8_t> &current_state,
-		 Context *on_finish);
-  void aio_update(uint64_t start_object_no, uint64_t end_object_no,
+  bool aio_update(uint64_t object_no, uint8_t new_state,
+		  const boost::optional<uint8_t> &current_state,
+		  Context *on_finish);
+  bool aio_update(uint64_t start_object_no, uint64_t end_object_no,
 		  uint8_t new_state,
 		  const boost::optional<uint8_t> &current_state,
 		  Context *on_finish);

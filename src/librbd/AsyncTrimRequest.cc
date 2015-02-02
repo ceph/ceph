@@ -159,61 +159,75 @@ void AsyncTrimRequest::send_remove_objects() {
 }
 
 void AsyncTrimRequest::send_pre_remove() {
+  bool remove_objects = false;
   bool lost_exclusive_lock = false;
   {
     RWLock::RLocker l(m_image_ctx.owner_lock);
     RWLock::RLocker l2(m_image_ctx.md_lock);
     if (m_image_ctx.object_map == NULL) {
-      send_remove_objects();
-      return;
-    }
-
-    ldout(m_image_ctx.cct, 5) << this << " send_pre_remove: "
-			      << " delete_start=" << m_delete_start
-			      << " num_objects=" << m_num_objects << dendl;
-    m_state = STATE_PRE_REMOVE;
-
-    if (!m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
-      lost_exclusive_lock = true;
+      remove_objects = true;
     } else {
-      // flag the objects as pending deletion
-      m_image_ctx.object_map->aio_update(
-	m_delete_start, m_num_objects, OBJECT_PENDING, OBJECT_EXISTS,
-	create_callback_context());
+      ldout(m_image_ctx.cct, 5) << this << " send_pre_remove: "
+				<< " delete_start=" << m_delete_start
+				<< " num_objects=" << m_num_objects << dendl;
+      m_state = STATE_PRE_REMOVE;
+
+      if (!m_image_ctx.image_watcher->is_lock_owner()) {
+        ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
+        lost_exclusive_lock = true;
+      } else {
+        // flag the objects as pending deletion
+        if (!m_image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+						OBJECT_PENDING, OBJECT_EXISTS,
+						create_callback_context())) {
+          remove_objects = true;
+        }
+      }
     }
   }
 
-  if (lost_exclusive_lock) {
+  // avoid possible recursive lock attempts
+  if (remove_objects) {
+    // no object map update required
+    send_remove_objects();
+  } else if (lost_exclusive_lock) {
     complete(-ERESTART);
   }
 }
 
 bool AsyncTrimRequest::send_post_remove() {
+  bool clean_boundary = false;
   bool lost_exclusive_lock = false;
   {
     RWLock::RLocker l(m_image_ctx.owner_lock);
     RWLock::RLocker l2(m_image_ctx.md_lock);
     if (m_image_ctx.object_map == NULL) {
-      return send_clean_boundary();
-    }
-
-    ldout(m_image_ctx.cct, 5) << this << " send_post_remove: "
-			      << " delete_start=" << m_delete_start
-			      << " num_objects=" << m_num_objects << dendl;
-    m_state = STATE_POST_REMOVE;
-
-    if (!m_image_ctx.image_watcher->is_lock_owner()) {
-      ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
+      clean_boundary = true;
     } else {
-      // flag the pending objects as removed
-      m_image_ctx.object_map->aio_update(
-	m_delete_start, m_num_objects, OBJECT_NONEXISTENT, OBJECT_PENDING,
-	create_callback_context());
+      ldout(m_image_ctx.cct, 5) << this << " send_post_remove: "
+          		        << " delete_start=" << m_delete_start
+          		        << " num_objects=" << m_num_objects << dendl;
+      m_state = STATE_POST_REMOVE;
+
+      if (!m_image_ctx.image_watcher->is_lock_owner()) {
+        ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
+      } else {
+        // flag the pending objects as removed
+        if (!m_image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+						OBJECT_NONEXISTENT,
+						OBJECT_PENDING,
+						create_callback_context())) {
+	  clean_boundary = true;
+	}
+      }
     }
   }
 
-  if (lost_exclusive_lock) {
+  // avoid possible recursive lock attempts
+  if (clean_boundary) {
+    // no object map update required
+    return send_clean_boundary();
+  } else if (lost_exclusive_lock) {
     complete(-ERESTART);
   }
   return false;
@@ -287,6 +301,7 @@ bool AsyncTrimRequest::send_clean_boundary() {
 
   }
 
+  // avoid possible recursive lock attempts
   if (lost_exclusive_lock) {
     complete(-ERESTART);
   } else if (completion != NULL) {

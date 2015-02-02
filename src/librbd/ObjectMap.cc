@@ -6,6 +6,7 @@
 #include "librbd/internal.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -29,7 +30,7 @@ int ObjectMap::lock()
   bool broke_lock = false;
   CephContext *cct = m_image_ctx.cct;
   while (true) {
-    ldout(cct, 10) << "locking object map" << dendl;
+    ldout(cct, 10) << &m_image_ctx << " locking object map" << dendl;
     r = rados::cls::lock::lock(&m_image_ctx.md_ctx,
 			       object_map_name(m_image_ctx.id),
 			       RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "", "",
@@ -86,6 +87,8 @@ int ObjectMap::unlock()
     return 0;
   }
 
+  ldout(m_image_ctx.cct, 10) << &m_image_ctx << " unlocking object map"
+			     << dendl;
   int r = rados::cls::lock::unlock(&m_image_ctx.md_ctx,
 				   object_map_name(m_image_ctx.id),
                                    RBD_LOCK_NAME, "");
@@ -106,8 +109,13 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 
   RWLock::RLocker l(m_image_ctx.object_map_lock);
   assert(object_no < object_map.size());
-  return (object_map[object_no] == OBJECT_EXISTS ||
-          object_map[object_no] == OBJECT_PENDING);
+
+  bool exists = (object_map[object_no] == OBJECT_EXISTS ||
+		 object_map[object_no] == OBJECT_PENDING);
+  ldout(m_image_ctx.cct, 20) << &m_image_ctx << " object_may_exist: "
+			     << "object_no=" << object_no << " r=" << exists
+			     << dendl;
+  return exists;
 }
 
 int ObjectMap::refresh()
@@ -115,9 +123,11 @@ int ObjectMap::refresh()
   if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
     return 0;
   }
-  
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
+
   CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << &m_image_ctx << " refreshing object map" << dendl;
+
+  RWLock::WLocker l(m_image_ctx.object_map_lock);
   int r = cls_client::object_map_load(&m_image_ctx.data_ctx,
 				      object_map_name(m_image_ctx.id),
                                       &object_map);
@@ -156,14 +166,15 @@ void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
   req->send();
 }
 
-void ObjectMap::aio_update(uint64_t object_no, uint8_t new_state,
+bool ObjectMap::aio_update(uint64_t object_no, uint8_t new_state,
 			   const boost::optional<uint8_t> &current_state,
 			   Context *on_finish)
 {
-  aio_update(object_no, object_no + 1, new_state, current_state, on_finish);
+  return aio_update(object_no, object_no + 1, new_state, current_state,
+		    on_finish);
 }
 
-void ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
+bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 			   uint8_t new_state,
                            const boost::optional<uint8_t> &current_state,
                            Context *on_finish)
@@ -172,42 +183,32 @@ void ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher->is_lock_owner());
 
-  bool update_required = false;
-  {
-    RWLock::WLocker l(m_image_ctx.object_map_lock);
-    assert(start_object_no < end_object_no);
+  RWLock::WLocker l(m_image_ctx.object_map_lock);
+  assert(start_object_no < end_object_no);
   
-    CephContext *cct = m_image_ctx.cct;
-    if (end_object_no > object_map.size()) {
-      ldout(cct, 20) << "skipping update of invalid object map" << dendl;
-      return;
-    }
+  CephContext *cct = m_image_ctx.cct;
+  if (end_object_no > object_map.size()) {
+    ldout(cct, 20) << "skipping update of invalid object map" << dendl;
+    return false;
+  }
   
-    for (uint64_t object_no = start_object_no; object_no < end_object_no;
-         ++object_no) {
-      if ((!current_state || object_map[object_no] == *current_state) &&
-          object_map[object_no] != new_state) {
-        update_required = true;
-        break;
-      }
-    }
-
-    if (update_required) {
+  for (uint64_t object_no = start_object_no; object_no < end_object_no;
+       ++object_no) {
+    if ((!current_state || object_map[object_no] == *current_state) &&
+        object_map[object_no] != new_state) {
       UpdateRequest *req = new UpdateRequest(m_image_ctx, start_object_no,
 					     end_object_no, new_state,
 					     current_state, on_finish);
       req->send();
+      return true;
     }
   }
-
-  if (!update_required) {
-    on_finish->complete(0);
-  }
+  return false;
 }
 
 void ObjectMap::invalidate() {
   CephContext *cct = m_image_ctx.cct;
-  lderr(cct) << this << " invalidating object map" << dendl;
+  lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
 
   librados::ObjectWriteOperation op;
@@ -222,7 +223,7 @@ void ObjectMap::invalidate() {
 
 bool ObjectMap::Request::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << this << " should_complete: r=" << r << dendl;
+  ldout(cct, 20) << &m_image_ctx << " should_complete: r=" << r << dendl;
 
   switch (m_state)
   {
@@ -252,9 +253,8 @@ bool ObjectMap::Request::should_complete(int r) {
     if (r < 0) {
       lderr(cct) << "failed to invalidate object map: " << cpp_strerror(r)
 		 << dendl; 
-      return true;
     }
-    break;
+    return true;
 
   default:
     lderr(cct) << "invalid state: " << m_state << dendl;
@@ -268,7 +268,7 @@ void ObjectMap::Request::invalidate() {
   CephContext *cct = m_image_ctx.cct;
   RWLock::WLocker l(m_image_ctx.md_lock);
 
-  lderr(cct) << this << " invalidating object map" << dendl;
+  lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_state = STATE_INVALIDATE;
   m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
 
@@ -288,7 +288,8 @@ void ObjectMap::ResizeRequest::send() {
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
 
-  ldout(cct, 5) << this << " resizing on-disk object map: " << m_num_objs << dendl;
+  ldout(cct, 5) << &m_image_ctx << " resizing on-disk object map: "
+		<< m_num_objs << dendl;
 
   librados::ObjectWriteOperation op;
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
@@ -304,7 +305,8 @@ void ObjectMap::ResizeRequest::send() {
 void ObjectMap::ResizeRequest::finish(ObjectMap *object_map) {
   CephContext *cct = m_image_ctx.cct;
 
-  ldout(cct, 5) << this << " resizing in-memory object map: " << m_num_objs << dendl;
+  ldout(cct, 5) << &m_image_ctx << " resizing in-memory object map: "
+		<< m_num_objs << dendl;
   size_t orig_object_map_size = object_map->object_map.size();
   object_map->object_map.resize(m_num_objs);
   for (uint64_t i = orig_object_map_size; i < object_map->object_map.size(); ++i) {
@@ -315,9 +317,11 @@ void ObjectMap::ResizeRequest::finish(ObjectMap *object_map) {
 void ObjectMap::UpdateRequest::send() {
   CephContext *cct = m_image_ctx.cct;
 
-  ldout(cct, 20) << this << " updating on-disk object map: ["
+  ldout(cct, 20) << &m_image_ctx << " updating on-disk object map: ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
-		 << static_cast<uint32_t>(m_new_state) << dendl;
+		 << (m_current_state ? stringify(*m_current_state) : "")
+		 << "->" << static_cast<uint32_t>(m_new_state)
+		 << dendl;
   
   librados::ObjectWriteOperation op;
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
@@ -334,7 +338,7 @@ void ObjectMap::UpdateRequest::send() {
 void ObjectMap::UpdateRequest::finish(ObjectMap *object_map) {
   CephContext *cct = m_image_ctx.cct;
 
-  ldout(cct, 20) << this << " updating in-memory object map" << dendl;
+  ldout(cct, 20) << &m_image_ctx << " updating in-memory object map" << dendl;
   for (uint64_t object_no = m_start_object_no;
        object_no < MIN(m_end_object_no, object_map->object_map.size());
        ++object_no) {
