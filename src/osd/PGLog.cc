@@ -681,6 +681,32 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   }
 }
 
+void PGLog::check() {
+  if (!pg_log_debug)
+    return;
+  if (log.log.size() != log_keys_debug.size()) {
+    derr << "log.log.size() != log_keys_debug.size()" << dendl;
+    derr << "actual log:" << dendl;
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+	 i != log.log.end();
+	 ++i) {
+      derr << "    " << *i << dendl;
+    }
+    derr << "log_keys_debug:" << dendl;
+    for (set<string>::const_iterator i = log_keys_debug.begin();
+	 i != log_keys_debug.end();
+	 ++i) {
+      derr << "    " << *i << dendl;
+    }
+  }
+  assert(log.log.size() == log_keys_debug.size());
+  for (list<pg_log_entry_t>::iterator i = log.log.begin();
+       i != log.log.end();
+       ++i) {
+    assert(log_keys_debug.count(i->get_key_name()));
+  }
+}
+
 void PGLog::write_log(
   ObjectStore::Transaction& t, const coll_t& coll, const ghobject_t &log_oid)
 {
