@@ -10,6 +10,7 @@
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "mon/MonitorDBStore.h"
+#include "osd/osd_types.h"
 
 // --
 
@@ -1424,5 +1425,76 @@ void PGMap::generate_test_instances(list<PGMap*>& o)
     o.back()->apply_incremental(NULL, *inc.front());
     delete inc.front();
     inc.pop_front();
+  }
+}
+
+void PGMap::get_filtered_pg_stats(string& state, int64_t poolid, int64_t osdid,
+                                  bool primary, set<pg_t>& pgs)
+{
+  int type = 0;
+  if (state != "all") {
+    type = pg_string_state(state);
+    if (type == -1)
+      assert(0 == "invalid type");
+  }
+
+  for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    if ((poolid >= 0) && (uint64_t(poolid) != i->first.pool()))
+      continue;
+    if ((osdid >= 0) && !(i->second.is_pg_on_osd(osdid,primary)))
+      continue;
+    if ((state != "all") && !(i->second.state & type))
+      continue;
+    pgs.insert(i->first);
+  }
+}
+
+void PGMap::dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const
+{
+  f->open_array_section("pg_stats");
+  for (ceph::unordered_map<pg_t,pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    if (pgs.count(i->first)) {
+      f->open_object_section("pg_stat");
+      f->dump_stream("pgid") << i->first;
+      i->second.dump(f);
+      f->close_section();
+    }
+  }
+  f->close_section();
+}
+void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
+{
+  ss << "pg_stat\tobjects\tmip\tdegr\tmisp\tunf\tbytes\tlog\tdisklog\tstate\t"
+    "state_stamp\tv\treported\tup\tup_primary\tacting\tacting_primary\t"
+    "last_scrub\tscrub_stamp\tlast_deep_scrub\tdeep_scrub_stamp" << std::endl;
+  for (ceph::unordered_map<pg_t, pg_stat_t>::const_iterator i = pg_stat.begin();
+       i != pg_stat.end(); ++i) {
+    const pg_stat_t &st(i->second);
+    if (pgs.count(i->first)) {
+      ss << i->first
+	 << "\t" << st.stats.sum.num_objects
+	 << "\t" << st.stats.sum.num_objects_missing_on_primary
+	 << "\t" << st.stats.sum.num_objects_degraded
+	 << "\t" << st.stats.sum.num_objects_misplaced
+	 << "\t" << st.stats.sum.num_objects_unfound
+	 << "\t" << st.stats.sum.num_bytes
+	 << "\t" << st.log_size
+	 << "\t" << st.ondisk_log_size
+	 << "\t" << pg_state_string(st.state)
+	 << "\t" << st.last_change
+	 << "\t" << st.version
+	 << "\t" << st.reported_epoch << ":" << st.reported_seq
+	 << "\t" << st.up
+	 << "\t" << st.up_primary
+	 << "\t" << st.acting
+	 << "\t" << st.acting_primary
+	 << "\t" << st.last_scrub << "\t" << st.last_scrub_stamp
+	 << "\t" << st.last_deep_scrub << "\t" << st.last_deep_scrub_stamp
+	 << std::endl;
+    }
   }
 }

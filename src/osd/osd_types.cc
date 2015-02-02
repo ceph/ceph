@@ -752,6 +752,53 @@ std::string pg_state_string(int state)
   return ret;
 }
 
+int pg_string_state(std::string state)
+{
+  int type;
+  if (state == "active")
+    type = PG_STATE_ACTIVE;
+  else if (state == "clean")
+    type = PG_STATE_CLEAN;
+  else if (state == "down")
+    type = PG_STATE_DOWN;
+  else if (state == "replay")
+    type = PG_STATE_REPLAY;
+  else if (state == "splitting")
+    type = PG_STATE_SPLITTING;
+  else if (state == "scrubbing")
+    type = PG_STATE_SCRUBBING;
+  else if (state == "scrubq")
+    type = PG_STATE_SCRUBQ;
+  else if (state == "degraded")
+    type = PG_STATE_DEGRADED;
+  else if (state == "inconsistent")
+    type = PG_STATE_INCONSISTENT;
+  else if (state == "peering")
+    type = PG_STATE_PEERING;
+  else if (state == "recoverying")
+    type = PG_STATE_RECOVERING;
+  else if (state == "backfill_wait")
+    type = PG_STATE_BACKFILL_WAIT;
+  else if (state == "incomplete")
+    type = PG_STATE_INCOMPLETE;
+  else if (state == "remapped")
+    type = PG_STATE_REMAPPED;
+  else if (state == "stale")
+    type = PG_STATE_STALE;
+  else if (state == "deep_scrub")
+    type = PG_STATE_DEEP_SCRUB;
+  else if (state == "backfill")
+    type = PG_STATE_BACKFILL;
+  else if (state == "backfill_toofull")
+    type = PG_STATE_BACKFILL_TOOFULL;
+  else if (state == "recovery_wait")
+    type = PG_STATE_RECOVERY_WAIT;
+  else if (state == "undersized")
+    type = PG_STATE_UNDERSIZED;
+  else
+    type = -1;
+  return type;
+}
 
 // -- eversion_t --
 string eversion_t::get_key_name() const
@@ -1706,6 +1753,21 @@ void object_stat_collection_t::generate_test_instances(list<object_stat_collecti
 
 
 // -- pg_stat_t --
+
+bool pg_stat_t::is_pg_on_osd(int32_t osd, bool primary) const
+{
+  if (primary && osd == acting_primary) {
+    return true;
+  } else if (!primary) {
+    for(vector<int32_t>::const_iterator it = acting.begin();
+        it != acting.end(); it++)
+    {
+      if (*it == osd)
+        return true;
+    }
+  }
+  return false;
+}
 
 void pg_stat_t::dump(Formatter *f) const
 {
