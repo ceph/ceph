@@ -57,9 +57,11 @@ map is ``active + clean``.
   full ratio.
 
 *Incomplete*
-  Ceph detects that a placement group is missing a necessary period of history 
-  from its log.  If you see this state, report a bug, and try to start any
-  failed OSDs that may contain the needed information.
+  Ceph detects that a placement group is missing information about
+  writes that may have occurred, or does not have any healthy
+  copies. If you see this state, try to start any failed OSDs that may
+  contain the needed information or temporarily adjust min_size to
+  allow recovery.
 
 *Stale*
   The placement group is in an unknown state - the monitors have not received
@@ -68,3 +70,11 @@ map is ``active + clean``.
 *Remapped*
   The placement group is temporarily mapped to a different set of OSDs from what
   CRUSH specified.
+
+*Undersized*
+  The placement group fewer copies than the configured pool replication level.
+
+*Peered*
+  The placement group has peered, but cannot serve client IO due to not having
+  enough copies to reach the pool's configured min_size parameter.  Recovery
+  may occur in this state, so the pg may heal up to min_size eventually.

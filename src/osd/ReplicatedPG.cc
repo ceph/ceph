@@ -1283,30 +1283,33 @@ void ReplicatedPG::do_request(
     dout(20) << flushes_in_progress
 	     << " flushes_in_progress pending "
 	     << "waiting for active on " << op << dendl;
-    waiting_for_active.push_back(op);
-    op->mark_delayed("waiting for flushes");
+    waiting_for_peered.push_back(op);
     return;
   }
 
-  if (!is_active()) {
+  if (!is_peered()) {
     // Delay unless PGBackend says it's ok
     if (pgbackend->can_handle_while_inactive(op)) {
       bool handled = pgbackend->handle_message(op);
       assert(handled);
       return;
     } else {
-      waiting_for_active.push_back(op);
-      op->mark_delayed("waiting for active");
+      waiting_for_peered.push_back(op);
       return;
     }
   }
 
-  assert(is_active() && flushes_in_progress == 0);
+  assert(is_peered() && flushes_in_progress == 0);
   if (pgbackend->handle_message(op))
     return;
 
   switch (op->get_req()->get_type()) {
   case CEPH_MSG_OSD_OP:
+    if (!is_active()) {
+      dout(20) << " peered, not active, waiting for active on " << op << dendl;
+      waiting_for_active.push_back(op);
+      return;
+    }
     if (is_replay()) {
       dout(20) << " replay, waiting for active on " << op << dendl;
       waiting_for_active.push_back(op);
@@ -2437,8 +2440,8 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
     first = &m->ops[0];
   }
 
-  if (!is_active()) {
-    waiting_for_active.push_back(op);
+  if (!is_peered()) {
+    waiting_for_peered.push_back(op);
     op->mark_delayed("waiting for active");
     return;
   }
@@ -7993,7 +7996,8 @@ ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
   if (ssc)
     register_snapset_context(ssc);
   dout(10) << "create_object_context " << (void*)obc.get() << " " << oi.soid << " " << dendl;
-  populate_obc_watchers(obc);
+  if (is_active())
+    populate_obc_watchers(obc);
   return obc;
 }
 
@@ -8061,7 +8065,8 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       soid, true,
       soid.has_snapset() ? attrs : 0);
 
-    populate_obc_watchers(obc);
+    if (is_active())
+      populate_obc_watchers(obc);
 
     if (pool.info.require_rollback()) {
       if (attrs) {
@@ -10262,9 +10267,9 @@ void ReplicatedPG::on_flushed()
   assert(flushes_in_progress > 0);
   flushes_in_progress--;
   if (flushes_in_progress == 0) {
-    requeue_ops(waiting_for_active);
+    requeue_ops(waiting_for_peered);
   }
-  if (!is_active() || !is_primary()) {
+  if (!is_peered() || !is_primary()) {
     pair<hobject_t, ObjectContextRef> i;
     while (object_contexts.get_next(i.first, &i)) {
       derr << "on_flushed: object " << i.first << " obc still alive" << dendl;
@@ -10386,7 +10391,11 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   // requeue everything in the reverse order they should be
   // reexamined.
+  requeue_ops(waiting_for_peered);
+
   clear_scrub_reserved();
+
+  // requeues waiting_for_active
   scrub_clear_state();
 
   context_registry_on_change();
