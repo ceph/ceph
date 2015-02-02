@@ -3099,7 +3099,14 @@ void RGWAbortMultipart::execute()
   int marker = 0;
   int max_parts = 1000;
 
+
   RGWObjectCtx *obj_ctx = (RGWObjectCtx *)s->obj_ctx;
+
+  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
+  meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = s->object.name;
+
+  cls_rgw_obj_chain chain;
 
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
@@ -3118,23 +3125,19 @@ void RGWAbortMultipart::execute()
         if (ret < 0 && ret != -ENOENT)
           return;
       } else {
-        RGWObjManifest& manifest = obj_part.manifest;
-        RGWObjManifest::obj_iterator oiter;
-        for (oiter = manifest.obj_begin(); oiter != manifest.obj_end(); ++oiter) {
-          rgw_obj loc = oiter.get_location();
-          loc.index_hash_source = s->object.name;
-          ret = store->delete_obj(*obj_ctx, s->bucket_info, loc, 0);
-          if (ret < 0 && ret != -ENOENT)
-            return;
-        }
+        store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
       }
     }
   } while (truncated);
 
+  /* use upload id as tag */
+  ret = store->send_chain_to_gc(chain, upload_id , false);  // do it async
+  if (ret < 0) {
+    ldout(store->ctx(), 5) << "gc->send_chain() returned " << ret << dendl;
+    return;
+  }
+
   // and also remove the metadata obj
-  meta_obj.init_ns(s->bucket, meta_oid, mp_ns);
-  meta_obj.set_in_extra_data(true);
-  meta_obj.index_hash_source = s->object.name;
   ret = store->delete_obj(*obj_ctx, s->bucket_info, meta_obj, 0);
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
