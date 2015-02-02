@@ -3103,9 +3103,16 @@ reprotect_and_return_err:
     ictx->user_flushed();
 
     c->get();
-    c->add_request();
     c->init_time(ictx, AIO_TYPE_FLUSH);
+
+    if (ictx->image_watcher != NULL) {
+      C_AioWrite *flush_ctx = new C_AioWrite(cct, c);
+      c->add_request();
+      ictx->image_watcher->flush_aio_operations(flush_ctx);
+    }
+
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
+    c->add_request();
     if (ictx->object_cacher) {
       ictx->flush_cache_aio(req_comp);
     } else {

@@ -3,9 +3,9 @@
 #ifndef CEPH_LIBRBD_IMAGE_WATCHER_H
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
-#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
+#include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include <set>
@@ -16,7 +16,6 @@
 #include "include/assert.h"
 
 class entity_name_t;
-class Context;
 class Finisher;
 class SafeTimer;
 
@@ -60,6 +59,7 @@ namespace librbd {
 
     bool has_pending_aio_operations();
     void flush_aio_operations();
+    void flush_aio_operations(Context *ctx);
 
     int try_lock();
     int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
@@ -170,7 +170,7 @@ namespace librbd {
     std::set<RemoteAsyncRequest> m_async_progress;
 
     Mutex m_aio_request_lock;
-    Cond m_aio_request_cond;
+    std::list<Context *> m_aio_flush_contexts;
     std::vector<AioRequest> m_aio_requests;
     bool m_retrying_aio_requests;
     Context *m_retry_aio_context;
@@ -191,7 +191,6 @@ namespace librbd {
     void finalize_retry_aio_requests();
     void retry_aio_requests();
 
-    void cancel_aio_requests(int result);
     void cancel_async_requests(int result);
 
     uint64_t encode_async_request(bufferlist &bl);
