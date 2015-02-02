@@ -1967,6 +1967,8 @@ public:
   int lock_exclusive(rgw_bucket& pool, const string& oid, utime_t& duration, string& zone_id, string& owner_id);
   int unlock(rgw_bucket& pool, const string& oid, string& zone_id, string& owner_id);
 
+  void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
+  int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);
   int gc_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_aio_operate(string& oid, librados::ObjectWriteOperation *op);
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
