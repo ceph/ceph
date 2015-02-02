@@ -760,6 +760,8 @@ std::string pg_state_string(int state)
     oss << "backfill_toofull+";
   if (state & PG_STATE_INCOMPLETE)
     oss << "incomplete+";
+  if (state & PG_STATE_PEERED)
+    oss << "peered+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1732,8 +1734,10 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_stream("last_fresh") << last_fresh;
   f->dump_stream("last_change") << last_change;
   f->dump_stream("last_active") << last_active;
+  f->dump_stream("last_peered") << last_peered;
   f->dump_stream("last_clean") << last_clean;
   f->dump_stream("last_became_active") << last_became_active;
+  f->dump_stream("last_became_peered") << last_became_peered;
   f->dump_stream("last_unstale") << last_unstale;
   f->dump_stream("last_undegraded") << last_undegraded;
   f->dump_stream("last_fullsized") << last_fullsized;
@@ -1787,7 +1791,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(20, 8, bl);
+  ENCODE_START(21, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -1825,6 +1829,8 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(last_undegraded, bl);
   ::encode(last_fullsized, bl);
   ::encode(hitset_bytes_stats_invalid, bl);
+  ::encode(last_peered, bl);
+  ::encode(last_became_peered, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1956,6 +1962,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     // if we are decoding an old encoding of this object, then the
     // encoder may not have supported num_bytes_hit_set_archive accounting.
     hitset_bytes_stats_invalid = true;
+  }
+  if (struct_v >= 21) {
+    ::decode(last_peered, bl);
+    ::decode(last_became_peered, bl);
+  } else {
+    last_peered = last_active;
+    last_became_peered = last_became_active;
   }
   DECODE_FINISH(bl);
 }
