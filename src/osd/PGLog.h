@@ -232,9 +232,15 @@ struct PGLog {
     }
 
     // actors
-    void add(pg_log_entry_t& e) {
+    void add(const pg_log_entry_t& e) {
       // add to log
       log.push_back(e);
+
+      /**
+       * Make sure we don't keep around more than we need to in the
+       * in-memory log
+       */
+      log.back().mod_desc.trim_bl();
 
       // riter previously pointed to the previous entry
       if (rollback_info_trimmed_to_riter == log.rbegin())
@@ -412,7 +418,7 @@ public:
 
   void unindex() { log.unindex(); }
 
-  void add(pg_log_entry_t& e) {
+  void add(const pg_log_entry_t& e) {
     mark_writeout_from(e.version);
     log.add(e);
   }
