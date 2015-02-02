@@ -175,6 +175,7 @@ struct crush_bucket_straw2 {
 struct crush_bucket_linear {
 	struct crush_bucket h;
 	__u32 item_weight;  /* 16-bit fixed point; all items equally weighted */
+	__s32 x_co, r_co, id_co, hash_id_co;
 };
 
 

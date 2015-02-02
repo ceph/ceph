@@ -339,8 +339,13 @@ static int bucket_straw2_choose(struct crush_bucket_straw2 *bucket,
 static int bucket_linear_choose(struct crush_bucket_linear *bucket,
 			       int x, int r)
 {
-	unsigned int item = x%bucket->h.size;
-	return bucket->h.items[item];
+	unsigned int item =
+		bucket->x_co * x +
+		bucket->r_co * r +
+		bucket->id_co + bucket->id;
+	if (bucket->hash_id_co)
+		item += bucket->hash_id_co * crush_hash32(bucket->id);
+	return bucket->h.items[item % bucket->h.size];
 }
 
 
