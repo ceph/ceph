@@ -173,7 +173,7 @@
        const hobject_t &hoid) = 0;
 
      virtual void log_operation(
-       vector<pg_log_entry_t> &logv,
+       const vector<pg_log_entry_t> &logv,
        boost::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &trim_rollback_to,
@@ -314,7 +314,7 @@
     * won't be called after on_change()
     */
    virtual void on_change() = 0;
-   virtual void clear_state() = 0;
+   virtual void clear_recovery_state() = 0;
 
    virtual void on_flushed() = 0;
 
@@ -503,7 +503,7 @@
      PGTransaction *t,                    ///< [in] trans to execute
      const eversion_t &trim_to,           ///< [in] trim log to here
      const eversion_t &trim_rollback_to,  ///< [in] trim rollback info to here
-     vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
+     const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
      Context *on_local_applied_sync,      ///< [in] called when applied locally

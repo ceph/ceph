@@ -266,6 +266,12 @@ void ReplicatedPG::on_local_recover(
     assert(obc);
     obc->obs.exists = true;
     obc->ondisk_write_lock();
+
+    bool got = obc->get_recovery_read();
+    assert(got);
+
+    assert(recovering.count(obc->obs.oi.soid));
+    recovering[obc->obs.oi.soid] = obc;
     obc->obs.oi = recovery_info.oi;  // may have been updated above
 
 
@@ -311,12 +317,17 @@ void ReplicatedPG::on_global_recover(
   dout(10) << "pushed " << soid << " to all replicas" << dendl;
   map<hobject_t, ObjectContextRef>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
-  if (backfills_in_flight.count(soid)) {
-    list<OpRequestRef> requeue_list;
-    i->second->drop_backfill_read(&requeue_list);
-    requeue_ops(requeue_list);
+
+  // recover missing won't have had an obc, but it gets filled in
+  // during on_local_recover
+  assert(i->second);
+  list<OpRequestRef> requeue_list;
+  i->second->drop_recovery_read(&requeue_list);
+  requeue_ops(requeue_list);
+
+  if (backfills_in_flight.count(soid))
     backfills_in_flight.erase(soid);
-  }
+
   recovering.erase(i);
   finish_recovery_op(soid);
   if (waiting_for_degraded_object.count(soid)) {
@@ -412,7 +423,11 @@ void ReplicatedPG::wait_for_unreadable_object(
   } else {
     dout(7) << "missing " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
-    recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    if (is_missing_object(soid)) {
+      recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    } else {
+      prep_object_replica_pushes(soid, v, h);
+    }
     pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
   }
   waiting_for_unreadable_object[soid].push_back(op);
@@ -1423,7 +1438,17 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   // degraded object?
-  if (write_ordered && is_degraded_object(head)) {
+  
+  /* We continue to block writes on degraded objects for an EC pools because
+   * we have to reset can_rollback_to when we get a repop without the
+   * transaction.  If two replicas do that on sequential ops on different
+   * objects and then crash, other unstable objects before those two would
+   * also be unable to be rolled back, and would also wind up unfound.
+   * We can enable degraded writes on ec pools by blocking such a write
+   * to a peer until all previous writes have completed.  For now, we
+   * will simply block them.
+   */
+  if (pool.info.ec_pool() && write_ordered && is_degraded_object(head)) {
     wait_for_degraded_object(head, op);
     return;
   }
@@ -1554,7 +1579,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
     return;
 
-  if (r) {
+  if (r && (r != -ENOENT || !obc)) {
+    dout(20) << __func__ << "find_object_context got error " << r << dendl;
     osd->reply_op_error(op, r);
     return;
   }
@@ -1710,10 +1736,17 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       reply_ctx(ctx, -EINVAL);
       return;
     }
-  } else if (!get_rw_locks(ctx)) {
+  } else if (!get_rw_locks(write_ordered, ctx)) {
     dout(20) << __func__ << " waiting for rw locks " << dendl;
     op->mark_delayed("waiting for rw locks");
     close_op_ctx(ctx, -EBUSY);
+    return;
+  }
+
+  if (r) {
+    dout(20) << __func__ << " returned an error: " << r << dendl;
+    close_op_ctx(ctx, r);
+    osd->reply_op_error(op, r);
     return;
   }
 
@@ -7558,6 +7591,40 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->reqid,
     repop->ctx->op);
   repop->ctx->op_t = NULL;
+
+  if (is_degraded_object(soid)) {
+    dout(10) << __func__ << ": " << soid
+	     << " degraded, maintaining missing sets"
+	     << dendl;
+    assert(!is_missing_object(soid));
+    for (vector<pg_log_entry_t>::iterator j = repop->ctx->log.begin();
+	 j != repop->ctx->log.end();
+	 ++j) {
+      for (set<pg_shard_t>::const_iterator peer = actingbackfill.begin();
+	   peer != actingbackfill.end();
+	   ++peer) {
+	if (*peer == pg_whoami) {
+	  assert(!is_missing_object(j->soid));
+	  continue;
+	}
+	map<pg_shard_t, pg_missing_t>::iterator pm = peer_missing.find(*peer);
+	assert(pm != peer_missing.end());
+	if (!pm->second.is_missing(soid)) {
+	  assert(!pm->second.is_missing(j->soid));
+	  continue;
+	}
+	dout(10) << __func__ << ": " << soid << " missing on "
+		 << *peer << ", adding event " << *j << " to missing"
+		 << dendl;
+	pm->second.add_next_event(*j);
+      }
+      missing_loc.rebuild_object_location(
+	j->soid,
+	actingbackfill,
+	get_all_missing(),
+	get_all_info());
+    }
+  }
 }
 
 template<typename T, int MSGTYPE>
@@ -7570,7 +7637,7 @@ Message * ReplicatedBackend::generate_subop(
   eversion_t pg_trim_rollback_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
-  vector<pg_log_entry_t> &log_entries,
+  const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_hist,
   InProgressOp *op,
   ObjectStore::Transaction *op_t,
@@ -7625,7 +7692,7 @@ void ReplicatedBackend::issue_op(
   eversion_t pg_trim_rollback_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
-  vector<pg_log_entry_t> &log_entries,
+  const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_hist,
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
@@ -8425,9 +8492,6 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   // sanity checks
   assert(m->map_epoch >= get_info().history.same_interval_since);
   
-  // we better not be missing this.
-  assert(!parent->get_log().get_missing().is_missing(soid));
-
   int ackerosd = m->get_source().num();
   
   op->mark_started();
@@ -10425,23 +10489,36 @@ void ReplicatedPG::_clear_recovery_state()
   recovering_oids.clear();
 #endif
   last_backfill_started = hobject_t();
-  list<OpRequestRef> blocked_ops;
   set<hobject_t>::iterator i = backfills_in_flight.begin();
   while (i != backfills_in_flight.end()) {
     assert(recovering.count(*i));
-    recovering[*i]->drop_backfill_read(&blocked_ops);
-    requeue_ops(blocked_ops);
     backfills_in_flight.erase(i++);
+  }
+
+  list<OpRequestRef> blocked_ops;
+  for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
+       i != recovering.end();
+       recovering.erase(i++)) {
+    if (i->second) {
+      i->second->drop_recovery_read(&blocked_ops);
+      requeue_ops(blocked_ops);
+    }
   }
   assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
-  recovering.clear();
-  pgbackend->clear_state();
+  assert(recovering.empty());
+  pgbackend->clear_recovery_state();
 }
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
   assert(recovering.count(soid));
+  ObjectContextRef obc = recovering[soid];
+  if (obc) {
+    list<OpRequestRef> blocked_ops;
+    obc->drop_recovery_read(&blocked_ops);
+    requeue_ops(blocked_ops);
+  }
   recovering.erase(soid);
   finish_recovery_op(soid);
   if (is_missing_object(soid))
@@ -10859,6 +10936,15 @@ int ReplicatedPG::prep_object_replica_pushes(
     return 0;
   }
 
+  if (!obc->get_recovery_read()) {
+    dout(20) << "recovery delayed on " << soid
+	     << "; could not get rw_manager lock" << dendl;
+    return 0;
+  } else {
+    dout(20) << "recovery got recovery read lock on " << soid
+	     << dendl;
+  }
+
   start_recovery_op(soid);
   assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
@@ -11226,7 +11312,7 @@ int ReplicatedPG::recover_backfill(
       if (!need_ver_targs.empty() || !missing_targs.empty()) {
 	ObjectContextRef obc = get_object_context(backfill_info.begin, false);
 	assert(obc);
-	if (obc->get_backfill_read()) {
+	if (obc->get_recovery_read()) {
 	  if (!need_ver_targs.empty()) {
 	    dout(20) << " BACKFILL replacing " << check
 		   << " with ver " << obj_v
@@ -12343,9 +12429,15 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
       return false;
   }
 
+  if (!obc->get_write(OpRequestRef())) {
+    dout(20) << __func__ << " skip (cannot get lock) " << obc->obs.oi << dendl;
+    return false;
+  }
+
   dout(10) << __func__ << " evicting " << obc->obs.oi << dendl;
   RepGather *repop = simple_repop_create(obc);
   OpContext *ctx = repop->ctx;
+  ctx->lock_to_release = OpContext::W_LOCK;
   ctx->at_version = get_next_version();
   assert(ctx->new_obs.exists);
   int r = _delete_oid(ctx, true);
