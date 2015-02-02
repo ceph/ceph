@@ -251,6 +251,58 @@ TEST(CRUSH, indep_out_progressive) {
   delete c;
 }
 
+// feed a bunch of inputs to each bucket type and make sure they don't
+// fall over
+TEST(CRUSH, buckets) {
+  for (int alg=1; alg<CRUSH_BUCKET_MAX; ++alg) {
+    CrushWrapper c;
+    const int ROOT_TYPE = 1;
+    c.set_type_name(ROOT_TYPE, "root");
+    const int OSD_TYPE = 0;
+    c.set_type_name(OSD_TYPE, "osd");
+
+    cout << "alg " << alg << std::endl;
+    c.set_allowed_bucket_algs(1 << alg);
+
+    int n = 15;
+    int items[n], weights[n];
+    for (int i=0; i<n; ++i) {
+      items[i] = i;
+      weights[i] = 0x10000;
+    }
+    c.set_max_devices(n);
+
+    int root;
+    string rootname("myroot");
+    int r = c.add_bucket(0, 0, CRUSH_HASH_DEFAULT, ROOT_TYPE, n, items,
+			 weights, &root);
+    ASSERT_EQ(0, r);
+    r = c.set_item_name(root, rootname);
+    ASSERT_EQ(0, r);
+
+    string name("myrule");
+    int ruleset = c.add_simple_ruleset(name, rootname, "osd",
+				       "firstn", pg_pool_t::TYPE_REPLICATED);
+    EXPECT_EQ(0, ruleset);
+
+    if (0) {
+      JSONFormatter jf(true);
+      jf.open_object_section("crush");
+      c.dump(&jf);
+      jf.close_section();
+      jf.flush(cout);
+    }
+
+    vector<unsigned> reweight(n, 0x10000);
+    for (int i=0; i<10000; ++i) {
+      vector<int> out;
+      c.do_rule(ruleset, i, out, 1, reweight, 1);
+      //cout << "alg " << alg << " x " << i << " out " << out << std::endl;
+      ASSERT_EQ(1u, out.size());
+    }
+  }
+}
+
 TEST(CRUSH, straw_zero) {
   // zero weight items should have no effect on placement.
 

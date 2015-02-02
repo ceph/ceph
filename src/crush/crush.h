@@ -110,7 +110,8 @@ enum {
 	CRUSH_BUCKET_TREE = 3,
 	CRUSH_BUCKET_STRAW = 4,
 	CRUSH_BUCKET_STRAW2 = 5,
-	CRUSH_BUCKET_LINEAR = 6
+	CRUSH_BUCKET_LINEAR = 6,
+	CRUSH_BUCKET_MAX = 7
 };
 extern const char *crush_bucket_alg_name(int alg);
 
