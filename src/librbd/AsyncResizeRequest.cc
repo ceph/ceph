@@ -33,7 +33,7 @@ bool AsyncResizeRequest::should_complete(int r)
   switch (m_state) {
   case STATE_TRIM_IMAGE:
     ldout(cct, 5) << "TRIM_IMAGE" << dendl;
-    send_grow_object_map();
+    send_update_header();
     break;
 
   case STATE_GROW_OBJECT_MAP:
@@ -127,10 +127,10 @@ void AsyncResizeRequest::send_grow_object_map() {
     }
   }
 
+  // avoid possible recursive lock attempts
   if (!object_map_enabled) {
     send_update_header();
   } else if (lost_exclusive_lock) {
-    // only complete when not holding locks
     complete(-ERESTART);
   }
 }
@@ -160,8 +160,8 @@ bool AsyncResizeRequest::send_shrink_object_map() {
     }
   }
 
+  // avoid possible recursive lock attempts
   if (lost_exclusive_lock) {
-    // only complete when not holding locks
     complete(-ERESTART);
   }
   return false;
@@ -207,8 +207,8 @@ void AsyncResizeRequest::send_update_header() {
     }
   }
 
+  // avoid possible recursive lock attempts
   if (lost_exclusive_lock) {
-    // only complete when not holding locks
     complete(-ERESTART);
   }
 }

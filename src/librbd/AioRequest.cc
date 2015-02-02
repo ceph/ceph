@@ -438,8 +438,11 @@ namespace librbd {
         m_state = LIBRBD_AIO_WRITE_PRE; 
         FunctionContext *ctx = new FunctionContext(
           boost::bind(&AioRequest::complete, this, _1));
-        m_ictx->object_map->aio_update(m_object_no, new_state,
-				       current_state, ctx);
+        if (!m_ictx->object_map->aio_update(m_object_no, new_state,
+					    current_state, ctx)) {
+	  // no object map update required
+	  return false;
+	}
       }
     }
     
@@ -469,8 +472,11 @@ namespace librbd {
     m_state = LIBRBD_AIO_WRITE_POST;
     FunctionContext *ctx = new FunctionContext(
       boost::bind(&AioRequest::complete, this, _1));
-    m_ictx->object_map->aio_update(m_object_no, OBJECT_NONEXISTENT,
-                                   OBJECT_PENDING, ctx);
+    if (!m_ictx->object_map->aio_update(m_object_no, OBJECT_NONEXISTENT,
+					OBJECT_PENDING, ctx)) {
+      // no object map update required
+      return true;
+    }
     return false;  
   } 
 
