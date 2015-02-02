@@ -3911,22 +3911,32 @@ int RGWRados::Object::complete_atomic_modification()
     return 0;
 
   cls_rgw_obj_chain chain;
-  RGWObjManifest::obj_iterator iter;
-  for (iter = state->manifest.obj_begin(); iter != state->manifest.obj_end(); ++iter) {
-    const rgw_obj& mobj = iter.get_location();
-    if (mobj == obj)
-      continue;
-    string oid, loc;
-    rgw_bucket bucket;
-    get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
-    cls_rgw_obj_key key(obj.get_index_key_name(), obj.get_instance());
-    chain.push_obj(bucket.data_pool, key, loc);
-  }
+  store->update_gc_chain(obj, state->manifest, &chain);
 
   string tag = (state->obj_tag.c_str() ? state->obj_tag.c_str() : "");
   int ret = store->gc->send_chain(chain, tag, false);  // do it async
 
   return ret;
+}
+
+void RGWRados::update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain)
+{
+  RGWObjManifest::obj_iterator iter;
+  for (iter = manifest.obj_begin(); iter != manifest.obj_end(); ++iter) {
+    const rgw_obj& mobj = iter.get_location();
+    if (mobj == head_obj)
+      continue;
+    string oid, loc;
+    rgw_bucket bucket;
+    get_obj_bucket_and_oid_loc(mobj, bucket, oid, loc);
+    cls_rgw_obj_key key(head_obj.get_index_key_name(), head_obj.get_instance());
+    chain->push_obj(bucket.data_pool, key, loc);
+  }
+}
+
+int RGWRados::send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync)
+{
+  return gc->send_chain(chain, tag, sync);
 }
 
 int RGWRados::open_bucket_index(rgw_bucket& bucket, librados::IoCtx& index_ctx, string& bucket_oid)

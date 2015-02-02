@@ -1220,8 +1220,6 @@ int main(int argc, const char **argv)
 
   delete olog;
 
-  rgw_perf_stop(g_ceph_context);
-
   RGWStoreManager::close_storage(store);
 
   rgw_tools_cleanup();
@@ -1232,6 +1230,8 @@ int main(int argc, const char **argv)
   g_ceph_context->put();
 
   ceph::crypto::shutdown();
+
+  rgw_perf_stop(g_ceph_context);
 
   signal_fd_finalize();
 
