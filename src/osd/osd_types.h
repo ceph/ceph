@@ -827,6 +827,7 @@ struct pg_pool_t {
     FLAG_NOPGCHANGE = 1<<5, // pool's pg and pgp num can't be changed
     FLAG_NOSIZECHANGE = 1<<6, // pool's size and min size can't be changed
     FLAG_WRITE_FADVISE_DONTNEED = 1<<7, // write mode with LIBRADOS_OP_FLAG_FADVISE_DONTNEED
+    FLAG_HASHPSPOOL2 = 1<<8, // hash pg seed and pool using congruential pseudo-random number generator
   };
 
   static const char *get_flag_name(int f) {
@@ -839,6 +840,7 @@ struct pg_pool_t {
     case FLAG_NOPGCHANGE: return "nopgchange";
     case FLAG_NOSIZECHANGE: return "nosizechange";
     case FLAG_WRITE_FADVISE_DONTNEED: return "write_fadvise_dontneed";
+    case FLAG_HASHPSPOOL2: return "hashpspool2";
     default: return "???";
     }
   }
@@ -1018,6 +1020,8 @@ public:
   uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
                                  ///< user does not specify any expected value
 
+  __u8 seed; ///< seed for compressing size of pps number space
+
   pg_pool_t()
     : flags(0), type(0), size(0), min_size(0),
       crush_ruleset(0), object_hash(0),
@@ -1041,7 +1045,8 @@ public:
       hit_set_count(0),
       min_read_recency_for_promote(0),
       stripe_width(0),
-      expected_num_objects(0)
+      expected_num_objects(0),
+      seed(1)
   { }
 
   void dump(Formatter *f) const;
@@ -1135,6 +1140,8 @@ public:
   uint64_t get_quota_max_objects() {
     return quota_max_objects;
   }
+  void set_seed(int s) {seed = s; }
+  int get_seed() const { return seed; }
 
   static int calc_bits_of(int t);
   void calc_pg_masks();

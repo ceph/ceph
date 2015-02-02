@@ -1138,7 +1138,7 @@ function test_mon_osd_pool_set()
   ceph --format=xml osd pool get $TEST_POOL_GETSET auid | grep $auid
   ceph osd pool set $TEST_POOL_GETSET auid 0
 
-  for flag in hashpspool nodelete nopgchange nosizechange; do
+  for flag in nodelete nopgchange nosizechange; do
       ceph osd pool set $TEST_POOL_GETSET $flag false
       ceph osd pool set $TEST_POOL_GETSET $flag true
       ceph osd pool set $TEST_POOL_GETSET $flag 1
@@ -1146,6 +1146,13 @@ function test_mon_osd_pool_set()
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag asdf
       expect_false ceph osd pool set $TEST_POOL_GETSET $flag 2
   done
+  ceph osd pool set $TEST_POOL_GETSET hashpspool true
+  ceph osd pool set $TEST_POOL_GETSET hashpspool false
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 0
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 1
+  ceph osd pool set $TEST_POOL_GETSET hashpspool 2
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool asdf
+  expect_false ceph osd pool set $TEST_POOL_GETSET hashpspool 3
 
   ceph osd pool set $TEST_POOL_GETSET nopgchange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET pg_num 10

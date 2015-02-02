@@ -506,7 +506,7 @@ OPTION(osd_erasure_code_plugins, OPT_STR,
 #endif
        ) // list of erasure code plugins
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
-OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
+OPTION(osd_pool_default_flag_hashpspool, OPT_INT, 1)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_flag_nodelete, OPT_BOOL, false) // pool can't be deleted
 OPTION(osd_pool_default_flag_nopgchange, OPT_BOOL, false) // pool's pg and pgp num can't be changed
 OPTION(osd_pool_default_flag_nosizechange, OPT_BOOL, false) // pool's size and min size can't be changed

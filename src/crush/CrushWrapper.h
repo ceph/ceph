@@ -135,7 +135,8 @@ public:
       (1 << CRUSH_BUCKET_UNIFORM) |
       (1 << CRUSH_BUCKET_LIST) |
       (1 << CRUSH_BUCKET_STRAW) |
-      (1 << CRUSH_BUCKET_STRAW2);
+      (1 << CRUSH_BUCKET_STRAW2) |
+      (1 << CRUSH_BUCKET_LINEAR);
   }
 
   void set_tunables_legacy() {
@@ -239,9 +240,10 @@ public:
       crush->chooseleaf_vary_r == 1 &&
       crush->straw_calc_version == 1 &&
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
-				      (1 << CRUSH_BUCKET_LIST) |
-				      (1 << CRUSH_BUCKET_STRAW) |
-				      (1 << CRUSH_BUCKET_STRAW2));
+				     (1 << CRUSH_BUCKET_LIST) |
+				     (1 << CRUSH_BUCKET_STRAW) |
+				     (1 << CRUSH_BUCKET_STRAW2) |
+				     (1 << CRUSH_BUCKET_LINEAR));
 }
 
   bool has_optimal_tunables() const {
@@ -286,6 +288,8 @@ public:
       return CRUSH_BUCKET_LIST;
     if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_UNIFORM))
       return CRUSH_BUCKET_UNIFORM;
+    if (crush->allowed_bucket_algs & (1 << CRUSH_BUCKET_LINEAR))
+      return CRUSH_BUCKET_LINEAR;
     return 0;
   }
 
@@ -1018,11 +1022,11 @@ public:
   }
 
   void do_rule(int rule, int x, vector<int>& out, int maxout,
-	       const vector<__u32>& weight) const {
+	       const vector<__u32>& weight, int seed) const {
     Mutex::Locker l(mapper_lock);
     int rawout[maxout];
     int scratch[maxout * 3];
-    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch);
+    int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0], weight.size(), scratch, seed);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);

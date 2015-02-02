@@ -1042,6 +1042,9 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (p->second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
+    if (p->second.flags & pg_pool_t::FLAG_HASHPSPOOL2) {
+      features |= CEPH_FEATURE_OSDHASHPSPOOL2;
+    }
     if (p->second.is_erasure() &&
 	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
       features |= CEPH_FEATURE_OSD_ERASURE_CODES;
@@ -1071,7 +1074,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
     }
   }
-  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
+  mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSDHASHPSPOOL2 |CEPH_FEATURE_OSD_CACHEPOOL;
   if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
     mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
@@ -1512,7 +1515,7 @@ int OSDMap::_pg_to_osds(const pg_pool_t& pool, pg_t pg,
   // what crush rule?
   int ruleno = crush->find_rule(pool.get_crush_ruleset(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, *osds, size, osd_weight);
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight, pool.get_seed());
 
   _remove_nonexistent_osds(pool, *osds);
 
@@ -1671,6 +1674,15 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
   _apply_primary_affinity(pps, *pool, up, primary);
 }
   
+int OSDMap::pg_to_up_osds_adaptive(const pg_pool_t& pool, pg_t pg, vector<int>& up) const
+{
+  int primary;
+  vector<int> raw;
+  _pg_to_osds(pool, pg, &raw, &primary, NULL);
+  _raw_to_up_osds(pool, raw, &up, &primary);
+  return up.size();
+}
+
 void OSDMap::_pg_to_up_acting_osds(const pg_t& pg, vector<int> *up, int *up_primary,
                                    vector<int> *acting, int *acting_primary) const
 {
@@ -2676,6 +2688,10 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].set_flag(pg_pool_t::FLAG_NOPGCHANGE);
     if (cct->_conf->osd_pool_default_flag_nosizechange)
       pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+    if (cct->_conf->osd_pool_default_flag_hashpspool == 1)
+      pools[pool].set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+    if (cct->_conf->osd_pool_default_flag_hashpspool == 2)
+      pools[pool].set_flag(pg_pool_t::FLAG_HASHPSPOOL2);
     pools[pool].size = cct->_conf->osd_pool_default_size;
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = default_replicated_ruleset;

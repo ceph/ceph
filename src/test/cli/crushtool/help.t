@@ -7,7 +7,7 @@
                            specify output for for (de)compilation
      --build --num_osds N layer1 ...
                            build a new map, where each 'layer' is
-                             'name (uniform|straw|list|tree) size'
+                             'name (uniform|straw|list|tree|linear) size'
      -i mapfn --test       test a range of inputs on the map
         [--min-x x] [--max-x x] [--x x]
         [--min-rule r] [--max-rule r] [--rule r]

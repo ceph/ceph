@@ -489,7 +489,7 @@ int CrushTester::test()
           if (use_crush) {
             if (output_mappings)
 	      err << "CRUSH"; // prepend CRUSH to placement output
-            crush.do_rule(r, x, out, nr, weight);
+            crush.do_rule(r, x, out, nr, weight, 1);
           } else {
             if (output_mappings)
 	      err << "RNG"; // prepend RNG to placement output to denote simulation

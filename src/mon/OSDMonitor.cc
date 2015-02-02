@@ -70,6 +70,27 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, OSDMap& osdmap) {
 		<< ").osd e" << osdmap.get_epoch() << " ";
 }
 
+float cal_average(vector<int> dataset, int length) {
+  float avg = 0;
+  float sum = 0;
+  for(int i = 0; i < length; i++){
+    sum += dataset[i];
+  }
+  avg = sum/length;
+  return avg;
+}
+
+float cal_stdev(vector<int> dataset, int length) {
+  float avg = cal_average(dataset, length);
+  float sum = 0;
+  float stdev;
+  for(int i = 0; i < length; i++){
+    sum += pow(dataset[i] - avg, 2);
+  }
+  stdev = pow(sum/length, 0.5);
+  return stdev;
+}
+
 bool OSDMonitor::_have_pending_crush()
 {
   return pending_inc.crush.length();
@@ -3586,6 +3607,54 @@ int OSDMonitor::crush_rename_bucket(const string& srcname,
   return 0;
 }
 
+void OSDMonitor::prepare_adaptive_seed(pg_pool_t *pi, int64_t pool)
+{
+  dout(10) << __func__ << " pool " << pool << dendl;
+  float min_stdev = 999999;
+  float avg_stdev = 0;
+  int num = 0;
+  int balance_param = 1;
+
+  for (int k = 1; k < 5; k++) {
+    map<int, int> osd_total_pgs;
+    pi->set_seed(k);
+    for (int i = 0; i < (int)pi->get_pg_num(); i++) {
+      pg_t pg(i, pool);
+      pg.set_pool(pool);
+      vector<int> acting;
+      int nrep = osdmap.pg_to_up_osds_adaptive(*pi, pg, acting);
+      if (nrep) {
+        for (int j = 0; j < nrep; j++) {
+          osd_total_pgs[acting[j]]++;
+        }
+      }
+    }
+
+    vector<int> pg_num;
+    for (map<int, int>::iterator ptr = osd_total_pgs.begin();
+	   ptr != osd_total_pgs.end();
+	   ++ptr) {
+      pg_num.push_back(ptr->second);
+    }
+
+    float stdev = cal_stdev(pg_num, pg_num.size());
+    avg_stdev += stdev;
+    ++num;
+    if (stdev < min_stdev) {
+      min_stdev = stdev;
+      balance_param = k;
+    }
+  }
+  if (num)
+    avg_stdev /= num;
+
+  pi->set_seed(balance_param);
+  dout(10) << __func__ << " chose seed " << balance_param
+	   << " with stddev " << min_stdev
+	   << " vs average stddev " << avg_stdev
+	   << dendl;
+}
+
 int OSDMonitor::crush_ruleset_create_erasure(const string &name,
 					     const string &profile,
 					     int *ruleset,
@@ -3972,6 +4041,8 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  else if (g_conf->osd_pool_default_flag_hashpspool == 2)
+    pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL2);
 
   pi->size = size;
   pi->min_size = min_size;
@@ -3990,6 +4061,10 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     g_conf->osd_pool_default_cache_target_full_ratio * 1000000;
   pi->cache_min_flush_age = g_conf->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf->osd_pool_default_cache_min_evict_age;
+
+  if (osdmap.crush->has_v4_buckets())
+    prepare_adaptive_seed(pi, pool);
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -4259,7 +4334,21 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return -ENOENT;
     }
     p.crush_ruleset = n;
-  } else if (var == "hashpspool" || var == "nodelete" || var == "nopgchange" ||
+  } else if (var == "hashpspool") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else if (interr.empty() && n == 2) {
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.set_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      p.unset_flag(pg_pool_t::FLAG_HASHPSPOOL2);
+    } else {
+      ss << "expecting value 'true', 'false', '0', '1' or '2'";
+      return -EINVAL;
+    }
+  } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
