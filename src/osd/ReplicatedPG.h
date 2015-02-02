@@ -369,13 +369,33 @@ public:
   const pg_pool_t &get_pool() const {
     return pool.info;
   }
+  map<pg_shard_t, const pg_missing_t *> get_all_missing() const {
+    map<pg_shard_t, const pg_missing_t *> all_missing;
+    all_missing[pg_whoami] = &(pg_log.get_missing());
+    for (map<pg_shard_t, pg_missing_t>::const_iterator i = peer_missing.begin();
+	 i != peer_missing.end();
+	 ++i) {
+      all_missing[i->first] = &(i->second);
+    }
+    return all_missing;
+  }
+  const map<pg_shard_t, const pg_info_t *> get_all_info() const {
+    map<pg_shard_t, const pg_info_t *> all_info;
+    all_info[pg_whoami] = &info;
+    for (map<pg_shard_t, pg_info_t>::const_iterator i = peer_info.begin();
+	 i != peer_info.end();
+	 ++i) {
+      all_info[i->first] = &(i->second);
+    }
+    return all_info;
+  }
   ObjectContextRef get_obc(
     const hobject_t &hoid,
     map<string, bufferlist> &attrs) {
     return get_object_context(hoid, true, &attrs);
   }
   void log_operation(
-    vector<pg_log_entry_t> &logv,
+    const vector<pg_log_entry_t> &logv,
     boost::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &trim_rollback_to,
@@ -397,11 +417,13 @@ public:
     if (peer == get_primary())
       return true;
     assert(peer_info.count(peer));
-    bool should_send = hoid.pool != (int64_t)info.pgid.pool() ||
+    bool should_send_backfill = hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= MAX(last_backfill_started, peer_info[peer].last_backfill);
-    if (!should_send)
+    if (!should_send_backfill)
       assert(is_backfill_targets(peer));
-    return should_send;
+
+    assert(peer_missing.count(peer));
+    return should_send_backfill && !peer_missing[peer].is_missing(hoid);
   }
   
   void update_peer_last_complete_ondisk(
@@ -579,7 +601,7 @@ public:
 
     ObjectModDesc mod_desc;
 
-    enum { W_LOCK, R_LOCK, NONE } lock_to_release;
+    enum { W_LOCK, R_LOCK, E_LOCK, NONE } lock_to_release;
 
     Context *on_finish;
 
@@ -734,48 +756,40 @@ protected:
    * @param ctx [in,out] ctx to get locks for
    * @return true on success, false if we are queued
    */
-  bool get_rw_locks(OpContext *ctx) {
+  bool get_rw_locks(bool write_ordered, OpContext *ctx) {
     /* If snapset_obc, !obc->obs->exists and we will always take the
      * snapdir lock *before* the head lock.  Since all callers will do
      * this (read or write) if we get the first we will be guaranteed
      * to get the second.
      */
-    if (ctx->snapset_obc) {
-      assert(!ctx->obc->obs.exists);
-      if (ctx->op->may_write() || ctx->op->may_cache()) {
-	if (ctx->snapset_obc->get_write(ctx->op)) {
-	  ctx->release_snapset_obc = true;
-	  ctx->lock_to_release = OpContext::W_LOCK;
-	} else {
-	  return false;
-	}
-      } else {
-	assert(ctx->op->may_read());
-	if (ctx->snapset_obc->get_read(ctx->op)) {
-	  ctx->release_snapset_obc = true;
-	  ctx->lock_to_release = OpContext::R_LOCK;
-	} else {
-	  return false;
-	}
-      }
-    }
-    if (ctx->op->may_write() || ctx->op->may_cache()) {
-      if (ctx->obc->get_write(ctx->op)) {
-	ctx->lock_to_release = OpContext::W_LOCK;
-	return true;
-      } else {
-	assert(!ctx->snapset_obc);
-	return false;
-      }
+    ObjectContext::RWState::State type = ObjectContext::RWState::RWNONE;
+    if (write_ordered && ctx->op->may_read()) {
+      type = ObjectContext::RWState::RWEXCL;
+      ctx->lock_to_release = OpContext::E_LOCK;
+    } else if (write_ordered) {
+      type = ObjectContext::RWState::RWWRITE;
+      ctx->lock_to_release = OpContext::W_LOCK;
     } else {
       assert(ctx->op->may_read());
-      if (ctx->obc->get_read(ctx->op)) {
-	ctx->lock_to_release = OpContext::R_LOCK;
-	return true;
+      type = ObjectContext::RWState::RWREAD;
+      ctx->lock_to_release = OpContext::R_LOCK;
+    }
+
+    if (ctx->snapset_obc) {
+      assert(!ctx->obc->obs.exists);
+      if (ctx->snapset_obc->get_lock_type(ctx->op, type)) {
+	ctx->release_snapset_obc = true;
       } else {
-	assert(!ctx->snapset_obc);
+	ctx->lock_to_release = OpContext::NONE;
 	return false;
       }
+    }
+    if (ctx->obc->get_lock_type(ctx->op, type)) {
+      return true;
+    } else {
+      assert(!ctx->snapset_obc);
+      ctx->lock_to_release = OpContext::NONE;
+      return false;
     }
   }
 
@@ -815,6 +829,24 @@ protected:
 	ctx->release_snapset_obc = false;
       }
       ctx->obc->put_write(
+	&to_req,
+	&requeue_recovery,
+	&requeue_snaptrimmer);
+      if (ctx->clone_obc)
+	ctx->clone_obc->put_write(
+	  &to_req,
+	  &requeue_recovery_clone,
+	  &requeue_snaptrimmer_clone);
+      break;
+    case OpContext::E_LOCK:
+      if (ctx->snapset_obc && ctx->release_snapset_obc) {
+	ctx->snapset_obc->put_excl(
+	  &to_req,
+	  &requeue_recovery_snapset,
+	  &requeue_snaptrimmer_snapset);
+	ctx->release_snapset_obc = false;
+      }
+      ctx->obc->put_excl(
 	&to_req,
 	&requeue_recovery,
 	&requeue_snaptrimmer);

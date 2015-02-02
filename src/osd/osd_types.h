@@ -3006,13 +3006,15 @@ public:
     enum State {
       RWNONE,
       RWREAD,
-      RWWRITE
+      RWWRITE,
+      RWEXCL,
     };
     static const char *get_state_name(State s) {
       switch (s) {
       case RWNONE: return "none";
       case RWREAD: return "read";
       case RWWRITE: return "write";
+      case RWEXCL: return "excl";
       default: return "???";
       }
     }
@@ -3025,7 +3027,7 @@ public:
     list<OpRequestRef> waiters;  ///< ops waiting on state change
 
     /// if set, restart backfill when we can get a read lock
-    bool backfill_read_marker;
+    bool recovery_read_marker;
 
     /// if set, requeue snaptrim on lock release
     bool snaptrimmer_write_marker;
@@ -3033,7 +3035,7 @@ public:
     RWState()
       : state(RWNONE),
 	count(0),
-	backfill_read_marker(false),
+	recovery_read_marker(false),
 	snaptrimmer_write_marker(false)
     {}
     bool get_read(OpRequestRef op) {
@@ -3059,6 +3061,8 @@ public:
 	return true;
       case RWWRITE:
 	return false;
+      case RWEXCL:
+	return false;
       default:
 	assert(0 == "unhandled case");
 	return false;
@@ -3077,7 +3081,7 @@ public:
       if (!greedy) {
 	// don't starve anybody!
 	if (!waiters.empty() ||
-	    backfill_read_marker) {
+	    recovery_read_marker) {
 	  return false;
 	}
       }
@@ -3091,10 +3095,38 @@ public:
 	return true;
       case RWREAD:
 	return false;
+      case RWEXCL:
+	return false;
       default:
 	assert(0 == "unhandled case");
 	return false;
       }
+    }
+    bool get_excl_lock() {
+      switch (state) {
+      case RWNONE:
+	assert(count == 0);
+	state = RWEXCL;
+	count = 1;
+	return true;
+      case RWWRITE:
+	return false;
+      case RWREAD:
+	return false;
+      case RWEXCL:
+	return false;
+      default:
+	assert(0 == "unhandled case");
+	return false;
+      }
+    }
+    bool get_excl(OpRequestRef op) {
+      if (get_excl_lock()) {
+	return true;
+      } // else
+      if (op)
+	waiters.push_back(op);
+      return false;
     }
     /// same as get_write_lock, but ignore starvation
     bool take_write_lock() {
@@ -3121,6 +3153,10 @@ public:
       assert(state == RWWRITE);
       dec(requeue);
     }
+    void put_excl(list<OpRequestRef> *requeue) {
+      assert(state == RWEXCL);
+      dec(requeue);
+    }
     bool empty() const { return state == RWNONE; }
   } rwstate;
 
@@ -3129,6 +3165,22 @@ public:
   }
   bool get_write(OpRequestRef op) {
     return rwstate.get_write(op, false);
+  }
+  bool get_excl(OpRequestRef op) {
+    return rwstate.get_excl(op);
+  }
+  bool get_lock_type(OpRequestRef op, RWState::State type) {
+    switch (type) {
+    case RWState::RWWRITE:
+      return get_write(op);
+    case RWState::RWREAD:
+      return get_read(op);
+    case RWState::RWEXCL:
+      return get_excl(op);
+    default:
+      assert(0 == "invalid lock type");
+      return true;
+    }
   }
   bool get_write_greedy(OpRequestRef op) {
     return rwstate.get_write(op, true);
@@ -3141,27 +3193,40 @@ public:
       return false;
     }
   }
-  bool get_backfill_read() {
-    rwstate.backfill_read_marker = true;
+  bool get_recovery_read() {
+    rwstate.recovery_read_marker = true;
     if (rwstate.get_read_lock()) {
       return true;
     }
     return false;
   }
-  void drop_backfill_read(list<OpRequestRef> *ls) {
-    assert(rwstate.backfill_read_marker);
+  void drop_recovery_read(list<OpRequestRef> *ls) {
+    assert(rwstate.recovery_read_marker);
     rwstate.put_read(ls);
-    rwstate.backfill_read_marker = false;
+    rwstate.recovery_read_marker = false;
   }
   void put_read(list<OpRequestRef> *to_wake) {
     rwstate.put_read(to_wake);
+  }
+  void put_excl(list<OpRequestRef> *to_wake,
+		 bool *requeue_recovery,
+		 bool *requeue_snaptrimmer) {
+    rwstate.put_excl(to_wake);
+    if (rwstate.empty() && rwstate.recovery_read_marker) {
+      rwstate.recovery_read_marker = false;
+      *requeue_recovery = true;
+    }
+    if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
+      rwstate.snaptrimmer_write_marker = false;
+      *requeue_snaptrimmer = true;
+    }
   }
   void put_write(list<OpRequestRef> *to_wake,
 		 bool *requeue_recovery,
 		 bool *requeue_snaptrimmer) {
     rwstate.put_write(to_wake);
-    if (rwstate.empty() && rwstate.backfill_read_marker) {
-      rwstate.backfill_read_marker = false;
+    if (rwstate.empty() && rwstate.recovery_read_marker) {
+      rwstate.recovery_read_marker = false;
       *requeue_recovery = true;
     }
     if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
