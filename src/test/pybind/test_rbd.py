@@ -741,6 +741,7 @@ class TestClone(object):
 
     def test_resize_io(self):
         parent_data = self.image.read(IMG_SIZE / 2, 256)
+        self.image.resize(0)
         self.clone.resize(IMG_SIZE / 2 + 128)
         child_data = self.clone.read(IMG_SIZE / 2, 128)
         eq(child_data, parent_data[:128])

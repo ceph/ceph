@@ -298,6 +298,10 @@ namespace librbd {
       snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
+
+      if (object_map != NULL) {
+        object_map->refresh();
+      }
       return 0;
     }
     return -ENOENT;
@@ -309,6 +313,10 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
+
+    if (object_map != NULL) {
+      object_map->refresh();
+    }
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const

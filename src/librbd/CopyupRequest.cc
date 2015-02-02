@@ -171,28 +171,32 @@ namespace librbd {
   }
 
   bool CopyupRequest::send_object_map() {
-    bool object_map_enabled = true;
+    bool copyup = false;
     {
       RWLock::RLocker l(m_ictx->owner_lock);
       RWLock::RLocker l2(m_ictx->md_lock);
       if (m_ictx->object_map == NULL) {
-	object_map_enabled = false;
+	copyup = true;
       } else if (!m_ictx->image_watcher->is_lock_owner()) {
 	ldout(m_ictx->cct, 20) << "exclusive lock not held for copy-on-read"
 			       << dendl;
 	return true; 
       } else {
 	m_state = STATE_OBJECT_MAP;
-        m_ictx->object_map->aio_update(m_object_no, OBJECT_EXISTS,
-				       boost::optional<uint8_t>(),
-				       create_callback_context());
+        if (!m_ictx->object_map->aio_update(m_object_no, OBJECT_EXISTS,
+					    boost::optional<uint8_t>(),
+					    create_callback_context())) {
+	  copyup = true;
+	}
       }
     }
 
-    if (!object_map_enabled) {
+    // avoid possible recursive lock attempts
+    if (copyup) {
+      // no object map update required
       send_copyup();
       return true;
-    }        
+    }
     return false;
   }
 
