@@ -7,7 +7,10 @@ a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
-.. important:: Ceph FS is currently not recommended for production data.
+.. important:: CephFS currently lacks a robust 'fsck' check and
+               repair function.  Please use caution when storing
+               important data as the disaster recovery tools are
+               still under development.
 
 .. ditaa::
             +-----------------------+  +------------------------+
