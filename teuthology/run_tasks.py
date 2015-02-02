@@ -76,6 +76,8 @@ def run_tasks(tasks, ctx):
             }
             if 'teuthology_branch' in config:
                 tags['teuthology_branch'] = config['teuthology_branch']
+            if 'branch' in config:
+                tags['branch'] = config['branch']
 
             # Remove ssh keys from reported config
             if 'targets' in config:
@@ -86,7 +88,6 @@ def run_tasks(tasks, ctx):
             job_id = ctx.config.get('job_id')
             archive_path = ctx.config.get('archive_path')
             extra = dict(config=config,
-                         branch=ctx.config.get('branch'),
                          )
             if job_id:
                 extra['logs'] = get_http_log_path(archive_path, job_id)
