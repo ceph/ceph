@@ -200,7 +200,7 @@ AsyncConnection::~AsyncConnection()
 {
   assert(out_q.empty());
   assert(sent.empty());
-  assert(!authorizer);
+  delete authorizer;
   if (recv_buf)
     delete[] recv_buf;
   if (state_buffer)
@@ -574,16 +574,19 @@ void AsyncConnection::process()
 
           if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
             header = *((ceph_msg_header*)state_buffer);
-            header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                                    sizeof(header) - sizeof(header.crc));
+            if (msgr->crcflags & MSG_CRC_HEADER)
+              header_crc = ceph_crc32c(0, (unsigned char *)&header,
+                                       sizeof(header) - sizeof(header.crc));
           } else {
             oldheader = *((ceph_msg_header_old*)state_buffer);
             // this is fugly
             memcpy(&header, &oldheader, sizeof(header));
             header.src = oldheader.src.name;
             header.reserved = oldheader.reserved;
-            header.crc = oldheader.crc;
-            header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
+            if (msgr->crcflags & MSG_CRC_HEADER) {
+              header.crc = oldheader.crc;
+              header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
+            }
           }
 
           ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
@@ -593,7 +596,8 @@ void AsyncConnection::process()
                               << " off " << header.data_off << dendl;
 
           // verify header crc
-          if (header_crc != header.crc) {
+          if (!(msgr->crcflags & MSG_CRC_HEADER)) {
+          } else if (header_crc != header.crc) {
             ldout(async_msgr->cct,0) << __func__ << " reader got bad header crc "
                               << header_crc << " != " << header.crc << dendl;
             goto fail;
@@ -764,9 +768,11 @@ void AsyncConnection::process()
             footer = *((ceph_msg_footer*)state_buffer);
           } else {
             old_footer = *((ceph_msg_footer_old*)state_buffer);
-            footer.front_crc = old_footer.front_crc;
-            footer.middle_crc = old_footer.middle_crc;
-            footer.data_crc = old_footer.data_crc;
+            if (msgr->crcflags & MSG_CRC_HEADER) {
+              footer.front_crc = old_footer.front_crc;
+              footer.middle_crc = old_footer.middle_crc;
+              footer.data_crc = old_footer.data_crc;
+            }
             footer.sig = 0;
             footer.flags = old_footer.flags;
           }
@@ -823,8 +829,15 @@ void AsyncConnection::process()
             message->put();
             if (has_feature(CEPH_FEATURE_RECONNECT_SEQ) && async_msgr->cct->_conf->ms_die_on_old_message)
               assert(0 == "old msgs despite reconnect_seq feature");
-            goto fail;
+            break;
           }
+          if (message->get_seq() > in_seq + 1) {
+            ldout(async_msgr->cct, 0) << __func__ << " missed message?  skipped from seq "
+                                      << in_seq << " to " << message->get_seq() << dendl;
+            if (async_msgr->cct->_conf->ms_die_on_skipped_message)
+              assert(0 == "skipped incoming seq");
+          }
+
           message->set_connection(this);
 
           // note last received message.
@@ -2176,8 +2189,12 @@ int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& foo
     oldheader.src.addr = get_peer_addr();
     oldheader.orig_src = oldheader.src;
     oldheader.reserved = header.reserved;
-    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-                                sizeof(oldheader) - sizeof(oldheader.crc));
+    if (msgr->crcflags & MSG_CRC_HEADER) {
+       oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
+                                   sizeof(oldheader) - sizeof(oldheader.crc));
+    } else {
+       oldheader.crc = 0;
+    }
     bl.append((char*)&oldheader, sizeof(oldheader));
   }
 
@@ -2188,9 +2205,13 @@ int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& foo
   if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
     bl.append((char*)&footer, sizeof(footer));
   } else {
-    old_footer.front_crc = footer.front_crc;
-    old_footer.middle_crc = footer.middle_crc;
-    old_footer.data_crc = footer.data_crc;
+    if (msgr->crcflags & MSG_CRC_HEADER) {
+      old_footer.front_crc = footer.front_crc;
+      old_footer.middle_crc = footer.middle_crc;
+      old_footer.data_crc = footer.data_crc;
+    } else {
+       old_footer.front_crc = old_footer.middle_crc = old_footer.data_crc = 0;
+    }
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
