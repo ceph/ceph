@@ -31,8 +31,8 @@ die() {
 debug_level=0
 verbose=0
 profile=0
-CONFIGURE_FLAGS="--disable-static"
-while getopts  "d:e:hHrTPJjpcvO:" flag
+CONFIGURE_FLAGS="--disable-static --with-lttng"
+while getopts  "d:e:hHrTPJljpcvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
@@ -58,6 +58,8 @@ do
     e) encode_dump=$OPTARG;;
 
     J) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --with-jemalloc";;
+
+    L) CONFIGURE_FLAGS="$CONFIGURE_FLAGS --without-lttng";;
 
     *)
         echo
