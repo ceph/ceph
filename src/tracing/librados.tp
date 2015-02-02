@@ -2599,6 +2599,21 @@ TRACEPOINT_EVENT(librados, rados_write_op_set_flags_exit,
     TP_FIELDS()
 )
 
+TRACEPOINT_EVENT(librados, rados_write_op_assert_version_enter,
+    TP_ARGS(
+        rados_write_op_t, op,
+	uint64_t, ver),
+    TP_FIELDS(
+        ctf_integer_hex(rados_write_op_t, op, op)
+	ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_write_op_assert_version_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
 TRACEPOINT_EVENT(librados, rados_write_op_assert_exists_enter,
     TP_ARGS(
         rados_write_op_t, op),
@@ -2985,6 +3000,21 @@ TRACEPOINT_EVENT(librados, rados_read_op_set_flags_enter,
 )
 
 TRACEPOINT_EVENT(librados, rados_read_op_set_flags_exit,
+    TP_ARGS(),
+    TP_FIELDS()
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_version_enter,
+    TP_ARGS(
+        rados_read_op_t, read_op,
+	uint64_t, ver),
+    TP_FIELDS(
+        ctf_integer_hex(rados_read_op_t, read_op, read_op)
+        ctf_integer(uint64_t, ver, ver)
+    )
+)
+
+TRACEPOINT_EVENT(librados, rados_read_op_assert_version_exit,
     TP_ARGS(),
     TP_FIELDS()
 )
