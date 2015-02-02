@@ -7370,7 +7370,7 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
         osd->scrub_wq.queue(this);
       }
     } else {
-      assert(!scrubber.block_writes);
+      assert(scrubber.start == scrubber.end);
     }
   } else {
     if (scrubber.active_rep_scrub) {
