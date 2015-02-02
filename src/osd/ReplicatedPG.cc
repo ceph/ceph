@@ -1992,8 +1992,10 @@ struct C_ProxyRead : public Context {
     if (prdop->canceled)
       return;
     pg->lock();
-    if (prdop->canceled)
+    if (prdop->canceled) {
+      pg->unlock();
       return;
+    }
     if (last_peering_reset == pg->get_last_peering_reset()) {
       pg->finish_proxy_read(oid, tid, r);
     }
