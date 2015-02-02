@@ -2106,60 +2106,69 @@ static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
   return 0;
 }
 
-class RbdWatchCtx : public librados::WatchCtx {
-  string name;
+class RbdWatchCtx : public librados::WatchCtx2 {
 public:
-  RbdWatchCtx(const char *imgname) : name(imgname) {}
-  virtual ~RbdWatchCtx() {}
-  virtual void notify(uint8_t opcode, uint64_t ver, bufferlist& bl) {
-    cout << name << " got notification opcode=" << (int)opcode << " ver="
-	 << ver << " bl.length=" << bl.length() << std::endl;
+  RbdWatchCtx(librados::IoCtx& io_ctx, const char *image_name,
+	      std::string header_oid)
+    : m_io_ctx(io_ctx), m_image_name(image_name), m_header_oid(header_oid)
+  {
   }
+
+  virtual ~RbdWatchCtx() {}
+
+  virtual void handle_notify(uint64_t notify_id,
+                             uint64_t cookie,
+                             uint64_t notifier_id,
+                             bufferlist& bl) {
+    cout << m_image_name << " received notification: notify_id=" << notify_id
+	 << ", cookie=" << cookie << ", notifier_id=" << notifier_id
+	 << ", bl.length=" << bl.length() << std::endl;
+    bufferlist reply;
+    m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
+  }
+  
+  virtual void handle_error(uint64_t cookie, int err) {
+    cerr << m_image_name << " received error: cookie=" << cookie << ", err="
+	 << cpp_strerror(err) << std::endl;
+  }
+private:
+  librados::IoCtx m_io_ctx;
+  const char *m_image_name;
+  string m_header_oid;
 };
 
-static int do_watch(librados::IoCtx& pp, const char *imgname)
+static int do_watch(librados::IoCtx& pp, librbd::Image &image,
+		    const char *imgname)
 {
-  string md_oid, dest_md_oid;
-  uint64_t cookie;
-  RbdWatchCtx ctx(imgname);
-
-  string old_header_oid = imgname;
-  old_header_oid += RBD_SUFFIX;
-  string new_id_oid = RBD_ID_PREFIX;
-  string new_header_oid = RBD_HEADER_PREFIX;
-  new_id_oid += imgname;
-  bool old_format = true;
-
-  int r = pp.stat(old_header_oid, NULL, NULL);
+  uint8_t old_format;
+  int r = image.old_format(&old_format);
   if (r < 0) {
-    r = pp.stat(new_id_oid, NULL, NULL);
-    if (r < 0)
-      return r;
-    old_format = false;
+    cerr << "failed to query format" << std::endl;
+    return r;
   }
 
-  if (!old_format) {
-    librbd::RBD rbd;
+  string header_oid;
+  if (old_format != 0) {
+    header_oid = string(imgname) + RBD_SUFFIX;
+  } else {
     librbd::image_info_t info;
-    librbd::Image image;
-
-    r = rbd.open_read_only(pp, image, imgname, NULL);
-    if (r < 0)
-      return r;
-
     r = image.stat(info, sizeof(info));
-    if (r < 0)
+    if (r < 0) {
+      cerr << "failed to stat image" << std::endl;
       return r;
+    }
 
     char prefix[RBD_MAX_BLOCK_NAME_SIZE + 1];
     strncpy(prefix, info.block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE);
     prefix[RBD_MAX_BLOCK_NAME_SIZE] = '\0';
 
-    new_header_oid.append(prefix + strlen(RBD_DATA_PREFIX));
+    string image_id(prefix + strlen(RBD_DATA_PREFIX));
+    header_oid = RBD_HEADER_PREFIX + image_id;
   }
 
-  r = pp.watch(old_format ? old_header_oid : new_header_oid,
-	       0, &cookie, &ctx);
+  uint64_t cookie;
+  RbdWatchCtx ctx(pp, imgname, header_oid);
+  r = pp.watch2(header_oid, &cookie, &ctx);
   if (r < 0) {
     cerr << "rbd: watch failed" << std::endl;
     return r;
@@ -2168,6 +2177,11 @@ static int do_watch(librados::IoCtx& pp, const char *imgname)
   cout << "press enter to exit..." << std::endl;
   getchar();
 
+  r = pp.unwatch2(cookie);
+  if (r < 0) {
+    cerr << "rbd: unwatch failed" << std::endl;
+    return r;
+  }
   return 0;
 }
 
@@ -3006,7 +3020,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
 	opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
-        opt_cmd == OPT_STATUS) {
+        opt_cmd == OPT_STATUS || opt_cmd == OPT_WATCH) {
       r = rbd.open_read_only(io_ctx, image, imgname, NULL);
     } else {
       r = rbd.open(io_ctx, image, imgname);
@@ -3330,7 +3344,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_WATCH:
-    r = do_watch(io_ctx, imgname);
+    r = do_watch(io_ctx, image, imgname);
     if (r < 0) {
       cerr << "rbd: watch failed: " << cpp_strerror(-r) << std::endl;
       return -r;
