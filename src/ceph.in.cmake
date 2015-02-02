@@ -623,9 +623,9 @@ def main():
             return 1
 
     try:
+        cluster_handle.connect(timeout=timeout)
         if childargs and childargs[0] == 'ping':
             return ping_monitor(cluster_handle, childargs[1])
-        cluster_handle.connect(timeout=timeout)
     except KeyboardInterrupt:
         print >> sys.stderr, 'Cluster connection aborted'
         return 1
