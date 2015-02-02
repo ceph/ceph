@@ -4127,7 +4127,7 @@ extern "C" void rados_write_op_set_flags(rados_write_op_t write_op, int flags)
 
 extern "C" void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver)
 {
-  tracepoint(librados, rados_write_op_assert_version_enter, write_op);
+  tracepoint(librados, rados_write_op_assert_version_enter, write_op, ver);
   ((::ObjectOperation *)write_op)->assert_version(ver);
   tracepoint(librados, rados_write_op_assert_version_exit);
 }
@@ -4389,7 +4389,7 @@ extern "C" void rados_read_op_set_flags(rados_read_op_t read_op, int flags)
 
 extern "C" void rados_read_op_assert_version(rados_read_op_t read_op, uint64_t ver)
 {
-  tracepoint(librados, rados_read_op_assert_version_enter, read_op);
+  tracepoint(librados, rados_read_op_assert_version_enter, read_op, ver);
   ((::ObjectOperation *)read_op)->assert_version(ver);
   tracepoint(librados, rados_read_op_assert_version_exit);
 }
