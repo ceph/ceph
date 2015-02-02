@@ -85,7 +85,9 @@ def run_tasks(tasks, ctx):
 
             job_id = ctx.config.get('job_id')
             archive_path = ctx.config.get('archive_path')
-            extra = dict(config=config)
+            extra = dict(config=config,
+                         branch=ctx.config.get('branch'),
+                         )
             if job_id:
                 extra['logs'] = get_http_log_path(archive_path, job_id)
 
