@@ -875,6 +875,8 @@ class Completion(object):
         run_in_thread(self.ioctx.librados.rados_aio_release,
                       (self.rados_comp,))
 
+RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
+
 class Ioctx(object):
     """rados.Ioctx object"""
     def __init__(self, name, librados, io):
@@ -885,9 +887,6 @@ class Ioctx(object):
         self.locator_key = ""
         self.safe_cbs = {}
         self.complete_cbs = {}
-        RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
-        self.__aio_safe_cb_c = RADOS_CB(self.__aio_safe_cb)
-        self.__aio_complete_cb_c = RADOS_CB(self.__aio_complete_cb)
         self.lock = threading.Lock()
 
     def __enter__(self):
@@ -940,9 +939,9 @@ class Ioctx(object):
         complete_cb = None
         safe_cb = None
         if oncomplete:
-            complete_cb = self.__aio_complete_cb_c
+            complete_cb = RADOS_CB(self.__aio_complete_cb)
         if onsafe:
-            safe_cb = self.__aio_safe_cb_c
+            safe_cb = RADOS_CB(self.__aio_safe_cb)
         ret = run_in_thread(self.librados.rados_aio_create_completion,
                             (c_void_p(0), complete_cb, safe_cb,
                             byref(completion)))
