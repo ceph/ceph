@@ -827,15 +827,9 @@ void librados::RadosClient::handle_log(MLog *m)
 	       stamp.tv_sec, stamp.tv_nsec,
 	       e.seq, level.c_str(), e.msg.c_str());
       }
-
-      /*
-	this was present in the old cephtool code, but does not appear to be necessary. :/
-
-	version_t v = log_last_version + 1;
-	ldout(cct, 10) << __func__ << " wanting " << log_watch << " ver " << v << dendl;
-	monclient.sub_want(log_watch, v, 0);
-      */
     }
+
+    monclient.sub_got(log_watch, log_last_version);
   }
 
   m->put();
