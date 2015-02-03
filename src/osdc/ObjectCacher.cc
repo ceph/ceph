@@ -1210,56 +1210,58 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	}
       }
 
-      // create reverse map of buffer offset -> object for the eventual result.
-      // this is over a single ObjectExtent, so we know that
-      //  - the bh's are contiguous
-      //  - the buffer frags need not be (and almost certainly aren't)
-      loff_t opos = ex_it->offset;
-      map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
-      assert(bh_it->second->start() <= opos);
-      uint64_t bhoff = opos - bh_it->second->start();
-      vector<pair<uint64_t,uint64_t> >::iterator f_it = ex_it->buffer_extents.begin();
-      uint64_t foff = 0;
-      while (1) {
-        BufferHead *bh = bh_it->second;
-        assert(opos == (loff_t)(bh->start() + bhoff));
+      if (!error) {
+	// create reverse map of buffer offset -> object for the eventual result.
+	// this is over a single ObjectExtent, so we know that
+	//  - the bh's are contiguous
+	//  - the buffer frags need not be (and almost certainly aren't)
+	loff_t opos = ex_it->offset;
+	map<loff_t, BufferHead*>::iterator bh_it = hits.begin();
+	assert(bh_it->second->start() <= opos);
+	uint64_t bhoff = opos - bh_it->second->start();
+	vector<pair<uint64_t,uint64_t> >::iterator f_it = ex_it->buffer_extents.begin();
+	uint64_t foff = 0;
+	while (1) {
+	  BufferHead *bh = bh_it->second;
+	  assert(opos == (loff_t)(bh->start() + bhoff));
 
-        uint64_t len = MIN(f_it->second - foff, bh->length() - bhoff);
-        ldout(cct, 10) << "readx rmap opos " << opos
-		       << ": " << *bh << " +" << bhoff
-		       << " frag " << f_it->first << "~" << f_it->second << " +" << foff << "~" << len
-		       << dendl;
+	  uint64_t len = MIN(f_it->second - foff, bh->length() - bhoff);
+	  ldout(cct, 10) << "readx rmap opos " << opos
+	    << ": " << *bh << " +" << bhoff
+	    << " frag " << f_it->first << "~" << f_it->second << " +" << foff << "~" << len
+	    << dendl;
 
-	bufferlist bit;  // put substr here first, since substr_of clobbers, and
-	                 // we may get multiple bh's at this stripe_map position
-	if (bh->is_zero()) {
-	  bufferptr bp(len);
-	  bp.zero();
-	  stripe_map[f_it->first].push_back(bp);
-	} else {
-	  bit.substr_of(bh->bl,
-			opos - bh->start(),
-			len);
-	  stripe_map[f_it->first].claim_append(bit);
+	  bufferlist bit;  // put substr here first, since substr_of clobbers, and
+	  // we may get multiple bh's at this stripe_map position
+	  if (bh->is_zero()) {
+	    bufferptr bp(len);
+	    bp.zero();
+	    stripe_map[f_it->first].push_back(bp);
+	  } else {
+	    bit.substr_of(bh->bl,
+		opos - bh->start(),
+		len);
+	    stripe_map[f_it->first].claim_append(bit);
+	  }
+
+	  opos += len;
+	  bhoff += len;
+	  foff += len;
+	  if (opos == bh->end()) {
+	    ++bh_it;
+	    bhoff = 0;
+	  }
+	  if (foff == f_it->second) {
+	    ++f_it;
+	    foff = 0;
+	  }
+	  if (bh_it == hits.end()) break;
+	  if (f_it == ex_it->buffer_extents.end())
+	    break;
 	}
-
-        opos += len;
-        bhoff += len;
-        foff += len;
-        if (opos == bh->end()) {
-          ++bh_it;
-          bhoff = 0;
-        }
-        if (foff == f_it->second) {
-          ++f_it;
-          foff = 0;
-        }
-        if (bh_it == hits.end()) break;
-        if (f_it == ex_it->buffer_extents.end())
-	  break;
+	assert(f_it == ex_it->buffer_extents.end());
+	assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
       }
-      assert(f_it == ex_it->buffer_extents.end());
-      assert(opos == (loff_t)ex_it->offset + (loff_t)ex_it->length);
 
       if (dontneed && o->include_all_cached_data(ex_it->offset, ex_it->length))
 	  bottouch_ob(o);
@@ -1303,7 +1305,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
       assert(rd->bl->length() == pos);
     }
     ldout(cct, 10) << "readx  result is " << rd->bl->length() << dendl;
-  } else {
+  } else if (!error) {
     ldout(cct, 10) << "readx  no bufferlist ptr (readahead?), done." << dendl;
     map<uint64_t,bufferlist>::reverse_iterator i = stripe_map.rbegin();
     pos = i->first + i->second.length();
