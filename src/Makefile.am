@@ -727,6 +727,7 @@ python_PYTHON = pybind/rados.py \
 		pybind/rbd.py \
 		pybind/cephfs.py \
 		pybind/ceph_argparse.py \
+		pybind/ceph_daemon.py \
 		pybind/ceph_rest_api.py
 
 
