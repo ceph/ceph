@@ -263,7 +263,7 @@ fi
 [ -z "$CEPH_BIN" ] && CEPH_BIN=.
 if [ -z "$CEPH_PORT" ]; then
     CEPH_PORT=6789
-    [ -e ".ceph.port" ] && CEPH_PORT=`cat .ceph_port`
+    [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
 fi
 
 
