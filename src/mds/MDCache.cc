@@ -167,6 +167,7 @@ public:
 
 
 MDCache::MDCache(MDS *m) :
+  logger(0),
   num_strays(0),
   num_strays_purging(0),
   num_strays_delayed(0),
@@ -219,6 +220,11 @@ MDCache::MDCache(MDS *m) :
 MDCache::~MDCache() 
 {
   delete migrator;
+  if (logger) {
+    g_ceph_context->get_perfcounters_collection()->remove(logger);
+    delete logger;
+    logger = 0;
+  }
   //delete renamer;
 }
 
