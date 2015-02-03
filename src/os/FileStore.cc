@@ -2343,7 +2343,7 @@ unsigned FileStore::_do_transaction(
 
     _inject_failure();
 
-    if (op != Transaction::OP_WRITE) {
+    if (op->op != Transaction::OP_WRITE) {
       set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_OTHER_OP_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
     }
 
@@ -2364,13 +2364,13 @@ unsigned FileStore::_do_transaction(
     case Transaction::OP_WRITE:
       {
         set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_WRITE_START], ceph_clock_now(g_ceph_context).to_nsec()/1000);
-	coll_t cid = i.decode_cid();
-	ghobject_t oid = i.decode_oid();
-	uint64_t off = i.decode_length();
-	uint64_t len = i.decode_length();
-	bool replica = i.get_replica();
-	bufferlist bl;
-	i.decode_bl(bl);
+        coll_t cid = i.get_cid(op->cid);
+        ghobject_t oid = i.get_oid(op->oid);
+        uint64_t off = op->off;
+        uint64_t len = op->len;
+        uint32_t fadvise_flags = i.get_fadvise_flags();
+        bufferlist bl;
+        i.decode_bl(bl);
         set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_WRITE_DECODE_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
         tracepoint(objectstore, write_enter, osr_name, off, len);
         if (_check_replay_guard(cid, oid, spos) > 0)

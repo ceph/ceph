@@ -63,11 +63,10 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h" // ??
-#else
-#define tracepoint(...)
 #define set_tp_stamp(stamp, val) { (stamp) = (val); }
 #define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
 #else
+#define tracepoint(...)
 #define set_tp_stamp(stamp, val)
 #define set_tp_stamp_if(cond, stamp, val)
 #endif
@@ -7692,7 +7691,16 @@ Message * ReplicatedBackend::generate_subop(
     wr->pg_stats = pinfo.stats;  // reflects backfill progress
   else
     wr->pg_stats = get_info().stats;
-    
+
+  wr->pg_trim_to = pg_trim_to;
+  wr->pg_trim_rollback_to = pg_trim_rollback_to;
+
+  wr->new_temp_oid = new_temp_oid;
+  wr->discard_temp_oid = discard_temp_oid;
+  wr->updated_hit_set_history = hset_hist;
+  return wr;
+}
+
 #define TP_ISSUE_OP_START              0
 #define TP_ISSUE_OP_OSD_SUBOP_CREATED  1
 #define TP_ISSUE_OP_SEND_TO_OSD        2
