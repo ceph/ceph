@@ -33,3 +33,4 @@ usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
 usr/lib/python*/dist-packages/ceph_argparse.py*
+usr/lib/python*/dist-packages/ceph_daemon.py*
