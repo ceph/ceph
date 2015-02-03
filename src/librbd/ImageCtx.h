@@ -151,10 +151,12 @@ namespace librbd {
 
     void add_snap(std::string in_snap_name, librados::snap_t id,
 		  uint64_t in_size, uint64_t features,
-		  parent_info parent, uint8_t protection_status);
+		  parent_info parent, uint8_t protection_status,
+		  uint64_t flags);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
     int get_features(librados::snap_t in_snap_id,
 		     uint64_t *out_features) const;
+    int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     const parent_info* get_parent_info(librados::snap_t in_snap_id) const;
     int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
     std::string get_parent_image_id(librados::snap_t in_snap_id) const;
