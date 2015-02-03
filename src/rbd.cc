@@ -32,6 +32,7 @@
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/rolling_sum.hpp>
+#include <boost/assign/list_of.hpp>
 #include <boost/scope_exit.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <errno.h>
@@ -206,6 +207,39 @@ static void format_features(Formatter *f, uint64_t features)
     f->dump_string("feature", feature_str(feature));
   }
   f->close_section();
+}
+
+static void format_flags(Formatter *f, uint64_t flags)
+{
+  int count = 0;
+  std::map<uint64_t, std::string> flag_mapping = boost::assign::map_list_of(
+    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
+
+  if (f == NULL) {
+    cout << "\tflags: ";
+  } else {
+    f->open_array_section("flags");
+  }
+  for (std::map<uint64_t, std::string>::iterator it = flag_mapping.begin();
+       it != flag_mapping.end(); ++it) {
+    if ((it->first & flags) == 0) {
+      continue;
+    }
+
+    if (f == NULL) {
+      if (count++ > 0) {
+        cout << ", ";
+      }
+      cout << it->second;
+    } else {
+      f->dump_string("flag", it->second);
+    }
+  }
+  if (f == NULL) {
+    cout << std::endl;
+  } else {
+    f->close_section();
+  }
 }
 
 struct MyProgressContext : public librbd::ProgressContext {
@@ -504,7 +538,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   librbd::image_info_t info;
   string parent_pool, parent_name, parent_snapname;
   uint8_t old_format;
-  uint64_t overlap, features;
+  uint64_t overlap, features, flags;
   bool snap_protected = false;
   int r;
 
@@ -523,6 +557,11 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   r = image.features(&features);
   if (r < 0)
     return r;
+
+  r = image.get_flags(&flags);
+  if (r < 0) {
+    return r;
+  }
 
   if (snapname) {
     r = image.snap_is_protected(snapname, &snap_protected);
@@ -562,6 +601,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
       format_features(f, features);
     else
       cout << "\tfeatures: " << features_str(features) << std::endl;
+    format_flags(f, flags);
   }
 
   // snapshot info, if present
