@@ -790,6 +790,11 @@ int Rados::wait_for_latest_osdmap() {
   return impl->wait_for_latest_osdmap();
 }
 
+int Rados::watch_flush() {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->watch_flush();
+}
+
 WatchCtx::~WatchCtx() {
 }
 
