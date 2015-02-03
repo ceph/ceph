@@ -286,7 +286,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       dump_owner(s, iter->owner, iter->owner_display_name);
       s->formatter->close_section();
     }
-    if (common_prefixes.size() > 0) {
+    if (!common_prefixes.empty()) {
       map<string, bool>::iterator pref_iter;
       for (pref_iter = common_prefixes.begin(); pref_iter != common_prefixes.end(); ++pref_iter) {
         s->formatter->open_array_section("CommonPrefixes");
