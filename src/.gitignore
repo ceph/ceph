@@ -30,6 +30,7 @@ Makefile
 /ceph_erasure_code
 /ceph_erasure_code_benchmark
 /ceph_erasure_code_non_regression
+/ceph_perf_objectstore
 /ceph_psim
 /ceph_radosacl
 /ceph_rgw_jsonparser
@@ -51,6 +52,7 @@ Makefile
 /ceph-kvstore-tool
 /ceph_ver.h
 /dev
+/get_command_descriptions
 /init-ceph
 /keyring
 /librados-config
@@ -69,6 +71,8 @@ Makefile
 /rbd-replay-prep
 /rest-bench
 /sample.fetch_config
+/simple_client
+/simple_server
 /TAGS
 /tags
 /testmsgr
@@ -76,8 +80,8 @@ Makefile
 /test-suite.log
 /cls_test_*
 /unittest_*
-/get_command_descriptions
-/ceph_perf_objectstore
+/xio_client
+/xio_server
 
 # old dir, may in use by older branches
 /leveldb
