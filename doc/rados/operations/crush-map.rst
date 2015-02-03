@@ -47,10 +47,6 @@ A custom CRUSH map can also help you identify the physical locations where
 Ceph stores redundant copies of data when the placement group(s) associated
 with a failed host are in a degraded state.
 
-`Inktank`_ provides excellent premium support for developing CRUSH maps.
-
-.. _Inktank: http://www.inktank.com
-
 .. note:: Lines of code in example boxes may extend past the edge of the box. 
    Please scroll when reading or copying longer examples.
 
