@@ -799,9 +799,13 @@ def main():
         # prettify?  prefix output with target, if there was a wildcard used
         prefix = ''
         suffix = ''
-        if not parsed_args.output_file and len(targets) > 1:
-            prefix = '{0}.{1}: '.format(*target)
-            suffix = '\n'
+        if not parsed_args.output_file and len(targets) >= 1:
+            if len(str(target[1])) >= 1 :
+                prefix = '{0}.{1}: '.format(*target)
+            else :
+                prefix = '{0}: '.format(target[0])
+            if len(targets) > 1:
+                suffix = '\n'
 
         ret, outbuf, outs = json_command(cluster_handle, target=target,
                                          prefix='get_command_descriptions')
