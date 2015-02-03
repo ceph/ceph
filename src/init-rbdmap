@@ -67,7 +67,7 @@ do_map() {
 			## Mount new rbd
 			MNT_RV=""
 			mount --fake /dev/rbd/$DEV >>/dev/null 2>&1 \
-			&& MNT_RV=$(mount -v /dev/rbd/$DEV 2>&1)
+			&& MNT_RV=$(mount -vn /dev/rbd/$DEV 2>&1)
 			[ -n "${MNT_RV}" ] && log_action_msg "mount: ${MNT_RV}"
 
 			## post-mapping
