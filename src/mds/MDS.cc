@@ -719,9 +719,9 @@ void MDS::create_logger()
     mds_plb.add_u64(l_mds_inodes_bottom, "inodes_bottom");
     mds_plb.add_u64(l_mds_inodes_pin_tail, "inodes_pin_tail");  
     mds_plb.add_u64(l_mds_inodes_pinned, "inodes_pinned");
-    mds_plb.add_u64_counter(l_mds_inodes_expired, "inodes_expired");
-    mds_plb.add_u64_counter(l_mds_inodes_with_caps, "inodes_with_caps");
-    mds_plb.add_u64_counter(l_mds_caps, "caps", "Capabilities", "caps");
+    mds_plb.add_u64(l_mds_inodes_expired, "inodes_expired");
+    mds_plb.add_u64(l_mds_inodes_with_caps, "inodes_with_caps");
+    mds_plb.add_u64(l_mds_caps, "caps", "Capabilities", "caps");
     mds_plb.add_u64(l_mds_subtrees, "subtrees");
     
     mds_plb.add_u64_counter(l_mds_traverse, "traverse"); 
