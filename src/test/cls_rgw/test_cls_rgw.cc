@@ -99,6 +99,7 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   rgw_bucket_entry_ver ver;
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
+  meta.accounted_size = meta.size;
   cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, NULL, true, 0);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
@@ -346,6 +347,7 @@ TEST(cls_rgw, index_suggest)
     dirent.locator = loc;
     dirent.exists = (i < num_objs / 2); // we removed half the objects
     dirent.meta.size = 1024;
+    dirent.meta.accounted_size = 1024;
 
     char suggest_op = (i < num_objs / 2 ? CEPH_RGW_UPDATE : CEPH_RGW_REMOVE);
     cls_rgw_encode_suggestion(suggest_op, dirent, updates);
