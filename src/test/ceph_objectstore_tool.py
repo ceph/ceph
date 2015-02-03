@@ -1092,6 +1092,12 @@ def main(argv):
                 if ret != 0:
                     logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
                     ERRORS += 1
+                cmd = "./ceph-objectstore-tool --no-overwrite import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Import-rados failed from {file} with {ret}".format(file=file, ret=ret))
+                    ERRORS += 1
 
         ERRORS += verify(DATADIR, NEWPOOL, REP_NAME)
     else:
