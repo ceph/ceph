@@ -32,7 +32,7 @@ debug_level=0
 verbose=0
 profile=0
 CONFIGURE_FLAGS="--disable-static --with-lttng"
-while getopts  "d:e:hHrTPJljpcvO:" flag
+while getopts  "d:e:hHrTPJLjpcvO:" flag
 do
     case $flag in
     d) debug_level=$OPTARG;;
