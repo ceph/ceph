@@ -415,12 +415,12 @@ namespace librbd {
   }
 
   void ImageCtx::add_snap(string in_snap_name, snap_t id, uint64_t in_size,
-			  uint64_t features,
-			  parent_info parent,
-			  uint8_t protection_status)
+			  uint64_t features, parent_info parent,
+			  uint8_t protection_status, uint64_t flags)
   {
     snaps.push_back(id);
-    SnapInfo info(in_snap_name, in_size, features, parent, protection_status);
+    SnapInfo info(in_snap_name, in_size, features, parent, protection_status,
+		  flags);
     snap_info.insert(pair<snap_t, SnapInfo>(id, info));
     snap_ids.insert(pair<string, snap_t>(in_snap_name, id));
   }
@@ -447,6 +447,20 @@ namespace librbd {
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_features = info->features;
+      return 0;
+    }
+    return -ENOENT;
+  }
+
+  int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
+  {
+    if (_snap_id == CEPH_NOSNAP) {
+      *_flags = flags;
+      return 0;
+    }
+    const SnapInfo *info = get_snap_info(_snap_id);
+    if (info) {
+      *_flags = info->flags;
       return 0;
     }
     return -ENOENT;
