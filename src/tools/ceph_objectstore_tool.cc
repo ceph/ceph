@@ -2354,18 +2354,13 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj, int fd)
   return 0;
 }
 
-struct do_list_lost : public action_on_object_t {
-  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
-    if (oi.is_lost())
-      cout << coll << "/" << ghobj << " is lost" << std::endl;
-    return 0;
-  }
-};
-
 struct do_fix_lost : public action_on_object_t {
   virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) {
     if (oi.is_lost()) {
-      cout << coll << "/" << ghobj << " is lost, fixing" << std::endl;
+      cout << coll << "/" << ghobj << " is lost";
+      if (!dry_run)
+        cout << ", fixing";
+      cout << std::endl;
       if (dry_run)
         return 0;
       oi.clear_flag(object_info_t::FLAG_LOST);
@@ -2480,9 +2475,9 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, mandatory for filestore type")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory except for import, list-lost, fix-lost, list-pgs, set-allow-sharded-objects")
+     "PG id, mandatory except for import, fix-lost, list-pgs, set-allow-sharded-objects")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
+     "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -2881,7 +2876,7 @@ int main(int argc, char **argv)
     }
   }
 
-  if (op != "list" && op != "import" && op != "list-lost" && op != "fix-lost"
+  if (op != "list" && op != "import" && op != "fix-lost"
       && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
       op != "dump-journal-mount" && (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
@@ -3023,12 +3018,9 @@ int main(int argc, char **argv)
     goto out;
   }
 
-  if (op == "list-lost" || op == "fix-lost") {
+  if (op == "fix-lost") {
     boost::scoped_ptr<action_on_object_t> action;
-    if (op == "list-lost")
-      action.reset(new do_list_lost());
-    if (op == "fix-lost")
-      action.reset(new do_fix_lost());
+    action.reset(new do_fix_lost());
     if (pgidstr.length())
       ret = action_on_all_objects_in_pg(fs, coll_t(pgid), *action, debug);
     else
@@ -3366,7 +3358,7 @@ int main(int argc, char **argv)
         cout << "Removal succeeded" << std::endl;
       }
     } else {
-      cerr << "Must provide --op (info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals)"
+      cerr << "Must provide --op (info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals)"
 	<< std::endl;
       usage(desc);
       ret = 1;
