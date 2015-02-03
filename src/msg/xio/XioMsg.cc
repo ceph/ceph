@@ -25,7 +25,7 @@ int XioDispatchHook::release_msgs()
   cl_flag = true;
 
   /* queue for release */
-  xrsp = (XioRsp *) rsp_pool.alloc(sizeof(XioRsp));
+  xrsp = static_cast<XioRsp *>(rsp_pool.alloc(sizeof(XioRsp)));
   new (xrsp) XioRsp(xcon, this);
 
   /* merge with portal traffic */
