@@ -181,10 +181,8 @@ TEST(PerfCounters, MultiplePerfCounters) {
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":13,\"element2\":0.000000000,"
 	    "\"element3\":{\"avgcount\":0,\"sum\":0.000000000}}}"), msg);
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf schema\", \"format\": \"json\" }", &msg));
-
-  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2,\"description\":\"\"},"
-	       "\"element2\":{\"type\":1,\"description\":\"\"},\"element3\":{\"type\":5,\"description\":\"\"}}}"), msg);
-
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":{\"type\":2,\"description\":\"\",\"nick\":\"\"},"
+	    "\"element2\":{\"type\":1,\"description\":\"\",\"nick\":\"\"},\"element3\":{\"type\":5,\"description\":\"\",\"nick\":\"\"}}}"), msg);
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ("{}", msg);
