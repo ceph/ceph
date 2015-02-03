@@ -1798,7 +1798,7 @@ loff_t ObjectCacher::release(Object *ob)
        p != ob->data.end();
        ++p) {
     BufferHead *bh = p->second;
-    if (bh->is_clean() || bh->is_zero())
+    if (bh->is_clean() || bh->is_zero() || bh->is_error())
       clean.push_back(bh);
     else 
       o_unclean += bh->length();
