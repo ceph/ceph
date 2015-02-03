@@ -26,11 +26,13 @@ if [ `dirname $0` = "." ] && [ $PWD != "/etc/init.d" ]; then
     LIBDIR=.
     ETCDIR=.
     SYSTEMD_RUN=""
+    ASSUME_DEV=1
 else
     BINDIR=@bindir@
     SBINDIR=@prefix@/sbin
     LIBDIR=@libdir@/ceph
     ETCDIR=@sysconfdir@/ceph
+    ASSUME_DEV=0
 fi
 
 usage_exit() {
@@ -219,6 +221,9 @@ for name in $what; do
 
     binary="$BINDIR/ceph-$type"
     cmd="$binary -i $id"
+    if [ $ASSUME_DEV -eq 1 ]; then
+      cmd="PATH=$PWD:$PATH $cmd"
+    fi
 
     get_conf run_dir "/var/run/ceph" "run dir"
 
