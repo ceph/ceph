@@ -639,8 +639,9 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
 int XioMessenger::bind(const entity_addr_t& addr)
 {
   const entity_addr_t *a = &addr;
+  struct entity_addr_t _addr = *a;
+
   if (a->is_blank_ip()) {
-    struct entity_addr_t _addr = *a;
     a = &_addr;
     std::vector <std::string> my_sections;
     g_conf->get_my_sections(my_sections);
