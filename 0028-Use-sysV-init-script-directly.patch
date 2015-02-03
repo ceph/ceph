@@ -1,0 +1,32 @@
+From: Owen Synge <osynge@suse.com>
+Date: Tue, 3 Feb 2015 17:58:09 +0100
+Subject: [PATCH] Use sysV init script directly
+
+ceph-disk:SLE11sp3 /sbin/service cannot take paramteres that start with '--'
+so use the init script directly.
+
+Signed-off-by: Owen Synge <osynge@suse.com>
+---
+ src/ceph-disk | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/ceph-disk b/src/ceph-disk
+index fb12b9b..5c7959f 100755
+--- a/src/ceph-disk
++++ b/src/ceph-disk
+@@ -1862,14 +1862,9 @@ def start_daemon(
+                     ],
+                 )
+         elif os.path.exists(os.path.join(path, 'sysvinit')):
+-            if os.path.exists('/usr/sbin/service'):
+-                svc = '/usr/sbin/service'
+-            else:
+-                svc = '/sbin/service'
+             command_check_call(
+                 [
+-                    svc,
+-                    'ceph',
++                    '/etc/init.d/ceph',
+                     '--cluster',
+                     '{cluster}'.format(cluster=cluster),
+                     'start',

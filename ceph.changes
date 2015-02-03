@@ -1,4 +1,11 @@
 -------------------------------------------------------------------
+Tue Feb  3 18:01:12 UTC 2015 - osynge@suse.com
+
+- ceph-disk on SLE11 now uses sysV init script directly.
+  * SLE11sp3 /sbin/service cannot take paramteres that start with 
+    '--' so use the init script directly.
+
+-------------------------------------------------------------------
 Wed Jan 28 11:14:53 UTC 2015 - tbehrens@suse.com
 
 - make platform- and systemd-related version checks consistent
