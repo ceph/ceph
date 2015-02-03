@@ -717,7 +717,7 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   int e = xpool_alloc(xio_msgr_noreg_mpool, sizeof(XioMsg), &mp_mem);
   if (!!e)
     return NULL;
-  XioMsg *xmsg = (XioMsg*) mp_mem.addr;
+  XioMsg *xmsg = reinterpret_cast<XioMsg*>(mp_mem.addr);
   assert(!!xmsg);
   new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt);
   return xmsg;
