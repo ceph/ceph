@@ -366,7 +366,7 @@ static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key,
 
   list<string>::iterator iter = vals.begin();
   key->name = *iter;
-  iter++;
+  ++iter;
 
   assert(iter != vals.end());
 
