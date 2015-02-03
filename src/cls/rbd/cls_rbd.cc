@@ -1973,8 +1973,9 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   size_t orig_object_map_size = object_map.size();
   if (object_count < orig_object_map_size) {
-    for (uint64_t i = object_count; i < orig_object_map_size; ++i) {
+    for (uint64_t i = object_count + 1; i < orig_object_map_size; ++i) {
       if (object_map[i] != default_state) {
+	CLS_ERR("object map indicates object still exists: %" PRIu64, i);
 	return -ESTALE;
       }
     }
