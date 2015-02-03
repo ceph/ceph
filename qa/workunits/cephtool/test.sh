@@ -192,13 +192,13 @@ function test_mon_injectargs()
   check_response "osd_debug_op_order = 'false'"
   ! grep "the.dump" $TMPFILE || return 1
   ceph tell osd.0 injectargs '--osd_debug_op_order --osd_failsafe_full_ratio .99' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
+  check_response "osd.0: osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.99'"
   ceph tell osd.0 injectargs --no-osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'false'"
+  check_response "osd.0: osd_debug_op_order = 'false'"
   ceph tell osd.0 injectargs -- --osd_debug_op_order >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true'"
+  check_response "osd.0: osd_debug_op_order = 'true'"
   ceph tell osd.0 injectargs -- '--osd_debug_op_order --osd_failsafe_full_ratio .98' >& $TMPFILE || return 1
-  check_response "osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
+  check_response "osd.0: osd_debug_op_order = 'true' osd_failsafe_full_ratio = '0.98'" 
 }
 
 function test_mon_injectargs_SI()
