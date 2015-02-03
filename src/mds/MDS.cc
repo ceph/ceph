@@ -333,6 +333,20 @@ bool MDS::asok_command(string command, cmdmap_t& cmdmap, string format,
       command_flush_journal(f);
     } else if (command == "get subtrees") {
       command_get_subtrees(f);
+    } else if (command == "export dir") {
+      string path;
+      if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+	ss << "malformed path";
+        delete f;
+        return true;
+      }
+      int64_t rank;
+      if(!cmd_getval(g_ceph_context, cmdmap, "rank", rank)) {
+	ss << "malformed rank";
+        delete f;
+        return true;
+      }
+      command_export_dir(f, path, (mds_rank_t)rank);
     } else if (command == "force_readonly") {
       mds_lock.Lock();
       mdcache->force_readonly();
@@ -509,6 +523,43 @@ void MDS::command_get_subtrees(Formatter *f)
 }
 
 
+void MDS::command_export_dir(Formatter *f,
+    const std::string &path,
+    mds_rank_t target)
+{
+  int r = _command_export_dir(path, target);
+  f->open_object_section("results");
+  f->dump_int("return_code", r);
+  f->close_section(); // results
+}
+
+int MDS::_command_export_dir(
+    const std::string &path,
+    mds_rank_t target)
+{
+  filepath fp(path.c_str());
+
+  if (target == whoami || !mdsmap->is_up(target) || !mdsmap->is_in(target)) {
+    derr << "bad MDS target " << target << dendl;
+    return -ENOENT;
+  }
+
+  CInode *in = mdcache->cache_traverse(fp);
+  if (!in) {
+    derr << "Bath path '" << path << "'" << dendl;
+    return -ENOENT;
+  }
+  CDir *dir = in->get_dirfrag(frag_t());
+  if (!dir || !(dir->is_auth())) {
+    derr << "bad export_dir path dirfrag frag_t() or dir not auth" << dendl;
+    return -EINVAL;
+  }
+
+  mdcache->migrator->export_dir(dir, target);
+  return 0;
+}
+
+
 void MDS::set_up_admin_socket()
 {
   int r;
@@ -536,6 +587,12 @@ void MDS::set_up_admin_socket()
                                      "flush_path name=path,type=CephString",
                                      asok_hook,
                                      "flush an inode (and its dirfrags)");
+  r = admin_socket->register_command("export dir",
+                                     "export dir "
+                                     "name=path,type=CephString "
+                                     "name=rank,type=CephInt",
+                                     asok_hook,
+                                     "migrate a subtree to named MDS");
   assert(0 == r);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
@@ -1162,7 +1219,7 @@ COMMAND("heap " \
 // FIXME: reinstate dumpcache as an admin socket command
 //  -- it makes no sense for it to be a remote command when
 //     the output is a local file
-// FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir, export_dir
+// FIXME: reinstate issue_caps, try_eval, fragment_dir, merge_dir
 //  *if* it makes sense to do so (or should these be admin socket things?)
 
 /* This function DOES put the passed message before returning*/
