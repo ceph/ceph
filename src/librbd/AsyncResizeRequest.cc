@@ -27,6 +27,12 @@ bool AsyncResizeRequest::should_complete(int r)
     if (m_image_ctx.size == m_new_size) {
       m_image_ctx.size = m_original_size;
     }
+
+    RWLock::WLocker l2(m_image_ctx.parent_lock);
+    if (m_image_ctx.parent != NULL &&
+	m_image_ctx.parent_md.overlap == m_new_parent_overlap) {
+      m_image_ctx.parent_md.overlap = m_original_parent_overlap;
+    }
     return true;
   }
 
@@ -92,6 +98,13 @@ void AsyncResizeRequest::send_trim_image() {
     // update in-memory size to clip concurrent IO operations
     RWLock::WLocker l(m_image_ctx.md_lock);
     m_image_ctx.size = m_new_size;
+
+    RWLock::WLocker l2(m_image_ctx.parent_lock);
+    if (m_image_ctx.parent != NULL) {
+      m_original_parent_overlap = m_image_ctx.parent_md.overlap;
+      m_new_parent_overlap = MIN(m_new_size, m_original_parent_overlap);
+      m_image_ctx.parent_md.overlap = m_new_parent_overlap;
+    }
   }
 
   AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
