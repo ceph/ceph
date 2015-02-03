@@ -1204,12 +1204,12 @@ int main(int argc, const char **argv)
   rgw_shutdown_resolver();
   curl_global_cleanup();
 
+  rgw_perf_stop(g_ceph_context);
+
   dout(1) << "final shutdown" << dendl;
   g_ceph_context->put();
 
   ceph::crypto::shutdown();
-
-  rgw_perf_stop(g_ceph_context);
 
   signal_fd_finalize();
 
