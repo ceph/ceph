@@ -1111,7 +1111,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     client_con->send_message(reply);
   }
-  
+
+  if (mdr->has_completed && mds->is_clientreplay())
+    mds->queue_one_replay();
+
   // clean up request
   mdcache->request_finish(mdr);
 
@@ -1271,27 +1274,40 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // completed request?
-  if (req->is_replay() ||
-      (req->get_retry_attempt() &&
-       req->get_op() != CEPH_MDS_OP_OPEN && 
-       req->get_op() != CEPH_MDS_OP_CREATE)) {
+  bool has_completed = false;
+  if (req->is_replay() || req->get_retry_attempt()) {
     assert(session);
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
-      dout(5) << "already completed " << req->get_reqid() << dendl;
-      MClientReply *reply = new MClientReply(req, 0);
-      if (created != inodeno_t()) {
-	bufferlist extra;
-	::encode(created, extra);
-	reply->set_extra_bl(extra);
+      has_completed = true;
+      // Don't send traceless reply if the completed request has created
+      // new inode. Treat the request as lookup request instead.
+      if (req->is_replay() ||
+	  ((created == inodeno_t() || !mds->is_clientreplay()) &&
+	   req->get_op() != CEPH_MDS_OP_OPEN &&
+	   req->get_op() != CEPH_MDS_OP_CREATE)) {
+	dout(5) << "already completed " << req->get_reqid() << dendl;
+	MClientReply *reply = new MClientReply(req, 0);
+	if (created != inodeno_t()) {
+	  bufferlist extra;
+	  ::encode(created, extra);
+	  reply->set_extra_bl(extra);
+	}
+	req->get_connection()->send_message(reply);
+
+	if (req->is_replay())
+	  mds->queue_one_replay();
+
+	req->put();
+	return;
       }
-      req->get_connection()->send_message(reply);
-
-      if (req->is_replay())
-	mds->queue_one_replay();
-
-      req->put();
-      return;
+      if (req->get_op() != CEPH_MDS_OP_OPEN &&
+	  req->get_op() != CEPH_MDS_OP_CREATE) {
+	dout(10) << " completed request which created new inode " << created
+		 << ", convert it to lookup request" << dendl;
+	req->head.op = req->get_dentry_wanted() ? CEPH_MDS_OP_LOOKUP : CEPH_MDS_OP_GETATTR;
+	req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+      }
     }
   }
 
@@ -1309,6 +1325,8 @@ void Server::handle_client_request(MClientRequest *req)
       mdr->session = session;
       session->requests.push_back(&mdr->item_session_request);
     }
+    if (has_completed)
+      mdr->has_completed = true;
   }
 
   // process embedded cap releases?
@@ -1349,7 +1367,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   // we shouldn't be waiting on anyone.
   assert(mdr->more()->waiting_on_slave.empty());
 
-  if (req->get_op() & CEPH_MDS_OP_WRITE) {
+  if (req->may_write()) {
     if (mdcache->is_readonly()) {
       dout(10) << " read-only FS" << dendl;
       respond_to_request(mdr, -EROFS);
@@ -1436,8 +1454,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-    if (req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid, NULL))
+    if (mdr->has_completed)
       handle_client_open(mdr);  // already created.. just open
     else
       handle_client_openc(mdr);
@@ -2745,9 +2762,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   // O_TRUNC
-  if ((flags & O_TRUNC) &&
-      !(req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid, NULL))) {
+  if ((flags & O_TRUNC) && !mdr->has_completed) {
     assert(cur->is_auth());
 
     xlocks.insert(&cur->filelock);
