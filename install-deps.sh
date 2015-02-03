@@ -23,6 +23,10 @@ if test -f /etc/redhat-release ; then
     $SUDO yum install -y redhat-lsb-core
 fi
 
+if which apt-get > /dev/null ; then
+    $SUDO apt-get install -y lsb-release
+fi
+
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
         $SUDO apt-get install -y dpkg-dev
