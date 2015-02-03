@@ -29,6 +29,8 @@ RBD_FEATURE_LAYERING = 1
 RBD_FEATURE_STRIPINGV2 = 2
 RBD_FEATURE_EXCLUSIVE_LOCK = 4
 
+RBD_FLAG_OBJECT_MAP_INVALID = 1
+
 class Error(Exception):
     pass
 
@@ -525,7 +527,24 @@ class Image(object):
             raise make_ex(ret, 'error getting overlap for image' % (self.name))
         return overlap.value
 
+    def flags(self):
+        """
+        Gets the flags bitmask of the image.
+
+        :returns: int - the flags bitmask of the image
+        """
+        flags = c_uint64()
+        reg = self.librbd.rbd_get_flags(self.image, byref(flags))
+        if (ret != 0):
+            raise make_ex(ret, 'error getting flags for image' % (self.name))
+        return flags.value
+
     def is_exclusive_lock_owner(self):
+        """
+        Gets the status of the image exclusive lock.
+
+        :returns: bool - true if the image is exclusively locked
+        """
         owner = c_int()
         ret = self.librbd.rbd_is_exclusive_lock_owner(self.image, byref(owner))
         if (ret != 0):
