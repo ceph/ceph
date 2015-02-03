@@ -7,9 +7,6 @@ operational issues with Ceph releases we recommend you `subscribe to the
 ceph-users email list`_. When  you no longer want to receive emails, you can
 `unsubscribe from the ceph-users email list`_.
 
-If you have read through this guide and you have contacted ``ceph-users``,
-but you haven't resolved your issue, you may contact `Inktank`_ for support.
-
 You may also `subscribe to the ceph-devel email list`_. You should do so if
 your issue is:
 
@@ -31,4 +28,3 @@ may `unsubscribe from the ceph-devel email list`_.
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
 .. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
 .. _ceph-devel: ceph-devel@vger.kernel.org
-.. _Inktank: http://inktank.com
