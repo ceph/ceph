@@ -1038,27 +1038,29 @@ TEST_F(TestClsRbd, flags)
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
 
   uint64_t flags;
-  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  std::vector<snapid_t> snap_ids;
+  std::vector<uint64_t> snap_flags;
+  ASSERT_EQ(0, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
   ASSERT_EQ(0U, flags);
 
   librados::ObjectWriteOperation op1;
   set_flags(&op1, 3, 2);
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
-  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  ASSERT_EQ(0, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
   ASSERT_EQ(2U, flags);
 
   uint64_t snap_id = 10;
-  ASSERT_EQ(-ENOENT, get_flags(&ioctx, oid, snap_id, &flags));
+  snap_ids.push_back(snap_id);
+  ASSERT_EQ(-ENOENT, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, snap_id, "snap"));
 
   librados::ObjectWriteOperation op2;
   set_flags(&op2, 31, 4);
   ASSERT_EQ(0, ioctx.operate(oid, &op2));
-  ASSERT_EQ(0, get_flags(&ioctx, oid, CEPH_NOSNAP, &flags));
+  ASSERT_EQ(0, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
   ASSERT_EQ(6U, flags);
-
-  ASSERT_EQ(0, get_flags(&ioctx, oid, snap_id, &flags));
-  ASSERT_EQ(2U, flags);
+  ASSERT_EQ(snap_ids.size(), snap_flags.size());
+  ASSERT_EQ(2U, snap_flags[0]);
 
   ioctx.close();
 }
