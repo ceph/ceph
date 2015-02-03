@@ -131,13 +131,22 @@ bool ImageWatcher::has_pending_aio_operations() {
 }
 
 void ImageWatcher::flush_aio_operations() {
+  C_SaferCond *ctx = new C_SaferCond();
+  flush_aio_operations(ctx);
+  ctx->wait();
+}
+
+void ImageWatcher::flush_aio_operations(Context *ctx) {
   Mutex::Locker l(m_aio_request_lock);
-  while (m_retrying_aio_requests || !m_aio_requests.empty()) {
-    ldout(m_image_ctx.cct, 20)  << "flushing aio operations: "
-				<< "retrying=" << m_retrying_aio_requests << ","
-				<< "count=" << m_aio_requests.size() << dendl;
-    m_aio_request_cond.Wait(m_aio_request_lock);
+  if (!m_retrying_aio_requests && m_aio_requests.empty()) {
+    ctx->complete(0);
+    return;
   }
+
+  ldout(m_image_ctx.cct, 20) << "pending flush: " << ctx << " "
+			     << "retrying=" << m_retrying_aio_requests << ", "
+			     << "count=" << m_aio_requests.size() << dendl;
+  m_aio_flush_contexts.push_back(ctx);
 }
 
 int ImageWatcher::try_lock() {
@@ -545,23 +554,13 @@ void ImageWatcher::retry_aio_requests() {
 
   Mutex::Locker l(m_aio_request_lock);
   m_retrying_aio_requests = false;
-  m_aio_request_cond.Signal();
-}
+  while (!m_aio_flush_contexts.empty()) {
+    Context *flush_ctx = m_aio_flush_contexts.front();
+    m_aio_flush_contexts.pop_front();
 
-void ImageWatcher::cancel_aio_requests(int result) {
-  Mutex::Locker l(m_aio_request_lock);
-  for (std::vector<AioRequest>::iterator iter = m_aio_requests.begin();
-       iter != m_aio_requests.end(); ++iter) {
-    AioCompletion *c = iter->second;
-    c->get();
-    c->lock.Lock();
-    c->rval = result;
-    c->lock.Unlock();
-    c->finish_adding_requests(m_image_ctx.cct);
-    c->put();
+    ldout(m_image_ctx.cct, 20) << "completed flush: " << flush_ctx << dendl;
+    flush_ctx->complete(0);
   }
-  m_aio_requests.clear();
-  m_aio_request_cond.Signal();
 }
 
 void ImageWatcher::cancel_async_requests(int result) {

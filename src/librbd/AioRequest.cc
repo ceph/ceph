@@ -259,8 +259,6 @@ namespace librbd {
       m_state = LIBRBD_AIO_WRITE_GUARD;
       m_write.assert_exists();
       ldout(m_ictx->cct, 20) << __func__ << " guarding write" << dendl;
-    } else {
-      m_state = LIBRBD_AIO_WRITE_FLAT;
     }
   }
 
@@ -480,6 +478,7 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
 			   << m_object_off << "~" << m_object_len << dendl;
 
+    m_state = LIBRBD_AIO_WRITE_FLAT;
     guard_write();
     add_write_ops(&m_write);
     assert(m_write.size() != 0);
