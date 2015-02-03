@@ -18,6 +18,11 @@ if test $(id -u) != 0 ; then
     SUDO=sudo
 fi
 export LC_ALL=C # the following is vulnerable to i18n
+
+if test -f /etc/redhat-release ; then
+    $SUDO yum install -y redhat-lsb-core
+fi
+
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
         $SUDO apt-get install -y dpkg-dev
