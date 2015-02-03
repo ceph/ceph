@@ -79,10 +79,10 @@ string lowercase_underscore_http_attr(const string& orig)
   for (size_t i = 0; i < orig.size(); ++i, ++s) {
     switch (*s) {
       case '-':
-	buf[i] = '_';
-	break;
+        buf[i] = '_';
+        break;
       default:
-	buf[i] = tolower(*s);
+        buf[i] = tolower(*s);
     }
   }
   return string(buf);
@@ -101,10 +101,32 @@ string uppercase_underscore_http_attr(const string& orig)
   for (size_t i = 0; i < orig.size(); ++i, ++s) {
     switch (*s) {
       case '-':
-	buf[i] = '_';
-	break;
+        buf[i] = '_';
+        break;
       default:
-	buf[i] = toupper(*s);
+        buf[i] = toupper(*s);
+    }
+  }
+  return string(buf);
+}
+
+/*
+ * make attrs look-like-this
+ * converts underscores to dashes
+ */
+string lowercase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+        buf[i] = '-';
+        break;
+      default:
+        buf[i] = tolower(*s);
     }
   }
   return string(buf);
@@ -125,15 +147,15 @@ string camelcase_dash_http_attr(const string& orig)
   for (size_t i = 0; i < orig.size(); ++i, ++s) {
     switch (*s) {
       case '_':
-	buf[i] = '-';
-	last_sep = true;
-	break;
+        buf[i] = '-';
+        last_sep = true;
+        break;
       default:
-	if (last_sep)
-	  buf[i] = toupper(*s);
-	else
-	  buf[i] = tolower(*s);
-	last_sep = false;
+        if (last_sep)
+          buf[i] = toupper(*s);
+        else
+          buf[i] = tolower(*s);
+        last_sep = false;
     }
   }
   return string(buf);
