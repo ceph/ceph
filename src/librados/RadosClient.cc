@@ -764,6 +764,8 @@ int librados::RadosClient::pg_command(pg_t pgid, vector<string>& cmd,
 
 int librados::RadosClient::monitor_log(const string& level, rados_log_callback_t cb, void *arg)
 {
+  Mutex::Locker l(lock);
+
   if (cb == NULL) {
     // stop watch
     ldout(cct, 10) << __func__ << " removing cb " << (void*)log_cb << dendl;
