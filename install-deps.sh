@@ -37,8 +37,8 @@ Ubuntu|Debian|Devuan)
             -e 's/\(.*?\)//g;' \
             -e 's/ +/\n/g;' | sort)
         case $(lsb_release -sc) in
-            squeeze)
-                packages=$(echo $packages | perl -pe 's/\w*babeltrace\w*//g')
+            squeeze|wheezy)
+                packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
                 ;;
         esac
         $SUDO apt-get install -y $packages
