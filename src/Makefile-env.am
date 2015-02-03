@@ -133,6 +133,7 @@ LIBGLOBAL = libglobal.la
 LIBCOMMON = libcommon.la
 LIBARCH = libarch.la
 LIBPERFGLUE = libperfglue.la
+LIBPERFGLUE_DISABLED = libperfglue_disabled.la
 LIBAUTH = libauth.la
 LIBMSG = libmsg.la
 LIBCRUSH = libcrush.la
@@ -176,7 +177,6 @@ LIBOSD += $(LIBOSDC) $(LIBOS)
 # These have references to syms like ceph_using_tcmalloc(), glue libperfglue to them
 LIBMON += $(LIBPERFGLUE)
 LIBOSD += $(LIBPERFGLUE)
-LIBMDS += $(LIBPERFGLUE)
 
 # Always use system leveldb
 LIBOS += -lleveldb -lsnappy

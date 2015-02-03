@@ -58,6 +58,7 @@ ceph_dencoder_LDADD = \
 	$(LIBMDS) \
 	$(LIBMON_TYPES) \
 	$(DENCODER_DEPS) \
+	$(LIBPERFGLUE_DISABLED) \
 	$(CEPH_GLOBAL)
 
 # These should always use explicit _CFLAGS/_CXXFLAGS so avoid basename conflicts

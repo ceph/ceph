@@ -9,13 +9,18 @@ else
 libperfglue_la_SOURCES += perfglue/disabled_heap_profiler.cc
 endif # WITH_TCMALLOC
 
+libperfglue_disabled_la_CFLAGS = -DMASK_LIBTCMALLOC
+libperfglue_disabled_la_SOURCES = perfglue/disabled_heap_profiler.cc
+
 if WITH_PROFILER
 libperfglue_la_SOURCES += perfglue/cpu_profiler.cc
+libperfglue_disabled_la_SOURCES += perfglue/cpu_profiler.cc
 else
 libperfglue_la_SOURCES += perfglue/disabled_stubs.cc
+libperfglue_disabled_la_SOURCES += perfglue/disabled_stubs.cc
 endif # WITH_PROFILER
 
-noinst_LTLIBRARIES += libperfglue.la
+noinst_LTLIBRARIES += libperfglue.la libperfglue_disabled.la
 
 noinst_HEADERS += \
 	perfglue/cpu_profiler.h \
