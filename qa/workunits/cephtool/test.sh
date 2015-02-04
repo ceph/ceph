@@ -879,7 +879,7 @@ function test_mon_osd()
   ceph osd deep-scrub 0
   ceph osd repair 0
 
-  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norecover notieragent full
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full
   do
     ceph osd set $f
     ceph osd unset $f

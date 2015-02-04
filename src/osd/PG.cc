@@ -6413,7 +6413,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
   }
 
   if (!pg->is_clean() &&
-      !pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
+      !pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL) &&
+      (!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) || pg->is_degraded())) {
     pg->osd->queue_for_recovery(pg);
   }
   return forward_event();

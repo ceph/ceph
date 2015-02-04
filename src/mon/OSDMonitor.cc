@@ -2473,6 +2473,7 @@ void OSDMonitor::get_health(list<pair<health_status_t,string> >& summary,
 			 CEPH_OSDMAP_NOIN |
 			 CEPH_OSDMAP_NOOUT |
 			 CEPH_OSDMAP_NOBACKFILL |
+			 CEPH_OSDMAP_NOREBALANCE |
 			 CEPH_OSDMAP_NORECOVER |
 			 CEPH_OSDMAP_NOSCRUB |
 			 CEPH_OSDMAP_NODEEP_SCRUB |
@@ -5279,6 +5280,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_set_flag(m, CEPH_OSDMAP_NOIN);
     else if (key == "nobackfill")
       return prepare_set_flag(m, CEPH_OSDMAP_NOBACKFILL);
+    else if (key == "norebalance")
+      return prepare_set_flag(m, CEPH_OSDMAP_NOREBALANCE);
     else if (key == "norecover")
       return prepare_set_flag(m, CEPH_OSDMAP_NORECOVER);
     else if (key == "noscrub")
@@ -5309,6 +5312,8 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       return prepare_unset_flag(m, CEPH_OSDMAP_NOIN);
     else if (key == "nobackfill")
       return prepare_unset_flag(m, CEPH_OSDMAP_NOBACKFILL);
+    else if (key == "norebalance")
+      return prepare_unset_flag(m, CEPH_OSDMAP_NOREBALANCE);
     else if (key == "norecover")
       return prepare_unset_flag(m, CEPH_OSDMAP_NORECOVER);
     else if (key == "noscrub")

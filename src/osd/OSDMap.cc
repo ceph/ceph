@@ -2359,6 +2359,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",noin";
   if (f & CEPH_OSDMAP_NOBACKFILL)
     s += ",nobackfill";
+  if (f & CEPH_OSDMAP_NOREBALANCE)
+    s += ",norebalance";
   if (f & CEPH_OSDMAP_NORECOVER)
     s += ",norecover";
   if (f & CEPH_OSDMAP_NOSCRUB)
