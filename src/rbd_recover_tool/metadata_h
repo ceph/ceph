@@ -1,0 +1,368 @@
+#!/bin/bash
+# file: metadata_h
+#
+# Copyright (C) 2015 Ubuntu Kylin
+#
+# Author: Min Chen <minchen@ubuntukylin.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+my_dir=$(dirname "$0")
+. $my_dir/common_h
+. $my_dir/epoch_h
+
+# put origin name in $image_name_in: for output
+# put convert "_" name in $image_name: for grep image hobjects from database
+image_name_in=
+image_name=
+function input_image()
+{
+  local func="input_image"
+  if [ "$1"x = ""x ];then
+    echo "$func: no image name input"
+    exit
+  fi
+
+  image_name_in=$1
+  # "_" -> "\u"
+  image_name=`convert_underline $image_name_in`
+}
+
+#======================================== distinguish v1 or v2 ===================================  
+#image_list_v1=$single_node/$cluster-$id/image_list_v1
+#image_list_v2=$single_node/$cluster-$id/image_list_v2
+function get_image_list()
+{
+  find $osd_data/current/ -type f|grep ".rbd__" >$image_list_v1
+  find $osd_data/current/ -type f|grep "rbd\\\\uid." >$image_list_v2
+}
+
+function get_image_format_by_hobject()
+{
+  local func="get_image_format"
+  if [ "$1"x = ""x ];then
+    exit
+  fi
+  local res1=`cat $image_list_v1|grep $1`  
+  if [ "$res1"x != ""x ];then
+    echo 1
+    exit
+  fi  
+ 
+  local res2=`cat $image_list_v2|grep  $1`
+  if [ "$res2"x = ""x ];then
+    echo 2
+    exit
+  fi
+}
+
+#======================================== image format v1 ========================================  
+# <image_name>.rbd inlude 3 parts:
+# header + snap_count*snapshot + snap_count*snap_name
+# 
+# struct rbd_obj_header_ondisk {
+# 40	char text[40];
+# 24	char block_name[RBD_MAX_BLOCK_NAME_SIZE];
+# 4	char signature[4];
+# 8	char version[8];
+# 	struct {
+# 1		__u8 order;
+# 1		__u8 crypt_type;
+# 1		__u8 comp_type;
+# 1		__u8 unused;
+# 	} __attribute__((packed)) options;
+# 8	__le64 image_size;//hexdump -C s=80 n=8
+# 8	__le64 snap_seq;  //hexdump -C s=88 n=8
+# 4	__le32 snap_count;//hexdump -C s=96 n=4
+# 4	__le32 reserved;
+# 8	__le64 snap_names_len;//hexdump -C s=104 n=8
+# 	struct rbd_obj_snap_ondisk snaps[0];
+# } __attribute__((packed));
+#
+# sizeof(rbd_obj_header_ondisk): 112
+#
+# struct rbd_obj_snap_ondisk {
+# 8	__le64 id;    //hexdump -C s=112+i*16 n=8   , i=[0, snap_count)
+# 8	__le64 image_size;//hexdump -C s=112+i*16+8 n=8, i=[0, snap_count)
+# } __attribute__((packed));
+# sizeof(rbd_obj_snap_ondisk): 16
+#
+# get snap_names form <image_nane>.rbd
+# hexdump -e '10/1 "%_c"' -s $((112 + $snap_count*16)) -n $snap_names_len <image_name>.rbd
+# then split snap_names into array
+
+function get_image_metadata_v1()
+{
+  local func="get_image_metadata_v1"
+  if [ "$1"x = ""x ];then
+    echo "$func: no image head object input"
+    exit
+  fi
+  local snap_name=
+  if [ "$2"x != ""x ];then
+    snap_name=$2 
+  fi
+    
+  if [ ! -e $1 ];then
+    echo "$func: $1 not exists"
+    exit
+  fi
+  local hobject_path=$1  
+  d_hobject_path=`dump_backslash $1`
+  local image_format=`get_image_format_by_hobject $d_hobject_path`
+  if [ $image_format != 1 ];then
+    echo "$func: image_format must be 1"
+    exit
+  fi
+ 
+  if [ ! -e $hobject_path ];then
+    echo "$func: $hobject_path not exists"
+    exit
+  fi
+
+  # decode rbd_obj_header_ondisk of <image_name>.rbd
+  local block_name=`hexdump -e '10/1 "%c"' -s 40 -n 24 $hobject_path`
+  local order=`hexdump -e '10/4 "%u"' -s 76 -n 1 $hobject_path`
+  local image_size=`hexdump -C -s 80 -n 8 $hobject_path|head -n 1|awk '{for (i=9; i>1; i--) {printf $i}}'`
+  image_size=$((16#$image_size))
+  local snap_seq=`hexdump -C -s 88 -n 8 $hobject_path|head -n 1|
+	awk '{num=""; for(i=9; i>1; i--){ num=num""$i;} print strtonum("0x"num);}'`
+  local snap_count=`hexdump -C -s 96 -n 4 $hobject_path|head -n 1|
+	awk '{num=""; for(i=5; i>1; i--){ num=num""$i;} print strtonum("0x"num);}'` 
+  local snap_names_len=`hexdump -C -s 104 -n 8 $hobject_path|head -n 1|
+	awk '{num=""; for(i=9; i>1; i--){ num=num""$i;} print strtonum("0x"num);}'` 
+
+  echo -e "block_name:\t$block_name"
+  echo -e "order:\t\t$order"
+  echo -e "image_size:\t$image_size"
+  echo -e "snap_seq:\t$snap_seq"
+
+  # decode N rbd_obj_snap_ondisk of <image_name>.rbd
+  declare -a snap_ids
+  declare -a snap_names
+  declare -a snap_image_sizes
+  local size_header=112 #sizeof(rbd_obj_header_ondisk)
+  local size_snap=16 #sizeof(rbd_obj_snap_ondisk)
+  local offset=0
+  local id_off=0
+  local size_off=0
+  for ((i=0; i<$snap_count; i++))
+  do
+    offset=$(($size_header + $i * $size_snap)) 
+    id_off=$offset 
+    size_off=$(($offset + 8))
+    snap_ids[$i]=`hexdump -C -s $id_off -n 8 $hobject_path|head -n 1|
+	awk '{num=""; for(i=9; i>1; i--){num=num""$i;} print strtonum("0x"num);}'`
+    snap_image_sizes[$i]=`hexdump -C -s $size_off -n 8 $hobject_path|head -n 1|
+	awk '{num=""; for(i=9; i>1; i--){num=num""$i;} print strtonum("0x"num);}'`
+  done
+  offset=$(($size_header + $snap_count * $size_snap))
+  snap_names=(`hexdump -e '10/1 "%_c"' -s $offset -n $snap_names_len $hobject_path|
+  	awk -F "\\\\\\\\\\\\\\\\0" '{for(i=1; i<=NF; i++) {print $i" "} }'`); 
+
+  echo -e "\t\tID\tNAME\t\tSIZE"
+  for ((i=0; i<$snap_count; i++))
+  do
+    if [ "$snap_name"x = ""x ];then
+      echo -n -e "snapshot:\t"
+      echo -e "${snap_ids[$i]}\t${snap_names[$i]}\t\t${snap_image_sizes[$i]}"
+      continue
+    fi
+    if [ "$snap_name"x = "${snap_names[$i]}"x ];then 
+      echo -n -e "snapshot:\t"
+      echo -e "${snap_ids[$i]}\t${snap_names[$i]}\t\t${snap_image_sizes[$i]}"
+      return
+    fi
+  done
+}
+
+#======================================== end image format v1 ========================================  
+
+#======================================== image format v2 ======================================== 
+
+# map_header, header_seq, header, key/value
+# eg. 
+# map_header		_HOBJTOSEQ_:rbd%uheader%e139a6b8b4567...head.2.68E826B6
+# meta_header_seq	17426
+# header:		_USER_0000000000017426_USER_:object_prefix
+#			_USER_0000000000017426_USER_:order
+#			_USER_0000000000017426_USER_:size
+#			_USER_0000000000017426_USER_:snap_seq
+# key/value		ceph-kvstore-tool /storepath get _USER_0000000000017426_USER_ (object_prefix|order|size|snap_seq)
+
+# decode image id from image_id_hobject 
+function get_image_id()
+{
+  local func="get_image_id"
+  if [ "$1"x = ""x ];then
+    exit;
+  fi
+  local image_id_hobject=$1 #from admin node's database
+
+  if [ ! -e $image_id_hobject ];then
+    #echo "$func: $image_id_hobject not exists"
+    exit;
+  fi
+  
+  # get len of string  
+  local n=`hexdump -e '10/4 "%u"' -s 0 -n 4 $image_id_hobject`
+  # get string
+  hexdump -e '10/1 "%c"' -s 4 -n $n $image_id_hobject
+}
+
+#find image_id omap entry in omaplist
+map_header_prefix=
+map_header_key=
+function get_map_header()
+{
+  local func="get_map_header"
+  local image_id=$1
+  if [ "$image_id"x = ""x ];then
+    echo "$func: no image_id input"
+    exit;
+  fi
+  map_header_prefix=`get_map_header_prefix`
+  local keyword="header%e"$image_id
+  map_header_key=`get_map_header_key $keyword`
+  if [ "$map_header_key"x = ""x ];then
+    echo "$func: map_header_key is NULL(not in omaplist)"
+    exit
+  fi
+}
+
+#get meta header seq from map_header
+meta_header_seq=
+function get_meta_header_seq() 
+{
+  local func="get_meta_header_seq"
+  if [ "$1"x == ""x ];then
+    echo "$func: no prefix input"
+    exit;
+  elif [ "$2"x == ""x ];then
+    echo "$func: no key input"
+    exit;
+  fi
+  local prefix=$1;
+  local key=$2;
+  meta_header_seq=`get_header_seq $prefix $key`
+}
+
+# get image metadata : object_prefix, order, image_size, snap_seq
+object_prefix=
+order=
+image_size=
+snap_seq=
+function get_image_metadata_v2()
+{
+  local func="get_image_metadata_v2"
+  if [ "$1"x = ""x ];then
+    echo "$func: no meta_header_seq input"
+    exit;
+  fi
+  local meta_header_seq=`printf "%016d" $1`
+  #echo "$func: meta_header_seq = "$meta_header_seq
+  local ghobject_key="_USER_"$meta_header_seq"_USER_"
+  local prefix=$ghobject_key
+
+  object_prefix=`get_header_kv $prefix object_prefix string`
+  #object_prefix="rbd_data.$image_id"
+  order=`get_header_kv $prefix order int`
+  image_size=`get_header_kv $prefix size int` 
+  snap_seq=`get_header_kv $prefix snap_seq int`
+
+  echo -e "object_prefix:\t$object_prefix"
+  echo -e "order:\t\t$order"
+  echo -e "image_size:\t$image_size"
+  echo -e "snap_seq:\t$snap_seq"
+
+  # list snapshot
+  list_snaps_v2 $1 $2
+}
+
+# struct cls_rbd_snap {
+# 	snapid_t id;
+#	string name;
+#	uint64_t image_size;
+#	uint64_t features;
+#	uint8_t protection_status;
+#	cls_rbd_parent parent;
+# }
+# decode cls_rbd_snap
+# 1	u8	struct_v
+# 1	u8	struct_compat
+# 4	u32	struct_len
+# 8	u64	snapid_t id //s=6 n=8
+# 4	u32	len of name //s=14 n=4
+# len	char	name        //s=18 n=len
+# 8	u64	image_size
+# 8	u64	features
+# ......
+#
+function list_snaps_v2()
+{
+  local func="list_snaps_v2"
+  if [ "$1"x = ""x ];then
+    exit
+  fi
+  local sname=
+  if [ $# -eq 2 ];then
+    sname=$2
+  fi
+  local meta_header_seq=`printf "%016d" $1`
+  local prefix="_USER_"$meta_header_seq"_USER_"
+  local keys=(`awk -F ":" '/snapshot_/ && $1 == "'"$prefix"'" {if ($2 == "") exit; split($2, arr, "_"); 
+	print arr[2];}' $omap_list|sort -r`)
+  echo -e "\t\tID\tNAME\t\tSIZE"
+  for key in ${keys[@]}
+  do
+    key="snapshot_$key"
+    local arr=(`ceph-kvstore-tool $omap_path get $prefix $key|awk -F ":" '{print $2}'`);
+    # get snap_name
+    tmp=
+    for ((i=17; i>13; i--))
+    do
+      tmp="$tmp${arr[$i]}"
+    done
+    local len=$((16#$tmp))
+    local snap_name=
+    for ((i=18; i<$((18+$len)); i++))
+    do
+      # convert ascii to char
+      local char=`echo -e "\x${arr[$i]}"` 
+      snap_name="$snap_name$char"
+    done
+    # get snap_id (little endian)
+    local tmp=
+    for ((i=13; i>5; i--))
+    do
+      tmp="$tmp${arr[$i]}" 
+    done
+    local snap_id=$((16#$tmp))
+    # get image_size of current snap (little endian)
+    tmp=
+    for ((i=$((25+$len)); i>$((17+$len)); i--))
+    do
+      tmp="$tmp${arr[$i]}"
+    done
+    local image_size=$((16#$tmp))
+    if [ "$sname"x = ""x ];then
+      echo -e "snapshot:\t$snap_id\t$snap_name\t\t$image_size" 
+      continue
+    fi
+    if [ "$sname"x = "$snap_name"x ];then
+      echo -e "snapshot:\t$snap_id\t$snap_name\t\t$image_size" 
+      return
+    fi
+  done
+}
+
+#======================================== end image format v2 ========================================  
