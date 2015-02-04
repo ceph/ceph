@@ -3,6 +3,6 @@ workload:
     - workunit:
         branch: giant
         clients:
-          client.0:
+          client.3:
             - rbd/test_librbd.sh
-    - print: "**** done rbd/test_librbd.sh 2-workload"
+    - print: "**** done rbd/test_librbd.sh 2-workload parallel"
