@@ -76,6 +76,8 @@ using ceph::crypto::SHA1;
 #include "include/assert.h"
 
 #include "common/config.h"
+#include "common/blkdev.h"
+#include <mntent.h>
 
 #ifdef WITH_LTTNG
 #include "tracing/objectstore.h"
@@ -522,6 +524,8 @@ FileStore::FileStore(const std::string &base, const std::string &jdev, osflagbit
   force_sync(false), 
   sync_entry_timeo_lock("sync_entry_timeo_lock"),
   timer(g_ceph_context, sync_entry_timeo_lock),
+  fstrim(false),
+  last_fstrim(utime_t()),
   stop(false), sync_thread(this),
   fdcache(g_ceph_context),
   wbthrottle(g_ceph_context),
@@ -1591,6 +1595,17 @@ int FileStore::mount()
     }
   }
 
+  if (g_conf->filestore_fstrim) {
+    string blk;
+    bool ret = file_to_blkdev(basedir, blk);
+    dout(1) << blk << " is mount on " << basedir << dendl;
+
+    if (ret) {
+      fstrim = block_device_support_discard(blk.c_str());
+      dout(1) << " support discard: " << (int)fstrim << dendl;
+    }
+  }
+
   journal_start();
 
   op_tp.start();
@@ -1680,8 +1695,102 @@ int FileStore::umount()
   return 0;
 }
 
+bool FileStore::file_to_blkdev(string& file, string& blkdev)
+{
+  struct  mntent  *ent = NULL;
+  struct  statfs64  stat;
+  multimap<string, string> blkdev_map;
 
+  FILE *fp = setmntent(MOUNTED, "r"); // read /etc/mtab
+  while( (ent = getmntent(fp)) != NULL){
+    bzero(&stat, sizeof(struct statfs));
+    if(-1 == statfs64(ent->mnt_dir, &stat)){
+        continue;
+    }
 
+    long all = stat.f_bsize * stat.f_blocks;
+    if (all) {
+      blkdev_map.insert(make_pair(ent->mnt_dir, ent->mnt_fsname));
+    }
+  }
+  endmntent(fp);
+
+  string path = file;
+  while(true) {
+    if (blkdev_map.count(path) > 1) {
+      derr << __func__ << " find multiple block dev mount on " << path << dendl;
+      return false;
+    }
+    else if (blkdev_map.count(path) == 1) {
+      blkdev = blkdev_map.find(path)->second;
+      return true;
+    } else if (path.compare("/") == 0) {
+      derr << __func__ << " Do not find which block dev mount on /" << dendl;
+      assert(false);
+    }
+
+    int last = path.find_last_of('/');
+    if (last > 0) {
+      path = path.substr(0, last);
+    } else if (last == 0) {
+      path = "/";
+    } else {
+      derr << __func__ << " Do not find char '/' in " << file << dendl;
+      assert(false);
+    }
+  }
+}
+
+/* returns: 0 = success, 1 = unsupported, < 0 = error */
+int FileStore::do_fstrim()
+{
+   struct fstrim_range range;
+   memset(&range, 0, sizeof(range));
+   range.len = ULLONG_MAX;
+   struct stat sb;
+
+   if (fstat(basedir_fd, &sb) == -1) {
+     dout(10) << __func__ << " stat failed " << basedir << dendl;
+     return -1;
+   }
+   errno = 0;
+   if (ioctl(basedir_fd, FITRIM, &range)) {
+     int rc = errno == EOPNOTSUPP || errno == ENOTTY ? 1 : -1;
+     if (rc != 1)
+       dout(10) << __func__ << " " << basedir << " FITRIM ioctl failed " << dendl;
+     return rc;
+   }
+
+   dout(10) << __func__ << " " << basedir << " " << range.len << " bytes trimmed" << dendl;
+   return 0;
+}
+
+bool FileStore::check_do_fstrim(bool force)
+{
+  if (fstrim) {
+    utime_t now = ceph_clock_now(g_ceph_context);
+    if (force) {
+        dout(10) << "force do_fstrim" << dendl;
+        do_fstrim();
+        last_fstrim = now;
+        return true;
+    }
+    struct tm bdt;
+    time_t tt = now.sec();
+    localtime_r(&tt, &bdt);
+    if (force || bdt.tm_hour == g_ceph_context->_conf->filestore_fstrim_at_hour) {
+      utime_t diff = now - last_fstrim;
+      dout(10) << "do_fstrim at " << now
+        << ": " << (double)diff << " min (" << g_ceph_context->_conf->filestore_fstrim_interval << " seconds)" << dendl;
+      if ((double)diff >= g_ceph_context->_conf->filestore_fstrim_interval) {
+        do_fstrim();
+        last_fstrim = now;
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 /// -----------------------------
 
@@ -3486,6 +3595,8 @@ void FileStore::sync_entry()
 	sync_cond.WaitInterval(g_ceph_context, lock, t);
       }
     }
+
+    check_do_fstrim();
 
     list<Context*> fin;
   again:

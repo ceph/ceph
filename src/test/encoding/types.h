@@ -516,6 +516,8 @@ MESSAGE(MOSDPing)
 MESSAGE(MOSDRepScrub)
 #include "messages/MOSDScrub.h"
 MESSAGE(MOSDScrub)
+#include "messages/MOSDFstrim.h"
+MESSAGE(MOSDFstrim)
 #include "messages/MOSDSubOp.h"
 MESSAGE(MOSDSubOp)
 #include "messages/MOSDSubOpReply.h"

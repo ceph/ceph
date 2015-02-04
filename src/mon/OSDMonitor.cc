@@ -41,6 +41,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDFstrim.h"
 
 #include "common/TextTable.h"
 #include "common/Timer.h"
@@ -2872,7 +2873,37 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
 	r = -EAGAIN;
       }
     }
-  } else if (prefix == "osd lspools") {
+  } else if (prefix == "osd fstrim") {
+    string whostr;
+    cmd_getval(g_ceph_context, cmdmap, "who", whostr);
+    vector<string> pvec;
+    get_str_vec(prefix, pvec);
+
+    if (whostr == "*") {
+      ss << "osds ";
+      int c = 0;
+      for (int i = 0; i < osdmap.get_max_osd(); i++)
+	if (osdmap.is_up(i)) {
+	  ss << (c++ ? "," : "") << i;
+	  mon->try_send_message(new MOSDFstrim(osdmap.get_fsid()),
+				osdmap.get_inst(i));
+	}
+      r = 0;
+      ss << " instructed to fstrim";
+    } else {
+      long osd = parse_osd_id(whostr.c_str(), &ss);
+      if (osd < 0) {
+	r = -EINVAL;
+      } else if (osdmap.is_up(osd)) {
+	mon->try_send_message(new MOSDFstrim(osdmap.get_fsid()),
+			      osdmap.get_inst(osd));
+	ss << "osd." << osd << " instructed to fstrim";
+      } else {
+	ss << "osd." << osd << " is not up";
+	r = -EAGAIN;
+      }
+    }
+  }  else if (prefix == "osd lspools") {
     int64_t auid;
     cmd_getval(g_ceph_context, cmdmap, "auid", auid, int64_t(0));
     if (f)

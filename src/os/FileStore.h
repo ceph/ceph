@@ -163,6 +163,9 @@ private:
   Mutex sync_entry_timeo_lock;
   SafeTimer timer;
 
+  bool fstrim;
+  utime_t last_fstrim;
+
   list<Context*> sync_waiters;
   bool stop;
   void sync_entry();
@@ -423,6 +426,10 @@ public:
   }
   int mkfs();
   int mkjournal();
+  bool file_to_blkdev(string& file, string& blkdev);
+  bool check_do_fstrim(bool force = false);
+  int do_fstrim();
+  bool do_force_fstrim() { return check_do_fstrim(true); }
 
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
