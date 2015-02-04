@@ -23,6 +23,10 @@ if test -f /etc/redhat-release ; then
     $SUDO yum install -y redhat-lsb-core
 fi
 
+if which apt-get > /dev/null ; then
+    $SUDO apt-get install -y lsb-release
+fi
+
 case $(lsb_release -si) in
 Ubuntu|Debian|Devuan)
         $SUDO apt-get install -y dpkg-dev
@@ -33,8 +37,8 @@ Ubuntu|Debian|Devuan)
             -e 's/\(.*?\)//g;' \
             -e 's/ +/\n/g;' | sort)
         case $(lsb_release -sc) in
-            squeeze)
-                packages=$(echo $packages | perl -pe 's/\w*babeltrace\w*//g')
+            squeeze|wheezy)
+                packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
                 ;;
         esac
         $SUDO apt-get install -y $packages
