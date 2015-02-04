@@ -1,0 +1,327 @@
+#!/bin/bash
+# file: rbd-recover-tool
+#
+# Copyright (C) 2015 Ubuntu Kylin
+#
+# Author: Min Chen <minchen@ubuntukylin.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU Library Public License as published by
+# the Free Software Foundation; either version 2, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Library Public License for more details.
+#
+
+# rbd-recover-tool is an offline recover tool for rbd image in replicated pool
+# when ceph cluster is stopped.
+# it is a simple disater recovery policy, just for urgent condition
+
+my_dir=$(dirname "$0")
+
+. $my_dir/common_h
+. $my_dir/metadata_h
+. $my_dir/epoch_h
+. $my_dir/database_h
+
+#scp files from admin node to osd node
+file1=common_h
+file2=metadata_h
+file3=epoch_h
+file4=osd_job
+
+#------------ admin node's action -------------
+
+function scp_file()
+{
+  local func="scp_file"
+  file=$1
+  if [ "$1"x = ""x ];then
+    echo "$func: not file input"
+    exit
+  fi
+  for host in `cat $osd_host`
+  do
+  {
+    echo "$func: $host"
+    scp $ssh_option $file $host:$job_path  1>/dev/null
+  } &
+  done
+}
+
+function scp_files()
+{
+  local func="scp_files"
+  for host in `cat $osd_host`
+  do
+  {
+    echo "$func: $host"
+    scp $ssh_option $file1 $host:$job_path
+    scp $ssh_option $file2 $host:$job_path
+    scp $ssh_option $file3 $host:$job_path
+    scp $ssh_option $file4 $host:$job_path
+  } &
+  done
+  wait
+  echo "$func: finish"
+}
+
+function scatter_node_jobs()
+{
+  local func="scatter_node_jobs"
+  local host=
+  local data_path=
+  echo "$func: flush osd journal & generate infos: omap, pg, image metadata ..."
+
+  trap 'echo $func failed; exit' INT HUP
+  while read line
+  do
+  {
+    host=`echo $line|awk '{print $1}'`
+    data_path=`echo $line|awk '{print $2}'`
+    check_osd_process $host
+
+    cmd="mkdir -p $job_path"
+    ssh $ssh_option $host $cmd
+    scp $ssh_option $file1 $host:$job_path  >/dev/null
+    scp $ssh_option $file2 $host:$job_path  >/dev/null
+    scp $ssh_option $file3 $host:$job_path  >/dev/null
+    scp $ssh_option $file4 $host:$job_path  >/dev/null
+
+    cmd="bash $job_path/osd_job flush_osd_journal $data_path;"
+    cmd="$cmd $job_path/osd_job do_omap_list $data_path;"
+    cmd="$cmd bash $job_path/osd_job do_pg_epoch $data_path;"
+    cmd="$cmd bash $job_path/osd_job do_image_list $data_path;"
+
+    ssh $ssh_option $host $cmd </dev/null
+  } &
+  done < $osd_host_path
+  wait
+  echo "$func: finish"
+}
+
+function gather_node_infos()
+{
+  local func="gather_node_infos"
+  echo "$func ..."
+  >$pg_coll
+  >$image_coll_v1
+  >$image_coll_v2
+  trap 'echo $func failed; exit' INT HUP
+  while read line
+  do
+  {
+    host=`echo $line|awk '{print $1}'`
+    data_path=`echo $line|awk '{print $2}'`
+    echo "$func: $host"
+    check_osd_process $host
+
+    #pg epoch
+    cmd1="bash $job_path/osd_job cat_pg_epoch $data_path"
+    ssh $ssh_option $host $cmd1 >> $pg_coll
+    #image v1
+    cmd2="bash $job_path/osd_job cat_image_v1 $data_path"
+    ssh $ssh_option $host $cmd2 >> $image_coll_v1
+    #image v2
+    cmd3="bash $job_path/osd_job cat_image_v2 $data_path"
+    ssh $ssh_option $host $cmd3 >> $image_coll_v2
+  } &
+  done < $osd_host_path
+  wait
+  echo "$func: finish"
+}
+
+function scatter_gather()
+{
+  local func="scatter_gather"
+  if [ ! -s $osd_host ];then
+    echo "$func: no osd_host input"
+    exit
+  fi
+  if [ ! -s $mon_host ];then
+    echo "$func: no mon_host input"
+    exit
+  fi
+  scatter_node_jobs
+  gather_node_infos
+}
+
+
+#------------- operations --------------
+
+function database()
+{
+  scatter_gather
+  gen_database
+}
+
+function list()
+{
+  list_images
+}
+
+function lookup()
+{
+  lookup_image $1 $2 $3
+}
+
+function recover()
+{
+  recover_image $1 $2 $3 $4
+}
+
+#------------- helper -------------
+
+function usage()
+{
+  local cmd_name="rbd-recover-tool"
+  echo 
+  echo "$cmd_name is used to recover rbd image of replicated pool, 
+	when all ceph services are stopped"
+  echo "Usage:"
+  echo "$cmd_name database
+		 	gather pg info, object info, image metadata, 
+		 	and epoch info from all osd nodes,
+		    	this will cosume a long time, just be patient, 
+			especially when scale up to 1000+ osds"
+  echo "$cmd_name list
+		    	list all rbd images of all replicated pools, 
+			before to lookup & recover"
+  echo "$cmd_name lookup  <pool_id>/<image_name>[@[<snap_name>]]
+		    	show image metadata: image format, rbd id, size, order, snapseq
+			In addtion, for image with snapshots, 
+			this will list all snapshot infomations"
+  echo "$cmd_name recover <pool_id>/<image_name>[@[<snap_name>]] [</path/to/store/image>]
+			all snapshots share one image head, to economize disk space
+			so there is only one snapshot at any time,
+			image is saved at </path/to/store/image>/pool_<pool_id>/image_name/image_name
+			cat <path/to/store/image>/pool_<pool_id>/image_name/@CURRENT,
+			will show snapid
+		    	recover to raw image/nosnap/head: <image_name>
+	            	rollback to image head:           <image_name>@
+	            	rollback to image snap:           <image_name>@<snap_name>
+			recover steps:
+			1. recover image nosnap (only one time)
+			2. rollback to image snap"
+}
+
+function get_path()
+{
+  local func="get_path"
+  if [ $# -lt 1 ];then
+    return
+  fi
+  if [[ $1 =~ // ]];then
+    return # "/path//to" is invalid
+  fi
+  local parent=`dirname $1`
+  local name=`basename $1`
+  if [ "$parent"x = "/"x ];then
+    echo "$parent$name"
+  else
+    echo -n "$parent/$name"
+  fi
+}
+
+function admin_cmd()
+{
+  local func="admin_cmd"
+  if [ $# -lt 1 ];then
+    usage
+    exit
+  fi
+  if [ "$1"x = "-h"x ] || [ "$1"x = "--help"x ];then
+    usage
+    exit
+  fi
+  
+  if [ "$1"x = "database"x ];then
+    if [ $# -gt 1 ];then
+      usage
+      exit
+    fi
+    # remove osd_host to refresh osd_host and osd_host_mapping
+    rm -f $osd_host
+    init_env_admin
+    database
+  elif [ "$1"x = "list"x ];then
+    if [ $# -gt 1 ];then
+      usage
+      exit
+    fi
+    init_env_admin
+    list
+  elif [ "$1"x = "lookup"x ];then
+    if [ $# -gt 2 ];then
+      usage
+      exit
+    fi
+    local pool_id=-1
+    local image_name=
+    local snap_name=
+    if [[ $2 =~  ^([^@/]+)/([^@/]+)$ ]];then
+      pool_id="${BASH_REMATCH[1]}"
+      image_name="${BASH_REMATCH[2]}"
+    elif [[ $2 =~  ^([^@/]+)/([^@/]+)@([^@/]*)$ ]];then
+      pool_id="${BASH_REMATCH[1]}"
+      image_name="${BASH_REMATCH[2]}"
+      snap_name="${BASH_REMATCH[3]}"
+    else
+      echo "format: $2 is invalid, use <pool_id>/<image_name>[@[<snap_name>]]"
+      exit
+    fi
+    init_env_admin
+    lookup $pool_id $image_name $snap_name
+  elif [ "$1"x = "recover"x ];then
+    if [ $# -lt 2 ] || [ $# -gt 3 ];then
+      usage
+      exit
+    fi
+    local pool_id=-1
+    local image_name=
+    local snap_name=@
+    local image_dir=
+    if [[ $2 =~  ^([^@/]+)/([^@/]+)$ ]];then
+      pool_id="${BASH_REMATCH[1]}"
+      image_name="${BASH_REMATCH[2]}"
+    elif [[ $2 =~  ^([^@/]+)/([^@/]+)@([^@/]*)$ ]];then
+      pool_id="${BASH_REMATCH[1]}"
+      image_name="${BASH_REMATCH[2]}"
+      snap_name="${BASH_REMATCH[3]}"
+      if [ "$snap_name"x = ""x ];then
+        snap_name=@@
+      fi
+    else
+      echo "format: $2 is invalid, use <pool_id>/<image_name>[@[<snap_name>]]"
+      exit
+    fi
+    if [ $# = 3 ];then
+      image_dir=`get_path $3`
+      if [ "image_dir"x = ""x ];then
+        echo "$3 invalid"
+        exit
+      fi
+    fi
+    init_env_admin
+    recover $pool_id $image_name $snap_name $image_dir
+  elif [ "$1"x = "scp_files"x ];then
+    if [ $# -gt 1 ];then
+      exit
+    fi
+    admin_parse_osd
+    scp_files
+  elif [ "$1"x = "scp_file"x ];then
+    if [ $# -gt 2 ];then
+      exit
+    fi
+    admin_parse_osd
+    scp_file $2
+  else
+    echo "$func: $1: command not found"
+  fi
+}
+
+admin_cmd $*
