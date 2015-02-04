@@ -18,10 +18,11 @@ namespace librbd {
     uint64_t features;
     parent_info parent;
     uint8_t protection_status;
+    uint64_t flags;
     SnapInfo(std::string _name, uint64_t _size, uint64_t _features,
-	     parent_info _parent, uint8_t _protection_status) :
-      name(_name), size(_size), features(_features), parent(_parent),
-      protection_status(_protection_status) {}
+	     parent_info _parent, uint8_t _protection_status, uint64_t _flags)
+      : name(_name), size(_size), features(_features), parent(_parent),
+	protection_status(_protection_status), flags(_flags) {}
   };
 }
 
