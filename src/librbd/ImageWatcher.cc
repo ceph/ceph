@@ -61,12 +61,14 @@ enum {
 };
 
 ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), m_watch_ctx(*this), m_handle(0),
+  : m_image_ctx(image_ctx),
+    m_watch_lock("librbd::ImageWatcher::m_watch_lock"),
+    m_watch_ctx(*this), m_watch_handle(0),
+    m_watch_state(WATCH_STATE_UNREGISTERED),
     m_lock_owner_state(LOCK_OWNER_STATE_NOT_LOCKED),
     m_finisher(new Finisher(image_ctx.cct)),
     m_timer_lock("librbd::ImageWatcher::m_timer_lock"),
     m_timer(new SafeTimer(image_ctx.cct, m_timer_lock)),
-    m_watch_lock("librbd::ImageWatcher::m_watch_lock"), m_watch_error(0),
     m_async_request_lock("librbd::ImageWatcher::m_async_request_lock"),
     m_async_request_id(0),
     m_aio_request_lock("librbd::ImageWatcher::m_aio_request_lock"),
@@ -78,8 +80,14 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
 
 ImageWatcher::~ImageWatcher()
 {
-  Mutex::Locker l(m_timer_lock);
-  m_timer->shutdown();
+  {
+    Mutex::Locker l(m_timer_lock);
+    m_timer->shutdown();
+  }
+  {
+    RWLock::RLocker l(m_watch_lock);
+    assert(m_watch_state != WATCH_STATE_REGISTERED);
+  }
   m_finisher->stop();
   delete m_finisher;
 }
@@ -99,14 +107,16 @@ int ImageWatcher::register_watch() {
   ldout(m_image_ctx.cct, 20) << "registering image watcher" << dendl;
 
   RWLock::WLocker l(m_watch_lock);
-  m_watch_error = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid, &m_handle,
-				            &m_watch_ctx);
-  return m_watch_error;
-}
+  assert(m_watch_state == WATCH_STATE_UNREGISTERED);
+  int r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
+				    &m_watch_handle,
+				    &m_watch_ctx);
+  if (r < 0) {
+    return r;
+  }
 
-int ImageWatcher::get_watch_error() {
-  RWLock::RLocker l(m_watch_lock);
-  return m_watch_error;
+  m_watch_state = WATCH_STATE_REGISTERED;
+  return 0;
 }
 
 int ImageWatcher::unregister_watch() {
@@ -119,8 +129,19 @@ int ImageWatcher::unregister_watch() {
 
   cancel_async_requests(-ESHUTDOWN);
 
-  RWLock::WLocker l(m_watch_lock);
-  return m_image_ctx.md_ctx.unwatch2(m_handle);
+  int r = 0;
+  {
+    RWLock::WLocker l(m_watch_lock);
+    assert(m_watch_state != WATCH_STATE_UNREGISTERED);
+    if (m_watch_state == WATCH_STATE_REGISTERED) {
+      r = m_image_ctx.md_ctx.unwatch2(m_watch_handle);
+    }
+    m_watch_state = WATCH_STATE_UNREGISTERED;
+  }
+
+  librados::Rados rados(m_image_ctx.md_ctx);
+  rados.watch_flush();
+  return r;
 }
 
 bool ImageWatcher::has_pending_aio_operations() {
@@ -210,6 +231,14 @@ int ImageWatcher::request_lock(
 			       << dendl;
     m_aio_requests.push_back(std::make_pair(restart_op, c));
     if (request_pending) {
+      return 0;
+    }
+  }
+
+  {
+    // aio operations will be retried once the the watch is re-established
+    RWLock::RLocker l(m_watch_lock);
+    if (m_watch_state == WATCH_STATE_ERROR) {
       return 0;
     }
   }
@@ -497,7 +526,7 @@ void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 std::string ImageWatcher::encode_lock_cookie() const {
   RWLock::RLocker l(m_watch_lock);
   std::ostringstream ss;
-  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << m_handle;
+  ss << WATCHER_LOCK_COOKIE_PREFIX << " " << m_watch_handle;
   return ss.str();
 }
 
@@ -575,7 +604,7 @@ uint64_t ImageWatcher::encode_async_request(bufferlist &bl) {
   ++m_async_request_id;
 
   RemoteAsyncRequest request(m_image_ctx.md_ctx.get_instance_id(),
-			     m_handle, m_async_request_id);
+			     m_watch_handle, m_async_request_id);
   ::encode(request, bl);
 
   ldout(m_image_ctx.cct, 20) << "async request: " << request << dendl;
@@ -787,7 +816,7 @@ void ImageWatcher::handle_async_progress(bufferlist::iterator iter) {
   ::decode(offset, iter);
   ::decode(total, iter);
   if (request.gid == m_image_ctx.md_ctx.get_instance_id() &&
-      request.handle == m_handle) {
+      request.handle == m_watch_handle) {
     RWLock::RLocker l(m_async_request_lock);
     std::map<uint64_t, AsyncRequest>::iterator iter =
       m_async_requests.find(request.request_id);
@@ -807,7 +836,7 @@ void ImageWatcher::handle_async_complete(bufferlist::iterator iter) {
   int r;
   ::decode(r, iter);
   if (request.gid == m_image_ctx.md_ctx.get_instance_id() &&
-      request.handle == m_handle) {
+      request.handle == m_watch_handle) {
     Context *ctx = NULL;
     {
       RWLock::RLocker l(m_async_request_lock);
@@ -975,9 +1004,16 @@ void ImageWatcher::handle_notify(uint64_t notify_id, uint64_t handle,
 void ImageWatcher::handle_error(uint64_t handle, int err) {
   lderr(m_image_ctx.cct) << "image watch failed: " << handle << ", "
                          << cpp_strerror(err) << dendl;
-  FunctionContext *ctx = new FunctionContext(
-    boost::bind(&ImageWatcher::reregister_watch, this));
-  m_finisher->queue(ctx);
+
+  RWLock::WLocker l(m_watch_lock);
+  if (m_watch_state == WATCH_STATE_REGISTERED) {
+    m_image_ctx.md_ctx.unwatch2(m_watch_handle);
+    m_watch_state = WATCH_STATE_ERROR;
+
+    FunctionContext *ctx = new FunctionContext(
+      boost::bind(&ImageWatcher::reregister_watch, this));
+    m_finisher->queue(ctx);
+  }
 }
 
 void ImageWatcher::acknowledge_notify(uint64_t notify_id, uint64_t handle,
@@ -991,22 +1027,30 @@ void ImageWatcher::reregister_watch() {
   {
     RWLock::WLocker l(m_image_ctx.owner_lock);
     bool lock_owner = (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED);
-    int r;
     if (lock_owner) {
       unlock();
     }
 
+    int r;
     {
       RWLock::WLocker l(m_watch_lock);
-      m_image_ctx.md_ctx.unwatch2(m_handle);
-      m_watch_error = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
-                                                &m_handle, &m_watch_ctx);
-      if (m_watch_error < 0) {
+      if (m_watch_state != WATCH_STATE_ERROR) {
+	return;
+      }
+
+      r = m_image_ctx.md_ctx.watch2(m_image_ctx.header_oid,
+                                    &m_watch_handle, &m_watch_ctx);
+      if (r < 0) {
         lderr(m_image_ctx.cct) << "failed to re-register image watch: "
-                               << cpp_strerror(m_watch_error) << dendl;
-	schedule_retry_aio_requests();
+                               << cpp_strerror(r) << dendl;
+	Mutex::Locker l(m_timer_lock);
+	FunctionContext *ctx = new FunctionContext(boost::bind(
+	  &ImageWatcher::reregister_watch, this));
+	m_timer->add_event_after(RETRY_DELAY_SECONDS, ctx);
         return;
       }
+
+      m_watch_state = WATCH_STATE_REGISTERED;
     }
     handle_header_update();
 
