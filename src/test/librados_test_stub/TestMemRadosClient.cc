@@ -115,4 +115,8 @@ int TestMemRadosClient::pool_reverse_lookup(int64_t id, std::string *name) {
   return -ENOENT;
 }
 
+int TestMemRadosClient::watch_flush() {
+  return 0;
+}
+
 } // namespace librados
