@@ -6986,7 +6986,7 @@ void OSD::handle_pg_create(OpRequestRef op)
     if (ci->second == utime_t()) {
       // Older OSD doesn't send ctime, so just do what we did before
       // The repair_test.py can fail in a mixed cluster
-      utime_t now = ceph_clock_now(NULL);
+      utime_t now = ceph_clock_now(cct);
       history.last_scrub_stamp = now;
       history.last_deep_scrub_stamp = now;
     } else {
