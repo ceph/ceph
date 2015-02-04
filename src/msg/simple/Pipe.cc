@@ -1667,13 +1667,13 @@ void Pipe::reader()
       } else {
         if (in_q->can_fast_dispatch(m)) {
 	  reader_dispatching = true;
-	  // set_tp_stamp(tp_stamps[TP_READER_PIPE_UNLOCK], ceph_clock_now(msgr->cct).to_nsec()/1000); 
-          // pipe_lock.Unlock();
+	  set_tp_stamp(tp_stamps[TP_READER_PIPE_UNLOCK], ceph_clock_now(msgr->cct).to_nsec()/1000); 
+          pipe_lock.Unlock();
 	  set_tp_stamp(tp_stamps[TP_READER_DISPATCH], ceph_clock_now(msgr->cct).to_nsec()/1000); 
           in_q->fast_dispatch(m);
 	  set_tp_stamp(tp_stamps[TP_READER_DISPATCH_DONE], ceph_clock_now(msgr->cct).to_nsec()/1000); 
-          // pipe_lock.Lock();
-	  // set_tp_stamp(tp_stamps[TP_READER_PIPE_LOCK2], ceph_clock_now(msgr->cct).to_nsec()/1000); 
+          pipe_lock.Lock();
+	  set_tp_stamp(tp_stamps[TP_READER_PIPE_LOCK2], ceph_clock_now(msgr->cct).to_nsec()/1000); 
 	  reader_dispatching = false;
 	  if (state == STATE_CLOSED ||
 	      notify_on_dispatch_done) { // there might be somebody waiting

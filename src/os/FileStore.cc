@@ -2745,9 +2745,9 @@ unsigned FileStore::_do_transaction(
       derr << "bad op " << op->op << dendl;
       assert(0);
     }
-    if (op != Transaction::OP_WRITE) {
+    if (op->op != Transaction::OP_WRITE) {
       set_tp_stamp(tp_stamps[TP_FSTORE_DO_TA_OTHER_OP_END], ceph_clock_now(g_ceph_context).to_nsec()/1000);
-      tracepoint(filestore, do_transaction, pthread_self(), op_seq, trans_num, "unknown", "", 0, 0,  op, tp_nops, tp_stamps);
+      tracepoint(filestore, do_transaction, pthread_self(), op_seq, trans_num, "unknown", "", 0, 0,  op->op, tp_nops, tp_stamps);
     }
 
     if (r < 0) {
