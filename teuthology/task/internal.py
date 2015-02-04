@@ -673,8 +673,12 @@ def _download_and_run_chef(remote_):
     Run ceph_qa_chef.
     """
     log.info('Running ceph_qa_chef on %s', remote_)
-    remote_.run(args=['wget', '-q', '-O-',
+    remote_.run(
+        args=[
+            'wget', '-q', '-O-',
             'http://ceph.com/git/?p=ceph-qa-chef.git;a=blob_plain;f=solo/solo-from-scratch;hb=HEAD',
             run.Raw('|'),
             'sh',
-        ])
+        ],
+        label="run chef solo-from-scratch"
+    )
