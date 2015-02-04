@@ -188,7 +188,11 @@ class Filesystem(object):
 
     def get_lone_mds_id(self):
         if len(self.mds_ids) != 1:
-            raise ValueError("Explicit MDS argument required when multiple MDSs in use")
+            active = self.get_active_names()
+            if len(active) == 1:
+                return active[0]
+            else:
+                raise ValueError("Explicit MDS argument required when multiple MDSs in use")
         else:
             return self.mds_ids[0]
 
