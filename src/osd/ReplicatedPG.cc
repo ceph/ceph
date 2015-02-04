@@ -10661,6 +10661,10 @@ bool ReplicatedPG::start_recovery_ops(
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOBACKFILL)) {
       dout(10) << "deferring backfill due to NOBACKFILL" << dendl;
       deferred_backfill = true;
+    } else if (get_osdmap()->test_flag(CEPH_OSDMAP_NOREBALANCE) &&
+	       !is_degraded())  {
+      dout(10) << "deferring backfill due to NOREBALANCE" << dendl;
+      deferred_backfill = true;
     } else if (!backfill_reserved) {
       dout(10) << "deferring backfill due to !backfill_reserved" << dendl;
       if (!backfill_reserving) {
