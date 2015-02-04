@@ -3924,6 +3924,11 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 	respond_to_request(mdr, -EINVAL);
 	return;
       }
+      if (cur->get_projected_inode()->size ||
+	  cur->get_projected_inode()->truncate_seq > 1) {
+	respond_to_request(mdr, -ENOTEMPTY);
+	return;
+      }
       ceph_file_layout layout = cur->get_projected_inode()->layout;
       rest = name.substr(name.find("layout"));
       const OSDMap *osdmap = mds->objecter->get_osdmap_read();
