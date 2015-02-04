@@ -1452,6 +1452,18 @@ reprotect_and_return_err:
     return 0;
   }
 
+  int get_flags(ImageCtx *ictx, uint64_t *flags)
+  {
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    RWLock::RLocker l(ictx->md_lock);
+    RWLock::RLocker l2(ictx->snap_lock);
+    return ictx->get_flags(ictx->snap_id, flags);
+  }
+
   int is_exclusive_lock_owner(ImageCtx *ictx, bool *is_owner)
   {
     RWLock::RLocker l(ictx->owner_lock);
@@ -1841,6 +1853,7 @@ reprotect_and_return_err:
     vector<uint64_t> snap_features;
     vector<parent_info> snap_parents;
     vector<uint8_t> snap_protection;
+    vector<uint64_t> snap_flags;
     {
       int r;
       RWLock::WLocker l(ictx->snap_lock);
@@ -1908,31 +1921,33 @@ reprotect_and_return_err:
 	      return -ENOSYS;
 	    }
 
-            r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
-                                      ictx->snap_id, &ictx->flags);
+	    r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
+				      &ictx->flags, new_snapc.snaps,
+				      &snap_flags);
             if (r == -EOPNOTSUPP || r == -EIO) {
               // Older OSD doesn't support RBD flags, need to assume the worst
               ldout(ictx->cct, 10) << "OSD does not support RBD flags" << dendl;
-            } else if (r == -ENOENT) {
-              ldout(ictx->cct, 10) << "Image at invalid snapshot" << dendl;
-            } else if (r < 0 && r != -ENOENT) {
-              lderr(cct) << "Error reading flags: " << cpp_strerror(r) << dendl;
-              return r;
-            }
-            if (r < 0) {
               ictx->flags = 0;
               if ((ictx->features & RBD_FEATURE_OBJECT_MAP) != 0) {
                 ldout(ictx->cct, 10) << "disabling object map optimizations"
                                      << dendl;
                 ictx->flags |= RBD_FLAG_OBJECT_MAP_INVALID;
               }
+
+	      vector<uint64_t> default_flags(new_snapc.snaps.size(), ictx->flags);
+	      snap_flags.swap(default_flags);
+            } else if (r == -ENOENT) {
+              ldout(ictx->cct, 10) << "Image at invalid snapshot" << dendl;
+	      continue;
+            } else if (r < 0) {
+              lderr(cct) << "Error reading flags: " << cpp_strerror(r) << dendl;
+              return r;
             }
 
 	    r = cls_client::snapshot_list(&(ictx->md_ctx), ictx->header_oid,
 					  new_snapc.snaps, &snap_names,
 					  &snap_sizes, &snap_features,
-					  &snap_parents,
-					  &snap_protection);
+					  &snap_parents, &snap_protection);
 	    // -ENOENT here means we raced with snapshot deletion
 	    if (r < 0 && r != -ENOENT) {
 	      lderr(ictx->cct) << "snapc = " << new_snapc << dendl;
@@ -1965,13 +1980,14 @@ reprotect_and_return_err:
 	ictx->snap_ids.clear();
 	for (size_t i = 0; i < new_snapc.snaps.size(); ++i) {
 	  uint64_t features = ictx->old_format ? 0 : snap_features[i];
+	  uint64_t flags = ictx->old_format ? 0 : snap_flags[i];
 	  uint8_t protection_status = ictx->old_format ?
 	    (uint8_t)RBD_PROTECTION_STATUS_UNPROTECTED : snap_protection[i];
 	  parent_info parent;
 	  if (!ictx->old_format)
 	    parent = snap_parents[i];
-	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val,
-			 snap_sizes[i], features, parent, protection_status);
+	  ictx->add_snap(snap_names[i], new_snapc.snaps[i].val, snap_sizes[i],
+			 features, parent, protection_status, flags);
 	}
 
 	r = refresh_parent(ictx);

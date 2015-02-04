@@ -292,6 +292,10 @@ class TestImage(object):
         info = self.image.stat()
         check_stat(info, IMG_SIZE, IMG_ORDER)
 
+    def test_flags(self):
+        flags = self.image.flags()
+        eq(0, flags)
+
     def test_write(self):
         data = rand_data(256)
         self.image.write(data, 0)
