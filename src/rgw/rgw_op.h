@@ -186,10 +186,18 @@ protected:
   string marker;
   uint64_t limit;
   uint64_t limit_max;
+  uint32_t buckets_count;
+  uint64_t buckets_objcount;
+  uint64_t buckets_size;
+  uint64_t buckets_size_rounded;
 
 public:
   RGWListBuckets() : ret(0), sent_data(false) {
     limit = limit_max = RGW_LIST_BUCKETS_LIMIT_MAX;
+    buckets_count = 0;
+    buckets_objcount = 0;
+    buckets_size = 0;
+    buckets_size_rounded = 0;
   }
 
   int verify_permission();
