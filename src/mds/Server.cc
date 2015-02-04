@@ -1049,8 +1049,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   mdr->mark_event("replying");
 
   // note successful request in session map?
-  if (req->may_write() && mdr->session && reply->get_result() == 0)
-    mdr->session->add_completed_request(mdr->reqid.tid, mdr->alloc_ino);
+  if (req->may_write() && mdr->session && reply->get_result() == 0) {
+    inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
+    mdr->session->add_completed_request(mdr->reqid.tid, created);
+  }
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);

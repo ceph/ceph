@@ -1572,13 +1572,13 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
        ++p) {
     if (p->first.name.is_client()) {
       dout(10) << "EMetaBlob.replay request " << p->first << " trim_to " << p->second << dendl;
-
+      inodeno_t created = allocated_ino ? allocated_ino : used_preallocated_ino;
       // if we allocated an inode, there should be exactly one client request id.
-      assert(allocated_ino == inodeno_t() || client_reqs.size() == 1);
+      assert(created == inodeno_t() || client_reqs.size() == 1);
 
       Session *session = mds->sessionmap.get_session(p->first.name);
       if (session) {
-	session->add_completed_request(p->first.tid, allocated_ino);
+	session->add_completed_request(p->first.tid, created);
 	if (p->second)
 	  session->trim_completed_requests(p->second);
       }
