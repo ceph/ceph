@@ -357,7 +357,8 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                 remote.run(
                     logger=log.getChild(role),
                     args=args,
-                    )
+                    label="workunit test {workunit}".format(workunit=workunit)
+                )
                 remote.run(
                     logger=log.getChild(role),
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp],
