@@ -187,6 +187,9 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
   assert(start_object_no < end_object_no);
   
   CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << &m_image_ctx << " aio_update: start=" << start_object_no
+		 << ", end=" << end_object_no << ", new_state="
+		 << static_cast<uint32_t>(new_state) << dendl;
   if (end_object_no > object_map.size()) {
     ldout(cct, 20) << "skipping update of invalid object map" << dendl;
     return false;
@@ -319,7 +322,8 @@ void ObjectMap::UpdateRequest::send() {
 
   ldout(cct, 20) << &m_image_ctx << " updating on-disk object map: ["
 		 << m_start_object_no << "," << m_end_object_no << ") = "
-		 << (m_current_state ? stringify(*m_current_state) : "")
+		 << (m_current_state ?
+		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
 		 << "->" << static_cast<uint32_t>(m_new_state)
 		 << dendl;
   

@@ -19,7 +19,8 @@ public:
 		     ProgressContext &prog_ctx)
     : AsyncRequest(image_ctx, on_finish),
       m_original_size(original_size), m_new_size(new_size),
-      m_prog_ctx(prog_ctx)
+      m_prog_ctx(prog_ctx), m_original_parent_overlap(0),
+      m_new_parent_overlap(0)
   {
   }
 
@@ -60,6 +61,8 @@ protected:
   uint64_t m_original_size;
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
+  uint64_t m_original_parent_overlap;
+  uint64_t m_new_parent_overlap;
 
   virtual bool should_complete(int r);
 

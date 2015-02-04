@@ -343,6 +343,24 @@ librbd_close(struct rbd_ctx *ctx)
 	return __librbd_close(ctx);
 }
 
+int
+librbd_verify_object_map(struct rbd_ctx *ctx)
+{
+	int n;
+	uint64_t flags;
+	n = rbd_get_flags(ctx->image, &flags);
+	if (n < 0) {
+		prt("rbd_get_flags() failed\n");
+		return n;
+	}
+
+	if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+		prt("rbd_get_flags() indicates object map is invalid\n");
+		return -EINVAL;
+	}
+	return 0;
+}
+
 ssize_t
 librbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
 {
@@ -359,11 +377,18 @@ ssize_t
 librbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, void *buf)
 {
 	ssize_t n;
+	int ret;
 
 	n = rbd_write(ctx->image, off, len, buf);
-	if (n < 0)
+	if (n < 0) {
 		prt("rbd_write(%llu, %zu) failed\n", off, len);
+		return n;
+	}
 
+	ret = librbd_verify_object_map(ctx);
+	if (ret < 0) {
+		return ret;
+	}
 	return n;
 }
 
@@ -378,7 +403,7 @@ librbd_flush(struct rbd_ctx *ctx)
 		return ret;
 	}
 
-	return 0;
+	return librbd_verify_object_map(ctx);
 }
 
 int
@@ -392,7 +417,7 @@ librbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
 		return ret;
 	}
 
-	return 0;
+	return librbd_verify_object_map(ctx);
 }
 
 int
@@ -423,7 +448,7 @@ __librbd_resize(struct rbd_ctx *ctx, uint64_t size)
 		return ret;
 	}
 
-	return 0;
+	return librbd_verify_object_map(ctx);
 }
 
 int
@@ -489,7 +514,7 @@ __librbd_flatten(struct rbd_ctx *ctx)
 		return ret;
 	}
 
-	return 0;
+	return librbd_verify_object_map(ctx);
 }
 
 int

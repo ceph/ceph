@@ -245,13 +245,25 @@ namespace librbd {
     }
 
     int get_flags(librados::IoCtx *ioctx, const std::string &oid,
-                  snapid_t snap_id, uint64_t *flags)
+		  uint64_t *flags, const std::vector<snapid_t> &snap_ids,
+		  vector<uint64_t> *snap_flags)
     {
       bufferlist inbl;
-      ::encode(snap_id, inbl);
+      ::encode(static_cast<snapid_t>(CEPH_NOSNAP), inbl);
+
+      librados::ObjectReadOperation op;
+      op.exec("rbd", "get_flags", inbl);
+      for (size_t i = 0; i < snap_ids.size(); ++i) {
+	bufferlist snapbl;
+	::encode(snap_ids[i], snapbl);
+	op.exec("rbd", "get_flags", snapbl);
+      }
+
+      snap_flags->clear();
+      snap_flags->resize(snap_ids.size());
 
       bufferlist outbl;
-      int r = ioctx->exec(oid, "rbd", "get_flags", inbl, outbl);
+      int r = ioctx->operate(oid, &op, &outbl);
       if (r < 0) {
         return r;
       }
@@ -259,6 +271,9 @@ namespace librbd {
       try {
         bufferlist::iterator iter = outbl.begin();
         ::decode(*flags, iter);
+	for (size_t i = 0; i < snap_ids.size(); ++i) {
+	  ::decode((*snap_flags)[i], iter);
+	}
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
