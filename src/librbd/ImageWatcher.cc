@@ -91,8 +91,6 @@ bool ImageWatcher::is_lock_supported() const {
 }
 
 bool ImageWatcher::is_lock_owner() const {
-  // TODO issue #8903 will address lost notification handling
-  // in cases where the lock was broken
   assert(m_image_ctx.owner_lock.is_locked());
   return m_lock_owner_state == LOCK_OWNER_STATE_LOCKED;
 }
