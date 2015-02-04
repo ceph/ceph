@@ -30,9 +30,10 @@ class RemoteProcess(object):
         'greenlets',
         # for orchestra.remote.Remote to place a backreference
         'remote',
+        'label',
         ]
 
-    def __init__(self, client, args, check_status=True, hostname=None):
+    def __init__(self, client, args, check_status=True, hostname=None, label=None):
         """
         Create the object. Does not initiate command execution.
 
@@ -42,7 +43,9 @@ class RemoteProcess(object):
         :param check_status: Whether to raise CommandFailedError on non-zero
                              exit status, and . Defaults to True. All signals
                              and connection loss are made to look like SIGHUP.
-        :param hostname: Name of remote host (optional)
+        :param hostname:     Name of remote host (optional)
+        :param label:        Can be used to label or describe what the
+                             command is doing.
         """
         self.client = client
         self.args = args
@@ -52,6 +55,7 @@ class RemoteProcess(object):
             self.command = quote(args)
 
         self.check_status = check_status
+        self.label = label
 
         if hostname:
             self.hostname = hostname
@@ -66,8 +70,11 @@ class RemoteProcess(object):
         """
         Execute remote command
         """
-        log.getChild(self.hostname).info(u"Running: {cmd!r}".format(
-            cmd=self.command))
+        prefix = "Running:"
+        if self.label:
+            prefix = "Running ({label}):".format(label=self.label)
+        log.getChild(self.hostname).info(u"{prefix} {cmd!r}".format(
+            cmd=self.command, prefix=prefix))
 
         (self._stdin_buf, self._stdout_buf, self._stderr_buf) = \
             self.client.exec_command(self.command)
@@ -103,7 +110,8 @@ class RemoteProcess(object):
                 raise CommandCrashedError(command=self.command)
             if status != 0:
                 raise CommandFailedError(command=self.command,
-                                         exitstatus=status, node=self.hostname)
+                                         exitstatus=status, node=self.hostname,
+                                         label=self.label)
         return status
 
     def _get_exitstatus(self):
@@ -287,7 +295,8 @@ def run(
     logger=None,
     check_status=True,
     wait=True,
-    name=None
+    name=None,
+    label=None
 ):
     """
     Run a command remotely.  If any of 'args' contains shell metacharacters
@@ -316,6 +325,7 @@ def run(
                  actual status is available via ``.get()``.
     :param name: Human readable name (probably hostname) of the destination
                  host
+    :param label: Can be used to label or describe what the command is doing.
     """
     try:
         (host, port) = client.get_transport().getpeername()
@@ -325,7 +335,7 @@ def run(
     if name is None:
         name = host
 
-    r = RemoteProcess(client, args, check_status=check_status, hostname=name)
+    r = RemoteProcess(client, args, check_status=check_status, hostname=name, label=label)
     r.execute()
 
     r.stdin = KludgeFile(wrapped=r.stdin)
