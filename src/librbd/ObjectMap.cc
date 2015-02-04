@@ -210,6 +210,10 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 }
 
 void ObjectMap::invalidate() {
+  if ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+    return;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
@@ -237,8 +241,7 @@ bool ObjectMap::Request::should_complete(int r) {
     } else if (r < 0) {
       lderr(cct) << "failed to update object map: " << cpp_strerror(r)
 		 << dendl;
-      invalidate();
-      return false;
+      return invalidate();
     }
 
     {
@@ -267,7 +270,11 @@ bool ObjectMap::Request::should_complete(int r) {
   return false;
 }
 
-void ObjectMap::Request::invalidate() {
+bool ObjectMap::Request::invalidate() {
+  if ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+    return true;
+  }
+
   CephContext *cct = m_image_ctx.cct;
   RWLock::WLocker l(m_image_ctx.md_lock);
 
@@ -283,6 +290,7 @@ void ObjectMap::Request::invalidate() {
 					 rados_completion, &op);
   assert(r == 0);
   rados_completion->release();
+  return false;
 }
 
 void ObjectMap::ResizeRequest::send() {
