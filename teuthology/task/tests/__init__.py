@@ -50,14 +50,19 @@ class TeuthologyContextPlugin(object):
             test_path = ".".join(test_path[4:-1])
             # removes the string '[ctx0, config0]' after the test name
             test_name = item.location[2].split("[")[0]
-            msg = "{path}:{name}".format(path=test_path, name=test_name)
+            name = "{path}:{name}".format(path=test_path, name=test_name)
             if report.passed:
-                log.info("{msg} PASSED!".format(msg=msg))
+                log.info("{name} Passed".format(name=name))
+            elif report.skipped:
+                log.info("{name} {info}".format(
+                    name=name,
+                    info=call.excinfo.exconly()
+                ))
             else:
-                log.error("{msg} FAILED!".format(msg=msg))
-                log.error("{msg} failed with: '{info}'".format(
-                    msg=msg,
-                    info=call.excinfo
+                # TODO: figure out a way to log the traceback
+                log.error("{name} Failed: {info}".format(
+                    name=name,
+                    info=call.excinfo.exconly()
                 ))
 
         return report
