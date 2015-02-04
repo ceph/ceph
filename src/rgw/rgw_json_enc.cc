@@ -9,6 +9,7 @@
 #include "rgw_cache.h"
 #include "rgw_bucket.h"
 #include "rgw_keystone.h"
+#include "rgw_basic_types.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -575,7 +576,7 @@ void RGWObjEnt::dump(Formatter *f) const
   encode_json("name", key.name, f);
   encode_json("instance", key.instance, f);
   encode_json("namespace", ns, f);
-  encode_json("owner", owner, f);
+  encode_json("owner", owner.to_str(), f);
   encode_json("owner_display_name", owner_display_name, f);
   encode_json("size", size, f);
   encode_json("mtime", mtime, f);

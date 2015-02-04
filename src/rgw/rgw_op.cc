@@ -1356,8 +1356,9 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
   }
   ldout(s->cct, 0) << "sending create_bucket request to master region" << dendl;
   bufferlist response;
+  string uid_str = s->user.user_id.to_str();
 #define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = store->rest_master_conn->forward(s->user.user_id, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
+  int ret = store->rest_master_conn->forward(uid_str, s->info, objv, MAX_REST_RESPONSE, &in_data, &response);
   if (ret < 0)
     return ret;
 

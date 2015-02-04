@@ -678,16 +678,18 @@ void RGWOp_Quota_Info::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid;
+  std::string uid_str;
   std::string quota_type;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
 
-  if (uid.empty()) {
+  if (uid_str.empty()) {
     http_ret = -EINVAL;
     return;
   }
+
+  rgw_user uid(uid_str);
 
   bool show_all = quota_type.empty();
   bool show_bucket = show_all || (quota_type == "bucket");
@@ -790,16 +792,18 @@ void RGWOp_Quota_Set::execute()
 {
   RGWUserAdminOpState op_state;
 
-  std::string uid;
+  std::string uid_str;
   std::string quota_type;
 
-  RESTArgs::get_string(s, "uid", uid, &uid);
+  RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "quota-type", quota_type, &quota_type);
 
-  if (uid.empty()) {
+  if (uid_str.empty()) {
     http_ret = -EINVAL;
     return;
   }
+
+  rgw_user uid(uid_str);
 
   bool set_all = quota_type.empty();
   bool set_bucket = set_all || (quota_type == "bucket");

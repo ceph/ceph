@@ -2691,7 +2691,8 @@ next:
       return EINVAL;
     }
     cls_user_header header;
-    int ret = store->cls_user_get_header(user_id, &header);
+    string user_str = user_id.to_str();
+    int ret = store->cls_user_get_header(user_str, &header);
     if (ret < 0) {
       cerr << "ERROR: can't read user header: " << cpp_strerror(-ret) << std::endl;
       return -ret;

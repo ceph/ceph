@@ -392,7 +392,7 @@ int rgw_remove_object(RGWRados *store, RGWBucketInfo& bucket_info, rgw_bucket& b
   return ret;
 }
 
-int rgw_remove_bucket(RGWRados *store, const string& bucket_owner, rgw_bucket& bucket, bool delete_children)
+int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -476,7 +476,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
 
   store = storage;
 
-  string user_id = op_state.get_user_id();
+  rgw_user user_id = op_state.get_user_id();
   bucket_name = op_state.get_bucket_name();
   RGWUserBuckets user_buckets;
   RGWObjectCtx obj_ctx(store);
@@ -608,7 +608,7 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, std::string *err_msg)
   bool delete_children = op_state.will_delete_children();
   rgw_bucket bucket = op_state.get_bucket();
 
-  int ret = rgw_remove_bucket(store, bucket_info.owner, bucket, delete_children);
+  int ret = rgw_remove_bucket(store, bucket, delete_children);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove bucket" + cpp_strerror(-ret));
     return ret;

@@ -77,6 +77,21 @@ struct rgw_user {
     rgw_user u(str);
     return compare(u);
   }
+
+  bool operator!=(const rgw_user& rhs) const {
+    return (compare(rhs) != 0);
+  }
+  bool operator==(const rgw_user& rhs) const {
+    return (compare(rhs) == 0);
+  }
+  bool operator<(const rgw_user& rhs) const {
+    if (tenant < rhs.tenant) {
+      return true;
+    } else if (tenant > rhs.tenant) {
+      return false;
+    }
+    return (id < rhs.id);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_user)
 
@@ -84,7 +99,7 @@ WRITE_CLASS_ENCODER(rgw_user)
 class JSONObj;
 
 void decode_json_obj(rgw_user& val, JSONObj *obj);
-void encode_json(const char *name, rgw_user& val, Formatter *f);
+void encode_json(const char *name, const rgw_user& val, Formatter *f);
 
 inline ostream& operator<<(ostream& out, const rgw_user &u) {
   string s;

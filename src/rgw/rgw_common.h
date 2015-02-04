@@ -854,7 +854,7 @@ WRITE_CLASS_ENCODER(RGWBucketInfo)
 struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
-  string owner;
+  rgw_user owner;
   time_t creation_time;
   bool linked;
 
@@ -864,17 +864,18 @@ struct RGWBucketEntryPoint
   RGWBucketEntryPoint() : creation_time(0), linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(8, 8, bl);
+    ENCODE_START(9, 8, bl);
     ::encode(bucket, bl);
-    ::encode(owner, bl);
+    ::encode(owner.id, bl);
     ::encode(linked, bl);
     uint64_t ctime = (uint64_t)creation_time;
     ::encode(ctime, bl);
+    ::encode(owner, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     bufferlist::iterator orig_iter = bl;
-    DECODE_START_LEGACY_COMPAT_LEN_32(8, 4, 4, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(9, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
       old_bucket_info.decode(orig_iter);
@@ -883,11 +884,14 @@ struct RGWBucketEntryPoint
     }
     has_bucket_info = false;
     ::decode(bucket, bl);
-    ::decode(owner, bl);
+    ::decode(owner.id, bl);
     ::decode(linked, bl);
     uint64_t ctime;
     ::decode(ctime, bl);
     creation_time = (uint64_t)ctime;
+    if (struct_v >= 9) {
+      ::decode(owner, bl);
+    }
     DECODE_FINISH(bl);
   }
 

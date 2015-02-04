@@ -479,7 +479,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
 
   ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
   if (requested_owner) {
-    const string& requested_id = requested_owner->get_id();
+    rgw_user& requested_id = requested_owner->get_id();
     if (!requested_id.empty() && requested_id.compare(owner->get_id()) != 0)
       return -EPERM;
   }

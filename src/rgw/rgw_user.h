@@ -45,7 +45,7 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-extern int rgw_user_sync_all_stats(RGWRados *store, const string& user_id);
+extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */

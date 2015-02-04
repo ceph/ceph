@@ -45,7 +45,7 @@ bool rgw_user_is_authenticated(RGWUserInfo& info)
   return (info.user_id.id != RGW_USER_ANON_ID);
 }
 
-int rgw_user_sync_all_stats(RGWRados *store, const string& user_id)
+int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
@@ -156,7 +156,10 @@ int rgw_store_user_info(RGWRados *store,
   ::encode(ui, data_bl);
   ::encode(info, data_bl);
 
-  ret = store->meta_mgr->put_entry(user_meta_handler, info.user_id, data_bl, exclusive, &ot, mtime, pattrs);
+  string key;
+  info.user_id.to_str(key);
+  
+  ret = store->meta_mgr->put_entry(user_meta_handler, key, data_bl, exclusive, &ot, mtime, pattrs);
   if (ret < 0)
     return ret;
 
@@ -465,12 +468,12 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
     return ret;
   }
 
-  string oid;
-  info.user_id.to_str(oid);
+  string key;
+  info.user_id.to_str(key);
   
-  rgw_obj uid_obj(store->zone.user_uid_pool, oid);
+  rgw_obj uid_obj(store->zone.user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
-  ret = store->meta_mgr->remove_entry(user_meta_handler, info.user_id, &objv_tracker);
+  ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -1971,7 +1974,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     std::map<std::string, RGWBucketEnt>::iterator it;
     for (it = m.begin(); it != m.end(); ++it) {
-      ret = rgw_remove_bucket(store, uid, ((*it).second).bucket, true);
+      ret = rgw_remove_bucket(store, ((*it).second).bucket, true);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2524,7 +2527,9 @@ public:
     RGWObjVersionTracker objv_tracker;
     time_t mtime;
 
-    int ret = rgw_get_user_info_by_uid(store, entry, uci.info, &objv_tracker,
+    rgw_user uid(entry);
+
+    int ret = rgw_get_user_info_by_uid(store, uid, uci.info, &objv_tracker,
                                        &mtime, NULL, &uci.attrs);
     if (ret < 0) {
       return ret;
@@ -2547,9 +2552,11 @@ public:
       pattrs = &uci.attrs;
     }
 
+    rgw_user uid(entry);
+
     RGWUserInfo old_info;
     time_t orig_mtime;
-    int ret = rgw_get_user_info_by_uid(store, entry, old_info, &objv_tracker, &orig_mtime);
+    int ret = rgw_get_user_info_by_uid(store, uid, old_info, &objv_tracker, &orig_mtime);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -2575,7 +2582,10 @@ public:
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) {
     RGWUserInfo info;
-    int ret = rgw_get_user_info_by_uid(store, entry, info, &objv_tracker);
+
+    rgw_user uid(entry);
+
+    int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker);
     if (ret < 0)
       return ret;
 
