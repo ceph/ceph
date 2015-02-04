@@ -3293,6 +3293,10 @@ public:
     readers++;
     lock.Unlock();
   }
+  bool test_ondisk_read_lock() {
+    Mutex::Locker l(lock);
+    return unstable_writes == 0;
+  }
   void ondisk_read_unlock() {
     lock.Lock();
     assert(readers > 0);
