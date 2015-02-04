@@ -78,6 +78,7 @@ public:
   virtual int64_t pool_lookup(const std::string &name);
   virtual int pool_reverse_lookup(int64_t id, std::string *name);
 
+  virtual int watch_flush();
 protected:
   ~TestMemRadosClient();
 

@@ -1778,16 +1778,6 @@ reprotect_and_return_err:
     bool needs_refresh = ictx->last_refresh != ictx->refresh_seq;
     ictx->refresh_lock.Unlock();
 
-    if (ictx->image_watcher != NULL) {
-      // might have encountered an error re-registering a watch
-      int r = ictx->image_watcher->get_watch_error();
-      if (r < 0) {
-        lderr(cct) << "rbd header watch invalid: " << cpp_strerror(r)
-                   << dendl;
-	return r;
-      }
-    }
-
     if (needs_refresh) {
       RWLock::WLocker l(ictx->md_lock);
 
