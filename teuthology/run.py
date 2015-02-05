@@ -15,6 +15,7 @@ from .run_tasks import run_tasks
 from .repo_utils import fetch_qa_suite
 from .results import email_results
 from .config import FakeNamespace
+from .config import config as teuth_config
 
 log = logging.getLogger(__name__)
 
@@ -131,7 +132,8 @@ def get_machine_type(machine_type, config):
     from the given config.
     """
     if machine_type is None:
-        fallback_default = config.get('machine_type', 'plana')
+        fallback_default = config.get('machine_type',
+                                      teuth_config.default_machine_type)
         machine_type = config.get('machine-type', fallback_default)
 
     return machine_type
