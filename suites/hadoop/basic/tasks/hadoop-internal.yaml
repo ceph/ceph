@@ -1,8 +1,3 @@
-overrides:
-  install:
-    ceph:
-      extra_packages: [libcephfs1, libcephfs-jni]
-
 tasks:
 - ssh_keys:
 - install:
