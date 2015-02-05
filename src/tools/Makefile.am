@@ -68,14 +68,14 @@ cephfs_journal_tool_SOURCES = \
 	tools/cephfs/Dumper.cc \
 	tools/cephfs/Resetter.cc \
 	tools/cephfs/MDSUtility.cc
-cephfs_journal_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
+cephfs_journal_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL) $(LIBPERFGLUE)
 bin_PROGRAMS += cephfs-journal-tool
 
 cephfs_table_tool_SOURCES = \
 	tools/cephfs/cephfs-table-tool.cc \
 	tools/cephfs/TableTool.cc \
 	tools/cephfs/MDSUtility.cc
-cephfs_table_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL)
+cephfs_table_tool_LDADD = $(LIBMDS) $(LIBRADOS) $(CEPH_GLOBAL) $(LIBPERFGLUE)
 bin_PROGRAMS += cephfs-table-tool
 
 if WITH_REST_BENCH
