@@ -1570,6 +1570,7 @@ void OSDMap::_apply_primary_affinity(ps_t seed,
     if (*p != CRUSH_ITEM_NONE &&
 	(*osd_primary_affinity)[*p] != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
       any = true;
+      break;
     }
   }
   if (!any)
@@ -2370,7 +2371,7 @@ string OSDMap::get_flag_string(unsigned f)
   if (f & CEPH_OSDMAP_NOTIERAGENT)
     s += ",notieragent";
   if (s.length())
-    s = s.erase(0, 1);
+    s.erase(0, 1);
   return s;
 }
 
