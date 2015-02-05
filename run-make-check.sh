@@ -17,7 +17,8 @@
 # make -j8 check possible
 #
 function can_parallel_make_check() {
-    test "$(git rev-list --max-count=1 --ancestry-path HEAD ^tags/v0.88)"
+    local commit=$(git rev-parse tags/v0.88^{})
+    git rev-list HEAD | grep --quiet $commit
 }
 
 function maybe_parallel_make_check() {
