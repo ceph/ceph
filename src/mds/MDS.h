@@ -380,7 +380,10 @@ private:
   void command_flush_path(Formatter *f, const string& path);
   void command_flush_journal(Formatter *f);
   void command_get_subtrees(Formatter *f);
+  void command_export_dir(Formatter *f,
+      const std::string &path, mds_rank_t dest);
  private:
+  int _command_export_dir(const std::string &path, mds_rank_t dest);
   int _command_flush_journal(std::stringstream *ss);
  public:
     // config observer bits
