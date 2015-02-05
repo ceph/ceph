@@ -112,7 +112,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       ObjectCacher::OSDWrite *wr = obc.prepare_write(snapc, bl, utime_t(), 0);
       wr->extents.push_back(op->extent);
       lock.Lock();
-      obc.writex(wr, &object_set, lock, NULL);
+      obc.writex(wr, &object_set, NULL);
       lock.Unlock();
     }
   }
