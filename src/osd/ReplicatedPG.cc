@@ -1746,6 +1746,14 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // test the ondisk_read_lock as early as possible to avoid stuck at a later time
+  if (op->may_read() && !obc->test_ondisk_read_lock()) {
+    dout(20) << __func__ << " waiting for ondisk_read_lock " << dendl;
+    op->mark_delayed("waiting for ondisk_read_lock");
+    close_op_ctx(ctx, -EBUSY);
+    return;
+  }
+
   if (r) {
     dout(20) << __func__ << " returned an error: " << r << dendl;
     close_op_ctx(ctx, r);
