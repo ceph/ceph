@@ -121,7 +121,7 @@ int NetHandler::generic_connect(const entity_addr_t& addr, bool nonblock)
     if (errno == EINPROGRESS && nonblock)
       return s;
 
-    lderr(cct) << __func__ << " connect: " << strerror(errno) << dendl;
+    ldout(cct, 10) << __func__ << " connect: " << strerror(errno) << dendl;
     close(s);
     return -errno;
   }
