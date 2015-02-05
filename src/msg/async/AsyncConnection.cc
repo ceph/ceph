@@ -313,7 +313,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   uint64_t left_pbrs = outcoming_bl.buffers().size();
   while (left_pbrs) {
     struct msghdr msg;
-    uint64_t size = MIN(left_pbrs, sizeof(msgvec));
+    uint64_t size = MIN(left_pbrs, msgvec);
     left_pbrs -= size;
     memset(&msg, 0, sizeof(msg));
     msg.msg_iovlen = 0;
