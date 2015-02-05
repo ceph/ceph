@@ -253,6 +253,24 @@ and your changes will be visible from the existing pull-request.  You may want
 to ping the reviewer again or comment on the pull request to ensure the updates
 are noticed.
 
+Q: Which branch should I target in my pull request?
+
+A: The target branch depends on the nature of your change:
+
+   If you are adding a feature, target the "master" branch in your pull
+   request.
+
+   If you are fixing a bug, target the "next" branch in your pull request.
+   The Ceph core developers will periodically merge "next" into "master". When
+   this happens, the master branch will contain your fix as well.
+
+   If you are fixing a bug (see above) *and* the bug exists in older stable
+   branches (for example, the "dumpling" or "firefly" branches), then you
+   should add a "Backport: <branchname>" line to your commit message. This will
+   notify other developers that your commit should be cherry-picked to these
+   stable branches. For example, you should add "Backport: firefly" to
+   indicate that you are fixing a bug that exists on the "firefly" branch and
+   that you desire that your change be cherry-picked to that branch.
 
 2) Patch submission via ceph-devel@vger.kernel.org
 
