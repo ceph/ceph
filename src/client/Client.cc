@@ -5587,7 +5587,7 @@ int Client::fchmod(int fd, mode_t mode)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -5644,7 +5644,7 @@ int Client::fchown(int fd, int uid, int gid)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -6383,7 +6383,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
 
   Fh *fh = NULL;
 
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   /* When the O_PATH is being specified, others flags than O_DIRECTORY
    * and O_NOFOLLOW are ignored. Please refer do_entry_open() function
    * in kernel (fs/open.c). */
@@ -6401,7 +6401,7 @@ int Client::open(const char *relpath, int flags, mode_t mode, int stripe_unit,
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -EEXIST;
 
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (r == 0 && in->is_symlink() && (flags & O_NOFOLLOW) && !(flags & O_PATH))
 #else
   if (r == 0 && in->is_symlink() && (flags & O_NOFOLLOW))
@@ -6720,7 +6720,7 @@ loff_t Client::lseek(int fd, loff_t offset, int whence)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -6843,7 +6843,7 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -7168,7 +7168,7 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (fh->flags & O_PATH)
     return -EBADF;
 #endif
@@ -7417,7 +7417,7 @@ int Client::ftruncate(int fd, loff_t length)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -7436,7 +7436,7 @@ int Client::fsync(int fd, bool syncdataonly)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (f->flags & O_PATH)
     return -EBADF;
 #endif
@@ -10024,7 +10024,7 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
   Fh *fh = get_filehandle(fd);
   if (!fh)
     return -EBADF;
-#if defined(__linux__)
+#if defined(__linux__) && defined(O_PATH)
   if (fh->flags & O_PATH)
     return -EBADF;
 #endif
