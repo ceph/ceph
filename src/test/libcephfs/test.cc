@@ -658,7 +658,7 @@ TEST(LibCephFS, Fchown) {
   ceph_shutdown(cmount);
 }
 
-#ifdef __linux__
+#if defined(__linux__) && defined(O_PATH)
 TEST(LibCephFS, FlagO_PATH) {
   struct ceph_mount_info *cmount;
 
