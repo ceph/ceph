@@ -596,10 +596,9 @@ void AsyncConnection::process()
                               << " off " << header.data_off << dendl;
 
           // verify header crc
-          if (!(msgr->crcflags & MSG_CRC_HEADER)) {
-          } else if (header_crc != header.crc) {
+          if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
             ldout(async_msgr->cct,0) << __func__ << " reader got bad header crc "
-                              << header_crc << " != " << header.crc << dendl;
+                                     << header_crc << " != " << header.crc << dendl;
             goto fail;
           }
 
@@ -768,11 +767,9 @@ void AsyncConnection::process()
             footer = *((ceph_msg_footer*)state_buffer);
           } else {
             old_footer = *((ceph_msg_footer_old*)state_buffer);
-            if (msgr->crcflags & MSG_CRC_HEADER) {
-              footer.front_crc = old_footer.front_crc;
-              footer.middle_crc = old_footer.middle_crc;
-              footer.data_crc = old_footer.data_crc;
-            }
+            footer.front_crc = old_footer.front_crc;
+            footer.middle_crc = old_footer.middle_crc;
+            footer.data_crc = old_footer.data_crc;
             footer.sig = 0;
             footer.flags = old_footer.flags;
           }
@@ -2211,8 +2208,9 @@ int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& foo
       old_footer.middle_crc = footer.middle_crc;
       old_footer.data_crc = footer.data_crc;
     } else {
-       old_footer.front_crc = old_footer.middle_crc = old_footer.data_crc = 0;
+       old_footer.front_crc = old_footer.middle_crc = 0;
     }
+    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
