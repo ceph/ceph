@@ -1,6 +1,6 @@
-# author: min chen(minchen@ubuntukylin.com) 2014 2015
+# author: Min chen(minchen@ubuntukylin.com) 2014 2015
 
-------------- ceph rbd recovery tool -------------
+------------- ceph rbd recover tool -------------
 
   ceph rbd recover tool is used for recovering ceph rbd image, when all ceph services are killed.
 it is based on ceph-0.80.x (Firefly and newer)
