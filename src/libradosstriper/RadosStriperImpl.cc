@@ -316,7 +316,7 @@ int libradosstriper::RadosStriperImpl::write_full(const std::string& soid,
 						  const bufferlist& bl) 
 {
   int rc = trunc(soid, 0);
-  if (rc) return rc;
+  if (rc && rc != -ENOENT) return rc; // ENOENT is obviously ok
   return write(soid, bl, bl.length(), 0);
 }
 
