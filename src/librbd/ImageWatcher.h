@@ -102,9 +102,6 @@ namespace librbd {
                                  uint64_t handle,
 				 uint64_t notifier_id,
                                  bufferlist& bl);
-      virtual void handle_failed_notify(uint64_t notify_id,
-                                        uint64_t handle,
-                                        uint64_t notifier_id);
       virtual void handle_error(uint64_t handle, int err);
     };
 
@@ -170,7 +167,6 @@ namespace librbd {
     std::set<RemoteAsyncRequest> m_async_progress;
 
     Mutex m_aio_request_lock;
-    std::list<Context *> m_aio_flush_contexts;
     std::vector<AioRequest> m_aio_requests;
     Context *m_retry_aio_context;
 
@@ -190,7 +186,7 @@ namespace librbd {
     void finalize_retry_aio_requests();
     void retry_aio_requests();
 
-    void cancel_async_requests(int result);
+    void cancel_async_requests();
 
     uint64_t encode_async_request(bufferlist &bl);
     static int decode_response_code(bufferlist &bl);
