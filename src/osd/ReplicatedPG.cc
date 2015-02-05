@@ -9235,7 +9235,15 @@ bool ReplicatedBackend::handle_pull_response(
 {
   interval_set<uint64_t> data_included = pop.data_included;
   bufferlist data;
-  data.claim(pop.data);
+  if (pop.compression) {
+    pop.data.decompress(buffer::ALG_LZ4, data, pop.src_len);
+    if (data.crc32c(0) != pop.src_data_crc) {
+      dout(10) << __func__ << pop << " crc error!" << dendl;
+      assert(0);
+    }
+  } else {
+    data.claim(pop.data);
+  }
   dout(10) << "handle_pull_response "
 	   << pop.recovery_info
 	   << pop.after_progress
@@ -9338,7 +9346,15 @@ void ReplicatedBackend::handle_push(
 	   << pop.after_progress
 	   << dendl;
   bufferlist data;
-  data.claim(pop.data);
+  if (pop.compression) {
+    pop.data.decompress(buffer::ALG_LZ4, data, pop.src_len);
+    if (data.crc32c(0) != pop.src_data_crc) {
+      dout(10) << __func__ << pop << " crc error!" << dendl;
+      assert(0);
+    }
+  } else {
+    data.claim(pop.data);
+  }
   bool first = pop.before_progress.first;
   bool complete = pop.after_progress.data_complete &&
     pop.after_progress.omap_complete;
@@ -9562,6 +9578,15 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
       break;
     }
     out_op->data.claim_append(bit);
+  }
+
+  if (cct->_conf->osd_recovery_data_compression) {
+    out_op->compression = true;
+    bufferlist dest;
+    out_op->data.compress(buffer::ALG_LZ4, dest);
+    out_op->src_len = out_op->data.length();
+    out_op->src_data_crc = out_op->data.crc32c(0);
+    out_op->data.swap(dest);
   }
 
   if (new_progress.is_complete(recovery_info)) {

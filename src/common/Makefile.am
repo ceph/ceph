@@ -132,7 +132,7 @@ LIBCOMMON_DEPS += \
 	$(LIBCRUSH) $(LIBJSON_SPIRIT) $(LIBLOG) $(LIBARCH)
 
 if LINUX
-LIBCOMMON_DEPS += -lrt
+LIBCOMMON_DEPS += -lrt -llz4
 endif # LINUX
 
 libcommon_la_SOURCES =

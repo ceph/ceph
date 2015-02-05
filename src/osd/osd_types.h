@@ -3440,6 +3440,10 @@ struct PushOp {
   ObjectRecoveryProgress before_progress;
   ObjectRecoveryProgress after_progress;
 
+  bool compression;
+  uint32_t src_len;
+  uint32_t src_data_crc;
+
   static void generate_test_instances(list<PushOp*>& o);
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -3447,6 +3451,8 @@ struct PushOp {
   void dump(Formatter *f) const;
 
   uint64_t cost(CephContext *cct) const;
+
+  PushOp() : compression(false) {}
 };
 WRITE_CLASS_ENCODER(PushOp)
 ostream& operator<<(ostream& out, const PushOp &op);
