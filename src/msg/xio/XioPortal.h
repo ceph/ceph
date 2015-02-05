@@ -340,12 +340,19 @@ private:
   vector<XioPortal*> portals;
   char **p_vec;
   int n;
+  int last_use;
 
 public:
-  XioPortals(Messenger *msgr, int _n) : p_vec(NULL), n(_n)
+  XioPortals(Messenger *msgr, int _n) : p_vec(NULL)
     {
       /* portal0 */
       portals.push_back(new XioPortal(msgr));
+      last_use = 0;
+
+      /* enforce at least two portals if bind */
+      if (_n < 2)
+        _n = 2;
+      n = _n;
 
       /* additional portals allocated on bind() */
     }
@@ -362,6 +369,14 @@ public:
       return n;
     }
 
+  int get_last_use()
+  {
+    int pix = last_use;
+    if (++last_use >= get_portals_len() - 1)
+      last_use = 0;
+    return pix;
+  }
+
   XioPortal* get_portal0()
     {
       return portals[0];
@@ -375,12 +390,11 @@ public:
 		 void *cb_user_context)
     {
       const char **portals_vec = get_vec();
-      int portals_len = get_portals_len()-1;
+      int pix = get_last_use();
 
       return xio_accept(session,
-			portals_vec,
-			portals_len,
-			NULL, 0);
+			(const char **)&(portals_vec[pix]),
+			1, NULL, 0);
     }
 
   void start()
