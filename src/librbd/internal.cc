@@ -1665,7 +1665,7 @@ reprotect_and_return_err:
       RWLock::RLocker l(ictx->md_lock);
       original_size = ictx->size;
       if (size < ictx->size) {
-	ictx->wait_for_pending_copyup();
+	ictx->flush_async_operations();
 	if (ictx->object_cacher) {
 	  // need to invalidate since we're deleting objects, and
 	  // ObjectCacher doesn't track non-existent objects
@@ -2299,10 +2299,7 @@ reprotect_and_return_err:
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
-    ictx->wait_for_pending_copyup();
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
+    ictx->flush_async_operations();
     if (ictx->object_cacher) {
       // complete pending writes before we're set to a snapshot and
       // get -EROFS for writes
@@ -2369,9 +2366,6 @@ reprotect_and_return_err:
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
     ictx->readahead.wait_for_pending();
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes
     } else {
@@ -2382,7 +2376,6 @@ reprotect_and_return_err:
       ictx->copyup_finisher->wait_for_empty();
       ictx->copyup_finisher->stop();
     }
-    ictx->wait_for_pending_copyup();
 
     if (ictx->parent) {
       close_image(ictx->parent);
@@ -3099,20 +3092,15 @@ reprotect_and_return_err:
       return r;
     }
 
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
     ictx->user_flushed();
 
     c->get();
+
+    C_AioWrite *flush_ctx = new C_AioWrite(cct, c);
+    c->add_request();
+    ictx->flush_async_operations(flush_ctx);
+
     c->init_time(ictx, AIO_TYPE_FLUSH);
-
-    if (ictx->image_watcher != NULL) {
-      C_AioWrite *flush_ctx = new C_AioWrite(cct, c);
-      c->add_request();
-      ictx->image_watcher->flush_aio_operations(flush_ctx);
-    }
-
     C_AioWrite *req_comp = new C_AioWrite(cct, c);
     c->add_request();
     if (ictx->object_cacher) {
@@ -3148,10 +3136,6 @@ reprotect_and_return_err:
 
   int _flush(ImageCtx *ictx)
   {
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
-
     CephContext *cct = ictx->cct;
     int r;
     // flush any outstanding writes
@@ -3159,7 +3143,7 @@ reprotect_and_return_err:
       r = ictx->flush_cache();
     } else {
       r = ictx->data_ctx.aio_flush();
-      ictx->wait_for_pending_aio();
+      ictx->flush_async_operations();
     }
 
     if (r)
@@ -3178,9 +3162,7 @@ reprotect_and_return_err:
       return r;
     }
 
-    if (ictx->image_watcher != NULL) {
-      ictx->image_watcher->flush_aio_operations();
-    }
+    ictx->flush_async_operations();
 
     RWLock::WLocker l(ictx->md_lock);
     r = ictx->invalidate_cache();
