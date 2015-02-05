@@ -1,5 +1,6 @@
 ## Rados object classes
 
+if ENABLE_SERVER
 libcls_hello_la_SOURCES = cls/hello/cls_hello.cc
 libcls_hello_la_LIBADD = $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_hello_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
@@ -56,6 +57,7 @@ libcls_rgw_la_SOURCES = \
 libcls_rgw_la_LIBADD = libjson_spirit.la $(PTHREAD_LIBS) $(EXTRALIBS)
 libcls_rgw_la_LDFLAGS = ${AM_LDFLAGS} -module -avoid-version -shared -export-symbols-regex '.*__cls_.*'
 radoslib_LTLIBRARIES += libcls_rgw.la
+endif # ENABLE_SERVER
 
 ## Rados object client classes
 

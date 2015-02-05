@@ -36,6 +36,7 @@ include tools/Makefile.am
 
 # core daemons
 
+if ENABLE_SERVER
 ceph_mon_SOURCES = ceph_mon.cc
 ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_PROGRAMS += ceph-mon
@@ -47,13 +48,14 @@ bin_PROGRAMS += ceph-osd
 ceph_mds_SOURCES = ceph_mds.cc
 ceph_mds_LDADD = $(LIBMDS) $(LIBOSDC) $(CEPH_GLOBAL) $(LIBCOMMON)
 bin_PROGRAMS += ceph-mds
-
+endif # ENABLE_SERVER
 
 # admin tools
 
 
 # user tools
 
+if ENABLE_SERVER
 mount_ceph_SOURCES = mount/mount.ceph.c common/secret.c
 mount_ceph_LDADD = $(LIBCOMMON) $(KEYUTILS_LIB)
 if LINUX
@@ -68,6 +70,7 @@ bin_PROGRAMS += cephfs
 librados_config_SOURCES = librados-config.cc
 librados_config_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
 bin_PROGRAMS += librados-config
+endif # ENABLE_SERVER
 
 ceph_syn_SOURCES = ceph_syn.cc
 ceph_syn_SOURCES += client/SyntheticClient.cc # uses g_conf.. needs cleanup
@@ -127,7 +130,7 @@ editpaths = sed \
 	-e 's|@datadir[@]|$(pkgdatadir)|g' \
 	-e 's|@prefix[@]|$(prefix)|g' \
 	-e 's|@@GCOV_PREFIX_STRIP[@][@]|$(GCOV_PREFIX_STRIP)|g'
-shell_scripts = ceph-debugpack ceph-post-file ceph-crush-location
+shell_scripts = ceph-post-file ceph-crush-location
 $(shell_scripts): Makefile
 $(shell_scripts): %: %.in
 	rm -f $@ $@.tmp
@@ -206,6 +209,7 @@ EXTRA_DIST += \
 	libs3/test \
 	unittest_bufferlist.sh
 
+if ENABLE_SERVER
 # work around old versions of automake that don't define $docdir
 # NOTE: this won't work on suse, where docdir is /usr/share/doc/packages/$package.
 docdir ?= ${datadir}/doc/ceph
@@ -216,34 +220,43 @@ doc_DATA = $(srcdir)/sample.ceph.conf sample.fetch_config
 
 shell_commondir = $(libdir)/ceph
 shell_common_SCRIPTS = ceph_common.sh
+endif # ENABLE_SERVER
 
 bash_completiondir = $(sysconfdir)/bash_completion.d
 bash_completion_DATA = $(srcdir)/bash_completion/ceph \
                $(srcdir)/bash_completion/rados \
-               $(srcdir)/bash_completion/rbd \
-               $(srcdir)/bash_completion/radosgw-admin
+               $(srcdir)/bash_completion/rbd
+if WITH_RADOSGW
+bash_completion_DATA += $(srcdir)/bash_completion/radosgw-admin
+endif
 
+if ENABLE_SERVER
 ceph_sbin_SCRIPTS = \
 	ceph-disk \
 	ceph-disk-prepare \
 	ceph-disk-activate \
 	ceph-disk-udev \
 	ceph-create-keys
+endif # ENABLE_SERVER
 
 bin_SCRIPTS += \
 	ceph \
+	ceph-post-file \
+	ceph-crush-location
+
+if ENABLE_SERVER
+bin_SCRIPTS += \
 	ceph-run \
 	ceph-rest-api \
 	ceph-clsinfo \
 	ceph-debugpack \
-	ceph-rbdnamer \
-	ceph-post-file \
-	ceph-crush-location
-
-BUILT_SOURCES += init-ceph
+	ceph-rbdnamer
 su_sbin_SCRIPTS += mkcephfs
+BUILT_SOURCES += init-ceph
+shell_scripts += init-ceph mkcephfs ceph-debugpack
+endif # ENABLE_SERVER
 
-shell_scripts += init-ceph mkcephfs
+
 
 
 
@@ -270,6 +283,7 @@ base: core-daemons admin-tools \
 	cephfs ceph-syn ceph-conf \
 	rados librados-config \
 	init-ceph mkcephfs ceph_mon_store_converter ceph-post-file
+client: ceph ceph-authtool ceph-conf ceph-syn ceph-crush-location rados rbd ceph-post-file brag librbd librados pybind libcephfs
 
 
 # version stuff
@@ -355,11 +369,9 @@ noinst_HEADERS += \
 
 # coverage
 
+if ENABLE_COVERAGE
 shell_scripts += ceph-coverage
 bin_SCRIPTS += ceph-coverage
-
-
-if ENABLE_COVERAGE
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
 COV_FILES = $(srcdir)/*.gcno
 COV_LIB_FILES = $(srcdir)/.libs/*.gcno

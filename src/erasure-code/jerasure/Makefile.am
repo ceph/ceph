@@ -12,6 +12,7 @@ noinst_HEADERS += \
   erasure-code/jerasure/gf-complete/include/gf_general.h \
   erasure-code/jerasure/ErasureCodeJerasure.h
 
+if ENABLE_SERVER
 jerasure_sources = \
   erasure-code/jerasure/jerasure/src/cauchy.c \
   erasure-code/jerasure/jerasure/src/galois.c \
@@ -108,3 +109,4 @@ libec_jerasure_la_LDFLAGS += -export-symbols-regex '.*__erasure_code_.*'
 endif
 
 erasure_codelib_LTLIBRARIES += libec_jerasure.la
+endif # ENABLE_SERVER

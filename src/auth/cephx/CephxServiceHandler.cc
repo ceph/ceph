@@ -14,11 +14,10 @@
 
 
 #include "CephxServiceHandler.h"
+#include "CephxKeyServer.h"
 #include "CephxProtocol.h"
 
 #include "../Auth.h"
-
-#include "mon/Monitor.h"
 
 #include <errno.h>
 #include <sstream>

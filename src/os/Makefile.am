@@ -3,6 +3,7 @@ libos_types_la_SOURCES = \
 libos_types_la_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += libos_types.la
 
+if ENABLE_SERVER
 libos_la_SOURCES = \
 	os/chain_xattr.cc \
 	os/DBObjectMap.cc \
@@ -17,6 +18,7 @@ libos_la_SOURCES = \
 	os/LevelDBStore.cc \
 	os/LFNIndex.cc \
 	os/MemStore.cc \
+	os/KeyValueDB.cc \
 	os/KeyValueStore.cc \
 	os/ObjectStore.cc \
 	os/WBThrottle.cc \
@@ -37,6 +39,15 @@ endif
 libos_la_CXXFLAGS = ${AM_CXXFLAGS}
 libos_la_LIBADD = $(LIBOS_TYPES)
 noinst_LTLIBRARIES += libos.la
+
+if WITH_LIBZFS
+libos_zfs_a_SOURCES = os/ZFS.cc
+libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
+noinst_LIBRARIES += libos_zfs.a
+noinst_HEADERS += os/ZFS.h
+endif # WITH_LIBZFS
+
+endif # ENABLE_SERVER
 
 noinst_HEADERS += \
 	os/btrfs_ioctl.h \
@@ -66,10 +77,4 @@ noinst_HEADERS += \
 	os/XfsFileStoreBackend.h \
 	os/ZFSFileStoreBackend.h
 
-if WITH_LIBZFS
-libos_zfs_a_SOURCES = os/ZFS.cc
-libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
-noinst_LIBRARIES += libos_zfs.a
-noinst_HEADERS += os/ZFS.h
-endif
 

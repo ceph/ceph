@@ -71,9 +71,11 @@ endif
 
 bin_PROGRAMS += ceph-dencoder
 
+if ENABLE_SERVER
 get_command_descriptions_SOURCES = test/common/get_command_descriptions.cc
 get_command_descriptions_LDADD = $(LIBMON) $(LIBCOMMON) $(CEPH_GLOBAL)
 noinst_PROGRAMS += get_command_descriptions
+endif
 
 
 ## Build tests

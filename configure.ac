@@ -494,10 +494,24 @@ AC_ARG_WITH([ocf],
             [with_ocf=no])
 AM_CONDITIONAL(WITH_OCF, [ test "$with_ocf" = "yes" ])
 
-# check is snappy-devel is installed, needed by leveldb
-AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])
-# use system leveldb
-AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])
+# server?
+AC_ARG_ENABLE([server],
+            [AS_HELP_STRING([--enable-server], [enable server binaries build])],
+            [],
+            [enable_server=yes])
+AM_CONDITIONAL(ENABLE_SERVER, test "$enable_server" = "yes")
+if test "$enable_server" = "yes"; then
+   AC_DEFINE([ENABLE_SERVER], [1], [Define if you want to build server-side binaries])
+fi
+
+# cond-check if snappy-devel is installed, needed by leveldb that is need by server parts of the project
+AS_IF([test "$enable_server" = "yes"],
+            [AC_CHECK_LIB([snappy], [snappy_compress], [true], [AC_MSG_FAILURE([libsnappy not found])])])
+
+# cond-check leveldb, necessary if server enabled
+AS_IF([test "$enable_server" = "yes"],
+            [AC_CHECK_LIB([leveldb], [leveldb_open], [true], [AC_MSG_FAILURE([libleveldb not found])], [-lsnappy -lpthread])])
+
 # see if we can use bloom filters with leveldb
 AC_LANG_PUSH([C++])
 AC_CHECK_HEADER([leveldb/filter_policy.h], [AC_DEFINE([HAVE_LEVELDB_FILTER_POLICY], [1], [Defined if LevelDB supports bloom filters ])])

@@ -5,6 +5,7 @@ libosd_types_la_SOURCES = \
 libosd_types_la_CXXFLAGS = ${AM_CXXFLAGS}
 noinst_LTLIBRARIES += libosd_types.la
 
+if ENABLE_SERVER
 libosd_la_SOURCES = \
 	osd/PG.cc \
 	osd/ReplicatedPG.cc \
@@ -26,6 +27,7 @@ libosd_la_SOURCES = \
 libosd_la_CXXFLAGS = ${AM_CXXFLAGS}
 libosd_la_LIBADD = $(LIBOSDC) $(LIBOS) $(LIBOSD_TYPES) $(LIBOS_TYPES)
 noinst_LTLIBRARIES += libosd.la
+endif # ENABLE_SERVER
 
 noinst_HEADERS += \
 	osd/Ager.h \
