@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Thu Feb  5 15:22:17 UTC 2015 - lmb@suse.com
+
+- Correct license statement for ceph-test package
+
+-------------------------------------------------------------------
 Tue Feb  3 18:01:12 UTC 2015 - osynge@suse.com
 
 - ceph-disk on SLE11 now uses sysV init script directly.

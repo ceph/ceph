@@ -355,7 +355,7 @@ object storage.
 
 %package -n ceph-test
 Summary:        Ceph benchmarks and test tools
-License:        GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
+License:        GPL-2.0 and GPL-2.0+ and GPL-3.0+ and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
 Group:          System/Filesystems
 Requires:       ceph-common = %{version}-%{release}
 Requires:       libcephfs1 = %{version}-%{release}
