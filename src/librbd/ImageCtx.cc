@@ -572,21 +572,6 @@ namespace librbd {
     }
   }
 
-  int ImageCtx::read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
-				size_t len, uint64_t off) {
-    int r;
-    Mutex mylock("librbd::ImageCtx::read_from_cache");
-    Cond cond;
-    bool done;
-    Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, object_no, bl, len, off, onfinish, 0);
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-    return r;
-  }
-
   void ImageCtx::user_flushed() {
     if (object_cacher && cct->_conf->rbd_cache_writethrough_until_flush) {
       md_lock.get_read();
