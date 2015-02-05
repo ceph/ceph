@@ -1354,8 +1354,7 @@ void ObjectCacher::retry_waiting_reads()
   waitfor_read.splice(waitfor_read.end(), ls);
 }
 
-int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
-			 Context *onfreespace)
+int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace)
 {
   assert(lock.is_locked());
   utime_t now = ceph_clock_now(cct);
@@ -1428,7 +1427,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Mutex& wait_on_lock,
     }
   }
 
-  int r = _wait_for_write(wr, bytes_written, oset, wait_on_lock, onfreespace);
+  int r = _wait_for_write(wr, bytes_written, oset, onfreespace);
   delete wr;
 
   //verify_stats();
@@ -1476,7 +1475,7 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len)
 }
 
 // blocking wait for write.
-int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Mutex& lock, Context *onfreespace)
+int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset, Context *onfreespace)
 {
   assert(lock.is_locked());
   int ret = 0;
