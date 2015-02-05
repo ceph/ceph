@@ -72,7 +72,7 @@ ImageWatcher::ImageWatcher(ImageCtx &image_ctx)
     m_async_request_lock("librbd::ImageWatcher::m_async_request_lock"),
     m_async_request_id(0),
     m_aio_request_lock("librbd::ImageWatcher::m_aio_request_lock"),
-    m_retrying_aio_requests(false), m_retry_aio_context(NULL)
+    m_retry_aio_context(NULL)
 {
   m_finisher->start();
   m_timer->init();
@@ -142,30 +142,6 @@ int ImageWatcher::unregister_watch() {
   librados::Rados rados(m_image_ctx.md_ctx);
   rados.watch_flush();
   return r;
-}
-
-bool ImageWatcher::has_pending_aio_operations() {
-  Mutex::Locker l(m_aio_request_lock);
-  return !m_aio_requests.empty();
-}
-
-void ImageWatcher::flush_aio_operations() {
-  C_SaferCond *ctx = new C_SaferCond();
-  flush_aio_operations(ctx);
-  ctx->wait();
-}
-
-void ImageWatcher::flush_aio_operations(Context *ctx) {
-  Mutex::Locker l(m_aio_request_lock);
-  if (!m_retrying_aio_requests && m_aio_requests.empty()) {
-    ctx->complete(0);
-    return;
-  }
-
-  ldout(m_image_ctx.cct, 20) << "pending flush: " << ctx << " "
-			     << "retrying=" << m_retrying_aio_requests << ", "
-			     << "count=" << m_aio_requests.size() << dendl;
-  m_aio_flush_contexts.push_back(ctx);
 }
 
 int ImageWatcher::try_lock() {
@@ -567,9 +543,7 @@ void ImageWatcher::retry_aio_requests() {
   std::vector<AioRequest> lock_request_restarts;
   {
     Mutex::Locker l(m_aio_request_lock);
-    assert(!m_retrying_aio_requests);
     lock_request_restarts.swap(m_aio_requests);
-    m_retrying_aio_requests = true;
   }
 
   for (std::vector<AioRequest>::iterator iter = lock_request_restarts.begin();
@@ -580,7 +554,6 @@ void ImageWatcher::retry_aio_requests() {
   }
 
   Mutex::Locker l(m_aio_request_lock);
-  m_retrying_aio_requests = false;
   while (!m_aio_flush_contexts.empty()) {
     Context *flush_ctx = m_aio_flush_contexts.front();
     m_aio_flush_contexts.pop_front();

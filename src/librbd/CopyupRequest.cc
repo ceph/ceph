@@ -27,10 +27,12 @@ namespace librbd {
     : m_ictx(ictx), m_oid(oid), m_object_no(objectno),
       m_image_extents(image_extents), m_state(STATE_READ_FROM_PARENT)
   {
+    m_async_op.start_op(*m_ictx);
   }
 
   CopyupRequest::~CopyupRequest() {
     assert(m_pending_requests.empty());
+    m_async_op.finish_op();
   }
 
   ceph::bufferlist& CopyupRequest::get_copyup_data() {
@@ -164,10 +166,6 @@ namespace librbd {
       m_ictx->copyup_list.find(m_object_no);
     assert(it != m_ictx->copyup_list.end());
     m_ictx->copyup_list.erase(it);
-
-    if (m_ictx->copyup_list.empty()) {
-      m_ictx->copyup_list_cond.Signal();
-    }
   }
 
   bool CopyupRequest::send_object_map() {

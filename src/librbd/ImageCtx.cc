@@ -7,8 +7,8 @@
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
+#include "librbd/AsyncOperation.h"
 #include "librbd/internal.h"
-
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
@@ -48,9 +48,8 @@ namespace librbd {
       parent_lock("librbd::ImageCtx::parent_lock"),
       refresh_lock("librbd::ImageCtx::refresh_lock"),
       object_map_lock("librbd::ImageCtx::object_map_lock"),
-      aio_lock("librbd::ImageCtx::aio_lock"),
+      async_ops_lock("librbd::ImageCtx::async_ops_lock"),
       copyup_list_lock("librbd::ImageCtx::copyup_list_lock"),
-      copyup_list_cond(),
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
@@ -60,7 +59,7 @@ namespace librbd {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      pending_aio(0), object_map(NULL)
+      object_map(NULL)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -612,6 +611,7 @@ namespace librbd {
   int ImageCtx::invalidate_cache() {
     if (!object_cacher)
       return 0;
+    flush_async_operations();
     cache_lock.Lock();
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -623,7 +623,6 @@ namespace librbd {
     } else if (r) {
       lderr(cct) << "flush_cache returned " << r << dendl;
     }
-    wait_for_pending_aio();
     cache_lock.Lock();
     loff_t unclean = object_cacher->release_set(object_set);
     cache_lock.Unlock();
@@ -694,18 +693,21 @@ namespace librbd {
     return len;
   }
 
-  void ImageCtx::wait_for_pending_aio() {
-    Mutex::Locker l(aio_lock);
-    while (pending_aio > 0) {
-      pending_aio_cond.Wait(aio_lock);
-    }
+  void ImageCtx::flush_async_operations() {
+    C_SaferCond *ctx = new C_SaferCond();
+    flush_async_operations(ctx);
+    ctx->wait();
   }
 
-  void ImageCtx::wait_for_pending_copyup() {
-    Mutex::Locker l(copyup_list_lock);
-    while (!copyup_list.empty()) {
-      ldout(cct, 20) << __func__ << " waiting CopyupRequest to be completed" << dendl;
-      copyup_list_cond.Wait(copyup_list_lock);
+  void ImageCtx::flush_async_operations(Context *on_finish) {
+    Mutex::Locker l(async_ops_lock);
+    if (async_ops.empty()) {
+      on_finish->complete(0);
+      return;
     }
+
+    ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                   << "count=" << async_ops.size() << dendl;
+    async_ops.back()->add_flush_context(on_finish);
   }
 }

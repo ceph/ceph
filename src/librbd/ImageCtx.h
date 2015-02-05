@@ -20,6 +20,7 @@
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
 #include "include/types.h"
+#include "include/xlist.h"
 #include "osdc/ObjectCacher.h"
 
 #include "cls/rbd/cls_rbd_client.h"
@@ -33,8 +34,9 @@ class PerfCounters;
 
 namespace librbd {
 
-  class ImageWatcher;
+  class AsyncOperation;
   class CopyupRequest;
+  class ImageWatcher;
   class ObjectMap;
 
   struct ImageCtx {
@@ -67,7 +69,7 @@ namespace librbd {
     /**
      * Lock ordering:
      * owner_lock, md_lock, cache_lock, snap_lock, parent_lock, refresh_lock,
-     * object_map_lock, aio_lock
+     * object_map_lock, async_op_lock
      */
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
@@ -78,10 +80,8 @@ namespace librbd {
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
     RWLock object_map_lock; // protects object map updates
-    Mutex aio_lock; // protects pending_aio and pending_aio_cond
+    Mutex async_ops_lock; // protects async_ops
     Mutex copyup_list_lock; // protects copyup_waiting_list
-
-    Cond copyup_list_cond; // protected by copyup_waiting_list_lock
 
     unsigned extra_read_flags;
 
@@ -110,8 +110,7 @@ namespace librbd {
     Finisher *copyup_finisher;
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
-    Cond pending_aio_cond;
-    uint64_t pending_aio;
+    xlist<AsyncOperation*> async_ops;
 
     ObjectMap *object_map;
 
@@ -182,8 +181,9 @@ namespace librbd {
 			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
-    void wait_for_pending_aio();
-    void wait_for_pending_copyup();
+
+    void flush_async_operations();
+    void flush_async_operations(Context *on_finish);
   };
 }
 

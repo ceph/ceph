@@ -1,6 +1,7 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 #include "test/librbd/test_fixture.h"
+#include "librbd/AioCompletion.h"
 #include "librbd/ImageWatcher.h"
 #include "librbd/internal.h"
 #include <boost/scope_exit.hpp>
@@ -260,8 +261,7 @@ TEST_F(TestInternal, AioWriteRequestsLock) {
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
-
-  ASSERT_TRUE(ictx->image_watcher->has_pending_aio_operations());
+  ASSERT_FALSE(c->is_complete());
 }
 
 TEST_F(TestInternal, AioDiscardRequestsLock) {
@@ -279,6 +279,5 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
   ASSERT_FALSE(is_owner);
-
-  ASSERT_TRUE(ictx->image_watcher->has_pending_aio_operations());
+  ASSERT_FALSE(c->is_complete());
 }

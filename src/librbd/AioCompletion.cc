@@ -89,12 +89,7 @@ namespace librbd {
       break;
     }
 
-    {
-      Mutex::Locker l(ictx->aio_lock);
-      assert(ictx->pending_aio != 0);
-      --ictx->pending_aio;
-      ictx->pending_aio_cond.Signal();
-    }
+    async_op.finish_op();
 
     if (complete_cb) {
       complete_cb(rbd_comp, complete_arg);

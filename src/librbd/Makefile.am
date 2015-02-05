@@ -3,6 +3,7 @@ librbd_internal_la_SOURCES = \
 	librbd/AioRequest.cc \
 	librbd/AsyncFlattenRequest.cc \
 	librbd/AsyncObjectThrottle.cc \
+	librbd/AsyncOperation.cc \
 	librbd/AsyncRequest.cc \
 	librbd/AsyncResizeRequest.cc \
 	librbd/AsyncTrimRequest.cc \
@@ -44,6 +45,7 @@ noinst_HEADERS += \
 	librbd/AioRequest.h \
 	librbd/AsyncFlattenRequest.h \
 	librbd/AsyncObjectThrottle.h \
+	librbd/AsyncOperation.h \
 	librbd/AsyncRequest.h \
 	librbd/AsyncResizeRequest.h \
 	librbd/AsyncTrimRequest.h \
