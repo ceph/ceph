@@ -1,7 +1,25 @@
 #!/usr/bin/env python
 
 from subprocess import call
-from subprocess import check_output
+try:
+    from subprocess import check_output
+except ImportError:
+    def check_output(*popenargs, **kwargs):
+        import subprocess
+        # backported from python 2.7 stdlib
+        process = subprocess.Popen(
+           stdout=subprocess.PIPE, *popenargs, **kwargs)
+        output, unused_err = process.communicate()
+        retcode = process.poll()
+        if retcode:
+            cmd = kwargs.get("args")
+            if cmd is None:
+                cmd = popenargs[0]
+            error = subprocess.CalledProcessError(retcode, cmd)
+            error.output = output
+            raise error
+        return output
+
 import subprocess
 import os
 import time
