@@ -249,7 +249,9 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 }
 
 static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
+                                  uint64_t buckets_object_count, uint64_t buckets_size,
+                                  uint64_t buckets_size_rounded, map<string, uint32_t> policy_stats)
+
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
@@ -260,13 +262,18 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
   s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
   s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+  for (map<string, uint32_t>::iterator it=policy_stats.begin(); it!=policy_stats.end(); it++) {
+    snprintf(buf, sizeof(buf), "%lld", (long long)it->second);
+    string _itemname = "X-Account-Storage-Policy-" + it->first + ": %s\r\n";
+    s->cio->print(_itemname.c_str(), buf);
+  }
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (ret >= 0) {
     ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, policy_stats);
   }
 
   set_req_state_err(s, ret);
