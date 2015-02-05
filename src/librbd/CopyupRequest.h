@@ -3,6 +3,7 @@
 #ifndef CEPH_LIBRBD_COPYUPREQUEST_H
 #define CEPH_LIBRBD_COPYUPREQUEST_H
 
+#include "librbd/AsyncOperation.h"
 #include "include/int_types.h"
 
 #include "common/Mutex.h"
@@ -53,6 +54,8 @@ namespace librbd {
     State m_state;
     ceph::bufferlist m_copyup_data;
     vector<AioRequest *> m_pending_requests;
+
+    AsyncOperation m_async_op;
 
     bool complete_requests(int r);
 

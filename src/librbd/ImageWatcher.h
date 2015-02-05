@@ -56,10 +56,6 @@ namespace librbd {
     int register_watch();
     int unregister_watch();
 
-    bool has_pending_aio_operations();
-    void flush_aio_operations();
-    void flush_aio_operations(Context *ctx);
-
     int try_lock();
     int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
 		     AioCompletion* c);
@@ -176,7 +172,6 @@ namespace librbd {
     Mutex m_aio_request_lock;
     std::list<Context *> m_aio_flush_contexts;
     std::vector<AioRequest> m_aio_requests;
-    bool m_retrying_aio_requests;
     Context *m_retry_aio_context;
 
     std::string encode_lock_cookie() const;
