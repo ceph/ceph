@@ -379,7 +379,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
         
         if (p->first < cur) {
           assert(final == 0);
-          if (cur + max >= p->first + p->second->length()) {
+          if (cur + max >= bh->end()) {
             // we want right bit (one splice)
             final = split(bh, cur);   // just split it, take right half.
             ++p;
@@ -393,7 +393,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(OSDWrite *wr)
           }
         } else {
 	  assert(p->first == cur);
-          if (p->second->length() <= max) {
+          if (bh->length() <= max) {
             // whole bufferhead, piece of cake.
           } else {
             // we want left bit (one splice)
