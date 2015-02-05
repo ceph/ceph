@@ -27,6 +27,20 @@ TEST_F(StriperTestPP, SimpleWritePP) {
   ASSERT_EQ(0, striper.write("SimpleWritePP", bl, sizeof(buf), 0));
 }
 
+TEST_F(StriperTest, SimpleWriteFull) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  ASSERT_EQ(0, rados_striper_write_full(striper, "SimpleWrite", buf, sizeof(buf)));
+}
+
+TEST_F(StriperTestPP, SimpleWriteFullPP) {
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, striper.write_full("SimpleWritePP", bl));
+}
+
 TEST_F(StriperTest, Stat) {
   uint64_t psize;
   time_t pmtime;
