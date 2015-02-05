@@ -16,6 +16,7 @@
 #define CEPH_XLIST_H
 
 #include "include/assert.h"
+#include <cstdlib>
 
 template<typename T>
 class xlist {
