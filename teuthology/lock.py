@@ -431,14 +431,14 @@ def unlock_one(ctx, name, user=None):
     if user is None:
         user = misc.get_user()
     name = misc.canonicalize_hostname(name, user=None)
+    if not provision.destroy_if_vm(ctx, name, user):
+        log.error('downburst destroy failed for %s', name)
     request = dict(name=name, locked=False, locked_by=user, description=None)
     uri = os.path.join(config.lock_server, 'nodes', name, 'lock', '')
     response = requests.put(uri, json.dumps(request))
     success = response.ok
     if success:
         log.info('unlocked %s', name)
-        if not provision.destroy_if_vm(ctx, name):
-            log.error('downburst destroy failed for %s', name)
     else:
         try:
             reason = response.json().get('message')
