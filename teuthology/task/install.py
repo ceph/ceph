@@ -41,6 +41,7 @@ PACKAGES['ceph']['deb'] = [
     'libcephfs1',
     'libcephfs1-dbg',
     'libcephfs-java',
+    'libcephfs-jni',
     'librados2',
     'librados2-dbg',
     'librbd1',
