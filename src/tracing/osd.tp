@@ -30,21 +30,6 @@ TRACEPOINT_EVENT(osd, prepare_tx_exit,
     )
 )
 
-TRACEPOINT_EVENT(osd, ms_fast_dispatch,
-    TP_ARGS(
-        // osd_reqid_t
-        uint8_t,  type,
-        int64_t,  num,
-        uint64_t, tid,
-        int32_t,  inc),
-    TP_FIELDS(
-        ctf_integer(uint8_t, type, type)
-        ctf_integer(int64_t, num, num)
-        ctf_integer(uint64_t, tid, tid)
-        ctf_integer(int32_t, inc, inc)
-    )
-)
-
 TRACEPOINT_EVENT(osd, opwq_process_start,
     TP_ARGS(
         // osd_reqid_t
@@ -756,3 +741,236 @@ TRACEPOINT_EVENT(osd, do_osd_op_post,
         ctf_integer_hex(int, result, result)
     )
 )
+
+TRACEPOINT_EVENT(osd, ms_fast_dispatch,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        int64_t,  data_len,
+        uint64_t,  reqtid,
+        int64_t,  reqnum,
+        int32_t,  reqinc,
+        int64_t,  pg_qlen,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer(int64_t, data_len, data_len)
+        ctf_integer_hex(uint64_t, reqtid, reqtid)
+        ctf_integer(int64_t, reqnum, reqnum)
+        ctf_integer(int32_t, reqinc, reqinc)
+        ctf_integer(int64_t, pg_qlen, pg_qlen)
+        ctf_array(uint64_t, stamps, stamps, 2)
+    )
+)
+
+TRACEPOINT_EVENT(osd, opwq_process,
+    TP_ARGS(
+        uint64_t, threadid,
+        // osd_reqid_t
+        uint64_t, tid,
+        int,      reqtype,
+        int64_t,  reqnum,
+        int32_t,  reqinc,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint8_t, reqtype, reqtype)
+        ctf_integer(int64_t, reqnum, reqnum)
+        ctf_integer(int32_t, reqinc, reqinc)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+
+TRACEPOINT_EVENT(osd, rpg_do_op,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t, reqtid,
+        int64_t,  reqnum,
+        int32_t,  reqinc,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer_hex(uint64_t, reqtid, reqtid)
+        ctf_integer(int64_t, reqnum, reqnum)
+        ctf_integer(int32_t, reqinc, reqinc)
+        ctf_array(uint64_t, stamps, stamps, 7)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rpg_execute_ctx,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t, replytid,
+        uint64_t, repoptid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer_hex(uint64_t, replytid, replytid)
+        ctf_integer_hex(uint64_t, repoptid, repoptid)
+        ctf_array(uint64_t, stamps, stamps, 8)
+    )
+)
+
+TRACEPOINT_EVENT(osd, handle_op,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t,  seq,
+        int,       type,
+        uint64_t,  data_len,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint8_t, seq, seq)
+        ctf_integer(int64_t, type, type)
+        ctf_integer(uint64_t, data_len, data_len)
+        ctf_array(uint64_t, stamps, stamps, 5)
+    )
+)
+
+TRACEPOINT_EVENT(osd, handle_replica_op,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t,  seq,
+        int,       type,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint8_t, seq, seq)
+        ctf_integer(int64_t, type, type)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_submit_transaction,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t, origtid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer_hex(uint64_t, origtid, origtid)
+        ctf_array(uint64_t, stamps, stamps, 8)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_issue_op,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t, origtid,
+        int32_t,  iteration,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer_hex(uint64_t, origtid, origtid)
+        ctf_integer(int32_t, iteration, iteration)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_sub_op_modify,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_array(uint64_t, stamps, stamps, 8)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_sub_op_modify_reply,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t,  seq,
+        uint64_t,  origtid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer_hex(uint64_t, origtid, origtid)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_sub_op_modify_applied,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint64_t,  acktid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer_hex(uint64_t, acktid, acktid)
+        ctf_array(uint64_t, stamps, stamps, 5)
+    )
+)
+
+TRACEPOINT_EVENT(osd, rbe_sub_op_modify_commit,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint64_t,  committid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer_hex(uint64_t, committid, committid)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(osd, eval_repop,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_array(uint64_t, stamps, stamps, 5)
+    )
+)
+

@@ -3,16 +3,18 @@
 TRACEPOINT_EVENT(pg, queue_op,
     TP_ARGS(
         // osd_reqid_t
-        uint8_t,  type,
-        int64_t,  num,
         uint64_t, tid,
+        uint8_t,  type,
+        int64_t,  reqnum,
         int32_t,  inc,
-        int,      rmw_flags),
+        int,      rmw_flags,
+        int32_t,  stamp),
     TP_FIELDS(
+        ctf_integer_hex(uint64_t, tid, tid)
         ctf_integer(uint8_t, type, type)
-        ctf_integer(int64_t, num, num)
-        ctf_integer(uint64_t, tid, tid)
+        ctf_integer(int64_t, reqnum, reqnum)
         ctf_integer(int32_t, inc, inc)
-        ctf_integer(int, rmw_flags, rmw_flags)
+        ctf_integer_hex(int, rmw_flags, rmw_flags)
+        ctf_integer(int, stamp, stamp)
     )
 )

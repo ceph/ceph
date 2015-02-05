@@ -35,6 +35,15 @@
 #include "common/blkdev.h"
 #include "common/linux_version.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/filejournal.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
+#else
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
+#endif
+
 #define dout_subsys ceph_subsys_journal
 #undef dout_prefix
 #define dout_prefix *_dout << "journal "
@@ -879,10 +888,25 @@ void FileJournal::queue_completions_thru(uint64_t seq)
   finisher_cond.Signal();
 }
 
+#define TP_FJ_PREP_WRITE                   0
+#define TP_FJ_PREP_WRITE_JOURNALQ          1
+#define TP_FJ_PREP_WRITE_JOURNALQ_DONE     2
+
 int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64_t& orig_ops, uint64_t& orig_bytes)
 {
+
+  uint64_t tp_stamps[3] = {0,0,0};
+  OpRequest * tp_opref = NULL;
+  int tp_journalq_len;
+  
   // grab next item
   write_item &next_write = peek_write();
+  
+  // for tp_stamps
+  if (next_write.tracked_op) {
+    tp_opref = reinterpret_cast<OpRequest *>(next_write.tracked_op.get());
+  }
+
   uint64_t seq = next_write.seq;
   bufferlist &ebl = next_write.bl;
   unsigned head_size = sizeof(entry_header_t);
@@ -898,6 +922,8 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   int r = check_for_full(seq, queue_pos, size);
   if (r < 0)
     return r;   // ENOSPC or EAGAIN
+
+  set_tp_stamp(tp_stamps[TP_FJ_PREP_WRITE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
 
   orig_bytes += ebl.length();
   orig_ops++;
@@ -938,12 +964,19 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
 
   // pop from writeq
   pop_write();
+  set_tp_stamp(tp_stamps[TP_FJ_PREP_WRITE_JOURNALQ], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   journalq.push_back(pair<uint64_t,off64_t>(seq, queue_pos));
+  tp_journalq_len = journalq.size();
+  set_tp_stamp(tp_stamps[TP_FJ_PREP_WRITE_JOURNALQ_DONE], ceph_clock_now(g_ceph_context).to_nsec()/1000);
   writing_seq = seq;
 
   queue_pos += size;
   if (queue_pos >= header.max_size)
     queue_pos = queue_pos + get_top() - header.max_size;
+
+  if (tp_opref) {
+    tracepoint(filejournal, prep_single_write, pthread_self(), tp_opref->get_reqid().tid, tp_journalq_len, tp_stamps);
+  }
 
   return 0;
 }

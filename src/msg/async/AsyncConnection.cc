@@ -23,6 +23,15 @@
 #include "AsyncMessenger.h"
 #include "AsyncConnection.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/asyncmsgr.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
+#else
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
+#endif
+
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
 
@@ -452,6 +461,18 @@ int AsyncConnection::read_until(uint64_t len, char *p)
   return len - state_offset;
 }
 
+#define TP_PROCESS_TAG_MSG           0
+#define TP_PROCESS_HEADER_COMPLETE   1
+#define TP_PROCESS_THROTTLE_DONE     2
+#define TP_PROCESS_FRONT_COMPLETE    3
+#define TP_PROCESS_MIDDLE_COMPLETE   4
+#define TP_PROCESS_DATA_COMPLETE     5
+#define TP_PROCESS_DECODE_START      6
+#define TP_PROCESS_DECODE_END        7
+#define TP_PROCESS_DISPATCH          8
+#define TP_PROCESS_CREATE_EVENT      9
+#define TP_PROCESS_DONE              10
+
 void AsyncConnection::process()
 {
   int r = 0;
@@ -561,7 +582,7 @@ void AsyncConnection::process()
             len = sizeof(header);
           else
             len = sizeof(oldheader);
-
+	  set_tp_stamp(tp_stamps[TP_PROCESS_TAG_MSG], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           r = read_until(len, state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read message header failed" << dendl;
@@ -608,6 +629,7 @@ void AsyncConnection::process()
           front.clear();
           middle.clear();
           data.clear();
+	  set_tp_stamp(tp_stamps[TP_PROCESS_HEADER_COMPLETE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           recv_stamp = ceph_clock_now(async_msgr->cct);
           current_header = header;
           state = STATE_OPEN_MESSAGE_THROTTLE_MESSAGE;
@@ -641,6 +663,7 @@ void AsyncConnection::process()
             }
           }
 
+	  set_tp_stamp(tp_stamps[TP_PROCESS_THROTTLE_DONE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           throttle_stamp = ceph_clock_now(msgr->cct);
           state = STATE_OPEN_MESSAGE_READ_FRONT;
           break;
@@ -665,6 +688,7 @@ void AsyncConnection::process()
 
             ldout(async_msgr->cct, 20) << __func__ << " got front " << front.length() << dendl;
           }
+	  set_tp_stamp(tp_stamps[TP_PROCESS_FRONT_COMPLETE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           state = STATE_OPEN_MESSAGE_READ_MIDDLE;
           break;
         }
@@ -688,6 +712,7 @@ void AsyncConnection::process()
             ldout(async_msgr->cct, 20) << __func__ << " got middle " << middle.length() << dendl;
           }
 
+	  set_tp_stamp(tp_stamps[TP_PROCESS_MIDDLE_COMPLETE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           state = STATE_OPEN_MESSAGE_READ_DATA_PREPARE;
           break;
         }
@@ -739,8 +764,10 @@ void AsyncConnection::process()
             msg_left -= read;
           }
 
-          if (msg_left == 0)
+          if (msg_left == 0) {
             state = STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH;
+	    set_tp_stamp(tp_stamps[TP_PROCESS_DATA_COMPLETE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
+	  }
 
           break;
         }
@@ -786,7 +813,9 @@ void AsyncConnection::process()
 
           ldout(async_msgr->cct, 20) << __func__ << " got " << front.length() << " + " << middle.length()
                               << " + " << data.length() << " byte message" << dendl;
+	  set_tp_stamp(tp_stamps[TP_PROCESS_DECODE_START], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           Message *message = decode_message(async_msgr->cct, async_msgr->crcflags, current_header, footer, front, middle, data);
+	  set_tp_stamp(tp_stamps[TP_PROCESS_DECODE_END], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
           if (!message) {
             ldout(async_msgr->cct, 1) << __func__ << " decode message failed " << dendl;
             goto fail;
@@ -855,13 +884,16 @@ void AsyncConnection::process()
 
           async_msgr->ms_fast_preprocess(message);
           if (async_msgr->ms_can_fast_dispatch(message)) {
+	  set_tp_stamp(tp_stamps[TP_PROCESS_DISPATCH], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
             lock.Unlock();
             async_msgr->ms_fast_dispatch(message);
             lock.Lock();
           } else {
+	  set_tp_stamp(tp_stamps[TP_PROCESS_CREATE_EVENT], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
             center->dispatch_event_external(EventCallbackRef(new C_handle_dispatch(async_msgr, message)));
           }
-
+	  set_tp_stamp(tp_stamps[TP_PROCESS_DONE], ceph_clock_now(async_msgr->cct).to_nsec()/1000);
+          tracepoint(asyncmsgr, process, pthread_self(), message->get_tid(), message->get_seq(), message->get_type(), tp_stamps);
           break;
         }
 
@@ -2282,8 +2314,15 @@ void AsyncConnection::_send_keepalive_or_ack(bool ack, utime_t *tp)
   _try_send(bl, false);
 }
 
+#define TP_HANDLE_WRITE_START         0
+#define TP_HANDLE_WRITE_GRAB_MESSAGE  1
+#define TP_HANDLE_WRITE_SEND          2
+#define TP_HANDLE_WRITE_SEND_DONE     3
+
 void AsyncConnection::handle_write()
 {
+  uint64_t tp_stamps[4] = {0,0,0,0};
+
   ldout(async_msgr->cct, 10) << __func__ << " started." << dendl;
   Mutex::Locker l(lock);
   bufferlist bl;
@@ -2295,12 +2334,17 @@ void AsyncConnection::handle_write()
     }
 
     while (1) {
+      set_tp_stamp(tp_stamps[TP_HANDLE_WRITE_START], ceph_clock_now(async_msgr->cct).usec());
       Message *m = _get_next_outgoing();
+      set_tp_stamp(tp_stamps[TP_HANDLE_WRITE_GRAB_MESSAGE], ceph_clock_now(async_msgr->cct).usec());
       if (!m)
         break;
 
       ldout(async_msgr->cct, 10) << __func__ << " try send msg " << m << dendl;
+      set_tp_stamp(tp_stamps[TP_HANDLE_WRITE_SEND], ceph_clock_now(async_msgr->cct).usec());
       r = _send(m);
+      set_tp_stamp(tp_stamps[TP_HANDLE_WRITE_SEND_DONE], ceph_clock_now(async_msgr->cct).usec());
+      tracepoint(asyncmsgr, handle_write, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), m->get_data_len(), tp_stamps);
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
         goto fail;

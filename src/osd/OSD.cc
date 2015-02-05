@@ -138,8 +138,12 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
 #else
 #define tracepoint(...)
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
 #endif
 
 static coll_t META_COLL("meta");
@@ -5396,6 +5400,8 @@ void OSD::session_notify_pg_cleared(
   clear_session_waiting_on_pg(session, pgid);
 }
 
+#define TP_OSD_FAST_DISPATCH     0
+#define TP_OSD_FAST_DISPATCH_END 1
 void OSD::ms_fast_dispatch(Message *m)
 {
   if (service.is_stopping()) {
@@ -5403,13 +5409,12 @@ void OSD::ms_fast_dispatch(Message *m)
     return;
   }
   OpRequestRef op = op_tracker.create_request<OpRequest>(m);
-  {
-#ifdef WITH_LTTNG
-    osd_reqid_t reqid = op->get_reqid();
-#endif
-    tracepoint(osd, ms_fast_dispatch, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
-  }
+  size_t pg_qlen;
+
+  uint64_t tp_stamps[2] = {0,0};
+  set_tp_stamp(tp_stamps[TP_OSD_FAST_DISPATCH], ceph_clock_now(cct).to_nsec()/1000);
+  osd_reqid_t reqid = op->get_reqid();
+
   OSDMapRef nextmap = service.get_nextmap_reserved();
   Session *session = static_cast<Session*>(m->get_connection()->get_priv());
   if (session) {
@@ -5421,6 +5426,9 @@ void OSD::ms_fast_dispatch(Message *m)
     }
     session->put();
   }
+  set_tp_stamp(tp_stamps[TP_OSD_FAST_DISPATCH_END], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, ms_fast_dispatch, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(),
+	     m->get_data_len(), reqid.tid, reqid.name._num, reqid.inc, pg_qlen, tp_stamps);
   service.release_map(nextmap);
 }
 
@@ -7985,10 +7993,21 @@ struct send_map_on_destruct {
   }
 };
 
+#define TP_OSD_HANDLE_OP            0
+#define TP_OSD_HANDLE_OP_CHECK_PG   1
+#define TP_OSD_HANDLE_OP_GET_PG     2
+#define TP_OSD_HANDLE_OP_ENQUEUE_PG 3
+#define TP_OSD_HANDLE_OP_DONE       4
+
 void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
+  uint64_t tp_stamps[5] = {0,0,0,0,0};
+  
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
+  
+  set_tp_stamp(tp_stamps[TP_OSD_HANDLE_OP], ceph_clock_now(cct).to_nsec()/1000);
+  
   if (op_is_discardable(m)) {
     dout(10) << " discardable " << *m << dendl;
     return;
@@ -8074,6 +8093,7 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
     }
   }
 
+  set_tp_stamp(tp_stamps[TP_OSD_HANDLE_OP_CHECK_PG], ceph_clock_now(cct).to_nsec()/1000);
   // calc actual pgid
   pg_t _pgid = m->get_pg();
   int64_t pool = _pgid.pool();
@@ -8126,21 +8146,35 @@ void OSD::handle_op(OpRequestRef& op, OSDMapRef& osdmap)
 	    << dendl;
     return;
   }
-
+  
+  set_tp_stamp(tp_stamps[TP_OSD_HANDLE_OP_GET_PG], ceph_clock_now(cct).to_nsec()/1000);
   PG *pg = get_pg_or_queue_for_pg(pgid, op);
   if (pg) {
     op->send_map_update = share_map.should_send;
     op->sent_epoch = m->get_map_epoch();
+    set_tp_stamp(tp_stamps[TP_OSD_HANDLE_OP_ENQUEUE_PG], ceph_clock_now(cct).to_nsec()/1000);
     enqueue_op(pg, op);
     share_map.should_send = false;
   }
+  set_tp_stamp(tp_stamps[TP_OSD_HANDLE_OP_DONE], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, handle_op, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), m->get_data_len(), tp_stamps);
 }
+
+#define TP_OSD_REPLICA_OP      0
+#define TP_OSD_REPLICA_OP_GET_PG  1
+#define TP_OSD_REPLICA_OP_ENQUEUE_PG  2
+#define TP_OSD_REPLICA_OP_DONE 3
 
 template<typename T, int MSGTYPE>
 void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
 {
+  
+  uint64_t tp_stamps[4] = {0,0,0,0};
+
   T *m = static_cast<T *>(op->get_req());
   assert(m->get_type() == MSGTYPE);
+
+  set_tp_stamp(tp_stamps[TP_OSD_REPLICA_OP], ceph_clock_now(cct).to_nsec()/1000);
 
   dout(10) << __func__ << " " << *m << " epoch " << m->map_epoch << dendl;
   if (!require_self_aliveness(op->get_req(), m->map_epoch))
@@ -8170,10 +8204,12 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
     peer_session->put();
   }
 
+  set_tp_stamp(tp_stamps[TP_OSD_REPLICA_OP_GET_PG], ceph_clock_now(cct).to_nsec()/1000);
   PG *pg = get_pg_or_queue_for_pg(m->pgid, op);
   if (pg) {
     op->send_map_update = should_share_map;
     op->sent_epoch = m->map_epoch;
+    set_tp_stamp(tp_stamps[TP_OSD_REPLICA_OP_ENQUEUE_PG], ceph_clock_now(cct).to_nsec()/1000);
     enqueue_op(pg, op);
   } else if (should_share_map && m->get_connection()->is_connected()) {
     C_SendMap *send_map = new C_SendMap(this, m->get_source(),
@@ -8181,6 +8217,9 @@ void OSD::handle_replica_op(OpRequestRef& op, OSDMapRef& osdmap)
                                         osdmap, m->map_epoch);
     service.op_gen_wq.queue(send_map);
   }
+
+  set_tp_stamp(tp_stamps[TP_OSD_REPLICA_OP_DONE], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, handle_replica_op, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), tp_stamps);
 }
 
 bool OSD::op_is_discardable(MOSDOp *op)
@@ -8205,9 +8244,18 @@ void OSD::enqueue_op(PG *pg, OpRequestRef& op)
   pg->queue_op(op);
 }
 
+#define TP_PROCESS_START         0
+#define TP_PROCESS_GOT_OP        1
+#define TP_PROCESS_OP_DEQUEUED   2
+#define TP_PROCESS_DONE          3
+  
 void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) {
 
   uint32_t shard_index = thread_index % num_shards;
+
+  uint64_t tp_stamps[4] = {0,0,0,0};
+
+  set_tp_stamp(tp_stamps[TP_PROCESS_START], ceph_clock_now(osd->cct).to_nsec()/1000);
 
   ShardData* sdata = shard_list[shard_index];
   assert(NULL != sdata);
@@ -8246,15 +8294,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
       sdata->pg_for_processing.erase(&*(item.first));
   }  
 
-  // osd:opwq_process marks the point at which an operation has been dequeued
-  // and will begin to be handled by a worker thread.
-  {
-#ifdef WITH_LTTNG
-    osd_reqid_t reqid = op->get_reqid();
-#endif
-    tracepoint(osd, opwq_process_start, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
-  }
+  set_tp_stamp(tp_stamps[TP_PROCESS_GOT_OP], ceph_clock_now(osd->cct).to_nsec()/1000);
 
   lgeneric_subdout(osd->cct, osd, 30) << "dequeue status: ";
   Formatter *f = Formatter::create("json");
@@ -8267,12 +8307,12 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb ) 
 
   osd->dequeue_op(item.first, op, tp_handle);
 
+  set_tp_stamp(tp_stamps[TP_PROCESS_OP_DEQUEUED], op->get_dequeued_time().to_nsec()/1000);
+  set_tp_stamp(tp_stamps[TP_PROCESS_DONE], ceph_clock_now(osd->cct).to_nsec()/1000);
   {
-#ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
-#endif
-    tracepoint(osd, opwq_process_finish, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc);
+    tracepoint(osd, opwq_process, pthread_self(), reqid.tid, reqid.name._type,
+        reqid.name._num, reqid.inc, tp_stamps);
   }
 
   (item.first)->unlock();

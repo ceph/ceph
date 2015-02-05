@@ -11,7 +11,11 @@ dist_noinst_DATA = \
 	oprequest.tp \
 	osd.tp \
 	pg.tp \
-	objectstore.tp
+	objectstore.tp \
+	filejournal.tp \
+	filestore.tp \
+	pipe.tp \
+	asyncmsgr.tp
 
 if WITH_LTTNG
 nodist_libosd_tp_la_SOURCES = \
@@ -20,11 +24,31 @@ nodist_libosd_tp_la_SOURCES = \
 	osd.c \
 	osd.h \
 	pg.h \
-	pg.c
+	pg.c \
+	filejournal.h \
+	filejournal.c
 endif
 libosd_tp_la_LIBADD = -llttng-ust -ldl
 libosd_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
 libosd_tp_la_LDFLAGS =
+
+if WITH_LTTNG
+nodist_libpipe_tp_la_SOURCES = \
+	pipe.c \
+	pipe.h
+endif
+libpipe_tp_la_LIBADD = -llttng-ust -ldl
+libpipe_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libpipe_tp_la_LDFLAGS =
+
+if WITH_LTTNG
+nodist_libasyncmsgr_tp_la_SOURCES = \
+	asyncmsgr.c \
+	asyncmsgr.h
+endif
+libasyncmsgr_tp_la_LIBADD = -llttng-ust -ldl
+libasyncmsgr_tp_la_CPPFLAGS = -DTRACEPOINT_PROBE_DYNAMIC_LINKAGE
+libasyncmsgr_tp_la_LDFLAGS =
 
 if WITH_LTTNG
 nodist_librados_tp_la_SOURCES = \
@@ -48,6 +72,10 @@ librbd_tp_la_LDFLAGS =
 
 if WITH_LTTNG
 nodist_libos_tp_la_SOURCES = \
+	filejournal.c \
+	filejournal.h \
+	filestore.c \
+	filestore.h \
 	objectstore.c \
 	objectstore.h
 endif
@@ -61,7 +89,9 @@ noinst_LTLIBRARIES = \
 	libosd_tp.la \
 	librados_tp.la \
 	librbd_tp.la \
-	libos_tp.la
+	libos_tp.la \
+	libpipe_tp.la \
+	libasyncmsgr_tp.la
 
 BUILT_SOURCES = \
 	librados.h \
@@ -69,11 +99,17 @@ BUILT_SOURCES = \
 	oprequest.h \
 	osd.h \
 	pg.h \
-	objectstore.h
+	objectstore.h \
+	filejournal.h \
+	filestore.h \
+	pipe.h \
+	asyncmsgr.h
 endif
 
 CLEANFILES = \
 	$(nodist_libosd_tp_la_SOURCES) \
 	$(nodist_librados_tp_la_SOURCES) \
 	$(nodist_librbd_tp_la_SOURCES) \
-	$(nodist_libos_tp_la_SOURCES)
+	$(nodist_libos_tp_la_SOURCES) \
+	$(nodist_libpipe_tp_la_SOURCES) \
+	$(nodist_libaysncmsgr_tp_la_SOURCES)

@@ -63,8 +63,12 @@
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h" // ??
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
 #else
 #define tracepoint(...)
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
 #endif
 
 #define dout_subsys ceph_subsys_osd
@@ -1386,6 +1390,14 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
   return false;
 }
 
+#define TP_DO_OP_START              0
+#define TP_DO_OP_GOT_OP             1
+#define TP_DO_OP_FIND_CONTEXT       2
+#define TP_DO_OP_FIND_CONTEXT_DONE  3
+#define TP_DO_OP_EXECUTE_CTX        4
+#define TP_DO_OP_EXECUTE_CTX_DONE   5
+#define TP_DO_OP_DONE               6
+
 /** do_op - do an op
  * pg lock will be held (if multithreaded)
  * osd_lock NOT held.
@@ -1393,13 +1405,24 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
 void ReplicatedPG::do_op(OpRequestRef& op)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
+
+  uint64_t tp_stamps[7] = {0,0,0,0,0,0,0};
+
+  tp_stamps[TP_DO_OP_START] = ceph_clock_now(cct).to_nsec()/1000;
+
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
     if (pg_op_must_wait(m)) {
       wait_for_all_missing(op);
       return;
     }
-    return do_pg_op(op);
+    do_pg_op(op);
+    set_tp_stamp(tp_stamps[TP_DO_OP_DONE], ceph_clock_now(cct).to_nsec()/1000);
+    osd_reqid_t reqid = op->get_reqid();
+    tracepoint(osd, rpg_do_op, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(),
+        reqid.tid, reqid.name._num, reqid.inc, tp_stamps);
+
+    return;
   }
 
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
@@ -1408,6 +1431,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  set_tp_stamp(tp_stamps[TP_DO_OP_GOT_OP], ceph_clock_now(cct).to_nsec()/1000);
+  
   // order this op as a write?
   bool write_ordered =
     op->may_write() ||
@@ -1527,6 +1552,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
+  set_tp_stamp(tp_stamps[TP_DO_OP_FIND_CONTEXT], ceph_clock_now(cct).to_nsec()/1000);
   int r = find_object_context(
     oid, &obc, can_create,
     m->get_flags() & CEPH_OSD_FLAG_MAP_SNAP_CLONE,
@@ -1562,6 +1588,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
       return;
     }
   }
+
+  set_tp_stamp(tp_stamps[TP_DO_OP_FIND_CONTEXT_DONE], ceph_clock_now(cct).to_nsec()/1000);
 
   bool in_hit_set = false;
   if (hit_set) {
@@ -1776,7 +1804,16 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   op->mark_started();
   ctx->src_obc = src_obc;
 
+  set_tp_stamp(tp_stamps[TP_DO_OP_EXECUTE_CTX], ceph_clock_now(cct).to_nsec()/1000);
   execute_ctx(ctx);
+  set_tp_stamp(tp_stamps[TP_DO_OP_EXECUTE_CTX_DONE], ceph_clock_now(cct).to_nsec()/1000);
+  set_tp_stamp(tp_stamps[TP_DO_OP_DONE], ceph_clock_now(cct).to_nsec()/1000);
+
+  {
+    osd_reqid_t reqid = op->get_reqid();
+    tracepoint(osd, rpg_do_op, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(),
+       reqid.tid, reqid.name._num, reqid.inc, tp_stamps);
+  }
 }
 
 bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
@@ -2171,8 +2208,21 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
     wait_for_blocked_object(obc->obs.oi.soid, op);
 }
 
+#define TP_EXECUTE_START              0
+#define TP_EXECUTE_PREPARE            1
+#define TP_EXECUTE_PREPARE_DONE       2
+#define TP_EXECUTE_REPLY_ALLOCATED    3
+#define TP_EXECUTE_NEW_REPOP          4
+#define TP_EXECUTE_ISSUE_REPOP        5
+#define TP_EXECUTE_EVAL_REPOP         6
+#define TP_EXECUTE_DONE               7
+
 void ReplicatedPG::execute_ctx(OpContext *ctx)
 {
+  uint64_t tp_stamps[8] = {0,0,0,0,0,0,0,0};
+
+  tp_stamps[TP_EXECUTE_START] = ceph_clock_now(cct).usec();
+
   dout(10) << __func__ << " " << ctx << dendl;
   ctx->reset_obs(ctx->obc);
   OpRequestRef op = ctx->op;
@@ -2239,6 +2289,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     p->second->ondisk_read_lock();
   }
 
+#if 0
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
@@ -2246,9 +2297,15 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     tracepoint(osd, prepare_tx_enter, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
+#endif
+
+  set_tp_stamp(tp_stamps[TP_EXECUTE_PREPARE], ceph_clock_now(cct).to_nsec()/1000);
 
   int result = prepare_transaction(ctx);
 
+  set_tp_stamp(tp_stamps[TP_EXECUTE_PREPARE_DONE], ceph_clock_now(cct).to_nsec()/1000);
+
+#if 0
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
@@ -2256,6 +2313,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
     tracepoint(osd, prepare_tx_exit, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
+#endif
 
   if (op->may_read()) {
     dout(10) << " dropping ondisk_read_lock" << dendl;
@@ -2288,6 +2346,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
 			       successful_write);
+  set_tp_stamp(tp_stamps[TP_EXECUTE_REPLY_ALLOCATED], ceph_clock_now(cct).to_nsec()/1000);
+
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
@@ -2348,14 +2408,25 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   // issue replica writes
   ceph_tid_t rep_tid = osd->get_tid();
+
+  set_tp_stamp(tp_stamps[TP_EXECUTE_NEW_REPOP], ceph_clock_now(cct).to_nsec()/1000);
+
   RepGather *repop = new_repop(ctx, obc, rep_tid);  // new repop claims our obc, src_obc refs
   // note: repop now owns ctx AND ctx->op
 
   repop->src_obc.swap(src_obc); // and src_obc.
 
+  set_tp_stamp(tp_stamps[TP_EXECUTE_ISSUE_REPOP], ceph_clock_now(cct).to_nsec()/1000);
+
   issue_repop(repop, now);
 
+  set_tp_stamp(tp_stamps[TP_EXECUTE_EVAL_REPOP], ceph_clock_now(cct).to_nsec()/1000);
+
   eval_repop(repop);
+
+  set_tp_stamp(tp_stamps[TP_EXECUTE_DONE], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, rpg_execute_ctx, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), ctx->reply->get_tid(), rep_tid, tp_stamps);
+
   repop->put();
 }
 
@@ -7382,9 +7453,17 @@ void ReplicatedPG::op_applied(const eversion_t &applied_version)
   }
 }
 
+#define TP_EVAL_REPOP_START              0
+#define TP_EVAL_REPOP_ALL_COMMITTED      1
+#define TP_EVAL_REPOP_ALL_APPLIED1       2
+#define TP_EVAL_REPOP_ALL_APPLIED2       3
+#define TP_EVAL_REPOP_DONE               4
+
 void ReplicatedPG::eval_repop(RepGather *repop)
 {
   MOSDOp *m = NULL;
+  uint64_t tp_stamps[5] = {0,0,0,0,0};
+  
   if (repop->ctx->op)
     m = static_cast<MOSDOp *>(repop->ctx->op->get_req());
 
@@ -7402,6 +7481,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     return;
 
   if (m) {
+    set_tp_stamp(tp_stamps[TP_EVAL_REPOP_START], ceph_clock_now(cct).to_nsec()/1000);
 
     // an 'ondisk' reply implies 'ack'. so, prefer to send just one
     // ondisk instead of ack followed by ondisk.
@@ -7445,6 +7525,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	}
 	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
 	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+        set_tp_stamp(tp_stamps[TP_EVAL_REPOP_ALL_COMMITTED], ceph_clock_now(cct).to_nsec()/1000);
 	osd->send_message_osd_client(reply, m->get_connection());
 	repop->sent_disk = true;
 	repop->ctx->op->mark_commit_sent();
@@ -7465,6 +7546,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	  reply->set_reply_versions(repop->ctx->at_version,
 	                            repop->ctx->user_at_version);
 	  reply->add_flags(CEPH_OSD_FLAG_ACK);
+          set_tp_stamp(tp_stamps[TP_EVAL_REPOP_ALL_APPLIED1], ceph_clock_now(cct).to_nsec()/1000);
 	  osd->send_message_osd_client(reply, m->get_connection());
 	}
 	waiting_for_ack.erase(repop->v);
@@ -7483,6 +7565,7 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	dout(10) << " sending ack on " << *repop << " " << reply << dendl;
         assert(entity_name_t::TYPE_OSD != m->get_connection()->peer_type);
+        set_tp_stamp(tp_stamps[TP_EVAL_REPOP_ALL_APPLIED2], ceph_clock_now(cct).to_nsec()/1000);
 	osd->send_message_osd_client(reply, m->get_connection());
 	repop->sent_ack = true;
       }
@@ -7494,6 +7577,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       if (repop->ctx->readable_stamp == utime_t())
 	repop->ctx->readable_stamp = ceph_clock_now(cct);
     }
+    set_tp_stamp(tp_stamps[TP_EVAL_REPOP_DONE], ceph_clock_now(cct).to_nsec()/1000);
+    tracepoint(osd, eval_repop, pthread_self(), m->get_tid(), m->get_seq(), m->get_type(), tp_stamps);
   }
 
   // done.
@@ -7678,7 +7763,7 @@ Message * ReplicatedBackend::generate_subop(
     wr->pg_stats = pinfo.stats;  // reflects backfill progress
   else
     wr->pg_stats = get_info().stats;
-    
+
   wr->pg_trim_to = pg_trim_to;
   wr->pg_trim_rollback_to = pg_trim_rollback_to;
 
@@ -7687,6 +7772,11 @@ Message * ReplicatedBackend::generate_subop(
   wr->updated_hit_set_history = hset_hist;
   return wr;
 }
+
+#define TP_ISSUE_OP_START              0
+#define TP_ISSUE_OP_OSD_SUBOP_CREATED  1
+#define TP_ISSUE_OP_SEND_TO_OSD        2
+#define TP_ISSUE_OP_SEND_TO_OSD_DONE   3
 
 void ReplicatedBackend::issue_op(
   const hobject_t &soid,
@@ -7702,6 +7792,9 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
 {
+  uint64_t tp_stamps[4] = {0,0,0,0};
+  int tp_iterations = 0;
+
 
   if (parent->get_actingbackfill_shards().size() > 1) {
     ostringstream ss;
@@ -7719,6 +7812,7 @@ void ReplicatedBackend::issue_op(
     pg_shard_t peer = *i;
     const pg_info_t &pinfo = parent->get_shard_info().find(peer)->second;
 
+    set_tp_stamp(tp_stamps[TP_ISSUE_OP_START], ceph_clock_now(cct).to_nsec()/1000);
     Message *wr;
     uint64_t min_features = parent->min_peer_features();
     if (!(min_features & CEPH_FEATURE_OSD_REPOP)) {
@@ -7756,8 +7850,13 @@ void ReplicatedBackend::issue_op(
 	    pinfo);
     }
 
+    // set_tp_stamp(tp_stamps[TP_ISSUE_OP_OSD_SUBOP_CREATED], ceph_clock_now(cct).to_nsec()/1000);
+    set_tp_stamp(tp_stamps[TP_ISSUE_OP_SEND_TO_OSD], ceph_clock_now(cct).to_nsec()/1000);
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());
+    set_tp_stamp(tp_stamps[TP_ISSUE_OP_SEND_TO_OSD_DONE], ceph_clock_now(cct).to_nsec()/1000);
+    tp_iterations++;
+    tracepoint(osd, rbe_issue_op, pthread_self(), tid, 0, 0, reqid.tid, tp_iterations, tp_stamps);
   }
 }
 
@@ -8479,6 +8578,15 @@ void ReplicatedBackend::sub_op_modify(OpRequestRef op) {
   }
 }
 
+#define TP_SUB_OP_MODIFY_START              0
+#define TP_SUB_OP_MODIFY_MARK_STARTED       1
+#define TP_SUB_OP_MODIFY_UPDATE_STATS       2
+#define TP_SUB_OP_MODIFY_PARENT_LOG         3
+#define TP_SUB_OP_MODIFY_PARENT_LOG_DONE    4
+#define TP_SUB_OP_MODIFY_MARK_STARTED2      5
+#define TP_SUB_OP_MODIFY_QUEUE_TRANSACTION  6
+#define TP_SUB_OP_MODIFY_END                7
+
 template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 {
@@ -8486,9 +8594,11 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   int msg_type = m->get_type();
   assert(MSGTYPE == msg_type);
   assert(msg_type == MSG_OSD_SUBOP || msg_type == MSG_OSD_REPOP);
+  uint64_t tp_stamps[8] = {0,0,0,0,0,0,0,0};
 
   const hobject_t& soid = m->poid;
 
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_START], ceph_clock_now(cct).to_nsec()/1000);
   dout(10) << "sub_op_modify trans"
            << " " << soid 
            << " v " << m->version
@@ -8502,6 +8612,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   int ackerosd = m->get_source().num();
   
   op->mark_started();
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_MARK_STARTED], ceph_clock_now(cct).to_nsec()/1000);
 
   RepModifyRef rm(new RepModify);
   rm->op = op;
@@ -8544,7 +8655,9 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     // collections now.  Otherwise, we do it later on push.
     update_snaps = true;
   }
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_UPDATE_STATS], ceph_clock_now(cct).to_nsec()/1000);
   parent->update_stats(m->pg_stats);
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_PARENT_LOG], ceph_clock_now(cct).to_nsec()/1000);
   parent->log_operation(
     log,
     m->updated_hit_set_history,
@@ -8552,10 +8665,11 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
     m->pg_trim_rollback_to,
     update_snaps,
     &(rm->localt));
-
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_PARENT_LOG_DONE], ceph_clock_now(cct).to_nsec()/1000);
   rm->bytes_written = rm->opt.get_encoded_bytes();
   
   op->mark_started();
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_MARK_STARTED2], ceph_clock_now(cct).to_nsec()/1000);
 
   rm->localt.append(rm->opt);
   rm->localt.register_on_commit(
@@ -8564,12 +8678,26 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
   rm->localt.register_on_applied(
     parent->bless_context(
       new C_OSD_RepModifyApply(this, rm)));
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_QUEUE_TRANSACTION], ceph_clock_now(cct).to_nsec()/1000);
   parent->queue_transaction(&(rm->localt), op);
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_END], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, rbe_sub_op_modify, pthread_self(), m->reqid.tid, tp_stamps);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
+#define TP_SUB_OP_MODIFY_APPLIED_START              0
+#define TP_SUB_OP_MODIFY_APPLIED_SEND_START         1
+#define TP_SUB_OP_MODIFY_APPLIED_SEND_DONE          2
+#define TP_SUB_OP_MODIFY_APPLIED_CALL_PARENT        3
+#define TP_SUB_OP_MODIFY_APPLIED_END                4
+
 void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 {
+  uint64_t tp_stamps[5] = {0,0,0,0,0};
+  ceph_tid_t tp_req_tid = 0;
+  ceph_tid_t tp_ack_tid = 0;
+  
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_APPLIED_START], ceph_clock_now(cct).to_nsec()/1000);
   rm->op->mark_event("sub_op_applied");
   rm->applied = true;
 
@@ -8588,6 +8716,8 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
       ack = new MOSDSubOpReply(
 	req, parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    tp_req_tid = req->reqid.tid;
+    tp_ack_tid = static_cast<MOSDSubOpReply *>(ack)->reqid.tid;
   } else if (m->get_type() == MSG_OSD_REPOP) {
     MOSDRepOp *req = static_cast<MOSDRepOp*>(m);
     version = req->version;
@@ -8595,6 +8725,8 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
       ack = new MOSDRepOpReply(
 	static_cast<MOSDRepOp*>(m), parent->whoami_shard(),
 	0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
+    tp_req_tid = req->reqid.tid;
+    tp_ack_tid = static_cast<MOSDRepOpReply *>(ack)->reqid.tid;
   } else {
     assert(0);
   }
@@ -8602,15 +8734,30 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   // send ack to acker only if we haven't sent a commit already
   if (ack) {
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+    set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_APPLIED_SEND_START], ceph_clock_now(cct).to_nsec()/1000);
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
+    set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_APPLIED_SEND_DONE], ceph_clock_now(cct).to_nsec()/1000);
   }
   
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_APPLIED_CALL_PARENT], ceph_clock_now(cct).to_nsec()/1000);
   parent->op_applied(version);
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_APPLIED_END], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, rbe_sub_op_modify_applied, pthread_self(), tp_req_tid, tp_ack_tid, tp_stamps);
 }
+
+#define TP_SUB_OP_MODIFY_COMMIT_START              0
+#define TP_SUB_OP_MODIFY_COMMIT_SEND_START         1
+#define TP_SUB_OP_MODIFY_COMMIT_SEND_DONE          2
+#define TP_SUB_OP_MODIFY_COMMIT_END                3
 
 void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
 {
+  uint64_t tp_stamps[4] = {0,0,0,0};
+  ceph_tid_t tp_req_tid = 0;
+  ceph_tid_t tp_commit_tid = 0;
+  
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_COMMIT_START], ceph_clock_now(cct).to_nsec()/1000);
   rm->op->mark_commit_sent();
   rm->committed = true;
 
@@ -8632,6 +8779,8 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
       0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     reply->set_last_complete_ondisk(rm->last_complete);
     commit = reply;
+    tp_req_tid = static_cast<MOSDSubOp *>(m)->reqid.tid;
+    tp_commit_tid = reply->reqid.tid;
   } else if (m->get_type() == MSG_OSD_REPOP) {
     MOSDRepOpReply *reply = new MOSDRepOpReply(
       static_cast<MOSDRepOp*>(m),
@@ -8639,16 +8788,22 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
       0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ONDISK);
     reply->set_last_complete_ondisk(rm->last_complete);
     commit = reply;
+    tp_req_tid = static_cast<MOSDRepOp *>(m)->reqid.tid;
+    tp_commit_tid = reply->reqid.tid;
   }
   else {
     assert(0);
   }
 
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_COMMIT_SEND_START], ceph_clock_now(cct).to_nsec()/1000);
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, commit, get_osdmap()->get_epoch());
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_COMMIT_SEND_DONE], ceph_clock_now(cct).to_nsec()/1000);
   
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
+  set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_COMMIT_END], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, rbe_sub_op_modify_commit, pthread_self(), tp_req_tid, tp_commit_tid, tp_stamps);
 }
 
 

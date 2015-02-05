@@ -1,0 +1,64 @@
+
+TRACEPOINT_EVENT(filestore, queue_transactions,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t,  tid,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_array(uint64_t, stamps, stamps, 3)
+    )
+)
+
+TRACEPOINT_EVENT(filestore, do_op,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t, op_seq,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer(uint64_t, op_seq, op_seq)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(filestore, do_transactions,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t, op_seq,
+        int32_t, trans_num,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer(uint64_t, op_seq, op_seq)
+        ctf_integer(int32_t, trans_num, trans_num)
+        ctf_array(uint64_t, stamps, stamps, 4)
+    )
+)
+
+TRACEPOINT_EVENT(filestore, do_transaction,
+    TP_ARGS(
+        uint64_t, threadid,
+        uint64_t, op_seq,
+        int32_t, trans_num,
+        const char*,  oid,
+        const char*,  cid,
+        uint64_t, off,
+        uint64_t, len,
+	int32_t, tp_op,
+        int32_t, tp_nops,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer(uint64_t, op_seq, op_seq)
+        ctf_integer(int32_t, trans_num, trans_num)
+        ctf_string(oid, oid)
+        ctf_string(cid, cid)
+        ctf_integer(uint64_t, off, off)
+        ctf_integer(uint64_t, len, len)
+        ctf_integer(int32_t, tp_op, tp_op)
+        ctf_integer(int32_t, tp_nops, tp_nops)
+        ctf_array(uint64_t, stamps, stamps, 8)
+    )
+)

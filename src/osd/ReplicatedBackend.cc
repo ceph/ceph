@@ -22,6 +22,15 @@
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
 
+#ifdef WITH_LTTNG
+#include "tracing/osd.h"
+#define set_tp_stamp(stamp, val) { (stamp) = (val); }
+#define set_tp_stamp_if(cond, stamp, val) { if ((cond)) {(stamp) = (val); } }
+#else
+#define set_tp_stamp(stamp, val)
+#define set_tp_stamp_if(cond, stamp, val)
+#endif
+
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
 #undef dout_prefix
@@ -516,6 +525,15 @@ public:
   }
 };
 
+#define TP_SUBMIT_TA_START              0
+#define TP_SUBMIT_TA_WAITING            1
+#define TP_SUBMIT_TA_ISSUE_OP           2
+#define TP_SUBMIT_TA_PARENT_LOG         3
+#define TP_SUBMIT_TA_PARENT_LOG_DONE    4
+#define TP_SUBMIT_TA_REGISTER_CALLBACKS 5
+#define TP_SUBMIT_TA_PARENT_QUEUE       6
+#define TP_SUBMIT_TA_END                7
+
 void ReplicatedBackend::submit_transaction(
   const hobject_t &soid,
   const eversion_t &at_version,
@@ -534,11 +552,13 @@ void ReplicatedBackend::submit_transaction(
   RPGTransaction *t = dynamic_cast<RPGTransaction*>(_t);
   assert(t);
   ObjectStore::Transaction *op_t = t->get_transaction();
+  uint64_t tp_stamps[8] = {0,0,0,0,0,0,0,0};
 
   assert(t->get_temp_added().size() <= 1);
   assert(t->get_temp_cleared().size() <= 1);
 
   assert(!in_progress_ops.count(tid));
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_START], ceph_clock_now(cct).to_nsec()/1000);
   InProgressOp &op = in_progress_ops.insert(
     make_pair(
       tid,
@@ -548,6 +568,7 @@ void ReplicatedBackend::submit_transaction(
       )
     ).first->second;
 
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_WAITING], ceph_clock_now(cct).to_nsec()/1000);
   op.waiting_for_applied.insert(
     parent->get_actingbackfill_shards().begin(),
     parent->get_actingbackfill_shards().end());
@@ -556,6 +577,7 @@ void ReplicatedBackend::submit_transaction(
     parent->get_actingbackfill_shards().end());
 
 
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_ISSUE_OP], ceph_clock_now(cct).to_nsec()/1000);
   issue_op(
     soid,
     at_version,
@@ -579,6 +601,7 @@ void ReplicatedBackend::submit_transaction(
   }
   clear_temp_objs(t->get_temp_cleared());
 
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_PARENT_LOG], ceph_clock_now(cct).to_nsec()/1000);
   parent->log_operation(
     log_entries,
     hset_history,
@@ -586,10 +609,12 @@ void ReplicatedBackend::submit_transaction(
     trim_rollback_to,
     true,
     &local_t);
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_PARENT_LOG_DONE], ceph_clock_now(cct).to_nsec()/1000);
 
   local_t.append(*op_t);
   local_t.swap(*op_t);
   
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_REGISTER_CALLBACKS], ceph_clock_now(cct).to_nsec()/1000);
   op_t->register_on_applied_sync(on_local_applied_sync);
   op_t->register_on_applied(
     parent->bless_context(
@@ -600,7 +625,10 @@ void ReplicatedBackend::submit_transaction(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
       
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_PARENT_QUEUE], ceph_clock_now(cct).to_nsec()/1000);
   parent->queue_transaction(op_t, op.op);
+  set_tp_stamp(tp_stamps[TP_SUBMIT_TA_END], ceph_clock_now(cct).to_nsec()/1000);
+  tracepoint(osd, rbe_submit_transaction, pthread_self(), reqid.tid, 0, 0, tid, tp_stamps);
   delete t;
 }
 
@@ -643,12 +671,19 @@ void ReplicatedBackend::op_commit(
   }
 }
 
+#define TP_SUB_OP_MODIFY_REPLY_START              0
+#define TP_SUB_OP_MODIFY_REPLY_ALL_APPLIED        1
+#define TP_SUB_OP_MODIFY_REPLY_ALL_COMMITED       2
+#define TP_SUB_OP_MODIFY_REPLY_END                3
+
 template<typename T, int MSGTYPE>
 void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 {
   T *r = static_cast<T *>(op->get_req());
   assert(r->get_header().type == MSGTYPE);
   assert(MSGTYPE == MSG_OSD_SUBOPREPLY || MSGTYPE == MSG_OSD_REPOPREPLY);
+  uint64_t tp_stamps[4] = {0,0,0,0};
+  uint64_t tp_m_req_tid = 0;
 
   op->mark_started();
 
@@ -657,6 +692,7 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
   pg_shard_t from = r->from;
 
   if (in_progress_ops.count(rep_tid)) {
+    set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_REPLY_START], ceph_clock_now(cct).to_nsec()/1000);
     map<ceph_tid_t, InProgressOp>::iterator iter =
       in_progress_ops.find(rep_tid);
     InProgressOp &ip_op = iter->second;
@@ -695,11 +731,13 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
 
     if (ip_op.waiting_for_applied.empty() &&
         ip_op.on_applied) {
+      set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_REPLY_ALL_APPLIED], ceph_clock_now(cct).to_nsec()/1000);
       ip_op.on_applied->complete(0);
       ip_op.on_applied = 0;
     }
     if (ip_op.waiting_for_commit.empty() &&
         ip_op.on_commit) {
+      set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_REPLY_ALL_COMMITED], ceph_clock_now(cct).to_nsec()/1000);
       ip_op.on_commit->complete(0);
       ip_op.on_commit= 0;
     }
@@ -707,6 +745,11 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
       assert(!ip_op.on_commit && !ip_op.on_applied);
       in_progress_ops.erase(iter);
     }
+    set_tp_stamp(tp_stamps[TP_SUB_OP_MODIFY_REPLY_END], ceph_clock_now(cct).to_nsec()/1000);
+    if (m != NULL) {
+       tp_m_req_tid = m->get_reqid().tid;
+    }
+    tracepoint(osd, rbe_sub_op_modify_reply, pthread_self(), ip_op.tid, r->get_header().seq, tp_m_req_tid, tp_stamps);
   }
 }
 

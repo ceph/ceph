@@ -1784,8 +1784,8 @@ void PG::queue_op(OpRequestRef& op)
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
 #endif
-    tracepoint(pg, queue_op, reqid.name._type,
-        reqid.name._num, reqid.tid, reqid.inc, op->rmw_flags);
+    tracepoint(pg, queue_op, reqid.tid, reqid.name._type,
+        reqid.name._num, reqid.inc, op->rmw_flags, ceph_clock_now(cct).usec());
   }
 }
 

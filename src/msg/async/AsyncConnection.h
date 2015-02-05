@@ -245,6 +245,7 @@ class AsyncConnection : public Connection {
   // Tis section are temp variables used by state transition
 
   // Open state
+  uint64_t tp_stamps[11];
   utime_t recv_stamp;
   utime_t throttle_stamp;
   uint64_t msg_left;

@@ -1,0 +1,71 @@
+TRACEPOINT_EVENT(pipe, reader,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t,  data_len,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer(uint64_t, data_len, data_len)
+        ctf_array(uint64_t, stamps, stamps, 9)
+    )
+)
+
+TRACEPOINT_EVENT(pipe, writer,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint64_t,  data_len,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer(uint64_t, data_len, data_len)
+        ctf_array(uint64_t, stamps, stamps, 6)
+    )
+)
+
+TRACEPOINT_EVENT(pipe, read_message,
+    TP_ARGS(
+        uint64_t,  threadid,
+        uint64_t,  tid,
+        uint32_t, seq,
+        int,  type,
+        uint32_t, data_len,
+        int32_t, loops,
+        uint64_t *, stamps),
+    TP_FIELDS(
+        ctf_integer(uint64_t, threadid, threadid)
+        ctf_integer_hex(uint64_t, tid, tid)
+        ctf_integer(uint32_t, seq, seq)
+        ctf_integer(int32_t, type, type)
+        ctf_integer(uint32_t, data_len, data_len)
+        ctf_integer(int32_t, loops, loops)
+        ctf_array(uint64_t, stamps, stamps, 11)
+    )
+)
+
+TRACEPOINT_EVENT(pipe, do_sendmsg,
+    TP_ARGS(
+        uint32_t,  addr,
+        uint16_t,  port,
+        int32_t, len,
+        int32_t, loops,
+        uint64_t *, tp_stamps),
+    TP_FIELDS(
+        ctf_integer_network(uint32_t, addr, addr)
+        ctf_integer(int16_t, port, port)
+        ctf_integer(int32_t, len, len)
+        ctf_integer(int32_t, loops, loops)
+        ctf_array(uint64_t, tp_stamps, tp_stamps, 2)
+    )
+)
