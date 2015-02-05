@@ -261,6 +261,8 @@ struct rados_cluster_stat_t {
  * - Object map key/value pairs: rados_write_op_omap_set(),
  *   rados_write_op_omap_rm_keys(), rados_write_op_omap_clear(),
  *   rados_write_op_omap_cmp()
+ * - Object properties: rados_write_op_assert_exists(),
+ *   rados_write_op_assert_version()
  * - Creating objects: rados_write_op_create()
  * - IO on objects: rados_write_op_append(), rados_write_op_write(), rados_write_op_zero
  *   rados_write_op_write_full(), rados_write_op_remove, rados_write_op_truncate(),
@@ -281,7 +283,8 @@ typedef void *rados_write_op_t;
  * - Object map key/value pairs: rados_read_op_omap_get_vals(),
  *   rados_read_op_omap_get_keys(), rados_read_op_omap_get_vals_by_keys(),
  *   rados_read_op_omap_cmp()
- * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists()
+ * - Object properties: rados_read_op_stat(), rados_read_op_assert_exists(),
+ *   rados_read_op_assert_version()
  * - IO on objects: rados_read_op_read()
  * - Custom operations: rados_read_op_exec(), rados_read_op_exec_user_buf()
  * - Request properties: rados_read_op_set_flags()
@@ -2205,6 +2208,21 @@ CEPH_RADOS_API void rados_write_op_set_flags(rados_write_op_t write_op,
 CEPH_RADOS_API void rados_write_op_assert_exists(rados_write_op_t write_op);
 
 /**
+ * Ensure that the object exists and that its internal version
+ * number is equal to "ver" before writing. "ver" should be a
+ * version number previously obtained with rados_get_last_version().
+ * - If the object's version is greater than the asserted version
+ *   then rados_write_op_operate will return -ERANGE instead of
+ *   executing the op.
+ * - If the object's version is less than the asserted version
+ *   then rados_write_op_operate will return -EOVERFLOW instead
+ *   of executing the op.
+ * @param write_op operation to add this action to
+ * @param ver object version number
+ */
+CEPH_RADOS_API void rados_write_op_assert_version(rados_write_op_t write_op, uint64_t ver);
+
+/**
  * Ensure that given xattr satisfies comparison.
  * If the comparison is not satisfied, the return code of the
  * operation will be -ECANCELED
@@ -2447,6 +2465,21 @@ CEPH_RADOS_API void rados_read_op_set_flags(rados_read_op_t read_op, int flags);
  * @param read_op operation to add this action to
  */
 CEPH_RADOS_API void rados_read_op_assert_exists(rados_read_op_t read_op);
+
+/**
+ * Ensure that the object exists and that its internal version
+ * number is equal to "ver" before reading. "ver" should be a
+ * version number previously obtained with rados_get_last_version().
+ * - If the object's version is greater than the asserted version
+ *   then rados_read_op_operate will return -ERANGE instead of
+ *   executing the op.
+ * - If the object's version is less than the asserted version
+ *   then rados_read_op_operate will return -EOVERFLOW instead
+ *   of executing the op.
+ * @param read_op operation to add this action to
+ * @param ver object version number
+ */
+CEPH_RADOS_API void rados_read_op_assert_version(rados_read_op_t write_op, uint64_t ver);
 
 /**
  * Ensure that the an xattr satisfies a comparison
