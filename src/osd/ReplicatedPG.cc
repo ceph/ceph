@@ -7409,54 +7409,47 @@ void ReplicatedPG::eval_repop(RepGather *repop)
   if (repop->rep_done)
     return;
 
-  if (m) {
-
-    // an 'ondisk' reply implies 'ack'. so, prefer to send just one
-    // ondisk instead of ack followed by ondisk.
-
     // ondisk?
-    if (repop->all_committed) {
+  if (repop->all_committed) {
+    if (!repop->log_op_stat) {
+      log_op_stats(repop->ctx);
+      repop->log_op_stat = true;
+    }
+    publish_stats_to_osd();
 
-      if (!repop->log_op_stat) {
-        log_op_stats(repop->ctx);
-        repop->log_op_stat = true;
+    // send dup commits, in order
+    if (waiting_for_ondisk.count(repop->v)) {
+      assert(waiting_for_ondisk.begin()->first == repop->v);
+      for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
+	   i != waiting_for_ondisk[repop->v].end();
+	   ++i) {
+	osd->reply_op_error(*i, 0, repop->ctx->at_version,
+			    repop->ctx->user_at_version);
       }
-      publish_stats_to_osd();
+      waiting_for_ondisk.erase(repop->v);
+    }
 
-      // send dup commits, in order
-      if (waiting_for_ondisk.count(repop->v)) {
-	assert(waiting_for_ondisk.begin()->first == repop->v);
-	for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
-	     i != waiting_for_ondisk[repop->v].end();
-	     ++i) {
-	  osd->reply_op_error(*i, 0, repop->ctx->at_version,
-			      repop->ctx->user_at_version);
-	}
-	waiting_for_ondisk.erase(repop->v);
-      }
+    // clear out acks, we sent the commits above
+    if (waiting_for_ack.count(repop->v)) {
+      assert(waiting_for_ack.begin()->first == repop->v);
+      waiting_for_ack.erase(repop->v);
+    }
 
-      // clear out acks, we sent the commits above
-      if (waiting_for_ack.count(repop->v)) {
-	assert(waiting_for_ack.begin()->first == repop->v);
-	waiting_for_ack.erase(repop->v);
+    if (m && m->wants_ondisk() && !repop->sent_disk) {
+      // send commit.
+      MOSDOpReply *reply = repop->ctx->reply;
+      if (reply)
+	repop->ctx->reply = NULL;
+      else {
+	reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	reply->set_reply_versions(repop->ctx->at_version,
+				  repop->ctx->user_at_version);
       }
-
-      if (m->wants_ondisk() && !repop->sent_disk) {
-	// send commit.
-	MOSDOpReply *reply = repop->ctx->reply;
-	if (reply)
-	  repop->ctx->reply = NULL;
-	else {
-	  reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
-	  reply->set_reply_versions(repop->ctx->at_version,
-	                            repop->ctx->user_at_version);
-	}
-	reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-	dout(10) << " sending commit on " << *repop << " " << reply << dendl;
-	osd->send_message_osd_client(reply, m->get_connection());
-	repop->sent_disk = true;
-	repop->ctx->op->mark_commit_sent();
-      }
+      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+      dout(10) << " sending commit on " << *repop << " " << reply << dendl;
+      osd->send_message_osd_client(reply, m->get_connection());
+      repop->sent_disk = true;
+      repop->ctx->op->mark_commit_sent();
     }
 
     // applied?
