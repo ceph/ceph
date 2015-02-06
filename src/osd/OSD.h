@@ -134,6 +134,7 @@ enum {
   l_osd_tier_dirty,
   l_osd_tier_clean,
   l_osd_tier_delay,
+  l_osd_tier_proxy_read,
 
   l_osd_agent_wake,
   l_osd_agent_skip,
