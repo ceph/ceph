@@ -159,13 +159,8 @@ struct InodeStat {
     rstat.rfiles = e.rfiles;
     rstat.rsubdirs = e.rsubdirs;
 
-    int n = e.fragtree.nsplits;
-    while (n) {
-      ceph_frag_tree_split s;
-      ::decode(s, p);
-      dirfragtree._splits[(__u32)s.frag] = s.by;
-      n--;
-    }
+    dirfragtree.decode_nohead(e.fragtree.nsplits, p);
+
     ::decode(symlink, p);
     
     if (features & CEPH_FEATURE_DIRLAYOUTHASH)
