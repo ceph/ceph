@@ -300,8 +300,19 @@ class TestImage(object):
         data = rand_data(256)
         self.image.write(data, 0)
 
+    def test_write_with_fadivse_flags(self):
+        data = rand_data(256)
+        self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
+        self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
+
     def test_read(self):
         data = self.image.read(0, 20)
+        eq(data, '\0' * 20)
+
+     def test_read_with_fadivse_flags(self):
+        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADIVSE_DONTNEED)
+        eq(data, '\0' * 20)
+        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADIVSE_RANDOM)
         eq(data, '\0' * 20)
 
     def test_large_write(self):

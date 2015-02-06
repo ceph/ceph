@@ -682,7 +682,7 @@ class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %s' % (self.name, name))
 
-    def read(self, offset, length):
+    def read(self, offset, length, fadvise_flags=0):
         """
         Read data from the image. Raises :class:`InvalidArgument` if
         part of the range specified is outside the image.
@@ -691,12 +691,18 @@ class Image(object):
         :type offset: int
         :param length: how many bytes to read
         :type length: int
+	:param fadvise_flags: fadvise flags for this read
+	:type fadvise_flags: int
         :returns: str - the data read
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
         ret_buf = create_string_buffer(length)
-        ret = self.librbd.rbd_read(self.image, c_uint64(offset),
-                                   c_size_t(length), byref(ret_buf))
+	if fadvise_flags == 0:
+	  ret = self.librbd.rbd_read(self.image, c_uint64(offset),
+				      c_size_t(length), byref(ret_buf))
+	else:
+	  ret = self.librbd.rbd_read2(self.image, c_uint64(offset),
+					c_size_t(length), byref(ret_buf), c_int(fadvise_flags))
         if ret < 0:
             raise make_ex(ret, 'error reading %s %ld~%ld' % (self.image, offset, length))
         return ctypes.string_at(ret_buf, ret)
@@ -753,7 +759,7 @@ class Image(object):
             msg = 'error generating diff from snapshot %s' % from_snapshot
             raise make_ex(ret, msg)
 
-    def write(self, data, offset):
+    def write(self, data, offset, fadvise_flags=0):
         """
         Write data to the image. Raises :class:`InvalidArgument` if
         part of the write would fall outside the image.
@@ -762,6 +768,8 @@ class Image(object):
         :type data: str
         :param offset: where to start writing data
         :type offset: int
+	:param fadvise_flags: fadvise flags for this write
+	:type fadvise_flags: int
         :returns: int - the number of bytes written
         :raises: :class:`IncompleteWriteError`, :class:`LogicError`,
                  :class:`InvalidArgument`, :class:`IOError`
@@ -769,8 +777,13 @@ class Image(object):
         if not isinstance(data, str):
             raise TypeError('data must be a string')
         length = len(data)
-        ret = self.librbd.rbd_write(self.image, c_uint64(offset),
-                                    c_size_t(length), c_char_p(data))
+	if fadvise_flags == 0:
+	  ret = self.librbd.rbd_write(self.image, c_uint64(offset),
+	                              c_size_t(length), c_char_p(data))
+	else:
+	  ret = self.librbd.rbd_write2(self.image, c_uint64(offset),
+	                              c_size_t(length), c_char_p(data), c_int(fadvise_flags))
+
         if ret == length:
             return ret
         elif ret < 0:
