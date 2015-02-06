@@ -18,6 +18,7 @@
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/interval_set.h"
+#include "include/compact_map.h"
 
 #include "inode_backtrace.h"
 
@@ -1378,7 +1379,7 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce; // [replica] defined on replica
-  std::map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
+  compact_map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
 
  public:
   bool is_replicated() const { return !replica_map.empty(); }
@@ -1411,13 +1412,13 @@ protected:
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  std::map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  std::map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const std::map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
+  compact_map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
+  compact_map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
+  const compact_map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
   void list_replicas(std::set<mds_rank_t>& ls) const {
-    for (std::map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
+    for (compact_map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
 	 p != replica_map.end();
-	 ++p) 
+	 ++p)
       ls.insert(p->first);
   }
 
@@ -1428,7 +1429,7 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<uint64_t, MDSInternalContextBase*>  waiting;
+  compact_multimap<uint64_t, MDSInternalContextBase*>  waiting;
 
  public:
   bool is_waiter_for(uint64_t mask, uint64_t min=0) {
@@ -1437,7 +1438,7 @@ protected:
       while (min & (min-1))  // if more than one bit is set
 	min &= min-1;        //  clear LSB
     }
-    for (multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
+    for (compact_multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
 	 p != waiting.end();
 	 ++p) {
       if (p->first & mask) return true;
@@ -1457,7 +1458,7 @@ protected:
   }
   virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
     if (waiting.empty()) return;
-    multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
+    compact_multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
