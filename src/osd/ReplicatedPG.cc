@@ -2202,8 +2202,6 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   ctx->op_t = pgbackend->get_transaction();
 
   if (op->may_write() || op->may_cache()) {
-    op->mark_started();
-
     // snap
     if (!(m->get_flags() & CEPH_OSD_FLAG_ENFORCE_SNAPC) &&
 	pool.info.is_pool_snaps_mode()) {
