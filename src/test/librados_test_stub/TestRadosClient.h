@@ -65,6 +65,9 @@ public:
 
   virtual int watch_flush() = 0;
 
+  virtual int blacklist_add(const std::string& client_address,
+			    uint32_t expire_seconds) = 0;
+
   TestWatchNotify &get_watch_notify() {
     return m_watch_notify;
   }
