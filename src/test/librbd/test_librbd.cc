@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "test/librados/test.h"
+#include "test/librbd/test_fixture.h"
 #include "common/errno.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
@@ -378,18 +379,18 @@ int test_ls_pp(librbd::RBD& rbd, librados::IoCtx& io_ctx, size_t num_expected, .
   if (r == -ENOENT)
     r = 0;
   EXPECT_TRUE(r >= 0);
-  cout << "num images is: " << names.size() << endl
-	    << "expected: " << num_expected << endl;
+  cout << "num images is: " << names.size() << std::endl
+	    << "expected: " << num_expected << std::endl;
   int num = names.size();
 
   for (i = 0; i < names.size(); i++) {
-    cout << "image: " << names[i] << endl;
+    cout << "image: " << names[i] << std::endl;
   }
 
   va_start(ap, num_expected);
   for (i = num_expected; i > 0; i--) {
     char *expected = va_arg(ap, char *);
-    cout << "expected = " << expected << endl;
+    cout << "expected = " << expected << std::endl;
     vector<string>::iterator listed_name = find(names.begin(), names.end(), string(expected));
     if (listed_name == names.end()) {
       ADD_FAILURE() << "Unable to find image " << expected;
@@ -581,11 +582,11 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
   vector<librbd::snap_info_t> snaps;
   r = image.snap_list(snaps);
   EXPECT_TRUE(r >= 0);
-  cout << "num snaps is: " << snaps.size() << endl
-	    << "expected: " << num_expected << endl;
+  cout << "num snaps is: " << snaps.size() << std::endl
+	    << "expected: " << num_expected << std::endl;
 
   for (i = 0; i < snaps.size(); i++) {
-    cout << "snap: " << snaps[i].name << endl;
+    cout << "snap: " << snaps[i].name << std::endl;
   }
 
   va_start(ap, num_expected);
@@ -597,7 +598,8 @@ int test_ls_snaps(librbd::Image& image, size_t num_expected, ...)
       if (snaps[j].name == "")
 	continue;
       if (strcmp(snaps[j].name.c_str(), expected) == 0) {
-	cout << "found " << snaps[j].name << " with size " << snaps[j].size << endl;
+	cout << "found " << snaps[j].name << " with size " << snaps[j].size
+	     << std::endl;
 	EXPECT_EQ(expected_size, snaps[j].size);
 	snaps[j].name = "";
 	found = 1;
@@ -935,12 +937,12 @@ TEST_F(TestLibRBD, TestEmptyDiscard)
 
 void simple_write_cb_pp(librbd::completion_t cb, void *arg)
 {
-  cout << "write completion cb called!" << endl;
+  cout << "write completion cb called!" << std::endl;
 }
 
 void simple_read_cb_pp(librbd::completion_t cb, void *arg)
 {
-  cout << "read completion cb called!" << endl;
+  cout << "read completion cb called!" << std::endl;
 }
 
 void aio_write_test_data(librbd::Image& image, const char *test_data,
@@ -2416,3 +2418,125 @@ TEST_F(TestLibRBD, TestPendingAio)
 
   rados_ioctx_destroy(ioctx);
 }
+
+TEST_F(TestLibRBD, SnapCreateViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.snap_create("snap1"));
+  ASSERT_TRUE(image1.snap_exists("snap1"));
+  ASSERT_TRUE(image2.snap_exists("snap1"));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+}
+
+TEST_F(TestLibRBD, FlattenViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string name = get_temp_image_name();
+  EXPECT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+			 name.c_str(), features, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.flatten());
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_PASSED(validate_object_map, image1);
+}
+
+TEST_F(TestLibRBD, ResizeViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.resize(0));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_PASSED(validate_object_map, image1);
+}
+
