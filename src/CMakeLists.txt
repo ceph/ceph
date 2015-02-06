@@ -648,13 +648,18 @@ if(${WITH_RBD})
     common/ContextCompletion.cc
     librbd/AioCompletion.cc
     librbd/AioRequest.cc
+    librbd/AsyncFlattenRequest.cc
     librbd/AsyncObjectThrottle.cc
+    librbd/AsyncRequest.cc
+    librbd/AsyncResizeRequest.cc
+    librbd/AsyncTrimRequest.cc
     librbd/CopyupRequest.cc
     librbd/ImageCtx.cc
     librbd/ImageWatcher.cc
     librbd/internal.cc
     librbd/librbd.cc
-    librbd/LibrbdWriteback.cc)
+    librbd/LibrbdWriteback.cc
+    librbd/ObjectMap.cc)
   add_library(librbd ${CEPH_SHARED} ${librbd_srcs}
     $<TARGET_OBJECTS:osdc_rbd_objs>
     $<TARGET_OBJECTS:common_util_obj>)
