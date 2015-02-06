@@ -1882,8 +1882,7 @@ class CephManager:
         Run cluster commands for the mds in order to get mds information
         check rank.
         """
-        out = self.raw_cluster_cmd('mds', 'dump', '--format=json')
-        j = json.loads(' '.join(out.splitlines()[1:]))
+        j = self.get_mds_status_all()
         # collate; for dup ids, larger gid wins.
         for info in j['info'].itervalues():
             if info['rank'] == rank:
