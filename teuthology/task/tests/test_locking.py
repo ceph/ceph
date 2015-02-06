@@ -1,5 +1,4 @@
 import pytest
-import re
 
 
 class TestLocking(object):
@@ -21,7 +20,4 @@ class TestLocking(object):
     def test_correct_machine_type(self, ctx, config):
         machine_type = ctx.machine_type
         for remote in ctx.cluster.remotes.iterkeys():
-            # gotta be a better way to get machine_type
-            # if not, should we move this to Remote?
-            remote_type = re.sub("[0-9]", "", remote.shortname)
-            assert remote_type in machine_type
+            assert remote.machine_type in machine_type

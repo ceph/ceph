@@ -1,7 +1,10 @@
 import requests
 import os
+import logging
 from .config import config
 from .misc import canonicalize_hostname
+
+log = logging.getLogger(__name__)
 
 
 def get_status(name):
@@ -11,4 +14,6 @@ def get_status(name):
     success = response.ok
     if success:
         return response.json()
+    log.warning(
+        "Failed to query lock server for status of {name}".format(name=name))
     return None
