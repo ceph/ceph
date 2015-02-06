@@ -792,14 +792,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       in->nlink = st->nlink;
     }
 
-    if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
-	st->xattrbl.length() &&
-	st->xattr_version > in->xattr_version) {
-      bufferlist::iterator p = st->xattrbl.begin();
-      ::decode(in->xattrs, p);
-      in->xattr_version = st->xattr_version;
-    }
-
     in->dirstat = st->dirstat;
     in->rstat = st->rstat;
 
@@ -821,6 +813,14 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   } else if (st->inline_version > in->inline_version) {
     in->inline_data = st->inline_data;
     in->inline_version = st->inline_version;
+  }
+
+  if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
+      st->xattrbl.length() &&
+      st->xattr_version > in->xattr_version) {
+    bufferlist::iterator p = st->xattrbl.begin();
+    ::decode(in->xattrs, p);
+    in->xattr_version = st->xattr_version;
   }
 
   // move me if/when version reflects fragtree changes.
@@ -3693,6 +3693,10 @@ void Client::put_snap_realm(SnapRealm *realm)
 		 << " " << realm->nref << " -> " << (realm->nref - 1) << dendl;
   if (--realm->nref == 0) {
     snap_realms.erase(realm->ino);
+    if (realm->pparent) {
+      realm->pparent->pchildren.erase(realm);
+      put_snap_realm(realm->pparent);
+    }
     delete realm;
   }
 }
@@ -9232,12 +9236,16 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
-  req->set_dentry(de);
   Inode *in;
   res = _lookup(dir, name, &in);
   if (res < 0)
     goto fail;
-  req->set_inode(in);
+  if (req->get_op() == CEPH_MDS_OP_RMDIR) {
+    req->set_dentry(de);
+    req->set_inode(in);
+  } else {
+    unlink(de, true, true);
+  }
 
   res = make_request(req, uid, gid);
 

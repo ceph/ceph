@@ -79,6 +79,9 @@ public:
   std::map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
                                            // rehydrate it without full MDCache
+  snapid_t                  oldest_snap;
+
+  InodeStore() : oldest_snap(CEPH_NOSNAP) { }
 
   /* Helpers */
   bool is_file() const    { return inode.is_file(); }
@@ -367,6 +370,7 @@ private:
 
 public:
   old_inode_t& cow_old_inode(snapid_t follows, bool cow_head);
+  void split_old_inode(snapid_t snap);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
@@ -427,6 +431,7 @@ public:
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
+  void split_need_snapflush(CInode *cowin, CInode *in);
 
 protected:
 

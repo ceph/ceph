@@ -278,10 +278,18 @@ void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client
 void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
   dout(10) << "remove_need_snapflush client." << client << " snapid " << snapid << " on " << snapin << dendl;
-  set<client_t>& clients = client_need_snapflush[snapid];
-  clients.erase(client);
-  if (clients.empty()) {
-    client_need_snapflush.erase(snapid);
+  map<snapid_t, std::set<client_t> >::iterator p = client_need_snapflush.find(snapid);
+  if (p == client_need_snapflush.end()) {
+    dout(10) << " snapid not found" << dendl;
+    return;
+  }
+  if (!p->second.count(client)) {
+    dout(10) << " client not found" << dendl;
+    return;
+  }
+  p->second.erase(client);
+  if (p->second.empty()) {
+    client_need_snapflush.erase(p);
     snapin->auth_unpin(this);
 
     if (client_need_snapflush.empty()) {
@@ -291,7 +299,17 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   }
 }
 
-
+void CInode::split_need_snapflush(CInode *cowin, CInode *in)
+{
+  dout(10) << "split_need_snapflush [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
+  for (map<snapid_t, set<client_t> >::iterator p = client_need_snapflush.lower_bound(cowin->first);
+       p != client_need_snapflush.end() && p->first <= cowin->last;
+       ++p) {
+    assert(!p->second.empty());
+    cowin->auth_pin(this);
+    in->auth_unpin(this);
+  }
+}
 
 void CInode::mark_dirty_rstat()
 {
@@ -371,7 +389,7 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
   } else {
     new_srnode = new sr_t();
     new_srnode->created = snapid;
-    new_srnode->current_parent_since = snapid;
+    new_srnode->current_parent_since = get_oldest_snap();
   }
   dout(10) << "project_snaprealm " << new_srnode << dendl;
   projected_nodes.back()->snapnode = new_srnode;
@@ -1193,7 +1211,7 @@ void CInode::clear_dirty_parent()
 
 void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 {
-  if (is_base() || is_dirty_parent())
+  if (is_base() || is_dirty_parent() || !is_auth())
     return;
 
   dout(10) << "verify_diri_backtrace" << dendl;
@@ -1231,11 +1249,12 @@ void InodeStore::encode_bare(bufferlist &bl) const
   ::encode(xattrs, bl);
   ::encode(snap_blob, bl);
   ::encode(old_inodes, bl);
+  ::encode(oldest_snap, bl);
 }
 
 void InodeStore::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   encode_bare(bl);
   ENCODE_FINISH(bl);
 }
@@ -1264,12 +1283,14 @@ void InodeStore::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
+  if (struct_v >= 5)
+    ::decode(oldest_snap, bl);
 }
 
 
 void InodeStore::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   decode_bare(bl, struct_v);
   DECODE_FINISH(bl);
 }
@@ -2367,7 +2388,7 @@ snapid_t CInode::get_oldest_snap()
   snapid_t t = first;
   if (!old_inodes.empty())
     t = old_inodes.begin()->second.first;
-  return MIN(t, first);
+  return MIN(t, oldest_snap);
 }
 
 old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
@@ -2381,6 +2402,9 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
   old.first = first;
   old.inode = *pi;
   old.xattrs = *px;
+
+  if (first < oldest_snap)
+    oldest_snap = first;
   
   dout(10) << " " << px->size() << " xattrs cowed, " << *px << dendl;
 
@@ -2396,6 +2420,19 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
 	   << *this << dendl;
 
   return old;
+}
+
+void CInode::split_old_inode(snapid_t snap)
+{
+  map<snapid_t, old_inode_t>::iterator p = old_inodes.lower_bound(snap);
+  assert(p != old_inodes.end() && p->second.first < snap);
+
+  old_inode_t &old = old_inodes[snap - 1];
+  old = p->second;
+
+  p->second.first = snap;
+  dout(10) << "split_old_inode " << "[" << old.first << "," << p->first
+	   << "] to [" << snap << "," << p->first << "] on " << *this << dendl;
 }
 
 void CInode::pre_cow_old_inode()

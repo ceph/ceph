@@ -64,6 +64,35 @@ void SnapRealm::add_open_past_parent(SnapRealm *parent)
   parent->inode->get(CInode::PIN_PASTSNAPPARENT);
 }
 
+struct C_SR_RetryOpenParents : public MDSInternalContextBase {
+  SnapRealm *sr;
+  snapid_t first, last, parent_last;
+  inodeno_t parent;
+  MDSInternalContextBase* fin;
+  C_SR_RetryOpenParents(SnapRealm *s, snapid_t f, snapid_t l, snapid_t pl,
+			inodeno_t p, MDSInternalContextBase *c) :
+    sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {}
+  MDS *get_mds() { return sr->mdcache->mds; }
+  void finish(int r) {
+    if (r < 0)
+      sr->_remove_missing_parent(parent_last, parent, r);
+    if (sr->_open_parents(fin, first, last))
+      fin->complete(0);
+  }
+};
+
+void SnapRealm::_remove_missing_parent(snapid_t snapid, inodeno_t parent, int err)
+{
+  map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.find(snapid);
+  if (p != srnode.past_parents.end()) {
+    dout(10) << __func__ << " " << parent << " [" << p->second.first << ","
+	     << p->first << "]  errno " << err << dendl;
+    srnode.past_parents.erase(p);
+  } else {
+    dout(10) << __func__ << " " << parent << " not found" << dendl;
+  }
+}
+
 bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, snapid_t last)
 {
   dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
@@ -89,15 +118,17 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
 	       << p->second.ino << dendl;
       CInode *parent = mdcache->get_inode(p->second.ino);
       if (!parent) {
-	mdcache->open_ino(p->second.ino, mdcache->mds->mdsmap->get_metadata_pool(), finish);
+	C_SR_RetryOpenParents *fin = new C_SR_RetryOpenParents(this, first, last, p->first,
+							       p->second.ino, finish);
+	mdcache->open_ino(p->second.ino, mdcache->mds->mdsmap->get_metadata_pool(), fin);
 	return false;
       }
       assert(parent->snaprealm);  // hmm!
+      if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
+	return false;
       if (!open_past_parents.count(p->second.ino)) {
 	add_open_past_parent(parent->snaprealm);
       }
-      if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
-	return false;
     }
   }
 
@@ -355,7 +386,7 @@ void SnapRealm::split_at(SnapRealm *child)
   dout(10) << "split_at " << *child 
 	   << " on " << *child->inode << dendl;
 
-  if (!child->inode->is_dir()) {
+  if (inode->is_mdsdir() || !child->inode->is_dir()) {
     // it's not a dir.
     if (child->inode->containing_realm) {
       //  - no open children.
