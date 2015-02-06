@@ -3202,12 +3202,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // encode
   e.fragtree.nsplits = dirfragtree._splits.size();
   ::encode(e, bl);
-  for (map<frag_t,int32_t>::iterator p = dirfragtree._splits.begin();
-       p != dirfragtree._splits.end();
-       ++p) {
-    ::encode(p->first, bl);
-    ::encode(p->second, bl);
-  }
+
+  dirfragtree.encode_nohead(bl);
+
   ::encode(symlink, bl);
   if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
     i = pfile ? pi : oi;
