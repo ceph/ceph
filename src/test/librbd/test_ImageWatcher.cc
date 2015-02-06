@@ -282,15 +282,26 @@ TEST_F(TestImageWatcher, TryLockNotifyAnnounceLocked) {
 TEST_F(TestImageWatcher, TryLockWithTimedOutOwner) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  // use new Rados connection due to blacklisting
+  librados::Rados rados;
+  ASSERT_EQ("", connect_cluster_pp(rados));
 
+  librados::IoCtx io_ctx;
+  ASSERT_EQ(0, rados.ioctx_create(_pool_name.c_str(), io_ctx));
+  librbd::ImageCtx *ictx = new librbd::ImageCtx(m_image_name.c_str(), "", NULL,
+					        io_ctx, false);
+  ASSERT_EQ(0, librbd::open_image(ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE, "auto 1234"));
+  librbd::close_image(ictx);
+  io_ctx.close();
 
   // no watcher on the locked image means we can break the lock
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
   RWLock::WLocker l(ictx->owner_lock);
   ASSERT_EQ(0, ictx->image_watcher->try_lock());
   ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+
+  rados.test_blacklist_self(false);
 }
 
 TEST_F(TestImageWatcher, TryLockWithUserExclusiveLock) {
