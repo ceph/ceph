@@ -864,6 +864,8 @@ OPTION(rbd_readahead_max_bytes, OPT_LONGLONG, 512 * 1024) // set to 0 to disable
 OPTION(rbd_readahead_disable_after_bytes, OPT_LONGLONG, 50 * 1024 * 1024) // how many bytes are read in total before readahead is disabled
 OPTION(rbd_clone_copy_on_read, OPT_BOOL, false)
 OPTION(rbd_object_map, OPT_BOOL, false) // whether to enable the RBD object map
+OPTION(rbd_blacklist_on_break_lock, OPT_BOOL, true) // whether to blacklist clients whose lock was broken
+OPTION(rbd_blacklist_expire_seconds, OPT_INT, 0) // number of seconds to blacklist - set to 0 for OSD default
 
 /*
  * The following options change the behavior for librbd's image creation methods that
