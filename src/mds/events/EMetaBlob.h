@@ -69,6 +69,7 @@ public:
     fragtree_t dirfragtree;
     map<string,bufferptr> xattrs;
     string symlink;
+    snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state;
     typedef map<snapid_t, old_inode_t> old_inodes_t;
@@ -80,18 +81,18 @@ public:
     fullbit(const string& d, snapid_t df, snapid_t dl, 
 	    version_t v, const inode_t& i, const fragtree_t &dft, 
 	    const map<string,bufferptr> &xa, const string& sym,
-	    const bufferlist &sbl, __u8 st,
+	    snapid_t os, const bufferlist &sbl, __u8 st,
 	    const old_inodes_t *oi = NULL) :
-      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa), state(st)
+      dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
+      oldest_snap(os), state(st)
     {
       if (i.is_symlink())
 	symlink = sym;
-      if (i.is_dir()) {
+      if (i.is_dir())
 	dirfragtree = dft;
-	snapbl = sbl;
-      }
       if (oi)
 	old_inodes = *oi;
+      snapbl = sbl;
     }
     fullbit(bufferlist::iterator &p) {
       decode(p);
@@ -440,14 +441,14 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(), 
-                                                         dn->first, dn->last,
-                                                         dn->get_projected_version(), 
-                                                         *pi, in->dirfragtree,
-                                                         *in->get_projected_xattrs(),
-                                                         in->symlink, snapbl,
-                                                         state,
-                                                         &in->old_inodes)));
+    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(),
+							 dn->first, dn->last,
+							 dn->get_projected_version(),
+							 *pi, in->dirfragtree,
+							 *in->get_projected_xattrs(),
+							 in->symlink,
+							 in->oldest_snap, snapbl,
+							 state, &in->old_inodes)));
   }
 
   // convenience: primary or remote?  figure it out.
@@ -502,9 +503,10 @@ private:
 
     string empty;
     roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, *pi,
-							      *pdft, *px, in->symlink, snapbl,
-							      dirty ? fullbit::STATE_DIRTY : 0,
-							      &in->old_inodes)));
+							  *pdft, *px, in->symlink,
+							  in->oldest_snap, snapbl,
+							  dirty ? fullbit::STATE_DIRTY : 0,
+							  &in->old_inodes)));
   }
   
   dirlump& add_dir(CDir *dir, bool dirty, bool complete=false) {

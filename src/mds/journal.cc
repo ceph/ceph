@@ -397,7 +397,7 @@ void EMetaBlob::update_segment(LogSegment *ls)
 // EMetaBlob::fullbit
 
 void EMetaBlob::fullbit::encode(bufferlist& bl) const {
-  ENCODE_START(6, 5, bl);
+  ENCODE_START(8, 5, bl);
   ::encode(dn, bl);
   ::encode(dnfirst, bl);
   ::encode(dnlast, bl);
@@ -417,11 +417,14 @@ void EMetaBlob::fullbit::encode(bufferlist& bl) const {
     ::encode(true, bl);
     ::encode(old_inodes, bl);
   }
+  if (!inode.is_dir())
+    ::encode(snapbl, bl);
+  ::encode(oldest_snap, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
   ::decode(dn, bl);
   ::decode(dnfirst, bl);
   ::decode(dnlast, bl);
@@ -458,6 +461,15 @@ void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
       ::decode(old_inodes, bl);
     }
   }
+  if (!inode.is_dir()) {
+    if (struct_v >= 7)
+      ::decode(snapbl, bl);
+  }
+  if (struct_v >= 8)
+    ::decode(oldest_snap, bl);
+  else
+    oldest_snap = CEPH_NOSNAP;
+
   DECODE_FINISH(bl);
 }
 
@@ -510,7 +522,7 @@ void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
   map<string,bufferptr> empty_xattrs;
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
-                                inode, fragtree, empty_xattrs, "", empty_snapbl,
+                                inode, fragtree, empty_xattrs, "", 0, empty_snapbl,
                                 false, NULL);
   ls.push_back(sample);
 }
@@ -538,17 +550,17 @@ void EMetaBlob::fullbit::update_inode(MDS *mds, CInode *in)
 	}
       }
     }
-
-    /*
-     * we can do this before linking hte inode bc the split_at would
-     * be a no-op.. we have no children (namely open snaprealms) to
-     * divy up 
-     */
-    in->decode_snap_blob(snapbl);  
   } else if (in->inode.is_symlink()) {
     in->symlink = symlink;
   }
   in->old_inodes = old_inodes;
+  /*
+   * we can do this before linking hte inode bc the split_at would
+   * be a no-op.. we have no children (namely open snaprealms) to
+   * divy up
+   */
+  in->oldest_snap = oldest_snap;
+  in->decode_snap_blob(snapbl);
 }
 
 // EMetaBlob::remotebit
@@ -1252,6 +1264,7 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
 	p->update_inode(mds, in);
+	in->first = p->dnfirst;
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
 	  dout(10) << "EMetaBlob.replay unlinking " << *in << dendl;
 	  unlinked[in] = in->get_parent_dir();
