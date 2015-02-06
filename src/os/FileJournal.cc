@@ -588,8 +588,22 @@ int FileJournal::dump(ostream& out)
   read_pos = header.start;
 
   JSONFormatter f(true);
+  f.open_object_section("journal");
 
-  f.open_array_section("journal");
+  f.open_object_section("header");
+  f.dump_unsigned("flags", header.flags);
+  ostringstream os;
+  os << header.fsid;
+  f.dump_string("fsid", os.str());
+  f.dump_unsigned("block_size", header.block_size);
+  f.dump_unsigned("alignment", header.alignment);
+  f.dump_int("max_size", header.max_size);
+  f.dump_int("start", header.start);
+  f.dump_unsigned("committed_up_to", header.committed_up_to);
+  f.dump_unsigned("start_seq", header.start_seq);
+  f.close_section();
+
+  f.open_array_section("entries");
   uint64_t seq = 0;
   while (1) {
     bufferlist bl;
@@ -618,6 +632,7 @@ int FileJournal::dump(ostream& out)
     f.close_section();
   }
 
+  f.close_section();
   f.close_section();
   f.flush(out);
   dout(10) << "dump finish" << dendl;
