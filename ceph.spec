@@ -238,6 +238,7 @@ Requires:       apache2-mod_fastcgi
 BuildRequires:  expat-devel
 BuildRequires:  fcgi-devel
 Requires:       mod_fcgid
+Requires(post): %{name} = %{version}-%{release}
 
 %endif
 %description radosgw

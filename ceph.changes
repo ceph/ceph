@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Fri Feb  6 09:58:42 UTC 2015 - tbehrens@suse.com
+
+- ceph-radosgw needs the ceph main package at postinstall, e.g.
+  due to systemd unit file dependencies. It is also probably a
+  good idea to have the other lot of in-cluster support binaries
+  around on such a host. 
+
+-------------------------------------------------------------------
 Thu Feb  5 15:22:17 UTC 2015 - lmb@suse.com
 
 - Correct license statement for ceph-test package
