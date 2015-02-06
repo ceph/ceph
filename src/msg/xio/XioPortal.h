@@ -158,9 +158,13 @@ public:
   inline void release_xio_rsp(XioRsp* xrsp) {
     struct xio_msg *msg = xrsp->dequeue();
     struct xio_msg *next_msg = NULL;
+    int code;
     while (msg) {
       next_msg = static_cast<struct xio_msg *>(msg->user_context);
-      int code = xio_release_msg(msg);
+      if (unlikely(!xrsp->xcon->conn || !xrsp->xcon->is_connected()))
+        code = ENOTCONN;
+      else
+        code = xio_release_msg(msg);
       if (unlikely(code)) {
 	/* very unlikely, so log it */
 	xrsp->xcon->msg_release_fail(msg, code);
@@ -344,30 +348,30 @@ private:
 
 public:
   XioPortals(Messenger *msgr, int _n) : p_vec(NULL)
-    {
-      /* portal0 */
-      portals.push_back(new XioPortal(msgr));
-      last_use = 0;
+  {
+    /* portal0 */
+    portals.push_back(new XioPortal(msgr));
+    last_use = 0;
 
-      /* enforce at least two portals if bind */
-      if (_n < 2)
-        _n = 2;
-      n = _n;
+    /* enforce at least two portals if bind */
+    if (_n < 2)
+      _n = 2;
+    n = _n;
 
-      /* additional portals allocated on bind() */
-    }
+    /* additional portals allocated on bind() */
+  }
 
   vector<XioPortal*>& get() { return portals; }
 
   const char **get_vec()
-    {
-      return (const char **) p_vec;
-    }
+  {
+    return (const char **) p_vec;
+  }
 
   int get_portals_len()
-    {
-      return n;
-    }
+  {
+    return n;
+  }
 
   int get_last_use()
   {
@@ -378,78 +382,76 @@ public:
   }
 
   XioPortal* get_portal0()
-    {
-      return portals[0];
-    }
+  {
+    return portals[0];
+  }
 
   int bind(struct xio_session_ops *ops, const string& base_uri,
 	   uint16_t port, uint16_t *port0);
 
-    int accept(struct xio_session *session,
-		 struct xio_new_session_req *req,
-		 void *cb_user_context)
-    {
-      const char **portals_vec = get_vec();
-      int pix = get_last_use();
+  int accept(struct xio_session *session,
+	     struct xio_new_session_req *req,
+	     void *cb_user_context)
+  {
+    const char **portals_vec = get_vec();
+    int pix = get_last_use();
 
-      return xio_accept(session,
-			(const char **)&(portals_vec[pix]),
-			1, NULL, 0);
-    }
+    return xio_accept(session,
+		      (const char **)&(portals_vec[pix]),
+		      1, NULL, 0);
+  }
 
   void start()
-    {
-      XioPortal *portal;
-      int p_ix, nportals = portals.size();
+  {
+    XioPortal *portal;
+    int p_ix, nportals = portals.size();
 
-      /* portal_0 is the new-session handler, portal_1+ terminate
-       * active sessions */
+    /* portal_0 is the new-session handler, portal_1+ terminate
+     * active sessions */
 
-      p_vec = new char*[(nportals-1)];
-      for (p_ix = 1; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	/* shift left */
-	p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
-	  portal->portal_id;
+    p_vec = new char*[(nportals-1)];
+    for (p_ix = 1; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      /* shift left */
+      p_vec[(p_ix-1)] = (char*) /* portal->xio_uri.c_str() */
+			portal->portal_id;
       }
 
-      for (p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->create();
-      }
+    for (p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->create();
     }
+  }
 
   void shutdown()
-    {
-      XioPortal *portal;
-      int nportals = portals.size();
-      for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->shutdown();
-      }
+  {
+    XioPortal *portal;
+    int nportals = portals.size();
+    for (int p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->shutdown();
     }
+  }
 
   void join()
-    {
-      XioPortal *portal;
-      int nportals = portals.size();
-      for (int p_ix = 0; p_ix < nportals; ++p_ix) {
-	portal = portals[p_ix];
-	portal->join();
-      }
+  {
+    XioPortal *portal;
+    int nportals = portals.size();
+    for (int p_ix = 0; p_ix < nportals; ++p_ix) {
+      portal = portals[p_ix];
+      portal->join();
     }
+  }
 
   ~XioPortals()
-    {
-      int nportals = portals.size();
-      for (int ix = 0; ix < nportals; ++ix) {
-	delete(portals[ix]);
-      }
-      portals.clear();
-      if (p_vec) {
-	delete[] p_vec;
-      }
-    }
+  {
+    int nportals = portals.size();
+    for (int ix = 0; ix < nportals; ++ix)
+      delete(portals[ix]);
+    portals.clear();
+    if (p_vec)
+      delete[] p_vec;
+  }
 };
 
 #endif /* XIO_PORTAL_H */
