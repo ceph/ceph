@@ -1,4 +1,9 @@
 -------------------------------------------------------------------
+Fri Feb  6 10:02:54 UTC 2015 - tbehrens@suse.com
+
+- Coherent dependencies to ceph main package
+
+-------------------------------------------------------------------
 Fri Feb  6 09:58:42 UTC 2015 - tbehrens@suse.com
 
 - ceph-radosgw needs the ceph main package at postinstall, e.g.

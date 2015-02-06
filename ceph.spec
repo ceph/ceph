@@ -251,7 +251,7 @@ conjunction with any FastCGI capable web server.
 Summary:        OCF-compliant Resource Agents for Ceph Daemons
 License:        GPL-2.0 and LGPL-2.1
 Group:          System/Filesystems
-Requires:       %{name} = %{version}
+Requires:       %{name} = %{version}-%{release}
 Requires:       resource-agents
 
 %description resource-agents
