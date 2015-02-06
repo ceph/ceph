@@ -453,6 +453,22 @@ inline void decode(std::set<T>& s, bufferlist::iterator& p)
   }
 }
 
+template<class T>
+inline void encode_nohead(const std::set<T>& s, bufferlist& bl)
+{
+  for (typename std::set<T>::const_iterator p = s.begin(); p != s.end(); ++p)
+    encode(*p, bl);
+}
+template<class T>
+inline void decode_nohead(int len, std::set<T>& s, bufferlist::iterator& p)
+{
+  for (int i=0; i<len; i++) {
+    T v;
+    decode(v, p);
+    s.insert(v);
+  }
+}
+
 // multiset
 template<class T>
 inline void encode(const std::multiset<T>& s, bufferlist& bl)
