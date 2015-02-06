@@ -58,8 +58,55 @@ struct generic_attr generic_attrs[] = {
   { NULL, NULL },
 };
 
+struct rgw_http_status_code {
+  int code;
+  const char *name;
+};
+
+const static struct rgw_http_status_code http_codes[] = {
+  { 100, "Continue" },
+  { 200, "OK" },
+  { 201, "Created" },
+  { 202, "Accepted" },
+  { 204, "No Content" },
+  { 205, "Reset Content" },
+  { 206, "Partial Content" },
+  { 207, "Multi Status" },
+  { 208, "Already Reported" },
+  { 300, "Multiple Choices" },
+  { 302, "Found" },
+  { 303, "See Other" },
+  { 304, "Not Modified" },
+  { 305, "User Proxy" },
+  { 306, "Switch Proxy" },
+  { 307, "Temporary Redirect" },
+  { 308, "Permanent Redirect" },
+  { 400, "Bad Request" },
+  { 401, "Unauthorized" },
+  { 402, "Payment Required" },
+  { 403, "Forbidden" },
+  { 404, "Not Found" },
+  { 405, "Method Not Allowed" },
+  { 406, "Not Acceptable" },
+  { 407, "Proxy Authentication Required" },
+  { 408, "Request Timeout" },
+  { 409, "Conflict" },
+  { 410, "Gone" },
+  { 411, "Length Required" },
+  { 412, "Precondition Failed" },
+  { 413, "Request Entity Too Large" },
+  { 414, "Request-URI Too Long" },
+  { 415, "Unsupported Media Type" },
+  { 416, "Requested Range Not Satisfiable" },
+  { 417, "Expectation Failed" },
+  { 422, "Unprocessable Entity" },
+  { 500, "Internal Server Error" },
+  { 0, NULL },
+};
+
 map<string, string> rgw_to_http_attrs;
 static map<string, string> generic_attrs_map;
+map<int, const char *> http_status_names;
 
 /*
  * make attrs look_like_this
@@ -159,11 +206,15 @@ void rgw_rest_init(CephContext *cct)
 
     generic_attrs_map[http_header] = rgw_attr;
   }
+
+  for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
+    http_status_names[h->code] = h->name;
+  }
 }
 
-static void dump_status(struct req_state *s, const char *status)
+static void dump_status(struct req_state *s, const char *status, const char *status_name)
 {
-  int r = s->cio->print("Status: %s\n", status);
+  int r = s->cio->print("Status: %s %s\n", status, status_name);
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: s->cio->print() returned err=" << r << dendl;
   }
@@ -222,14 +273,14 @@ void dump_errno(struct req_state *s)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", s->err.http_ret);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_errno(struct req_state *s, int err)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%d", err);
-  dump_status(s, buf);
+  dump_status(s, buf, http_status_names[s->err.http_ret]);
 }
 
 void dump_content_length(struct req_state *s, uint64_t len)
@@ -461,7 +512,7 @@ void abort_early(struct req_state *s, RGWOp *op, int err_no)
 
 void dump_continue(struct req_state *s)
 {
-  dump_status(s, "100");
+  dump_status(s, "100", "Continue");
   s->cio->flush();
 }
 
