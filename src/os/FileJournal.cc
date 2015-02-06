@@ -1778,7 +1778,7 @@ bool FileJournal::read_entry(
   }
 
   stringstream errss;
-  if (seq < header.committed_up_to) {
+  if (seq && seq < header.committed_up_to) {
     derr << "Unable to read past sequence " << seq
 	 << " but header indicates the journal has committed up through "
 	 << header.committed_up_to << ", journal is corrupt" << dendl;
