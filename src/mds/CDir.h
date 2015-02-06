@@ -428,10 +428,7 @@ private:
   // for giving to clients
   void get_dist_spec(std::set<mds_rank_t>& ls, mds_rank_t auth) {
     if (is_rep()) {
-      for (std::map<mds_rank_t,unsigned>::iterator p = replicas_begin();
-	   p != replicas_end(); 
-	   ++p)
-	ls.insert(p->first);
+      list_replicas(ls);
       if (!ls.empty()) 
 	ls.insert(auth);
     }

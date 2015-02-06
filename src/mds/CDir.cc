@@ -1029,8 +1029,8 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       steal_dentry(dir->items.begin()->second);
     
     // merge replica map
-    for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-	 p != dir->replica_map.end();
+    for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+	 p != dir->replicas_end();
 	 ++p) {
       unsigned cur = replica_map[p->first];
       if (p->second > cur)
@@ -2720,8 +2720,9 @@ void CDir::dump(Formatter *f) const
   f->open_object_section("auth_state");
   {
     f->open_object_section("replica_map");
-    for (std::map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
-         i != replica_map.end(); ++i) {
+    for (compact_map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
+	 i != replica_map.end();
+	 ++i) {
       std::ostringstream rank_str;
       rank_str << i->first;
       f->dump_int(rank_str.str().c_str(), i->second);
