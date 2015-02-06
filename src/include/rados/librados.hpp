@@ -1108,6 +1108,9 @@ namespace librados
     /// get/wait for the most recent osdmap
     int wait_for_latest_osdmap();
 
+    int blacklist_add(const std::string& client_address,
+                      uint32_t expire_seconds);
+
     /*
      * pool aio
      *
