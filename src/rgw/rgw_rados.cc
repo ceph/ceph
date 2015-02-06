@@ -4246,7 +4246,7 @@ int RGWRados::Object::Delete::delete_obj()
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0 || r == -ENOENT) {
-    r = index_op.complete_del(poolid, ref.ioctx.get_last_version());
+    r = index_op.complete_del(poolid, ref.ioctx.get_last_version(), params.remove_objs);
   } else {
     int ret = index_op.cancel();
     if (ret < 0) {
@@ -4323,7 +4323,7 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   RGWRados::Bucket bop(this, bucket);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
 
-  int r = index_op.complete_del(-1 /* pool */, 0);
+  int r = index_op.complete_del(-1 /* pool */, 0, NULL);
 
   return r;
 }
@@ -5019,7 +5019,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch, uint
   return ret;
 }
 
-int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch)
+int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch,
+                                                list<rgw_obj_key> *remove_objs)
 {
   RGWRados *store = target->get_store();
   BucketShard *bs;
@@ -5028,7 +5029,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(int64_t poolid, uint64_t epoch)
     ldout(store->ctx(), 5) << "failed to get BucketShard object: ret=" << ret << dendl;
     return ret;
   }
-  return store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, bilog_flags);
+  return store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, remove_objs, bilog_flags);
 }
 
 
@@ -7401,11 +7402,13 @@ int RGWRados::cls_obj_complete_add(BucketShard& bs, string& tag,
 
 int RGWRados::cls_obj_complete_del(BucketShard& bs, string& tag,
                                    int64_t pool, uint64_t epoch,
-                                   rgw_obj& obj, uint16_t bilog_flags)
+                                   rgw_obj& obj,
+                                   list<rgw_obj_key> *remove_objs,
+                                   uint16_t bilog_flags)
 {
   RGWObjEnt ent;
   obj.get_index_key(&ent.key);
-  return cls_obj_complete_op(bs, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, NULL, bilog_flags);
+  return cls_obj_complete_op(bs, CLS_RGW_OP_DEL, tag, pool, epoch, ent, RGW_OBJ_CATEGORY_NONE, remove_objs, bilog_flags);
 }
 
 int RGWRados::cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags)
