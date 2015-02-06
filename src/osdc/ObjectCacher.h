@@ -458,6 +458,7 @@ class ObjectCacher {
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call);
+  void retry_waiting_reads();
 
  public:
   void bh_read_finish(int64_t poolid, sobject_t oid, tid_t tid,
