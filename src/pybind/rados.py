@@ -5,7 +5,7 @@ Copyright 2011, Hannu Valtonen <hannu.valtonen@ormod.com>
 """
 from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_char, c_int, c_long, \
     c_ulong, create_string_buffer, byref, Structure, c_uint64, c_ubyte, \
-    pointer, CFUNCTYPE, c_int64, c_uint8
+    pointer, CFUNCTYPE, c_int64, c_uint32, c_uint8
 from ctypes.util import find_library
 import ctypes
 import errno
@@ -765,6 +765,24 @@ Rados object in state %s." % self.state)
     def wait_for_latest_osdmap(self):
         self.require_state("connected")
         return run_in_thread(self.librados.rados_wait_for_latest_osdmap, (self.cluster,))
+
+    def blacklist_add(self, client_address, expire_seconds = 0):
+        """
+        Blacklist a client from the OSDs
+
+        :param client_address: client address
+        :type client_address: str
+        :param expire_seconds: number of seconds to blacklist
+        :type expire_seconds: int
+
+        :raises: :class:`Error`
+        """
+        self.require_state("connected")
+        ret = run_in_thread(self.librados.rados_blacklist_add,
+                            (self.cluster, c_char_p(client_address),
+                             c_uint32(expire_seconds)))
+        if ret < 0:
+            raise make_ex(ret, "error blacklisting client '%s'" % client_address)
 
 class ObjectIterator(object):
     """rados.Ioctx Object iterator"""

@@ -2126,6 +2126,12 @@ int librados::Rados::wait_for_latest_osdmap()
   return client->wait_for_latest_osdmap();
 }
 
+int librados::Rados::blacklist_add(const std::string& client_address,
+				   uint32_t expire_seconds)
+{
+  return client->blacklist_add(client_address, expire_seconds);
+}
+
 librados::PoolAsyncCompletion *librados::Rados::pool_async_create_completion()
 {
   PoolAsyncCompletionImpl *c = new PoolAsyncCompletionImpl;
@@ -2469,6 +2475,13 @@ extern "C" int rados_wait_for_latest_osdmap(rados_t cluster)
   int retval = radosp->wait_for_latest_osdmap();
   tracepoint(librados, rados_wait_for_latest_osdmap_exit, retval);
   return retval;
+}
+
+extern "C" int rados_blacklist_add(rados_t cluster, char *client_address,
+				   uint32_t expire_seconds)
+{
+  librados::RadosClient *radosp = (librados::RadosClient *)cluster;
+  return radosp->blacklist_add(client_address, expire_seconds);
 }
 
 extern "C" int rados_pool_list(rados_t cluster, char *buf, size_t len)

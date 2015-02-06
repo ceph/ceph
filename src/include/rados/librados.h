@@ -2797,6 +2797,19 @@ CEPH_RADOS_API ssize_t rados_list_lockers(rados_ioctx_t io, const char *o,
 CEPH_RADOS_API int rados_break_lock(rados_ioctx_t io, const char *o,
                                     const char *name, const char *client,
                                     const char *cookie);
+
+/**
+ * Blacklists the specified client from the OSDs
+ *
+ * @param cluster cluster handle
+ * @param client_address client address
+ * @param expire_seconds number of seconds to blacklist (0 for default)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_blacklist_add(rados_t cluster,
+				       char *client_address,
+				       uint32_t expire_seconds);
+
 /**
  * @defgroup librados_h_commands Mon/OSD/PG Commands
  *
