@@ -505,7 +505,8 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   if (!old_inodes.empty()) {
     f->open_array_section("old inodes");
     for (old_inodes_t::const_iterator iter = old_inodes.begin();
-	iter != old_inodes.end(); ++iter) {
+	 iter != old_inodes.end();
+	 ++iter) {
       f->open_object_section("inode");
       f->dump_int("snapid", iter->first);
       iter->second.dump(f);
