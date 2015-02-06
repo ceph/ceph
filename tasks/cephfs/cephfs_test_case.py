@@ -71,9 +71,9 @@ class CephFSTestCase(unittest.TestCase):
         self.configs_set.add((subsys, key))
         self.fs.set_ceph_conf(subsys, key, value)
 
-    def assert_session_count(self, expected, ls_data=None):
+    def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
-            ls_data = self.fs.mds_asok(['session', 'ls'])
+            ls_data = self.fs.mds_asok(['session', 'ls'], mds_id=mds_id)
 
         self.assertEqual(expected, len(ls_data), "Expected {0} sessions, found {1}".format(
             expected, len(ls_data)

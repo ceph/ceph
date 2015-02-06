@@ -411,13 +411,13 @@ def task(ctx, config):
 
     run_tests(ctx, config, TestClientRecovery, {
         "mds_reconnect_timeout": int(fs.mds_asok(
-            ['config', 'get', 'mds_reconnect_timeout']
+            ['config', 'get', 'mds_reconnect_timeout'], fs.mds_ids[0]
         )['mds_reconnect_timeout']),
         "mds_session_timeout": int(fs.mds_asok(
-            ['config', 'get', 'mds_session_timeout']
+            ['config', 'get', 'mds_session_timeout'], fs.mds_ids[0]
         )['mds_session_timeout']),
         "ms_max_backoff": int(fs.mds_asok(
-            ['config', 'get', 'ms_max_backoff']
+            ['config', 'get', 'ms_max_backoff'], fs.mds_ids[0]
         )['ms_max_backoff']),
         "fs": fs,
         "mount_a": mount_a,
