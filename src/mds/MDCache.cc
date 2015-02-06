@@ -1873,7 +1873,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       } else {
 	// our life is easier here because old_inodes is not sparse
 	// (although it may not begin at snapid 1)
-	map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
+	compact_map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
 	if (p == pin->old_inodes.end()) {
 	  dout(10) << " no old_inode <= " << last << ", done." << dendl;
 	  break;
