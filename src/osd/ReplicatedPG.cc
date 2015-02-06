@@ -2086,6 +2086,8 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
     in_progress_proxy_reads.erase(oid);
   }
 
+  osd->logger->inc(l_osd_tier_proxy_read);
+
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   OpContext *ctx = new OpContext(op, m->get_reqid(), prdop->ops, this);
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
