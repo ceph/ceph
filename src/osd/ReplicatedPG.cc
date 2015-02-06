@@ -1450,8 +1450,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
    * We can enable degraded writes on ec pools by blocking such a write
    * to a peer until all previous writes have completed.  For now, we
    * will simply block them.
+   *
+   * We also block if our peers do not support DEGRADED_WRITES.
    */
-  if (pool.info.ec_pool() && write_ordered && is_degraded_object(head)) {
+  if ((pool.info.ec_pool() ||
+       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES)) &&
+      write_ordered &&
+      is_degraded_object(head)) {
     wait_for_degraded_object(head, op);
     return;
   }

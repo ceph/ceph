@@ -5471,6 +5471,10 @@ int Client::fsetattr(int fd, struct stat *attr, int mask)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
+#if defined(__linux__) && defined(O_PATH)
+  if (f->flags & O_PATH)
+    return -EBADF;
+#endif
   return _setattr(f->inode, attr, mask); 
 }
 
