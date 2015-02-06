@@ -616,10 +616,10 @@ int FileJournal::dump(ostream& out)
     }
     f.close_section();
     f.close_section();
-    f.flush(cout);
   }
 
   f.close_section();
+  f.flush(out);
   dout(10) << "dump finish" << dendl;
   return 0;
 }
