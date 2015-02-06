@@ -18,6 +18,7 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <pthread.h>
 #include <errno.h>
 
@@ -654,6 +655,32 @@ int librados::RadosClient::pool_delete_async(const char *name, PoolAsyncCompleti
 void librados::RadosClient::blacklist_self(bool set) {
   Mutex::Locker l(lock);
   objecter->blacklist_self(set);
+}
+
+int librados::RadosClient::blacklist_add(const string& client_address,
+					 uint32_t expire_seconds)
+{
+  entity_addr_t addr;
+  if (!addr.parse(client_address.c_str(), 0)) {
+    lderr(cct) << "unable to parse address " << client_address << dendl;
+    return -EINVAL;
+  }
+
+  std::stringstream cmd;
+  cmd << "{"
+      << "\"prefix\": \"osd blacklist\", "
+      << "\"blacklistop\": \"add\", "
+      << "\"addr\": \"" << client_address << "\"";
+  if (expire_seconds != 0) {
+    cmd << ", \"expire\": " << expire_seconds << ".0";
+  }
+  cmd << "}";
+
+  std::vector<std::string> cmds;
+  cmds.push_back(cmd.str());
+  bufferlist inbl;
+  int r = mon_command(cmds, inbl, NULL, NULL);
+  return r;
 }
 
 int librados::RadosClient::mon_command(const vector<string>& cmd,
