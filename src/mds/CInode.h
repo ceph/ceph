@@ -70,18 +70,16 @@ extern int num_cinode_locks;
  * handle CInodes from the backing store without hitting all
  * the business logic in CInode proper.
  */
-class InodeStore {
+class InodeStoreBase {
 public:
   inode_t                    inode;        // the inode itself
   std::string                symlink;      // symlink dest, if symlink
   std::map<std::string, bufferptr> xattrs;
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  std::map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
-  bufferlist		     snap_blob;    // Encoded copy of SnapRealm, because we can't
-                                           // rehydrate it without full MDCache
+  compact_map<snapid_t, old_inode_t> old_inodes;   // key = last, value.first = first
   snapid_t                  oldest_snap;
 
-  InodeStore() : oldest_snap(CEPH_NOSNAP) { }
+  InodeStoreBase() : oldest_snap(CEPH_NOSNAP) { }
 
   /* Helpers */
   bool is_file() const    { return inode.is_file(); }
@@ -90,20 +88,37 @@ public:
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void encode(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void decode(bufferlist::iterator &bl, bufferlist& snap_blob);
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
-  void encode_bare(bufferlist &bl) const;
-  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=5);
+  void encode_bare(bufferlist &bl, const bufferlist *snap_blob=NULL) const;
+  void decode_bare(bufferlist::iterator &bl, bufferlist &snap_blob, __u8 struct_v=5);
+};
 
+class InodeStore : public InodeStoreBase {
+public:
+  bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
+			 // rehydrate it without full MDCache
+  void encode(bufferlist &bl) const {
+    InodeStoreBase::encode(bl, &snap_blob);
+  }
+  void decode(bufferlist::iterator &bl) {
+    InodeStoreBase::decode(bl, snap_blob);
+  }
+  void encode_bare(bufferlist &bl) const {
+    InodeStoreBase::encode_bare(bl, &snap_blob);
+  }
+  void decode_bare(bufferlist::iterator &bl) {
+    InodeStoreBase::decode_bare(bl, snap_blob);
+  }
   /* For use in debug and ceph-dencoder */
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<InodeStore*>& ls);
 };
 
 // cached inode wrapper
-class CInode : public MDSCacheObject, public InodeStore {
+class CInode : public MDSCacheObject, public InodeStoreBase {
   /*
    * This class uses a boost::pool to handle allocation. This is *not*
    * thread-safe, so don't do allocations from multiple threads!

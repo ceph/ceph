@@ -1707,8 +1707,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  in->dirfragtree.swap(inode_data.dirfragtree);
 	  in->xattrs.swap(inode_data.xattrs);
 	  in->old_inodes.swap(inode_data.old_inodes);
-	  in->decode_snap_blob(inode_data.snap_blob);
 	  in->oldest_snap = inode_data.oldest_snap;
+	  in->decode_snap_blob(inode_data.snap_blob);
 	  if (snaps && !in->snaprealm)
 	    in->purge_stale_snap_data(*snaps);
 
@@ -2012,9 +2012,9 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     if (in->is_multiversion() && snaps && !in->snaprealm)
       in->purge_stale_snap_data(*snaps);
 
-    in->encode_snap_blob(in->snap_blob);
-    in->encode_bare(bl);
-    in->snap_blob.clear();
+    bufferlist snap_blob;
+    in->encode_snap_blob(snap_blob);
+    in->encode_bare(bl, &snap_blob);
   }
 }
 

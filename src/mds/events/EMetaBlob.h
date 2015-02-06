@@ -62,6 +62,7 @@ public:
     static const int STATE_DIRTY =	 (1<<0);
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
+    typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
     string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv;
@@ -72,7 +73,6 @@ public:
     snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state;
-    typedef map<snapid_t, old_inode_t> old_inodes_t;
     old_inodes_t old_inodes;
 
     fullbit(const fullbit& o);
