@@ -1060,6 +1060,13 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
   map<uint64_t, bufferlist> stripe_map;  // final buffer offset -> substring
   bool dontneed = rd->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_DONTNEED;
 
+  /*
+   * WARNING: we can only meaningfully return ENOENT if the read request
+   * passed in a single ObjectExtent.  Any caller who wants ENOENT instead of
+   * zeroed buffers needs to feed single extents into readx().
+   */
+  assert(!oset->return_enoent || rd->extents.size() == 1);
+
   for (vector<ObjectExtent>::iterator ex_it = rd->extents.begin();
        ex_it != rd->extents.end();
        ++ex_it) {
@@ -1075,10 +1082,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     // does not exist and no hits?
     if (oset->return_enoent && !o->exists) {
-      // WARNING: we can only meaningfully return ENOENT if the read request
-      // passed in a single ObjectExtent.  Any caller who wants ENOENT instead of
-      // zeroed buffers needs to feed single extents into readx().
-      assert(rd->extents.size() == 1);
       ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
 
       // should we worry about COW underneaeth us?
