@@ -417,7 +417,6 @@ void Objecter::_send_linger(LingerOp *info)
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
 
   vector<OSDOp> opv;
-  Context *onack = NULL;
   Context *oncommit = NULL;
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
@@ -434,8 +433,9 @@ void Objecter::_send_linger(LingerOp *info)
   }
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, oncommit,
+		 NULL, NULL,
 		 info->pobjver);
+  o->oncommit_sync = oncommit;
   o->snapid = info->snap;
   o->snapc = info->snapc;
   o->mtime = info->mtime;
@@ -550,7 +550,8 @@ void Objecter::_send_linger_ping(LingerOp *info)
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, NULL, NULL);
+		 NULL, NULL, NULL);
+  o->oncommit_sync = onack;
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
@@ -2731,7 +2732,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->oncommit)
+  if (op->oncommit || op->oncommit_sync)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
@@ -3027,6 +3028,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->oncommit = 0;
     num_uncommitted.dec();
     logger->inc(l_osdc_op_commit);
+  }
+  if (op->oncommit_sync) {
+    op->oncommit_sync->complete(rc);
+    op->oncommit_sync = NULL;
   }
 
   /* get it before we call _finish_op() */
