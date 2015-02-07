@@ -485,6 +485,8 @@ int main(int argc, const char **argv)
 
   bool modified = false;
 
+  // input ----
+
   if (!infn.empty()) {
     bufferlist bl;
     std::string error;
@@ -496,36 +498,6 @@ int main(int argc, const char **argv)
     }
     bufferlist::iterator p = bl.begin();
     crush.decode(p);
-  }
-
-  if (full_location >= 0) {
-    map<string, string> loc = crush.get_full_location(full_location);
-    for (map<string,string>::iterator p = loc.begin();
-	 p != loc.end();
-	 ++p) {
-      cout << p->first << "\t" << p->second << std::endl;
-    }
-    exit(0);
-  }
-  if (decompile) {
-    CrushCompiler cc(crush, cerr, verbose);
-    if (!outfn.empty()) {
-      ofstream o;
-      o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
-      if (!o.is_open()) {
-	cerr << me << ": error writing '" << outfn << "'" << std::endl;
-	exit(1);
-      }
-      cc.decompile(o);
-      o.close();
-    } else {
-      cc.decompile(cout);
-    }
-  }
-  if (tree) {
-    ostringstream oss;
-    crush.dump_tree(&oss, NULL);
-    dout(1) << "\n" << oss.str() << dendl;
   }
 
   if (compile) {
@@ -670,59 +642,7 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (!reweight_name.empty()) {
-    cout << me << " reweighting item " << reweight_name << " to " << reweight_weight << std::endl;
-    int r;
-    if (!crush.name_exists(reweight_name)) {
-      cerr << " name " << reweight_name << " dne" << std::endl;
-      r = -ENOENT;
-    } else {
-      int item = crush.get_item_id(reweight_name);
-      r = crush.adjust_item_weightf(g_ceph_context, item, reweight_weight);
-    }
-    if (r >= 0)
-      modified = true;
-    else {
-      cerr << me << " " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-        
-  }
-  if (!remove_name.empty()) {
-    cout << me << " removing item " << remove_name << std::endl;
-    int r;
-    if (!crush.name_exists(remove_name)) {
-      cerr << " name " << remove_name << " dne" << std::endl;
-      r = -ENOENT;
-    } else {
-      int remove_item = crush.get_item_id(remove_name);
-      r = crush.remove_item(g_ceph_context, remove_item, false);
-    }
-    if (r == 0)
-      modified = true;
-    else {
-      cerr << me << " " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-  }
-  if (add_item >= 0) {
-    int r;
-    if (update_item) {
-      r = crush.update_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
-    } else {
-      r = crush.insert_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
-    }
-    if (r >= 0) {
-      modified = true;
-    } else {
-      cerr << me << " " << cpp_strerror(r) << std::endl;
-      return r;
-    }
-  }
-  if (reweight) {
-    crush.reweight(g_ceph_context);
-    modified = true;
-  }
+  // mutate ----
 
   if (choose_local_tries >= 0) {
     crush.set_choose_local_tries(choose_local_tries);
@@ -752,6 +672,107 @@ int main(int argc, const char **argv)
     crush.set_allowed_bucket_algs(allowed_bucket_algs);
     modified = true;
   }
+
+  if (!reweight_name.empty()) {
+    cout << me << " reweighting item " << reweight_name << " to " << reweight_weight << std::endl;
+    int r;
+    if (!crush.name_exists(reweight_name)) {
+      cerr << " name " << reweight_name << " dne" << std::endl;
+      r = -ENOENT;
+    } else {
+      int item = crush.get_item_id(reweight_name);
+      r = crush.adjust_item_weightf(g_ceph_context, item, reweight_weight);
+    }
+    if (r >= 0)
+      modified = true;
+    else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  if (!remove_name.empty()) {
+    cout << me << " removing item " << remove_name << std::endl;
+    int r;
+    if (!crush.name_exists(remove_name)) {
+      cerr << " name " << remove_name << " dne" << std::endl;
+      r = -ENOENT;
+    } else {
+      int remove_item = crush.get_item_id(remove_name);
+      r = crush.remove_item(g_ceph_context, remove_item, false);
+    }
+    if (r == 0)
+      modified = true;
+    else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  if (add_item >= 0) {
+    int r;
+    if (update_item) {
+      r = crush.update_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
+    } else {
+      r = crush.insert_item(g_ceph_context, add_item, add_weight, add_name.c_str(), add_loc);
+    }
+    if (r >= 0) {
+      modified = true;
+    } else {
+      cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  if (reweight) {
+    crush.reweight(g_ceph_context);
+    modified = true;
+  }
+
+
+  // display ---
+  if (full_location >= 0) {
+    map<string, string> loc = crush.get_full_location(full_location);
+    for (map<string,string>::iterator p = loc.begin();
+	 p != loc.end();
+	 ++p) {
+      cout << p->first << "\t" << p->second << std::endl;
+    }
+  }
+
+  if (tree) {
+    ostringstream oss;
+    crush.dump_tree(&oss, NULL);
+    dout(1) << "\n" << oss.str() << dendl;
+  }
+
+  if (decompile) {
+    CrushCompiler cc(crush, cerr, verbose);
+    if (!outfn.empty()) {
+      ofstream o;
+      o.open(outfn.c_str(), ios::out | ios::binary | ios::trunc);
+      if (!o.is_open()) {
+	cerr << me << ": error writing '" << outfn << "'" << std::endl;
+	exit(1);
+      }
+      cc.decompile(o);
+      o.close();
+    } else {
+      cc.decompile(cout);
+    }
+  }
+
+  if (test) {
+    if (tester.get_output_utilization_all() ||
+	tester.get_output_utilization())
+      tester.set_output_statistics(true);
+
+    int r = tester.test();
+    if (r < 0)
+      exit(1);
+  }
+
+  // output ---
   if (modified) {
     crush.finalize();
 
@@ -768,16 +789,6 @@ int main(int argc, const char **argv)
       if (verbose)
 	cout << "wrote crush map to " << outfn << std::endl;
     }
-  }
-
-  if (test) {
-    if (tester.get_output_utilization_all() ||
-	tester.get_output_utilization())
-      tester.set_output_statistics(true);
-
-    int r = tester.test();
-    if (r < 0)
-      exit(1);
   }
 
   return 0;
