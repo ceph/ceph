@@ -37,6 +37,7 @@ void usage(ostream &out)
   out << "\n";
   out << "  list_types          list supported types\n";
   out << "  type <classname>    select in-memory type\n";
+  out << "  skip <num>          skip <num> leading bytes before decoding\n";
   out << "  decode              decode into in-memory object\n";
   out << "  encode              encode in-memory object\n";
   out << "  dump_json           dump in-memory object as json (to stdout)\n";
