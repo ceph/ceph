@@ -430,8 +430,6 @@ void Objecter::_send_linger(LingerOp *info)
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
     opv = info->ops;
-    if (info->on_reg_ack)
-      onack = new C_Linger_Register(this, info);
     oncommit = new C_Linger_Commit(this, info);
   }
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
@@ -465,15 +463,6 @@ void Objecter::_send_linger(LingerOp *info)
   }
 
   logger->inc(l_osdc_linger_send);
-}
-
-void Objecter::_linger_register(LingerOp *info, int r)
-{
-  ldout(cct, 10) << "_linger_register " << info->linger_id << dendl;
-  if (info->on_reg_ack) {
-    info->on_reg_ack->complete(r);
-    info->on_reg_ack = NULL;
-  }
 }
 
 void Objecter::_linger_commit(LingerOp *info, int r) 
@@ -689,7 +678,6 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
   info->inbl = inbl;
   info->poutbl = NULL;
   info->pobjver = objver;
-  info->on_reg_ack = NULL;
   info->on_reg_commit = oncommit;
 
   RWLock::WLocker wl(rwlock);
@@ -1389,9 +1377,6 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
-      if (op->on_reg_ack) {
-	op->on_reg_ack->complete(-ENOENT);
-      }
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
       }
