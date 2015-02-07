@@ -1160,6 +1160,7 @@ public:
 
     int priority;
     Context *onack, *oncommit, *ontimeout;
+    Context *oncommit_sync;         // used internally by watch/notify
 
     ceph_tid_t tid;
     eversion_t replay_version;        // for op replay
@@ -1191,10 +1192,15 @@ public:
       con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
-      priority(0), onack(ac), oncommit(co),
+      priority(0),
+      onack(ac),
+      oncommit(co),
       ontimeout(NULL),
-      tid(0), attempts(0),
-      objver(ov), reply_epoch(NULL),
+      oncommit_sync(NULL),
+      tid(0),
+      attempts(0),
+      objver(ov),
+      reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true),
