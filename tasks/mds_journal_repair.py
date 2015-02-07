@@ -85,7 +85,7 @@ class TestJournalRepair(CephFSTestCase):
         # Now check the MDS can read what we wrote: truncate the journal
         # and start the mds.
         self.fs.journal_tool(['journal', 'reset'])
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         # List files
@@ -280,7 +280,7 @@ class TestJournalRepair(CephFSTestCase):
 
         # Bring an MDS back online, mount a client, and see that we can walk the full
         # filesystem tree again
-        self.fs.mds_restart(active_mds_names[0])
+        self.fs.mds_fail_restart(active_mds_names[0])
         self.wait_until_equal(lambda: self.fs.get_active_names(), [active_mds_names[0]], 30,
                               reject_fn=lambda v: len(v) > 1)
         self.mount_a.mount()
