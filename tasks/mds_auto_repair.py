@@ -30,7 +30,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         # trim log segment as fast as possible
         self.set_conf('mds', 'mds cache size', 100)
         self.set_conf('mds', 'mds verify backtrace', 1)
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         create_script = "mkdir {0}; for i in `seq 0 500`; do touch {0}/file$i; done"
@@ -98,7 +98,7 @@ class TestMDSAutoRepair(CephFSTestCase):
         self.assertTrue(writer.finished)
 
         # restart mds to make it writable
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
 

@@ -57,9 +57,7 @@ class TestClientRecovery(CephFSTestCase):
         # Check that after an MDS restart both clients reconnect and continue
         # to handle I/O
         # =====================================================
-        self.fs.mds_stop()
-        self.fs.mds_fail()
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
 
         self.mount_a.create_destroy()
@@ -254,9 +252,7 @@ class TestClientRecovery(CephFSTestCase):
         self.assertGreaterEqual(num_caps, count)
 
         # Restart MDS. client should trim its cache when reconnecting to the MDS
-        self.fs.mds_stop()
-        self.fs.mds_fail()
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
 
         num_caps = self._session_num_caps(client_id)
@@ -320,9 +316,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.wait_for_visible("background_file-2")
         self.mount_b.check_filelock()
 
-        self.fs.mds_stop()
-        self.fs.mds_fail()
-        self.fs.mds_restart()
+        self.fs.mds_fail_restart()
         self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
 
         self.mount_b.check_filelock()
