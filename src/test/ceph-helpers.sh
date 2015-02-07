@@ -21,6 +21,15 @@ CEPH_HELPER_VERBOSE=false
 TIMEOUT=60
 PG_NUM=4
 
+if type xmlstarlet > /dev/null 2>&1; then
+    XMLSTARLET=xmlstarlet
+elif type xml > /dev/null 2>&1; then
+    XMLSTARLET=xml
+else
+	echo "Missing xmlstarlet binary!"
+	exit 1
+fi
+
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing
 #
@@ -501,7 +510,7 @@ function get_osds() {
     local objectname=$2
 
     ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        xmlstarlet sel -t -m "//acting/osd" -v . -o ' '
+        $XMLSTARLET sel -t -m "//acting/osd" -v . -o ' '
 }
 
 function test_get_osds() {
@@ -532,7 +541,7 @@ function get_pg() {
     local objectname=$2
 
     ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        xmlstarlet sel -t -m "//pgid" -v . -n
+        $XMLSTARLET sel -t -m "//pgid" -v . -n
 }
 
 function test_get_pg() {
@@ -566,7 +575,7 @@ function get_config() {
     CEPH_ARGS='' \
         ceph --format xml daemon $dir/ceph-mon.$id.asok \
         config get $config 2> /dev/null | \
-        xmlstarlet sel -t -m "//$config" -v . -n
+        $XMLSTARLET sel -t -m "//$config" -v . -n
 }
 
 function test_get_config() {
@@ -594,7 +603,7 @@ function get_primary() {
     local objectname=$2
 
     ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        xmlstarlet sel -t -m "//acting_primary" -v . -n
+        $XMLSTARLET sel -t -m "//acting_primary" -v . -n
 }
 
 function test_get_primary() {
@@ -626,7 +635,7 @@ function get_not_primary() {
 
     local primary=$(get_primary $poolname $objectname)
     ceph --format xml osd map $poolname $objectname 2>/dev/null | \
-        xmlstarlet sel -t -m "//acting/osd[not(.='$primary')]" -v . -n | \
+        $XMLSTARLET sel -t -m "//acting/osd[not(.='$primary')]" -v . -n | \
         head -1
 }
 
@@ -704,7 +713,7 @@ function test_objectstore_tool() {
 #
 function get_is_making_recovery_progress() {
     local progress=$(ceph --format xml status 2>/dev/null | \
-        xmlstarlet sel \
+        $XMLSTARLET sel \
         -t -m "//pgmap/recovering_keys_per_sec" -v . -o ' ' \
         -t -m "//pgmap/recovering_bytes_per_sec" -v . -o ' ' \
         -t -m "//pgmap/recovering_objects_per_sec" -v .)
@@ -740,7 +749,7 @@ function get_num_active_clean() {
     # add extra new lines that must be ignored with
     # grep -v '^$' 
     ceph --format xml pg dump pgs 2>/dev/null | \
-        xmlstarlet sel -t -m "//pg_stat/state[$expression]" -v . -n | \
+        $XMLSTARLET sel -t -m "//pg_stat/state[$expression]" -v . -n | \
         grep -v '^$' | wc -l
 }
 
@@ -767,7 +776,7 @@ function test_get_num_active_clean() {
 #
 function get_num_pgs() {
     ceph --format xml status 2>/dev/null | \
-        xmlstarlet sel -t -m "//pgmap/num_pgs" -v .
+        $XMLSTARLET sel -t -m "//pgmap/num_pgs" -v .
 }
 
 function test_get_num_pgs() {
@@ -796,7 +805,7 @@ function test_get_num_pgs() {
 function get_last_scrub_stamp() {
     local pgid=$1
     ceph --format xml pg dump pgs 2>/dev/null | \
-        xmlstarlet sel -t -m "//pg_stat[pgid='$pgid']/last_scrub_stamp" -v .
+        $XMLSTARLET sel -t -m "//pg_stat[pgid='$pgid']/last_scrub_stamp" -v .
 }
 
 function test_get_last_scrub_stamp() {
