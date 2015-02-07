@@ -679,7 +679,7 @@ protected:
       kb = p->second.kb;
       kb_used = p->second.kb_used;
       kb_avail = p->second.kb_avail;
-      return true;
+      return kb > 0;
     }
 
     kb = 0;
@@ -695,7 +695,7 @@ protected:
       kb_used += kb_used_i;
       kb_avail += kb_avail_i;
     }
-    return true;
+    return kb > 0;
   }
 
 protected:
