@@ -5,6 +5,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/snap_types.h"
 #include "global/global_context.h"
 #include "librados/AioCompletionImpl.h"
@@ -17,6 +18,9 @@
 #include <deque>
 #include <list>
 #include <vector>
+#include "include/assert.h"
+
+#define dout_subsys ceph_subsys_rados
 
 static librados::TestClassHandler *get_class_handler() {
   static librados::TestClassHandler *s_class_handler = NULL;
@@ -524,6 +528,11 @@ int IoCtx::write(const std::string& oid, bufferlist& bl, size_t len,
   return ctx->write(oid, bl, len, off);
 }
 
+int IoCtx::write_full(const std::string& oid, bufferlist& bl) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->write_full(oid, bl);
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
@@ -956,6 +965,19 @@ int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl) {
 }
 
 int cls_log(int level, const char *format, ...) {
+  int size = 256;
+  va_list ap;
+  while (1) {
+    char buf[size];
+    va_start(ap, format);
+    int n = vsnprintf(buf, size, format, ap);
+    va_end(ap);
+    if ((n > -1 && n < size) || size > 8196) {
+      dout(level) << buf << dendl;
+      return n;
+    }
+    size *= 2;
+  }
   return 0;
 }
 
