@@ -619,11 +619,14 @@ public:
     osdmap(osdmap_),
     pgm(pgm_),
     tree(tree_),
-    average_util(100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb),
+    average_util(0),
     min_var(-1),
     max_var(-1),
     stddev(0),
-    sum(0) {}
+    sum(0) {
+    if (pgm->osd_sum.kb)
+      average_util = 100.0 * (double)pgm->osd_sum.kb_used / (double)pgm->osd_sum.kb;
+  }
 
 protected:
   void dump_stray(F *f) {
@@ -639,8 +642,9 @@ protected:
 
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
     int64_t kb = 0, kb_used = 0, kb_avail = 0;
-    double util = get_bucket_utilization(qi.id, kb, kb_used, kb_avail) ?
-      100.0 * (double)kb_used / (double)kb : 0;
+    double util = 0;
+    if (get_bucket_utilization(qi.id, kb, kb_used, kb_avail) && kb > 0)
+      util = 100.0 * (double)kb_used / (double)kb;
     double var = 1.0;
     if (average_util)
       var = util / average_util;
