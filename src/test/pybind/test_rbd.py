@@ -8,7 +8,10 @@ import os
 from contextlib import nested
 from nose import with_setup, SkipTest
 from nose.tools import eq_ as eq, assert_raises
-from rados import Rados
+from rados import (Rados,
+                   LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
+                   LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
+                   LIBRADOS_OP_FLAG_FADVISE_RANDOM)
 from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
@@ -300,7 +303,7 @@ class TestImage(object):
         data = rand_data(256)
         self.image.write(data, 0)
 
-    def test_write_with_fadivse_flags(self):
+    def test_write_with_fadvise_flags(self):
         data = rand_data(256)
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
         self.image.write(data, 0, LIBRADOS_OP_FLAG_FADVISE_NOCACHE)
@@ -309,10 +312,10 @@ class TestImage(object):
         data = self.image.read(0, 20)
         eq(data, '\0' * 20)
 
-     def test_read_with_fadivse_flags(self):
-        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADIVSE_DONTNEED)
+    def test_read_with_fadvise_flags(self):
+        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADVISE_DONTNEED)
         eq(data, '\0' * 20)
-        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADIVSE_RANDOM)
+        data = self.image.read(0, 20, LIBRADOS_OP_FLAG_FADVISE_RANDOM)
         eq(data, '\0' * 20)
 
     def test_large_write(self):

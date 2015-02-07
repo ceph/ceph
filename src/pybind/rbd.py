@@ -534,7 +534,7 @@ class Image(object):
         :returns: int - the flags bitmask of the image
         """
         flags = c_uint64()
-        reg = self.librbd.rbd_get_flags(self.image, byref(flags))
+        ret = self.librbd.rbd_get_flags(self.image, byref(flags))
         if (ret != 0):
             raise make_ex(ret, 'error getting flags for image' % (self.name))
         return flags.value
