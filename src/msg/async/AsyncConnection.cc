@@ -181,7 +181,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), stop_lock("AsyncConnection::stop_lock"),
     got_bad_auth(false), authorizer(NULL), replacing(false), once_session_reset(false),
-    state_buffer(NULL), state_offset(0), net(cct), center(c)
+    is_reset_from_peer(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
   write_handler.reset(new C_handle_write(this));
@@ -596,10 +596,9 @@ void AsyncConnection::process()
                               << " off " << header.data_off << dendl;
 
           // verify header crc
-          if (!(msgr->crcflags & MSG_CRC_HEADER)) {
-          } else if (header_crc != header.crc) {
+          if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
             ldout(async_msgr->cct,0) << __func__ << " reader got bad header crc "
-                              << header_crc << " != " << header.crc << dendl;
+                                     << header_crc << " != " << header.crc << dendl;
             goto fail;
           }
 
@@ -768,11 +767,9 @@ void AsyncConnection::process()
             footer = *((ceph_msg_footer*)state_buffer);
           } else {
             old_footer = *((ceph_msg_footer_old*)state_buffer);
-            if (msgr->crcflags & MSG_CRC_HEADER) {
-              footer.front_crc = old_footer.front_crc;
-              footer.middle_crc = old_footer.middle_crc;
-              footer.data_crc = old_footer.data_crc;
-            }
+            footer.front_crc = old_footer.front_crc;
+            footer.middle_crc = old_footer.middle_crc;
+            footer.data_crc = old_footer.data_crc;
             footer.sig = 0;
             footer.flags = old_footer.flags;
           }
@@ -1513,7 +1510,6 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   int r = 0;
   ceph_msg_connect_reply reply;
   bufferlist reply_bl;
-  bool is_reset_from_peer = false;
 
   memset(&reply, 0, sizeof(reply));
   reply.protocol_version = async_msgr->get_proto_version(peer_type, false);
@@ -1720,13 +1716,15 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
 
     // reset the in_seq if this is a hard reset from peer,
     // otherwise we respect our original connection's value
-    if (is_reset_from_peer)
-      existing->in_seq = 0;
+    if (is_reset_from_peer) {
+      existing->is_reset_from_peer = true;
+    }
 
     // Now existing connection will be alive and the current connection will
     // exchange socket with existing connection because we want to maintain
     // original "connection_state"
-    existing->center->delete_file_event(existing->sd, EVENT_READABLE|EVENT_WRITABLE);
+    if (existing->sd > 0)
+      existing->center->delete_file_event(existing->sd, EVENT_READABLE|EVENT_WRITABLE);
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
     existing->center->create_file_event(sd, EVENT_READABLE, existing->read_handler);
 
@@ -1763,14 +1761,16 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
 
   int next_state;
 
-  // if it is a hard reset from peer(in_seq == 0), we don't need a round-trip to negotiate in/out sequence
-  if ((connect.features & CEPH_FEATURE_RECONNECT_SEQ) && in_seq) {
+  // if it is a hard reset from peer, we don't need a round-trip to negotiate in/out sequence
+  if ((connect.features & CEPH_FEATURE_RECONNECT_SEQ) && !is_reset_from_peer) {
     reply.tag = CEPH_MSGR_TAG_SEQ;
     next_state = STATE_ACCEPTING_WAIT_SEQ;
   } else {
     reply.tag = CEPH_MSGR_TAG_READY;
     next_state = STATE_ACCEPTING_READY;
     discard_requeued_up_to(0);
+    is_reset_from_peer = false;
+    in_seq = 0;
   }
 
   // send READY reply
@@ -2210,8 +2210,9 @@ int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& foo
       old_footer.middle_crc = footer.middle_crc;
       old_footer.data_crc = footer.data_crc;
     } else {
-       old_footer.front_crc = old_footer.middle_crc = old_footer.data_crc = 0;
+       old_footer.front_crc = old_footer.middle_crc = 0;
     }
+    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
     old_footer.flags = footer.flags;
     bl.append((char*)&old_footer, sizeof(old_footer));
   }
