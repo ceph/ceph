@@ -240,7 +240,7 @@ Open Required Ports
 -------------------
 
 Ceph Monitors communicate using port ``6789`` by default. Ceph OSDs communicate
-in a port range of ``6800:7810`` by default. See the `Network Configuration
+in a port range of ``6800:7300`` by default. See the `Network Configuration
 Reference`_ for details. Ceph OSDs can use multiple network connections to
 communicate with clients, monitors, other OSDs for replication, and other OSDs
 for heartbeats.
