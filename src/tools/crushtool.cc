@@ -27,6 +27,7 @@
 #include "common/config.h"
 
 #include "common/ceph_argparse.h"
+#include "include/stringify.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
@@ -531,11 +532,12 @@ int main(int argc, const char **argv)
     vector<int> lower_items;
     vector<int> lower_weights;
 
+    crush.set_max_devices(num_osds);
     for (int i=0; i<num_osds; i++) {
       lower_items.push_back(i);
       lower_weights.push_back(0x10000);
+      crush.set_item_name(i, "osd." + stringify(i));
     }
-    crush.set_max_devices(num_osds);
 
     int type = 1;
     for (vector<layer_t>::iterator p = layers.begin(); p != layers.end(); ++p, type++) {

@@ -33,7 +33,7 @@
   tunable chooseleaf_descend_once 1
   
   # devices
-  device 0 device0
+  device 0 osd.0
   
   # types
   type 0 device
@@ -45,7 +45,7 @@
   \t# weight 1.000 (esc)
   \talg straw (esc)
   \thash 0\t# rjenkins1 (esc)
-  \titem device0 weight 1.000 (esc)
+  \titem osd.0 weight 1.000 (esc)
   }
   
   # rules
