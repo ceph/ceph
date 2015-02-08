@@ -42,6 +42,8 @@ class AsyncMessenger;
 class WorkerPool;
 
 class Worker : public Thread {
+  static const uint64_t InitEventNumber = 5000;
+  static const uint64_t EventMaxWaitUs = 30000000;
   CephContext *cct;
   WorkerPool *pool;
   bool done;
@@ -51,7 +53,7 @@ class Worker : public Thread {
   EventCenter center;
   Worker(CephContext *c, WorkerPool *p, int i)
     : cct(c), pool(p), done(false), id(i), center(c) {
-    center.init(5000);
+    center.init(InitEventNumber);
   }
   void *entry();
   void stop();
