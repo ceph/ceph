@@ -570,9 +570,7 @@ int main(int argc, const char **argv)
     }
   }
   if (tree) {
-    ostringstream oss;
-    crush.dump_tree(&oss, NULL);
-    dout(1) << "\n" << oss.str() << dendl;
+    crush.dump_tree(&cout, NULL);
   }
 
   if (compile) {
