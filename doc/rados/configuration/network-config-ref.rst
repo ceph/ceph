@@ -160,6 +160,9 @@ public or cluster network. For example::
 
 	sudo iptables -A INPUT -i {iface}  -m multiport -p tcp -s {ip-address}/{netmask} --dports 6800:6810 -j ACCEPT
 
+Be sure to replace the "6810" in the above example with an upper bound that
+reflects the number of daemons you will be running on this host.
+
 .. tip:: If you run Ceph Metadata Servers on the same Ceph Node as the 
    Ceph OSD Daemons, you can consolidate the public network configuration step. 
    Ensure that you open the number of ports required for each daemon per host.
