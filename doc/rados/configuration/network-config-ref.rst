@@ -71,7 +71,7 @@ There are several reasons to consider operating two separate networks:
 IP Tables
 =========
 
-By default, daemons `bind`_ to ports within the ``6800:7100`` range. You may
+By default, daemons `bind`_ to ports within the ``6800:7300`` range. You may
 configure this range at your discretion. Before configuring your IP tables,
 check the default ``iptables`` configuration.
 
@@ -349,7 +349,7 @@ Bind
 ----
 
 Bind settings set the default port ranges Ceph OSD and MDS daemons use. The
-default range is ``6800:7100``. Ensure that your `IP Tables`_ configuration
+default range is ``6800:7300``. Ensure that your `IP Tables`_ configuration
 allows you to use the configured port range.
 
 You may also enable Ceph daemons to bind to IPv6 addresses.
@@ -367,7 +367,7 @@ You may also enable Ceph daemons to bind to IPv6 addresses.
 
 :Description: The maximum port number to which an OSD or MDS daemon will bind.
 :Type: 32-bit Integer
-:Default: ``7100``
+:Default: ``7300``
 :Required: No. 
 
 
