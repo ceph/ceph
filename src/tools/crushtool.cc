@@ -615,12 +615,6 @@ int main(int argc, const char **argv)
       lower_weights.swap(cur_weights);
     }
 
-    {
-      ostringstream oss;
-      crush.dump_tree(&oss, NULL);
-      dout(1) << "\n" << oss.str() << dendl;
-    }
-
     string root = layers.back().size == 0 ? layers.back().name :
       string(layers.back().name) + "0";
 
