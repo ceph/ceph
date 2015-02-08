@@ -5728,6 +5728,19 @@ int Client::lutime(const char *relpath, struct utimbuf *buf)
   return _setattr(in, &attr, CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME);
 }
 
+int Client::flock(int fd, int operation, uint64_t owner)
+{
+  Mutex::Locker lock(client_lock);
+  tout(cct) << "flock" << std::endl;
+  tout(cct) << fd << std::endl;
+  tout(cct) << operation << std::endl;
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+
+  return _flock(f, operation, owner, NULL);
+}
+
 int Client::opendir(const char *relpath, dir_result_t **dirpp) 
 {
   Mutex::Locker lock(client_lock);
