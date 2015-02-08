@@ -247,7 +247,7 @@ class FakeEvent : public EventCallback {
 
 TEST(EventCenterTest, FileEventExpansion) {
   vector<int> sds;
-  EventCenter center;
+  EventCenter center(g_ceph_context);
   center.init(100);
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 10000; i++) {
