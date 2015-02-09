@@ -1070,15 +1070,12 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
     in = diri;
     pdn = in->get_parent_dn();
   }
-  vector<int64_t>::iterator i = inode.old_pools.begin();
-  while(i != inode.old_pools.end()) {
+  for (compact_set<int64_t>::iterator i = inode.old_pools.begin();
+       i != inode.old_pools.end();
+       ++i) {
     // don't add our own pool id to old_pools to avoid looping (e.g. setlayout 0, 1, 0)
-    if (*i == pool) {
-      ++i;
-      continue;
-    }
-    bt.old_pools.insert(*i);
-    ++i;
+    if (*i != pool)
+      bt.old_pools.insert(*i);
   }
 }
 
@@ -1134,11 +1131,10 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
 				 0, NULL, gather.new_sub());
 
-  set<int64_t> old_pools;
-  for (vector<int64_t>::iterator p = inode.old_pools.begin();
-      p != inode.old_pools.end();
-      ++p) {
-    if (*p == pool || old_pools.count(*p))
+  for (compact_set<int64_t>::iterator p = inode.old_pools.begin();
+       p != inode.old_pools.end();
+       ++p) {
+    if (*p == pool)
       continue;
 
     ObjectOperation op;
@@ -1149,7 +1145,6 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
     object_locator_t oloc(*p);
     mdcache->mds->objecter->mutate(oid, oloc, op, snapc, ceph_clock_now(g_ceph_context),
 				   0, NULL, gather.new_sub());
-    old_pools.insert(*p);
   }
   gather.activate();
 }
@@ -1373,7 +1368,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	::encode(inode.truncate_size, bl);
 	::encode(inode.client_ranges, bl);
 	::encode(inode.inline_data, bl);
-	::encode(inode.inline_version, bl);
       }
     } else {
       // treat flushing as dirty when rejoining cache
@@ -1571,7 +1565,6 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	::decode(inode.truncate_size, p);
 	::decode(inode.client_ranges, p);
 	::decode(inode.inline_data, p);
-	::decode(inode.inline_version, p);
       }
     } else {
       bool replica_dirty;
@@ -2842,7 +2835,7 @@ int CInode::get_caps_allowed_for_client(client_t client) const
   } else {
     allowed = get_caps_allowed_by_type(CAP_ANY);
   }
-  if (inode.inline_version != CEPH_INLINE_NONE &&
+  if (inode.inline_data.version != CEPH_INLINE_NONE &&
       !mdcache->mds->get_session(client)->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA))
     allowed &= ~(CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR);
   return allowed;
@@ -3056,13 +3049,14 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // inline data
   version_t inline_version = 0;
   bufferlist inline_data;
-  if (i->inline_version == CEPH_INLINE_NONE) {
+  if (i->inline_data.version == CEPH_INLINE_NONE) {
     inline_version = CEPH_INLINE_NONE;
   } else if ((!cap && !no_caps) ||
-	     (cap && cap->client_inline_version < i->inline_version) ||
+	     (cap && cap->client_inline_version < i->inline_data.version) ||
 	     (getattr_caps & CEPH_CAP_FILE_RD)) { // client requests inline data
-    inline_version = i->inline_version;
-    inline_data = i->inline_data;
+    inline_version = i->inline_data.version;
+    if (i->inline_data.length() > 0)
+      inline_data = i->inline_data.get_data();
   }
 
   // nest (do same as file... :/)
@@ -3257,9 +3251,10 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i->atime.encode_timeval(&m->head.atime);
   m->head.time_warp_seq = i->time_warp_seq;
 
-  if (cap->client_inline_version < i->inline_version) {
-    m->inline_version = cap->client_inline_version = i->inline_version;
-    m->inline_data = i->inline_data;
+  if (cap->client_inline_version < i->inline_data.version) {
+    m->inline_version = cap->client_inline_version = i->inline_data.version;
+    if (i->inline_data.length() > 0)
+      m->inline_data = i->inline_data.get_data();
   } else {
     m->inline_version = 0;
   }
