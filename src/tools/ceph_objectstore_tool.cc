@@ -26,6 +26,7 @@
 
 #include "os/ObjectStore.h"
 #include "os/FileStore.h"
+#include "os/FileJournal.h"
 
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
@@ -2290,6 +2291,20 @@ bool ends_with(const string& check, const string& ending)
     return check.size() >= ending.size() && check.rfind(ending) == (check.size() - ending.size());
 }
 
+// Based on FileStore::dump_journal(), set-up enough to only dump
+int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
+{
+  int r;
+
+  if (!journalpath.length())
+    return -EINVAL;
+
+  FileJournal *journal = new FileJournal(uuid_d(), NULL, NULL, journalpath.c_str(), m_journal_dio);
+  r = journal->_fdump(*f, false);
+  delete journal;
+  return r;
+}
+
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
@@ -2310,7 +2325,7 @@ int main(int argc, char **argv)
     ("pgid", po::value<string>(&pgidstr),
      "PG id, mandatory except for import, list-lost, fix-lost, list-pgs, set-allow-sharded-objects")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects]")
+     "Arg is one of [info, log, remove, export, import, list, list-lost, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal]")
     ("file", po::value<string>(&file),
      "path of file to export or import")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
@@ -2408,13 +2423,14 @@ int main(int argc, char **argv)
     myexit(ret != 0);
   }
 
-  if (!vm.count("data-path")) {
+  if (!vm.count("type")) {
+    type = "filestore";
+  }
+  if (!vm.count("data-path") &&
+     !(op == "dump-journal" && type == "filestore")) {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
     myexit(1);
-  }
-  if (!vm.count("type")) {
-    type = "filestore";
   }
   if (type == "filestore" && !vm.count("journal-path")) {
     cerr << "Must provide --journal-path" << std::endl;
@@ -2488,6 +2504,27 @@ int main(int argc, char **argv)
     g_conf->set_val_or_die("err_to_stderr", "true");
   }
   g_conf->apply_changes(NULL);
+
+  // Special list handling.  Treating pretty_format as human readable,
+  // with one object per line and not an enclosing array.
+  human_readable = ends_with(format, "-pretty");
+  if (op == "list" && human_readable) {
+    // Remove -pretty from end of format which we know is there
+    format = format.substr(0, format.size() - strlen("-pretty"));
+  }
+
+  formatter = Formatter::create(format);
+  if (formatter == NULL) {
+    cerr << "unrecognized format: " << format << std::endl;
+    myexit(1);
+  }
+
+  // Special handling for filestore journal, so we can dump it without mounting
+  if (op == "dump-journal" && type == "filestore") {
+    int ret = mydump_journal(formatter, jpath, g_conf->journal_dio);
+    formatter->flush(cout);
+    myexit(ret != 0);
+  }
 
   //Verify that data-path really exists
   struct stat st;
@@ -2674,7 +2711,7 @@ int main(int argc, char **argv)
 
   if (op != "list" && op != "import" && op != "list-lost" && op != "fix-lost"
       && op != "list-pgs"  && op != "set-allow-sharded-objects" &&
-      (pgidstr.length() == 0)) {
+      op != "dump-journal-mount" && (pgidstr.length() == 0)) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
     ret = 1;
@@ -2786,6 +2823,19 @@ int main(int argc, char **argv)
     if (ret == 0)
       cout << "Import successful" << std::endl;
     goto out;
+  } else if (op == "dump-journal-mount") {
+    // Undocumented feature to dump journal with mounted fs
+    // This doesn't support the format option, but it uses the
+    // ObjectStore::dump_journal() and mounts to get replay to run.
+    int r = fs->dump_journal(cout);
+    if (r) {
+      if (r == -EOPNOTSUPP) {
+        cerr << "Object store type \"" << type << "\" doesn't support journal dump" << std::endl;
+      } else {
+        cerr << "Journal dump failed with error " << r << std::endl;
+      }
+    }
+    goto out;
   }
 
   log_oid = OSD::make_pg_log_oid(pgid);
@@ -2814,21 +2864,6 @@ int main(int argc, char **argv)
       ret = action_on_all_objects_in_pg(fs, coll_t(pgid), *action, debug);
     else
       ret = action_on_all_objects(fs, *action, debug);
-    goto out;
-  }
-
-  // Special list handling.  Treating pretty_format as human readable,
-  // with one object per line and not an enclosing array.
-  human_readable = ends_with(format, "-pretty");
-  if (op == "list" && human_readable) {
-    // Remove -pretty from end of format which we know is there
-    format = format.substr(0, format.size() - strlen("-pretty"));
-  }
-
-  formatter = Formatter::create(format);
-  if (formatter == NULL) {
-    cerr << "unrecognized format: " << format << std::endl;
-    ret = 1;
     goto out;
   }
 
