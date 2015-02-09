@@ -10255,6 +10255,9 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
     remove_repop(repop);
   }
 
+  assert(repop_map.empty());
+  assert(repop_queue.empty());
+
   if (requeue) {
     requeue_ops(rq);
     if (!waiting_for_ondisk.empty()) {
