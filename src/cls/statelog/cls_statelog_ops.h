@@ -34,7 +34,7 @@ struct cls_statelog_list_op {
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
-  cls_statelog_list_op() {}
+  cls_statelog_list_op() : max_entries(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -119,7 +119,7 @@ struct cls_statelog_check_state_op {
   string object;
   uint32_t state;
 
-  cls_statelog_check_state_op() {}
+  cls_statelog_check_state_op() : state(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
