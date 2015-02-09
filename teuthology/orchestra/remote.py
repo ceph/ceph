@@ -82,6 +82,15 @@ class Remote(object):
         return self._hostname
 
     @property
+    def machine_type(self):
+        if not getattr(self, '_machine_type', None):
+            remote_info = ls.get_status(self.hostname)
+            if not remote_info:
+                return None
+            self._machine_type = remote_info.get("machine_type", None)
+        return self._machine_type
+
+    @property
     def shortname(self):
         if self._shortname is None:
             self._shortname = self.hostname.split('.')[0]
