@@ -128,7 +128,7 @@ enumerate_images(struct rbd_image_data *data)
 		    ((strlen(mount_image_name) > 0) &&
 		    (strcmp(ip, mount_image_name) == 0))) {
 			fprintf(stderr, "%s, ", ip);
-			im = (rbd_image*) malloc(sizeof(*im));
+			im = static_cast<rbd_image*>(malloc(sizeof(*im)));
 			im->image_name = ip;
 			im->next = *head;
 			*head = im;

@@ -230,7 +230,7 @@ public:
   }
 
   void alloc_trailers(int cnt) {
-    req_arr = (xio_msg_ex*) malloc(cnt * sizeof(xio_msg_ex));
+    req_arr = static_cast<xio_msg_ex*>(malloc(cnt * sizeof(xio_msg_ex)));
     for (int ix = 0; ix < cnt; ++ix) {
       xio_msg_ex* xreq = &(req_arr[ix]);
       new (xreq) xio_msg_ex(this);

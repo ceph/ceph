@@ -16,7 +16,7 @@ struct cls_statelog_entry {
   bufferlist data;
   uint32_t state; /* user defined state */
 
-  cls_statelog_entry() {}
+  cls_statelog_entry() : state(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

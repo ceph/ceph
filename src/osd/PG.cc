@@ -3672,7 +3672,7 @@ void PG::repair_object(
     list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
     for (i = ok_peers->begin();
 	 i != ok_peers->end();
-	 i++)
+	 ++i)
       missing_loc.add_location(soid, i->second);
 
     pg_log.set_last_requested(0);
@@ -4199,7 +4199,7 @@ void PG::scrub_compare_maps()
       list<pair<ScrubMap::object, pg_shard_t> > good_peers;
       for (list<pg_shard_t>::const_iterator j = i->second.begin();
 	   j != i->second.end();
-	   j++) {
+	   ++j) {
 	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
       }
       scrubber.authoritative.insert(
