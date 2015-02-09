@@ -850,13 +850,15 @@ void Pipe::set_socket_options()
 
   int prio = msgr->get_socket_priority();
   if (prio >= 0) {
+    int r;
+#ifdef IPTOS_CLASS_CS6
     int iptos = IPTOS_CLASS_CS6;
-    int r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
+    r = ::setsockopt(sd, IPPROTO_IP, IP_TOS, &iptos, sizeof(iptos));
     if (r < 0) {
       ldout(msgr->cct,0) << "couldn't set IP_TOS to " << iptos
                          << ": " << cpp_strerror(errno) << dendl;
     }
-
+#endif
     // setsockopt(IPTOS_CLASS_CS6) sets the priority of the socket as 0.
     // See http://goo.gl/QWhvsD and http://goo.gl/laTbjT
     // We need to call setsockopt(SO_PRIORITY) after it.
