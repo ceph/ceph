@@ -1,4 +1,10 @@
 -------------------------------------------------------------------
+Mon Feb  9 01:38:05 UTC 2015 - tserong@suse.com
+
+- Only use %service macros with ceph.target, not individual parameterized
+  services (fixes ceph-mon etc. disabled on upgrade, bnc#916499)
+
+-------------------------------------------------------------------
 Fri Feb  6 10:02:54 UTC 2015 - tbehrens@suse.com
 
 - Coherent dependencies to ceph main package

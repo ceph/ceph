@@ -543,24 +543,40 @@ rm -f $RPM_BUILD_ROOT%{_mandir}/man8/ceph-post-file.8*
 rm -rf $RPM_BUILD_ROOT
 
 %pre
-
 %if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
-%service_add_pre $SERVICES
+# service_add_pre and friends don't work with parameterized systemd service
+# instances, only with single services or targets, so we always pass
+# ceph.target to these macros (this and related comments all pertain to
+# bnc#916499)
+%service_add_pre ceph.target
 %endif
 
 %post
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
+# TODO: find out what exactly this systemd-tmpfiles inovcation is for
 systemd-tmpfiles --create /%{_tmpfilesdir}/%{name}.conf
-SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
-%service_add_post $SERVICES
+# service_add_post takes care of `systemctl daemon-reload`
+%service_add_post ceph.target
 %endif
 
 %preun
 %if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
-%service_del_preun $SERVICES
+if [ $1 -eq 0 ]; then
+  # Need a special case here when removing the RPM to disable specific
+  # service instance, or stale symlinks will be left lying around in
+  # /etc/systemd/system.  May as well stop them too for completeness
+  # (although strictly service_del_preun would do that anyway by dint
+  # of stopping ceph.target)
+  SERVICES=$(systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph-mds@'  | cut -d' ' -f1)
+  if [ -n "$SERVICES" ]; then
+   /usr/bin/systemctl --no-reload disable $SERVICES > /dev/null 2>&1 || :
+   /usr/bin/systemctl stop $SERVICES > /dev/null 2>&1 || :
+  fi
+fi
+# service_del_preun ceph.target takes care of actually stopping everything
+# and removing ceph.target, if this is a removal not an upgrade.
+%service_del_preun ceph.target
 %else
 %stop_on_removal ceph
 if [ $1 = 0 ] ; then
@@ -568,20 +584,20 @@ if [ $1 = 0 ] ; then
 #    /sbin/chkconfig --del ceph
 fi
 %endif
-%stop_on_removal ceph
 
 %postun
 /sbin/ldconfig
 %if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-mon@|^ceph-osd@|^ceph@'  | cut -d' ' -f1`
-%service_del_postun $SERVICES
+# service_del_postun ceph.target does a try-restart on ceph-target during an
+# upgrade, so handles restarting all ceph daemons
+%service_del_postun ceph.target
 %else
 if [ "$1" -ge "1" ] ; then
     /sbin/service ceph condrestart >/dev/null 2>&1 || :
 fi
-%endif
 %restart_on_update ceph
 %insserv_cleanup
+%endif
 
 #################################################################################
 # files
@@ -767,18 +783,20 @@ fi
 %endif
 
 %pre radosgw
-%if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
-%service_add_pre $SERVICES
-%endif
+# Nothing to do here (service_add_pre tries to migrate services from sysvinit
+# to systemd, but that only applies for single services, not to parameterized
+# services like ceph-radosgw)
 
 %post radosgw
 /sbin/ldconfig
 %if 0%{?suse_version}
 %if 0%{?suse_version} >= 1310
+# TODO: find out what exactly this systemd-tmpfiles inovcation is for
 systemd-tmpfiles --create /%{_tmpfilesdir}/ceph-radosgw.conf
-SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
-%service_add_post $SERVICES
+# explicit systemctl daemon-reload (that's the only relevant bit of
+# service_add_post; the rest is all sysvinit --> systemd migration which
+# isn't applicable in this context (see above comment).
+/usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
 %else
 %fillup_and_insserv -f -y ceph-radosgw
 %endif
@@ -787,8 +805,16 @@ SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 %preun radosgw
 %if 0%{?suse_version}
 %if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
-%service_del_preun $SERVICES
+if [ $1 -eq 0 ]; then
+  # Need a special case here when removing the RPM to disable specific
+  # service instance, or stale symlinks will be left lying around in
+  # /etc/systemd/system (see also comment in main package preun)
+  SERVICES=$(systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1)
+  if [ -n "$SERVICES" ]; then
+   /usr/bin/systemctl --no-reload disable $SERVICES > /dev/null 2>&1 || :
+   /usr/bin/systemctl stop $SERVICES > /dev/null 2>&1 || :
+  fi
+fi
 %else
 %stop_on_removal ceph-radosgw
 %endif
@@ -798,8 +824,18 @@ SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
 /sbin/ldconfig
 %if 0%{?suse_version}
 %if 0%{?suse_version} >= 1310
-SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
-%service_del_postun $SERVICES
+# This try-restart / daemon-reload are the relevant parts of service_del_postun
+# which don't try to do sysvinit -> systemd migration
+if [ $1 -ge 1 ]; then
+  SERVICES=`systemctl | grep -E '^ceph-radosgw@'  | cut -d' ' -f1`
+  if [ -n "$SERVICES" ] ; then
+    if test "$YAST_IS_RUNNING" != "instsys" -a "$DISABLE_RESTART_ON_UPDATE" != yes ; then
+      /usr/bin/systemctl try-restart $SERVICES >/dev/null 2>&1 || :
+    fi
+  fi
+else
+  /usr/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+fi
 %else
 %restart_on_update ceph-radosgw
 %endif
