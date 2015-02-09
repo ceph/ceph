@@ -192,6 +192,39 @@ unittest_erasure_code_plugin_lrc_LDADD += -ldl
 endif
 check_PROGRAMS += unittest_erasure_code_plugin_lrc
 
+unittest_erasure_code_shec_SOURCES = \
+	test/erasure-code/TestErasureCodeShec.cc \
+	${libec_shec_la_SOURCES}
+unittest_erasure_code_shec_CFLAGS = ${libec_shec_la_CFLAGS}
+unittest_erasure_code_shec_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_shec_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
+unittest_erasure_code_shec_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_shec
+
+unittest_erasure_code_shec_all_SOURCES = \
+	test/erasure-code/TestErasureCodeShec_all.cc \
+	${libec_shec_la_SOURCES}
+unittest_erasure_code_shec_all_CFLAGS = ${libec_shec_la_CFLAGS}
+unittest_erasure_code_shec_all_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_shec_all_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
+unittest_erasure_code_shec_all_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_shec_all
+
+unittest_erasure_code_shec_thread_SOURCES = \
+	test/erasure-code/TestErasureCodeShec_thread.cc \
+	${libec_shec_la_SOURCES}
+unittest_erasure_code_shec_thread_CFLAGS = ${libec_shec_la_CFLAGS}
+unittest_erasure_code_shec_thread_CXXFLAGS = ${libec_shec_la_CXXFLAGS} $(UNITTEST_CXXFLAGS)
+unittest_erasure_code_shec_thread_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
+if LINUX
+unittest_erasure_code_shec_thread_LDADD += -ldl
+endif
+check_PROGRAMS += unittest_erasure_code_shec_thread
+
 unittest_erasure_code_example_SOURCES = \
 	erasure-code/ErasureCode.cc \
 	test/erasure-code/TestErasureCodeExample.cc
