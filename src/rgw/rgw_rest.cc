@@ -1086,6 +1086,21 @@ int RGWHandler_ObjStore::allocate_formatter(struct req_state *s, int default_typ
       s->format = RGW_FORMAT_XML;
     } else if (format_str.compare("json") == 0) {
       s->format = RGW_FORMAT_JSON;
+    } else {
+      const char *accept = s->info.env->get("HTTP_ACCEPT");
+      if (accept) {
+        char format_buf[64];
+        unsigned int i = 0;
+        for (; i < sizeof(format_buf) - 1 && accept[i] && accept[i] != ';'; ++i) {
+          format_buf[i] = accept[i];
+        }
+        format_buf[i] = 0;
+        if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
+          s->format = RGW_FORMAT_XML;
+        } else if (strcmp(format_buf, "application/json") == 0) {
+          s->format = RGW_FORMAT_JSON;
+        }
+      }
     }
   }
 
