@@ -229,6 +229,27 @@ ostream& operator<<(ostream& out, const client_writeable_range_t& r)
   return out << r.range.first << '-' << r.range.last << "@" << r.follows;
 }
 
+/*
+ * inline_data_t
+ */
+void inline_data_t::encode(bufferlist &bl) const
+{
+  ::encode(version, bl);
+  if (blp)
+    ::encode(*blp, bl);
+  else
+    ::encode(bufferlist(), bl);
+}
+void inline_data_t::decode(bufferlist::iterator &p)
+{
+  ::decode(version, p);
+  uint32_t inline_len;
+  ::decode(inline_len, p);
+  if (inline_len > 0)
+    ::decode_nohead(inline_len, get_data(), p);
+  else
+    free_data();
+}
 
 /*
  * inode_t
@@ -274,9 +295,7 @@ void inode_t::encode(bufferlist &bl) const
   ::encode(backtrace_version, bl);
   ::encode(old_pools, bl);
   ::encode(max_size_ever, bl);
-  ::encode(inline_version, bl);
   ::encode(inline_data, bl);
-
   ::encode(quota, bl);
 
   ENCODE_FINISH(bl);
@@ -340,10 +359,9 @@ void inode_t::decode(bufferlist::iterator &p)
   if (struct_v >= 8)
     ::decode(max_size_ever, p);
   if (struct_v >= 9) {
-    ::decode(inline_version, p);
     ::decode(inline_data, p);
   } else {
-    inline_version = CEPH_INLINE_NONE;
+    inline_data.version = CEPH_INLINE_NONE;
   }
   if (struct_v < 10)
     backtrace_version = 0; // force update backtrace
@@ -372,10 +390,10 @@ void inode_t::dump(Formatter *f) const
   f->close_section();
 
   f->open_array_section("old_pools");
-  vector<int64_t>::const_iterator i = old_pools.begin();
-  while(i != old_pools.end()) {
+  for (compact_set<int64_t>::const_iterator i = old_pools.begin();
+       i != old_pools.end();
+       ++i)
     f->dump_int("pool", *i);
-  }
   f->close_section();
 
   f->dump_unsigned("size", size);
@@ -444,9 +462,7 @@ int inode_t::compare(const inode_t &other, bool *divergent) const
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
-        !(*const_cast<bufferlist*>(&inline_data) ==
-            *const_cast<bufferlist*>(&other.inline_data)) ||
-        inline_version != other.inline_version ||
+        inline_data != other.inline_data ||
         client_ranges != other.client_ranges ||
         !(dirstat == other.dirstat) ||
         !(rstat == other.rstat) ||
@@ -472,7 +488,7 @@ bool inode_t::older_is_consistent(const inode_t &other) const
   if (max_size_ever < other.max_size_ever ||
       truncate_seq < other.truncate_seq ||
       time_warp_seq < other.time_warp_seq ||
-      inline_version < other.inline_version ||
+      inline_data.version < other.inline_data.version ||
       dirstat.version < other.dirstat.version ||
       rstat.version < other.rstat.version ||
       accounted_rstat.version < other.accounted_rstat.version ||

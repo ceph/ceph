@@ -9243,7 +9243,7 @@ void MDCache::purge_stray(CDentry *dn)
 			  NULL, gather.new_sub());
   }
   // remove old backtrace objects
-  for (vector<int64_t>::iterator p = pi->old_pools.begin();
+  for (compact_set<int64_t>::iterator p = pi->old_pools.begin();
        p != pi->old_pools.end();
        ++p) {
     object_locator_t oloc(*p);
