@@ -474,6 +474,13 @@ def main(argv):
     cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
+    cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide pgid")
+
+    # Don't secify a --op
+    cmd = CFSD_PREFIX.format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Must provide --op or object command...")
+
     # Test --op list and generate json for all objects
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
