@@ -251,6 +251,7 @@ check_SCRIPTS += \
 	test/mon/osd-crush.sh \
 	test/mon/osd-erasure-code-profile.sh \
 	test/mon/mkfs.sh \
+	test/osd/osd-scrub-repair.sh \
 	test/osd/osd-config.sh \
 	test/osd/osd-bench.sh \
 	test/osd/osd-copy-from.sh \
