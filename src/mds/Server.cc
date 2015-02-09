@@ -813,17 +813,15 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   for (int i = 0; i < numlocks; ++i) {
     ::decode(lock, p);
     lock.client = client;
-    in->fcntl_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
-				      (lock.start, lock));
-    ++in->fcntl_locks.client_held_lock_counts[client];
+    in->get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
+    ++in->get_fcntl_lock_state()->client_held_lock_counts[client];
   }
   ::decode(numlocks, p);
   for (int i = 0; i < numlocks; ++i) {
     ::decode(lock, p);
     lock.client = client;
-    in->flock_locks.held_locks.insert(pair<uint64_t, ceph_filelock>
-				      (lock.start, lock));
-    ++in->flock_locks.client_held_lock_counts[client];
+    in->get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
+    ++in->get_flock_lock_state()->client_held_lock_counts[client];
   }
 }
 
@@ -3340,14 +3338,14 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
     interrupt = true;
     // fall-thru
   case CEPH_LOCK_FLOCK:
-    lock_state = &cur->flock_locks;
+    lock_state = cur->get_flock_lock_state();
     break;
 
   case CEPH_LOCK_FCNTL_INTR:
     interrupt = true;
     // fall-thru
   case CEPH_LOCK_FCNTL:
-    lock_state = &cur->fcntl_locks;
+    lock_state = cur->get_fcntl_lock_state();
     break;
 
   default:
@@ -3430,11 +3428,11 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
   ceph_lock_state_t *lock_state = NULL;
   switch (req->head.args.filelock_change.rule) {
   case CEPH_LOCK_FLOCK:
-    lock_state = &cur->flock_locks;
+    lock_state = cur->get_flock_lock_state();
     break;
 
   case CEPH_LOCK_FCNTL:
-    lock_state = &cur->fcntl_locks;
+    lock_state = cur->get_fcntl_lock_state();
     break;
 
   default:

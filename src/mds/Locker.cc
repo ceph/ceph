@@ -3054,17 +3054,17 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       ::decode(decoded_lock, bli);
-      in->fcntl_locks.held_locks.
+      in->get_fcntl_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->fcntl_locks.client_held_lock_counts[(client_t)(decoded_lock.client)];
+      ++in->get_fcntl_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
     ::decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
       ::decode(decoded_lock, bli);
-      in->flock_locks.held_locks.
+      in->get_flock_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
-      ++in->flock_locks.client_held_lock_counts[(client_t)(decoded_lock.client)];
+      ++in->get_flock_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
   }
 
