@@ -21,6 +21,7 @@
 #include "include/elist.h"
 #include "include/types.h"
 #include "include/lru.h"
+#include "include/compact_set.h"
 
 #include "mdstypes.h"
 #include "flock.h"
@@ -233,7 +234,7 @@ public:
   SnapRealm        *snaprealm;
   SnapRealm        *containing_realm;
   snapid_t          first, last;
-  std::set<snapid_t> dirty_old_rstats;
+  compact_set<snapid_t> dirty_old_rstats;
 
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
@@ -392,7 +393,7 @@ public:
 
   // -- cache infrastructure --
 private:
-  std::map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
+  compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
   int stickydir_ref;
 
 public:
@@ -427,7 +428,7 @@ public:
  protected:
   // parent dentries in cache
   CDentry         *parent;             // primary link
-  std::set<CDentry*>    remote_parents;     // if hard linked
+  compact_set<CDentry*>    remote_parents;     // if hard linked
 
   std::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
 
@@ -437,12 +438,12 @@ public:
 protected:
   // file capabilities
   std::map<client_t, Capability*> client_caps;         // client -> caps
-  std::map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
+  compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int                   replica_caps_wanted; // [replica] what i've requested from auth
 
-  std::map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  compact_map<int, std::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
 public:
-  std::map<snapid_t, std::set<client_t> > client_need_snapflush;
+  compact_map<snapid_t, std::set<client_t> > client_need_snapflush;
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
@@ -639,7 +640,7 @@ public:
 
   // -- waiting --
 protected:
-  std::map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
+  compact_map<frag_t, std::list<MDSInternalContextBase*> > waiting_on_dir;
 public:
   void add_dir_waiter(frag_t fg, MDSInternalContextBase *c);
   void take_dir_waiting(frag_t fg, std::list<MDSInternalContextBase*>& ls);
@@ -791,8 +792,8 @@ public:
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
-  const std::map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
-  std::map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  const compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
+  compact_map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
 
   const std::map<client_t,Capability*>& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
