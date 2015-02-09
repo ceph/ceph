@@ -1719,7 +1719,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
   if (cur->last >= floor)
     _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
       
-  for (set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+  for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
        p != cur->dirty_old_rstats.end();
        ++p) {
     old_inode_t& old = cur->old_inodes[*p];
