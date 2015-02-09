@@ -2517,6 +2517,11 @@ int main(int argc, char **argv)
     return 1;
   }
 
+  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
+    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
+    return 1;
+  }
+
   ObjectStore *fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
   if (fs == NULL) {
     cerr << "Must provide --type (filestore, memstore, keyvaluestore)" << std::endl;
@@ -2579,11 +2584,6 @@ int main(int argc, char **argv)
       << unsupported << std::endl;
     ret = EINVAL;
     goto out;
-  }
-
-  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
-    cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
-    return 1;
   }
 
   if (op != "list" && vm.count("object")) {
