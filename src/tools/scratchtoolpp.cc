@@ -23,6 +23,7 @@ using namespace librados;
 #include <stdlib.h>
 #include <time.h>
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -317,3 +318,4 @@ int main(int argc, const char **argv)
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
