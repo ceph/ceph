@@ -170,7 +170,7 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  std::map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
+  compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
@@ -258,7 +258,7 @@ protected:
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
-  std::set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
+  compact_set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -502,7 +502,7 @@ protected:
   void _tmap_fetched(bufferlist &bl, const std::string& want_dn, int r);
 
   // -- commit --
-  std::map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
+  compact_map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
@@ -539,7 +539,7 @@ public:
     
   // -- waiters --
 protected:
-  std::map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
+  compact_map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
 
 public:
   bool is_waiting_for_dentry(const std::string& dname, snapid_t snap) {

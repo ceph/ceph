@@ -1649,7 +1649,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
-	map<snapid_t,old_rstat_t> dirty_old_rstat;
+	compact_map<snapid_t,old_rstat_t> dirty_old_rstat;
 	::decode(fg, p);
 	::decode(fgfirst, p);
 	::decode(rstat, p);
@@ -2032,7 +2032,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
 	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
 					       dir->first, CEPH_NOSNAP, this, true);
-	  for (map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
+	  for (compact_map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
 	       q != dir->dirty_old_rstat.end();
 	       ++q)
 	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
