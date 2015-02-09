@@ -938,7 +938,6 @@ struct MonCommand {
 
   // MonCommand flags
   enum {
-    FLAG_NONE      = (0 << 0),
     FLAG_NOFORWARD = (1 << 0),
   };
 
