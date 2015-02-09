@@ -35,6 +35,7 @@ public:
     }
 };
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -122,3 +123,4 @@ TEST_P(WatchStress, Stress1) {
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
