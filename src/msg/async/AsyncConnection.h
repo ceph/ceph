@@ -23,15 +23,14 @@
 #include <map>
 using namespace std;
 
+#include "auth/AuthSessionHandler.h"
 #include "common/Mutex.h"
 #include "include/buffer.h"
-
-#include "auth/AuthSessionHandler.h"
-#include "include/buffer.h"
 #include "msg/Connection.h"
-#include "net_handler.h"
-#include "Event.h"
 #include "msg/Messenger.h"
+
+#include "Event.h"
+#include "net_handler.h"
 
 class AsyncMessenger;
 

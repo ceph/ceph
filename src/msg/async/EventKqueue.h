@@ -29,7 +29,7 @@ class KqueueDriver : public EventDriver {
   int size;
 
  public:
-  KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c) {}
+  KqueueDriver(CephContext *c): kqfd(-1), events(NULL), cct(c), size(0) {}
   virtual ~KqueueDriver() {
     if (kqfd != -1)
       close(kqfd);

@@ -122,7 +122,7 @@ void EventOutput::summary() const
   }
 
   std::cout << "Errors: " << scan.errors.size() << std::endl;
-  if (scan.errors.size()) {
+  if (!scan.errors.empty()) {
     for (JournalScanner::ErrorMap::const_iterator i = scan.errors.begin();
          i != scan.errors.end(); ++i) {
       std::cout << "  0x" << std::hex << i->first << std::dec
