@@ -34,6 +34,7 @@ TEST_F(LibRadosList, ListObjects) {
   rados_objects_list_close(ctx);
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -154,6 +155,7 @@ static void check_list(std::set<std::string>& myset, rados_list_ctx_t& ctx)
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 TEST_F(LibRadosList, ListObjectsNS) {
   char buf[128];
@@ -207,6 +209,7 @@ TEST_F(LibRadosList, ListObjectsNS) {
   ASSERT_EQ(-EINVAL, rados_objects_list_open(ioctx, &ctx));
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -474,6 +477,7 @@ TEST_F(LibRadosListECPP, ListObjectsEndIter) {
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 TEST_F(LibRadosListEC, ListObjectsNS) {
   char buf[128];
@@ -570,6 +574,7 @@ TEST_F(LibRadosListECPP, ListObjectsPPNS) {
   EXPECT_THROW(check_listpp(def, ioctx), std::runtime_error);
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -661,3 +666,4 @@ TEST_F(LibRadosListECPP, ListObjectsStartPP) {
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"

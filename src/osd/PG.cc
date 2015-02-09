@@ -2515,6 +2515,7 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -2555,6 +2556,7 @@ void PG::upgrade(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls)
 {
@@ -2753,6 +2755,7 @@ void PG::write_info(ObjectStore::Transaction& t)
   dirty_big_info = false;
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -2843,6 +2846,7 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
