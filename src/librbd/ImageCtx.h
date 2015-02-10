@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
@@ -60,7 +61,8 @@ namespace librbd {
 
     /**
      * Lock ordering:
-     * md_lock, cache_lock, snap_lock, parent_lock, refresh_lock
+     * md_lock, cache_lock, snap_lock, parent_lock, refresh_lock,
+     * aio_lock
      */
     RWLock md_lock; // protects access to the mutable image metadata that
                    // isn't guarded by other locks below
@@ -69,6 +71,7 @@ namespace librbd {
     RWLock snap_lock; // protects snapshot-related member variables:
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
+    Mutex aio_lock; // protects pending_aio and pending_aio_cond
 
     unsigned extra_read_flags;
 
@@ -89,6 +92,9 @@ namespace librbd {
     ObjectCacher *object_cacher;
     LibrbdWriteback *writeback_handler;
     ObjectCacher::ObjectSet *object_set;
+
+    Cond pending_aio_cond;
+    uint64_t pending_aio;
 
     /**
      * Either image_name or image_id must be set.
@@ -154,7 +160,7 @@ namespace librbd {
 			 librados::snap_t in_snap_id);
     uint64_t prune_parent_extents(vector<pair<uint64_t,uint64_t> >& objectx,
 				  uint64_t overlap);
-
+    void wait_for_pending_aio();
   };
 }
 
