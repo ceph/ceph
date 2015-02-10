@@ -548,6 +548,7 @@ void PGMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       ::encode(p->first, dirty);
       bufferlist bl;
       ::encode(p->second, bl, features);
+      ::encode(pending_inc.get_osd_epochs().find(p->first)->second, bl);
       t->put(prefix, stringify(p->first), bl);
     }
     for (set<int32_t>::const_iterator p =
