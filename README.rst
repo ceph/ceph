@@ -450,7 +450,7 @@ set of tests based off the data in the directory for the suite.
 
 To run a suite, enter::
 
-    teuthology-suite -s <suite> [-c <ceph>] [-k <kernel>] [-t <teuth>] [-m <mtype>]
+    teuthology-suite -s <suite> [-c <ceph>] [-k <kernel>] [-e email] [-f flavor] [-t <teuth>] [-m <mtype>]
 
 where:
 
@@ -458,18 +458,20 @@ where:
 * ``ceph``: ceph branch to be used.
 * ``kernel``: version of the kernel to be used.
 * ``email``: email address to send the results to.
-* ``flavor``: flavor of the test
+* ``flavor``: the kernel flavor to run against
 * ``teuth``: version of teuthology to run
 * ``mtype``: machine type of the run
 * ``templates``: template file used for further modifying the suite (optional)
 
 For example, consider::
 
-     schedule_suite.sh rbd wip-fix cuttlefish bob.smith@foo.com master cuttlefish plana
+     teuthology-suite -s rbd -c wip-fix -k cuttlefish -e bob.smith@foo.com -f basic -t cuttlefish -m plana
 
-The above command runs the rbd suite using wip-fix as the ceph branch, a
-straight cuttlefish kernel, and the master flavor of cuttlefish teuthology.  It
-will run on plana machines.
+The above command runs the rbd suite using the wip-fix branch of ceph, the
+cuttlefish kernel, with a 'basic' kernel flavor, and the teuthology
+cuttlefish branch will be used.  It will run on plana machines and send an email
+to bob.smith@foo.com when it's completed. For more details on
+``teuthology-suite``, please consult the output of ``teuthology-suite --help``.
 
 In order for a queued task to be run, a teuthworker thread on
 ``teuthology.front.sepia.ceph.com`` needs to remove the task from the queue.
