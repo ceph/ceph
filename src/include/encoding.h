@@ -306,6 +306,7 @@ inline void encode(const boost::optional<T> &p, bufferlist &bl)
     encode(p.get(), bl);
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
 #pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
@@ -321,6 +322,7 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
   }
 }
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 //triple tuple
 template<class A, class B, class C>
