@@ -3120,6 +3120,7 @@ void RGWAbortMultipart::execute()
   meta_obj.index_hash_source = s->object.name;
 
   cls_rgw_obj_chain chain;
+  list<rgw_obj_key> remove_objs;
 
   do {
     ret = list_multipart_parts(store, s, upload_id, meta_oid, max_parts, marker, obj_parts, &marker, &truncated);
@@ -3139,6 +3140,13 @@ void RGWAbortMultipart::execute()
           return;
       } else {
         store->update_gc_chain(meta_obj, obj_part.manifest, &chain);
+        RGWObjManifest::obj_iterator oiter = obj_part.manifest.obj_begin();
+        if (oiter != obj_part.manifest.obj_end()) {
+          rgw_obj head = oiter.get_location();
+          rgw_obj_key key;
+          head.get_index_key(&key);
+          remove_objs.push_back(key);
+        }
       }
     }
   } while (truncated);
@@ -3150,8 +3158,17 @@ void RGWAbortMultipart::execute()
     return;
   }
 
+  RGWRados::Object del_target(store, s->bucket_info, *obj_ctx, meta_obj);
+  RGWRados::Object::Delete del_op(&del_target);
+
+  del_op.params.bucket_owner = s->bucket_info.owner;
+  del_op.params.versioning_status = 0;
+  if (!remove_objs.empty()) {
+    del_op.params.remove_objs = &remove_objs;
+  }
+
   // and also remove the metadata obj
-  ret = store->delete_obj(*obj_ctx, s->bucket_info, meta_obj, 0);
+  ret = del_op.delete_obj();
   if (ret == -ENOENT) {
     ret = -ERR_NO_SUCH_BUCKET;
   }
