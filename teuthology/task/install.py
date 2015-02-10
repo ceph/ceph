@@ -721,15 +721,22 @@ def remove_sources(ctx, config):
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
     }
-    log.info("Removing {proj} sources lists".format(
-        proj=config.get('project', 'ceph')))
     with parallel() as p:
+        project = config.get('project', 'ceph')
+        log.info("Removing {proj} sources lists".format(
+            proj=project))
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_sources_pkgs[
-                    system_type], remote, config.get('project', 'ceph'))
-            p.spawn(remove_sources_pkgs[
-                    system_type], remote, 'calamari')
+            remove_fn = remove_sources_pkgs[remote.os.package_type]
+            p.spawn(remove_fn, remote, project)
+
+    with parallel() as p:
+        project = 'calamari'
+        log.info("Removing {proj} sources lists".format(
+            proj=project))
+        for remote in ctx.cluster.remotes.iterkeys():
+            remove_fn = remove_sources_pkgs[remote.os.package_type]
+            p.spawn(remove_fn, remote, project)
+
 
 @contextlib.contextmanager
 def install(ctx, config):
