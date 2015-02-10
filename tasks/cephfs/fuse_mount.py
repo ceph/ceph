@@ -97,6 +97,7 @@ class FuseMount(CephFSMount):
         else:
             log.debug('ceph-fuse not mounted, got fs type {fstype!r}'.format(
                 fstype=fstype))
+            return False
 
     def wait_until_mounted(self):
         """
@@ -132,20 +133,16 @@ class FuseMount(CephFSMount):
             )
         except run.CommandFailedError:
             log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
+
             # abort the fuse mount, killing all hung processes
             self.client_remote.run(
                 args=[
-                    'if', 'test', '-e', '/sys/fs/fuse/connections/*/abort',
-                    run.Raw(';'), 'then',
-                    'echo',
-                    '1',
-                    run.Raw('>'),
-                    run.Raw('/sys/fs/fuse/connections/*/abort'),
-                    run.Raw(';'), 'fi',
-                ],
+                    "find", "/sys/fs/fuse/connections", "-name", "abort",
+                    "-exec", "bash", "-c", "echo 1 > {}", "\;"
+                ]
             )
             # make sure its unmounted
-            if self._mountpoint_exists():
+            if self.is_mounted():
                 self.client_remote.run(
                     args=[
                         'sudo',
