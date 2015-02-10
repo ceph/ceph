@@ -308,11 +308,11 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT * 2, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k + 1));
-    int object_size = EC_ISA_ADDRESS_ALIGNMENT * k * 1024 + 1;
-    ASSERT_NE(0, object_size % k);
-    ASSERT_NE(0, object_size % EC_ISA_ADDRESS_ALIGNMENT);
-    int chunk_size = Isa.get_chunk_size(object_size);
-    ASSERT_EQ(0, chunk_size % EC_ISA_ADDRESS_ALIGNMENT);
+    unsigned object_size = EC_ISA_ADDRESS_ALIGNMENT * k * 1024 + 1;
+    ASSERT_NE(0u, object_size % k);
+    ASSERT_NE(0u, object_size % EC_ISA_ADDRESS_ALIGNMENT);
+    unsigned chunk_size = Isa.get_chunk_size(object_size);
+    ASSERT_EQ(0u, chunk_size % EC_ISA_ADDRESS_ALIGNMENT);
     ASSERT_GT(chunk_size, (chunk_size * k) - object_size);
   }
 }
