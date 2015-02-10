@@ -2459,11 +2459,6 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (dpath.length() == 0) {
-    cerr << "Invalid params" << std::endl;
-    return 1;
-  }
-
   osflagbits_t flags = 0;
   if (vm.count("skip-journal-replay"))
     flags |= SKIP_JOURNAL_REPLAY;
