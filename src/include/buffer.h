@@ -184,7 +184,7 @@ public:
     bool is_page_aligned() const { return is_aligned(CEPH_PAGE_SIZE); }
     bool is_n_align_sized(unsigned align) const
     {
-      return (length() & (align-1)) == 0;
+      return (length() % align) == 0;
     }
     bool is_n_page_sized() const { return is_n_align_sized(CEPH_PAGE_SIZE); }
 
@@ -393,6 +393,8 @@ public:
     void rebuild();
     void rebuild(ptr& nb);
     void rebuild_aligned(unsigned align);
+    void rebuild_aligned_size_and_memory(unsigned align_size,
+					 unsigned align_memory);
     void rebuild_page_aligned();
 
     // sort-of-like-assignment-op
