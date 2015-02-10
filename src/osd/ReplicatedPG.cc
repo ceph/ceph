@@ -8007,17 +8007,35 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
 				      bool map_snapid_to_clone,
 				      hobject_t *pmissing)
 {
+  assert(oid.pool == info.pgid.pool());
+  // want the head?
+  if (oid.snap == CEPH_NOSNAP) {
+    ObjectContextRef obc = get_object_context(oid, can_create);
+    if (!obc) {
+      if (pmissing)
+  *pmissing = oid;
+      return -ENOENT;
+    }
+    dout(10) << "find_object_context " << oid
+       << " @" << oid.snap
+       << " oi=" << obc->obs.oi
+       << dendl;
+    *pobc = obc;
+
+    if (can_create && !obc->ssc)
+      obc->ssc = get_snapset_context(oid, true);
+
+    return 0;
+  }
+
   hobject_t head(oid.oid, oid.get_key(), CEPH_NOSNAP, oid.get_hash(),
 		 info.pgid.pool(), oid.get_namespace());
-  hobject_t snapdir(oid.oid, oid.get_key(), CEPH_SNAPDIR, oid.get_hash(),
-		    info.pgid.pool(), oid.get_namespace());
-
   // want the snapdir?
   if (oid.snap == CEPH_SNAPDIR) {
     // return head or snapdir, whichever exists.
     ObjectContextRef obc = get_object_context(head, can_create);
     if (!obc || !obc->obs.exists)
-      obc = get_object_context(snapdir, can_create);
+      obc = get_object_context(oid, can_create);
     if (!obc || !obc->obs.exists) {
       // if we have neither, we would want to promote the head.
       if (pmissing)
@@ -8034,26 +8052,6 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     if (!obc->ssc)
       obc->ssc = get_snapset_context(
 	oid, true);
-    return 0;
-  }
-
-  // want the head?
-  if (oid.snap == CEPH_NOSNAP) {
-    ObjectContextRef obc = get_object_context(head, can_create);
-    if (!obc) {
-      if (pmissing)
-	*pmissing = head;
-      return -ENOENT;
-    }
-    dout(10) << "find_object_context " << oid
-	     << " @" << oid.snap
-	     << " oi=" << obc->obs.oi
-	     << dendl;
-    *pobc = obc;
-
-    if (can_create && !obc->ssc)
-      obc->ssc = get_snapset_context(oid, true);
-
     return 0;
   }
 
