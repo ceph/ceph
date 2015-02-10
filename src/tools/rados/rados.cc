@@ -1600,8 +1600,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
+      utime_t t(mtime, 0);
       cout << pool_name << "/" << oid
-           << " mtime " << mtime << ", size " << size << std::endl;
+           << " mtime " << t << ", size " << size << std::endl;
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {
