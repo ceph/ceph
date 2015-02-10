@@ -3443,7 +3443,16 @@ private:
 public:
   C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) {
-    client->remount_cb(client->callback_handle);
+    assert (r == 0);
+    r = client->remount_cb(client->callback_handle);
+    if (r != 0) {
+      client_t whoami = client->get_nodeid();
+      lderr(client->cct) << "tried to remount (to trim kernel dentries) and got error "
+			 << r << dendl;
+      if (client->cct->_conf->client_die_on_failed_remount) {
+	assert(0 == "failed to remount for kernel dentry trimming");
+      }
+    }
   }
 };
 

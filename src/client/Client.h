@@ -136,7 +136,7 @@ typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off,
 
 typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
-typedef void (*client_remount_callback_t)(void *handle);
+typedef int (*client_remount_callback_t)(void *handle);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
