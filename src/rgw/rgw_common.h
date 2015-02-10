@@ -1266,7 +1266,7 @@ public:
   /*
    * get the object's key name as being referred to by the bucket index.
    */
-  string get_index_key_name() {
+  string get_index_key_name() const {
     if (ns.empty()) {
       if (orig_obj.size() < 1 || orig_obj[0] != '_') {
         return orig_obj;
@@ -1279,7 +1279,7 @@ public:
     return string(buf) + orig_obj;
   };
 
-  void get_index_key(rgw_obj_key *key) {
+  void get_index_key(rgw_obj_key *key) const {
     key->name = get_index_key_name();
     key->instance = instance;
   }
@@ -1375,17 +1375,20 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 3, bl);
+    ENCODE_START(5, 3, bl);
     ::encode(bucket.name, bl);
     ::encode(loc, bl);
     ::encode(ns, bl);
     ::encode(object, bl);
     ::encode(bucket, bl);
     ::encode(instance, bl);
+    if (!ns.empty() || !instance.empty()) {
+      ::encode(orig_obj, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     ::decode(bucket.name, bl);
     ::decode(loc, bl);
     ::decode(ns, bl);
@@ -1394,6 +1397,19 @@ public:
       ::decode(bucket, bl);
     if (struct_v >= 4)
       ::decode(instance, bl);
+    if (ns.empty() && instance.empty()) {
+      orig_obj = object;
+    } else {
+      if (struct_v >= 5) {
+        ::decode(orig_obj, bl);
+      } else {
+        ssize_t pos = object.find('_', 1);
+        if (pos < 0) {
+          throw buffer::error();
+        }
+        orig_obj = object.substr(pos);
+      }
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
