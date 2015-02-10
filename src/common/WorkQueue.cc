@@ -142,8 +142,13 @@ void ThreadPool::worker(WorkThread *wt)
     }
 
     ldout(cct,20) << "worker waiting" << dendl;
-    cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
-    _cond.WaitInterval(cct, _lock, utime_t(2, 0));
+    cct->get_heartbeat_map()->reset_timeout(
+      hb,
+      cct->_conf->threadpool_default_timeout,
+      0);
+    _cond.WaitInterval(cct, _lock,
+      utime_t(
+	cct->_conf->threadpool_empty_queue_max_wait, 0));
   }
   ldout(cct,1) << "worker finish" << dendl;
 
