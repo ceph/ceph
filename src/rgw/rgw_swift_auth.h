@@ -9,7 +9,7 @@
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
-extern int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info);
+extern int rgw_swift_verify_signed_token(CephContext *cct, RGWRados *store, const char *token, RGWUserInfo& info, string *pswift_user);
 
 class RGW_SWIFT_Auth_Get : public RGWOp {
 public:
