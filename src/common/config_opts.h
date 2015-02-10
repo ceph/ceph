@@ -456,7 +456,9 @@ OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2
 // Maximum number of concurrent stray files to purge
 OPTION(mds_max_purge_files, OPT_U32, 64)
 // Maximum number of concurrent RADOS ops to issue in purging
-OPTION(mds_max_purge_ops, OPT_U32, 256)
+OPTION(mds_max_purge_ops, OPT_U32, 8192)
+// Maximum number of concurrent RADOS ops to issue in purging, scaled by PG count
+OPTION(mds_max_purge_ops_per_pg, OPT_FLOAT, 0.5)
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)

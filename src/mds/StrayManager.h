@@ -22,7 +22,7 @@ class PerfCounters;
 class CInode;
 class CDentry;
 
-class StrayManager
+class StrayManager : public md_config_obs_t
 {
   protected:
   class QueuedStray {
@@ -47,6 +47,9 @@ class StrayManager
   // Throttled allowances
   uint64_t ops_in_flight;
   uint64_t files_purging;
+
+  // Dynamic op limit per MDS based on PG count
+  uint64_t max_purge_ops;
 
   // Statistics
   uint64_t num_strays;
@@ -87,6 +90,11 @@ class StrayManager
   void notify_stray_created();
   void notify_stray_removed();
   void abort_queue();
+
+  void update_op_limit();
+  virtual const char** get_tracked_conf_keys() const;
+  virtual void handle_conf_change(const struct md_config_t *conf,
+			  const std::set <std::string> &changed);
 };
 
 #endif  // STRAY_MANAGER_H
