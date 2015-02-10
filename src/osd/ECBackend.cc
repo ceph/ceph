@@ -13,7 +13,7 @@
  */
 
 #include <boost/variant.hpp>
-#include <boost/optional.hpp>
+#include <boost/optional/optional_io.hpp>
 #include <iostream>
 #include <sstream>
 
@@ -81,7 +81,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::read_result_t &rhs)
   lhs << "read_result_t(r=" << rhs.r
       << ", errors=" << rhs.errors;
   if (rhs.attrs) {
-    lhs << ", attrs=" << rhs.attrs;
+    lhs << ", attrs=" << rhs.attrs.get();
   } else {
     lhs << ", noattrs";
   }
