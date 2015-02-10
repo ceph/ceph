@@ -918,7 +918,7 @@ struct req_info {
 
   req_info(CephContext *cct, RGWEnv *_env);
   void rebuild_from(req_info& src);
-  void init_meta_info(bool *found_nad_meta);
+  void init_meta_info(bool *found_bad_meta);
 };
 
 struct rgw_obj_key {
