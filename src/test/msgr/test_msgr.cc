@@ -1175,6 +1175,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf->set_val("auth_client_required", "none");
   g_ceph_context->_conf->set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
   g_ceph_context->_conf->set_val("ms_die_on_bad_msg", "true");
+  g_ceph_context->_conf->set_val("ms_die_on_old_message", "true");
   g_ceph_context->_conf->set_val("ms_max_backoff", "1");
   common_init_finish(g_ceph_context);
 
