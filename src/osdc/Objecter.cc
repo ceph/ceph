@@ -1771,7 +1771,7 @@ void Objecter::kick_requests(OSDSession *session)
 
 void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend)
 {
-  assert(rwlock.is_locked());
+  assert(rwlock.is_wlocked());
 
   // resend ops
   map<ceph_tid_t,Op*> resend;  // resend in tid order
@@ -1815,7 +1815,7 @@ void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lr
 
 void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend)
 {
-  assert(rwlock.is_locked());
+  assert(rwlock.is_wlocked());
 
   while (!lresend.empty()) {
     LingerOp *op = lresend.begin()->second;
@@ -2578,7 +2578,7 @@ void Objecter::_session_linger_op_assign(OSDSession *to, LingerOp *op)
 void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
 {
   assert(from == op->session);
-  assert(from->lock.is_locked());
+  assert(from->lock.is_wlocked());
 
   if (from->is_homeless()) {
     num_homeless_ops.dec();
