@@ -856,4 +856,8 @@ def main():
     return 0
 
 if __name__ == '__main__':
-    sys.exit(main())
+    retval = main()
+    # shutdown explicitly; Rados() does not
+    if cluster_handle:
+        cluster_handle.shutdown()
+    sys.exit(retval)
