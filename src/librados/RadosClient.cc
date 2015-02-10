@@ -815,19 +815,19 @@ void librados::RadosClient::handle_log(MLog *m)
 
     if (log_cb) {
       for (std::deque<LogEntry>::iterator it = m->entries.begin(); it != m->entries.end(); ++it) {
-	LogEntry e = *it;
-	ostringstream ss;
-	ss << e.stamp << " " << e.who.name << " " << e.prio << " " << e.msg;
-	string line = ss.str();
-	string who = stringify(e.who);
-	string level = stringify(e.prio);
-	struct timespec stamp;
-	e.stamp.to_timespec(&stamp);
+        LogEntry e = *it;
+        ostringstream ss;
+        ss << e.stamp << " " << e.who.name << " " << e.prio << " " << e.msg;
+        string line = ss.str();
+        string who = stringify(e.who);
+        string level = stringify(e.prio);
+        struct timespec stamp;
+        e.stamp.to_timespec(&stamp);
 
-	ldout(cct, 20) << __func__ << " delivering " << ss.str() << dendl;
-	log_cb(log_cb_arg, line.c_str(), who.c_str(),
-	       stamp.tv_sec, stamp.tv_nsec,
-	       e.seq, level.c_str(), e.msg.c_str());
+        ldout(cct, 20) << __func__ << " delivering " << ss.str() << dendl;
+        log_cb(log_cb_arg, line.c_str(), who.c_str(),
+               stamp.tv_sec, stamp.tv_nsec,
+               e.seq, level.c_str(), e.msg.c_str());
       }
     }
 
