@@ -829,11 +829,14 @@ class Snap(object):
 
 class Completion(object):
     """completion object"""
-    def __init__(self, ioctx, rados_comp, oncomplete, onsafe):
+    def __init__(self, ioctx, rados_comp, oncomplete, onsafe,
+                 complete_cb, safe_cb):
         self.rados_comp = rados_comp
         self.oncomplete = oncomplete
         self.onsafe = onsafe
         self.ioctx = ioctx
+        self.complete_cb = complete_cb
+        self.safe_cb = safe_cb
 
     def wait_for_safe(self):
         """
@@ -952,7 +955,8 @@ class Ioctx(object):
         if ret < 0:
             raise make_ex(ret, "error getting a completion")
         with self.lock:
-            completion_obj = Completion(self, completion, oncomplete, onsafe)
+            completion_obj = Completion(self, completion, oncomplete, onsafe,
+                                        complete_cb, safe_cb)
             if oncomplete:
                 self.complete_cbs[completion.value] = completion_obj
             if onsafe:
