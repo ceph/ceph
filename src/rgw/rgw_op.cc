@@ -1918,6 +1918,7 @@ void RGWPutMetadata::execute()
   for (giter = s->generic_attrs.begin(); giter != s->generic_attrs.end(); ++giter) {
     bufferlist& attrbl = attrs[giter->first];
     const string& val = giter->second;
+    attrbl.clear();
     attrbl.append(val.c_str(), val.size() + 1);
   }
 

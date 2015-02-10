@@ -4206,7 +4206,33 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   if (!op.size())
     return 0;
 
+  string tag;
+  if (state) {
+    r = prepare_update_index(state, bucket, CLS_RGW_OP_ADD, obj, tag);
+    if (r < 0)
+      return r;
+  }
+
   r = ref.ioctx.operate(ref.oid, &op);
+  if (state) {
+    if (r >= 0) {
+      bufferlist acl_bl = attrs[RGW_ATTR_ACL];
+      bufferlist etag_bl = attrs[RGW_ATTR_ETAG];
+      bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
+      string etag(etag_bl.c_str(), etag_bl.length());
+      string content_type(content_type_bl.c_str(), content_type_bl.length());
+      uint64_t epoch = ref.ioctx.get_last_version();
+      int64_t poolid = ref.ioctx.get_id();
+      utime_t mtime = ceph_clock_now(cct);
+      r = complete_update_index(bucket, obj.object, tag, poolid, epoch, state->size,
+                                mtime, etag, content_type, &acl_bl, RGW_OBJ_CATEGORY_MAIN, NULL);
+    } else {
+      int ret = complete_update_index_cancel(bucket, obj.object, tag);
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: comlete_update_index_cancel() returned r=" << r << dendl;
+      }
+    }
+  }
   if (r < 0)
     return r;
 
