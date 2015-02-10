@@ -14,6 +14,7 @@
 #include <limits.h>
 
 #include <string>
+#include <set>
 #include <map>
 
 #include "rgw_common.h"
@@ -498,7 +499,7 @@ public:
 class RGWPutMetadata : public RGWOp {
 protected:
   int ret;
-  map<string, bufferlist> attrs;
+  set<string> rmattr_names;
   bool has_policy, has_cors;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
