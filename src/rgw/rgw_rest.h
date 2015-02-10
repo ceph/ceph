@@ -372,7 +372,6 @@ extern void dump_continue(struct req_state *s);
 extern void list_all_buckets_end(struct req_state *s);
 extern void dump_time(struct req_state *s, const char *name, time_t *t);
 extern void dump_bucket_from_state(struct req_state *s);
-extern void dump_object_from_state(struct req_state *s);
 extern void dump_uri_from_state(struct req_state *s);
 extern void dump_redirect(struct req_state *s, const string& redirect);
 extern void dump_pair(struct req_state *s, const char *key, const char *value);

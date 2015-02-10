@@ -33,7 +33,7 @@ void RGWFCGX::init_env(CephContext *cct)
 
 int RGWFCGX::send_status(const char *status, const char *status_name)
 {
-  return print("Status: %s %s\n", status, status_name);
+  return print("Status: %s %s\r\n", status, status_name);
 }
 
 int RGWFCGX::send_100_continue()
@@ -49,7 +49,7 @@ int RGWFCGX::send_content_length(uint64_t len)
 {
   char buf[21];
   snprintf(buf, sizeof(buf), "%" PRIu64, len);
-  return print("Content-Length: %s\n", buf);
+  return print("Content-Length: %s\r\n", buf);
 }
 
 int RGWFCGX::complete_header()
