@@ -44,6 +44,7 @@ using namespace librados;
 #include "cls/lock/cls_lock_client.h"
 #include "include/compat.h"
 #include "common/hobject.h"
+#include "global/signal_handler.h"
 
 int rados_tool_sync(const std::map < std::string, std::string > &opts,
                              std::vector<const char*> &args);
@@ -203,6 +204,13 @@ static void usage_exit()
   exit(1);
 }
 
+/*
+ * Don't do anying, it only make pause() return
+ */
+static void sigint_handle(int sig)
+{
+  ;
+}
 
 template <typename I, typename T>
 static int rados_sistrtoll(I &i, T *val) {
@@ -2279,8 +2287,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret != 0)
       cerr << "error calling watch: " << ret << std::endl;
     else {
-      cout << "press enter to exit..." << std::endl;
-      getchar();
+      cout << "Press Ctl+c or kill -SIGINT " << getpid() << "(if in background) to exit..." <<std::endl;
+      install_sighandler(SIGINT, sigint_handle, SA_RESETHAND);
+      pause();
       io_ctx.unwatch2(cookie);
       rados.watch_flush();
     }
