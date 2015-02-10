@@ -1800,6 +1800,8 @@ void MDS::handle_mds_map(MMDSMap *m)
     set_osd_epoch_barrier(osd_epoch);
   }
 
+  mdcache->notify_mdsmap_changed();
+
  out:
   beacon.notify_mdsmap(mdsmap);
 
