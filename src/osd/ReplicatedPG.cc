@@ -3813,7 +3813,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
 	assert(ctx->snapset_obc->registered);
       }
     }
-  } else if (ctx->new_snapset.clones.size()) {
+  } else if (ctx->new_snapset.clones.size() &&
+	     (!ctx->snapset_obc || !ctx->snapset_obc->obs.exists)) {
     // save snapset on _snap
     hobject_t snapoid(soid.oid, soid.get_key(), CEPH_SNAPDIR, soid.hash,
 		      info.pgid.pool(), soid.get_namespace());
@@ -3822,7 +3823,8 @@ int ReplicatedPG::prepare_transaction(OpContext *ctx)
     ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, snapoid, ctx->at_version, old_version,
 				  osd_reqid_t(), ctx->mtime));
 
-    ctx->snapset_obc = get_object_context(snapoid, true);
+    if (!ctx->snapset_obc)
+      ctx->snapset_obc = get_object_context(snapoid, true);
     ctx->snapset_obc->obs.exists = true;
     ctx->snapset_obc->obs.oi.version = ctx->at_version;
     ctx->snapset_obc->obs.oi.last_reqid = ctx->reqid;
