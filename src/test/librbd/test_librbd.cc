@@ -21,6 +21,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include "common/config.h"
 
 #include "gtest/gtest.h"
 
@@ -39,6 +40,8 @@
 #include "common/errno.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
+
+#include <boost/scope_exit.hpp>
 
 using namespace std;
 
@@ -67,6 +70,8 @@ static int create_image_full(rados_ioctx_t ioctx, const char *name,
 {
   if (old_format) {
     return rbd_create(ioctx, name, size, order);
+  } else if ((features & RBD_FEATURE_STRIPINGV2) != 0) {
+    return rbd_create3(ioctx, name, size, features, order, 65536, 16);
   } else {
     return rbd_create2(ioctx, name, size, features, order);
   }
@@ -1905,6 +1910,52 @@ TEST(LibRBD, TestPendingAio)
     ASSERT_EQ(1, rbd_aio_is_complete(comps[i]));
     rbd_aio_release(comps[i]);
   }
+
+  rados_ioctx_destroy(ioctx);
+  ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
+}
+
+TEST(LibRBD, LargeCacheRead)
+{
+  if (!g_conf->rbd_cache) {
+    std::cout << "SKIPPING due to disabled cache" << std::endl;
+    return;
+  }
+
+  rados_t cluster;
+  rados_ioctx_t ioctx;
+  string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool(pool_name, &cluster));
+  rados_ioctx_create(cluster, pool_name.c_str(), &ioctx);
+
+  uint64_t orig_cache_size = g_conf->rbd_cache_size;
+  g_conf->set_val("rbd_cache_size", "16777216");
+  BOOST_SCOPE_EXIT( (orig_cache_size) ) {
+    g_conf->set_val("rbd_cache_size", stringify(orig_cache_size).c_str());
+  } BOOST_SCOPE_EXIT_END;
+  ASSERT_EQ(16777216, g_conf->rbd_cache_size);
+
+  rbd_image_t image;
+  int order = 0;
+  const char *name = "testimg";
+  uint64_t size = g_conf->rbd_cache_size + 1;
+
+  ASSERT_EQ(0, create_image(ioctx, name, size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name, &image, NULL));
+
+  std::string buffer(1 << order, '1');
+  for (size_t offs = 0; offs < size; offs += buffer.size()) {
+    size_t len = std::min<uint64_t>(buffer.size(), size - offs);
+    ASSERT_EQ(static_cast<ssize_t>(len),
+	      rbd_write(image, offs, len, buffer.c_str()));
+  }
+
+  ASSERT_EQ(0, rbd_invalidate_cache(image));
+
+  buffer.resize(size);
+  ASSERT_EQ(static_cast<ssize_t>(size-1024), rbd_read(image, 1024, size, &buffer[0]));
+
+  ASSERT_EQ(0, rbd_close(image));
 
   rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
