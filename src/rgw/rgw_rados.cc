@@ -4736,7 +4736,7 @@ int RGWRados::get_obj(void *ctx, RGWObjVersionTracker *objv_tracker, void **hand
     bl.append(read_bl);
 
 done:
-  if (bl.length() > 0) {
+  if (r >= 0) {
     r = bl.length();
   }
   if (r < 0 || !len || ((off_t)(ofs + len - 1) == end)) {
