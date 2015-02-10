@@ -265,7 +265,7 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
-  bool once_session_reset;
+  bool allow_session_reset;
   bool is_reset_from_peer;
   atomic_t stopping;
 
