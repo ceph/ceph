@@ -1741,7 +1741,6 @@ public:
   void _session_command_op_assign(OSDSession *to, CommandOp *op);
   void _session_command_op_remove(OSDSession *from, CommandOp *op);
 
-  int _get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession);
   int _assign_op_target_session(Op *op, RWLock::Context& lc, bool src_session_locked, bool dst_session_locked);
   int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 
@@ -1929,7 +1928,6 @@ private:
   int pool_snap_get_info(int64_t poolid, snapid_t snap, pool_snap_info_t *info);
   int pool_snap_list(int64_t poolid, vector<uint64_t> *snaps);
 private:
-  bool _promote_lock_check_race(RWLock::Context& lc);
 
   // low-level
   ceph_tid_t _op_submit(Op *op, RWLock::Context& lc);
