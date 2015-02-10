@@ -1743,7 +1743,6 @@ public:
 
   int _get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession);
   int _assign_op_target_session(Op *op, RWLock::Context& lc, bool src_session_locked, bool dst_session_locked);
-  int _get_op_target_session(Op *op, RWLock::Context& lc, OSDSession **psession);
   int _recalc_linger_op_target(LingerOp *op, RWLock::Context& lc);
 
   void _linger_submit(LingerOp *info);
