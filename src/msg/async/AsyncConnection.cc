@@ -180,7 +180,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     port(-1), lock("AsyncConnection::lock"), open_write(false), keepalive(false), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), stop_lock("AsyncConnection::stop_lock"),
-    got_bad_auth(false), authorizer(NULL), replacing(false), once_session_reset(false),
+    got_bad_auth(false), authorizer(NULL), replacing(false), allow_session_reset(true),
     is_reset_from_peer(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -1655,11 +1655,11 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     assert(connect.connect_seq > existing->connect_seq);
     assert(connect.global_seq >= existing->peer_global_seq);
     if (policy.resetcheck &&   // RESETSESSION only used by servers; peers do not reset each other
-        existing->connect_seq == 0 && once_session_reset) {
+        existing->connect_seq == 0 && allow_session_reset) {
       ldout(async_msgr->cct, 0) << __func__ << " accept we reset (peer sent cseq "
                           << connect.connect_seq << ", " << existing << ".cseq = "
                           << existing->connect_seq << "), sending RESETSESSION" << dendl;
-      once_session_reset = false;
+      allow_session_reset = false;
       return _reply_accept(CEPH_MSGR_TAG_RESETSESSION, connect, reply, authorizer_reply);
     }
 
@@ -1812,6 +1812,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
 
   lock.Lock();
   replacing = false;
+  allow_session_reset = true;
   if (r < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " existing race replacing process for addr=" << peer_addr
                               << " just fail later one(this)" << dendl;
@@ -2068,7 +2069,7 @@ void AsyncConnection::was_session_reset()
   in_seq = 0;
   connect_seq = 0;
   in_seq_acked = 0;
-  once_session_reset = true;
+  allow_session_reset = true;
 }
 
 void AsyncConnection::_stop()
