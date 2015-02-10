@@ -1501,7 +1501,9 @@ protected:
       pg->put("SnapTrimWQ");
     }
     void _clear() {
-      osd->snap_trim_queue.clear();
+      while (PG *pg = _dequeue()) {
+	pg->put("SnapTrimWQ");
+      }
     }
   } snap_trim_wq;
 
