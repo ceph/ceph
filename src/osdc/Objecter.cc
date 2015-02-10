@@ -2642,11 +2642,6 @@ int Objecter::_get_osd_session(int osd, RWLock::Context& lc, OSDSession **psessi
   return 0;
 }
 
-int Objecter::_get_op_target_session(Op *op, RWLock::Context& lc, OSDSession **psession)
-{
-  return _get_osd_session(op->target.osd, lc, psession);
-}
-
 bool Objecter::_promote_lock_check_race(RWLock::Context& lc)
 {
   epoch_t epoch = osdmap->get_epoch();
