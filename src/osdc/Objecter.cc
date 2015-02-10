@@ -2624,31 +2624,6 @@ void Objecter::_session_command_op_assign(OSDSession *to, CommandOp *op)
   ldout(cct, 15) << __func__ << " " << to->osd << " " << op->tid << dendl;
 }
 
-int Objecter::_get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession)
-{
-  int r;
-  do {
-    r = _get_session(osd, psession, lc);
-    if (r == -EAGAIN) {
-      assert(!lc.is_wlocked());
-
-      if (!_promote_lock_check_race(lc)) {
-        return r;
-      }
-    }
-  } while (r == -EAGAIN);
-  assert(r == 0);
-
-  return 0;
-}
-
-bool Objecter::_promote_lock_check_race(RWLock::Context& lc)
-{
-  epoch_t epoch = osdmap->get_epoch();
-  lc.promote();
-  return (epoch == osdmap->get_epoch());
-}
-
 int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_wlocked());
@@ -2659,13 +2634,9 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 		   << " pgid " << linger_op->target.pgid
 		   << " acting " << linger_op->target.acting << dendl;
     
-    OSDSession *s;
-    r = _get_osd_session(linger_op->target.osd, lc, &s);
-    if (r < 0) {
-      // We have no session for the new destination for the op, so leave it
-      // in this session to be handled again next time we scan requests
-      return r;
-    }
+    OSDSession *s = NULL;
+    r = _get_session(linger_op->target.osd, &s, lc);
+    assert(r == 0);
 
     if (linger_op->session != s) {
       // NB locking two sessions (s and linger_op->session) at the same time here
