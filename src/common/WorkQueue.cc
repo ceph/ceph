@@ -301,8 +301,12 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
       ++num_paused;
       wait_cond.Signal();
       while(pause_threads.read()) {
-       cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
-       shardedpool_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
+       cct->get_heartbeat_map()->reset_timeout(
+	 hb,
+	 wq->timeout_interval, wq->suicide_interval);
+       shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+	 utime_t(
+	   cct->_conf->threadpool_empty_queue_max_wait, 0));
       }
       --num_paused;
       shardedpool_lock.Unlock();
@@ -313,14 +317,21 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
         ++num_drained;
         wait_cond.Signal();
         while (drain_threads.read()) {
-          cct->get_heartbeat_map()->reset_timeout(hb, 4, 0);
-          shardedpool_cond.WaitInterval(cct, shardedpool_lock, utime_t(2, 0));
+	  cct->get_heartbeat_map()->reset_timeout(
+	    hb,
+	    wq->timeout_interval, wq->suicide_interval);
+          shardedpool_cond.WaitInterval(cct, shardedpool_lock,
+	    utime_t(
+	      cct->_conf->threadpool_empty_queue_max_wait, 0));
         }
         --num_drained;
       }
       shardedpool_lock.Unlock();
     }
 
+    cct->get_heartbeat_map()->reset_timeout(
+      hb,
+      wq->timeout_interval, wq->suicide_interval);
     wq->_process(thread_index, hb);
 
   }
