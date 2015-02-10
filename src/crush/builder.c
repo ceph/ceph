@@ -745,7 +745,10 @@ int crush_remove_uniform_bucket_item(struct crush_bucket_uniform *bucket, int it
 	for (j = i; j < bucket->h.size; j++)
 		bucket->h.items[j] = bucket->h.items[j+1];
 	newsize = --bucket->h.size;
-	bucket->h.weight -= bucket->item_weight;
+	if (bucket->item_weight < bucket->h.weight)
+		bucket->h.weight -= bucket->item_weight;
+	else
+		bucket->h.weight = 0;
 
 	if ((_realloc = realloc(bucket->h.items, sizeof(__s32)*newsize)) == NULL) {
 		return -ENOMEM;
@@ -778,7 +781,10 @@ int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 		bucket->item_weights[j] = bucket->item_weights[j+1];
 		bucket->sum_weights[j] = bucket->sum_weights[j+1] - weight;
 	}
-	bucket->h.weight -= weight;
+	if (weight < bucket->h.weight)
+		bucket->h.weight -= weight;
+	else
+		bucket->h.weight = 0;
 	newsize = --bucket->h.size;
 	
 	void *_realloc = NULL;
@@ -829,7 +835,10 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 			bucket->node_weights[node] -= weight;
 			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
-		bucket->h.weight -= weight;
+		if (weight < bucket->h.weight)
+			bucket->h.weight -= weight;
+		else
+			bucket->h.weight = 0;
 		break;
 	}
 	if (i == bucket->h.size)
@@ -884,7 +893,10 @@ int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
 	for (i = 0; i < bucket->h.size; i++) {
 		if (bucket->h.items[i] == item) {
 			bucket->h.size--;
-			bucket->h.weight -= bucket->item_weights[i];
+			if (bucket->item_weights[i] < bucket->h.weight)
+				bucket->h.weight -= bucket->item_weights[i];
+			else
+				bucket->h.weight = 0;
 			for (j = i; j < bucket->h.size; j++) {
 				bucket->h.items[j] = bucket->h.items[j+1];
 				bucket->item_weights[j] = bucket->item_weights[j+1];
