@@ -581,7 +581,7 @@ void SimpleMessenger::mark_down_all()
     Pipe *p = *q;
     ldout(cct,5) << "mark_down_all accepting_pipe " << p << dendl;
     p->pipe_lock.Lock();
-    p->stop_and_wait();
+    p->stop();
     PipeConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -596,7 +596,7 @@ void SimpleMessenger::mark_down_all()
     rank_pipe.erase(it);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop_and_wait();
+    p->stop();
     PipeConnectionRef con = p->connection_state;
     if (con && con->clear_pipe(p))
       dispatch_queue.queue_reset(con.get());
@@ -613,7 +613,7 @@ void SimpleMessenger::mark_down(const entity_addr_t& addr)
     ldout(cct,1) << "mark_down " << addr << " -- " << p << dendl;
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop_and_wait();
+    p->stop();
     if (p->connection_state) {
       // generate a reset event for the caller in this case, even
       // though they asked for it, since this is the addr-based (and
@@ -640,7 +640,7 @@ void SimpleMessenger::mark_down(Connection *con)
     assert(p->msgr == this);
     p->unregister_pipe();
     p->pipe_lock.Lock();
-    p->stop_and_wait();
+    p->stop();
     if (p->connection_state) {
       // do not generate a reset event for the caller in this case,
       // since they asked for it.
