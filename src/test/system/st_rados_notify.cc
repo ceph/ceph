@@ -38,6 +38,7 @@ StRadosNotify::~StRadosNotify()
 {
 }
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -77,3 +78,4 @@ int StRadosNotify::run()
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"

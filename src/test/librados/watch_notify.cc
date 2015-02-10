@@ -98,6 +98,7 @@ public:
 
 // --
 
+#pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
@@ -215,6 +216,7 @@ TEST_F(LibRadosWatchNotifyECPP, WatchNotifyTimeout) {
 }
 
 #pragma GCC diagnostic pop
+#pragma GCC diagnostic warning "-Wpragmas"
 
 
 // --
