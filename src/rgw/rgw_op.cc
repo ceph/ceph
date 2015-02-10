@@ -1535,45 +1535,6 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-static int put_obj_user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs,
-                                       void *param)
-{
-  RGWPutObj *op = static_cast<RGWPutObj *>(param);
-  return op->user_manifest_iterate_cb(bucket, ent, bucket_policy, start_ofs, end_ofs);
-}
-
-int RGWPutObj::user_manifest_iterate_cb(rgw_bucket& bucket, RGWObjEnt& ent, RGWAccessControlPolicy *bucket_policy, off_t start_ofs, off_t end_ofs)
-{
-  rgw_obj part(bucket, ent.name);
-
-  map<string, bufferlist> attrs;
-
-  int ret = get_obj_attrs(store, s, part, attrs, NULL, NULL);
-  if (ret < 0) {
-    return ret;
-  }
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_ETAG);
-  if (iter == attrs.end()) {
-    return 0;
-  }
-  bufferlist& bl = iter->second;
-  const char *buf = bl.c_str();
-  int len = bl.length();
-  while (len > 0 && buf[len - 1] == '\0') {
-    len--;
-  }
-  if (len > 0) {
-    user_manifest_parts_hash->Update((const byte *)bl.c_str(), len);
-  }
-
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
-    string e(bl.c_str(), bl.length());
-    ldout(s->cct, 20) << __func__ << ": appending user manifest etag: " << e << dendl;
-  }
-
-  return 0;
-}
-
 static int put_data_and_throttle(RGWPutObjProcessor *processor, bufferlist& data, off_t ofs,
                                  MD5 *hash, bool need_to_wait)
 {
@@ -1742,7 +1703,6 @@ void RGWPutObj::execute()
     bufferlist manifest_bl;
     string manifest_obj_prefix;
     string manifest_bucket;
-    RGWBucketInfo bucket_info;
 
     char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -1759,16 +1719,6 @@ void RGWPutObj::execute()
 
     manifest_bucket = prefix_str.substr(0, pos);
     manifest_obj_prefix = prefix_str.substr(pos + 1);
-
-    ret = store->get_bucket_info(NULL, manifest_bucket, bucket_info, NULL, NULL);
-    if (ret < 0) {
-      ldout(s->cct, 0) << "could not get bucket info for bucket=" << manifest_bucket << dendl;
-    }
-    ret = iterate_user_manifest_parts(s->cct, store, 0, -1, bucket_info.bucket, manifest_obj_prefix,
-                                      NULL, NULL, put_obj_user_manifest_iterate_cb, (void *)this);
-    if (ret < 0) {
-      goto done;
-    }
 
     hash.Final((byte *)etag_buf);
     buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE, etag_buf_str);
