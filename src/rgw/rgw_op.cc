@@ -2050,11 +2050,24 @@ void RGWPutMetadata::execute()
     }
   }
 
-  /* only remove meta attrs */
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
     const string& name = iter->first;
+    /* check if the attr is user-defined metadata item */
     if (name.compare(0, meta_prefix_len, meta_prefix) == 0) {
-      rmattrs[name] = iter->second;
+      if (is_object_op) {
+        /* for the objects all existing meta attrs have to be removed */
+        rmattrs[name] = iter->second;
+      } else {
+        /* for the buckets all existing meta attrs are preserved,
+           except those that are listed in rmattr_names. */
+        if (rmattr_names.find(name) != rmattr_names.end()) {
+          map<string, bufferlist>::iterator aiter = attrs.find(name);
+          if (aiter != attrs.end()) {
+            attrs.erase(aiter);
+          }
+          rmattrs[name] = iter->second;
+        }
+      }
     } else if (attrs.find(name) == attrs.end()) {
       attrs[name] = iter->second;
     }
