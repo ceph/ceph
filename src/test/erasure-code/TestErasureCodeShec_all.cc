@@ -63,7 +63,7 @@ TEST_P(ParameterTest, parameter_all)
   char* k = GetParam().k;
   char* m = GetParam().m;
   char* c = GetParam().c;
-  int c_size = GetParam().ch_size;
+  unsigned c_size = GetParam().ch_size;
   int i_k = atoi(k);
   int i_m = atoi(m);
   int i_c = atoi(c);
@@ -89,7 +89,7 @@ TEST_P(ParameterTest, parameter_all)
   EXPECT_EQ(i_k, shec->k);
   EXPECT_EQ(i_m, shec->m);
   EXPECT_EQ(i_c, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -132,7 +132,7 @@ TEST_P(ParameterTest, parameter_all)
 	g_recover++;
       } else {
 	EXPECT_EQ(-EIO, result);
-	EXPECT_EQ(0, minimum_chunks.size());
+	EXPECT_EQ(0u, minimum_chunks.size());
 	g_cannot_recover++;
 	comb.k = shec->k;
 	comb.m = shec->m;
