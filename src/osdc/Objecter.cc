@@ -658,7 +658,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   info->target.flags = flags;
   info->watch_valid_thru = ceph_clock_now(NULL);
 
-  RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
+  RWLock::WLocker l(rwlock);
 
   // Acquire linger ID
   info->linger_id = ++max_linger_id;
