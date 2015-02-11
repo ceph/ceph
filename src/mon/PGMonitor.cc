@@ -1645,7 +1645,6 @@ bool PGMonitor::preprocess_command(MMonCommand *m)
     } else if (!pgs.empty()){
       pg_map.dump_filtered_pg_stats(ds,pgs);
     }
-    ss << "list states " << what <<  " pool " << pool << " osd osd." << osd;
     r = 0;
   } else if (prefix == "pg dump_stuck") {
     vector<string> stuckop_vec;
