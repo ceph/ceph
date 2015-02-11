@@ -81,7 +81,7 @@ namespace CrushTreeDumper {
 	if (root == roots.end())
 	  return false;
 	push_back(Item(*root, 0, crush->get_bucket_weightf(*root)));
-	root++;
+	++root;
       }
 
       qi = front();
@@ -147,7 +147,7 @@ namespace CrushTreeDumper {
     f->open_array_section("children");
     for (list<int>::const_iterator i = qi.children.begin();
 	 i != qi.children.end();
-	 i++) {
+	 ++i) {
       f->dump_int("child", *i);
     }
     f->close_section();

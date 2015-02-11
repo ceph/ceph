@@ -7,5 +7,6 @@ gcc fsync-tester.c -o fsync-tester
 
 ./fsync-tester
 
+echo $PATH
+whereis lsof
 lsof
-

@@ -30,31 +30,38 @@ Requires:	python-argparse
 Requires:	python-requests
 Requires:	python-flask
 Requires:	xfsprogs
-Requires:	cryptsetup
 Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
+Requires:	cryptsetup
 Requires(post):	binutils
-BuildRequires:	make
 BuildRequires:	gcc-c++
-BuildRequires:	libtool
 BuildRequires:	boost-devel
 BuildRequires:  bzip2-devel
-BuildRequires:	libedit-devel
-BuildRequires:	perl
+BuildRequires:	cryptsetup
 BuildRequires:	gdbm
-BuildRequires:	pkgconfig
-BuildRequires:	python
-BuildRequires:	python-nose
-BuildRequires:	python-argparse
-BuildRequires:	python-virtualenv
+BuildRequires:	hdparm
 BuildRequires:	libaio-devel
 BuildRequires:	libcurl-devel
+BuildRequires:	libedit-devel
 BuildRequires:	libxml2-devel
 BuildRequires:	libuuid-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libudev-devel
+BuildRequires:	libtool
 BuildRequires:	leveldb-devel > 1.2
+BuildRequires:	make
+BuildRequires:	perl
+BuildRequires:	parted
+BuildRequires:	pkgconfig
+BuildRequires:	python
+BuildRequires:	python-argparse
+BuildRequires:	python-flask
+BuildRequires:	python-nose
+BuildRequires:	python-requests
+BuildRequires:	python-virtualenv
+BuildRequires:	util-linux
+BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
@@ -282,8 +289,13 @@ License:	LGPL-2.0
 Requires:	java
 Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
 BuildRequires:	java-devel
+%if 0%{?el6}
 Requires:	junit4
 BuildRequires:	junit4
+%else
+Requires:       junit
+BuildRequires:  junit
+%endif
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
