@@ -52,6 +52,27 @@ def send_raw_http_request(conn, method, bucket_name, key_name, follow_redirects 
     h.follow_redirects = follow_redirects
     return h.request(url, method)
 
+
+def get_acl(key):
+    """
+    Helper function to get the xml acl from a key, ensuring that the xml
+    version tag is removed from the acl response
+    """
+    raw_acl = key.get_xml_acl()
+
+    def remove_version(string):
+        return string.split(
+            '<?xml version="1.0" encoding="UTF-8"?>'
+        )[-1]
+
+    def remove_newlines(string):
+        return string.strip('\n')
+
+    return remove_version(
+        remove_newlines(raw_acl)
+    )
+
+
 def task(ctx, config):
     """
     Test radosgw-admin functionality against a running rgw instance.
@@ -920,7 +941,7 @@ def task(ctx, config):
         ['policy', '--bucket', bucket.name, '--object', key.key],
         check_status=True)
 
-    acl = key.get_xml_acl()
+    acl = get_acl(key)
 
     assert acl == out.strip('\n')
 
@@ -931,7 +952,8 @@ def task(ctx, config):
         ['policy', '--bucket', bucket.name, '--object', key.key],
         check_status=True)
 
-    acl = key.get_xml_acl()
+    acl = get_acl(key)
+
     assert acl == out.strip('\n')
 
     # TESTCASE 'rm-bucket', 'bucket', 'rm', 'bucket with objects', 'succeeds'
