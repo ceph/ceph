@@ -5470,7 +5470,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
   SnapContext& snapc = ctx->snapc;
-  PGBackend::PGTransaction *t = pgbackend->get_transaction();
 
   // clone?
   assert(soid.snap == CEPH_NOSNAP);
@@ -5563,7 +5562,13 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     snap_oi->snaps = snaps;
     if (was_dirty)
       snap_oi->set_flag(object_info_t::FLAG_DIRTY);
+
+    // prepend transaction to op_t
+    PGBackend::PGTransaction *t = pgbackend->get_transaction();
     _make_clone(ctx, t, ctx->clone_obc, soid, coid, snap_oi);
+    t->append(ctx->op_t);
+    delete ctx->op_t;
+    ctx->op_t = t;
     
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty())
@@ -5613,11 +5618,6 @@ void ReplicatedPG::make_writeable(OpContext *ctx)
     }
   }
   
-  // prepend transaction to op_t
-  t->append(ctx->op_t);
-  delete ctx->op_t;
-  ctx->op_t = t;
-
   // update snapset with latest snap context
   ctx->new_snapset.seq = snapc.seq;
   ctx->new_snapset.snaps = snapc.snaps;
