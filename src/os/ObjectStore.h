@@ -1551,7 +1551,8 @@ public:
         uint32_t largest_data_off = data.largest_data_off;
         uint32_t largest_data_off_in_tbl = data.largest_data_off_in_tbl;
         bool tolerate_collection_add_enoent = false;
-        ENCODE_START(7, 5, bl);
+	uint32_t fadvise_flags = data.fadvise_flags;
+        ENCODE_START(8, 5, bl);
         ::encode(ops, bl);
         ::encode(pad_unused_bytes, bl);
         ::encode(largest_data_len, bl);
@@ -1559,10 +1560,11 @@ public:
         ::encode(largest_data_off_in_tbl, bl);
         ::encode(tbl, bl);
         ::encode(tolerate_collection_add_enoent, bl);
+	::encode(fadvise_flags, bl);
         ENCODE_FINISH(bl);
       } else {
         //layout: data_bl + op_bl + coll_index + object_index + data
-        ENCODE_START(8, 5, bl);
+        ENCODE_START(9, 9, bl);
         ::encode(data_bl, bl);
         ::encode(op_bl, bl);
         ::encode(coll_index, bl);
@@ -1572,9 +1574,29 @@ public:
       }
     }
     void decode(bufferlist::iterator &bl) {
-      DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
+      DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
       DECODE_OLDEST(2);
-      if (struct_v == 8) {
+
+      bool decoded = false;
+      if (struct_v < 8) {
+	decode8_5(bl, struct_v);
+	use_tbl = true;
+	decoded = true;
+      }	else if (struct_v == 8) {
+	bufferlist::iterator bl2 = bl;
+	try {
+	  decode8_5(bl, struct_v);
+	  use_tbl = true;
+	  decoded = true;
+	} catch (...) {
+	  bl = bl2;
+	  decoded = false;
+	}
+      }
+
+      /* Actual version should be 9, but some version 9
+       * transactions ended up with version 8 */
+      if (!decoded && struct_v >= 8) {
         ::decode(data_bl, bl);
         ::decode(op_bl, bl);
         ::decode(coll_index, bl);
@@ -1583,13 +1605,13 @@ public:
         use_tbl = false;
         coll_id = coll_index.size();
         object_id = object_index.size();
-      } else {
-        decode7_5(bl, struct_v);
-        use_tbl = true;
+	decoded = true;
       }
+
+      assert(decoded);
       DECODE_FINISH(bl);
     }
-    void decode7_5(bufferlist::iterator &bl, __u8 struct_v) {
+    void decode8_5(bufferlist::iterator &bl, __u8 struct_v) {
       uint64_t _ops = 0;
       uint64_t _pad_unused_bytes = 0;
       uint32_t _largest_data_len = 0;
