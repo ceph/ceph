@@ -10,7 +10,8 @@ and Swift APIs, or native bindings (librados).
 .. important:: CephFS currently lacks a robust 'fsck' check and
                repair function.  Please use caution when storing
                important data as the disaster recovery tools are
-               still under development.
+               still under development.  For more information about
+               using CephFS today, see :doc:`/cephfs/early-adopters`
 
 .. ditaa::
             +-----------------------+  +------------------------+
