@@ -56,7 +56,6 @@ BuildRequires:	parted
 BuildRequires:	pkgconfig
 BuildRequires:	python
 BuildRequires:	python-argparse
-BuildRequires:	python-flask
 BuildRequires:	python-nose
 BuildRequires:	python-requests
 BuildRequires:	python-virtualenv
