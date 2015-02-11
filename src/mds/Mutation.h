@@ -198,9 +198,10 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
   interval_set<inodeno_t> prealloc_inos;
 
   int snap_caps;
+  int getattr_caps;       ///< caps requested by getattr
   bool did_early_reply;
   bool o_trunc;           ///< request is an O_TRUNC mutation
-  int getattr_caps;       ///< caps requested by getattr
+  bool has_completed;     ///< request has already completed
 
   bufferlist reply_extra_bl;
 
@@ -300,8 +301,9 @@ struct MDRequestImpl : public MutationImpl, public TrackedOp {
     TrackedOp(tracker, params.initiated),
     session(NULL), item_session_request(this),
     client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
-    tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0), snap_caps(0),
-    did_early_reply(false), o_trunc(false), getattr_caps(0),
+    tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
+    snap_caps(0), getattr_caps(0),
+    did_early_reply(false), o_trunc(false), has_completed(false),
     slave_request(NULL), internal_op(params.internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
