@@ -756,6 +756,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   int code = 0;
 
   static uint32_t nreqs;
+  Mutex::Locker l(xcon->lock);
   if (unlikely(XioPool::trace_mempool)) {
     if (unlikely((++nreqs % 65536) == 0)) {
       xp_stats.dump(__func__, nreqs);
