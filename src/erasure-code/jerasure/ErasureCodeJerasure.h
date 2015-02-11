@@ -34,8 +34,11 @@ public:
   bool per_chunk_alignment;
 
   ErasureCodeJerasure(const char *_technique) :
+    k(0),
     DEFAULT_K(2),
+    m(0),
     DEFAULT_M(1),
+    w(0),
     DEFAULT_W(8),
     technique(_technique),
     ruleset_root("default"),

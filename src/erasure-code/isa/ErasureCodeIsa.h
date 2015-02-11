@@ -51,6 +51,9 @@ public:
 
   ErasureCodeIsa(const char *_technique,
                  ErasureCodeIsaTableCache &_tcache) :
+  k(0),
+  m(0),
+  w(0),
   tcache(_tcache),
   technique(_technique),
   ruleset_root("default"),
