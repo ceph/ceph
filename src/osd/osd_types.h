@@ -772,6 +772,8 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 
 std::string pg_state_string(int state);
 std::string pg_vector_string(const vector<int32_t> &a);
+int pg_string_state(std::string state);
+
 
 /*
  * pool_snap_info_t
@@ -1499,6 +1501,7 @@ struct pg_stat_t {
     ondisk_log_size -= o.ondisk_log_size;
   }
 
+  bool is_acting_osd(int32_t osd, bool primary) const;
   void dump(Formatter *f) const;
   void dump_brief(Formatter *f) const;
   void encode(bufferlist &bl) const;
