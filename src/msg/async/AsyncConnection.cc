@@ -179,8 +179,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     out_seq(0), in_seq(0), in_seq_acked(0), state(STATE_NONE), state_after_send(0), sd(-1),
     port(-1), lock("AsyncConnection::lock"), open_write(false), keepalive(false), recv_buf(NULL),
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
-    recv_start(0), recv_end(0), stop_lock("AsyncConnection::stop_lock"),
-    got_bad_auth(false), authorizer(NULL), replacing(false),
+    recv_start(0), recv_end(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
@@ -2023,12 +2022,12 @@ void AsyncConnection::fault()
   replacing = false;
   outcoming_bl.clear();
   if (!once_ready && !is_queued() &&
-    state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
-  ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
-                            << "accept state just closed, state="
-                            << get_state_name(state) << dendl;
-   _stop();
-   return ;
+      state >=STATE_ACCEPTING && state <= STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+    ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
+                              << "accept state just closed, state="
+                              << get_state_name(state) << dendl;
+    _stop();
+    return ;
   }
   if (policy.standby && !is_queued()) {
     ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
