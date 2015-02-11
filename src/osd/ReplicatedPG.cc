@@ -7091,6 +7091,9 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   issue_repop(repop, repop->ctx->mtime);
   eval_repop(repop);
   repop->put();
+
+  // apply new object state.
+  ctx->obc->obs = ctx->new_obs;
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
