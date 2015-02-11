@@ -1063,6 +1063,24 @@ function test_mon_pg()
   ceph pg dump_stuck stale
   ceph pg dump_stuck undersized
   ceph pg dump_stuck degraded
+  ceph pg ls
+  ceph pg ls 0
+  ceph pg ls stale
+  ceph pg ls active stale
+  ceph pg ls 0 active
+  ceph pg ls 0 active stale
+  ceph pg ls-by-primary osd.0
+  ceph pg ls-by-primary osd.0 0
+  ceph pg ls-by-primary osd.0 active
+  ceph pg ls-by-primary osd.0 active stale
+  ceph pg ls-by-primary osd.0 0 active stale
+  ceph pg ls-by-osd osd.0
+  ceph pg ls-by-osd osd.0 0
+  ceph pg ls-by-osd osd.0 active
+  ceph pg ls-by-osd osd.0 active stale
+  ceph pg ls-by-osd osd.0 0 active stale
+  ceph pg ls-by-pool rbd
+  ceph pg ls-by-pool rbd active stale
   # can't test this...
   # ceph pg force_create_pg
   ceph pg getmap -o $TMPDIR/map.$$
