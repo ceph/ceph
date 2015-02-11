@@ -419,6 +419,7 @@ void Objecter::_send_linger(LingerOp *info)
   vector<OSDOp> opv;
   Context *onack = NULL;
   Context *oncommit = NULL;
+  info->watch_lock.get_read(); // just to read registered status
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
     opv.push_back(OSDOp());
@@ -434,6 +435,7 @@ void Objecter::_send_linger(LingerOp *info)
       onack = new C_Linger_Register(this, info);
     oncommit = new C_Linger_Commit(this, info);
   }
+  info->watch_lock.put_read();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
 		 onack, oncommit,
@@ -478,6 +480,7 @@ void Objecter::_linger_register(LingerOp *info, int r)
 
 void Objecter::_linger_commit(LingerOp *info, int r) 
 {
+  RWLock::WLocker wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
   if (info->on_reg_commit) {
     info->on_reg_commit->complete(r);
@@ -1879,6 +1882,7 @@ void Objecter::tick()
            p != s->linger_ops.end();
            ++p) {
         LingerOp *op = p->second;
+        RWLock::WLocker wl(op->watch_lock);
         assert(op->session);
         ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
         toping.insert(op->session);
