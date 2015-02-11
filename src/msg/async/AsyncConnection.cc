@@ -878,7 +878,7 @@ void AsyncConnection::process()
 
       case STATE_CLOSED:
         {
-          if (sd > 0)
+          if (sd >= 0)
             center->delete_file_event(sd, EVENT_READABLE);
           ldout(async_msgr->cct, 20) << __func__ << " socket closed" << dendl;
           break;
@@ -1723,7 +1723,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
     // Now existing connection will be alive and the current connection will
     // exchange socket with existing connection because we want to maintain
     // original "connection_state"
-    if (existing->sd > 0)
+    if (existing->sd >= 0)
       existing->center->delete_file_event(existing->sd, EVENT_READABLE|EVENT_WRITABLE);
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
     existing->center->create_file_event(sd, EVENT_READABLE, existing->read_handler);
@@ -1913,7 +1913,7 @@ int AsyncConnection::send_message(Message *m)
       ldout(async_msgr->cct, 10) << __func__ << " state is " << get_state_name(state)
                                  << " policy.server is false" << dendl;
       _connect();
-    } else if (sd > 0 && !open_write) {
+    } else if (sd >= 0 && !open_write) {
       center->dispatch_event_external(write_handler);
     }
   }
@@ -2012,6 +2012,8 @@ void AsyncConnection::fault()
   if (sd >= 0) {
     shutdown_socket();
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
+    ::close(sd);
+    sd = -1;
   }
   open_write = false;
 
@@ -2076,7 +2078,7 @@ void AsyncConnection::_stop()
 {
   assert(lock.is_locked());
   ldout(async_msgr->cct, 10) << __func__ << dendl;
-  if (sd > 0)
+  if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
   discard_out_queue();
@@ -2092,11 +2094,12 @@ void AsyncConnection::_stop()
   }
 
   state = STATE_CLOSED;
-  shutdown_socket();
   open_write = false;
   state_offset = 0;
-  if (sd > 0)
+  if (sd >= 0) {
+    shutdown_socket();
     ::close(sd);
+  }
   sd = -1;
   for (set<uint64_t>::iterator it = register_time_events.begin();
        it != register_time_events.end(); ++it)
