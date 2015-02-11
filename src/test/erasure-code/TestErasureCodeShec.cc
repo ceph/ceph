@@ -3215,30 +3215,6 @@ TEST(ErasureCodeShec, get_chunk_count_1)
   delete parameters;
 }
 
-TEST(ErasureCodeShec, get_chunk_count_2)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  //init is not executed
-
-  //get_chunk_count
-  EXPECT_EQ(10u, shec->get_chunk_count());
-
-  delete shec;
-  delete parameters;
-}
-
 TEST(ErasureCodeShec, get_data_chunk_count_1)
 {
   //init
@@ -3263,7 +3239,7 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   delete parameters;
 }
 
-TEST(ErasureCodeShec, get_data_chunk_count_2)
+TEST(ErasureCodeShec, get_chunk_count_no_init)
 {
   //init
   ErasureCodeShecTableCache tcache;
@@ -3281,7 +3257,8 @@ TEST(ErasureCodeShec, get_data_chunk_count_2)
   //init is not executed
 
   //get_data_chunk_count
-  EXPECT_EQ(6u, shec->get_data_chunk_count());
+  EXPECT_EQ(0u, shec->get_data_chunk_count());
+  EXPECT_EQ(0u, shec->get_chunk_count());
 
   delete shec;
   delete parameters;
