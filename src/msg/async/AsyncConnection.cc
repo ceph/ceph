@@ -2084,21 +2084,15 @@ void AsyncConnection::was_session_reset()
 void AsyncConnection::_stop()
 {
   assert(lock.is_locked());
+  if (state == STATE_CLOSED)
+    return ;
+
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   if (sd >= 0)
     center->delete_file_event(sd, EVENT_READABLE|EVENT_WRITABLE);
 
   discard_out_queue();
   async_msgr->unregister_conn(this);
-
-  if (async_msgr->cct->_conf->ms_inject_internal_delays) {
-    ldout(msgr->cct, 10) << __func__ << " sleep for "
-                         << async_msgr->cct->_conf->ms_inject_internal_delays
-                         << dendl;
-    utime_t t;
-    t.set_from_double(async_msgr->cct->_conf->ms_inject_internal_delays);
-    t.sleep();
-  }
 
   state = STATE_CLOSED;
   open_write = false;
