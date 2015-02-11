@@ -1,2 +1,4 @@
 *~
 .*.sw[nmop]
+*.pyc
+__pycache__
