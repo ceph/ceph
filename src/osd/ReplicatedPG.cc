@@ -1442,7 +1442,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   bool write_ordered =
     op->may_write() ||
     op->may_cache() ||
-    (m->get_flags() & CEPH_OSD_FLAG_RWORDERED);
+    m->has_flag(CEPH_OSD_FLAG_RWORDERED);
 
   dout(10) << "do_op " << *m
 	   << (op->may_write() ? " may_write" : "")
@@ -1564,14 +1564,14 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 		m->get_object_locator().nspace);
 
   // io blocked on obc?
-  if (((m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) &&
+  if (!m->has_flag(CEPH_OSD_FLAG_FLUSH) &&
       maybe_await_blocked_snapset(oid, op)) {
     return;
   }
 
   int r = find_object_context(
     oid, &obc, can_create,
-    m->get_flags() & CEPH_OSD_FLAG_MAP_SNAP_CLONE,
+    m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE),
     &missing_oid);
 
   if (r == -EAGAIN) {
@@ -1579,8 +1579,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // CEPH_OSD_FLAG_LOCALIZE_READS set, we just return -EAGAIN. Otherwise,
     // we have to wait for the object.
     if (is_primary() ||
-	(!(m->get_flags() & CEPH_OSD_FLAG_BALANCE_READS) &&
-	 !(m->get_flags() & CEPH_OSD_FLAG_LOCALIZE_READS))) {
+	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS))))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
@@ -1625,7 +1625,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     agent_choose_mode();
   }
 
-  if ((m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) == 0 &&
+  if (!(m->has_flag(CEPH_OSD_FLAG_IGNORE_CACHE)) &&
       maybe_handle_cache(op, write_ordered, obc, r, missing_oid, false, in_hit_set))
     return;
 
@@ -1647,7 +1647,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 
   // io blocked on obc?
   if (obc->is_blocked() &&
-      (m->get_flags() & CEPH_OSD_FLAG_FLUSH) == 0) {
+      !m->has_flag(CEPH_OSD_FLAG_FLUSH)) {
     wait_for_blocked_object(obc->obs.oi.soid, op);
     return;
   }
@@ -1781,7 +1781,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   if (ctx->snapset_obc && !ctx->snapset_obc->obs.exists)
     ctx->snapset_obc = ObjectContextRef();
 
-  if (m->get_flags() & CEPH_OSD_FLAG_SKIPRWLOCKS) {
+  if (m->has_flag(CEPH_OSD_FLAG_SKIPRWLOCKS)) {
     dout(20) << __func__ << ": skipping rw locks" << dendl;
   } else if (m->get_flags() & CEPH_OSD_FLAG_FLUSH) {
     dout(20) << __func__ << ": part of flush, will ignore write lock" << dendl;
@@ -1808,7 +1808,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return;
   }
 
-  if (m->get_flags() & CEPH_OSD_FLAG_IGNORE_CACHE) {
+  if (m->has_flag(CEPH_OSD_FLAG_IGNORE_CACHE)) {
     ctx->ignore_cache = true;
   }
 
@@ -2267,7 +2267,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
 
   if (op->may_write() || op->may_cache()) {
     // snap
-    if (!(m->get_flags() & CEPH_OSD_FLAG_ENFORCE_SNAPC) &&
+    if (!(m->has_flag(CEPH_OSD_FLAG_ENFORCE_SNAPC)) &&
 	pool.info.is_pool_snaps_mode()) {
       // use pool's snapc
       ctx->snapc = pool.snapc;
@@ -2276,7 +2276,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
       ctx->snapc.seq = m->get_snap_seq();
       ctx->snapc.snaps = m->get_snaps();
     }
-    if ((m->get_flags() & CEPH_OSD_FLAG_ORDERSNAP) &&
+    if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
 	ctx->snapc.seq < obc->ssc->snapset.seq) {
       dout(10) << " ORDERSNAP flag set and snapc seq " << ctx->snapc.seq
 	       << " < snapset seq " << obc->ssc->snapset.seq
@@ -7583,7 +7583,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
   const hobject_t& soid = ctx->obs->oi.soid;
   if (ctx->op &&
     ((static_cast<MOSDOp *>(
-	ctx->op->get_req()))->get_flags() & CEPH_OSD_FLAG_PARALLELEXEC)) {
+	ctx->op->get_req()))->has_flag(CEPH_OSD_FLAG_PARALLELEXEC))) {
     // replicate original op for parallel execution on replica
     assert(0 == "broken implementation, do not use");
   }
