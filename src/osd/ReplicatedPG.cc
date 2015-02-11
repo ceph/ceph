@@ -7990,6 +7990,9 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 
   // obc ref swallowed by repop!
   simple_repop_submit(repop);
+
+  // apply new object state.
+  ctx->obc->obs = ctx->new_obs;
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
