@@ -225,11 +225,7 @@ class AsyncConnection : public Connection {
   EventCallbackRef reset_handler;
   EventCallbackRef remote_reset_handler;
   EventCallbackRef connect_handler;
-  EventCallbackRef fast_connect_handler;
   EventCallbackRef accept_handler;
-  EventCallbackRef fast_accept_handler;
-  EventCallbackRef stop_handler;
-  EventCallbackRef signal_handler;
   EventCallbackRef local_deliver_handler;
   bool keepalive;
   struct iovec msgvec[IOV_MAX];
@@ -237,8 +233,6 @@ class AsyncConnection : public Connection {
   uint32_t recv_max_prefetch;
   uint32_t recv_start;
   uint32_t recv_end;
-  Mutex stop_lock; // used to protect `mark_down_cond`
-  Cond stop_cond;
   set<uint64_t> register_time_events; // need to delete it if stop
 
   // Tis section are temp variables used by state transition
@@ -265,7 +259,6 @@ class AsyncConnection : public Connection {
                      // there won't exists conflicting connection so we use
                      // "replacing" to skip RESETSESSION to avoid detect wrong
                      // presentation
-  bool allow_session_reset;
   bool is_reset_from_peer;
   bool once_ready;
   atomic_t stopping;
