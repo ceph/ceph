@@ -7,7 +7,10 @@ a Ceph Storage Cluster to store its data. The Ceph filesystem uses the same Ceph
 Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
 and Swift APIs, or native bindings (librados).
 
-.. important:: Ceph FS is currently not recommended for production data.
+.. important:: CephFS currently lacks a robust 'fsck' check and
+               repair function.  Please use caution when storing
+               important data as the disaster recovery tools are
+               still under development.
 
 .. ditaa::
             +-----------------------+  +------------------------+
@@ -15,7 +18,7 @@ and Swift APIs, or native bindings (librados).
             +-----------------------+  +------------------------+            
 
             +---------------------------------------------------+
-            |            Ceph FS Library (libcephfs)            |
+            |            CephFS Library (libcephfs)            |
             +---------------------------------------------------+
 
             +---------------------------------------------------+
@@ -51,7 +54,7 @@ least one :term:`Ceph Metadata Server` running.
 
 .. raw:: html 
 
-	</td><td><h3>Step 2: Mount Ceph FS</h3>
+	</td><td><h3>Step 2: Mount CephFS</h3>
 
 Once you have a healthy Ceph Storage Cluster with at least
 one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
@@ -61,10 +64,10 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
-	Create Ceph FS <createfs>
-	Mount Ceph FS <kernel>
-	Mount Ceph FS as FUSE <fuse>
-	Mount Ceph FS in fstab <fstab>
+	Create CephFS <createfs>
+	Mount CephFS <kernel>
+	Mount CephFS as FUSE <fuse>
+	Mount CephFS in fstab <fstab>
 	Manpage cephfs <../../man/8/cephfs>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
