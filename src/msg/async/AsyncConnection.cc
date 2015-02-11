@@ -181,7 +181,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, EventCente
     recv_max_prefetch(MIN(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0), stop_lock("AsyncConnection::stop_lock"),
     got_bad_auth(false), authorizer(NULL), replacing(false), allow_session_reset(true),
-    is_reset_from_peer(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
+    is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0), net(cct), center(c)
 {
   read_handler.reset(new C_handle_read(this));
   write_handler.reset(new C_handle_write(this));
@@ -1228,6 +1228,7 @@ int AsyncConnection::_process_connection()
         peer_global_seq = connect_reply.global_seq;
         policy.lossy = connect_reply.flags & CEPH_MSG_CONNECT_LOSSY;
         state = STATE_OPEN;
+        once_ready = true;
         connect_seq += 1;
         assert(connect_seq == connect_reply.connect_seq);
         backoff = utime_t();
@@ -1811,6 +1812,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
   }
 
   lock.Lock();
+  once_ready = true;
   replacing = false;
   allow_session_reset = true;
   if (r < 0) {
@@ -2024,8 +2026,13 @@ void AsyncConnection::fault()
   replacing = false;
   outcoming_bl.clear();
   if (policy.standby && !is_queued()) {
-    ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
-    state = STATE_STANDBY;
+    if (!once_ready) {
+      // a half connection, close
+      _stop();
+    } else {
+      ldout(async_msgr->cct,0) << __func__ << " with nothing to send, going to standby" << dendl;
+      state = STATE_STANDBY;
+    }
     return;
   }
 
