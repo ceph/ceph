@@ -251,27 +251,32 @@ void JournalingObjectStore::ApplyManager::commit_finish()
 }
 
 void JournalingObjectStore::_op_journal_transactions(
-  list<ObjectStore::Transaction*>& tls, uint64_t op,
+  bufferlist& tbl, int data_align,  uint64_t op,
   Context *onjournal, TrackedOpRef osd_op)
 {
-  dout(10) << "op_journal_transactions " << op << " " << tls << dendl;
-
+  dout(10) << "op_journal_transactions " << op << dendl;
   if (journal && journal->is_writeable()) {
-    bufferlist tbl;
-    unsigned data_len = 0;
-    int data_align = -1; // -1 indicates that we don't care about the alignment
-    for (list<ObjectStore::Transaction*>::iterator p = tls.begin();
-	 p != tls.end(); ++p) {
-      ObjectStore::Transaction *t = *p;
-      if (t->get_data_length() > data_len &&
-	(int)t->get_data_length() >= g_conf->journal_align_min_size) {
-	data_len = t->get_data_length();
-	data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
-      }
-      ::encode(*t, tbl);
-    }
     journal->submit_entry(op, tbl, data_align, onjournal, osd_op);
   } else if (onjournal) {
     apply_manager.add_waiter(op, onjournal);
   }
+}
+
+int JournalingObjectStore::_op_journal_transactions_prepare(
+  list<ObjectStore::Transaction*>& tls, bufferlist& tbl)
+{
+  dout(10) << "_op_journal_transactions_prepare " << tls << dendl;
+  unsigned data_len = 0;
+  int data_align = -1; // -1 indicates that we don't care about the alignment
+  for (list<ObjectStore::Transaction*>::iterator p = tls.begin();
+      p != tls.end(); ++p) {
+    ObjectStore::Transaction *t = *p;
+    if (t->get_data_length() > data_len &&
+     (int)t->get_data_length() >= g_conf->journal_align_min_size) {
+     data_len = t->get_data_length();
+     data_align = (t->get_data_alignment() - tbl.length()) & ~CEPH_PAGE_MASK;
+    }
+    ::encode(*t, tbl);
+  }
+  return data_align;
 }
