@@ -379,7 +379,7 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
 int AsyncConnection::read_until(uint64_t len, char *p)
 {
   assert(len);
-  ldout(async_msgr->cct, 20) << __func__ << " len is " << len << " state_offset is "
+  ldout(async_msgr->cct, 25) << __func__ << " len is " << len << " state_offset is "
                              << state_offset << dendl;
 
   if (async_msgr->cct->_conf->ms_inject_socket_failures && sd >= 0) {
@@ -397,7 +397,7 @@ int AsyncConnection::read_until(uint64_t len, char *p)
     memcpy(p, recv_buf+recv_start, to_read);
     recv_start += to_read;
     left -= to_read;
-    ldout(async_msgr->cct, 20) << __func__ << " got " << to_read << " in buffer "
+    ldout(async_msgr->cct, 25) << __func__ << " got " << to_read << " in buffer "
                                << " left is " << left << " buffer still has "
                                << recv_end - recv_start << dendl;
     if (left == 0) {
@@ -413,7 +413,7 @@ int AsyncConnection::read_until(uint64_t len, char *p)
     /* this was a large read, we don't prefetch for these */
     do {
       r = read_bulk(sd, p+state_offset, left);
-      ldout(async_msgr->cct, 20) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
+      ldout(async_msgr->cct, 25) << __func__ << " read_bulk left is " << left << " got " << r << dendl;
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " read failed, state is " << get_state_name(state) << dendl;
         return -1;
@@ -427,7 +427,7 @@ int AsyncConnection::read_until(uint64_t len, char *p)
   } else {
     do {
       r = read_bulk(sd, recv_buf+recv_end, recv_max_prefetch);
-      ldout(async_msgr->cct, 20) << __func__ << " read_bulk recv_end is " << recv_end
+      ldout(async_msgr->cct, 25) << __func__ << " read_bulk recv_end is " << recv_end
                                  << " left is " << left << " got " << r << dendl;
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " read failed, state is " << get_state_name(state) << dendl;
@@ -446,7 +446,7 @@ int AsyncConnection::read_until(uint64_t len, char *p)
     state_offset += (recv_end - recv_start);
     recv_end = recv_start = 0;
   }
-  ldout(async_msgr->cct, 20) << __func__ << " need len " << len << " remaining "
+  ldout(async_msgr->cct, 25) << __func__ << " need len " << len << " remaining "
                              << len - state_offset << " bytes, state is "
                              << get_state_name(state) << dendl;
   return len - state_offset;
