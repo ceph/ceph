@@ -2126,7 +2126,7 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   bool cmd_w = (this_cmd->req_perms.find('w') != string::npos);
   bool cmd_x = (this_cmd->req_perms.find('x') != string::npos);
 
-  bool capable = s->caps.is_capable(g_ceph_context, s->inst.name,
+  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
                                     module, prefix, param_str_map,
                                     cmd_r, cmd_w, cmd_x);
 
