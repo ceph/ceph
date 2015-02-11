@@ -51,9 +51,13 @@ public:
   ErasureCodeShec(const int _technique,
 		  ErasureCodeShecTableCache &_tcache) :
     tcache(_tcache),
+    k(0),
     DEFAULT_K(2),
+    m(0),
     DEFAULT_M(1),
+    c(0),
     DEFAULT_C(1),
+    w(0),
     DEFAULT_W(8),
     technique(_technique),
     ruleset_root("default"),
