@@ -660,53 +660,37 @@ def _remove_sources_list_deb(remote, proj):
     """
     remote.run(
         args=[
-            'sudo', 'rm', '-f', '/etc/apt/sources.list.d/{proj}.list'.format(
+            'sudo', 'rm', '/etc/apt/sources.list.d/{proj}.list'.format(
                 proj=proj),
             run.Raw('&&'),
             'sudo', 'apt-get', 'update',
-            # ignore failure
-            run.Raw('||'),
-            'true',
         ],
-        stdout=StringIO(),
+        check_status=False,
     )
 
 
 def _remove_sources_list_rpm(remote, proj):
     """
-    Removes /etc/yum.repos.d/{proj}.repo, /var/lib/{proj}, and /var/log/{proj}.
+    Removes /etc/yum.repos.d/{proj}.repo, /var/lib/{proj}, and /var/log/{proj}
 
     :param remote: the teuthology.orchestra.remote.Remote object
-    :param proj: the project whose sources.list needs removing
+    :param proj: the project whose .repo needs removing
     """
     remote.run(
-        args=[
-            'sudo', 'rm', '-f', '/etc/yum.repos.d/{proj}.repo'.format(
-                proj=proj),
-            run.Raw('||'),
-            'true',
-        ],
-        stdout=StringIO(),
+        args=['sudo', 'rm', '/etc/yum.repos.d/{proj}.repo'.format(proj=proj)],
+        check_status=False,
     )
     # FIXME
     # There probably should be a way of removing these files that is
     # implemented in the yum/rpm remove procedures for the ceph package.
     # FIXME but why is this function doing these things?
     remote.run(
-        args=[
-            'sudo', 'rm', '-fr', '/var/lib/{proj}'.format(proj=proj),
-            run.Raw('||'),
-            'true',
-        ],
-        stdout=StringIO(),
+        args=['sudo', 'rm', '-r', '/var/lib/{proj}'.format(proj=proj)],
+        check_status=False,
     )
     remote.run(
-        args=[
-            'sudo', 'rm', '-fr', '/var/log/{proj}'.format(proj=proj),
-            run.Raw('||'),
-            'true',
-        ],
-        stdout=StringIO(),
+        args=['sudo', 'rm', '-r', '/var/log/{proj}'.format(proj=proj)],
+        check_status=False,
     )
 
 
@@ -721,15 +705,22 @@ def remove_sources(ctx, config):
         'deb': _remove_sources_list_deb,
         'rpm': _remove_sources_list_rpm,
     }
-    log.info("Removing {proj} sources lists".format(
-        proj=config.get('project', 'ceph')))
     with parallel() as p:
+        project = config.get('project', 'ceph')
+        log.info("Removing {proj} sources lists".format(
+            proj=project))
         for remote in ctx.cluster.remotes.iterkeys():
-            system_type = teuthology.get_system_type(remote)
-            p.spawn(remove_sources_pkgs[
-                    system_type], remote, config.get('project', 'ceph'))
-            p.spawn(remove_sources_pkgs[
-                    system_type], remote, 'calamari')
+            remove_fn = remove_sources_pkgs[remote.os.package_type]
+            p.spawn(remove_fn, remote, project)
+
+    with parallel() as p:
+        project = 'calamari'
+        log.info("Removing {proj} sources lists".format(
+            proj=project))
+        for remote in ctx.cluster.remotes.iterkeys():
+            remove_fn = remove_sources_pkgs[remote.os.package_type]
+            p.spawn(remove_fn, remote, project)
+
 
 @contextlib.contextmanager
 def install(ctx, config):
