@@ -28,7 +28,7 @@ MON_ID=a
 MONA=127.0.0.1:7451
 TEST_POOL=rbd
 FSID=$(uuidgen)
-export CEPH_CONF=/dev/null
+export CEPH_CONF=$DIR/ceph.conf
 export CEPH_ARGS="--fsid $FSID"
 CEPH_ARGS+=" --chdir="
 CEPH_ARGS+=" --run-dir=$DIR"
@@ -223,6 +223,70 @@ function test_activate() {
     $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 
+function test_activate_dmcrypt() {
+    local to_prepare=$1
+    local to_activate=$2
+    local journal=$3
+    local journal_p=$4
+    local uuid=$5
+    local juuid=$6
+
+    $mkdir -p $OSD_DATA
+
+    ./ceph-disk $CEPH_DISK_ARGS \
+		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
+
+    /sbin/cryptsetup --key-file $DIR/keys/$uuid.luks.key luksOpen $to_activate $uuid
+    /sbin/cryptsetup --key-file $DIR/keys/$juuid.luks.key luksOpen ${journal}${journal_p} $juuid
+    
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        /dev/mapper/$uuid || return 1
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+
+    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+}
+
+function test_activate_dmcrypt_plain() {
+    local to_prepare=$1
+    local to_activate=$2
+    local journal=$3
+    local journal_p=$4
+    local uuid=$5
+    local juuid=$6
+
+    $mkdir -p $OSD_DATA
+
+    echo "osd_dmcrypt_type=plain" > $DIR/ceph.conf
+    
+    ./ceph-disk $CEPH_DISK_ARGS \
+		prepare --dmcrypt --dmcrypt-key-dir $DIR/keys --osd-uuid=$uuid --journal-uuid=$juuid $to_prepare $journal || return 1
+
+    /sbin/cryptsetup --key-file $DIR/keys/$uuid --key-size 256 create $uuid $to_activate
+    /sbin/cryptsetup --key-file $DIR/keys/$juuid --key-size 256 create $juuid $journal
+    
+    $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
+        activate \
+        --mark-init=none \
+        /dev/mapper/$uuid || return 1
+    $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
+
+    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
+    local weight=1
+    ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
+    echo FOO > $DIR/BAR
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL put BAR $DIR/BAR || return 1
+    $timeout $TIMEOUT ./rados --pool $TEST_POOL get BAR $DIR/BAR.copy || return 1
+    $diff $DIR/BAR $DIR/BAR.copy || return 1
+}
+
 function test_activate_dir() {
     run_mon
 
@@ -290,6 +354,90 @@ function test_activate_dev() {
     destroy_dev vdf.disk $disk
     destroy_dev vdg.disk $journal
     destroy_dev vdh.disk $newdisk
+
+    return $status
+}
+
+function destroy_dmcrypt_dev() {
+    local name=$1
+    local dev=$2
+    local uuid=$3
+
+    for partition in 1 2 3 4 ; do
+        umount /dev/mapper/$uuid || true
+	/sbin/cryptsetup remove /dev/mapper/$uuid || true
+	dmsetup remove /dev/mapper/$uuid || true
+    done
+    losetup --detach $dev
+    rm $name
+}
+
+function activate_dmcrypt_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$(uuidgen)
+    local juuid=$(uuidgen)
+
+    setup
+    run_mon
+    test_activate_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_dev() {
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dmcrypt_dev_body $disk $journal $newdisk
+    status=$?
+
+    destroy_dmcrypt_dev vdf.disk $disk
+    destroy_dmcrypt_dev vdg.disk $journal
+    destroy_dmcrypt_dev vdh.disk $newdisk
+
+    return $status
+}
+
+function activate_dmcrypt_plain_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$(uuidgen)
+    local juuid=$(uuidgen)
+
+    setup
+    run_mon
+    test_activate_dmcrypt_plain $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_plain_dev() {
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dmcrypt_plain_dev_body $disk $journal $newdisk
+    status=$?
+
+    destroy_dmcrypt_dev vdf.disk $disk
+    destroy_dmcrypt_dev vdg.disk $journal
+    destroy_dmcrypt_dev vdh.disk $newdisk
 
     return $status
 }
