@@ -30,7 +30,7 @@ function setup_container() {
     local build=true
     if docker images $image | grep --quiet "^$image " ; then
         eval touch --date=$(docker inspect $image | jq '.[0].Created') $image
-        found=$(find -L test/$os_type/* -newer $image)
+        found=$(find -L test/$os_type-$os_version/* -newer $image)
         rm $image
         if test -n "$found" ; then
             docker rmi $image
@@ -44,7 +44,7 @@ function setup_container() {
         # replace environment variables %%FOO%% with their content
         #
         rm -fr dockerfile
-        cp --dereference --recursive test/$os_type dockerfile
+        cp --dereference --recursive test/$os_type-$os_version dockerfile
         os_version=$os_version user_id=$(id -u) \
             perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
             dockerfile/Dockerfile.in > dockerfile/Dockerfile
