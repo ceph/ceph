@@ -551,8 +551,6 @@ void Objecter::_send_linger_ping(LingerOp *info)
   utime_t now = ceph_clock_now(NULL);
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now << dendl;
 
-  RWLock::Context lc(rwlock, RWLock::Context::TakenForRead);
-
   vector<OSDOp> opv(1);
   opv[0].op.op = CEPH_OSD_OP_WATCH;
   opv[0].op.watch.cookie = info->get_cookie();
