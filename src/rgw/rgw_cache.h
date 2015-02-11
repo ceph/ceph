@@ -201,7 +201,10 @@ class RGWCache  : public T
   }
 
   int distribute_cache(const string& normal_name, rgw_obj& obj, ObjectCacheInfo& obj_info, int op);
-  int watch_cb(int opcode, uint64_t ver, bufferlist& bl);
+  int watch_cb(uint64_t notify_id,
+	       uint64_t cookie,
+	       uint64_t notifier_id,
+	       bufferlist& bl);
 public:
   RGWCache() {}
 
@@ -554,7 +557,10 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_obj& obj, Objec
 }
 
 template <class T>
-int RGWCache<T>::watch_cb(int opcode, uint64_t ver, bufferlist& bl)
+int RGWCache<T>::watch_cb(uint64_t notify_id,
+			  uint64_t cookie,
+			  uint64_t notifier_id,
+			  bufferlist& bl)
 {
   RGWCacheNotifyInfo info;
 

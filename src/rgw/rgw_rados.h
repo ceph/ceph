@@ -1208,6 +1208,8 @@ class RGWRados
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
 
+  friend class RGWWatcher;
+
   Mutex bucket_id_lock;
 
   // This field represents the number of bucket index object shards
@@ -1888,7 +1890,10 @@ public:
   virtual int init_watch();
   virtual void finalize_watch();
   virtual int distribute(const string& key, bufferlist& bl);
-  virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
+  virtual int watch_cb(uint64_t notify_id,
+		       uint64_t cookie,
+		       uint64_t notifier_id,
+		       bufferlist& bl) { return 0; }
   void pick_control_oid(const string& key, string& notify_oid);
 
   void set_atomic(void *ctx, rgw_obj& obj) {
