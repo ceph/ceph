@@ -76,7 +76,7 @@ def task(ctx, config):
     """
     status = pytest.main(
         args=[
-            '-s', '-q',
+            '-q',
             '--pyargs', __name__
         ],
         plugins=[TeuthologyContextPlugin(ctx, config)]
