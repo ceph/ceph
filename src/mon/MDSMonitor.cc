@@ -493,6 +493,14 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
     // state change
     MDSMap::mds_info_t& info = pending_mdsmap.get_info_gid(gid);
 
+    if (info.state == MDSMap::STATE_STOPPING && state != MDSMap::STATE_STOPPED ) {
+      // we can't transition to any other states from STOPPING
+      dout(0) << "got beacon for MDS in STATE_STOPPING, ignoring requested state change"
+	       << dendl;
+      _note_beacon(m);
+      return true;
+    }
+
     if (info.laggy()) {
       dout(10) << "prepare_beacon clearing laggy flag on " << addr << dendl;
       info.clear_laggy();
