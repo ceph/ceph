@@ -2397,10 +2397,12 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
   
   if (need_check_tiering &&
       (t->flags & CEPH_OSD_FLAG_IGNORE_OVERLAY) == 0) {
-    if (is_read && pi->has_read_tier())
-      t->target_oloc.pool = pi->read_tier;
-    if (is_write && pi->has_write_tier())
-      t->target_oloc.pool = pi->write_tier;
+    if (pi->cache_mode != pg_pool_t::CACHEMODE_NONE) {
+      if (is_read && pi->has_read_tier())
+	t->target_oloc.pool = pi->read_tier;
+      if (is_write && pi->has_write_tier())
+	t->target_oloc.pool = pi->write_tier;
+    }
   }
 
   pg_t pgid;
