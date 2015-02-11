@@ -115,6 +115,7 @@ TEST(LibCephFS, BasicLocking) {
   ASSERT_EQ(0, ceph_flock(cmount, fd, LOCK_UN, 42));
 
   ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, c_file));
   CLEANUP_CEPH();
 }
 
@@ -273,6 +274,7 @@ TEST(LibCephFS, ConcurrentLocking) {
   ASSERT_EQ(0, sem_destroy(&s.sem));
   ASSERT_EQ(0, sem_destroy(&s.semReply));
   ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, c_file));
   CLEANUP_CEPH();
 }
 
@@ -361,6 +363,7 @@ TEST(LibCephFS, ThreesomeLocking) {
   ASSERT_EQ(0, sem_destroy(&s.sem));
   ASSERT_EQ(0, sem_destroy(&s.semReply));
   ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, c_file));
   CLEANUP_CEPH();
 }
 
@@ -514,6 +517,7 @@ TEST(LibCephFS, InterProcessLocking) {
   ASSERT_EQ(0, sem_destroy(&s.semReply));
   ASSERT_EQ(0, munmap(shs, sizeof(*shs)));
   ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, c_file));
   CLEANUP_CEPH();
 }
 
@@ -627,5 +631,6 @@ TEST(LibCephFS, ThreesomeInterProcessLocking) {
   ASSERT_EQ(0, sem_destroy(&s.semReply));
   ASSERT_EQ(0, munmap(shs, sizeof(*shs)));
   ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, c_file));
   CLEANUP_CEPH();
 }
