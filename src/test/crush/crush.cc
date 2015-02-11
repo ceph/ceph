@@ -595,10 +595,10 @@ TEST(CRUSH, straw2_reweight) {
   for (int i=0; i<total; ++i) {
     vector<int> out0, out1;
     c->do_rule(ruleset0, i, out0, 1, reweight);
-    ASSERT_EQ(1, out0.size());
+    ASSERT_EQ(1u, out0.size());
 
     c->do_rule(ruleset1, i, out1, 1, reweight);
-    ASSERT_EQ(1, out1.size());
+    ASSERT_EQ(1u, out1.size());
 
     sum[out1[0]]++;
     //sum[rand()%n]++;
