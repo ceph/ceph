@@ -3052,7 +3052,8 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     dout(10) << "forward_request " << rr->tid << " request " << *req
 	     << " features " << rr->con_features << dendl;
 
-    MForward *forward = new MForward(rr->tid, req,
+    MForward *forward = new MForward(rr->tid,
+                                     req,
 				     rr->con_features,
 				     rr->session->caps);
     forward->set_priority(req->get_priority());
@@ -3103,8 +3104,11 @@ void Monitor::handle_forward(MForward *m)
   } else {
     // see PaxosService::dispatch(); we rely on this being anon
     // (c->msgr == NULL)
+    PaxosServiceMessage *req = m->claim_message();
+    assert(req != NULL);
+
     ConnectionRef c(new AnonConnection(cct));
-    MonSession *s = new MonSession(m->msg->get_source_inst(),
+    MonSession *s = new MonSession(req->get_source_inst(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(s->get());
     c->set_peer_addr(m->client.addr);
@@ -3119,8 +3123,6 @@ void Monitor::handle_forward(MForward *m)
     s->proxy_con = m->get_connection();
     s->proxy_tid = m->tid;
 
-    PaxosServiceMessage *req = m->msg;
-    m->msg = NULL;  // so ~MForward doesn't delete it
     req->set_connection(c);
 
     // not super accurate, but better than nothing.
