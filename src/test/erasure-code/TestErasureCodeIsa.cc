@@ -308,11 +308,11 @@ TEST_F(IsaErasureCodeTest, chunk_size)
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k - 1));
     ASSERT_EQ(EC_ISA_ADDRESS_ALIGNMENT * 2, Isa.get_chunk_size(EC_ISA_ADDRESS_ALIGNMENT * k + 1));
-    int object_size = EC_ISA_ADDRESS_ALIGNMENT * k * 1024 + 1;
-    ASSERT_NE(0, object_size % k);
-    ASSERT_NE(0, object_size % EC_ISA_ADDRESS_ALIGNMENT);
-    int chunk_size = Isa.get_chunk_size(object_size);
-    ASSERT_EQ(0, chunk_size % EC_ISA_ADDRESS_ALIGNMENT);
+    unsigned object_size = EC_ISA_ADDRESS_ALIGNMENT * k * 1024 + 1;
+    ASSERT_NE(0u, object_size % k);
+    ASSERT_NE(0u, object_size % EC_ISA_ADDRESS_ALIGNMENT);
+    unsigned chunk_size = Isa.get_chunk_size(object_size);
+    ASSERT_EQ(0u, chunk_size % EC_ISA_ADDRESS_ALIGNMENT);
     ASSERT_GT(chunk_size, (chunk_size * k) - object_size);
   }
 }
@@ -471,7 +471,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -598,7 +598,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -725,7 +725,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);
@@ -851,7 +851,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
   for (int l1 = 0; l1 < (k + m); l1++) {
     map<int, bufferlist> degraded = encoded;
     set<int> want_to_decode;
-    bool err = true;
+    bool err;
     degraded.erase(l1);
     want_to_decode.insert(l1);
     err = DecodeAndVerify(Isa, degraded, want_to_decode, enc, length);

@@ -33,7 +33,7 @@ struct cls_log_list_op {
   int max_entries; /* upperbound to returned num of entries
                       might return less than that and still be truncated */
 
-  cls_log_list_op() {}
+  cls_log_list_op() : max_entries(0) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

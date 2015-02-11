@@ -204,8 +204,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   need_up_thru(false),
   last_peering_reset(0),
   heartbeat_peer_lock("PG::heartbeat_peer_lock"),
-  backfill_reserved(0),
-  backfill_reserving(0),
+  backfill_reserved(false),
+  backfill_reserving(false),
   flushes_in_progress(0),
   pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
@@ -3676,7 +3676,7 @@ void PG::repair_object(
     list<pair<ScrubMap::object, pg_shard_t> >::iterator i;
     for (i = ok_peers->begin();
 	 i != ok_peers->end();
-	 i++)
+	 ++i)
       missing_loc.add_location(soid, i->second);
 
     pg_log.set_last_requested(0);
@@ -4203,7 +4203,7 @@ void PG::scrub_compare_maps()
       list<pair<ScrubMap::object, pg_shard_t> > good_peers;
       for (list<pg_shard_t>::const_iterator j = i->second.begin();
 	   j != i->second.end();
-	   j++) {
+	   ++j) {
 	good_peers.push_back(make_pair(maps[*j]->objects[i->first], *j));
       }
       scrubber.authoritative.insert(

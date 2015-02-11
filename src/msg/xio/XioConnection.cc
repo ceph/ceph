@@ -194,7 +194,7 @@ static inline XioDispatchHook* pool_alloc_xio_dispatch_hook(
 		      sizeof(XioDispatchHook), &mp_mem);
   if (!!e)
     return NULL;
-  XioDispatchHook *xhook = (XioDispatchHook*) mp_mem.addr;
+  XioDispatchHook *xhook = static_cast<XioDispatchHook*>(mp_mem.addr);
   new (xhook) XioDispatchHook(xcon, m, msg_seq, mp_mem);
   return xhook;
 }
