@@ -11,6 +11,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/Throttle.h"
+#include "common/Finisher.h"
 
 #include "rgw_rados.h"
 #include "rgw_cache.h"
@@ -1212,6 +1213,15 @@ int RGWPutObjProcessor_Atomic::do_complete(string& etag, time_t *mtime, time_t s
 class RGWWatcher : public librados::WatchCtx2 {
   RGWRados *rados;
   string oid;
+
+  class C_ReinitWatch : public Context {
+    RGWWatcher *watcher;
+    public:
+      C_ReinitWatch(RGWWatcher *_watcher) : watcher(_watcher) {}
+      void finish(int r) {
+        watcher->reinit();
+      }
+  };
 public:
   RGWWatcher(RGWRados *r, const string& o) : rados(r), oid(o) {}
   void handle_notify(uint64_t notify_id,
@@ -1232,6 +1242,10 @@ public:
     lderr(rados->ctx()) << "RGWWatcher::handle_error cookie " << cookie
 			<< " err " << cpp_strerror(err) << dendl;
     rados->set_cache_enabled(false);
+    rados->schedule_context(new C_ReinitWatch(this));
+  }
+
+  void reinit() {
     rados->finalize_watch();
     int ret = rados->init_watch();
     if (ret < 0) {
@@ -1313,6 +1327,8 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 
 void RGWRados::finalize()
 {
+  finisher->stop();
+  delete finisher;
   if (need_watch_notify()) {
     finalize_watch();
   }
@@ -1428,6 +1444,9 @@ int RGWRados::init_complete()
     }
   }
 
+  finisher = new Finisher(cct);
+  finisher->start();
+
   if (need_watch_notify()) {
     ret = init_watch();
     if (ret < 0) {
@@ -1513,6 +1532,10 @@ void RGWRados::finalize_watch()
   delete[] notify_oids;
   delete[] watch_handles;
   delete[] watchers;
+}
+
+void RGWRados::schedule_context(Context *c) {
+  finisher->queue(c);
 }
 
 int RGWRados::list_raw_prefixed_objs(string pool_name, const string& prefix, list<string>& result)
