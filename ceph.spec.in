@@ -466,7 +466,6 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
-%{_bindir}/ceph-rbdnamer
 %{_bindir}/librados-config
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs-journal-tool
@@ -523,7 +522,6 @@ fi
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
-%{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
@@ -696,6 +694,8 @@ fi
 %else
 /lib/udev/rules.d/50-rbd.rules
 %endif
+%{_bindir}/ceph-rbdnamer
+%{_mandir}/man8/ceph-rbdnamer.8*
 
 %post -n librbd1
 /sbin/ldconfig
