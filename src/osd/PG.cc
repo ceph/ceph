@@ -4152,6 +4152,7 @@ void PG::scrub_compare_maps()
 
   // construct authoritative scrub map for type specific scrubbing
   ScrubMap authmap(scrubber.primary_scrubmap);
+  map<hobject_t, pair<uint32_t, uint32_t> > missing_digest;
 
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
@@ -4182,7 +4183,7 @@ void PG::scrub_compare_maps()
       scrubber.missing,
       scrubber.inconsistent,
       authoritative,
-      scrubber.missing_digest,
+      missing_digest,
       scrubber.shallow_errors,
       scrubber.deep_errors,
       info.pgid, acting,
@@ -4217,7 +4218,7 @@ void PG::scrub_compare_maps()
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(authmap);
+  _scrub(authmap, missing_digest);
 }
 
 void PG::scrub_process_inconsistent()
