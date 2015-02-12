@@ -88,8 +88,9 @@ void ConfigKeyService::store_list(stringstream &ss)
 }
 
 
-bool ConfigKeyService::service_dispatch(Message *m)
+bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
 {
+  Message *m = op->get_req();
   dout(10) << __func__ << " " << *m << dendl;
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
@@ -154,7 +155,7 @@ bool ConfigKeyService::service_dispatch(Message *m)
     }
     // we'll reply to the message once the proposal has been handled
     store_put(key, data,
-        new Monitor::C_Command(mon, cmd, 0, "value stored", 0));
+        new Monitor::C_Command(mon, op, 0, "value stored", 0));
     // return for now; we'll put the message once it's done.
     return true;
 
@@ -169,7 +170,7 @@ bool ConfigKeyService::service_dispatch(Message *m)
       ss << "no such key '" << key << "'";
       goto out;
     }
-    store_delete(key, new Monitor::C_Command(mon, cmd, 0, "key deleted", 0));
+    store_delete(key, new Monitor::C_Command(mon, op, 0, "key deleted", 0));
     // return for now; we'll put the message once it's done
     return true;
 
