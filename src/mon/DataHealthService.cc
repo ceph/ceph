@@ -230,16 +230,18 @@ void DataHealthService::service_tick()
   }
 }
 
-void DataHealthService::handle_tell(MMonHealth *m)
+void DataHealthService::handle_tell(MonOpRequestRef op)
 {
+  MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_op() == MMonHealth::OP_TELL);
 
   stats[m->get_source_inst()] = m->data_stats;
 }
 
-bool DataHealthService::service_dispatch(MMonHealth *m)
+bool DataHealthService::service_dispatch_op(MonOpRequestRef op)
 {
+  MMonHealth *m = static_cast<MMonHealth*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   assert(m->get_service_type() == get_type());
   if (!in_quorum()) {
@@ -251,7 +253,7 @@ bool DataHealthService::service_dispatch(MMonHealth *m)
   switch (m->service_op) {
     case MMonHealth::OP_TELL:
       // someone is telling us their stats
-      handle_tell(m);
+      handle_tell(op);
       break;
     default:
       dout(0) << __func__ << " unknown op " << m->service_op << dendl;
