@@ -1189,6 +1189,7 @@ class RGWRados
   void get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
   Mutex lock;
+  Mutex watchers_lock;
   SafeTimer *timer;
 
   class C_Tick : public Context {
@@ -1206,7 +1207,7 @@ class RGWRados
 
   int num_watchers;
   RGWWatcher **watchers;
-  uint64_t *watch_handles;
+  std::set<int> watchers_set;
   librados::IoCtx root_pool_ctx;      // .rgw
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
@@ -1248,9 +1249,9 @@ protected:
   Finisher *finisher;
 
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL),
+  RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false), quota_threads(false),
-               num_watchers(0), watchers(NULL), watch_handles(NULL),
+               num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
@@ -1895,6 +1896,10 @@ public:
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 
+  int watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx);
+  int unwatch(uint64_t watch_handle);
+  void add_watcher(int i);
+  void remove_watcher(int i);
   virtual bool need_watch_notify() { return false; }
   virtual int init_watch();
   virtual void finalize_watch();
