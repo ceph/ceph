@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -20,7 +20,8 @@
 #
 FROM centos:%%os_version%%
 
-COPY install-deps.sh ceph.spec.in /root/
+COPY install-deps.sh /root/
+COPY ceph.spec.in /root/
 # http://jperrin.github.io/centos/2014/09/25/centos-docker-and-systemd/
 RUN yum -y swap -- remove fakesystemd -- install systemd systemd-libs && (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done) && rm -f /lib/systemd/system/multi-user.target.wants/* && rm -f /etc/systemd/system/*.wants/* && rm -f /lib/systemd/system/local-fs.target.wants/* && rm -f /lib/systemd/system/sockets.target.wants/*udev* && rm -f /lib/systemd/system/sockets.target.wants/*initctl* && rm -f /lib/systemd/system/basic.target.wants/* && rm -f /lib/systemd/system/anaconda.target.wants/* && yum install -y redhat-lsb-core
 RUN yum install -y yum-utils && yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/7/x86_64/ && yum install --nogpgcheck -y epel-release && rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-7 && rm /etc/yum.repos.d/dl.fedoraproject.org*
