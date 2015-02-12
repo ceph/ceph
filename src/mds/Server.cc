@@ -265,9 +265,9 @@ void Server::handle_client_session(MClientSession *m)
     if (session->is_closed())
       mds->sessionmap.add_session(session);
 
+    pv = mds->sessionmap.mark_projected(session);
     sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
     mds->sessionmap.touch_session(session);
-    pv = ++mds->sessionmap.projected;
     mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
 			      new C_MDS_session_finish(mds, session, sseq, true, pv));
     mdlog->flush();
@@ -357,6 +357,8 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
 	   << " " << pv << dendl;
 
+  mds->sessionmap.mark_dirty(session);
+
   if (piv) {
     mds->inotable->apply_release_ids(inos);
     assert(mds->inotable->get_version() == piv);
@@ -430,18 +432,29 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
   } else {
     assert(0);
   }
-  mds->sessionmap.version++;  // noop
 }
 
+/**
+ * Inject sessions from some source other than actual connections.
+ *
+ * For example:
+ *  - sessions inferred from journal replay
+ *  - sessions learned from other MDSs during rejoin
+ *  - sessions learned from other MDSs during dir/caps migration
+ *  - sessions learned from other MDSs during a cross-MDS rename
+ */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 					      map<client_t,uint64_t>& sseqmap)
 {
-  version_t pv = ++mds->sessionmap.projected;
+  version_t pv = mds->sessionmap.get_projected();
+
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+
     Session *session = mds->sessionmap.get_or_add_session(p->second);
+    pv = mds->sessionmap.mark_projected(session);
     if (session->is_closed() || 
 	session->is_closing() ||
 	session->is_killing())
@@ -451,7 +464,6 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	     session->is_opening() ||
 	     session->is_stale());
     session->inc_importing();
-//  mds->sessionmap.touch_session(session);
   }
   return pv;
 }
@@ -466,8 +478,13 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
    * trying to force open a session...  
    */
   dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
-	   << " v " << mds->sessionmap.version << " -> " << (mds->sessionmap.version+1) << dendl;
+	   << " initial v " << mds->sessionmap.get_version() << dendl;
+  
+
+  int sessions_inserted = 0;
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
+    sessions_inserted++;
+
     Session *session = mds->sessionmap.get_session(p->second.name);
     assert(session);
     
@@ -487,10 +504,15 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
       dout(10) << "force_open_sessions skipping already-open " << session->info.inst << dendl;
       assert(session->is_open() || session->is_stale());
     }
-    if (dec_import)
+
+    if (dec_import) {
       session->dec_importing();
+    }
+
+    mds->sessionmap.mark_dirty(session);
   }
-  mds->sessionmap.version++;
+
+  dout(10) << __func__ << ": final v " << mds->sessionmap.get_version() << dendl;
 }
 
 class C_MDS_TerminatedSessions : public ServerContext {
@@ -612,7 +634,7 @@ void Server::kill_session(Session *session, Context *on_safe)
 void Server::journal_close_session(Session *session, int state, Context *on_safe)
 {
   uint64_t sseq = mds->sessionmap.set_state(session, state);
-  version_t pv = ++mds->sessionmap.projected;
+  version_t pv = mds->sessionmap.mark_projected(session);
   version_t piv = 0;
 
   // release alloc and pending-alloc inos for this session
@@ -2135,7 +2157,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   if (mdr->session->info.prealloc_inos.size()) {
     mdr->used_prealloc_ino = 
       in->inode.ino = mdr->session->take_ino(useino);  // prealloc -> used
-    mds->sessionmap.projected++;
+    mds->sessionmap.mark_projected(mdr->session);
+
     dout(10) << "prepare_new_inode used_prealloc " << mdr->used_prealloc_ino
 	     << " (" << mdr->session->info.prealloc_inos
 	     << ", " << mdr->session->info.prealloc_inos.size() << " left)"
@@ -2159,7 +2182,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, got);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.projected++;
+    mds->sessionmap.mark_projected(mdr->session);
     dout(10) << "prepare_new_inode prealloc " << mdr->prealloc_inos << dendl;
   }
 
@@ -2224,14 +2247,14 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
 void Server::journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob)
 {
-  dout(20) << "journal_allocated_inos sessionmapv " << mds->sessionmap.projected
+  dout(20) << "journal_allocated_inos sessionmapv " << mds->sessionmap.get_projected()
 	   << " inotablev " << mds->inotable->get_projected_version()
 	   << dendl;
   blob->set_ino_alloc(mdr->alloc_ino,
 		      mdr->used_prealloc_ino,
 		      mdr->prealloc_inos,
 		      mdr->client_request->get_source(),
-		      mds->sessionmap.projected,
+		      mds->sessionmap.get_projected(),
 		      mds->inotable->get_projected_version());
 }
 
@@ -2249,13 +2272,13 @@ void Server::apply_allocated_inos(MDRequestRef& mdr)
     assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.version++;
+    mds->sessionmap.mark_dirty(session);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {
     assert(session);
     session->info.used_inos.erase(mdr->used_prealloc_ino);
-    mds->sessionmap.version++;
+    mds->sessionmap.mark_dirty(session);
   }
 }
 
@@ -6125,7 +6148,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   
   _rename_prepare(mdr, &le->metablob, &le->client_map, srcdn, destdn, straydn);
   if (le->client_map.length())
-    le->cmapv = mds->sessionmap.projected;
+    le->cmapv = mds->sessionmap.get_projected();
 
   // -- commit locally --
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(mds, mdr, srcdn, destdn, straydn);
