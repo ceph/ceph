@@ -1010,6 +1010,8 @@ void OSDMonitor::share_map_with_random_osd()
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
   s->con->send_message(m);
+  // NOTE: do *not* record osd has up to this epoch (as we do
+  // elsewhere) as they may still need to request older values.
 }
 
 version_t OSDMonitor::get_trim_to()
@@ -2210,6 +2212,10 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     MOSDMap *m = build_incremental(first, last);
     session->con->send_message(m);
     first = last + 1;
+
+    if (session->inst.name.is_osd())
+      note_osd_has_epoch(session->inst.name.num(), last);
+
     if (onetime)
       break;
   }
