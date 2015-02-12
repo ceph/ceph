@@ -1601,6 +1601,7 @@ reprotect_and_return_err:
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
 
+    uint64_t request_id = ictx->async_request_seq.inc();
     int r;
     do {
       C_SaferCond *ctx;
@@ -1614,7 +1615,7 @@ reprotect_and_return_err:
 	    break;
 	  }
 
-	  r = ictx->image_watcher->notify_resize(size, prog_ctx);
+	  r = ictx->image_watcher->notify_resize(request_id, size, prog_ctx);
 	  if (r != -ETIMEDOUT && r != -ERESTART) {
 	    return r;
 	  }
@@ -2409,6 +2410,7 @@ reprotect_and_return_err:
       return -EROFS;
     }
 
+    uint64_t request_id = ictx->async_request_seq.inc();
     int r;
     do {
       C_SaferCond *ctx;
@@ -2422,7 +2424,7 @@ reprotect_and_return_err:
 	    break;
 	  }
 
-          r = ictx->image_watcher->notify_flatten(prog_ctx);
+          r = ictx->image_watcher->notify_flatten(request_id, prog_ctx);
           if (r != -ETIMEDOUT && r != -ERESTART) {
             return r;
           }
