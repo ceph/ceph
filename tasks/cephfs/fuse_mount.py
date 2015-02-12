@@ -4,6 +4,7 @@ import json
 import time
 import os
 import logging
+from textwrap import dedent
 
 from teuthology import misc
 from teuthology.orchestra import run
@@ -19,6 +20,7 @@ class FuseMount(CephFSMount):
 
         self.client_config = client_config if client_config else {}
         self.fuse_daemon = None
+        self._fuse_conn = None
 
     def mount(self):
         log.info("Client client.%s config is %s" % (self.client_id, self.client_config))
@@ -65,6 +67,23 @@ class FuseMount(CephFSMount):
 
         run_cmd.extend(run_cmd_tail)
 
+        def list_connections():
+            p = self.client_remote.run(
+                args=["ls", "/sys/fs/fuse/connections"],
+                stdout=StringIO()
+            )
+
+            ls_str = p.stdout.getvalue().strip()
+            if ls_str:
+                return [int(n) for n in ls_str.split("\n")]
+            else:
+                return []
+
+        # Before starting ceph-fuse process, note the contents of
+        # /sys/fs/fuse/connections
+        pre_mount_conns = list_connections()
+        log.info("Pre-mount connections: {0}".format(pre_mount_conns))
+
         proc = self.client_remote.run(
             args=run_cmd,
             logger=log.getChild('ceph-fuse.{id}'.format(id=self.client_id)),
@@ -72,6 +91,29 @@ class FuseMount(CephFSMount):
             wait=False,
         )
         self.fuse_daemon = proc
+
+        # Wait for the connection reference to appear in /sys
+        waited = 0
+        while list_connections() == pre_mount_conns:
+            time.sleep(1)
+            waited += 1
+            if waited > 30:
+                raise RuntimeError("Fuse mount failed to populate /sys/ after {0} seconds".format(
+                    waited
+                ))
+
+        post_mount_conns = list_connections()
+        log.info("Post-mount connections: {0}".format(post_mount_conns))
+
+        # Record our fuse connection number so that we can use it when
+        # forcing an unmount
+        new_conns = list(set(post_mount_conns) - set(pre_mount_conns))
+        if len(new_conns) == 0:
+            raise RuntimeError("New fuse connection directory not found ({0})".format(new_conns))
+        elif len(new_conns) > 1:
+            raise RuntimeError("Unexpectedly numerous fuse connections {0}".format(new_conns))
+        else:
+            self._fuse_conn = new_conns[0]
 
     def is_mounted(self):
         try:
@@ -135,14 +177,18 @@ class FuseMount(CephFSMount):
             log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
 
             # abort the fuse mount, killing all hung processes
-            self.client_remote.run(
-                args=[
-                    "find", "/sys/fs/fuse/connections", "-name", "abort",
-                    "-exec", "bash", "-c", "echo 1 > {}", "\;"
-                ]
-            )
-            # make sure its unmounted
-            if self.is_mounted():
+            if self._fuse_conn:
+                self.run_python(dedent("""
+                import os
+                path = "/sys/fs/fuse/connections/{0}/abort"
+                if os.path.exists(path):
+                    open(path, "w").write("1")
+                """).format(self._fuse_conn))
+                self._fuse_conn = None
+
+            stderr = StringIO()
+            try:
+                # make sure its unmounted
                 self.client_remote.run(
                     args=[
                         'sudo',
@@ -151,19 +197,40 @@ class FuseMount(CephFSMount):
                         '-f',
                         self.mountpoint,
                     ],
+                    stderr=stderr
                 )
+            except CommandFailedError:
+                if "not found" in stderr.getvalue():
+                    # Missing mount point, so we are unmounted already, yay.
+                    pass
+                else:
+                    raise
+
+        assert not self.is_mounted()
+        self._fuse_conn = None
 
     def umount_wait(self, force=False):
         """
-        :param force: Complete even if the MDS is offline
+        :param force: Complete cleanly even if the MDS is offline
         """
-        self.umount()
         if force:
+            # When we expect to be forcing, kill the ceph-fuse process directly.
+            # This should avoid hitting the more aggressive fallback killing
+            # in umount() which can affect other mounts too.
             self.fuse_daemon.stdin.close()
+
+            # However, we will still hit the aggressive wait if there is an ongoing
+            # mount -o remount (especially if the remount is stuck because MDSs
+            # are unavailable)
+
+        self.umount()
+
         try:
-            self.fuse_daemon.wait()
+            if self.fuse_daemon:
+                self.fuse_daemon.wait()
         except CommandFailedError:
             pass
+
         self.cleanup()
 
     def cleanup(self):
@@ -172,13 +239,21 @@ class FuseMount(CephFSMount):
 
         Prerequisite: the client is not mounted.
         """
-        self.client_remote.run(
-            args=[
-                'rmdir',
-                '--',
-                self.mountpoint,
-            ],
-        )
+        stderr = StringIO()
+        try:
+            self.client_remote.run(
+                args=[
+                    'rmdir',
+                    '--',
+                    self.mountpoint,
+                ],
+                stderr=stderr
+            )
+        except CommandFailedError:
+            if "No such file or directory" in stderr.getvalue():
+                pass
+            else:
+                raise
 
     def kill(self):
         """
@@ -203,8 +278,8 @@ class FuseMount(CephFSMount):
         """
         super(FuseMount, self).teardown()
 
-        if self.is_mounted():
-            self.umount()
+        self.umount()
+
         if not self.fuse_daemon.finished:
             self.fuse_daemon.stdin.close()
             try:
