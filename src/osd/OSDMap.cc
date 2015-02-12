@@ -2575,12 +2575,16 @@ void OSDMap::print_summary(Formatter *f, ostream& out) const
     f->dump_int("num_in_osds", get_num_in_osds());
     f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL) ? true : false);
     f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ? true : false);
+    f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
     f->close_section();
   } else {
     out << "     osdmap e" << get_epoch() << ": "
 	<< get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
-	<< get_num_in_osds() << " in\n";
+	<< get_num_in_osds() << " in";
+    if (get_num_pg_temp())
+      out << "; " << get_num_pg_temp() << " remapped pgs";
+    out << "\n";
     if (flags)
       out << "            flags " << get_flag_string() << "\n";
   }
