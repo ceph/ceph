@@ -1359,7 +1359,9 @@ protected:
   // -- scrub --
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end);
-  virtual void _scrub(ScrubMap& map);
+  virtual void _scrub(
+    ScrubMap &map,
+    const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest);
   void _scrub_digest_updated();
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();
