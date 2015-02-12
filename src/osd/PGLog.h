@@ -126,22 +126,42 @@ struct PGLog {
     bool logged_req(const osd_reqid_t &r) const {
       return caller_ops.count(r) || extra_caller_ops.count(r);
     }
-    const pg_log_entry_t *get_request(const osd_reqid_t &r) const {
+    bool get_request(
+      const osd_reqid_t &r,
+      eversion_t *replay_version,
+      version_t *user_version) const {
+      assert(replay_version);
+      assert(user_version);
       ceph::unordered_map<osd_reqid_t,pg_log_entry_t*>::const_iterator p;
       p = caller_ops.find(r);
-      if (p != caller_ops.end())
-	return p->second;
+      if (p != caller_ops.end()) {
+	*replay_version = p->second->version;
+	*user_version = p->second->user_version;
+	return true;
+      }
+
       // warning: we will return *a* request for this reqid, but not
       // necessarily the most recent.
       p = extra_caller_ops.find(r);
-      if (p != extra_caller_ops.end())
-	return p->second;
-      return NULL;
+      if (p != extra_caller_ops.end()) {
+	for (vector<pair<osd_reqid_t, version_t> >::const_iterator i =
+	       p->second->extra_reqids.begin();
+	     i != p->second->extra_reqids.end();
+	     ++i) {
+	  if (i->first == r) {
+	    *replay_version = p->second->version;
+	    *user_version = i->second;
+	    return true;
+	  }
+	}
+	assert(0 == "in extra_caller_ops but not extra_reqids");
+      }
+      return false;
     }
 
     /// get a (bounded) list of recent reqids for the given object
     void get_object_reqids(const hobject_t& oid, unsigned max,
-			   vector<osd_reqid_t> *pls) const {
+			   vector<pair<osd_reqid_t, version_t> > *pls) const {
       // make sure object is present at least once before we do an
       // O(n) search.
       if (objects.count(oid) == 0)
@@ -151,7 +171,7 @@ struct PGLog {
            ++i) {
 	if (i->soid == oid) {
 	  if (i->reqid_is_indexed())
-	    pls->push_back(i->reqid);
+	    pls->push_back(make_pair(i->reqid, i->user_version));
 	  pls->insert(pls->end(), i->extra_reqids.begin(), i->extra_reqids.end());
 	  if (pls->size() >= max) {
 	    if (pls->size() > max) {
@@ -175,10 +195,11 @@ struct PGLog {
 	  //assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	  caller_ops[i->reqid] = &(*i);
 	}
-	for (vector<osd_reqid_t>::const_iterator j = i->extra_reqids.begin();
+	for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
+	       i->extra_reqids.begin();
 	     j != i->extra_reqids.end();
 	     ++j) {
-	  extra_caller_ops.insert(make_pair(*j, &(*i)));
+	  extra_caller_ops.insert(make_pair(j->first, &(*i)));
 	}
       }
 
@@ -196,10 +217,11 @@ struct PGLog {
 	//assert(caller_ops.count(i->reqid) == 0);  // divergent merge_log indexes new before unindexing old
 	caller_ops[e.reqid] = &e;
       }
-      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+      for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
+	     e.extra_reqids.begin();
 	   j != e.extra_reqids.end();
 	   ++j) {
-	extra_caller_ops.insert(make_pair(*j, &e));
+	extra_caller_ops.insert(make_pair(j->first, &e));
       }
     }
     void unindex() {
@@ -216,12 +238,13 @@ struct PGLog {
 	    caller_ops[e.reqid] == &e)
 	  caller_ops.erase(e.reqid);
       }
-      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+      for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
+	     e.extra_reqids.begin();
 	   j != e.extra_reqids.end();
 	   ++j) {
 	for (ceph::unordered_multimap<osd_reqid_t,pg_log_entry_t*>::iterator k =
-	       extra_caller_ops.find(*j);
-	     k != extra_caller_ops.end() && k->first == *j;
+	       extra_caller_ops.find(j->first);
+	     k != extra_caller_ops.end() && k->first == j->first;
 	     ++k) {
 	  if (k->second == &e) {
 	    extra_caller_ops.erase(k);
@@ -255,10 +278,11 @@ struct PGLog {
       if (e.reqid_is_indexed()) {
 	caller_ops[e.reqid] = &(log.back());
       }
-      for (vector<osd_reqid_t>::const_iterator j = e.extra_reqids.begin();
+      for (vector<pair<osd_reqid_t, version_t> >::const_iterator j =
+	     e.extra_reqids.begin();
 	   j != e.extra_reqids.end();
 	   ++j) {
-	extra_caller_ops.insert(make_pair(*j, &(log.back())));
+	extra_caller_ops.insert(make_pair(j->first, &(log.back())));
       }
     }
 
