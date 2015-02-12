@@ -1688,10 +1688,13 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     osd = req->get_source().num();
     map<int,epoch_t>::iterator p = osd_epoch.find(osd);
     if (p != osd_epoch.end()) {
-      dout(10) << " osd." << osd << " should have epoch " << p->second << dendl;
-      first = p->second + 1;
-      if (first > osdmap.get_epoch())
-	return;
+      if (first <= p->second) {
+	dout(10) << __func__ << " osd." << osd << " should already have epoch "
+		 << p->second << dendl;
+	first = p->second + 1;
+	if (first > osdmap.get_epoch())
+	  return;
+      }
     }
   }
 
