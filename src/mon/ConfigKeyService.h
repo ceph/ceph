@@ -55,7 +55,7 @@ public:
   virtual void get_health(Formatter *f,
 			  list<pair<health_status_t,string> >& summary,
                           list<pair<health_status_t,string> > *detail) { }
-  virtual bool service_dispatch(Message *m);
+  virtual bool service_dispatch(MonOpRequestRef op);
 
   virtual void start_epoch() { }
   virtual void finish_epoch() { }

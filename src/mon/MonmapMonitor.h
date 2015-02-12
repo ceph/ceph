@@ -58,14 +58,14 @@ class MonmapMonitor : public PaxosService {
 
   void dump_info(Formatter *f);
 
-  bool preprocess_query(PaxosServiceMessage *m);
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_join(MMonJoin *m);
-  bool prepare_join(MMonJoin *m);
+  bool preprocess_join(MonOpRequestRef op);
+  bool prepare_join(MonOpRequestRef op);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;

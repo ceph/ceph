@@ -116,12 +116,12 @@ private:
   void encode_pending(MonitorDBStore::TransactionRef t);
   virtual void encode_full(MonitorDBStore::TransactionRef t);
   version_t get_trim_to();
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
 
-  bool preprocess_log(MLog *m);
-  bool prepare_log(MLog *m);
-  void _updated_log(MLog *m);
+  bool preprocess_log(MonOpRequestRef op);
+  bool prepare_log(MonOpRequestRef op);
+  void _updated_log(MonOpRequestRef op);
 
   bool should_propose(double& delay);
 
@@ -132,20 +132,18 @@ private:
 
   struct C_Log : public Context {
     LogMonitor *logmon;
-    MLog *ack;
-    C_Log(LogMonitor *p, MLog *a) : logmon(p), ack(a) {}
+    MonOpRequestRef op;
+    C_Log(LogMonitor *p, MonOpRequestRef o) : logmon(p), op(o) {}
     void finish(int r) {
       if (r == -ECANCELED) {
-	if (ack)
-	  ack->put();
 	return;
       }
-      logmon->_updated_log(ack);
+      logmon->_updated_log(op);
     }    
   };
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   bool _create_sub_summary(MLog *mlog, int level);
   void _create_sub_incremental(MLog *mlog, int level, version_t sv);
