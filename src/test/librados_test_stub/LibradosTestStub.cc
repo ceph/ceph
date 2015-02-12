@@ -678,6 +678,12 @@ AioCompletion *Rados::aio_create_completion(void *cb_arg,
   return new AioCompletion(c);
 }
 
+int Rados::blacklist_add(const std::string& client_address,
+			 uint32_t expire_seconds) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->blacklist_add(client_address, expire_seconds);
+}
+
 int Rados::conf_parse_env(const char *env) const {
   return rados_conf_parse_env(reinterpret_cast<rados_t>(client), env);
 }
@@ -760,7 +766,7 @@ int Rados::pool_list(std::list<std::string>& v) {
   return 0;
 }
 
-int librados::Rados::pool_list2(std::list<std::pair<int64_t, std::string> >& v)
+int Rados::pool_list2(std::list<std::pair<int64_t, std::string> >& v)
 {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   return impl->pool_list(v);
@@ -783,6 +789,9 @@ void Rados::shutdown() {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
   impl->put();
   client = NULL;
+}
+
+void Rados::test_blacklist_self(bool set) {
 }
 
 int Rados::wait_for_latest_osdmap() {

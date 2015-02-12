@@ -2597,7 +2597,46 @@ reprotect_and_return_err:
 		       << "'" << dendl;
       return -EINVAL;
     }
-    RWLock::RLocker locker(ictx->md_lock);
+
+    md_config_t *conf = ictx->cct->_conf;
+    if (conf->rbd_blacklist_on_break_lock) {
+      typedef std::map<rados::cls::lock::locker_id_t,
+		       rados::cls::lock::locker_info_t> Lockers;
+      Lockers lockers;
+      ClsLockType lock_type;
+      std::string lock_tag;
+      r = rados::cls::lock::get_lock_info(&ictx->md_ctx, ictx->header_oid,
+                                          RBD_LOCK_NAME, &lockers, &lock_type,
+                                          &lock_tag);
+      if (r < 0) {
+        lderr(ictx->cct) << "unable to retrieve lock info: " << cpp_strerror(r)
+          	       << dendl;
+        return r;
+      }
+
+      std::string client_address;
+      for (Lockers::iterator it = lockers.begin();
+           it != lockers.end(); ++it) {
+        if (it->first.locker == lock_client) {
+          client_address = stringify(it->second.addr);
+          break;
+        }
+      }
+      if (client_address.empty()) {
+        return -ENOENT;
+      }
+      
+      RWLock::RLocker locker(ictx->md_lock);
+      librados::Rados rados(ictx->md_ctx);
+      r = rados.blacklist_add(client_address,
+			      conf->rbd_blacklist_expire_seconds);
+      if (r < 0) {
+        lderr(ictx->cct) << "unable to blacklist client: " << cpp_strerror(r)
+          	       << dendl;
+        return r;
+      }
+    }
+
     r = rados::cls::lock::break_lock(&ictx->md_ctx, ictx->header_oid,
 				     RBD_LOCK_NAME, cookie, lock_client);
     if (r < 0)
