@@ -331,6 +331,9 @@ public:
   void get_up_osds(set<int32_t>& ls) const;
   unsigned get_num_up_osds() const;
   unsigned get_num_in_osds() const;
+  unsigned get_num_pg_temp() const {
+    return pg_temp->size();
+  }
 
   int get_flags() const { return flags; }
   int test_flag(int f) const { return flags & f; }
