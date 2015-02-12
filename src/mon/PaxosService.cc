@@ -22,6 +22,8 @@
 #include "include/assert.h"
 #include "common/Formatter.h"
 
+#include "mon/MonOpRequest.h"
+
 #define dout_subsys ceph_subsys_paxos
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, paxos, service_name, get_first_committed(), get_last_committed())
@@ -32,8 +34,10 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon, Paxos *paxos, string 
 		<< ").paxosservice(" << service_name << " " << fc << ".." << lc << ") ";
 }
 
-bool PaxosService::dispatch(PaxosServiceMessage *m)
+bool PaxosService::dispatch(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   if (mon->is_shutdown()) {
@@ -66,12 +70,12 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   // make sure our map is readable and up to date
   if (!is_readable(m->version)) {
     dout(10) << " waiting for paxos -> readable (v" << m->version << ")" << dendl;
-    wait_for_readable(new C_RetryMessage(this, m), m->version);
+    wait_for_readable(new C_RetryMessage(this, op), m->version);
     return true;
   }
 
   // preprocess
-  if (preprocess_query(m)) 
+  if (preprocess_query(op)) 
     return true;  // easy!
 
   // leader?
@@ -83,12 +87,12 @@ bool PaxosService::dispatch(PaxosServiceMessage *m)
   // writeable?
   if (!is_writeable()) {
     dout(10) << " waiting for paxos -> writeable" << dendl;
-    wait_for_writeable(new C_RetryMessage(this, m));
+    wait_for_writeable(new C_RetryMessage(this, op));
     return true;
   }
 
   // update
-  if (prepare_update(m)) {
+  if (prepare_update(op)) {
     double delay = 0.0;
     if (should_propose(delay)) {
       if (delay == 0.0) {
