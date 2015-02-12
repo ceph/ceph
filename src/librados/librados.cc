@@ -1039,6 +1039,11 @@ std::string librados::IoCtx::get_pool_name()
   return s;
 }
 
+const std::string& librados::IoCtx::get_pool_name() const
+{
+  return io_ctx_impl->get_cached_pool_name();
+}
+
 uint64_t librados::IoCtx::get_instance_id() const
 {
   return io_ctx_impl->client->get_instance_id();
@@ -1785,11 +1790,6 @@ void librados::IoCtx::set_assert_src_version(const std::string& oid, uint64_t ve
 {
   object_t obj(oid);
   io_ctx_impl->set_assert_src_version(obj, ver);
-}
-
-const std::string& librados::IoCtx::get_pool_name() const
-{
-  return io_ctx_impl->pool_name;
 }
 
 void librados::IoCtx::locator_set_key(const string& key)
@@ -2772,16 +2772,23 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   tracepoint(librados, rados_ioctx_pool_stat_enter, io);
   librados::IoCtxImpl *io_ctx_impl = (librados::IoCtxImpl *)io;
   list<string> ls;
-  ls.push_back(io_ctx_impl->pool_name);
-  map<string, ::pool_stat_t> rawresult;
+  std::string pool_name;
 
-  int err = io_ctx_impl->client->get_pool_stats(ls, rawresult);
+  int err = io_ctx_impl->client->pool_get_name(io_ctx_impl->get_id(), &pool_name);
+  if (err) {
+    tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
+    return err;
+  }
+  ls.push_back(pool_name);
+
+  map<string, ::pool_stat_t> rawresult;
+  err = io_ctx_impl->client->get_pool_stats(ls, rawresult);
   if (err) {
     tracepoint(librados, rados_ioctx_pool_stat_exit, err, stats);
     return err;
   }
 
-  ::pool_stat_t& r = rawresult[io_ctx_impl->pool_name];
+  ::pool_stat_t& r = rawresult[pool_name];
   stats->num_kb = SHIFT_ROUND_UP(r.stats.sum.num_bytes, 10);
   stats->num_bytes = r.stats.sum.num_bytes;
   stats->num_objects = r.stats.sum.num_objects;
@@ -3081,12 +3088,19 @@ extern "C" int rados_ioctx_get_pool_name(rados_ioctx_t io, char *s, unsigned max
 {
   tracepoint(librados, rados_ioctx_get_pool_name_enter, io, maxlen);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
-  if (ctx->pool_name.length() >= maxlen) {
+  std::string pool_name;
+
+  int err = ctx->client->pool_get_name(ctx->get_id(), &pool_name);
+  if (err) {
+    tracepoint(librados, rados_ioctx_get_pool_name_exit, err, "");
+    return err;
+  }
+  if (pool_name.length() >= maxlen) {
     tracepoint(librados, rados_ioctx_get_pool_name_exit, -ERANGE, "");
     return -ERANGE;
   }
-  strcpy(s, ctx->pool_name.c_str());
-  int retval = ctx->pool_name.length();
+  strcpy(s, pool_name.c_str());
+  int retval = pool_name.length();
   tracepoint(librados, rados_ioctx_get_pool_name_exit, retval, s);
   return retval;
 }

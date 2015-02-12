@@ -67,6 +67,11 @@ void usage(ostream& out)
 "   ls                               list objects in pool\n\n"
 "   chown 123                        change the pool owner to auid 123\n"
 "\n"
+"POOL SNAP COMMANDS\n"
+"   lssnap                           list snaps\n"
+"   mksnap <snap-name>               create snap <snap-name>\n"
+"   rmsnap <snap-name>               remove snap <snap-name>\n"
+"\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> [outfile]         fetch object\n"
 "   put <obj-name> [infile]          write object\n"
@@ -81,9 +86,6 @@ void usage(ostream& out)
 "   rmxattr <obj-name> attr\n"
 "   stat objname                     stat the named object\n"
 "   mapext <obj-name>\n"
-"   lssnap                           list snaps\n"
-"   mksnap <snap-name>               create snap <snap-name>\n"
-"   rmsnap <snap-name>               remove snap <snap-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
 "   listsnaps <obj-name>             list the snapshots of this object\n"
@@ -104,6 +106,8 @@ void usage(ostream& out)
 "   getomapheader <obj-name> [file]\n"
 "   setomapheader <obj-name> <val>\n"
 "   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
+"   watch <obj-name>                 add watcher on this object\n"
+"   notify <obj-name> <message>      notify wather of this object with message\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "   set-alloc-hint <obj-name> <expected-object-size> <expected-write-size>\n"
 "                                    set allocation hint for an object\n"
@@ -1600,8 +1604,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
            << cpp_strerror(ret) << std::endl;
       goto out;
     } else {
+      utime_t t(mtime, 0);
       cout << pool_name << "/" << oid
-           << " mtime " << mtime << ", size " << size << std::endl;
+           << " mtime " << t << ", size " << size << std::endl;
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {
