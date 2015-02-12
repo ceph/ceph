@@ -167,7 +167,7 @@ def lock_machines(ctx, config):
                 get_status(ctx.summary) == 'pass':
             log.info('Unlocking machines...')
             for machine in ctx.config['targets'].iterkeys():
-                lock.unlock_one(ctx, machine, ctx.owner)
+                lock.unlock_one(ctx, machine, ctx.owner, ctx.archive)
 
 
 def save_config(ctx, config):

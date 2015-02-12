@@ -98,7 +98,7 @@ def create_if_vm(ctx, machine_name):
     return True
 
 
-def destroy_if_vm(ctx, machine_name, user=None):
+def destroy_if_vm(ctx, machine_name, user=None, description=None):
     """
     Use downburst to destroy a virtual machine
 
@@ -110,6 +110,10 @@ def destroy_if_vm(ctx, machine_name, user=None):
     if user is not None and user != status_info['locked_by']:
         log.error("Tried to destroy {node} as {as_user} but it is locked by {locked_by}".format(
             node=machine_name, as_user=user, locked_by=status_info['locked_by']))
+        return False
+    if description is not None and description != status_info['description']:
+        log.error("Tried to destroy {node} with description {desc_arg} but it is locked with description {desc_lock}".format(
+            node=machine_name, desc_arg=description, desc_lock=status_info['description']))
         return False
     phys_host = decanonicalize_hostname(status_info['vm_host']['name'])
     destroyMe = decanonicalize_hostname(machine_name)
