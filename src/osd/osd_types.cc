@@ -3029,10 +3029,15 @@ void pg_log_entry_t::dump(Formatter *f) const
   f->dump_stream("prior_version") << prior_version;
   f->dump_stream("reqid") << reqid;
   f->open_array_section("extra_reqids");
-  for (vector<osd_reqid_t>::const_iterator p = extra_reqids.begin();
+  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p =
+	 extra_reqids.begin();
        p != extra_reqids.end();
-       ++p)
-    f->dump_stream("reqid") << *p;
+       ++p) {
+    f->open_object_section("extra_reqid");
+    f->dump_stream("reqid") << p->first;
+    f->dump_stream("user_version") << p->second;
+    f->close_section();
+  }
   f->close_section();
   f->dump_stream("mtime") << mtime;
   if (snaps.length() > 0) {
@@ -3651,7 +3656,7 @@ void object_copy_data_t::generate_test_instances(list<object_copy_data_t*>& o)
   o.back()->data.push_back(databp);
   o.back()->omap_header.append("this is an omap header");
   o.back()->snaps.push_back(123);
-  o.back()->reqids.push_back(osd_reqid_t());
+  o.back()->reqids.push_back(make_pair(osd_reqid_t(), version_t()));
 }
 
 void object_copy_data_t::dump(Formatter *f) const
@@ -3676,10 +3681,14 @@ void object_copy_data_t::dump(Formatter *f) const
     f->dump_unsigned("snap", *p);
   f->close_section();
   f->open_array_section("reqids");
-  for (vector<osd_reqid_t>::const_iterator p = reqids.begin();
+  for (vector<pair<osd_reqid_t, version_t> >::const_iterator p = reqids.begin();
        p != reqids.end();
-       ++p)
-    f->dump_stream("reqid") << *p;
+       ++p) {
+    f->open_object_section("extra_reqid");
+    f->dump_stream("reqid") << p->first;
+    f->dump_stream("user_version") << p->second;
+    f->close_section();
+  }
   f->close_section();
 }
 
