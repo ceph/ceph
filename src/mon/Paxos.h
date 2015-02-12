@@ -122,6 +122,7 @@ e 12v
 #include <errno.h>
 
 #include "MonitorDBStore.h"
+#include "mon/MonOpRequest.h"
 
 class Monitor;
 class MMonPaxos;
@@ -775,7 +776,7 @@ private:
    *
    * @param collect The collect message sent by the Leader to the Peon.
    */
-  void handle_collect(MMonPaxos *collect);
+  void handle_collect(MonOpRequestRef op);
   /**
    * Handle a response from a Peon to the Leader's collect phase.
    *
@@ -806,7 +807,7 @@ private:
    *
    * @param last The message sent by the Peon to the Leader.
    */
-  void handle_last(MMonPaxos *last);
+  void handle_last(MonOpRequestRef op);
   /**
    * The Recovery Phase timed out, meaning that a significant part of the
    * quorum does not believe we are the Leader, and we thus should trigger new
@@ -867,7 +868,7 @@ private:
    *		  Paxos::begin function
    *
    */
-  void handle_begin(MMonPaxos *begin);
+  void handle_begin(MonOpRequestRef op);
   /**
    * Handle an Accept message sent by a Peon.
    *
@@ -892,7 +893,7 @@ private:
    * @param accept The message sent by the Peons to the Leader during the
    *		   Paxos::handle_begin function
    */
-  void handle_accept(MMonPaxos *accept);
+  void handle_accept(MonOpRequestRef op);
   /**
    * Trigger a fresh election.
    *
@@ -946,7 +947,7 @@ private:
    * @param commit The message sent by the Leader to the Peon during
    *		   Paxos::commit
    */
-  void handle_commit(MMonPaxos *commit);
+  void handle_commit(MonOpRequestRef op);
   /**
    * Extend the system's lease.
    *
@@ -990,7 +991,7 @@ private:
    * @param lease The message sent by the Leader to the Peon during the
    *	    Paxos::extend_lease function
    */
-  void handle_lease(MMonPaxos *lease);
+  void handle_lease(MonOpRequestRef op);
   /**
    * Account for all the Lease Acks the Leader receives from the Peons.
    *
@@ -1007,7 +1008,7 @@ private:
    * @param ack The message sent by a Peon to the Leader during the
    *		Paxos::handle_lease function
    */
-  void handle_lease_ack(MMonPaxos *ack);
+  void handle_lease_ack(MonOpRequestRef op);
   /**
    * Call fresh elections because at least one Peon didn't acked our lease.
    *
@@ -1111,7 +1112,7 @@ public:
     return paxos_name;
   }
 
-  void dispatch(PaxosServiceMessage *m);
+  void dispatch(MonOpRequestRef op);
 
   void read_and_prepare_transactions(MonitorDBStore::TransactionRef tx,
 				     version_t from, version_t last);

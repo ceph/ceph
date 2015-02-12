@@ -264,15 +264,16 @@ version_t LogMonitor::get_trim_to()
   return 0;
 }
 
-bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
+bool LogMonitor::preprocess_query(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return preprocess_command(static_cast<MMonCommand*>(m));
+    return preprocess_command(op);
 
   case MSG_LOG:
-    return preprocess_log((MLog*)m);
+    return preprocess_log(op);
 
   default:
     assert(0);
@@ -281,14 +282,15 @@ bool LogMonitor::preprocess_query(PaxosServiceMessage *m)
   }
 }
 
-bool LogMonitor::prepare_update(PaxosServiceMessage *m)
+bool LogMonitor::prepare_update(MonOpRequestRef op)
 {
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    return prepare_command(static_cast<MMonCommand*>(m));
+    return prepare_command(op);
   case MSG_LOG:
-    return prepare_log((MLog*)m);
+    return prepare_log(op);
   default:
     assert(0);
     m->put();
@@ -296,8 +298,9 @@ bool LogMonitor::prepare_update(PaxosServiceMessage *m)
   }
 }
 
-bool LogMonitor::preprocess_log(MLog *m)
+bool LogMonitor::preprocess_log(MonOpRequestRef op)
 {
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
@@ -328,8 +331,9 @@ bool LogMonitor::preprocess_log(MLog *m)
   return true;
 }
 
-bool LogMonitor::prepare_log(MLog *m) 
+bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
   if (m->fsid != mon->monmap->fsid) {
@@ -348,12 +352,13 @@ bool LogMonitor::prepare_log(MLog *m)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  wait_for_finished_proposal(new C_Log(this, m));
+  wait_for_finished_proposal(new C_Log(this, op));
   return true;
 }
 
-void LogMonitor::_updated_log(MLog *m)
+void LogMonitor::_updated_log(MonOpRequestRef op)
 {
+  MLog *m = static_cast<MLog*>(op->get_req());
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
   mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 
@@ -372,8 +377,9 @@ bool LogMonitor::should_propose(double& delay)
 }
 
 
-bool LogMonitor::preprocess_command(MMonCommand *m)
+bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -388,8 +394,9 @@ bool LogMonitor::preprocess_command(MMonCommand *m)
 }
 
 
-bool LogMonitor::prepare_command(MMonCommand *m)
+bool LogMonitor::prepare_command(MonOpRequestRef op)
 {
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -422,7 +429,7 @@ bool LogMonitor::prepare_command(MMonCommand *m)
     le.msg = str_join(logtext, " ");
     pending_summary.add(le);
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
-    wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, string(),
+    wait_for_finished_proposal(new Monitor::C_Command(mon, op, 0, string(),
 					      get_last_committed() + 1));
     return true;
   }

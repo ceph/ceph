@@ -51,17 +51,19 @@ class MDSMonitor : public PaxosService {
 
   class C_Updated : public Context {
     MDSMonitor *mm;
-    MMDSBeacon *m;
+    MonOpRequestRef op;
+//    MMDSBeacon *m;
   public:
-    C_Updated(MDSMonitor *a, MMDSBeacon *c) :
-      mm(a), m(c) {}
+    C_Updated(MDSMonitor *a, MonOpRequestRef c) :
+      mm(a), op(c) {}
     void finish(int r) {
       if (r >= 0)
-	mm->_updated(m);   // success
+	mm->_updated(op);   // success
       else if (r == -ECANCELED)
-	m->put();
+        return;
+//	m->put();
       else
-	mm->dispatch((PaxosServiceMessage*)m);        // try again
+	mm->dispatch(op);        // try again
     }
   };
 
@@ -79,35 +81,35 @@ class MDSMonitor : public PaxosService {
 
   void update_logger();
 
-  void _updated(MMDSBeacon *m);
+  void _updated(MonOpRequestRef op);
  
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
   bool should_propose(double& delay);
 
   void on_active();
 
   void _note_beacon(class MMDSBeacon *m);
-  bool preprocess_beacon(class MMDSBeacon *m);
-  bool prepare_beacon(class MMDSBeacon *m);
+  bool preprocess_beacon(MonOpRequestRef op);
+  bool prepare_beacon(MonOpRequestRef op);
 
-  bool preprocess_offload_targets(MMDSLoadTargets *m);
-  bool prepare_offload_targets(MMDSLoadTargets *m);
+  bool preprocess_offload_targets(MonOpRequestRef op);
+  bool prepare_offload_targets(MonOpRequestRef op);
 
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail) const;
   int fail_mds(std::ostream &ss, const std::string &arg);
   void fail_mds_gid(mds_gid_t gid);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
   int management_command(
-      MMonCommand *m,
+      MonOpRequestRef op,
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
       std::stringstream &ss);
   int filesystem_command(
-      MMonCommand *m,
+      MonOpRequestRef op,
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
       std::stringstream &ss);

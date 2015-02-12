@@ -143,21 +143,21 @@ private:
   void create_initial();
   void update_from_paxos(bool *need_bootstrap);
   void create_pending();  // prepare a new pending
-  bool prepare_global_id(MMonGlobalID *m);
+  bool prepare_global_id(MonOpRequestRef op);
   void increase_max_global_id();
-  uint64_t assign_global_id(MAuth *m, bool should_increase_max);
+  uint64_t assign_global_id(MonOpRequestRef op, bool should_increase_max);
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t);
   virtual void encode_full(MonitorDBStore::TransactionRef t);
   version_t get_trim_to();
 
-  bool preprocess_query(PaxosServiceMessage *m);  // true if processed.
-  bool prepare_update(PaxosServiceMessage *m);
+  bool preprocess_query(MonOpRequestRef op);  // true if processed.
+  bool prepare_update(MonOpRequestRef op);
 
-  bool prep_auth(MAuth *m, bool paxos_writable);
+  bool prep_auth(MonOpRequestRef op, bool paxos_writable);
 
-  bool preprocess_command(MMonCommand *m);
-  bool prepare_command(MMonCommand *m);
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
 
   bool check_rotate();
  public:

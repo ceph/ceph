@@ -104,14 +104,16 @@ protected:
    */
   class C_RetryMessage : public Context {
     PaxosService *svc;
-    PaxosServiceMessage *m;
+    MonOpRequestRef op;
+//    PaxosServiceMessage *m;
   public:
-    C_RetryMessage(PaxosService *s, PaxosServiceMessage *m_) : svc(s), m(m_) {}
+    C_RetryMessage(PaxosService *s, MonOpRequestRef op_) : svc(s), op(op_) {}
     void finish(int r) {
       if (r == -EAGAIN || r >= 0)
-	svc->dispatch(m);
+	svc->dispatch(op);
       else if (r == -ECANCELED)
-	m->put();
+        return;
+//	m->put();
       else
 	assert(0 == "bad C_RetryMessage return value");
     }
@@ -319,7 +321,7 @@ public:
    * @param m A message
    * @returns 'true' on successful dispatch; 'false' otherwise.
    */
-  bool dispatch(PaxosServiceMessage *m);
+  bool dispatch(MonOpRequestRef op);
 
   void refresh(bool *need_bootstrap);
 
@@ -402,7 +404,7 @@ public:
    *	      answered, was a state change that has no effect); 'false' 
    *	      otherwise.
    */
-  virtual bool preprocess_query(PaxosServiceMessage *m) = 0;
+  virtual bool preprocess_query(MonOpRequestRef op) = 0;
 
   /**
    * Apply the message to the pending state.
@@ -413,7 +415,7 @@ public:
    * @returns 'true' if the update message was handled (e.g., a command that
    *	      went through); 'false' otherwise.
    */
-  virtual bool prepare_update(PaxosServiceMessage *m) = 0;
+  virtual bool prepare_update(MonOpRequestRef op) = 0;
   /**
    * @}
    */
