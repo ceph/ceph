@@ -74,15 +74,21 @@ def task(ctx, config):
     and then executing them with the teuthology ctx and config args.
     Your tests must follow standard pytest conventions to be discovered.
     """
-    status = pytest.main(
-        args=[
-            '-q',
-            '--pyargs', __name__
-        ],
-        plugins=[TeuthologyContextPlugin(ctx, config)]
-    )
-    if status == 0:
-        log.info("OK. All tests passed!")
+    try:
+        status = pytest.main(
+            args=[
+                '-q',
+                '--pyargs', __name__
+            ],
+            plugins=[TeuthologyContextPlugin(ctx, config)]
+        )
+    except Exception:
+        log.exception("Saw failure running pytest")
+        ctx.summary["status"] = "dead"
     else:
-        log.error("FAIL. Saw test failures...")
-        ctx.summary["status"] = "fail"
+        if status == 0:
+            log.info("OK. All tests passed!")
+            ctx.summary["status"] = "pass"
+        else:
+            log.error("FAIL. Saw test failures...")
+            ctx.summary["status"] = "fail"
