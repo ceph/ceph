@@ -38,6 +38,15 @@ class TeuthologyContextPlugin(object):
         # pass the teuthology ctx and config to each test method
         metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
 
+    @pytest.mark.trylast
+    def pytest_configure(self, config):
+        # removes the default pytest TerminalReporter
+        # this fixes failures with scheduled jobs; when run by a worker
+        # there is no terminal to report to and pytest dies
+        standard_reporter = config.pluginmanager.getplugin('terminalreporter')
+        config.pluginmanager.unregister(standard_reporter)
+        log.info("removing pytest terminal reporter")
+
     # log the outcome of each test
     def pytest_runtest_makereport(self, __multicall__, item, call):
         report = __multicall__.execute()
