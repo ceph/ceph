@@ -5119,6 +5119,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	  goto wait;
 	if (err)
 	  goto reply;
+      } else if (plugin == "shec") {
+	if (!g_ceph_context->check_experimental_feature_enabled("shec", &ss)) {
+	  err = -EINVAL;
+	  goto reply;
+	}
       }
       dout(20) << "erasure code profile " << name << " set" << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
