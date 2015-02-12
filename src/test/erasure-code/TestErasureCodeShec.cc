@@ -912,112 +912,6 @@ TEST(ErasureCodeShec, init_34)
   delete parameters;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
-TEST(ErasureCodeShec, init2_1)
-{
-  //all parameters are normal values
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-
-  int r = shec->init(*parameters);
-
-  //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
-  EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-
-  delete shec;
-  delete parameters;
-}
-*/
-
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
-TEST(ErasureCodeShec, init2_2)
-{
-  //all parameters are normal values
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-
-  int r = shec->init(*parameters);
-
-  //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
-  EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
-  EXPECT_STREQ("default", shec->ruleset_root.c_str());
-  EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
-  EXPECT_TRUE(shec->matrix != NULL);
-  EXPECT_EQ(0, r);
-
-  delete shec;
-  delete parameters;
-}
-*/
-
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, init2_3)
- {
- //all parameters are normal values
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
-
- int r = shec->init(*parameters);
-
- //k,m,c are default values
- EXPECT_EQ(2u,shec->k);
- EXPECT_EQ(1u,shec->m);
- EXPECT_EQ(1u,shec->c);
- EXPECT_TRUE(shec->matrix != NULL);
- EXPECT_NE(0,r);
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, init2_4)
 {
   //all parameters are normal values
@@ -1465,45 +1359,6 @@ TEST(ErasureCodeShec, minimum_to_decode2_1)
   delete parameters;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, minimum_to_decode2_2)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- //init is not executed
-
- //minimum_to_decode
- set<int> want_to_decode;
- set<int> available_chunks;
- set<int> minimum_chunks;
-
- want_to_decode.insert(0);
- available_chunks.insert(0);
- available_chunks.insert(1);
- available_chunks.insert(2);
-
- int r = shec->minimum_to_decode(want_to_decode,available_chunks,
-				 &minimum_chunks);
- EXPECT_NE(0,r);
-
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, minimum_to_decode2_3)
 {
   //init
@@ -1590,45 +1445,6 @@ TEST(ErasureCodeShec, minimum_to_decode_with_cost_1)
   delete shec;
   delete parameters;
 }
-
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_2)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- //init is not executed
-
- //minimum_to_decode_with_cost
- set<int> want_to_decode;
- map<int,int> available_chunks;
- set<int> minimum_chunks;
-
- want_to_decode.insert(0);
- available_chunks[0] = 0;
- available_chunks[1] = 1;
- available_chunks[2] = 2;
-
- int r = shec->minimum_to_decode_with_cost(want_to_decode, available_chunks,
-					   &minimum_chunks);
- EXPECT_NE(0,r);
-
- delete shec;
- delete parameters;
- }
- */
 
 TEST(ErasureCodeShec, minimum_to_decode_with_cost_2_3)
 {
@@ -1921,42 +1737,6 @@ TEST(ErasureCodeShec, encode_4)
   delete parameters;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, encode_6)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- shec->init(*parameters);
-
- //encode
- set<int> want_to_encode;
- map<int, bufferlist> encoded;
-
- for(unsigned int i = 0; i < shec->get_chunk_count(); i++)
- want_to_encode.insert(i);
- int r = shec->encode(want_to_encode, NULL, &encoded) //inbuf=NULL
- EXPECT_EQ(0, r);
- EXPECT_EQ(shec->get_chunk_count(), encoded.size());
- EXPECT_EQ(0, encoded[0].length());
-
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, encode_8)
 {
   //init
@@ -2093,47 +1873,6 @@ TEST(ErasureCodeShec, encode2_1)
   delete shec;
   delete parameters;
 }
-
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, encode2_2)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- //init is not executed
-
- //encode
- bufferlist in;
- set<int> want_to_encode;
- map<int, bufferlist> encoded;
-
- in.append("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"	//length = 62
-	   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"	//124
-	   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"	//186
-	   "012345"															//192
- );
- for(unsigned int i = 0; i < shec->get_chunk_count(); i++)
- want_to_encode.insert(i);
-
- int r = shec->encode(want_to_encode, in, &encoded);
- EXPECT_EQ(-EINVAL, r);
-
- delete shec;
- delete parameters;
- }
- */
 
 TEST(ErasureCodeShec, encode2_3)
 {
@@ -2446,39 +2185,6 @@ TEST(ErasureCodeShec, decode_4)
   delete parameters;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, decode_6)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- shec->init(*parameters);
-
- //decode
- int want_to_decode[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
- map<int, bufferlist> decoded;
-
- //	map<int, bufferlist> inchunks;
- EXPECT_NE(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), NULL,
-			  &decoded));
-
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, decode_7)
 {
   //init
@@ -2709,46 +2415,6 @@ TEST(ErasureCodeShec, decode2_1)
   delete parameters;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, decode2_2)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map<std::string, std::string> *parameters = new map<std::string,
-						     std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- // init is not executed
-
- //create encoded
- map<int, bufferlist> encoded;
- bufferlist buf;
- buf.append("ABCDEFGH");
- for(unsigned int i = 0; i < shec->get_chunk_count(); i++)
- encoded[i] = buf;
-
- // all chunks are available
- //decode
- int want_to_decode[] = { 0 };
- map<int, bufferlist> decoded;
-
- EXPECT_NE(0,shec->decode(set<int>(want_to_decode, want_to_decode+2), encoded,
-			  &decoded));
-
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, decode2_3)
 {
   //init
@@ -2929,37 +2595,6 @@ TEST(ErasureCodeShec, create_ruleset_1_2)
   delete crush;
 }
 
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, create_ruleset_3)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map < std::string, std::string > *parameters = new map<std::string,
-							std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- shec->init(*parameters);
-
- //create_ruleset
- stringstream ss;
- CrushWrapper *crush = NULL;
- int r = shec->create_ruleset("myrule", *crush, &ss);
- EXPECT_NE(0, r);	//crush = NULL
-
- delete shec;
- delete parameters;
- }
- */
-
 TEST(ErasureCodeShec, create_ruleset_4)
 {
   //create ruleset
@@ -3061,60 +2696,6 @@ TEST(ErasureCodeShec, create_ruleset2_1)
   int r = shec->create_ruleset("myrule", *crush, &ss);
   EXPECT_EQ(0, r);
   EXPECT_STREQ("myrule", crush->rule_name_map[0].c_str());
-
-  delete shec;
-  delete parameters;
-  delete crush;
-}
-
-TEST(ErasureCodeShec, create_ruleset2_2)
-{
-  //create ruleset
-  CrushWrapper *crush = new CrushWrapper;
-  crush->create();
-  crush->set_type_name(2, "root");
-  crush->set_type_name(1, "host");
-  crush->set_type_name(0, "osd");
-
-  int rootno;
-  crush->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1, 2, 0, NULL,
-		    NULL, &rootno);
-  crush->set_item_name(rootno, "default");
-
-  map < string, string > loc;
-  loc["root"] = "default";
-
-  int num_host = 2;
-  int num_osd = 5;
-  int osd = 0;
-  for (int h = 0; h < num_host; ++h) {
-    loc["host"] = string("host-") + stringify(h);
-    for (int o = 0; o < num_osd; ++o, ++osd) {
-      crush->insert_item(g_ceph_context, osd, 1.0,
-			 string("osd.") + stringify(osd), loc);
-    }
-  }
-
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  // init is not executed
-
-  //create_ruleset
-  stringstream ss;
-
-  int r = shec->create_ruleset("myrule", *crush, &ss);
-  EXPECT_EQ(0, r);
 
   delete shec;
   delete parameters;
@@ -3239,31 +2820,6 @@ TEST(ErasureCodeShec, get_data_chunk_count_1)
   delete parameters;
 }
 
-TEST(ErasureCodeShec, get_chunk_count_no_init)
-{
-  //init
-  ErasureCodeShecTableCache tcache;
-  ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				  tcache,
-				  ErasureCodeShec::MULTIPLE);
-  map < std::string, std::string > *parameters = new map<std::string,
-							 std::string>();
-  (*parameters)["plugin"] = "shec";
-  (*parameters)["technique"] = "";
-  (*parameters)["ruleset-failure-domain"] = "osd";
-  (*parameters)["k"] = "6";
-  (*parameters)["m"] = "4";
-  (*parameters)["c"] = "3";
-  //init is not executed
-
-  //get_data_chunk_count
-  EXPECT_EQ(0u, shec->get_data_chunk_count());
-  EXPECT_EQ(0u, shec->get_chunk_count());
-
-  delete shec;
-  delete parameters;
-}
-
 TEST(ErasureCodeShec, get_chunk_size_1_2)
 {
   //init
@@ -3290,37 +2846,6 @@ TEST(ErasureCodeShec, get_chunk_size_1_2)
   delete shec;
   delete parameters;
 }
-
-/*
- * This test case cannot be executed because of environment issues,
- * so this is intentionally commented out.
- TEST(ErasureCodeShec, get_chunk_size2)
- {
- //init
- ErasureCodeShecTableCache tcache;
- ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
-				 tcache,
-				 ErasureCodeShec::MULTIPLE);
- map < std::string, std::string > *parameters = new map<std::string,
-							std::string>();
- (*parameters)["plugin"] = "shec";
- (*parameters)["technique"] = "";
- (*parameters)["ruleset-failure-domain"] = "osd";
- (*parameters)["k"] = "6";
- (*parameters)["m"] = "4";
- (*parameters)["c"] = "3";
- (*parameters)["w"] = "8";
- //init is not executed
-
- //when there is no padding(192=k*w*4)
- EXPECT_EQ(32u, shec->get_chunk_size(192));
- //when there is padding(190=k*w*4-2)
- EXPECT_EQ(32u, shec->get_chunk_size(190));
-
- delete shec;
- delete parameters;
- }
- */
 
 int main(int argc, char **argv)
 {
