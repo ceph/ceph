@@ -1156,6 +1156,8 @@ struct RGWObjectCtx {
   void invalidate(rgw_obj& obj);
 };
 
+class Finisher;
+
 class RGWRados
 {
   friend class RGWGC;
@@ -1243,6 +1245,8 @@ protected:
 
   RGWQuotaHandler *quota_handler;
 
+  Finisher *finisher;
+
 public:
   RGWRados() : lock("rados_timer_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false), quota_threads(false),
@@ -1254,6 +1258,7 @@ public:
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
+               finisher(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1314,6 +1319,8 @@ public:
   int init_complete();
   virtual int initialize();
   virtual void finalize();
+
+  void schedule_context(Context *c);
 
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
