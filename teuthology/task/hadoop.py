@@ -3,7 +3,6 @@ import contextlib
 import logging
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.parallel import parallel
 from ..orchestra import run
 
 log = logging.getLogger(__name__)
