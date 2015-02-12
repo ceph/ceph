@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -30,7 +30,7 @@ function setup_container() {
     local build=true
     if docker images $image | grep --quiet "^$image " ; then
         eval touch --date=$(docker inspect $image | jq '.[0].Created') $image
-        found=$(find -L test/$os_type/* -newer $image)
+        found=$(find -L test/$os_type-$os_version/* -newer $image)
         rm $image
         if test -n "$found" ; then
             docker rmi $image
@@ -44,7 +44,7 @@ function setup_container() {
         # replace environment variables %%FOO%% with their content
         #
         rm -fr dockerfile
-        cp --dereference --recursive test/$os_type dockerfile
+        cp --dereference --recursive test/$os_type-$os_version dockerfile
         os_version=$os_version user_id=$(id -u) \
             perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
             dockerfile/Dockerfile.in > dockerfile/Dockerfile
@@ -148,7 +148,7 @@ function run_in_docker() {
     return $status
 }
 
-declare -A OS_TYPE2VERSIONS=([ubuntu]="12.04 14.04" [centos]="centos6 centos7")
+declare -A OS_TYPE2VERSIONS=([ubuntu]="12.04 14.04" [centos]="6 7")
 
 function self_in_docker() {
     local script=$1
@@ -178,7 +178,7 @@ $0 [options] command args ...
 
    [--os-type type]       docker image repository (centos, ubuntu, etc.) 
                           (defaults to ubuntu)
-   [--os-version version] docker image tag (centos6 for centos, 12.04 for ubuntu, etc.)
+   [--os-version version] docker image tag (7 for centos, 12.04 for ubuntu, etc.)
                           (defaults to 14.04)
    [--ref gitref]         git reset --hard gitref before running the command
                           (defaults to git rev-parse HEAD)
@@ -199,14 +199,14 @@ and running a unit test:
 
    $ lsb_release -d
    Description:	Ubuntu Trusty Tahr (development branch)
-   $ test/docker-test.sh --os-type centos --os-version centos7 --shell
+   $ test/docker-test.sh --os-type centos --os-version 7 --shell
    HEAD is now at 1caee81 autotools: add --enable-docker
    bash-4.2$ pwd
-   /srv/ceph/ceph-centos-centos7
+   /srv/ceph/ceph-centos-7
    bash-4.2$ lsb_release -d
    Description:	CentOS Linux release 7.0.1406 (Core) 
    bash-4.2$ 
-   $ time test/docker-test.sh --os-type centos --os-version centos7 unittest_str_map
+   $ time test/docker-test.sh --os-type centos --os-version 7 unittest_str_map
    HEAD is now at 1caee81 autotools: add --enable-docker
    Running main() from gtest_main.cc
    [==========] Running 2 tests from 1 test case.
@@ -229,20 +229,20 @@ and running a unit test:
 The --all argument is a bash associative array literal listing the
 operating system version for each operating system type. For instance
 
-   docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="centos6 centos7")' 
+   docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="6 7")' 
 
 is strictly equivalent to
 
    docker-test.sh --os-type ubuntu --os-version 12.04
    docker-test.sh --os-type ubuntu --os-version 14.04
-   docker-test.sh --os-type centos --os-version centos6
-   docker-test.sh --os-type centos --os-version centos7
+   docker-test.sh --os-type centos --os-version 6
+   docker-test.sh --os-type centos --os-version 7
 
 The --os-type and --os-version must be exactly as displayed by docker images:
 
    $ docker images
    REPOSITORY            TAG                 IMAGE ID          ...
-   centos                centos7             87e5b6b3ccc1      ...
+   centos                7                   87e5b6b3ccc1      ...
    ubuntu                14.04               6b4e8a7373fe      ...
 
 The --os-type value can be any string in the REPOSITORY column, the --os-version
@@ -250,8 +250,8 @@ can be any string in the TAG column.
 
 The --shell and --remove actions are mutually exclusive.
 
-Run make check in centos7
-docker-test.sh --os-type centos --os-version centos7 -- make check
+Run make check in centos 7
+docker-test.sh --os-type centos --os-version 7 -- make check
 
 Run make check on a giant
 docker-test.sh --ref giant -- make check
@@ -262,8 +262,8 @@ docker-test.sh --user root --dev -- make TESTS=test/ceph-disk-root.sh check
 Run an interactive shell and set resolv.conf to use 172.17.42.1
 docker-test.sh --opts --dns=172.17.42.1 --shell
 
-Run make check on centos6, centos7, ubuntu-12.04 and ubuntu-14.04
-docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="centos6 centos7")' -- make check
+Run make check on centos 6, centos 7, ubuntu 12.04 and ubuntu 14.04
+docker-test.sh --all '([ubuntu]="12.04 14.04" [centos]="6 7")' -- make check
 EOF
 }
 
