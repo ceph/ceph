@@ -229,10 +229,10 @@ void LogSegment::try_to_expire(MDS *mds, MDSGatherBuilder &gather_bld, int op_pr
   }
 
   // sessionmap
-  if (sessionmapv > mds->sessionmap.committed) {
+  if (sessionmapv > mds->sessionmap.get_committed()) {
     dout(10) << "try_to_expire saving sessionmap, need " << sessionmapv 
-	      << ", committed is " << mds->sessionmap.committed
-	      << " (" << mds->sessionmap.committing << ")"
+	      << ", committed is " << mds->sessionmap.get_committed()
+	      << " (" << mds->sessionmap.get_committing() << ")"
 	      << dendl;
     mds->sessionmap.save(gather_bld.new_sub(), sessionmapv);
   }
@@ -1498,12 +1498,12 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
     }
   }
   if (sessionmapv) {
-    if (mds->sessionmap.version >= sessionmapv) {
+    if (mds->sessionmap.get_version() >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
-	       << " <= table " << mds->sessionmap.version << dendl;
-    } else if (mds->sessionmap.version + 2 >= sessionmapv) {
+	       << " <= table " << mds->sessionmap.get_version() << dendl;
+    } else if (mds->sessionmap.get_version() + 2 >= sessionmapv) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
-	       << " -(1|2) == table " << mds->sessionmap.version
+	       << " -(1|2) == table " << mds->sessionmap.get_version()
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
@@ -1524,26 +1524,28 @@ void EMetaBlob::replay(MDS *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    assert(i == used_preallocated_ino);
 	    session->info.used_inos.clear();
 	  }
-	  mds->sessionmap.projected = ++mds->sessionmap.version;
+          mds->sessionmap.replay_dirty_session(session);
 	}
 	if (!preallocated_inos.empty()) {
 	  session->info.prealloc_inos.insert(preallocated_inos);
-	  mds->sessionmap.projected = ++mds->sessionmap.version;
+          mds->sessionmap.replay_dirty_session(session);
 	}
+
       } else {
 	dout(10) << "EMetaBlob.replay no session for " << client_name << dendl;
-	if (used_preallocated_ino)
-	  mds->sessionmap.projected = ++mds->sessionmap.version;
+	if (used_preallocated_ino) {
+	  mds->sessionmap.replay_advance_version();
+        }
 	if (!preallocated_inos.empty())
-	  mds->sessionmap.projected = ++mds->sessionmap.version;
+	  mds->sessionmap.replay_advance_version();
       }
-      assert(sessionmapv == mds->sessionmap.version);
+      assert(sessionmapv == mds->sessionmap.get_version());
     } else {
       mds->clog->error() << "journal replay sessionmap v " << sessionmapv
-			<< " -(1|2) > table " << mds->sessionmap.version << "\n";
+			<< " -(1|2) > table " << mds->sessionmap.get_version() << "\n";
       assert(g_conf->mds_wipe_sessions);
       mds->sessionmap.wipe();
-      mds->sessionmap.version = mds->sessionmap.projected = sessionmapv;
+      mds->sessionmap.set_version(sessionmapv);
     }
   }
 
@@ -1616,14 +1618,12 @@ void ESession::update_segment()
 
 void ESession::replay(MDS *mds)
 {
-  if (mds->sessionmap.version >= cmapv) {
-    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version 
+  if (mds->sessionmap.get_version() >= cmapv) {
+    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version() 
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
-    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.version
+    dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << " " << (open ? "open":"close") << " " << client_inst << dendl;
-    mds->sessionmap.projected = ++mds->sessionmap.version;
-    assert(mds->sessionmap.version == cmapv);
     Session *session;
     if (open) {
       session = mds->sessionmap.get_or_add_session(client_inst);
@@ -1636,6 +1636,7 @@ void ESession::replay(MDS *mds)
 	if (session->connection == NULL) {
 	  dout(10) << " removed session " << session->info.inst << dendl;
 	  mds->sessionmap.remove_session(session);
+          session = NULL;
 	} else {
 	  session->clear();    // the client has reconnected; keep the Session, but reset
 	  dout(10) << " reset session " << session->info.inst << " (they reconnected)" << dendl;
@@ -1645,6 +1646,12 @@ void ESession::replay(MDS *mds)
 			  << " from time " << stamp << ", ignoring";
       }
     }
+    if (session) {
+      mds->sessionmap.replay_dirty_session(session);
+    } else {
+      mds->sessionmap.replay_advance_version();
+    }
+    assert(mds->sessionmap.get_version() == cmapv);
   }
   
   if (inos.size() && inotablev) {
@@ -1769,15 +1776,15 @@ void ESessions::update_segment()
 
 void ESessions::replay(MDS *mds)
 {
-  if (mds->sessionmap.version >= cmapv) {
-    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.version
+  if (mds->sessionmap.get_version() >= cmapv) {
+    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
-    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.version
+    dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << dendl;
     mds->sessionmap.open_sessions(client_map);
-    assert(mds->sessionmap.version == cmapv);
-    mds->sessionmap.projected = mds->sessionmap.version;
+    assert(mds->sessionmap.get_version() == cmapv);
+    mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
 }
@@ -2035,11 +2042,11 @@ void EUpdate::replay(MDS *mds)
   }
   
   if (client_map.length()) {
-    if (mds->sessionmap.version >= cmapv) {
+    if (mds->sessionmap.get_version() >= cmapv) {
       dout(10) << "EUpdate.replay sessionmap v " << cmapv
-	       << " <= table " << mds->sessionmap.version << dendl;
+	       << " <= table " << mds->sessionmap.get_version() << dendl;
     } else {
-      dout(10) << "EUpdate.replay sessionmap " << mds->sessionmap.version
+      dout(10) << "EUpdate.replay sessionmap " << mds->sessionmap.get_version()
 	       << " < " << cmapv << dendl;
       // open client sessions?
       map<client_t,entity_inst_t> cm;
@@ -2049,8 +2056,8 @@ void EUpdate::replay(MDS *mds)
       mds->server->prepare_force_open_sessions(cm, seqm);
       mds->server->finish_force_open_sessions(cm, seqm);
 
-      assert(mds->sessionmap.version == cmapv);
-      mds->sessionmap.projected = mds->sessionmap.version;
+      assert(mds->sessionmap.get_version() == cmapv);
+      mds->sessionmap.set_projected(mds->sessionmap.get_version());
     }
   }
 }
@@ -2854,18 +2861,18 @@ void EImportStart::replay(MDS *mds)
 					    mds_authority_t(mds->get_nodeid(), mds->get_nodeid()));
 
   // open client sessions?
-  if (mds->sessionmap.version >= cmapv) {
-    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
+  if (mds->sessionmap.get_version() >= cmapv) {
+    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.get_version() 
 	     << " >= " << cmapv << ", noop" << dendl;
   } else {
-    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.version 
+    dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.get_version() 
 	     << " < " << cmapv << dendl;
     map<client_t,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
     ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
-    assert(mds->sessionmap.version == cmapv);
-    mds->sessionmap.projected = mds->sessionmap.version;
+    assert(mds->sessionmap.get_version() == cmapv);
+    mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
 }
