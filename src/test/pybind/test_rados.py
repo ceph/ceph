@@ -65,6 +65,7 @@ class TestRadosStateError(object):
         assert_raises(RadosStateError, rados.osd_command, 0, '', '')
         assert_raises(RadosStateError, rados.pg_command, '', '', '')
         assert_raises(RadosStateError, rados.wait_for_latest_osdmap)
+        assert_raises(RadosStateError, rados.blacklist_add, '127.0.0.1/123', 0)
 
     def test_configuring(self):
         rados = Rados(conffile='')
@@ -172,6 +173,9 @@ class TestRados(object):
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
         eq(len(fsid), 36)
+
+    def test_blacklist_add(self):
+        self.rados.blacklist_add("1.2.3.4/123", 1)
 
 class TestIoctx(object):
 

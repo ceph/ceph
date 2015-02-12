@@ -79,6 +79,9 @@ public:
   virtual int pool_reverse_lookup(int64_t id, std::string *name);
 
   virtual int watch_flush();
+
+  virtual int blacklist_add(const std::string& client_address,
+			    uint32_t expire_seconds);
 protected:
   ~TestMemRadosClient();
 
