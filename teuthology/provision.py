@@ -84,17 +84,20 @@ def create_if_vm(ctx, machine_name):
                               'create', metadata, createMe],
                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
         owt, err = p.communicate()
-        if err:
-            log.info("Downburst completed on %s: %s" %
-                     (machine_name, err))
-        else:
-            log.info("%s created: %s" % (machine_name, owt))
-        # If the guest already exists first destroy then re-create:
-        if 'exists' in err:
-            log.info("Guest files exist. Re-creating guest: %s" %
-                     (machine_name))
-            destroy_if_vm(ctx, machine_name)
-            create_if_vm(ctx, machine_name)
+        if p.returncode == 0:
+            log.info("Downburst created %s: %s" % (machine_name, owt.strip()))
+        elif err:
+            # If the guest already exists first destroy then re-create:
+            # FIXME there is a recursion-depth issue here.
+            if 'exists' in err:
+                log.info("Guest files exist. Re-creating guest: %s" %
+                         (machine_name))
+                destroy_if_vm(ctx, machine_name)
+                create_if_vm(ctx, machine_name)
+            else:
+                log.info("Downburst failed on %s: %s" % (machine_name,
+                                                         err.strip()))
+                return False
     return True
 
 
