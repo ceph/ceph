@@ -184,6 +184,20 @@ int ImageWatcher::try_lock() {
       }
     }
 
+    md_config_t *conf = m_image_ctx.cct->_conf;
+    if (conf->rbd_blacklist_on_break_lock) {
+      ldout(m_image_ctx.cct, 1) << "blacklisting client: " << locker << "@"
+				<< locker_address << dendl;
+      librados::Rados rados(m_image_ctx.md_ctx);
+      r = rados.blacklist_add(locker_address,
+			      conf->rbd_blacklist_expire_seconds);
+      if (r < 0) {
+        lderr(m_image_ctx.cct) << "unable to blacklist client: "
+			       << cpp_strerror(r) << dendl;
+        return r;
+      }
+    }
+
     ldout(m_image_ctx.cct, 1) << "breaking exclusive lock: " << locker << dendl;
     r = rados::cls::lock::break_lock(&m_image_ctx.md_ctx,
                                      m_image_ctx.header_oid, RBD_LOCK_NAME,
