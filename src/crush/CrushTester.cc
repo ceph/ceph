@@ -3,7 +3,12 @@
 
 #include <algorithm>
 #include <stdlib.h>
-
+/* fork */
+#include <unistd.h>
+/* waitpid */
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <common/errno.h>
 
 void CrushTester::set_device_weight(int dev, float f)
 {
@@ -348,6 +353,76 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
 
   // write the data buffer to the destination
   dst.push_back( data_buffer.str() );
+}
+
+int CrushTester::test_with_crushtool()
+{
+  vector<const char *> cmd_args;
+  cmd_args.push_back("crushtool");
+  cmd_args.push_back("-i");
+  cmd_args.push_back("-");
+  cmd_args.push_back("--test");
+  cmd_args.push_back("--output-csv");
+  cmd_args.push_back(NULL);
+
+  int pipefds[2];
+  if (::pipe(pipefds) == -1) {
+    int r = errno;
+    err << "error creating pipe: " << cpp_strerror(r) << "\n";
+    return -r;
+  }
+
+  int fpid = fork();
+  if (fpid < 0) {
+    int r = errno;
+    err << "unable to fork(): " << cpp_strerror(r);
+    ::close(pipefds[0]);
+    ::close(pipefds[1]);
+    return -r;
+  } else if (fpid == 0) {
+    ::close(pipefds[1]);
+    ::dup2(pipefds[0], STDIN_FILENO);
+    ::close(pipefds[0]);
+    ::close(1);
+    ::close(2);
+    int r = execvp(cmd_args[0], (char * const *)&cmd_args[0]);
+    if (r < 0)
+      exit(errno);
+    // we should never reach this
+    exit(EINVAL);
+  }
+  ::close(pipefds[0]);
+
+  bufferlist bl;
+  ::encode(crush, bl);
+  bl.write_fd(pipefds[1]);
+  ::close(pipefds[1]);
+
+  int status;
+  int r = waitpid(fpid, &status, 0);
+  assert(r == fpid);
+
+  if (!WIFEXITED(status)) {
+    assert(WIFSIGNALED(status));
+    err << "error testing crush map\n";
+    return -EINVAL;
+  }
+
+  r = WEXITSTATUS(status);
+  if (r == 0) {
+    // major success!
+    return 0;
+  }
+
+  if (r == ENOENT) {
+    err << "unable to find 'crushtool' to test the map";
+    return -ENOENT;
+  }
+
+  // something else entirely happened
+  // log it and consider an invalid crush map
+  err << "error running crushmap through crushtool: " << cpp_strerror(r);
+  return -r;
 }
 
 int CrushTester::test()

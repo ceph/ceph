@@ -1925,7 +1925,7 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
   req->set_filepath(request->get_filepath());
   req->set_filepath2(request->get_filepath2());
   req->set_data(request->data);
-  req->set_retry_attempt(request->retry_attempt);
+  req->set_retry_attempt(request->retry_attempt++);
   req->head.num_fwd = request->num_fwd;
   return req;
 }
@@ -2251,6 +2251,7 @@ void Client::handle_mds_map(MMDSMap* m)
 
     if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
+	// kick new requests
 	kick_requests(p->second);
 	kick_flushing_caps(p->second);
 	signal_context_list(p->second->waiting_for_open);
@@ -2344,6 +2345,10 @@ void Client::kick_requests(MetaSession *session)
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
+    if (p->second->got_unsafe)
+      continue;
+    if (p->second->retry_attempt > 0)
+      continue; // new requests only
     if (p->second->mds == session->mds_num) {
       send_request(p->second, session);
     }
@@ -2356,6 +2361,20 @@ void Client::resend_unsafe_requests(MetaSession *session)
        !iter.end();
        ++iter)
     send_request(*iter, session);
+
+  // also re-send old requests when MDS enters reconnect stage. So that MDS can
+  // process completed requests in clientreplay stage.
+  for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
+       p != mds_requests.end();
+       ++p) {
+    MetaRequest *req = p->second;
+    if (req->got_unsafe)
+      continue;
+    if (req->retry_attempt == 0)
+      continue; // old requests only
+    if (req->mds == session->mds_num)
+      send_request(req, session);
+  }
 }
 
 void Client::kick_requests_closed(MetaSession *session)

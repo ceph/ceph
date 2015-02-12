@@ -922,6 +922,7 @@ function test_mon_osd()
   f=$TMPDIR/map.$$
   ceph osd getcrushmap -o $f
   [ -s $f ]
+  ceph osd setcrushmap -i $f
   rm $f
   ceph osd getmap -o $f
   [ -s $f ]
