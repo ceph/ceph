@@ -182,7 +182,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     str %= quoted_string | unquoted_word;
     estr %= equoted_string | unquoted_word;
 
-    spaces = +(lit(' ') | lit('\n') | lit('\t'));
+    spaces = +ascii::space;
 
 
     // match := [pool[=]<poolname> [namespace[=]<namespace>] | auid <123>] [object_prefix <prefix>]
@@ -214,12 +214,12 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 			 str                          [_val = phoenix::construct<OSDCapSpec>(_1, string())] ));
 
     // grant := allow match capspec
-    grant = (*lit(' ') >> lit("allow") >>
+    grant = (*ascii::blank >> lit("allow") >>
 	     ((capspec >> match)       [_val = phoenix::construct<OSDCapGrant>(_2, _1)] |
 	      (match >> capspec)       [_val = phoenix::construct<OSDCapGrant>(_1, _2)]) >>
-	     *lit(' '));
+	     *ascii::blank);
     // osdcap := grant [grant ...]
-    grants %= (grant % (*lit(' ') >> (lit(';') | lit(',')) >> *lit(' ')));
+    grants %= (grant % (lit(';') | lit(',')));
     osdcap = grants  [_val = phoenix::construct<OSDCap>(_1)]; 
   }
   qi::rule<Iterator> spaces;
