@@ -650,6 +650,7 @@ if(${WITH_RBD})
     librbd/AioRequest.cc
     librbd/AsyncFlattenRequest.cc
     librbd/AsyncObjectThrottle.cc
+    librbd/AsyncOperation.cc
     librbd/AsyncRequest.cc
     librbd/AsyncResizeRequest.cc
     librbd/AsyncTrimRequest.cc
