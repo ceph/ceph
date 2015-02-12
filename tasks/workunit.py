@@ -308,13 +308,13 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
             'if', 'test', '-e', 'Makefile', run.Raw(';'), 'then', 'make', run.Raw(';'), 'fi',
             run.Raw('&&'),
             'find', '-executable', '-type', 'f', '-printf', r'%P\0'.format(srcdir=srcdir),
-            run.Raw('>{tdir}/workunits.list'.format(tdir=testdir)),
+            run.Raw('>{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)),
         ],
     )
 
     workunits = sorted(misc.get_file(
         remote,
-        '{tdir}/workunits.list'.format(tdir=testdir)).split('\0'))
+        '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role)).split('\0'))
     assert workunits
 
     try:
@@ -368,6 +368,6 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
         remote.run(
             logger=log.getChild(role),
             args=[
-                'rm', '-rf', '--', '{tdir}/workunits.list'.format(tdir=testdir), srcdir,
+                'rm', '-rf', '--', '{tdir}/workunits.list.{role}'.format(tdir=testdir, role=role), srcdir,
             ],
         )
