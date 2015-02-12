@@ -131,9 +131,13 @@ location. ::
 
 	ceph osd crush set {id} {weight} [{loc1} [{loc2} ...]]
 
-Remove an existing item from the CRUSH map. ::
+Remove an existing item (OSD) from the CRUSH map. ::
 
-	ceph osd crush remove {id}
+	ceph osd crush remove {name}
+
+Remove an existing bucket from the CRUSH map. ::
+
+	ceph osd crush remove {bucket-name}
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
