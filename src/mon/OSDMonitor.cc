@@ -2145,7 +2145,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     mon->send_reply(req, m);
 
     if (osd >= 0)
-      osd_epoch[osd] = osdmap.get_epoch();
+      note_osd_has_epoch(osd, osdmap.get_epoch());
     return;
   }
 
@@ -2158,7 +2158,27 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   mon->send_reply(req, m);
 
   if (osd >= 0)
-    osd_epoch[osd] = last;
+    note_osd_has_epoch(osd, last);
+}
+
+// FIXME: we assume the OSD actually receives this.  if the mon
+// session drops and they reconnect we may not share the same maps
+// with them again, which could cause a strange hang (perhaps stuck
+// 'waiting for osdmap' requests?).  this information should go in the
+// MonSession, but I think these functions need to be refactored in
+// terms of MonSession first for that to work.
+void OSDMonitor::note_osd_has_epoch(int osd, epoch_t epoch)
+{
+  dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
+  map<int,epoch_t>::iterator p = osd_epoch.find(osd);
+  if (p != osd_epoch.end()) {
+    dout(20) << __func__ << " osd." << osd << " epoch " << epoch
+	     << " (was " << p->second << ")" << dendl;
+    p->second = epoch;
+  } else {
+    dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
+    osd_epoch[osd] = epoch;
+  }
 }
 
 void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
