@@ -4492,7 +4492,14 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    tester.test();
+    int r = tester.test_with_crushtool();
+    if (r < 0) {
+      derr << "error on crush map: " << ess.str() << dendl;
+      ss << "Failed to parse crushmap: " << ess.str();
+      err = r;
+      goto reply;
+    }
+
     dout(10) << " result " << ess.str() << dendl;
 
     pending_inc.crush = data;

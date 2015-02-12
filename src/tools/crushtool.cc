@@ -41,6 +41,26 @@ using namespace std;
 
 const char *infn = "stdin";
 
+static int get_fd_data(int fd, bufferlist &bl)
+{
+
+  uint64_t total = 0;
+  do {
+    ssize_t bytes = bl.read_fd(fd, 1024*1024);
+    if (bytes < 0) {
+      cerr << "read_fd error " << cpp_strerror(-bytes) << "\n";
+      return -1;
+    }
+
+    if (bytes == 0)
+      break;
+
+    total += bytes;
+  } while(true);
+
+  assert(bl.length() == total);
+  return 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////
 
@@ -488,11 +508,25 @@ int main(int argc, const char **argv)
   if (!infn.empty()) {
     bufferlist bl;
     std::string error;
-    int r = bl.read_file(infn.c_str(), &error);
-    if (r < 0) {
-      cerr << me << ": error reading '" << infn << "': " 
-	   << error << std::endl;
-      exit(1);
+
+    int r = 0;
+    if (infn == "-") {
+      if (isatty(STDIN_FILENO)) {
+        cerr << "stdin must not be from a tty" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      r = get_fd_data(STDIN_FILENO, bl);
+      if (r < 0) {
+        cerr << "error reading data from STDIN" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      r = bl.read_file(infn.c_str(), &error);
+      if (r < 0) {
+        cerr << me << ": error reading '" << infn << "': " 
+             << error << std::endl;
+        exit(1);
+      }
     }
     bufferlist::iterator p = bl.begin();
     crush.decode(p);

@@ -222,7 +222,7 @@ int librados::RadosClient::connect()
   ldout(cct, 1) << "starting objecter" << dendl;
 
   err = -ENOMEM;
-  objecter = new Objecter(cct, messenger, &monclient,
+  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
 			  &finisher,
 			  cct->_conf->rados_mon_op_timeout,
 			  cct->_conf->rados_osd_op_timeout);
@@ -275,8 +275,19 @@ int librados::RadosClient::connect()
   err = 0;
 
  out:
-  if (err)
+  if (err) {
     state = DISCONNECTED;
+
+    if (objecter) {
+      delete objecter;
+      objecter = NULL;
+    }
+    if (messenger) {
+      delete messenger;
+      messenger = NULL;
+    }
+  }
+
   return err;
 }
 
@@ -349,20 +360,13 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
     }
   }
 
-  *io = new librados::IoCtxImpl(this, objecter, poolid, name, CEPH_NOSNAP);
+  *io = new librados::IoCtxImpl(this, objecter, poolid, CEPH_NOSNAP);
   return 0;
 }
 
 int librados::RadosClient::create_ioctx(int64_t pool_id, IoCtxImpl **io)
 {
-  std::string pool_name;
-  int r = pool_get_name(pool_id, &pool_name);
-  if (r < 0) {
-    return r;
-  }
-
-  *io = new librados::IoCtxImpl(this, objecter, pool_id, pool_name.c_str(),
-                                CEPH_NOSNAP);
+  *io = new librados::IoCtxImpl(this, objecter, pool_id, CEPH_NOSNAP);
   return 0;
 }
 
@@ -424,7 +428,7 @@ int librados::RadosClient::wait_for_osdmap()
 {
   assert(!lock.is_locked_by_me());
 
-  if (objecter == NULL) {
+  if (state != CONNECTED) {
     return -ENOTCONN;
   }
 

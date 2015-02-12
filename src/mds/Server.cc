@@ -114,23 +114,51 @@ void Server::dispatch(Message *m)
   // active?
   if (!mds->is_active() && 
       !(mds->is_stopping() && m->get_source().is_mds())) {
-    if ((mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) &&
-	m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-	(static_cast<MClientRequest*>(m))->is_replay()) {
-      dout(3) << "queuing replayed op" << dendl;
-      mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
-      return;
-    } else if (mds->is_clientreplay() &&
-	       // session open requests need to be handled during replay,
-	       // close requests need to be delayed
-	       ((m->get_type() == CEPH_MSG_CLIENT_SESSION &&
-		 (static_cast<MClientSession*>(m))->get_op() != CEPH_SESSION_REQUEST_CLOSE) ||
-		(m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
-		 (static_cast<MClientRequest*>(m))->is_replay()))) {
-      // replaying!
-    } else if (m->get_type() == MSG_MDS_SLAVE_REQUEST) {
+    if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
+	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
+      MClientRequest *req = static_cast<MClientRequest*>(m);
+      bool queue_replay = false;
+      if (req->is_replay()) {
+	dout(3) << "queuing replayed op" << dendl;
+	queue_replay = true;
+      } else if (req->get_retry_attempt()) {
+	// process completed request in clientreplay stage. The completed request
+	// might have created new file/directorie. This guarantees MDS sends a reply
+	// to client before other request modifies the new file/directorie.
+	Session *session = get_session(req);
+	if (session && session->have_completed_request(req->get_reqid().tid, NULL)) {
+	  dout(3) << "queuing completed op" << dendl;
+	  queue_replay = true;
+	}
+      }
+      if (queue_replay) {
+	mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
+	return;
+      }
+    }
+
+    bool wait_for_active = true;
+    if (m->get_type() == MSG_MDS_SLAVE_REQUEST) {
       // handle_slave_request() will wait if necessary
-    } else {
+      wait_for_active = false;
+    } else if (mds->is_clientreplay()) {
+      // session open requests need to be handled during replay,
+      // close requests need to be delayed
+      if ((m->get_type() == CEPH_MSG_CLIENT_SESSION &&
+	  (static_cast<MClientSession*>(m))->get_op() != CEPH_SESSION_REQUEST_CLOSE)) {
+	wait_for_active = false;
+      } else if (m->get_type() == CEPH_MSG_CLIENT_REQUEST) {
+	MClientRequest *req = static_cast<MClientRequest*>(m);
+	if (req->is_replay()) {
+	  wait_for_active = false;
+	} else {
+	  Session *session = get_session(req);
+	  if (session && session->have_completed_request(req->get_reqid().tid, NULL))
+	    wait_for_active = false;
+	}
+      }
+    }
+    if (wait_for_active) {
       dout(3) << "not active yet, waiting" << dendl;
       mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
       return;
@@ -1021,8 +1049,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
   mdr->mark_event("replying");
 
   // note successful request in session map?
-  if (req->may_write() && mdr->session && reply->get_result() == 0)
-    mdr->session->add_completed_request(mdr->reqid.tid, mdr->alloc_ino);
+  if (req->may_write() && mdr->session && reply->get_result() == 0) {
+    inodeno_t created = mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino;
+    mdr->session->add_completed_request(mdr->reqid.tid, created);
+  }
 
   // give any preallocated inos to the session
   apply_allocated_inos(mdr);
@@ -1083,7 +1113,10 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     reply->set_mdsmap_epoch(mds->mdsmap->get_epoch());
     client_con->send_message(reply);
   }
-  
+
+  if (mdr->has_completed && mds->is_clientreplay())
+    mds->queue_one_replay();
+
   // clean up request
   mdcache->request_finish(mdr);
 
@@ -1245,27 +1278,40 @@ void Server::handle_client_request(MClientRequest *req)
   }
 
   // completed request?
-  if (req->is_replay() ||
-      (req->get_retry_attempt() &&
-       req->get_op() != CEPH_MDS_OP_OPEN && 
-       req->get_op() != CEPH_MDS_OP_CREATE)) {
+  bool has_completed = false;
+  if (req->is_replay() || req->get_retry_attempt()) {
     assert(session);
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
-      dout(5) << "already completed " << req->get_reqid() << dendl;
-      MClientReply *reply = new MClientReply(req, 0);
-      if (created != inodeno_t()) {
-	bufferlist extra;
-	::encode(created, extra);
-	reply->set_extra_bl(extra);
+      has_completed = true;
+      // Don't send traceless reply if the completed request has created
+      // new inode. Treat the request as lookup request instead.
+      if (req->is_replay() ||
+	  ((created == inodeno_t() || !mds->is_clientreplay()) &&
+	   req->get_op() != CEPH_MDS_OP_OPEN &&
+	   req->get_op() != CEPH_MDS_OP_CREATE)) {
+	dout(5) << "already completed " << req->get_reqid() << dendl;
+	MClientReply *reply = new MClientReply(req, 0);
+	if (created != inodeno_t()) {
+	  bufferlist extra;
+	  ::encode(created, extra);
+	  reply->set_extra_bl(extra);
+	}
+	req->get_connection()->send_message(reply);
+
+	if (req->is_replay())
+	  mds->queue_one_replay();
+
+	req->put();
+	return;
       }
-      req->get_connection()->send_message(reply);
-
-      if (req->is_replay())
-	mds->queue_one_replay();
-
-      req->put();
-      return;
+      if (req->get_op() != CEPH_MDS_OP_OPEN &&
+	  req->get_op() != CEPH_MDS_OP_CREATE) {
+	dout(10) << " completed request which created new inode " << created
+		 << ", convert it to lookup request" << dendl;
+	req->head.op = req->get_dentry_wanted() ? CEPH_MDS_OP_LOOKUP : CEPH_MDS_OP_GETATTR;
+	req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
+      }
     }
   }
 
@@ -1283,6 +1329,8 @@ void Server::handle_client_request(MClientRequest *req)
       mdr->session = session;
       session->requests.push_back(&mdr->item_session_request);
     }
+    if (has_completed)
+      mdr->has_completed = true;
   }
 
   // process embedded cap releases?
@@ -1323,7 +1371,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   // we shouldn't be waiting on anyone.
   assert(mdr->more()->waiting_on_slave.empty());
 
-  if (req->get_op() & CEPH_MDS_OP_WRITE) {
+  if (req->may_write()) {
     if (mdcache->is_readonly()) {
       dout(10) << " read-only FS" << dendl;
       respond_to_request(mdr, -EROFS);
@@ -1410,8 +1458,7 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
     // funky.
   case CEPH_MDS_OP_CREATE:
-    if (req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid, NULL))
+    if (mdr->has_completed)
       handle_client_open(mdr);  // already created.. just open
     else
       handle_client_openc(mdr);
@@ -2719,9 +2766,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   // O_TRUNC
-  if ((flags & O_TRUNC) &&
-      !(req->get_retry_attempt() &&
-	mdr->session->have_completed_request(req->get_reqid().tid, NULL))) {
+  if ((flags & O_TRUNC) && !mdr->has_completed) {
     assert(cur->is_auth());
 
     xlocks.insert(&cur->filelock);
@@ -3924,6 +3969,11 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     } else if (name.find("ceph.file.layout") == 0) {
       if (!cur->is_file()) {
 	respond_to_request(mdr, -EINVAL);
+	return;
+      }
+      if (cur->get_projected_inode()->size ||
+	  cur->get_projected_inode()->truncate_seq > 1) {
+	respond_to_request(mdr, -ENOTEMPTY);
 	return;
       }
       ceph_file_layout layout = cur->get_projected_inode()->layout;

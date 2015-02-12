@@ -1,4 +1,7 @@
 #!/bin/sh
+
+set -e
+
 cd "$(dirname "$0")"
 cd ..
 TOPDIR=`pwd`
@@ -16,6 +19,17 @@ if command -v dpkg >/dev/null; then
 	echo "$0: missing required packages, please install them:" 1>&2
 	echo "sudo apt-get install $missing"
 	exit 1
+    fi
+elif command -v yum >/dev/null; then
+    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml-devel libxslt-devel; do
+	if ! rpm -q $package >/dev/null ; then
+		missing="${missing:+$missing }$package"
+	fi
+    done
+    if [ -n "$missing" ]; then
+        echo "$0: missing required packages, please install them:" 1>&2
+        echo "yum install $missing"
+        exit 1
     fi
 else
     for command in virtualenv doxygen ant ditaa; do

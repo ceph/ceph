@@ -39,6 +39,25 @@ TEST(LibRadosMiscVersion, VersionPP) {
   Rados::version(&major, &minor, &extra);
 }
 
+TEST(LibRadosMiscConnectFailure, ConnectFailure) {
+  rados_t cluster;
+
+  char *id = getenv("CEPH_CLIENT_ID");
+  if (id)
+    std::cerr << "Client id is: " << id << std::endl;
+
+  ASSERT_EQ(0, rados_create(&cluster, NULL));
+  ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
+  ASSERT_EQ(0, rados_conf_parse_env(cluster, NULL));
+
+  ASSERT_EQ(0, rados_conf_set(cluster, "client_mount_timeout", "0.000001"));
+
+  ASSERT_NE(0, rados_connect(cluster));
+  ASSERT_NE(0, rados_connect(cluster));
+
+  rados_shutdown(cluster);
+}
+
 TEST_F(LibRadosMisc, ClusterFSID) {
   char fsid[37];
   ASSERT_EQ(-ERANGE, rados_cluster_fsid(cluster, fsid, sizeof(fsid) - 1));

@@ -175,13 +175,22 @@ TEST(LibCephFS, OpenLayout) {
   /* valid layout */
   char test_layout_file[256];
   sprintf(test_layout_file, "test_layout_%d_b", getpid());
-  int fd = ceph_open_layout(cmount, test_layout_file, O_CREAT, 0666, (1<<20), 7, (1<<20), NULL);
+  int fd = ceph_open_layout(cmount, test_layout_file, O_CREAT|O_WRONLY, 0666, (1<<20), 7, (1<<20), NULL);
   ASSERT_GT(fd, 0);
   char poolname[80];
   ASSERT_LT(0, ceph_get_file_pool_name(cmount, fd, poolname, sizeof(poolname)));
   ASSERT_EQ(4, ceph_get_file_pool_name(cmount, fd, poolname, 0));
   ASSERT_EQ(0, strcmp("data", poolname));
+
+  /* on already-written file (ENOTEMPTY) */
+  ceph_write(cmount, fd, "hello world", 11, 0);
   ceph_close(cmount, fd);
+
+  char xattrk[128];
+  char xattrv[128];
+  sprintf(xattrk, "ceph.file.layout.stripe_unit");
+  sprintf(xattrv, "65536");
+  ASSERT_EQ(-ENOTEMPTY, ceph_setxattr(cmount, test_layout_file, xattrk, (void *)xattrv, 5, 0));
 
   /* invalid layout */
   sprintf(test_layout_file, "test_layout_%d_c", getpid());
