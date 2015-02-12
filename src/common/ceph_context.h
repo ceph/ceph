@@ -127,6 +127,8 @@ public:
 
   /// check if experimental feature is enable, and emit appropriate warnings
   bool check_experimental_feature_enabled(std::string feature);
+  bool check_experimental_feature_enabled(std::string feature,
+					  std::ostream *message);
 
 private:
   CephContext(const CephContext &rhs);
