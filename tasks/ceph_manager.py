@@ -139,7 +139,7 @@ class Thrasher:
         else:
             self.ceph_objectstore_tool = False
             self.test_rm_past_intervals = False
-            self.log("Unable to test ceph_objectstore_tool, "
+            self.log("Unable to test ceph-objectstore-tool, "
                      "not available on all OSD nodes")
 
     def cmd_exists_on_osds(self, cmd):
