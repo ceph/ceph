@@ -617,7 +617,8 @@ def ssh_keyscan(hostnames):
 
     keys_dict = dict()
     for line in p.stderr.readlines():
-        if not line.startswith('#'):
+        line = line.strip()
+        if line and not line.startswith('#'):
             log.error(line)
     for line in p.stdout.readlines():
         host, key = line.strip().split(' ', 1)
