@@ -277,6 +277,8 @@ for name in $what; do
 	    fi
 	fi
         first_dev=`echo $fs_devs | cut '-d ' -f 1`
+	# use the uuid to mount|umount osd
+        get_conf uuid "" "uuid"
     fi
 
     # do lockfile, if RH
@@ -347,6 +349,9 @@ for name in $what; do
 
 		[ -n "$fs_opt" ] && fs_opt="-o $fs_opt"
 		[ -n "$pre_mount" ] && do_cmd "$pre_mount"
+		if [ "$uuid" != "" ];then
+                   first_dev="UUID=$uuid"
+                fi
 
 		if [ "$fs_type" = "btrfs" ]; then
 		    echo Mounting Btrfs on $host:$fs_path
