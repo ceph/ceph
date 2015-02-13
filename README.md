@@ -42,7 +42,7 @@ rpm-based
 
 The list of RPM packages dependencies can be installed with:
 
-         ./install-deps.sh
+	./install-deps.sh
 
 Building Ceph
 =============
