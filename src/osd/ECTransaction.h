@@ -200,7 +200,7 @@ public:
     ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,
     const ECUtil::stripe_info_t &sinfo,
-    map<shard_id_t, ObjectStore::Transaction> *transactions,
+    map<shard_id_t, ObjectStore::Transaction*> *transactions,
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     stringstream *out = 0) const;
