@@ -417,6 +417,7 @@ set(libos_srcs
   os/GenericFileStoreBackend.cc
   os/BtrfsFileStoreBackend.cc
   os/ZFSFileStoreBackend.cc
+  os/XfsFileStoreBackend.cc
   os/KeyValueStore.cc
   os/KeyValueDB.cc
   os/MemStore.cc
