@@ -1,7 +1,19 @@
 #!/bin/sh
 
+if [ -z "$CEPH_BUILD_ROOT" ]; then
+        [ -z "$CEPH_BIN" ] && CEPH_BIN=.
+        [ -z "$CEPH_LIB" ] && CEPH_LIB=.libs
+        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB
+        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB
+else
+        [ -z $CEPH_BIN ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
+        [ -z $CEPH_LIB ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
+        [ -z $EC_PATH ] && EC_PATH=$CEPH_LIB/erasure-code
+        [ -z $OBJCLASS_PATH ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+fi
+
 export PYTHONPATH=./pybind
-export LD_LIBRARY_PATH=.libs
+export LD_LIBRARY_PATH=$CEPH_LIB
 export DYLD_LIBRARY_PATH=$LD_LIBRARY_PATH
 
 
@@ -260,18 +272,18 @@ fi
 # lockdep everywhere?
 # export CEPH_ARGS="--lockdep 1"
 
-[ -z "$CEPH_BIN" ] && CEPH_BIN=.
 if [ -z "$CEPH_PORT" ]; then
     CEPH_PORT=6789
     [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
 fi
 
+[ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
 
 # sudo if btrfs
 test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
 
 if [ "$start_all" -eq 1 ]; then
-    $SUDO $CEPH_BIN/init-ceph stop
+    $SUDO $INIT_CEPH stop
 fi
 $SUDO rm -f core*
 
@@ -346,7 +358,7 @@ if [ "$start_mon" -eq 1 ]; then
         mon osd full ratio = .99
         mon data avail warn = 10
         mon data avail crit = 1
-        osd pool default erasure code directory = .libs
+        osd pool default erasure code directory = $EC_PATH
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd
         rgw frontends = fastcgi, civetweb port=$CEPH_RGW_PORT
         filestore fd cache size = 32
@@ -389,7 +401,7 @@ $DAEMONOPTS
         osd journal = $journal_path
         osd journal size = 100
         osd class tmp = out
-        osd class dir = .libs
+        osd class dir = $OBJCLASS_PATH
         osd scrub load threshold = 5.0
         osd debug op order = true
         filestore wbthrottle xfs ios start flusher = 10
@@ -661,7 +673,7 @@ echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug 
 
 echo ""
 echo "export PYTHONPATH=./pybind"
-echo "export LD_LIBRARY_PATH=.libs"
+echo "export LD_LIBRARY_PATH=$CEPH_LIB"
 
 if [ "$CEPH_DIR" != "$PWD" ]; then
     echo "export CEPH_CONF=$conf_fn"
