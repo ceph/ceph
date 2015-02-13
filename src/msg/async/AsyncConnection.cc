@@ -1899,12 +1899,13 @@ int AsyncConnection::send_message(Message *m)
       center->dispatch_event_external(write_handler);
     }
   } else if (state == STATE_CLOSED) {
-      ldout(async_msgr->cct, 10) << __func__ << " connection closed."
-                                 << " Drop message " << m << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " connection closed."
+                               << " Drop message " << m << dendl;
+    m->put();
   } else if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
-      ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
-      local_messages.push_back(m);
-      center->dispatch_event_external(local_deliver_handler);
+    ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
+    local_messages.push_back(m);
+    center->dispatch_event_external(local_deliver_handler);
   } else {
     out_q[m->get_priority()].push_back(m);
     if (state == STATE_STANDBY && !policy.server) {
