@@ -129,7 +129,8 @@ def destroy_if_vm(ctx, machine_name, user=None, description=None):
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
     owt, err = p.communicate()
     if err:
-        log.error(err)
+        log.error("Error destroying {machine}: {msg}".format(
+            machine=machine_name, msg=err))
         return False
     else:
         log.info("%s destroyed: %s" % (machine_name, owt))
