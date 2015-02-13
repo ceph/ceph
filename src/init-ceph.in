@@ -91,7 +91,11 @@ stop_daemon() {
     [ -z "$action" ] && action="Stopping"
     echo -n "$action Ceph $name on $host..."
     do_cmd "if [ -e $pidfile ] ; then 
-	pid=\`cat $pidfile\`
+	    pid=\`cat $pidfile\`
+	else
+            id=\`echo $name | cut -c 4- | sed 's/^\\.//'\`
+            pid=\`/bin/ps -ef| grep \"$BINDIR/$daemon -i \$id \" | grep -v \"grep\" | awk '{print \$2}'\`
+        fi
 	while [ -e /proc/\$pid ] && grep -q $daemon /proc/\$pid/cmdline ; do
 	    cmd=\"kill $signal \$pid\"
 	    echo -n \$cmd...
@@ -99,7 +103,7 @@ stop_daemon() {
 	    sleep 1
 	    continue
 	done
-    fi"
+    "
     echo done
 }
 
