@@ -182,27 +182,36 @@ public:
   }
 };
 
-bool CephContext::check_experimental_feature_enabled(std::string feat)
+bool CephContext::check_experimental_feature_enabled(const std::string& feat)
+{
+  stringstream message;
+  bool enabled = check_experimental_feature_enabled(feat, &message);
+  lderr(this) << message.str() << dendl;
+  return enabled;
+}
+
+bool CephContext::check_experimental_feature_enabled(const std::string& feat,
+						     std::ostream *message)
 {
   ceph_spin_lock(&_feature_lock);
   bool enabled = _experimental_features.count(feat);
   ceph_spin_unlock(&_feature_lock);
 
   if (enabled) {
-    lderr(this) << "WARNING: experimental feature '" << feat << "' is enabled" << dendl;
-    lderr(this) << "Please be aware that this feature is experimental, untested," << dendl;
-    lderr(this) << "unsupported, and may result in data corruption, data loss," << dendl;
-    lderr(this) << "and/or irreparable damage to your cluster.  Do not use" << dendl;
-    lderr(this) << "feature with important data." << dendl;
+    (*message) << "WARNING: experimental feature '" << feat << "' is enabled\n";
+    (*message) << "Please be aware that this feature is experimental, untested,\n";
+    (*message) << "unsupported, and may result in data corruption, data loss,\n";
+    (*message) << "and/or irreparable damage to your cluster.  Do not use\n";
+    (*message) << "feature with important data.\n";
   } else {
-    lderr(this) << "*** experimental feature '" << feat << "' is not enabled ***" << dendl;
-    lderr(this) << "This feature is marked as experimental, which means it" << dendl;
-    lderr(this) << " - is untested" << dendl;
-    lderr(this) << " - is unsupported" << dendl;
-    lderr(this) << " - may corrupt your data" << dendl;
-    lderr(this) << " - may break your cluster is an unrecoverable fashion" << dendl;
-    lderr(this) << "To enable this feature, add this to your ceph.conf:" << dendl;
-    lderr(this) << "  enable experimental unrecoverable data corrupting features = " << feat << dendl;
+    (*message) << "*** experimental feature '" << feat << "' is not enabled ***\n";
+    (*message) << "This feature is marked as experimental, which means it\n";
+    (*message) << " - is untested\n";
+    (*message) << " - is unsupported\n";
+    (*message) << " - may corrupt your data\n";
+    (*message) << " - may break your cluster is an unrecoverable fashion\n";
+    (*message) << "To enable this feature, add this to your ceph.conf:\n";
+    (*message) << "  enable experimental unrecoverable data corrupting features = " << feat << "\n";
   }
   return enabled;
 }
