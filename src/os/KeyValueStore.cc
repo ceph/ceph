@@ -541,10 +541,6 @@ KeyValueStore::KeyValueStore(const std::string &base,
   oss << basedir << "/current";
   current_fn = oss.str();
 
-  ostringstream sss;
-  sss << basedir << "/current/commit_op_seq";
-  current_op_seq_fn = sss.str();
-
   // initialize perf_logger
   PerfCountersBuilder plb(g_ceph_context, internal_name, l_os_commit_len, l_os_last);
 
