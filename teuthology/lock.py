@@ -504,26 +504,24 @@ def find_stale_locks(owner=None):
         nodes = [node for node in nodes if node['locked_by'] == owner]
     nodes = filter(might_be_stale, nodes)
 
-    # What jobs are currently running?
-    url = os.path.join(config.results_server, 'runs', 'status', 'running', '')
-    resp = requests.get(url)
-    running_runs = resp.json()
-    running_jobs = []
-    for run in running_runs:
-        url = os.path.join(run['href'][0], 'jobs',
-                           '?status=running&fields=name,job_id,targets,href')
-        resp = requests.get(url)
-        jobs = resp.json()
-        running_jobs.extend(jobs)
+    def node_job_is_active(node, cache):
+        """
+        Is this node's job active (e.g. running or waiting)?
 
-    def node_matches_job(node, job):
+        :param node:  The node dict as returned from the lock server
+        :param cache: A set() used for caching results
+        :returns:     True or False
         """
-        Is or was this node used by this job?
-        """
-        job_str = '/'.join((job['name'], job['job_id']))
-        if node['description'].endswith(job_str):
+        description = node['description']
+        if description in cache:
             return True
-        elif job['targets'] and node['name'] in job['targets'].keys():
+        (name, job_id) = description.split('/')[-2:]
+        url = os.path.join(config.results_server, 'runs', name, 'jobs', job_id,
+                           '')
+        resp = requests.get(url)
+        job_info = resp.json()
+        if job_info['status'] in ('running', 'waiting'):
+            cache.add(description)
             return True
         return False
 
@@ -531,13 +529,9 @@ def find_stale_locks(owner=None):
     # Here we build the list of of nodes that are locked, for a job (as opposed
     # to being locked manually for random monkeying), where the job is not
     # running
+    active_jobs = set()
     for node in nodes:
-        matched = False
-        for job in running_jobs:
-            if node_matches_job(node, job):
-                matched = True
-                break
-        if matched:
+        if node_job_is_active(node, active_jobs):
             continue
         result.append(node)
     return result
