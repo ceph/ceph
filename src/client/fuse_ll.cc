@@ -864,8 +864,6 @@ CephFuse::Handle::~Handle()
 
 void CephFuse::Handle::finalize()
 {
-  client->ll_register_callbacks(NULL);
-
   if (se)
     fuse_remove_signal_handlers(se);
   if (ch)
