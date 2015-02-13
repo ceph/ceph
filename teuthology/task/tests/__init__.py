@@ -38,6 +38,15 @@ class TeuthologyContextPlugin(object):
         # pass the teuthology ctx and config to each test method
         metafunc.parametrize(["ctx", "config"], [(self.ctx, self.config),])
 
+    @pytest.mark.trylast
+    def pytest_configure(self, config):
+        # removes the default pytest TerminalReporter
+        # this fixes failures with scheduled jobs; when run by a worker
+        # there is no terminal to report to and pytest dies
+        standard_reporter = config.pluginmanager.getplugin('terminalreporter')
+        config.pluginmanager.unregister(standard_reporter)
+        log.info("removing pytest terminal reporter")
+
     # log the outcome of each test
     def pytest_runtest_makereport(self, __multicall__, item, call):
         report = __multicall__.execute()
@@ -74,15 +83,21 @@ def task(ctx, config):
     and then executing them with the teuthology ctx and config args.
     Your tests must follow standard pytest conventions to be discovered.
     """
-    status = pytest.main(
-        args=[
-            '-q',
-            '--pyargs', __name__
-        ],
-        plugins=[TeuthologyContextPlugin(ctx, config)]
-    )
-    if status == 0:
-        log.info("OK. All tests passed!")
+    try:
+        status = pytest.main(
+            args=[
+                '-q',
+                '--pyargs', __name__
+            ],
+            plugins=[TeuthologyContextPlugin(ctx, config)]
+        )
+    except Exception:
+        log.exception("Saw failure running pytest")
+        ctx.summary["status"] = "dead"
     else:
-        log.error("FAIL. Saw test failures...")
-        ctx.summary["status"] = "fail"
+        if status == 0:
+            log.info("OK. All tests passed!")
+            ctx.summary["status"] = "pass"
+        else:
+            log.error("FAIL. Saw test failures...")
+            ctx.summary["status"] = "fail"
