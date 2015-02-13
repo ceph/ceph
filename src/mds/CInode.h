@@ -95,7 +95,7 @@ public:
 
   /* Serialization without ENCODE_START/FINISH blocks for use embedded in dentry */
   void encode_bare(bufferlist &bl) const;
-  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=4);
+  void decode_bare(bufferlist::iterator &bl, __u8 struct_v=5);
 
   /* For use in debug and ceph-dencoder */
   void dump(Formatter *f) const;
