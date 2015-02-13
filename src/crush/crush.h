@@ -191,6 +191,12 @@ struct crush_map {
 	 * mappings line up a bit better with previous mappings. */
 	__u8 chooseleaf_vary_r;
 
+	/*
+	 * version 0 (original) of straw_calc has various flaws.  version 1
+	 * fixes a few of them.
+	 */
+	__u8 straw_calc_version;
+
 	__u32 *choose_tries;
 };
 

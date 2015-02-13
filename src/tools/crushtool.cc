@@ -191,6 +191,7 @@ int main(int argc, const char **argv)
   int choose_total_tries = -1;
   int chooseleaf_descend_once = -1;
   int chooseleaf_vary_r = -1;
+  int straw_calc_version = -1;
 
   CrushWrapper crush;
 
@@ -266,6 +267,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_withint(args, i, &chooseleaf_vary_r, &err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &straw_calc_version, &err,
+				     "--set_straw_calc_version", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
@@ -714,6 +718,10 @@ int main(int argc, const char **argv)
   }
   if (chooseleaf_vary_r >= 0) {
     crush.set_chooseleaf_vary_r(chooseleaf_vary_r);
+    modified = true;
+  }
+  if (straw_calc_version >= 0) {
+    crush.set_straw_calc_version(straw_calc_version);
     modified = true;
   }
   if (modified) {
