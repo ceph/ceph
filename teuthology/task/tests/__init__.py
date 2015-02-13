@@ -32,6 +32,7 @@ class TeuthologyContextPlugin(object):
     def __init__(self, ctx, config):
         self.ctx = ctx
         self.config = config
+        self.failures = list()
 
     # this is pytest hook for generating tests with custom parameters
     def pytest_generate_tests(self, metafunc):
@@ -69,10 +70,16 @@ class TeuthologyContextPlugin(object):
                 ))
             else:
                 # TODO: figure out a way to log the traceback
-                log.error("{name} Failed: {info}".format(
+                log.error("{name} Failed:\n {info}".format(
                     name=name,
                     info=call.excinfo.exconly()
                 ))
+                failure = "{name}: {err}".format(
+                    name=name,
+                    err=call.excinfo.exconly().replace("\n", "")
+                )
+                self.failures.append(failure)
+                self.ctx.summary['failure_reason'] = self.failures
 
         return report
 
