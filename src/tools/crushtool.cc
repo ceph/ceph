@@ -118,6 +118,7 @@ void usage()
   cout << "   --show utilization-all\n";
   cout << "                         include zero weight items\n";
   cout << "   --show-statistics     show chi squared statistics\n";
+  cout << "   --show-mappings       show mappings\n";
   cout << "   --show-bad-mappings   show bad mappings\n";
   cout << "   --show-choose-tries   show choose tries histogram\n";
   cout << "   --set-choose-local-tries N\n";
@@ -190,6 +191,7 @@ int main(int argc, const char **argv)
   int choose_total_tries = -1;
   int chooseleaf_descend_once = -1;
   int chooseleaf_vary_r = -1;
+  int straw_calc_version = -1;
 
   CrushWrapper crush;
 
@@ -233,6 +235,9 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--show_statistics", (char*)NULL)) {
       display = true;
       tester.set_output_statistics(true);
+    } else if (ceph_argparse_flag(args, i, "--show_mappings", (char*)NULL)) {
+      display = true;
+      tester.set_output_mappings(true);
     } else if (ceph_argparse_flag(args, i, "--show_bad_mappings", (char*)NULL)) {
       display = true;
       tester.set_output_bad_mappings(true);
@@ -262,6 +267,9 @@ int main(int argc, const char **argv)
       adjust = true;
     } else if (ceph_argparse_withint(args, i, &chooseleaf_vary_r, &err,
 				     "--set_chooseleaf_vary_r", (char*)NULL)) {
+      adjust = true;
+    } else if (ceph_argparse_withint(args, i, &straw_calc_version, &err,
+				     "--set_straw_calc_version", (char*)NULL)) {
       adjust = true;
     } else if (ceph_argparse_flag(args, i, "--reweight", (char*)NULL)) {
       reweight = true;
@@ -581,10 +589,8 @@ int main(int argc, const char **argv)
 	  dout(2) << "  item " << items[j] << " weight " << weights[j] << dendl;
 	}
 
-	crush_bucket *b = crush_make_bucket(buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights);
-	assert(b);
 	int id;
-	int r = crush_add_bucket(crush.crush, 0, b, &id);
+	int r = crush.add_bucket(0, buckettype, CRUSH_HASH_DEFAULT, type, j, items, weights, &id);
 	if (r < 0) {
 	  dout(2) << "Couldn't add bucket: " << cpp_strerror(r) << dendl;
 	}
@@ -710,6 +716,10 @@ int main(int argc, const char **argv)
   }
   if (chooseleaf_vary_r >= 0) {
     crush.set_chooseleaf_vary_r(chooseleaf_vary_r);
+    modified = true;
+  }
+  if (straw_calc_version >= 0) {
+    crush.set_straw_calc_version(straw_calc_version);
     modified = true;
   }
   if (modified) {

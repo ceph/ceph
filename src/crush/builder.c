@@ -11,6 +11,8 @@
 #include "builder.h"
 #include "hash.h"
 
+#define dprintk(args...) /* printf(args) */
+
 #define BUG_ON(x) assert(!(x))
 
 struct crush_map *crush_create()
@@ -27,6 +29,7 @@ struct crush_map *crush_create()
 	m->choose_total_tries = 19;
 	m->chooseleaf_descend_once = 0;
 	m->chooseleaf_vary_r = 0;
+	m->straw_calc_version = 0;
 	return m;
 }
 
@@ -265,7 +268,7 @@ crush_make_list_bucket(int hash, int type, int size,
 
 		w += weights[i];
 		bucket->sum_weights[i] = w;
-		/*printf("pos %d item %d weight %d sum %d\n",
+		/*dprintk("pos %d item %d weight %d sum %d\n",
 		  i, items[i], weights[i], bucket->sum_weights[i]);*/
 	}
 
@@ -306,6 +309,10 @@ static int parent(int n)
 
 static int calc_depth(int size)
 {
+	if (size == 0) {
+		return 0;
+	}
+
 	int depth = 1;
 	int t = size - 1;
 	while (t) {
@@ -334,6 +341,16 @@ crush_make_tree_bucket(int hash, int type, int size,
 	bucket->h.type = type;
 	bucket->h.size = size;
 
+	if (size == 0) {
+		bucket->h.items = NULL;
+		bucket->h.perm = NULL;
+		bucket->h.weight = 0;
+		bucket->node_weights = NULL;
+		bucket->num_nodes = 0;
+		/* printf("size 0 depth 0 nodes 0\n"); */
+		return bucket;
+	}
+
 	bucket->h.items = malloc(sizeof(__s32)*size);
         if (!bucket->h.items)
                 goto err;
@@ -344,7 +361,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	/* calc tree depth */
 	depth = calc_depth(size);
 	bucket->num_nodes = 1 << depth;
-	printf("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
+	dprintk("size %d depth %d nodes %d\n", size, depth, bucket->num_nodes);
 
         bucket->node_weights = malloc(sizeof(__u32)*bucket->num_nodes);
         if (!bucket->node_weights)
@@ -356,7 +373,7 @@ crush_make_tree_bucket(int hash, int type, int size,
 	for (i=0; i<size; i++) {
 		bucket->h.items[i] = items[i];
 		node = crush_calc_tree_node(i);
-		printf("item %d node %d weight %d\n", i, node, weights[i]);
+		dprintk("item %d node %d weight %d\n", i, node, weights[i]);
 		bucket->node_weights[node] = weights[i];
 
 		if (crush_addition_is_unsafe(bucket->h.weight, weights[i]))
@@ -370,7 +387,7 @@ crush_make_tree_bucket(int hash, int type, int size,
                                 goto err;
 
 			bucket->node_weights[node] += weights[i];
-			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+			dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
 	}
 	BUG_ON(bucket->node_weights[bucket->num_nodes/2] != bucket->h.weight);
@@ -388,7 +405,34 @@ err:
 
 /* straw bucket */
 
-int crush_calc_straw(struct crush_bucket_straw *bucket)
+/*
+ * this code was written 8 years ago.  i have a vague recollection of
+ * drawing boxes underneath bars of different lengths, where the bar
+ * length represented the probability/weight, and that there was some
+ * trial and error involved in arriving at this implementation.
+ * however, reading the code now after all this time, the intuition
+ * that motivated is lost on me.  lame.  my only excuse is that I now
+ * know that the approach is fundamentally flawed and am not
+ * particularly motivated to reconstruct the flawed reasoning.
+ *
+ * as best as i can remember, the idea is: sort the weights, and start
+ * with the smallest.  arbitrarily scale it at 1.0 (16-bit fixed
+ * point).  look at the next larger weight, and calculate the scaling
+ * factor for that straw based on the relative difference in weight so
+ * far.  what's not clear to me now is why we are looking at wnext
+ * (the delta to the next bigger weight) for all remaining weights,
+ * and slicing things horizontally instead of considering just the
+ * next item or set of items.  or why pow() is used the way it is.
+ *
+ * note that the original version 1 of this function made special
+ * accomodation for the case where straw lengths were identical.  this
+ * is also flawed in a non-obvious way; version 2 drops the special
+ * handling and appears to work just as well.
+ *
+ * moral of the story: if you do something clever, write down why it
+ * works.
+ */
+int crush_calc_straw(struct crush_map *map, struct crush_bucket_straw *bucket)
 {
 	int *reverse;
 	int i, j, k;
@@ -424,41 +468,82 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 
 	i=0;
 	while (i < size) {
-		/* zero weight items get 0 length straws! */
-		if (weights[reverse[i]] == 0) {
-			bucket->straws[reverse[i]] = 0;
+		if (map->straw_calc_version == 0) {
+			/* zero weight items get 0 length straws! */
+			if (weights[reverse[i]] == 0) {
+				bucket->straws[reverse[i]] = 0;
+				i++;
+				continue;
+			}
+
+			/* set this item's straw */
+			bucket->straws[reverse[i]] = straw * 0x10000;
+			dprintk("item %d at %d weight %d straw %d (%lf)\n",
+				bucket->h.items[reverse[i]],
+				reverse[i], weights[reverse[i]],
+				bucket->straws[reverse[i]], straw);
 			i++;
-			continue;
-		}
-
-		/* set this item's straw */
-		bucket->straws[reverse[i]] = straw * 0x10000;
-		/*printf("item %d at %d weight %d straw %d (%lf)\n",
-		       items[reverse[i]],
-		       reverse[i], weights[reverse[i]], bucket->straws[reverse[i]], straw);*/
-		i++;
-		if (i == size) break;
-
-		/* same weight as previous? */
-		if (weights[reverse[i]] == weights[reverse[i-1]]) {
-			/*printf("same as previous\n");*/
-			continue;
-		}
-
-		/* adjust straw for next guy */
-		wbelow += ((double)weights[reverse[i-1]] - lastw) * numleft;
-		for (j=i; j<size; j++)
-			if (weights[reverse[j]] == weights[reverse[i]])
-				numleft--;
-			else
+			if (i == size)
 				break;
-		wnext = numleft * (weights[reverse[i]] - weights[reverse[i-1]]);
-		pbelow = wbelow / (wbelow + wnext);
-		/*printf("wbelow %lf  wnext %lf  pbelow %lf\n", wbelow, wnext, pbelow);*/
 
-		straw *= pow((double)1.0 / pbelow, (double)1.0 / (double)numleft);
+			/* same weight as previous? */
+			if (weights[reverse[i]] == weights[reverse[i-1]]) {
+				dprintk("same as previous\n");
+				continue;
+			}
 
-		lastw = weights[reverse[i-1]];
+			/* adjust straw for next guy */
+			wbelow += ((double)weights[reverse[i-1]] - lastw) *
+				numleft;
+			for (j=i; j<size; j++)
+				if (weights[reverse[j]] == weights[reverse[i]])
+					numleft--;
+				else
+					break;
+			wnext = numleft * (weights[reverse[i]] -
+					   weights[reverse[i-1]]);
+			pbelow = wbelow / (wbelow + wnext);
+			dprintk("wbelow %lf  wnext %lf  pbelow %lf  numleft %d\n",
+				wbelow, wnext, pbelow, numleft);
+
+			straw *= pow((double)1.0 / pbelow, (double)1.0 /
+				     (double)numleft);
+
+			lastw = weights[reverse[i-1]];
+		} else if (map->straw_calc_version >= 1) {
+			/* zero weight items get 0 length straws! */
+			if (weights[reverse[i]] == 0) {
+				bucket->straws[reverse[i]] = 0;
+				i++;
+				numleft--;
+				continue;
+			}
+
+			/* set this item's straw */
+			bucket->straws[reverse[i]] = straw * 0x10000;
+			dprintk("item %d at %d weight %d straw %d (%lf)\n",
+				bucket->h.items[reverse[i]],
+				reverse[i], weights[reverse[i]],
+				bucket->straws[reverse[i]], straw);
+			i++;
+			if (i == size)
+				break;
+
+			/* adjust straw for next guy */
+			wbelow += ((double)weights[reverse[i-1]] - lastw) *
+				numleft;
+			numleft--;
+			wnext = numleft * (weights[reverse[i]] -
+					   weights[reverse[i-1]]);
+			pbelow = wbelow / (wbelow + wnext);
+			dprintk("wbelow %lf  wnext %lf  pbelow %lf  numleft %d\n",
+				wbelow, wnext, pbelow, numleft);
+
+			straw *= pow((double)1.0 / pbelow, (double)1.0 /
+				     (double)numleft);
+
+			lastw = weights[reverse[i-1]];
+		}
 	}
 
 	free(reverse);
@@ -466,7 +551,8 @@ int crush_calc_straw(struct crush_bucket_straw *bucket)
 }
 
 struct crush_bucket_straw *
-crush_make_straw_bucket(int hash, 
+crush_make_straw_bucket(struct crush_map *map,
+			int hash,
 			int type,
 			int size,
 			int *items,
@@ -504,7 +590,7 @@ crush_make_straw_bucket(int hash,
 		bucket->item_weights[i] = weights[i];
 	}
 
-        if (crush_calc_straw(bucket) < 0)
+        if (crush_calc_straw(map, bucket) < 0)
                 goto err;
 
 	return bucket;
@@ -520,7 +606,8 @@ err:
 
 
 struct crush_bucket*
-crush_make_bucket(int alg, int hash, int type, int size,
+crush_make_bucket(struct crush_map *map,
+		  int alg, int hash, int type, int size,
 		  int *items,
 		  int *weights)
 {
@@ -541,7 +628,7 @@ crush_make_bucket(int alg, int hash, int type, int size,
 		return (struct crush_bucket *)crush_make_tree_bucket(hash, type, size, items, weights);
 
 	case CRUSH_BUCKET_STRAW:
-		return (struct crush_bucket *)crush_make_straw_bucket(hash, type, size, items, weights);
+		return (struct crush_bucket *)crush_make_straw_bucket(map, hash, type, size, items, weights);
 	}
 	return 0;
 }
@@ -650,27 +737,39 @@ int crush_add_tree_bucket_item(struct crush_bucket_tree *bucket, int item, int w
 	node = crush_calc_tree_node(newsize-1);
 	bucket->node_weights[node] = weight;
 
+	/* if the depth increase, we need to initialize the new root node's weight before add bucket item */
+	int root = bucket->num_nodes/2;
+	if (depth >= 2 && (node - 1) == root) {
+		/* if the new item is the first node in right sub tree, so
+		* the root node initial weight is left sub tree's weight
+		*/
+		bucket->node_weights[root] = bucket->node_weights[root/2];
+	}
+
 	for (j=1; j<depth; j++) {
 		node = parent(node);
 
-                if (!crush_addition_is_unsafe(bucket->node_weights[node], weight))
+                if (crush_addition_is_unsafe(bucket->node_weights[node], weight))
                         return -ERANGE;
 
 		bucket->node_weights[node] += weight;
-                printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+                dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 	}
 
 
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 	
+	bucket->h.items[newsize-1] = item;
         bucket->h.weight += weight;
         bucket->h.size++;
 
 	return 0;
 }
 
-int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int weight)
+int crush_add_straw_bucket_item(struct crush_map *map,
+				struct crush_bucket_straw *bucket,
+				int item, int weight)
 {
 	int newsize = bucket->h.size + 1;
 	
@@ -703,13 +802,14 @@ int crush_add_straw_bucket_item(struct crush_bucket_straw *bucket, int item, int
 	if (crush_addition_is_unsafe(bucket->h.weight, weight))
                 return -ERANGE;
 
-	 bucket->h.weight += weight;
-	 bucket->h.size++;
+	bucket->h.weight += weight;
+	bucket->h.size++;
 	
-	return crush_calc_straw(bucket);
+	return crush_calc_straw(map, bucket);
 }
 
-int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
+int crush_bucket_add_item(struct crush_map *map,
+			  struct crush_bucket *b, int item, int weight)
 {
 	/* invalidate perm cache */
 	b->perm_n = 0;
@@ -722,7 +822,7 @@ int crush_bucket_add_item(struct crush_bucket *b, int item, int weight)
 	case CRUSH_BUCKET_TREE:
 		return crush_add_tree_bucket_item((struct crush_bucket_tree *)b, item, weight);
 	case CRUSH_BUCKET_STRAW:
-		return crush_add_straw_bucket_item((struct crush_bucket_straw *)b, item, weight);
+		return crush_add_straw_bucket_item(map, (struct crush_bucket_straw *)b, item, weight);
 	default:
 		return -1;
 	}
@@ -768,7 +868,7 @@ int crush_remove_list_bucket_item(struct crush_bucket_list *bucket, int item)
 {
 	unsigned i, j;
 	int newsize;
-	int weight;
+	unsigned weight;
 
 	for (i = 0; i < bucket->h.size; i++)
 		if (bucket->h.items[i] == item)
@@ -820,7 +920,7 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 
 	for (i = 0; i < bucket->h.size; i++) {
 		int node;
-		int weight;
+		unsigned weight;
 		int j;
 		int depth = calc_depth(bucket->h.size);
 
@@ -834,7 +934,7 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 		for (j = 1; j < depth; j++) {
 			node = parent(node);
 			bucket->node_weights[node] -= weight;
-			printf(" node %d weight %d\n", node, bucket->node_weights[node]);
+			dprintk(" node %d weight %d\n", node, bucket->node_weights[node]);
 		}
 		if (weight < bucket->h.weight)
 			bucket->h.weight -= weight;
@@ -886,7 +986,8 @@ int crush_remove_tree_bucket_item(struct crush_bucket_tree *bucket, int item)
 	return 0;
 }
 
-int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
+int crush_remove_straw_bucket_item(struct crush_map *map,
+				   struct crush_bucket_straw *bucket, int item)
 {
 	int newsize = bucket->h.size - 1;
 	unsigned i, j;
@@ -931,10 +1032,10 @@ int crush_remove_straw_bucket_item(struct crush_bucket_straw *bucket, int item)
 		bucket->straws = _realloc;
 	}
 
-	return crush_calc_straw(bucket);
+	return crush_calc_straw(map, bucket);
 }
 
-int crush_bucket_remove_item(struct crush_bucket *b, int item)
+int crush_bucket_remove_item(struct crush_map *map, struct crush_bucket *b, int item)
 {
 	/* invalidate perm cache */
 	b->perm_n = 0;
@@ -947,7 +1048,7 @@ int crush_bucket_remove_item(struct crush_bucket *b, int item)
 	case CRUSH_BUCKET_TREE:
 		return crush_remove_tree_bucket_item((struct crush_bucket_tree *)b, item);
 	case CRUSH_BUCKET_STRAW:
-		return crush_remove_straw_bucket_item((struct crush_bucket_straw *)b, item);
+		return crush_remove_straw_bucket_item(map, (struct crush_bucket_straw *)b, item);
 	default:
 		return -1;
 	}
@@ -1016,7 +1117,9 @@ int crush_adjust_tree_bucket_item_weight(struct crush_bucket_tree *bucket, int i
 	return diff;
 }
 
-int crush_adjust_straw_bucket_item_weight(struct crush_bucket_straw *bucket, int item, int weight)
+int crush_adjust_straw_bucket_item_weight(struct crush_map *map,
+					  struct crush_bucket_straw *bucket,
+					  int item, int weight)
 {
 	unsigned idx;
 	int diff;
@@ -1032,14 +1135,16 @@ int crush_adjust_straw_bucket_item_weight(struct crush_bucket_straw *bucket, int
 	bucket->item_weights[idx] = weight;
 	bucket->h.weight += diff;
 
-	r = crush_calc_straw(bucket);
+	r = crush_calc_straw(map, bucket);
         if (r < 0)
                 return r;
 
 	return diff;
 }
 
-int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight)
+int crush_bucket_adjust_item_weight(struct crush_map *map,
+				    struct crush_bucket *b,
+				    int item, int weight)
 {
 	switch (b->alg) {
 	case CRUSH_BUCKET_UNIFORM:
@@ -1052,7 +1157,8 @@ int crush_bucket_adjust_item_weight(struct crush_bucket *b, int item, int weight
 		return crush_adjust_tree_bucket_item_weight((struct crush_bucket_tree *)b,
 							    item, weight);
 	case CRUSH_BUCKET_STRAW:
-		return crush_adjust_straw_bucket_item_weight((struct crush_bucket_straw *)b,
+		return crush_adjust_straw_bucket_item_weight(map,
+							     (struct crush_bucket_straw *)b,
 							     item, weight);
 	default:
 		return -1;
@@ -1155,6 +1261,7 @@ static int crush_reweight_straw_bucket(struct crush_map *crush, struct crush_buc
 
                 bucket->h.weight += bucket->item_weights[i];
 	}
+	crush_calc_straw(crush, bucket);
 
 	return 0;
 }
