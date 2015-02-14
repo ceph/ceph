@@ -3264,6 +3264,9 @@ reprotect_and_return_err:
       return r;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::RLocker md_locker(ictx->md_lock);
+
     ictx->snap_lock.get_read();
     snapid_t snap_id = ictx->snap_id;
     ::SnapContext snapc = ictx->snapc;
@@ -3282,7 +3285,6 @@ reprotect_and_return_err:
     c->get();
     c->init_time(ictx, AIO_TYPE_WRITE);
 
-    RWLock::RLocker l(ictx->owner_lock);
     if (ictx->image_watcher->is_lock_supported() &&
 	!ictx->image_watcher->is_lock_owner()) {
       c->put();
@@ -3358,6 +3360,9 @@ reprotect_and_return_err:
       return r;
     }
 
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::RLocker md_locker(ictx->md_lock);
+
     // TODO: check for snap
     ictx->snap_lock.get_read();
     snapid_t snap_id = ictx->snap_id;
@@ -3375,7 +3380,6 @@ reprotect_and_return_err:
     c->get();
     c->init_time(ictx, AIO_TYPE_DISCARD);
 
-    RWLock::RLocker l(ictx->owner_lock);
     if (ictx->image_watcher->is_lock_supported() &&
 	!ictx->image_watcher->is_lock_owner()) {
       c->put();
