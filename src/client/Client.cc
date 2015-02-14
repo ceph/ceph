@@ -5734,6 +5734,7 @@ int Client::flock(int fd, int operation, uint64_t owner)
   tout(cct) << "flock" << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << operation << std::endl;
+  tout(cct) << owner << std::endl;
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
