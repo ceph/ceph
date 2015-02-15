@@ -956,6 +956,8 @@ function test_mon_osd()
   [ -s $f ]
   rm $f
   save=$(ceph osd getmaxosd | sed -e 's/max_osd = //' -e 's/ in epoch.*//')
+  [ "$save" -gt 0 ]
+  ceph osd setmaxosd $((save - 1)) 2>&1 | grep 'EBUSY'
   ceph osd setmaxosd 10
   ceph osd getmaxosd | grep 'max_osd = 10'
   ceph osd setmaxosd $save
@@ -969,6 +971,7 @@ function test_mon_osd()
 
   local old_osds=$(echo $(ceph osd ls))
   id=`ceph osd create`
+  ceph osd find $id
   ceph osd lost $id --yes-i-really-mean-it
   expect_false ceph osd setmaxosd $id
   local new_osds=$(echo $(ceph osd ls))
@@ -983,6 +986,56 @@ function test_mon_osd()
   ceph osd rm $id
 
   ceph osd
+
+  # reset max_osd.
+  ceph osd setmaxosd $id
+  ceph osd getmaxosd | grep "max_osd = $save"
+  local max_osd=$save
+
+  ceph osd create $uuid 0 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $((max_osd - 1)) 2>&1 | grep 'EINVAL'
+
+  id=`ceph osd create $uuid $max_osd`
+  [ "$id" = "$max_osd" ]
+  ceph osd find $id
+  max_osd=$((max_osd + 1))
+  ceph osd getmaxosd | grep "max_osd = $max_osd"
+
+  ceph osd create $uuid $((id - 1)) 2>&1 | grep 'EINVAL'
+  ceph osd create $uuid $((id + 1)) 2>&1 | grep 'EINVAL'
+  id2=`ceph osd create $uuid`
+  [ "$id" = "$id2" ]
+  id2=`ceph osd create $uuid $id`
+  [ "$id" = "$id2" ]
+
+  uuid=`uuidgen`
+  local gap_start=$max_osd
+  id=`ceph osd create $uuid $((gap_start + 100))`
+  [ "$id" = "$((gap_start + 100))" ]
+  max_osd=$((id + 1))
+  ceph osd getmaxosd | grep "max_osd = $max_osd"
+
+  ceph osd create $uuid $gap_start 2>&1 | grep 'EINVAL'
+
+  id=`ceph osd create`
+  [ "$id" = "$gap_start" ]
+  gap_start=$((gap_start + 1))
+
+  id=`ceph osd create $(uuidgen)`
+  [ "$id" = "$gap_start" ]
+  gap_start=$((gap_start + 1))
+
+  id=`ceph osd create $(uuidgen) $gap_start`
+  [ "$id" = "$gap_start" ]
+  gap_start=$((gap_start + 1))
+
+  local new_osds=$(echo $(ceph osd ls))
+  for id in $(echo $new_osds | sed -e "s/$old_osds//") ; do
+      [ $id -ge $save ]
+      ceph osd rm $id
+  done
+  ceph osd setmaxosd $save
+
   ceph osd ls
   ceph osd pool create data 10
   ceph osd lspools | grep data

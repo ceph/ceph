@@ -73,8 +73,16 @@ weight).
    OSD starts up. The following command will output the OSD number, which you 
    will need for subsequent steps. ::
 	
-	ceph osd create [{uuid}]
+	ceph osd create [{uuid} [{id}]]
 
+   If the optional parameter {id} is given it will be used as the OSD id.
+   Note, in this case the command may fail if the number is already in use.
+
+   .. warning:: In general, explicitly specifying {id} is not recommended.
+   IDs are allocated as an array, and skipping entries consumes some extra
+   memory. This can become significant if there are large gaps and/or
+   clusters are large. If {id} is not specified, the smallest available is
+   used.
 
 #. Create the default directory on your new OSD. :: 
 
