@@ -897,12 +897,13 @@ void OSDService::share_map_peer(int peer, Connection *con, OSDMapRef map)
 }
 
 
-bool OSDService::inc_scrubs_pending()
+bool OSDService::inc_scrubs_pending(utime_t last_scrub_stamp)
 {
   bool result = false;
 
   sched_scrub_lock.Lock();
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
+  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs &&
+      cmp_scrub_stamp(last_scrub_stamp)) {
     dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
 	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
     result = true;

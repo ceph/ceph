@@ -540,7 +540,13 @@ public:
     return true;
   }
 
-  bool inc_scrubs_pending();
+  bool cmp_scrub_stamp(utime_t last_scrub_stamp) {
+    assert(sched_scrub_lock.is_locked());
+    return last_scrub_pg.empty() ||
+      (last_scrub_stamp <= last_scrub_pg.begin()->first);
+  }
+
+  bool inc_scrubs_pending(utime_t last_scrub_stamp = utime_t());
   void inc_scrubs_active(bool reserved);
   void dec_scrubs_pending();
   void dec_scrubs_active();

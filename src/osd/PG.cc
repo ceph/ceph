@@ -3375,7 +3375,7 @@ void PG::sub_op_scrub_reserve(OpRequestRef op)
 
   op->mark_started();
 
-  scrubber.reserved = osd->inc_scrubs_pending();
+  scrubber.reserved = osd->inc_scrubs_pending(m->pg_last_scrub_stamp);
 
   MOSDSubOpReply *reply = new MOSDSubOpReply(
     m, pg_whoami, 0, get_osdmap()->get_epoch(), CEPH_OSD_FLAG_ACK);
@@ -3492,6 +3492,7 @@ void PG::scrub_reserve_replicas()
       reqid, pg_whoami, spg_t(info.pgid.pgid, i->shard), poid, 0,
       get_osdmap()->get_epoch(), osd->get_tid(), v);
     subop->ops = scrub;
+    subop->pg_last_scrub_stamp = scrubber.scrub_reg_stamp;
     osd->send_message_osd_cluster(
       i->osd, subop, get_osdmap()->get_epoch());
   }
