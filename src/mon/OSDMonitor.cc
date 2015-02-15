@@ -5796,11 +5796,23 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
   } else if (prefix == "osd create") {
     int i = -1;
 
+    // optional id provided?
+    int64_t id = -1;
+    if (cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+      if (id < 0) {
+	ss << "invalid osd id value '" << id << "'";
+	err = -EINVAL;
+	goto reply;
+      }
+      dout(10) << " osd create got id " << id << dendl;
+    }
+
     // optional uuid provided?
     uuid_d uuid;
     string uuidstr;
     if (cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
       if (!uuid.parse(uuidstr.c_str())) {
+	ss << "invalid uuid value '" << uuidstr << "'";
 	err = -EINVAL;
 	goto reply;
       }
@@ -5808,6 +5820,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
       i = osdmap.identify_osd(uuid);
       if (i >= 0) {
 	// osd already exists
+	if (id >= 0 && i != id) {
+	  ss << "uuid " << uuidstr << " already in use for different id " << i;
+	  err = -EINVAL;
+	  goto reply;
+	}
 	err = 0;
 	if (f) {
 	  f->open_object_section("created_osd");
@@ -5820,11 +5837,31 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
 	}
 	goto reply;
       }
-      i = pending_inc.identify_osd(uuid);
-      if (i >= 0) {
+      // i < 0
+      if (id >= 0) {
+	if (osdmap.exists(id)) {
+	  ss << "id " << id << " already in use and does not match uuid "
+	     << uuid;
+	  err = -EINVAL;
+	  goto reply;
+	}
+	if (pending_inc.new_state.count(id)) {
+	  // osd is about to exist
+	  wait_for_finished_proposal(new C_RetryMessage(this, m));
+	  return true;
+	}
+	i = id;
+      }
+      if (pending_inc.identify_osd(uuid) >= 0) {
 	// osd is about to exist
 	wait_for_finished_proposal(new C_RetryMessage(this, m));
 	return true;
+      }
+      if (i >= 0) {
+	// raise max_osd
+	if (osdmap.get_max_osd() <= i && pending_inc.new_max_osd <= i)
+	  pending_inc.new_max_osd = i + 1;
+	goto done;
       }
     }
 
