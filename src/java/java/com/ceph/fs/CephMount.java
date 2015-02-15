@@ -697,7 +697,7 @@ public class CephMount {
   /**
    * Apply or remove an advisory lock.
    *
-   * @param fd File descriptor to synchronize.
+   * @param fd File descriptor to lock or unlock.
    * @param operation the advisory lock operation to be performed on the file
    * descriptor among LOCK_SH (shared lock), LOCK_EX (exclusive lock),
    * or LOCK_UN (remove lock). The LOCK_NB value can be ORed to perform a
