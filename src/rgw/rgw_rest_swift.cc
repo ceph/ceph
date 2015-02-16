@@ -151,12 +151,15 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   return 0;
 }
 
+static void dump_container_metadata(struct req_state *, RGWBucketEnt&);
+
 void RGWListBucket_ObjStore_SWIFT::send_response()
 {
   vector<RGWObjEnt>::iterator iter = objs.begin();
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
+  dump_container_metadata(s, bucket);
 
   s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
 
