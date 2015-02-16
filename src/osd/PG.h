@@ -1109,8 +1109,7 @@ public:
     // Map from object with errors to good peers
     map<hobject_t, list<pair<ScrubMap::object, pg_shard_t> > > authoritative;
 
-    // Objects who need digest updates
-    map<hobject_t, pair<uint32_t,uint32_t> > missing_digest;
+    // digest updates which we are waiting on
     int num_digest_updates_pending;
 
     // chunky scrub
@@ -1205,7 +1204,6 @@ public:
       inconsistent.clear();
       missing.clear();
       authoritative.clear();
-      missing_digest.clear();
       num_digest_updates_pending = 0;
     }
 
@@ -1243,7 +1241,9 @@ public:
    */
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end) = 0;
-  virtual void _scrub(ScrubMap &map) { }
+  virtual void _scrub(
+    ScrubMap &map,
+    const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest) { }
   virtual void _scrub_clear_state() { }
   virtual void _scrub_finish() { }
   virtual void get_colls(list<coll_t> *out) = 0;

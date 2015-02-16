@@ -12775,7 +12775,9 @@ void ReplicatedPG::_scrub_digest_updated()
   }
 }
 
-void ReplicatedPG::_scrub(ScrubMap& scrubmap)
+void ReplicatedPG::_scrub(
+  ScrubMap &scrubmap,
+  const map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest)
 {
   dout(10) << "_scrub" << dendl;
 
@@ -12990,9 +12992,9 @@ void ReplicatedPG::_scrub(ScrubMap& scrubmap)
   }
 
   if (scrubber.shallow_errors == 0) {
-    for (map<hobject_t,pair<uint32_t,uint32_t> >::iterator p =
-	   scrubber.missing_digest.begin();
-	 p != scrubber.missing_digest.end();
+    for (map<hobject_t,pair<uint32_t,uint32_t> >::const_iterator p =
+	   missing_digest.begin();
+	 p != missing_digest.end();
 	 ++p) {
       if (p->first.is_snapdir())
 	continue;
