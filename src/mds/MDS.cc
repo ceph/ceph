@@ -3013,7 +3013,7 @@ void MDS::heartbeat_reset()
   // after a call to suicide() completes, in which case MDS::hb
   // has been freed and we are a no-op.
   if (!hb) {
-      assert(state == CEPH_MDS_STATE_DNE);
+      assert(want_state == CEPH_MDS_STATE_DNE);
       return;
   }
 
