@@ -7097,6 +7097,12 @@ void MDCache::dentry_remove_replica(CDentry *dn, mds_rank_t from, set<SimpleLock
   // fix lock
   if (dn->lock.remove_replica(from))
     gather_locks.insert(&dn->lock);
+
+  // Replicated strays might now be elegible for purge
+  CDentry::linkage_t *dnl = dn->get_linkage();
+  if (dnl->is_primary()) {
+    maybe_eval_stray(dnl->get_inode());
+  }
 }
 
 void MDCache::trim_client_leases()
