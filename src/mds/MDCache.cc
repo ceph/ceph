@@ -7191,6 +7191,14 @@ bool MDCache::shutdown_pass()
   }
   assert(subtrees.empty());
 
+  // Still replicas of mydir?
+  if (mydir->inode->is_replicated()) {
+    // We do this because otherwise acks to locks could come in after
+    // we cap the log.
+    dout(7) << "waiting for mydir replicas to release: " << *mydir << dendl;
+    return false;
+  }
+
   // (only do this once!)
   if (!mds->mdlog->is_capped()) {
     dout(7) << "capping the log" << dendl;
