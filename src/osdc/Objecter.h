@@ -2052,10 +2052,13 @@ public:
     return o;
   }
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
-	     ObjectOperation& op,
-	     snapid_t snapid, bufferlist *pbl, int flags,
-	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+		  ObjectOperation& op,
+		  snapid_t snapid, bufferlist *pbl, int flags,
+		  Context *onack, version_t *objver = NULL, int *data_offset = NULL,
+		  uint64_t features = 0) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver, data_offset);
+    if (features)
+      o->features = features;
     return op_submit(o);
   }
   ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,
