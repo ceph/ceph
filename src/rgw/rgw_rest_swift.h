@@ -40,6 +40,7 @@ public:
 
   int get_params();
   void send_response();
+  bool need_container_stats() { return true; }
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {

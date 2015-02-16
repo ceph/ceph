@@ -245,6 +245,7 @@ public:
 
 class RGWListBucket : public RGWOp {
 protected:
+  RGWBucketEnt bucket;
   string prefix;
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
@@ -273,6 +274,7 @@ public:
   virtual const string name() { return "list_bucket"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKET; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual bool need_container_stats() { return false; }
 };
 
 class RGWGetBucketLogging : public RGWOp {
