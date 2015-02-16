@@ -10404,14 +10404,6 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   context_registry_on_change();
 
-  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
-         in_progress_async_reads.begin();
-       i != in_progress_async_reads.end();
-       in_progress_async_reads.erase(i++)) {
-    close_op_ctx(i->second, -ECANCELED);
-    requeue_op(i->first);
-  }
-
   cancel_copy_ops(is_primary());
   cancel_flush_ops(is_primary());
   cancel_proxy_read_ops(is_primary());
@@ -10453,6 +10445,16 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   } else {
     waiting_for_cache_not_full.clear();
     waiting_for_all_missing.clear();
+  }
+
+
+  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
+         in_progress_async_reads.begin();
+       i != in_progress_async_reads.end();
+       in_progress_async_reads.erase(i++)) {
+    close_op_ctx(i->second, -ECANCELED);
+    if (is_primary())
+      requeue_op(i->first);
   }
 
   // this will requeue ops we were working on but didn't finish, and
