@@ -399,6 +399,29 @@ def _yum_fix_repo_host(remote, project):
     )
 
 
+def _yum_set_check_obsoletes(remote):
+    """
+    Set check_obsoletes = 1 in /etc/yum/pluginconf.d/priorities.conf
+
+    Creates a backup at /etc/yum/pluginconf.d/priorities.conf.orig so we can
+    restore later.
+    """
+    conf_path = '/etc/yum/pluginconf.d/priorities.conf'
+    conf_path_orig = conf_path + '.orig'
+    remote.run(args=['sudo', 'cp', '-af', conf_path, conf_path_orig])
+    remote.run(args=['echo', 'check_obsoletes = 1', run.Raw('|'),
+                     'sudo', 'tee', '-a', conf_path])
+
+
+def _yum_unset_check_obsoletes(remote):
+    """
+    Restore the /etc/yum/pluginconf.d/priorities.conf backup
+    """
+    conf_path = '/etc/yum/pluginconf.d/priorities.conf'
+    conf_path_orig = conf_path + '.orig'
+    remote.run(args=['sudo', 'mv', '-f', conf_path_orig, conf_path])
+
+
 def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     """
     Installs the ceph-release package for the relevant branch, then installs
@@ -434,6 +457,7 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
     uri = baseparms['uri']
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
+    _yum_set_check_obsoletes(remote)
 
     remote.run(
         args=[
@@ -692,6 +716,7 @@ def _remove_sources_list_rpm(remote, proj):
         args=['sudo', 'rm', '-r', '/var/log/{proj}'.format(proj=proj)],
         check_status=False,
     )
+    _yum_unset_check_obsoletes(remote)
 
 
 def remove_sources(ctx, config):
