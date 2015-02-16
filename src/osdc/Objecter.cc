@@ -2758,7 +2758,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 			 op->target.target_oid, op->target.target_oloc,
 			 op->target.pgid,
 			 osdmap->get_epoch(),
-			 flags);
+			 flags, op->features);
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);

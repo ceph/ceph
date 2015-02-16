@@ -32,7 +32,7 @@ class OSD;
 
 class MOSDOp : public Message {
 
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -53,6 +53,8 @@ private:
   snapid_t snapid;
   snapid_t snap_seq;
   vector<snapid_t> snaps;
+
+  uint64_t features;
 
 public:
   friend class MOSDOpReply;
@@ -94,11 +96,12 @@ public:
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDOp(int inc, long tid,
          object_t& _oid, object_locator_t& _oloc, pg_t& _pgid, epoch_t _osdmap_epoch,
-	 int _flags)
+	 int _flags, uint64_t feat)
     : Message(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
-      oid(_oid), oloc(_oloc), pgid(_pgid) {
+      oid(_oid), oloc(_oloc), pgid(_pgid),
+      features(feat) {
     set_tid(tid);
   }
 private:
@@ -141,6 +144,12 @@ public:
   }
   void stat() {
     add_simple_op(CEPH_OSD_OP_STAT, 0, 0);
+  }
+
+  uint64_t get_features() const {
+    if (features)
+      return features;
+    return get_connection()->get_features();
   }
 
   // flags
@@ -251,6 +260,7 @@ struct ceph_osd_request_head {
       ::encode(snaps, payload);
 
       ::encode(retry_attempt, payload);
+      ::encode(features, payload);
     }
   }
 
@@ -297,6 +307,7 @@ struct ceph_osd_request_head {
 				oid.name.length()));
 
       retry_attempt = -1;
+      features = 0;
     } else {
       // new decode 
       ::decode(client_inc, p);
@@ -332,6 +343,11 @@ struct ceph_osd_request_head {
 	::decode(retry_attempt, p);
       else
 	retry_attempt = -1;
+
+      if (header.version >= 5)
+	::decode(features, p);
+      else
+	features = 0;
     }
 
     OSDOp::split_osd_op_vector_in_data(ops, data);
