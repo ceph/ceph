@@ -1146,6 +1146,7 @@ public:
     op_target_t target;
 
     ConnectionRef con;  // for rx buffer only
+    uint64_t features;  // explicitly specified op features
 
     vector<OSDOp> ops;
 
@@ -1189,6 +1190,7 @@ public:
       session(NULL), incarnation(0),
       target(o, ol, f),
       con(NULL),
+      features(CEPH_FEATURES_SUPPORTED_DEFAULT),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       priority(0), onack(ac), oncommit(co),
