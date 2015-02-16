@@ -48,7 +48,7 @@ Group:		System/Filesystems
 Group:		System Environment/Base
 %endif
 URL:		http://ceph.com/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
+Source0:	http://ceph.com/download/%{name}-%{version}.tar.xz
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
