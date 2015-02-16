@@ -6287,6 +6287,19 @@ bool MDCache::trim(int max, int count)
     }
   }
 
+  // Other rank's base inodes (when I'm stopping)
+  if (max == 0) {
+    for (set<CInode*>::iterator p = base_inodes.begin();
+         p != base_inodes.end(); ++p) {
+      if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->whoami) {
+        dout(20) << __func__ << ": maybe trimming base: " << *(*p) << dendl;
+        if ((*p)->get_num_ref() == 0) {
+          trim_inode(NULL, *p, NULL, expiremap);
+        }
+      }
+    }
+  }
+
   // send any expire messages
   send_expire_messages(expiremap);
 
