@@ -6,6 +6,7 @@
 #include "include/rados/librados.h"
 #include "include/rbd/librbd.hpp"
 #include "common/Cond.h"
+#include "common/errno.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "cls/lock/cls_lock_client.h"
@@ -17,16 +18,46 @@
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/assign/list_of.hpp>
+#include <boost/assign/std/set.hpp>
 #include <boost/bind.hpp>
 #include <iostream>
-#include <list>
+#include <map>
 #include <set>
 #include <sstream>
 #include <vector>
 
 using namespace ceph;
+using namespace boost::assign;
 
 void register_test_image_watcher() {
+}
+
+enum NotifyOp {
+  NOTIFY_OP_ACQUIRED_LOCK = 0,
+  NOTIFY_OP_RELEASED_LOCK = 1,
+  NOTIFY_OP_REQUEST_LOCK  = 2,
+  NOTIFY_OP_HEADER_UPDATE = 3
+};
+
+std::ostream& operator<<(std::ostream& os, NotifyOp op) {
+  switch (op) {
+  case NOTIFY_OP_ACQUIRED_LOCK:
+    os << "acquired lock";
+    break;
+  case NOTIFY_OP_RELEASED_LOCK:
+    os << "released lock";
+    break;
+  case NOTIFY_OP_REQUEST_LOCK:
+    os << "request lock";
+    break;
+  case NOTIFY_OP_HEADER_UPDATE:
+    os << "header update";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(op) << ")";
+    break;
+  }
+  return os;
 }
 
 class TestImageWatcher : public TestFixture {
@@ -37,13 +68,6 @@ public:
 		       m_callback_lock("m_callback_lock")
   {
   }
-
-  enum NotifyOp {
-    NOTIFY_OP_ACQUIRED_LOCK = 0,
-    NOTIFY_OP_RELEASED_LOCK = 1,
-    NOTIFY_OP_REQUEST_LOCK  = 2,
-    NOTIFY_OP_HEADER_UPDATE = 3
-  };
 
   class WatchCtx : public librados::WatchCtx2 {
   public:
@@ -71,33 +95,24 @@ public:
 	iter.copy_all(payload);
 	DECODE_FINISH(iter);
 
-	Mutex::Locker l(m_parent.m_callback_lock);
-	if (!m_parent.m_notify_acks.empty()) {
-	  NotifyOp notify_op = m_parent.m_notify_acks.front().first;
-	  if (notify_op != op) {
-	    EXPECT_EQ(notify_op, static_cast<NotifyOp>(op));
-	    m_parent.m_notify_acks.clear();
-	  } else {
-	    m_parent.m_ioctx.notify_ack(m_header_oid, notify_id, cookie,
-					m_parent.m_notify_acks.front().second);
-	    m_parent.m_notify_acks.pop_front();
-	  }
-	}
+	std::cout << "NOTIFY: " << static_cast<NotifyOp>(op) << ", " << notify_id
+		  << ", " << cookie << ", " << notifier_id << std::endl;
 
-	m_parent.m_notifies.push_back(
-	  std::make_pair(static_cast<NotifyOp>(op), payload));
+	Mutex::Locker l(m_parent.m_callback_lock);
+	bufferlist reply;
+	m_parent.m_ioctx.notify_ack(m_header_oid, notify_id, cookie, reply);
+	m_parent.m_notify_acks.erase(static_cast<NotifyOp>(op));
+
+	m_parent.m_notifies += static_cast<NotifyOp>(op);
 	m_parent.m_callback_cond.Signal();
       } catch (...) {
 	FAIL();
       }
     }
 
-    virtual void handle_failed_notify(uint64_t notify_id,
-                                      uint64_t cookie,
-                                      uint64_t notifier_id) {
-    }
-
-    virtual void handle_error(uint64_t cookie, int er) {
+    virtual void handle_error(uint64_t cookie, int err) {
+      std::cerr << "ERROR: " << cookie << ", " << cpp_strerror(err)
+		<< std::endl; 
     }
 
     uint64_t get_handle() const {
@@ -199,11 +214,12 @@ public:
     return (r == 0);
   }
 
-  typedef std::pair<NotifyOp, bufferlist> NotifyOpPayload;
-  typedef std::list<NotifyOpPayload> NotifyOpPayloads;
+  typedef std::map<NotifyOp, bufferlist> NotifyOpPayloads;
+  typedef std::set<NotifyOp> NotifyOps;
 
   WatchCtx *m_watch_ctx;
-  NotifyOpPayloads m_notifies;
+  
+  NotifyOps m_notifies;
   NotifyOpPayloads m_notify_acks;
 
   std::set<librbd::AioCompletion *> m_aio_completions;
@@ -274,8 +290,8 @@ TEST_F(TestImageWatcher, TryLockNotifyAnnounceLocked) {
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }
 
@@ -358,19 +374,23 @@ TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
 
-  RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  }
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
-  ASSERT_EQ(0, ictx->image_watcher->unlock());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->unlock());
+  }
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()))(
-    std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK, NOTIFY_OP_RELEASED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }
 
@@ -430,8 +450,8 @@ TEST_F(TestImageWatcher, RequestLock) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
   ASSERT_EQ(0, unlock_image());
@@ -451,9 +471,8 @@ TEST_F(TestImageWatcher, RequestLock) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   ASSERT_TRUE(m_notify_acks.empty());
-  expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()))(
-    std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
+  expected_notify_ops.clear();
+  expected_notify_ops += NOTIFY_OP_RELEASED_LOCK, NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
   ASSERT_TRUE(wait_for_aio_completions(*ictx));
@@ -481,8 +500,8 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
   ASSERT_TRUE(wait_for_aio_completions(*ictx));
@@ -517,8 +536,8 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
   m_notifies.clear();
@@ -583,8 +602,8 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 
   ASSERT_EQ(0, unlock_image());
@@ -619,7 +638,7 @@ TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
   ASSERT_TRUE(m_notify_acks.empty());
-  NotifyOpPayloads expected_notify_ops = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_HEADER_UPDATE, bufferlist()));
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_HEADER_UPDATE;
   ASSERT_EQ(expected_notify_ops, m_notifies);
 }

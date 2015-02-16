@@ -87,18 +87,20 @@ TYPED_TEST(BitVectorTest, get_set) {
 TYPED_TEST(BitVectorTest, get_buffer_extents) {
   typename TestFixture::bit_vector_t bit_vector;
 
-  uint64_t offset = 5381;
-  uint64_t length = 4111;
+  uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
+  bit_vector.resize((2 * CEPH_PAGE_SIZE + 51) * elements_per_byte);
+
+  uint64_t offset = (CEPH_PAGE_SIZE + 11) * elements_per_byte;
+  uint64_t length = (CEPH_PAGE_SIZE + 31) * elements_per_byte;
   uint64_t byte_offset;
   uint64_t byte_length;
   bit_vector.get_data_extents(offset, length, &byte_offset, &byte_length);
+  ASSERT_EQ(CEPH_PAGE_SIZE, byte_offset);
+  ASSERT_EQ(2 * CEPH_PAGE_SIZE, byte_length);
 
-  uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
-  uint64_t start_byte = offset / elements_per_byte;
-  ASSERT_EQ(start_byte, byte_offset);
-
-  uint64_t end_byte = (offset + length - 1) / elements_per_byte;
-  ASSERT_EQ(end_byte - start_byte + 1, byte_length);
+  bit_vector.get_data_extents(1, 1, &byte_offset, &byte_length);
+  ASSERT_EQ(0U, byte_offset);
+  ASSERT_EQ(CEPH_PAGE_SIZE, byte_length);
 }
 
 TYPED_TEST(BitVectorTest, get_header_length) {
@@ -107,4 +109,120 @@ TYPED_TEST(BitVectorTest, get_header_length) {
   bufferlist bl;
   bit_vector.encode_header(bl);
   ASSERT_EQ(bl.length(), bit_vector.get_header_length());
+}
+
+TYPED_TEST(BitVectorTest, get_footer_offset) {
+  typename TestFixture::bit_vector_t bit_vector;
+
+  bit_vector.resize(5111);
+
+  uint64_t byte_offset;
+  uint64_t byte_length;
+  bit_vector.get_data_extents(0, bit_vector.size(), &byte_offset, &byte_length);
+
+  ASSERT_EQ(bit_vector.get_header_length() + byte_length,
+	    bit_vector.get_footer_offset());
+}
+
+TYPED_TEST(BitVectorTest, partial_decode_encode) {
+  typename TestFixture::bit_vector_t bit_vector;
+
+  uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
+  bit_vector.resize(5111 * elements_per_byte);
+  for (uint64_t i = 0; i < bit_vector.size(); ++i) {
+    bit_vector[i] = i % 4;
+  }
+
+  bufferlist bl;
+  ::encode(bit_vector, bl);
+  bit_vector.clear();
+
+  bufferlist header_bl;
+  header_bl.substr_of(bl, 0, bit_vector.get_header_length());
+  bufferlist::iterator header_it = header_bl.begin();
+  bit_vector.decode_header(header_it);
+
+  bufferlist footer_bl;
+  footer_bl.substr_of(bl, bit_vector.get_footer_offset(),
+		      bl.length() - bit_vector.get_footer_offset());
+  bufferlist::iterator footer_it = footer_bl.begin();
+  bit_vector.decode_footer(footer_it);
+
+  uint64_t byte_offset;
+  uint64_t byte_length;
+  bit_vector.get_data_extents(0, 1, &byte_offset, &byte_length); 
+
+  bufferlist data_bl;
+  data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
+		    byte_length);
+  bufferlist::iterator data_it = data_bl.begin();
+  bit_vector.decode_data(data_it, byte_offset);
+
+  bit_vector[0] = 3;
+
+  data_bl.clear();
+  bit_vector.encode_data(data_bl, byte_offset, byte_length);
+
+  footer_bl.clear();
+  bit_vector.encode_footer(footer_bl);
+
+  bufferlist updated_bl;
+  updated_bl.substr_of(bl, 0, bit_vector.get_header_length() + byte_offset);
+  updated_bl.append(data_bl);
+
+  uint64_t tail_data_offset = bit_vector.get_header_length() + byte_offset +
+			      byte_length;
+  data_bl.substr_of(bl, tail_data_offset,
+		    bit_vector.get_footer_offset() - tail_data_offset);
+  updated_bl.append(data_bl);
+  updated_bl.append(footer_bl);
+  ASSERT_EQ(bl.length(), updated_bl.length());
+
+  bufferlist::iterator updated_it = updated_bl.begin();
+  ::decode(bit_vector, updated_it); 
+}
+
+TYPED_TEST(BitVectorTest, header_crc) {
+  typename TestFixture::bit_vector_t bit_vector;
+
+  bufferlist header;
+  bit_vector.encode_header(header);
+
+  bufferlist footer;
+  bit_vector.encode_footer(footer);
+
+  bufferlist::iterator it = footer.begin();
+  bit_vector.decode_footer(it);
+
+  bit_vector.resize(1);
+  bit_vector.encode_header(header);
+
+  it = footer.begin();
+  ASSERT_THROW(bit_vector.decode_footer(it), buffer::malformed_input);
+}
+
+TYPED_TEST(BitVectorTest, data_crc) {
+  typename TestFixture::bit_vector_t bit_vector;
+
+  uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
+  bit_vector.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
+
+  uint64_t byte_offset;
+  uint64_t byte_length;
+  bit_vector.get_data_extents(0, bit_vector.size(), &byte_offset, &byte_length);
+
+  bufferlist data;
+  bit_vector.encode_data(data, byte_offset, byte_length);
+
+  bufferlist::iterator data_it = data.begin();
+  bit_vector.decode_data(data_it, byte_offset); 
+
+  bit_vector[bit_vector.size() - 1] = 1;
+
+  bufferlist dummy_data;
+  bit_vector.encode_data(dummy_data, byte_offset, byte_length);
+
+  data_it = data.begin();
+  ASSERT_THROW(bit_vector.decode_data(data_it, byte_offset),
+	       buffer::malformed_input);
 }

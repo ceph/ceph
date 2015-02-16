@@ -625,7 +625,7 @@ struct ObjectOperation {
     uint32_t *out_flags;
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
-    vector<osd_reqid_t> *out_reqids;
+    vector<pair<osd_reqid_t, version_t> > *out_reqids;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
 			      uint64_t *s,
@@ -638,7 +638,7 @@ struct ObjectOperation {
 			      uint32_t *flags,
 			      uint32_t *dd,
 			      uint32_t *od,
-			      vector<osd_reqid_t> *oreqids,
+			      vector<pair<osd_reqid_t, version_t> > *oreqids,
 			      int *r)
       : cursor(c),
 	out_size(s), out_mtime(m),
@@ -698,7 +698,7 @@ struct ObjectOperation {
 		uint32_t *out_flags,
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
-		vector<osd_reqid_t> *out_reqids,
+		vector<pair<osd_reqid_t, version_t> > *out_reqids,
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
