@@ -353,7 +353,7 @@ int ImageWatcher::lock() {
       unlock();
       return r;
     }
-    m_image_ctx.object_map->refresh();
+    m_image_ctx.object_map->refresh(CEPH_NOSNAP);
   }
 
   bufferlist bl;
@@ -398,9 +398,8 @@ void ImageWatcher::release_lock()
   RWLock::WLocker l(m_image_ctx.owner_lock);
   {
     RWLock::WLocker l2(m_image_ctx.md_lock);
-    m_image_ctx.flush_cache();
+    librbd::_flush(&m_image_ctx);
   }
-  m_image_ctx.data_ctx.aio_flush();
 
   unlock();
 }

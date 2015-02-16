@@ -246,9 +246,6 @@ namespace librbd {
       m_state(LIBRBD_AIO_WRITE_FLAT), m_snap_seq(snapc.seq.val),
       m_entire_object(NULL)
   {
-    m_io_ctx.dup(ictx->data_ctx);
-    m_io_ctx.snap_set_read(CEPH_NOSNAP);
-
     m_object_image_extents = objectx;
     m_parent_overlap = object_overlap;
   }
