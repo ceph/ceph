@@ -6133,7 +6133,8 @@ int ReplicatedPG::fill_in_copy_get(
     return result;
   }
 
-  uint64_t features = ctx->op->get_req()->get_connection()->get_features();
+  MOSDOp *op = reinterpret_cast<MOSDOp*>(ctx->op->get_req());
+  uint64_t features = op->get_features();
 
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
