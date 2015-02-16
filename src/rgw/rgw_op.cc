@@ -1183,11 +1183,19 @@ void RGWListBucket::pre_exec()
 
 void RGWListBucket::execute()
 {
-  string no_ns;
-
   ret = get_params();
   if (ret < 0)
     return;
+
+  if (need_container_stats()) {
+    map<string, RGWBucketEnt> m;
+    m[s->bucket.name] = RGWBucketEnt();
+    m.begin()->second.bucket = s->bucket;
+    ret = store->update_containers_stats(m);
+    if (ret > 0) {
+      bucket = m.begin()->second;
+    } 
+  }
 
   RGWRados::Bucket target(store, s->bucket);
   RGWRados::Bucket::List list_op(&target);
