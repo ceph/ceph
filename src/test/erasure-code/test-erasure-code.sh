@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -25,6 +25,7 @@ function run() {
     export CEPH_MON="127.0.0.1:7101"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--enable-experimental-unrecoverable-data-corrupting-features=shec "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     setup $dir || return 1
@@ -180,6 +181,25 @@ function TEST_rados_put_get_jerasure() {
     ./ceph osd erasure-code-profile set $profile \
         plugin=jerasure \
         k=4 m=2 \
+        ruleset-failure-domain=osd || return 1
+    ./ceph osd pool create $poolname 12 12 erasure $profile \
+        || return 1
+
+    rados_put_get $dir $poolname || return 1
+
+    delete_pool $poolname
+    ./ceph osd erasure-code-profile rm $profile
+}
+
+function TEST_rados_put_get_shec() {
+    local dir=$1
+
+    local poolname=pool-shec
+    local profile=profile-shec
+
+    ./ceph osd erasure-code-profile set $profile \
+        plugin=shec \
+        k=2 m=1 c=1 \
         ruleset-failure-domain=osd || return 1
     ./ceph osd pool create $poolname 12 12 erasure $profile \
         || return 1

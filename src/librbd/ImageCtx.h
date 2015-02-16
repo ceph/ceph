@@ -16,6 +16,7 @@
 #include "common/Readahead.h"
 #include "common/RWLock.h"
 #include "common/snap_types.h"
+#include "include/atomic.h"
 #include "include/buffer.h"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd_types.h"
@@ -113,6 +114,8 @@ namespace librbd {
     xlist<AsyncOperation*> async_ops;
 
     ObjectMap *object_map;
+
+    atomic_t async_request_seq;
 
     /**
      * Either image_name or image_id must be set.
