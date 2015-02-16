@@ -37,8 +37,8 @@
 # common
 #################################################################################
 Name:		ceph
-Version:	latest_suse+git.6061c0b
-Release:	0%{?dist}
+Version:	@VERSION@
+Release:	@RPM_RELEASE@
 Epoch:		1
 Summary:	User space components of the Ceph file system
 License:	GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
