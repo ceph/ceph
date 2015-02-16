@@ -1489,27 +1489,30 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // promote ops, but we can't possible have both in our log where
     // the original request is still not stable on disk, so for our
     // purposes here it doesn't matter which one we get.
-    const pg_log_entry_t *entry = pg_log.get_log().get_request(m->get_reqid());
-    if (entry) {
-      const eversion_t& oldv = entry->version;
+    eversion_t replay_version;
+    version_t user_version;
+    bool got = pg_log.get_log().get_request(
+      m->get_reqid(), &replay_version, &user_version);
+    if (got) {
       dout(3) << __func__ << " dup " << m->get_reqid()
-	      << " was " << oldv << dendl;
-      if (already_complete(oldv)) {
-	osd->reply_op_error(op, 0, oldv, entry->user_version);
+	      << " was " << replay_version << dendl;
+      if (already_complete(replay_version)) {
+	osd->reply_op_error(op, 0, replay_version, user_version);
       } else {
 	if (m->wants_ack()) {
-	  if (already_ack(oldv)) {
+	  if (already_ack(replay_version)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
 	    reply->add_flags(CEPH_OSD_FLAG_ACK);
-	    reply->set_reply_versions(oldv, entry->user_version);
+	    reply->set_reply_versions(replay_version, user_version);
 	    osd->send_message_osd_client(reply, m->get_connection());
 	  } else {
-	    dout(10) << " waiting for " << oldv << " to ack" << dendl;
-	    waiting_for_ack[oldv].push_back(op);
+	    dout(10) << " waiting for " << replay_version << " to ack" << dendl;
+	    waiting_for_ack[replay_version].push_back(make_pair(op, user_version));
 	  }
 	}
-	dout(10) << " waiting for " << oldv << " to commit" << dendl;
-	waiting_for_ondisk[oldv].push_back(op);  // always queue ondisk waiters, so that we can requeue if needed
+	dout(10) << " waiting for " << replay_version << " to commit" << dendl;
+        // always queue ondisk waiters, so that we can requeue if needed
+	waiting_for_ondisk[replay_version].push_back(make_pair(op, user_version));
 	op->mark_delayed("waiting for ondisk");
       }
       return;
@@ -7425,11 +7428,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // send dup commits, in order
     if (waiting_for_ondisk.count(repop->v)) {
       assert(waiting_for_ondisk.begin()->first == repop->v);
-      for (list<OpRequestRef>::iterator i = waiting_for_ondisk[repop->v].begin();
+      for (list<pair<OpRequestRef, version_t> >::iterator i =
+	     waiting_for_ondisk[repop->v].begin();
 	   i != waiting_for_ondisk[repop->v].end();
 	   ++i) {
-	osd->reply_op_error(*i, 0, repop->ctx->at_version,
-			    repop->ctx->user_at_version);
+	osd->reply_op_error(i->first, 0, repop->ctx->at_version,
+			    i->second);
       }
       waiting_for_ondisk.erase(repop->v);
     }
@@ -7464,13 +7468,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
     // send dup acks, in order
     if (waiting_for_ack.count(repop->v)) {
       assert(waiting_for_ack.begin()->first == repop->v);
-      for (list<OpRequestRef>::iterator i = waiting_for_ack[repop->v].begin();
+      for (list<pair<OpRequestRef, version_t> >::iterator i =
+	     waiting_for_ack[repop->v].begin();
 	   i != waiting_for_ack[repop->v].end();
 	   ++i) {
-	MOSDOp *m = (MOSDOp*)(*i)->get_req();
+	MOSDOp *m = (MOSDOp*)i->first->get_req();
 	MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
 	reply->set_reply_versions(repop->ctx->at_version,
-				  repop->ctx->user_at_version);
+				  i->second);
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	osd->send_message_osd_client(reply, m->get_connection());
       }
@@ -10233,10 +10238,16 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
       }
 
       // also requeue any dups, interleaved into position
-      map<eversion_t, list<OpRequestRef> >::iterator p = waiting_for_ondisk.find(repop->v);
+      map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator p =
+	waiting_for_ondisk.find(repop->v);
       if (p != waiting_for_ondisk.end()) {
 	dout(10) << " also requeuing ondisk waiters " << p->second << dendl;
-	rq.splice(rq.end(), p->second);
+	for (list<pair<OpRequestRef, version_t> >::iterator i =
+	       p->second.begin();
+	     i != p->second.end();
+	     ++i) {
+	  rq.push_back(i->first);
+	}
 	waiting_for_ondisk.erase(p);
       }
     }
@@ -10247,14 +10258,15 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   if (requeue) {
     requeue_ops(rq);
     if (!waiting_for_ondisk.empty()) {
-      for (map<eversion_t, list<OpRequestRef> >::iterator i =
+      for (map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator i =
 	     waiting_for_ondisk.begin();
 	   i != waiting_for_ondisk.end();
 	   ++i) {
-	for (list<OpRequestRef>::iterator j = i->second.begin();
+	for (list<pair<OpRequestRef, version_t> >::iterator j =
+	       i->second.begin();
 	     j != i->second.end();
 	     ++j) {
-	  derr << __func__ << ": op " << *((*j)->get_req()) << " waiting on "
+	  derr << __func__ << ": op " << *(j->first->get_req()) << " waiting on "
 	       << i->first << dendl;
 	}
       }
