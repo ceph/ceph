@@ -1,6 +1,34 @@
-%bcond_with ocf
+# use %_with_ocf 1 in prj conf
+# cannot use getconf _NPROCESSORS_ONLN, osc builds in a chroot w/o proc
+# for tcmalloc, use --without for archs ppc ppc64 s390 s390x ia64
+# id_dsa_drop rm missing?
+# dropping README.SUSE.v0.2 - is that even remotely accurate still?
+# have group names globally - those differ a lot
 
-%if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
+# In file included from perfglue/heap_profiler.cc:16:0:
+# [  770s] /usr/include/google/malloc_extension.h:34:2: warning: #warning "google/malloc_extension.h is deprecated. Use gperftools/malloc_extension.h instead" [-Wcpp]
+# [  770s]  #warning "google/malloc_extension.h is deprecated. Use gperftools/malloc_extension.h instead"
+
+%bcond_with ocf
+%bcond_with cephfs_java
+%bcond_with system_leveldb
+%bcond_without tests
+%bcond_without tcmalloc
+
+# this was before: %if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+# should work on sle12, too
+%bcond_with babeltrace
+
+# suse OBS build hosts are memory-limited
+%if 0%{?suse_version}
+ %if 0%{?jobs} > 6
+  %define jobs 6
+ %endif
+%else
+ %define jobs $(getconf _NPROCESSORS_ONLN)
+%endif
+
+%if ! (0%{?fedora} > 12 || 0%{?rhel} > 5 || 0%{?suse_version})
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
@@ -9,17 +37,18 @@
 # common
 #################################################################################
 Name:		ceph
-Version:	latest_suse+git.2235aa9
+Version:	latest_suse+git.6061c0b
 Release:	0%{?dist}
 Epoch:		1
 Summary:	User space components of the Ceph file system
-License:	GPL-2.0
+License:	GPL-2.0 and LGPL-2.1 and Apache-2.0 and MIT and GPL-2.0-with-autoconf-exception
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%else
 Group:		System Environment/Base
+%endif
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.xz
-%if 0%{?fedora} || 0%{?centos} || 0%{?rhel}
-Patch0:		init-ceph.in-fedora.patch
-%endif
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
@@ -34,9 +63,15 @@ Requires:	parted
 Requires:	util-linux
 Requires:	hdparm
 Requires:	cryptsetup
+%if 0%{?suse_version}
+# make that with systemd or something...
+# see also systemd-tmpfiles below
+Requires(post): systemd
+Requires(postun): systemd
+%endif
 Requires(post):	binutils
 BuildRequires:	gcc-c++
-BuildRequires:	boost-devel
+BuildRequires:	boost-devel > 1.48
 BuildRequires:  libbz2-devel
 BuildRequires:	cryptsetup
 BuildRequires:	gdbm
@@ -75,13 +110,10 @@ BuildRequires:	snappy-devel
 BuildRequires:	sharutils
 %endif
 
-%if 0%{defined suse_version}
-%if 0%{?suse_version} > 1210
+%if 0%{?suse_version}
 Requires:	gptfdisk
-BuildRequires:	gperftools-devel
-%else
-Requires:	scsirastools
-BuildRequires:	google-perftools-devel
+%if 0%{with tcmalloc}
+BuildRequires:  gperftools-devel%{?_isa}
 %endif
 Recommends:	logrotate
 BuildRequires:	%insserv_prereq
@@ -94,11 +126,12 @@ Requires:	gdisk
 BuildRequires:	nss-devel
 BuildRequires:	keyutils-libs-devel
 BuildRequires:	libatomic_ops-devel
-Requires:	gdisk
 Requires(post):	chkconfig
 Requires(preun):chkconfig
 Requires(preun):initscripts
+%if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel
+%endif
 %endif
 
 %description
@@ -144,7 +177,7 @@ Summary:	Rados REST gateway
 Group:		Development/Libraries
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-%if 0%{defined suse_version}
+%if 0%{?suse_version}
 BuildRequires:	libexpat-devel
 BuildRequires:	FastCGI-devel
 Requires:	apache2-mod_fcgid
@@ -270,9 +303,6 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
-%if 0%{defined suse_version}
-%py_requires
-%endif
 %description -n python-ceph
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
@@ -292,12 +322,18 @@ License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if 0%{with babeltrace}
 BuildRequires:	lttng-ust-devel
+%if 0%{?suse_version}
+BuildRequires:	babeltrace-devel
+%else
 BuildRequires:	libbabeltrace-devel
+%endif
 %endif
 %description -n ceph-test
 This package contains Ceph benchmarks and test tools.
+
+%if 0%{with cephfs_java}
 
 %package -n libcephfs_jni1
 Summary:	Java Native Interface library for CephFS Java bindings.
@@ -338,6 +374,8 @@ BuildRequires:  junit
 %description -n cephfs-java
 This package contains the Java libraries for the Ceph File System.
 
+%endif
+
 %package libs-compat
 Summary:	Meta package to include ceph libraries.
 Group:		System Environment/Libraries
@@ -360,9 +398,6 @@ librbd1 or libcephfs1 instead.
 #################################################################################
 %prep
 %setup -q
-%if 0%{?fedora} || 0%{?rhel} || 0%{?centos}
-%patch0 -p1 -b .init
-%endif
 
 %build
 # Find jni.h
@@ -386,14 +421,19 @@ export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 		--without-cryptopp \
 		--with-rest-bench \
 		--with-debug \
+%if 0%{with cephfs_java}
 		--enable-cephfs-java \
+%endif
 		--with-librocksdb-static=check \
 		$MY_CONF_OPT \
 		%{?_with_ocf} \
+		%{?_with_tcmalloc} \
+		%{?_with_system_leveldb} \
 		CFLAGS="$RPM_OPT_FLAGS" CXXFLAGS="$RPM_OPT_FLAGS"
 
+# do we still need this?
 # fix bug in specific version of libedit-devel
-%if 0%{defined suse_version}
+%if 0%{?suse_version}
 sed -i -e "s/-lcurses/-lncurses/g" Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" man/Makefile
@@ -401,7 +441,16 @@ sed -i -e "s/-lcurses/-lncurses/g" src/ocf/Makefile
 sed -i -e "s/-lcurses/-lncurses/g" src/java/Makefile
 %endif
 
-make -j$(getconf _NPROCESSORS_ONLN)
+make %{?jobs:-j%{jobs}}
+
+# %if 0%{with tests}
+# %check
+# # run in-tree unittests
+# make %{?jobs:-j%{jobs}} check-local
+
+# # use make check for a more complete set - which unfortunately does
+# # not have all ingredients shipped in the tarball...
+# %endif
 
 %install
 make DESTDIR=$RPM_BUILD_ROOT install
@@ -420,7 +469,7 @@ chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
 # udev rules
-%if 0%{?rhel} >= 7 || 0%{?fedora}
+%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 %else
@@ -434,15 +483,20 @@ install -m 0644 -D udev/95-ceph-osd-alt.rules $RPM_BUILD_ROOT/lib/udev/rules.d/9
 install -m 0644 -D udev/95-ceph-osd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules
 %endif
 
-%if 0%{?rhel} >= 7 || 0%{?fedora}
+%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 mv $RPM_BUILD_ROOT/lib/udev/rules.d/95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
+%if ! 0%{?suse_version}
 mv $RPM_BUILD_ROOT/sbin/mount.ceph $RPM_BUILD_ROOT/usr/sbin/mount.ceph
 mv $RPM_BUILD_ROOT/sbin/mount.fuse.ceph $RPM_BUILD_ROOT/usr/sbin/mount.fuse.ceph
+%endif
+%endif
+
+%if ! 0%{with babeltrace}
+rm $RPM_BUILD_ROOT%{_mandir}/man8/rbd-replay-prep.8*
 %endif
 
 #set up placeholder directories
 mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/ceph
-mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/run/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/ceph
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/tmp
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mon
@@ -451,27 +505,41 @@ mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-osd
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p $RPM_BUILD_ROOT%{_localstatedir}/log/radosgw
+%if 0%{?suse_version}
+# this should _really_ not be in any package?!
+rm -f $RPM_BUILD_ROOT%{_datadir}/ceph/known_hosts_drop.ceph.com
+rm -f $RPM_BUILD_ROOT%{_datadir}/ceph/id_dsa_drop.ceph.com
+rm -f $RPM_BUILD_ROOT%{_datadir}/ceph/id_dsa_drop.ceph.com.pub
+%endif
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
+%if 0%{?suse_version}
+systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
+%else
 /sbin/chkconfig --add ceph
+%endif
 mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
-%if %{defined suse_version}
+%if 0%{?suse_version}
 %stop_on_removal ceph
-%endif
+%else
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
     /sbin/chkconfig --del ceph
 fi
+%endif
 
 %postun
+# TODO: check this is cleaned up!!
+# systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 /sbin/ldconfig
-%if %{defined suse_version}
+%if 0%{?suse_version}
+%restart_on_update ceph
 %insserv_cleanup
 %endif
 
@@ -517,6 +585,7 @@ fi
 %endif
 %dir %{_libdir}/ceph
 %{_libdir}/ceph/ceph_common.sh
+%dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
 %dir %{_libdir}/rados-classes
 %{_libdir}/rados-classes/libcls_rbd.so*
@@ -532,7 +601,7 @@ fi
 %{_libdir}/rados-classes/libcls_version.so*
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
-%if 0%{?rhel} >= 7 || 0%{?fedora}
+%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 /usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /usr/lib/udev/rules.d/95-ceph-osd.rules
 %else
@@ -565,7 +634,13 @@ fi
 %dir %{_localstatedir}/lib/ceph/mds
 %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%ghost %dir %{_localstatedir}/run/ceph/
+# %if 0%{?suse_version}
+# %dir %{_tmpfilesdir}/
+# %{_tmpfilesdir}/%{name}.conf
+# %else
+# %ghost %dir %{_localstatedir}/run/ceph/
+# %endif
+# hmmm - so upstream is also not creating the file?!
 
 #################################################################################
 %files -n ceph-common
@@ -588,9 +663,12 @@ fi
 %{_mandir}/man8/ceph.8*
 %{_mandir}/man8/rados.8*
 %{_mandir}/man8/rbd.8*
+%if ! 0%{?suse_version}
+# this should _really_ not be in any package?!
 %{_datadir}/ceph/known_hosts_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com
 %{_datadir}/ceph/id_dsa_drop.ceph.com.pub
+%endif
 %dir %{_sysconfdir}/ceph/
 %dir %{_localstatedir}/log/ceph/
 %config %{_sysconfdir}/bash_completion.d/rados
@@ -637,18 +715,18 @@ fi
 
 %post radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
+%if 0%{?suse_version}
 %fillup_and_insserv -f -y ceph-radosgw
 %endif
 
 %preun radosgw
-%if %{defined suse_version}
+%if 0%{?suse_version}
 %stop_on_removal ceph-radosgw
 %endif
 
 %postun radosgw
 /sbin/ldconfig
-%if %{defined suse_version}
+%if 0%{?suse_version}
 %restart_on_update ceph-radosgw
 %insserv_cleanup
 %endif
@@ -716,7 +794,7 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
-%if 0%{?rhel} >= 7 || 0%{?fedora}
+%if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 /usr/lib/udev/rules.d/50-rbd.rules
 %else
 /lib/udev/rules.d/50-rbd.rules
@@ -799,28 +877,35 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph-kvstore-tool
 %{_mandir}/man8/rbd-replay.8*
 %{_mandir}/man8/rbd-replay-many.8*
-%{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
-%if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
+%if 0%{with babeltrace}
+%{_mandir}/man8/rbd-replay-prep.8*
 %{_bindir}/rbd-replay-prep
 %endif
 
 #################################################################################
+%if 0%{with cephfs_java}
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
+
+%post -n libcephfs_jni1
+/sbin/ldconfig
+
+%postun -n libcephfs_jni1
+/sbin/ldconfig
 
 #################################################################################
 %files -n libcephfs_jni1-devel
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so
 
-#################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
+%endif
 
 #################################################################################
 %files libs-compat
