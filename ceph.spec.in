@@ -48,7 +48,7 @@ Group:		System/Filesystems
 Group:		System Environment/Base
 %endif
 URL:		http://ceph.com/
-Source0:	http://ceph.com/download/%{name}-%{version}.tar.xz
+Source0:	http://ceph.com/download/%{name}-%{version}.tar.bz2
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
@@ -871,6 +871,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/ceph_streamtest
 %{_bindir}/ceph_test_*
 %{_bindir}/ceph_tpbench
+%{_bindir}/ceph_perf_objectstore
 %{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-monstore-tool
 %{_bindir}/ceph-osdomap-tool
