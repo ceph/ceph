@@ -68,7 +68,7 @@ private:
 
     State m_state;
 
-    void invalidate();
+    bool invalidate();
   }; 
 
   class ResizeRequest : public Request {

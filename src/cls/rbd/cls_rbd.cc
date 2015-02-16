@@ -1916,6 +1916,7 @@ int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
     bufferlist::iterator iter = bl.begin();
     ::decode(object_map, iter);
   } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode object map: %s", err.what());
     return -EINVAL;
   }
   return 0;
@@ -1939,6 +1940,7 @@ int object_map_load(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  object_map.set_crc_enabled(false);
   ::encode(object_map, *out);
   return 0;
 }
@@ -1989,9 +1991,8 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   bufferlist map;
   ::encode(object_map, map);
-  CLS_LOG(20, "object_map_resize: object size=%llu, byte size=%llu",
-	  static_cast<unsigned long long>(object_count),
-	  static_cast<unsigned long long>(map.length()));
+  CLS_LOG(20, "object_map_resize: object size=%" PRIu64 ", byte size=%u",
+	  object_count, map.length());
   return cls_cxx_write_full(hctx, &map);
 }
 
@@ -2023,9 +2024,15 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     return -EINVAL;
   }
 
+  uint64_t size;
+  int r = cls_cxx_stat(hctx, &size, NULL);
+  if (r < 0) {
+    return r;
+  }
+
   BitVector<2> object_map;
   bufferlist header_bl;
-  int r = cls_cxx_read(hctx, 0, object_map.get_header_length(), &header_bl);
+  r = cls_cxx_read(hctx, 0, object_map.get_header_length(), &header_bl);
   if (r < 0) {
     return r;
   }
@@ -2034,7 +2041,18 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     bufferlist::iterator it = header_bl.begin();
     object_map.decode_header(it);
   } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode object map header: %s", err.what());
     return -EINVAL;
+  }
+
+  bufferlist footer_bl;
+  r = cls_cxx_read(hctx, object_map.get_footer_offset(),
+		   size - object_map.get_footer_offset(), &footer_bl);
+  try {
+    bufferlist::iterator it = footer_bl.begin();
+    object_map.decode_footer(it);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode object map footer: %s", err.what());
   }
 
   if (start_object_no >= end_object_no || end_object_no > object_map.size()) {
@@ -2058,6 +2076,8 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     bufferlist::iterator it = data_bl.begin();
     object_map.decode_data(it, byte_offset);
   } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode data chunk [%" PRIu64 "]: %s",
+	    byte_offset, err.what());
     return -EINVAL;
   } 
 
@@ -2072,16 +2092,19 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   if (updated) {
-    CLS_LOG(20, "object_map_update: %llu~%llu -> %llu",
-	    static_cast<unsigned long long>(byte_offset),
-	    static_cast<unsigned long long>(byte_length),
-	    static_cast<unsigned long long>(object_map.get_header_length() +
-					    byte_offset));
+    CLS_LOG(20, "object_map_update: %" PRIu64 "~%" PRIu64 " -> %" PRIu64,
+	    byte_offset, byte_length,
+	    object_map.get_header_length() + byte_offset);
 
-    bufferlist update;
-    object_map.encode_data(update, byte_offset, byte_length); 
+    bufferlist data_bl;
+    object_map.encode_data(data_bl, byte_offset, byte_length);
     r = cls_cxx_write(hctx, object_map.get_header_length() + byte_offset,
-		      update.length(), &update);
+		      data_bl.length(), &data_bl);
+
+    footer_bl.clear();
+    object_map.encode_footer(footer_bl);
+    r = cls_cxx_write(hctx, object_map.get_footer_offset(), footer_bl.length(),
+		      &footer_bl);
   }
   return r;
 }
