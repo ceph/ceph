@@ -126,7 +126,7 @@ public:
     uint32_t flags;    // object_copy_data_t::FLAG_*
     uint32_t source_data_digest, source_omap_digest;
     uint32_t data_digest, omap_digest;
-    vector<osd_reqid_t> reqids;
+    vector<pair<osd_reqid_t, version_t> > reqids; // [(reqid, user_version)]
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -553,7 +553,7 @@ public:
     int num_read;    ///< count read ops
     int num_write;   ///< count update ops
 
-    vector<osd_reqid_t> extra_reqids;
+    vector<pair<osd_reqid_t, version_t> > extra_reqids;
 
     CopyFromCallback *copy_cb;
 
@@ -1357,7 +1357,9 @@ protected:
   // -- scrub --
   virtual bool _range_available_for_scrub(
     const hobject_t &begin, const hobject_t &end);
-  virtual void _scrub(ScrubMap& map);
+  virtual void _scrub(
+    ScrubMap &map,
+    const std::map<hobject_t, pair<uint32_t, uint32_t> > &missing_digest);
   void _scrub_digest_updated();
   virtual void _scrub_clear_state();
   virtual void _scrub_finish();

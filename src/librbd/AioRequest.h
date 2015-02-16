@@ -192,8 +192,6 @@ namespace librbd {
     }
 
   private:
-    librados::IoCtx m_io_ctx;
-
     bool send_pre();
     bool send_post();
     void send_write();

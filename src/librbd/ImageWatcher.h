@@ -63,13 +63,9 @@ namespace librbd {
 
     void assert_header_locked(librados::ObjectWriteOperation *op);
 
-    int notify_async_progress(const RemoteAsyncRequest &remote_async_request,
-			      uint64_t offset, uint64_t total);
-    int notify_async_complete(const RemoteAsyncRequest &remote_async_request,
-			      int r);
-
-    int notify_flatten(ProgressContext &prog_ctx);
-    int notify_resize(uint64_t size, ProgressContext &prog_ctx);
+    int notify_flatten(uint64_t request_id, ProgressContext &prog_ctx);
+    int notify_resize(uint64_t request_id, uint64_t size,
+		      ProgressContext &prog_ctx);
     int notify_snap_create(const std::string &snap_name);
 
     static void notify_header_update(librados::IoCtx &io_ctx,
@@ -102,9 +98,6 @@ namespace librbd {
                                  uint64_t handle,
 				 uint64_t notifier_id,
                                  bufferlist& bl);
-      virtual void handle_failed_notify(uint64_t notify_id,
-                                        uint64_t handle,
-                                        uint64_t notifier_id);
       virtual void handle_error(uint64_t handle, int err);
     };
 
@@ -118,8 +111,8 @@ namespace librbd {
       }
 
       virtual int update_progress(uint64_t offset, uint64_t total) {
-	m_image_watcher.schedule_update_progress(
-	  m_remote_async_request, offset, total);
+	m_image_watcher.schedule_async_progress(m_remote_async_request, offset,
+						total);
         return 0;
       }
 
@@ -165,12 +158,11 @@ namespace librbd {
     SafeTimer *m_timer;
 
     RWLock m_async_request_lock;
-    uint64_t m_async_request_id;
     std::map<uint64_t, AsyncRequest> m_async_requests;
+    std::set<RemoteAsyncRequest> m_async_pending;
     std::set<RemoteAsyncRequest> m_async_progress;
 
     Mutex m_aio_request_lock;
-    std::list<Context *> m_aio_flush_contexts;
     std::vector<AioRequest> m_aio_requests;
     Context *m_retry_aio_context;
 
@@ -185,14 +177,15 @@ namespace librbd {
     void finalize_request_lock();
     void finalize_header_update();
 
-    void schedule_retry_aio_requests();
+    void schedule_retry_aio_requests(bool use_timer);
     void cancel_retry_aio_requests();
     void finalize_retry_aio_requests();
     void retry_aio_requests();
 
-    void cancel_async_requests(int result);
+    void schedule_cancel_async_requests();
+    void cancel_async_requests();
 
-    uint64_t encode_async_request(bufferlist &bl);
+    void encode_async_request(uint64_t request_id, bufferlist &bl);
     static int decode_response_code(bufferlist &bl);
 
     void notify_released_lock();
@@ -203,8 +196,14 @@ namespace librbd {
 			     ProgressContext& prog_ctx);
     void notify_request_leadership();
 
-    void schedule_update_progress(const RemoteAsyncRequest &remote_async_request,
-				  uint64_t offset, uint64_t total);
+    void schedule_async_progress(const RemoteAsyncRequest &remote_async_request,
+				 uint64_t offset, uint64_t total);
+    int notify_async_progress(const RemoteAsyncRequest &remote_async_request,
+			      uint64_t offset, uint64_t total);
+    void schedule_async_complete(const RemoteAsyncRequest &remote_async_request,
+				 int r);
+    int notify_async_complete(const RemoteAsyncRequest &remote_async_request,
+			      int r);
 
     void handle_header_update();
     void handle_acquired_lock();

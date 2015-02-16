@@ -1283,7 +1283,7 @@ void InodeStore::decode_bare(bufferlist::iterator &bl, __u8 struct_v)
       ::decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
-  if (struct_v >= 5)
+  if (struct_v >= 5 && !bl.end())
     ::decode(oldest_snap, bl);
 }
 

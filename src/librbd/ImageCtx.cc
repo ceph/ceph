@@ -299,7 +299,7 @@ namespace librbd {
       data_ctx.snap_set_read(snap_id);
 
       if (object_map != NULL) {
-        object_map->refresh();
+        object_map->refresh(in_snap_id);
       }
       return 0;
     }
@@ -314,7 +314,7 @@ namespace librbd {
     data_ctx.snap_set_read(snap_id);
 
     if (object_map != NULL) {
-      object_map->refresh();
+      object_map->refresh(CEPH_NOSNAP);
     }
   }
 
