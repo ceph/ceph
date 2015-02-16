@@ -1391,8 +1391,10 @@ int RGWRados::get_max_chunk_size(rgw_bucket& bucket, uint64_t *max_chunk_size)
 
 void RGWRados::finalize()
 {
-  finisher->stop();
-  delete finisher;
+  if (finisher) {
+    finisher->stop();
+    delete finisher;
+  }
   if (need_watch_notify()) {
     finalize_watch();
   }
