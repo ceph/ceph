@@ -7947,12 +7947,8 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
     return;
   }
 
-  vector<OSDOp> ops;
-  ceph_tid_t rep_tid = osd->get_tid();
-  osd_reqid_t reqid(osd->get_cluster_msgr_name(), 0, rep_tid);
-  OpContext *ctx = new OpContext(OpRequestRef(), reqid, ops, obc, this);
-  ctx->op_t = pgbackend->get_transaction();
-  ctx->mtime = ceph_clock_now(cct);
+  RepGather *repop = simple_repop_create(obc);
+  OpContext *ctx = repop->ctx;
   ctx->at_version = get_next_version();
 
   object_info_t& oi = ctx->new_obs.oi;
@@ -7964,7 +7960,6 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
 
 
   entity_inst_t nobody;
-  RepGather *repop = new_repop(ctx, obc, rep_tid);
   PGBackend::PGTransaction *t = ctx->op_t;
   ctx->log.push_back(pg_log_entry_t(pg_log_entry_t::MODIFY, obc->obs.oi.soid,
 				    ctx->at_version,
@@ -7987,9 +7982,10 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   }
 
   // obc ref swallowed by repop!
-  issue_repop(repop, repop->ctx->mtime);
-  eval_repop(repop);
-  repop->put();
+  simple_repop_submit(repop);
+
+  // apply new object state.
+  ctx->obc->obs = ctx->new_obs;
 }
 
 ObjectContextRef ReplicatedPG::create_object_context(const object_info_t& oi,
