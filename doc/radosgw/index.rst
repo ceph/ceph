@@ -3,7 +3,7 @@
 =====================
 
 :term:`Ceph Object Gateway` is an object storage interface built on top of
-``librgw`` to provide applications with a RESTful gateway to
+``librados`` to provide applications with a RESTful gateway to
 Ceph Storage Clusters. :term:`Ceph Object Storage` supports two interfaces:
 
 #. **S3-compatible:** Provides object storage functionality with an interface 
