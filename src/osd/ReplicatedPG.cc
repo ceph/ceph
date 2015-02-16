@@ -2046,7 +2046,8 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
     m->get_snapid(), NULL,
     flags, new C_OnFinisher(fin, &osd->objecter_finisher),
     &prdop->user_version,
-    &prdop->data_offset);
+    &prdop->data_offset,
+    m->get_features());
   fin->tid = tid;
   prdop->objecter_tid = tid;
   proxyread_ops[tid] = prdop;
