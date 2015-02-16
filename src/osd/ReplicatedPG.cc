@@ -1840,13 +1840,23 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
   }
 
+  // older versions do not proxy the feature bits.
+  bool can_proxy_read = get_osdmap()->get_up_osd_features() &
+    CEPH_FEATURE_OSD_PROXY_FEATURES;
+  OpRequestRef promote_op;
+
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
-	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
-	do_proxy_read(op);
+	if (can_proxy_read) {
+	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
+	  do_proxy_read(op);
+	} else {
+	  dout(20) << __func__ << " cache pool full, redirect read" << dendl;
+	  do_cache_redirect(op);
+	}
 	return true;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -1861,8 +1871,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
 
-    // Always proxy
-    do_proxy_read(op);
+    if (can_proxy_read)
+      do_proxy_read(op);
+    else
+      promote_op = op;   // for non-proxy case promote_object needs this
 
     // Avoid duplicate promotion
     if (obc.get() && obc->is_blocked()) {
@@ -1872,17 +1884,19 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
-      promote_object(obc, missing_oid, oloc, OpRequestRef());
+      promote_object(obc, missing_oid, oloc, promote_op);
       break;
     case 1:
       // Check if in the current hit set
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
+	promote_object(obc, missing_oid, oloc, promote_op);
+      } else if (!can_proxy_read) {
+	do_cache_redirect(op);
       }
       break;
     default:
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
+	promote_object(obc, missing_oid, oloc, promote_op);
       } else {
 	// Check if in other hit sets
 	map<time_t,HitSetRef>::iterator itor;
@@ -1894,7 +1908,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	  }
 	}
 	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, OpRequestRef());
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else if (!can_proxy_read) {
+	  do_cache_redirect(op);
 	}
       }
       break;
