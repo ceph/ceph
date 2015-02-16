@@ -780,7 +780,10 @@ protected:
 			     waiting_for_blocked_object;
   // Callbacks should assume pg (and nothing else) is locked
   map<hobject_t, list<Context*> > callbacks_for_degraded_object;
-  map<eversion_t,list<OpRequestRef> > waiting_for_ack, waiting_for_ondisk;
+
+  map<eversion_t,
+      list<pair<OpRequestRef, version_t> > > waiting_for_ack, waiting_for_ondisk;
+
   map<eversion_t,OpRequestRef>   replay_queue;
   void split_ops(PG *child, unsigned split_bits);
 
