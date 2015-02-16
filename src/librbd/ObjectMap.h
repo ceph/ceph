@@ -24,6 +24,9 @@ public:
 
   ObjectMap(ImageCtx &image_ctx);
 
+  static std::string object_map_name(const std::string &image_id,
+				     uint64_t snap_id);
+
   int lock();
   int unlock();
 
@@ -39,7 +42,9 @@ public:
 		  const boost::optional<uint8_t> &current_state,
 		  Context *on_finish);
 
-  int refresh();
+  void refresh(uint64_t snap_id);
+  void rollback(uint64_t snap_id);
+  void snapshot(uint64_t snap_id);
 
 private:
 
@@ -113,7 +118,7 @@ private:
 
   ImageCtx &m_image_ctx;
 
-  ceph::BitVector<2> object_map;
+  ceph::BitVector<2> m_object_map;
 
   void invalidate();
 
