@@ -6714,6 +6714,12 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
 
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
+    if (!(msg->get_connection()->get_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY)) {
+      dout(10) << "Got logevt resetting backfill from peer featuring bug"
+	       << " 10780, setting msg->info.last_epoch_started to logevt.query_epoch,"
+	       << " which is the activation epoch." << dendl;
+      msg->info.last_epoch_started = msg->get_query_epoch();
+    }
     // restart backfill
     pg->unreg_next_scrub();
     pg->info = msg->info;
