@@ -1518,6 +1518,9 @@ void ECBackend::start_write(Op *op) {
     trans[i->shard];
     trans[i->shard].set_use_tbl(parent->transaction_use_tbl());
   }
+  ObjectStore::Transaction empty;
+  empty.set_use_tbl(parent->transaction_use_tbl());
+
   op->t->generate_transactions(
     op->unstable_hash_infos,
     ec_impl,
@@ -1557,7 +1560,7 @@ void ECBackend::start_write(Op *op) {
       op->reqid,
       op->hoid,
       stats,
-      should_send ? iter->second : ObjectStore::Transaction(),
+      should_send ? iter->second : empty,
       op->version,
       op->trim_to,
       op->trim_rollback_to,
