@@ -419,7 +419,8 @@ def _yum_unset_check_obsoletes(remote):
     """
     conf_path = '/etc/yum/pluginconf.d/priorities.conf'
     conf_path_orig = conf_path + '.orig'
-    remote.run(args=['sudo', 'mv', '-f', conf_path_orig, conf_path])
+    remote.run(args=['sudo', 'mv', '-f', conf_path_orig, conf_path],
+               check_status=False)
 
 
 def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
