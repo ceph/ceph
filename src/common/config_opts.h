@@ -505,6 +505,10 @@ OPTION(osd_erasure_code_plugins, OPT_STR,
        " isa"
 #endif
        ) // list of erasure code plugins
+
+// Allows the "peered" state for recovery and backfill below min_size
+OPTION(osd_allow_recovery_below_min_size, OPT_BOOL, true)
+
 OPTION(osd_pool_default_flags, OPT_INT, 0)   // default flags for new pools
 OPTION(osd_pool_default_flag_hashpspool, OPT_BOOL, true)   // use new pg hashing to prevent pool/pg overlap
 OPTION(osd_pool_default_flag_nodelete, OPT_BOOL, false) // pool can't be deleted
