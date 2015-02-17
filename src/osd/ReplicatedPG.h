@@ -1009,7 +1009,7 @@ protected:
       pg(p), obc(o) {}
     void finish(int r) {
       pg->object_context_destructor_callback(obc);
-     }
+    }
   };
 
   int find_object_context(const hobject_t& oid,
