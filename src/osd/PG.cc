@@ -1312,7 +1312,8 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id)
   // Otherwise, we will go "peered", but not "active"
   if (num_want_acting < pool.info.min_size &&
       (pool.info.ec_pool() ||
-       !(get_min_peer_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY))) {
+       (!(get_min_peer_features() & CEPH_FEATURE_OSD_MIN_SIZE_RECOVERY)) ||
+       !cct->_conf->osd_allow_recovery_below_min_size)) {
     want_acting.clear();
     dout(10) << "choose_acting failed, below min size" << dendl;
     return false;
