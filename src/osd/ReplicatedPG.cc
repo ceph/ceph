@@ -10338,6 +10338,7 @@ void ReplicatedPG::on_shutdown()
   pgbackend->on_change();
 
   context_registry_on_change();
+  object_contexts.clear();
 
   osd->remote_reserver.cancel_reservation(info.pgid);
   osd->local_reserver.cancel_reservation(info.pgid);
