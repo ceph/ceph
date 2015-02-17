@@ -343,9 +343,9 @@ def _update_deb_package_list_and_install(ctx, remote, debs, config):
         ],
         stdout=StringIO(),
     )
+    remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
     remote.run(
         args=[
-            'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
             '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
                 'Dpkg::Options::="--force-confold"'),
@@ -909,9 +909,9 @@ def _upgrade_deb_packages(ctx, config, remote, debs):
         ],
         stdout=StringIO(),
     )
+    remote.run(args=['sudo', 'apt-get', 'update'], check_status=False)
     remote.run(
         args=[
-            'sudo', 'apt-get', 'update', run.Raw('&&'),
             'sudo', 'DEBIAN_FRONTEND=noninteractive', 'apt-get', '-y', '--force-yes',
             '-o', run.Raw('Dpkg::Options::="--force-confdef"'), '-o', run.Raw(
                 'Dpkg::Options::="--force-confold"'),
