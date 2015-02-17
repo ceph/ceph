@@ -440,6 +440,36 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
   op->mark_delayed("waiting for all missing");
 }
 
+bool ReplicatedPG::is_degraded_object(const hobject_t &soid, int *healthy_copies)
+{
+  bool degraded = false;
+  assert(healthy_copies);
+  *healthy_copies = 0;
+
+  if (pg_log.get_missing().missing.count(soid)) {
+    degraded = true;
+  } else {
+    *healthy_copies += 1;
+  }
+
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    if (peer_missing.count(peer) &&
+        peer_missing[peer].missing.count(soid)) {
+      degraded = true;
+      continue;
+    }
+
+    assert(peer_info.count(peer));
+    if (!peer_info[peer].is_incomplete())
+      *healthy_copies += 1;
+  }
+  return degraded;
+}
+
 bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
@@ -1453,10 +1483,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
    *
    * We also block if our peers do not support DEGRADED_WRITES.
    */
-  if ((pool.info.ec_pool() ||
-       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES)) &&
-      write_ordered &&
-      is_degraded_or_backfilling_object(head)) {
+  int valid_copies = 0;
+  if (write_ordered &&
+      is_degraded_object(head, &valid_copies) &&
+      (valid_copies < pool.info.min_size ||
+       pool.info.ec_pool() ||
+       !cct->_conf->osd_enable_degraded_writes ||
+       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES))) {
     wait_for_degraded_object(head, op);
     return;
   }
