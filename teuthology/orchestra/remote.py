@@ -216,7 +216,17 @@ class Remote(object):
     def get_file(self, path, sudo=False, dest_dir='/tmp'):
         """
         Fetch a remote file, and return its local filename.
+
+        :param sudo:     Use sudo on the remote end to read a file that
+                         requires it. Defaults to False.
+        :param dest_dir: Store the file in this directory. If it is /tmp,
+                         generate a unique filename; if not, use the original
+                         filename.
+        :returns:        The path to the local file
         """
+        if not os.path.isdir(dest_dir):
+            raise IOError("{dir} is not a directory".format(dir=dest_dir))
+
         if sudo:
             orig_path = path
             path = self.mktemp()
@@ -228,12 +238,20 @@ class Remote(object):
                 ]
             self.run(args=args)
             self.chmod(path, '0666')
-        (fd, local_temp_path) = tempfile.mkstemp(dir=dest_dir)
-        os.close(fd)
-        self._sftp_get_file(path, local_temp_path)
+
+        if dest_dir == '/tmp':
+            # If we're storing in /tmp, generate a unique filename
+            (fd, local_path) = tempfile.mkstemp(dir=dest_dir)
+            os.close(fd)
+        else:
+            # If we are storing somewhere other than /tmp, use the original
+            # filename
+            local_path = os.path.join(dest_dir, path.split(os.path.sep)[-1])
+
+        self._sftp_get_file(path, local_path)
         if sudo:
             self.remove(path)
-        return local_temp_path
+        return local_path
 
     def get_tar(self, path, to_path, sudo=False):
         """
