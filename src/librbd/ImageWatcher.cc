@@ -860,9 +860,17 @@ void ImageWatcher::handle_flatten(bufferlist::iterator iter, bufferlist *out) {
     RemoteAsyncRequest request;
     ::decode(request, iter);
 
+    bool new_request;
+    {
+      RWLock::WLocker l(m_async_request_lock);
+      new_request = (m_async_pending.count(request) == 0);
+      if (new_request) {
+	m_async_pending.insert(request);
+      }
+    }
+
     int r = 0;
-    RWLock::WLocker l(m_async_request_lock);
-    if (m_async_pending.count(request) == 0) {
+    if (new_request) {
       RemoteProgressContext *prog_ctx =
 	new RemoteProgressContext(*this, request);
       RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
@@ -873,8 +881,9 @@ void ImageWatcher::handle_flatten(bufferlist::iterator iter, bufferlist *out) {
 	delete ctx;
 	lderr(m_image_ctx.cct) << "remove flatten request failed: "
 			       << cpp_strerror(r) << dendl;
-      } else {
-	m_async_pending.insert(request);
+
+	RWLock::WLocker l(m_async_request_lock);
+	m_async_pending.erase(request);
       }
     }
 
@@ -893,9 +902,17 @@ void ImageWatcher::handle_resize(bufferlist::iterator iter, bufferlist *out) {
     RemoteAsyncRequest request;
     ::decode(request, iter);
 
+    bool new_request;
+    {
+      RWLock::WLocker l(m_async_request_lock);
+      new_request = (m_async_pending.count(request) == 0);
+      if (new_request) {
+	m_async_pending.insert(request);
+      }
+    }
+
     int r = 0;
-    RWLock::WLocker l(m_async_request_lock);
-    if (m_async_pending.count(request) == 0) {
+    if (new_request) {
       RemoteProgressContext *prog_ctx =
 	new RemoteProgressContext(*this, request);
       RemoteContext *ctx = new RemoteContext(*this, request, prog_ctx);
@@ -907,8 +924,9 @@ void ImageWatcher::handle_resize(bufferlist::iterator iter, bufferlist *out) {
 	lderr(m_image_ctx.cct) << "remove resize request failed: "
 			       << cpp_strerror(r) << dendl;
 	delete ctx;
-      } else {
-	m_async_pending.insert(request);
+
+	RWLock::WLocker l(m_async_request_lock);
+	m_async_pending.erase(request);
       }
     }
 
@@ -1046,6 +1064,13 @@ void ImageWatcher::acknowledge_notify(uint64_t notify_id, uint64_t handle,
   m_image_ctx.md_ctx.notify_ack(m_image_ctx.header_oid, notify_id, handle, out);
 }
 
+void ImageWatcher::schedule_reregister_watch() {
+  Mutex::Locker l(m_timer_lock);
+  Context *ctx = new FunctionContext(boost::bind(
+    &ImageWatcher::reregister_watch, this));
+  m_timer->add_event_after(RETRY_DELAY_SECONDS, ctx);
+}
+
 void ImageWatcher::reregister_watch() {
   ldout(m_image_ctx.cct, 10) << "re-registering image watch" << dendl;
 
@@ -1068,10 +1093,11 @@ void ImageWatcher::reregister_watch() {
       if (r < 0) {
         lderr(m_image_ctx.cct) << "failed to re-register image watch: "
                                << cpp_strerror(r) << dendl;
-	Mutex::Locker l(m_timer_lock);
-	FunctionContext *ctx = new FunctionContext(boost::bind(
-	  &ImageWatcher::reregister_watch, this));
-	m_timer->add_event_after(RETRY_DELAY_SECONDS, ctx);
+	if (r != -ESHUTDOWN) {
+	  FunctionContext *ctx = new FunctionContext(boost::bind(
+	    &ImageWatcher::schedule_reregister_watch, this));
+	  m_finisher->queue(ctx);
+	}
         return;
       }
 
