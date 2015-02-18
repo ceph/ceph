@@ -41,10 +41,12 @@ class TestIntegration():
             run.run,
             client=ssh,
             args=['sh', '-c', 'kill -ABRT $PPID'],
+            name=HOST,
             )
         assert e.command == "sh -c 'kill -ABRT $PPID'"
         assert str(e) == \
-            "SSH connection was lost: \"sh -c 'kill -ABRT $PPID'\""
+            "SSH connection to {host} was lost: ".format(host=HOST) + \
+            "\"sh -c 'kill -ABRT $PPID'\""
 
     def test_pipe(self):
         ssh = connection.connect(HOST)
