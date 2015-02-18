@@ -220,6 +220,8 @@ namespace librbd {
     void handle_error(uint64_t cookie, int err);
     void acknowledge_notify(uint64_t notify_id, uint64_t handle,
 			    bufferlist &out);
+
+    void schedule_reregister_watch();
     void reregister_watch();
   };
 
