@@ -573,6 +573,16 @@ void FileJournal::close()
 
 int FileJournal::dump(ostream& out)
 {
+  return _dump(out, false);
+}
+
+int FileJournal::simple_dump(ostream& out)
+{
+  return _dump(out, true);
+}
+
+int FileJournal::_dump(ostream& out, bool simple)
+{
   dout(10) << "dump" << dendl;
 
   assert(fd == -1);
@@ -637,19 +647,23 @@ int FileJournal::dump(ostream& out)
     f.open_object_section("entry");
     f.dump_unsigned("offset", pos);
     f.dump_unsigned("seq", seq);
-    f.open_array_section("transactions");
-    bufferlist::iterator p = bl.begin();
-    int trans_num = 0;
-    while (!p.end()) {
-      ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
-      f.open_object_section("transaction");
-      f.dump_unsigned("trans_num", trans_num);
-      t->dump(&f);
+    if (simple) {
+      f.dump_unsigned("bl.length", bl.length());
+    } else {
+      f.open_array_section("transactions");
+      bufferlist::iterator p = bl.begin();
+      int trans_num = 0;
+      while (!p.end()) {
+        ObjectStore::Transaction *t = new ObjectStore::Transaction(p);
+        f.open_object_section("transaction");
+        f.dump_unsigned("trans_num", trans_num);
+        t->dump(&f);
+        f.close_section();
+        delete t;
+        trans_num++;
+      }
       f.close_section();
-      delete t;
-      trans_num++;
     }
-    f.close_section();
     f.close_section();
   }
 
