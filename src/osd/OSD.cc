@@ -4413,7 +4413,8 @@ void OSD::_send_boot()
   }
 
   MOSDBoot *mboot = new MOSDBoot(superblock, service.get_boot_epoch(),
-                                 hb_back_addr, hb_front_addr, cluster_addr);
+                                 hb_back_addr, hb_front_addr, cluster_addr,
+				 CEPH_FEATURES_ALL);
   dout(10) << " client_addr " << client_messenger->get_myaddr()
 	   << ", cluster_addr " << cluster_addr
 	   << ", hb_back_addr " << hb_back_addr

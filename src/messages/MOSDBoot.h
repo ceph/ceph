@@ -22,7 +22,7 @@
 
 class MOSDBoot : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 5;
+  static const int HEAD_VERSION = 6;
   static const int COMPAT_VERSION = 2;
 
  public:
@@ -31,21 +31,24 @@ class MOSDBoot : public PaxosServiceMessage {
   entity_addr_t cluster_addr;
   epoch_t boot_epoch;  // last epoch this daemon was added to the map (if any)
   map<string,string> metadata; ///< misc metadata about this osd
+  uint64_t osd_features;
 
   MOSDBoot()
     : PaxosServiceMessage(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
-      boot_epoch(0)
+      boot_epoch(0), osd_features(0)
   { }
   MOSDBoot(OSDSuperblock& s, epoch_t be,
 	   const entity_addr_t& hb_back_addr_ref,
 	   const entity_addr_t& hb_front_addr_ref,
-           const entity_addr_t& cluster_addr_ref)
+           const entity_addr_t& cluster_addr_ref,
+	   uint64_t feat)
     : PaxosServiceMessage(MSG_OSD_BOOT, s.current_epoch, HEAD_VERSION, COMPAT_VERSION),
       sb(s),
       hb_back_addr(hb_back_addr_ref),
       hb_front_addr(hb_front_addr_ref),
       cluster_addr(cluster_addr_ref),
-      boot_epoch(be)
+      boot_epoch(be),
+      osd_features(feat)
   { }
   
 private:
@@ -54,7 +57,9 @@ private:
 public:
   const char *get_type_name() const { return "osd_boot"; }
   void print(ostream& out) const {
-    out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch << " v" << version << ")";
+    out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
+	<< " features " << osd_features
+	<< " v" << version << ")";
   }
   
   void encode_payload(uint64_t features) {
@@ -65,6 +70,7 @@ public:
     ::encode(boot_epoch, payload);
     ::encode(hb_front_addr, payload);
     ::encode(metadata, payload);
+    ::encode(osd_features, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
@@ -79,6 +85,10 @@ public:
       ::decode(hb_front_addr, p);
     if (header.version >= 5)
       ::decode(metadata, p);
+    if (header.version >= 6)
+      ::decode(osd_features, p);
+    else
+      osd_features = 0;
   }
 };
 
