@@ -1810,10 +1810,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     dout(25) << __func__ << " " << obc->obs.oi << " "
 	     << (obc->obs.exists ? "exists" : "DNE")
 	     << " missing_oid " << missing_oid
+	     << " must_promote " << (int)must_promote
+	     << " in_hit_set " << (int)in_hit_set
 	     << dendl;
   else
     dout(25) << __func__ << " (no obc)"
 	     << " missing_oid " << missing_oid
+	     << " must_promote " << (int)must_promote
+	     << " in_hit_set " << (int)in_hit_set
 	     << dendl;
 
   // if it is write-ordered and blocked, stop now
