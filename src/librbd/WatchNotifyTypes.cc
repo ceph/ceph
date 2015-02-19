@@ -3,6 +3,7 @@
 
 #include "librbd/WatchNotifyTypes.h"
 #include "include/assert.h"
+#include "common/Formatter.h"
 
 namespace librbd {
 namespace WatchNotify {
@@ -37,6 +38,19 @@ private:
   bufferlist::iterator &m_iter;
 };
 
+class DumpPayloadVisitor : public boost::static_visitor<void> {
+public:
+  DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
+
+  template <typename Payload>
+  inline void operator()(const Payload &payload) const {
+    payload.dump(m_formatter);
+  }
+
+private:
+  ceph::Formatter *m_formatter;
+};
+
 }
 
 void ClientId::encode(bufferlist &bl) const {
@@ -49,6 +63,11 @@ void ClientId::decode(bufferlist::iterator &iter) {
   ::decode(handle, iter);
 }
 
+void ClientId::dump(Formatter *f) const {
+  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("handle", handle);
+}
+
 void AsyncRequestId::encode(bufferlist &bl) const {
   ::encode(client_id, bl);
   ::encode(request_id, bl);
@@ -59,11 +78,22 @@ void AsyncRequestId::decode(bufferlist::iterator &iter) {
   ::decode(request_id, iter);
 }
 
+void AsyncRequestId::dump(Formatter *f) const {
+  f->open_object_section("client_id");
+  client_id.dump(f);
+  f->close_section();
+  f->dump_unsigned("request_id", request_id);
+}
+
 void AcquiredLockPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_ACQUIRED_LOCK), bl);
 }
 
 void AcquiredLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+}
+
+void AcquiredLockPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "AcquiredLock");
 }
 
 void ReleasedLockPayload::encode(bufferlist &bl) const {
@@ -73,6 +103,10 @@ void ReleasedLockPayload::encode(bufferlist &bl) const {
 void ReleasedLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
+void ReleasedLockPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "ReleasedLock");
+}
+
 void RequestLockPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_REQUEST_LOCK), bl);
 }
@@ -80,11 +114,19 @@ void RequestLockPayload::encode(bufferlist &bl) const {
 void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
+void RequestLockPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "RequestLock");
+}
+
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_HEADER_UPDATE), bl);
 }
 
 void HeaderUpdatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+}
+
+void HeaderUpdatePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "HeaderUpdate");
 }
 
 void AsyncProgressPayload::encode(bufferlist &bl) const {
@@ -100,6 +142,15 @@ void AsyncProgressPayload::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(total, iter);
 }
 
+void AsyncProgressPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "AsyncProgress");
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
+  f->dump_unsigned("offset", offset);
+  f->dump_unsigned("total", total);
+}
+
 void AsyncCompletePayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_ASYNC_COMPLETE), bl);
   ::encode(async_request_id, bl);
@@ -111,6 +162,14 @@ void AsyncCompletePayload::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(result, iter);
 }
 
+void AsyncCompletePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "AsyncComplete");
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
+  f->dump_int("result", result);
+}
+
 void FlattenPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_FLATTEN), bl);
   ::encode(async_request_id, bl);
@@ -118,6 +177,13 @@ void FlattenPayload::encode(bufferlist &bl) const {
 
 void FlattenPayload::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(async_request_id, iter);
+}
+
+void FlattenPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "Flatten");
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
 }
 
 void ResizePayload::encode(bufferlist &bl) const {
@@ -131,6 +197,14 @@ void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(async_request_id, iter);
 }
 
+void ResizePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "Resize");
+  f->dump_unsigned("size", size);
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
+}
+
 void SnapCreatePayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_SNAP_CREATE), bl);
   ::encode(snap_name, bl);
@@ -140,11 +214,19 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
   ::decode(snap_name, iter);
 }
 
+void SnapCreatePayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", "SnapCreate");
+  f->dump_string("snap_name", snap_name);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   assert(false);
 }
 
 void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+}
+
+void UnknownPayload::dump(Formatter *f) const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
@@ -197,6 +279,22 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   DECODE_FINISH(iter);
 }
 
+void NotifyMessage::dump(Formatter *f) const {
+  apply_visitor(DumpPayloadVisitor(f), payload);
+}
+
+void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
+  o.push_back(new NotifyMessage(AcquiredLockPayload()));
+  o.push_back(new NotifyMessage(ReleasedLockPayload()));
+  o.push_back(new NotifyMessage(RequestLockPayload()));
+  o.push_back(new NotifyMessage(HeaderUpdatePayload()));
+  o.push_back(new NotifyMessage(AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
+  o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
+  o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(ResizePayload(123, AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
+}
+
 void ResponseMessage::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   ::encode(result, bl);
@@ -207,6 +305,14 @@ void ResponseMessage::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
   ::decode(result, iter);
   DECODE_FINISH(iter);
+}
+
+void ResponseMessage::dump(Formatter *f) const {
+  f->dump_int("result", result);
+}
+
+void ResponseMessage::generate_test_instances(std::list<ResponseMessage *> &o) {
+  o.push_back(new ResponseMessage(1));
 }
 
 } // namespace WatchNotify
