@@ -417,7 +417,6 @@ void Objecter::_send_linger(LingerOp *info)
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
 
   vector<OSDOp> opv;
-  Context *onack = NULL;
   Context *oncommit = NULL;
   info->watch_lock.get_read(); // just to read registered status
   if (info->registered && info->is_watch) {
@@ -431,15 +430,14 @@ void Objecter::_send_linger(LingerOp *info)
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
     opv = info->ops;
-    if (info->on_reg_ack)
-      onack = new C_Linger_Register(this, info);
     oncommit = new C_Linger_Commit(this, info);
   }
   info->watch_lock.put_read();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, oncommit,
+		 NULL, NULL,
 		 info->pobjver);
+  o->oncommit_sync = oncommit;
   o->snapid = info->snap;
   o->snapc = info->snapc;
   o->mtime = info->mtime;
@@ -467,15 +465,6 @@ void Objecter::_send_linger(LingerOp *info)
   }
 
   logger->inc(l_osdc_linger_send);
-}
-
-void Objecter::_linger_register(LingerOp *info, int r)
-{
-  ldout(cct, 10) << "_linger_register " << info->linger_id << dendl;
-  if (info->on_reg_ack) {
-    info->on_reg_ack->complete(r);
-    info->on_reg_ack = NULL;
-  }
 }
 
 void Objecter::_linger_commit(LingerOp *info, int r) 
@@ -562,7 +551,8 @@ void Objecter::_send_linger_ping(LingerOp *info)
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, NULL, NULL);
+		 NULL, NULL, NULL);
+  o->oncommit_sync = onack;
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
@@ -690,7 +680,6 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
   info->inbl = inbl;
   info->poutbl = NULL;
   info->pobjver = objver;
-  info->on_reg_ack = NULL;
   info->on_reg_commit = oncommit;
 
   RWLock::WLocker wl(rwlock);
@@ -1390,9 +1379,6 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
-      if (op->on_reg_ack) {
-	op->on_reg_ack->complete(-ENOENT);
-      }
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
       }
@@ -2714,7 +2700,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->oncommit)
+  if (op->oncommit || op->oncommit_sync)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
@@ -3010,6 +2996,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->oncommit = 0;
     num_uncommitted.dec();
     logger->inc(l_osdc_op_commit);
+  }
+  if (op->oncommit_sync) {
+    op->oncommit_sync->complete(rc);
+    op->oncommit_sync = NULL;
   }
 
   /* get it before we call _finish_op() */
