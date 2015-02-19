@@ -1160,6 +1160,7 @@ public:
 
     int priority;
     Context *onack, *oncommit, *ontimeout;
+    Context *oncommit_sync;         // used internally by watch/notify
 
     ceph_tid_t tid;
     eversion_t replay_version;        // for op replay
@@ -1191,10 +1192,15 @@ public:
       con(NULL),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
-      priority(0), onack(ac), oncommit(co),
+      priority(0),
+      onack(ac),
+      oncommit(co),
       ontimeout(NULL),
-      tid(0), attempts(0),
-      objver(ov), reply_epoch(NULL),
+      oncommit_sync(NULL),
+      tid(0),
+      attempts(0),
+      objver(ov),
+      reply_epoch(NULL),
       map_dne_bound(0),
       budgeted(false),
       should_resend(true),
@@ -1520,7 +1526,7 @@ public:
     uint32_t register_gen;
     bool registered;
     bool canceled;
-    Context *on_reg_ack, *on_reg_commit;
+    Context *on_reg_commit;
 
     // we trigger these from an async finisher
     Context *on_notify_finish;
@@ -1554,7 +1560,7 @@ public:
 		 register_gen(0),
 		 registered(false),
 		 canceled(false),
-		 on_reg_ack(NULL), on_reg_commit(NULL),
+		 on_reg_commit(NULL),
 		 on_notify_finish(NULL),
 		 notify_result_bl(NULL),
 		 watch_context(NULL),
@@ -1577,20 +1583,6 @@ public:
     }
   };
 
-  struct C_Linger_Register : public Context {
-    Objecter *objecter;
-    LingerOp *info;
-    C_Linger_Register(Objecter *o, LingerOp *l) : objecter(o), info(l) {
-      info->get();
-    }
-    ~C_Linger_Register() {
-      info->put();
-    }
-    void finish(int r) {
-      objecter->_linger_register(info, r);
-    }
-  };
-  
   struct C_Linger_Commit : public Context {
     Objecter *objecter;
     LingerOp *info;
@@ -1746,7 +1738,6 @@ public:
 
   void _linger_submit(LingerOp *info);
   void _send_linger(LingerOp *info);
-  void _linger_register(LingerOp *info, int r);
   void _linger_commit(LingerOp *info, int r);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
