@@ -17,7 +17,7 @@ class ObjecterWriteback : public WritebackHandler {
   virtual void read(const object_t& oid, uint64_t object_no,
 		    const object_locator_t& oloc, uint64_t off, uint64_t len,
 		    snapid_t snapid, bufferlist *pbl, uint64_t trunc_size,
-		    __u32 trunc_seq, Context *onfinish) {
+		    __u32 trunc_seq, int op_flags, Context *onfinish) {
     m_objecter->read_trunc(oid, oloc, off, len, snapid, pbl, 0,
 			   trunc_size, trunc_seq,
 			   new C_OnFinisher(new C_Lock(m_lock, onfinish),
