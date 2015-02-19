@@ -29,6 +29,10 @@ struct ClientId {
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
 
+  inline bool is_valid() const {
+    return (*this != ClientId());
+  }
+
   inline bool operator==(const ClientId &rhs) const {
     return (gid == rhs.gid && handle == rhs.handle);
   }
@@ -78,18 +82,33 @@ enum NotifyOp {
 };
 
 struct AcquiredLockPayload {
+  ClientId client_id;
+
+  AcquiredLockPayload() {}
+  AcquiredLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
   void dump(Formatter *f) const;
 };
 
 struct ReleasedLockPayload {
+  ClientId client_id;
+
+  ReleasedLockPayload() {}
+  ReleasedLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
   void dump(Formatter *f) const;
 };
 
 struct RequestLockPayload {
+  ClientId client_id;
+
+  RequestLockPayload() {}
+  RequestLockPayload(const ClientId &client_id_) : client_id(client_id_) {}
+
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
   void dump(Formatter *f) const;

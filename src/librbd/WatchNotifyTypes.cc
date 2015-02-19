@@ -87,35 +87,56 @@ void AsyncRequestId::dump(Formatter *f) const {
 
 void AcquiredLockPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_ACQUIRED_LOCK), bl);
+  ::encode(client_id, bl);
 }
 
 void AcquiredLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  if (version >= 2) {
+    ::decode(client_id, iter);
+  }
 }
 
 void AcquiredLockPayload::dump(Formatter *f) const {
   f->dump_string("notify_op", "AcquiredLock");
+  f->open_object_section("client_id");
+  client_id.dump(f);
+  f->close_section();
 }
 
 void ReleasedLockPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_RELEASED_LOCK), bl);
+  ::encode(client_id, bl);
 }
 
 void ReleasedLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  if (version >= 2) {
+    ::decode(client_id, iter);
+  }
 }
 
 void ReleasedLockPayload::dump(Formatter *f) const {
   f->dump_string("notify_op", "ReleasedLock");
+  f->open_object_section("client_id");
+  client_id.dump(f);
+  f->close_section();
 }
 
 void RequestLockPayload::encode(bufferlist &bl) const {
   ::encode(static_cast<uint32_t>(NOTIFY_OP_REQUEST_LOCK), bl);
+  ::encode(client_id, bl);
 }
 
 void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  if (version >= 2) {
+    ::decode(client_id, iter);
+  }
 }
 
 void RequestLockPayload::dump(Formatter *f) const {
   f->dump_string("notify_op", "RequestLock");
+  f->open_object_section("client_id");
+  client_id.dump(f);
+  f->close_section();
 }
 
 void HeaderUpdatePayload::encode(bufferlist &bl) const {
@@ -230,7 +251,7 @@ void UnknownPayload::dump(Formatter *f) const {
 }
 
 void NotifyMessage::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   boost::apply_visitor(EncodePayloadVisitor(bl), payload);
   ENCODE_FINISH(bl);
 }
@@ -284,9 +305,9 @@ void NotifyMessage::dump(Formatter *f) const {
 }
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
-  o.push_back(new NotifyMessage(AcquiredLockPayload()));
-  o.push_back(new NotifyMessage(ReleasedLockPayload()));
-  o.push_back(new NotifyMessage(RequestLockPayload()));
+  o.push_back(new NotifyMessage(AcquiredLockPayload(ClientId(1, 2))));
+  o.push_back(new NotifyMessage(ReleasedLockPayload(ClientId(1, 2))));
+  o.push_back(new NotifyMessage(RequestLockPayload(ClientId(1, 2))));
   o.push_back(new NotifyMessage(HeaderUpdatePayload()));
   o.push_back(new NotifyMessage(AsyncProgressPayload(AsyncRequestId(ClientId(0, 1), 2), 3, 4)));
   o.push_back(new NotifyMessage(AsyncCompletePayload(AsyncRequestId(ClientId(0, 1), 2), 3)));
