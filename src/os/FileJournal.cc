@@ -823,7 +823,8 @@ int FileJournal::prepare_multi_write(bufferlist& bl, uint64_t& orig_ops, uint64_
   }
 
   dout(20) << "prepare_multi_write queue_pos now " << queue_pos << dendl;
-  //assert(write_pos + bl.length() == queue_pos);
+  assert((write_pos + bl.length() == queue_pos) ||
+         (write_pos + bl.length() - header.max_size + get_top() == queue_pos));
   return 0;
 }
 
@@ -1022,22 +1023,32 @@ void FileJournal::do_write(bufferlist& bl)
     dout(10) << "do_write wrapping, first bit at " << pos << " len " << first.length()
 	     << " second bit len " << second.length() << " (orig len " << bl.length() << ")" << dendl;
 
-    if (write_bl(pos, first)) {
-      derr << "FileJournal::do_write: write_bl(pos=" << pos
-	   << ") failed" << dendl;
-      ceph_abort();
-    }
-    assert(pos == get_top());
+    //Save pos to write first piece second
+    off64_t first_pos = pos;
+    off64_t orig_pos;
+    pos = get_top();
+    // header too?
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
       second.push_front(hbp);
       pos = 0;          // we included the header
     }
+    // Write the second portion first possible with the header, so
+    // do_read_entry() won't even get a valid entry_header_t if there
+    // is a crash between the two writes.
+    orig_pos = pos;
     if (write_bl(pos, second)) {
-      derr << "FileJournal::do_write: write_bl(pos=" << pos
+      derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
 	   << ") failed" << dendl;
       ceph_abort();
     }
+    orig_pos = first_pos;
+    if (write_bl(first_pos, first)) {
+      derr << "FileJournal::do_write: write_bl(pos=" << orig_pos
+	   << ") failed" << dendl;
+      ceph_abort();
+    }
+    assert(first_pos == get_top());
   } else {
     // header too?
     if (hbp.length()) {
