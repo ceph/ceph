@@ -114,7 +114,7 @@ BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
 
 // </magic>
 
-void MonCapGrant::expand_profile(entity_name_t name) const
+void MonCapGrant::expand_profile(EntityName name) const
 {
   // only generate this list once
   if (!profile_grants.empty())
@@ -196,7 +196,7 @@ void MonCapGrant::expand_profile(entity_name_t name) const
 }
 
 mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
-				    entity_name_t name,
+				    EntityName name,
 				    const std::string& s, const std::string& c,
 				    const map<string,string>& c_args) const
 {
@@ -262,7 +262,7 @@ void MonCap::set_allow_all()
 }
 
 bool MonCap::is_capable(CephContext *cct,
-			entity_name_t name,
+			EntityName name,
 			const string& service,
 			const string& command, const map<string,string>& command_args,
 			bool op_may_read, bool op_may_write, bool op_may_exec) const
