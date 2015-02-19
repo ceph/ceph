@@ -453,7 +453,7 @@ class ObjectCacher {
   void bh_remove(Object *ob, BufferHead *bh);
 
   // io
-  void bh_read(BufferHead *bh);
+  void bh_read(BufferHead *bh, int op_flags);
   void bh_write(BufferHead *bh);
 
   void trim();
