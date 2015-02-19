@@ -56,8 +56,7 @@ namespace librbd {
 
     enum LockOwnerState {
       LOCK_OWNER_STATE_NOT_LOCKED,
-      LOCK_OWNER_STATE_LOCKED,
-      LOCK_OWNER_STATE_RELEASING
+      LOCK_OWNER_STATE_LOCKED
     };
 
     enum WatchState {
@@ -127,12 +126,12 @@ namespace librbd {
       ImageWatcher *image_watcher;
       uint64_t notify_id;
       uint64_t handle; 
-      bool loopback;
 
       HandlePayloadVisitor(ImageWatcher *image_watcher_, uint64_t notify_id_,
-			   uint64_t handle_, bool loopback_)
-	: image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_),
-	  loopback(loopback_) {}
+			   uint64_t handle_)
+	: image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_)
+      {
+      }
 
       inline void operator()(const WatchNotify::HeaderUpdatePayload &payload) const {
 	bufferlist out;
@@ -143,9 +142,7 @@ namespace librbd {
       template <typename Payload>
       inline void operator()(const Payload &payload) const {
 	bufferlist out;
-	if (!loopback) {
-	  image_watcher->handle_payload(payload, &out);
-	}
+	image_watcher->handle_payload(payload, &out);
 	image_watcher->acknowledge_notify(notify_id, handle, out);
       }
     };
@@ -173,6 +170,9 @@ namespace librbd {
     std::vector<AioRequest> m_aio_requests;
     Context *m_retry_aio_context;
 
+    Mutex m_owner_client_id_lock;
+    WatchNotify::ClientId m_owner_client_id;
+
     std::string encode_lock_cookie() const;
     static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
 
@@ -192,11 +192,10 @@ namespace librbd {
     void cancel_async_requests();
 
     WatchNotify::ClientId get_client_id();
-    static int decode_response_code(bufferlist &bl);
 
     void notify_released_lock();
     void notify_request_lock();
-    int notify_lock_owner(bufferlist &bl, bufferlist &response);
+    int notify_lock_owner(bufferlist &bl);
 
     int notify_async_request(const WatchNotify::AsyncRequestId &id,
 			     bufferlist &in, ProgressContext& prog_ctx);
