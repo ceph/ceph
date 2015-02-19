@@ -53,12 +53,18 @@ def generate_iso(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     for client, client_config in config.iteritems():
         assert 'test' in client_config, 'You must specify a test to run'
+        (remote,) = ctx.cluster.only(client).remotes.keys()
         src_dir = os.path.dirname(__file__)
         userdata_path = os.path.join(testdir, 'qemu', 'userdata.' + client)
         metadata_path = os.path.join(testdir, 'qemu', 'metadata.' + client)
 
         with file(os.path.join(src_dir, 'userdata_setup.yaml'), 'rb') as f:
             test_setup = ''.join(f.readlines())
+            # configuring the commands to setup the nfs mount
+            mnt_dir = "/export/{client}".format(client=client)
+            test_setup = test_setup.format(
+                mnt_dir=mnt_dir
+            )
 
         with file(os.path.join(src_dir, 'userdata_teardown.yaml'), 'rb') as f:
             test_teardown = ''.join(f.readlines())
@@ -84,7 +90,6 @@ def generate_iso(ctx, config):
   /mnt/cdrom/test.sh > /mnt/log/test.log 2>&1 && touch /mnt/log/success
 """ + test_teardown
 
-        (remote,) = ctx.cluster.only(client).remotes.keys()
         teuthology.write_file(remote, userdata_path, StringIO(user_data))
 
         with file(os.path.join(src_dir, 'metadata.yaml'), 'rb') as f:
@@ -154,6 +159,77 @@ def download_image(ctx, config):
                     ],
                 )
 
+
+def _setup_nfs_mount(remote, client, mount_dir):
+    """
+    Sets up an nfs mount on the remote that the guest can use to
+    store logs. This nfs mount is also used to touch a file
+    at the end of the test to indiciate if the test was successful
+    or not.
+    """
+    export_dir = "/export/{client}".format(client=client)
+    log.info("Creating the nfs export directory...")
+    remote.run(args=[
+        'sudo', 'mkdir', '-p', export_dir,
+    ])
+    log.info("Mounting the test directory...")
+    remote.run(args=[
+        'sudo', 'mount', '--bind', mount_dir, export_dir,
+    ])
+    log.info("Adding mount to /etc/exports...")
+    export = "{dir} *(rw,no_root_squash,no_subtree_check,insecure)".format(
+        dir=export_dir
+    )
+    remote.run(args=[
+        'echo', export, run.Raw("|"),
+        'sudo', 'tee', '-a', "/etc/exports",
+    ])
+    log.info("Restarting NFS...")
+    if remote.os.package_type == "deb":
+        remote.run(args=['sudo', 'service', 'nfs-kernel-server', 'restart'])
+    else:
+        remote.run(args=['sudo', 'systemctl', 'nfs', 'restart'])
+
+
+def _teardown_nfs_mount(remote, client):
+    """
+    Tears down the nfs mount on the remote used for logging and reporting the
+    status of the tests being ran in the guest.
+    """
+    log.info("Tearing down the nfs mount for {remote}".format(remote=remote))
+    export_dir = "/export/{client}".format(client=client)
+    log.info("Stopping NFS...")
+    if remote.os.package_type == "deb":
+        remote.run(args=[
+            'sudo', 'service', 'nfs-kernel-server', 'stop'
+        ])
+    else:
+        remote.run(args=[
+            'sudo', 'systemctl', 'nfs', 'stop'
+        ])
+    log.info("Unmounting exported directory...")
+    remote.run(args=[
+        'sudo', 'umount', export_dir
+    ])
+    log.info("Deleting exported directory...")
+    remote.run(args=[
+        'sudo', 'rm', '-r', '/export'
+    ])
+    log.info("Deleting export from /etc/exports...")
+    remote.run(args=[
+        'sudo', 'sed', '-i', '$ d', '/etc/exports'
+    ])
+    log.info("Starting NFS...")
+    if remote.os.package_type == "deb":
+        remote.run(args=[
+            'sudo', 'service', 'nfs-kernel-server', 'start'
+        ])
+    else:
+        remote.run(args=[
+            'sudo', 'systemctl', 'nfs', 'start'
+        ])
+
+
 @contextlib.contextmanager
 def run_qemu(ctx, config):
     """Setup kvm environment and start qemu"""
@@ -168,6 +244,10 @@ def run_qemu(ctx, config):
                 'sudo', 'modprobe', 'kvm',
                 ]
             )
+
+        # make an nfs mount to use for logging and to
+        # allow to test to tell teuthology the tests outcome
+        _setup_nfs_mount(remote, client, log_dir)
 
         base_file = '{tdir}/qemu/base.{client}.qcow2'.format(
             tdir=testdir,
@@ -189,11 +269,6 @@ def run_qemu(ctx, config):
             'file={base},format=qcow2,if=virtio'.format(base=base_file),
             # cd holding metadata for cloud-init
             '-cdrom', '{tdir}/qemu/{client}.iso'.format(tdir=testdir, client=client),
-            # virtio 9p fs for logging
-            '-fsdev',
-            'local,id=log,path={log},security_model=none'.format(log=log_dir),
-            '-device',
-            'virtio-9p-pci,fsdev=log,mount_tag=test_log',
             ]
 
         cachemode = 'none'
@@ -235,6 +310,9 @@ def run_qemu(ctx, config):
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():
             (remote,) = ctx.cluster.only(client).remotes.keys()
+            # teardown nfs mount
+            _teardown_nfs_mount(remote, client)
+            # check for test status
             remote.run(
                 args=[
                     'test', '-f',
@@ -244,6 +322,7 @@ def run_qemu(ctx, config):
                         ),
                     ],
                 )
+
 
 @contextlib.contextmanager
 def task(ctx, config):
