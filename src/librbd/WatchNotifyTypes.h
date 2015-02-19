@@ -7,8 +7,13 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include <iostream>
+#include <list>
 #include <string>
 #include <boost/variant.hpp>
+
+namespace ceph {
+class Formatter;
+}
 
 namespace librbd {
 namespace WatchNotify {
@@ -22,6 +27,7 @@ struct ClientId {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 
   inline bool operator==(const ClientId &rhs) const {
     return (gid == rhs.gid && handle == rhs.handle);
@@ -48,6 +54,7 @@ struct AsyncRequestId {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
 
   inline bool operator<(const AsyncRequestId &rhs) const {
     if (client_id != rhs.client_id) {
@@ -73,21 +80,25 @@ enum NotifyOp {
 struct AcquiredLockPayload {
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct ReleasedLockPayload {
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct RequestLockPayload {
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct HeaderUpdatePayload {
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct AsyncProgressPayload {
@@ -101,6 +112,7 @@ struct AsyncProgressPayload {
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct AsyncCompletePayload {
@@ -113,6 +125,7 @@ struct AsyncCompletePayload {
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct FlattenPayload {
@@ -123,6 +136,7 @@ struct FlattenPayload {
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct ResizePayload {
@@ -135,6 +149,7 @@ struct ResizePayload {
 
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct SnapCreatePayload {
@@ -145,11 +160,13 @@ struct SnapCreatePayload {
  
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 struct UnknownPayload {
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
 };
 
 typedef boost::variant<AcquiredLockPayload,
@@ -171,6 +188,9 @@ struct NotifyMessage {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<NotifyMessage *> &o);
 };
 
 struct ResponseMessage {
@@ -181,6 +201,9 @@ struct ResponseMessage {
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ResponseMessage *> &o);
 };
 
 } // namespace WatchNotify

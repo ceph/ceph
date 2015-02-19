@@ -222,6 +222,10 @@ TYPE(ETableServer)
 #include "mds/events/EUpdate.h"
 TYPE(EUpdate)
 
+#include "librbd/WatchNotifyTypes.h"
+TYPE(librbd::WatchNotify::NotifyMessage)
+TYPE(librbd::WatchNotify::ResponseMessage)
+
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
