@@ -82,26 +82,28 @@ class TestFlush(CephFSTestCase):
                              ).strip())
 
         # Now for deletion!
+        # We will count the RADOS deletions and MDS file purges, to verify that
+        # the expected behaviour is happening as a result of the purge
+        initial_dels = self.fs.mds_asok(['perf', 'dump', 'objecter'])['objecter']['osdop_delete']
+        initial_purges = self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_purged']
+
+        # Use a client to delete a file
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
         self.mount_a.run_shell(["rm", "-rf", "mydir"])
 
-        # We will count the RADOS deletions and MDS file purges, to verify that
-        # the expected behaviour is happening as a result of the purge
-        initial_dels = self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete']
-        initial_purges = self.fs.mds_asok(['perf', 'dump'])['mds_cache']['strays_purged']
-
+        # Flush the journal so that the directory inode can be purged
         flush_data = self.fs.mds_asok(["flush", "journal"])
         self.assertEqual(flush_data['return_code'], 0)
 
         # We expect to see a single file purge
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['perf', 'dump'])['mds_cache']['strays_purged'] - initial_purges >= 1,
+            lambda: self.fs.mds_asok(['perf', 'dump', 'mds_cache'])['mds_cache']['strays_purged'] - initial_purges >= 2,
             60)
 
         # We expect two deletions, one of the dirfrag and one of the backtrace
         self.wait_until_true(
-            lambda: self.fs.mds_asok(['perf', 'dump'])['objecter']['osdop_delete'] - initial_dels >= 2,
+            lambda: self.fs.mds_asok(['perf', 'dump', 'objecter'])['objecter']['osdop_delete'] - initial_dels >= 2,
             60)  # timeout is fairly long to allow for tick+rados latencies
 
         with self.assertRaises(ObjectNotFound):
