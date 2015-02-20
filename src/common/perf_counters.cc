@@ -292,6 +292,7 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema,
     if (schema) {
       f->open_object_section(d->name);
       f->dump_int("type", d->type);
+      f->dump_string("description", d->description);
       f->close_section();
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
@@ -356,32 +357,32 @@ PerfCountersBuilder::~PerfCountersBuilder()
   m_perf_counters = NULL;
 }
 
-void PerfCountersBuilder::add_u64_counter(int idx, const char *name)
+void PerfCountersBuilder::add_u64_counter(int idx, const char *name, const char *description)
 {
-  add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
+  add_impl(idx, name, description, PERFCOUNTER_U64 | PERFCOUNTER_COUNTER);
 }
 
-void PerfCountersBuilder::add_u64(int idx, const char *name)
+void PerfCountersBuilder::add_u64(int idx, const char *name, const char *description)
 {
-  add_impl(idx, name, PERFCOUNTER_U64);
+  add_impl(idx, name, description, PERFCOUNTER_U64);
 }
 
-void PerfCountersBuilder::add_u64_avg(int idx, const char *name)
+void PerfCountersBuilder::add_u64_avg(int idx, const char *name, const char *description)
 {
-  add_impl(idx, name, PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
+  add_impl(idx, name, description, PERFCOUNTER_U64 | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_time(int idx, const char *name)
+void PerfCountersBuilder::add_time(int idx, const char *name, const char *description)
 {
-  add_impl(idx, name, PERFCOUNTER_TIME);
+  add_impl(idx, name, description, PERFCOUNTER_TIME);
 }
 
-void PerfCountersBuilder::add_time_avg(int idx, const char *name)
+void PerfCountersBuilder::add_time_avg(int idx, const char *name, const char *description)
 {
-  add_impl(idx, name, PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
+  add_impl(idx, name, description, PERFCOUNTER_TIME | PERFCOUNTER_LONGRUNAVG);
 }
 
-void PerfCountersBuilder::add_impl(int idx, const char *name, int ty)
+void PerfCountersBuilder::add_impl(int idx, const char *name, const char *description, int ty)
 {
   assert(idx > m_perf_counters->m_lower_bound);
   assert(idx < m_perf_counters->m_upper_bound);
@@ -390,6 +391,7 @@ void PerfCountersBuilder::add_impl(int idx, const char *name, int ty)
     &data(vec[idx - m_perf_counters->m_lower_bound - 1]);
   assert(data.type == PERFCOUNTER_NONE);
   data.name = name;
+  data.description = description;
   data.type = (enum perfcounter_type_d)ty;
 }
 
