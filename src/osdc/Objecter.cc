@@ -417,8 +417,8 @@ void Objecter::_send_linger(LingerOp *info)
   RWLock::Context lc(rwlock, RWLock::Context::TakenForWrite);
 
   vector<OSDOp> opv;
-  Context *onack = NULL;
   Context *oncommit = NULL;
+  info->watch_lock.get_read(); // just to read registered status
   if (info->registered && info->is_watch) {
     ldout(cct, 15) << "send_linger " << info->linger_id << " reconnect" << dendl;
     opv.push_back(OSDOp());
@@ -430,14 +430,14 @@ void Objecter::_send_linger(LingerOp *info)
   } else {
     ldout(cct, 15) << "send_linger " << info->linger_id << " register" << dendl;
     opv = info->ops;
-    if (info->on_reg_ack)
-      onack = new C_Linger_Register(this, info);
     oncommit = new C_Linger_Commit(this, info);
   }
+  info->watch_lock.put_read();
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, oncommit,
+		 NULL, NULL,
 		 info->pobjver);
+  o->oncommit_sync = oncommit;
   o->snapid = info->snap;
   o->snapc = info->snapc;
   o->mtime = info->mtime;
@@ -467,17 +467,9 @@ void Objecter::_send_linger(LingerOp *info)
   logger->inc(l_osdc_linger_send);
 }
 
-void Objecter::_linger_register(LingerOp *info, int r)
-{
-  ldout(cct, 10) << "_linger_register " << info->linger_id << dendl;
-  if (info->on_reg_ack) {
-    info->on_reg_ack->complete(r);
-    info->on_reg_ack = NULL;
-  }
-}
-
 void Objecter::_linger_commit(LingerOp *info, int r) 
 {
+  RWLock::WLocker wl(info->watch_lock);
   ldout(cct, 10) << "_linger_commit " << info->linger_id << dendl;
   if (info->on_reg_commit) {
     info->on_reg_commit->complete(r);
@@ -551,8 +543,6 @@ void Objecter::_send_linger_ping(LingerOp *info)
   utime_t now = ceph_clock_now(NULL);
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now << dendl;
 
-  RWLock::Context lc(rwlock, RWLock::Context::TakenForRead);
-
   vector<OSDOp> opv(1);
   opv[0].op.op = CEPH_OSD_OP_WATCH;
   opv[0].op.watch.cookie = info->get_cookie();
@@ -561,7 +551,8 @@ void Objecter::_send_linger_ping(LingerOp *info)
   C_Linger_Ping *onack = new C_Linger_Ping(this, info);
   Op *o = new Op(info->target.base_oid, info->target.base_oloc,
 		 opv, info->target.flags | CEPH_OSD_FLAG_READ,
-		 onack, NULL, NULL);
+		 NULL, NULL, NULL);
+  o->oncommit_sync = onack;
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
@@ -689,7 +680,6 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
   info->inbl = inbl;
   info->poutbl = NULL;
   info->pobjver = objver;
-  info->on_reg_ack = NULL;
   info->on_reg_commit = oncommit;
 
   RWLock::WLocker wl(rwlock);
@@ -1389,9 +1379,6 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
-      if (op->on_reg_ack) {
-	op->on_reg_ack->complete(-ENOENT);
-      }
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
       }
@@ -1771,7 +1758,7 @@ void Objecter::kick_requests(OSDSession *session)
 
 void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend)
 {
-  assert(rwlock.is_locked());
+  assert(rwlock.is_wlocked());
 
   // resend ops
   map<ceph_tid_t,Op*> resend;  // resend in tid order
@@ -1815,7 +1802,7 @@ void Objecter::_kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lr
 
 void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend)
 {
-  assert(rwlock.is_locked());
+  assert(rwlock.is_wlocked());
 
   while (!lresend.empty()) {
     LingerOp *op = lresend.begin()->second;
@@ -1881,6 +1868,7 @@ void Objecter::tick()
            p != s->linger_ops.end();
            ++p) {
         LingerOp *op = p->second;
+        RWLock::WLocker wl(op->watch_lock);
         assert(op->session);
         ldout(cct, 10) << " pinging osd that serves lingering tid " << p->first << " (osd." << op->session->osd << ")" << dendl;
         toping.insert(op->session);
@@ -2578,7 +2566,7 @@ void Objecter::_session_linger_op_assign(OSDSession *to, LingerOp *op)
 void Objecter::_session_linger_op_remove(OSDSession *from, LingerOp *op)
 {
   assert(from == op->session);
-  assert(from->lock.is_locked());
+  assert(from->lock.is_wlocked());
 
   if (from->is_homeless()) {
     num_homeless_ops.dec();
@@ -2624,36 +2612,6 @@ void Objecter::_session_command_op_assign(OSDSession *to, CommandOp *op)
   ldout(cct, 15) << __func__ << " " << to->osd << " " << op->tid << dendl;
 }
 
-int Objecter::_get_osd_session(int osd, RWLock::Context& lc, OSDSession **psession)
-{
-  int r;
-  do {
-    r = _get_session(osd, psession, lc);
-    if (r == -EAGAIN) {
-      assert(!lc.is_wlocked());
-
-      if (!_promote_lock_check_race(lc)) {
-        return r;
-      }
-    }
-  } while (r == -EAGAIN);
-  assert(r == 0);
-
-  return 0;
-}
-
-int Objecter::_get_op_target_session(Op *op, RWLock::Context& lc, OSDSession **psession)
-{
-  return _get_osd_session(op->target.osd, lc, psession);
-}
-
-bool Objecter::_promote_lock_check_race(RWLock::Context& lc)
-{
-  epoch_t epoch = osdmap->get_epoch();
-  lc.promote();
-  return (epoch == osdmap->get_epoch());
-}
-
 int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 {
   assert(rwlock.is_wlocked());
@@ -2664,13 +2622,9 @@ int Objecter::_recalc_linger_op_target(LingerOp *linger_op, RWLock::Context& lc)
 		   << " pgid " << linger_op->target.pgid
 		   << " acting " << linger_op->target.acting << dendl;
     
-    OSDSession *s;
-    r = _get_osd_session(linger_op->target.osd, lc, &s);
-    if (r < 0) {
-      // We have no session for the new destination for the op, so leave it
-      // in this session to be handled again next time we scan requests
-      return r;
-    }
+    OSDSession *s = NULL;
+    r = _get_session(linger_op->target.osd, &s, lc);
+    assert(r == 0);
 
     if (linger_op->session != s) {
       // NB locking two sessions (s and linger_op->session) at the same time here
@@ -2746,7 +2700,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   int flags = op->target.flags;
   flags |= CEPH_OSD_FLAG_KNOWN_REDIR;
-  if (op->oncommit)
+  if (op->oncommit || op->oncommit_sync)
     flags |= CEPH_OSD_FLAG_ONDISK;
   if (op->onack)
     flags |= CEPH_OSD_FLAG_ACK;
@@ -3042,6 +2996,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->oncommit = 0;
     num_uncommitted.dec();
     logger->inc(l_osdc_op_commit);
+  }
+  if (op->oncommit_sync) {
+    op->oncommit_sync->complete(rc);
+    op->oncommit_sync = NULL;
   }
 
   /* get it before we call _finish_op() */
