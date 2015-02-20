@@ -1690,6 +1690,12 @@ public:
   virtual int aio_wait(void *handle);
   virtual bool aio_completed(void *handle);
 
+  enum AttrsMod {
+    ATTRSMOD_NONE    = 0,
+    ATTRSMOD_REPLACE = 1,
+    ATTRSMOD_MERGE   = 2
+  };
+
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj);
   int fetch_remote_obj(RGWObjectCtx& obj_ctx,
                        const string& user_id,
@@ -1707,7 +1713,7 @@ public:
                        const time_t *unmod_ptr,
                        const char *if_match,
                        const char *if_nomatch,
-                       bool replace_attrs,
+                       AttrsMod attrs_mod,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
@@ -1727,7 +1733,14 @@ public:
    * Copy an object.
    * dest_obj: the object to copy into
    * src_obj: the object to copy from
-   * attrs: if replace_attrs is set then these are placed on the new object
+   * attrs: usage depends on attrs_mod parameter
+   * attrs_mod: the modification mode of the attrs, may have the following values:
+   *            ATTRSMOD_NONE - the attributes of the source object will be
+   *                            copied without modifications, attrs parameter is ignored;
+   *            ATTRSMOD_REPLACE - new object will have the attributes provided by attrs
+   *                               parameter, source object attributes are not copied;
+   *            ATTRSMOD_MERGE - any conflicting meta keys on the source object's attributes
+   *                             are overwritten by values contained in attrs parameter.
    * err: stores any errors resulting from the get of the original object
    * Returns: 0 on success, -ERR# otherwise.
    */
@@ -1747,7 +1760,7 @@ public:
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               bool replace_attrs,
+               AttrsMod attrs_mod,
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,

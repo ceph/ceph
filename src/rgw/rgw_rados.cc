@@ -3457,19 +3457,27 @@ public:
 };
 
 /*
- * prepare attrset, either replace it with new attrs, or keep it (other than acls).
+ * prepare attrset depending on attrs_mod.
  */
-static void set_copy_attrs(map<string, bufferlist>& src_attrs, map<string, bufferlist>& attrs, bool replace_attrs, bool intra_region)
+static void set_copy_attrs(map<string, bufferlist>& src_attrs,
+                           map<string, bufferlist>& attrs,
+                           RGWRados::AttrsMod attrs_mod)
 {
-  if (replace_attrs) {
-    if (!attrs[RGW_ATTR_ETAG].length())
+  switch (attrs_mod) {
+  case RGWRados::ATTRSMOD_NONE:
+    src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+    break;
+  case RGWRados::ATTRSMOD_REPLACE:
+    if (!attrs[RGW_ATTR_ETAG].length()) {
       attrs[RGW_ATTR_ETAG] = src_attrs[RGW_ATTR_ETAG];
-
+    }
     src_attrs = attrs;
-  } else {
-    /* copying attrs from source, however acls should only be copied if it's intra-region operation */
-    if (!intra_region)
-      src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
+    break;
+  case RGWRados::ATTRSMOD_MERGE:
+    for (map<string, bufferlist>::iterator it = attrs.begin(); it != attrs.end(); ++it) {
+      src_attrs[it->first] = it->second;
+    }
+    break;
   }
 }
 
@@ -3525,7 +3533,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               bool replace_attrs,
+               AttrsMod attrs_mod,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -3621,7 +3629,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
-  set_copy_attrs(src_attrs, attrs, replace_attrs, !source_zone.empty());
+  if (source_zone.empty()) {
+    set_copy_attrs(src_attrs, attrs, attrs_mod);
+  }
 
   ret = cb.complete(etag, mtime, set_mtime, src_attrs);
   if (ret < 0)
@@ -3672,7 +3682,14 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
  * Copy an object.
  * dest_obj: the object to copy into
  * src_obj: the object to copy from
- * attrs: if replace_attrs is set then these are placed on the new object
+ * attrs: usage depends on attrs_mod parameter
+ * attrs_mod: the modification mode of the attrs, may have the following values:
+ *            ATTRSMOD_NONE - the attributes of the source object will be
+ *                            copied without modifications, attrs parameter is ignored;
+ *            ATTRSMOD_REPLACE - new object will have the attributes provided by attrs
+ *                               parameter, source object attributes are not copied;
+ *            ATTRSMOD_MERGE - any conflicting meta keys on the source object's attributes
+ *                             are overwritten by values contained in attrs parameter.
  * err: stores any errors resulting from the get of the original object
  * Returns: 0 on success, -ERR# otherwise.
  */
@@ -3692,7 +3709,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                const time_t *unmod_ptr,
                const char *if_match,
                const char *if_nomatch,
-               bool replace_attrs,
+               AttrsMod attrs_mod,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
@@ -3727,7 +3744,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
-               unmod_ptr, if_match, if_nomatch, replace_attrs, attrs, category,
+               unmod_ptr, if_match, if_nomatch, attrs_mod, attrs, category,
                olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
   }
 
@@ -3752,7 +3769,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  set_copy_attrs(src_attrs, attrs, replace_attrs, false);
+  set_copy_attrs(src_attrs, attrs, attrs_mod);
   src_attrs.erase(RGW_ATTR_ID_TAG);
 
   RGWObjManifest manifest;

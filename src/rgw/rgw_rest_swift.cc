@@ -592,6 +592,10 @@ int RGWCopyObj_ObjStore_SWIFT::get_params()
   dest_bucket_name = s->bucket_name_str;
   dest_object = s->object.name;
 
+  if (!s->info.x_meta_map.empty()) {
+    attrs_mod = RGWRados::ATTRSMOD_MERGE;
+  }
+
   return 0;
 }
 
