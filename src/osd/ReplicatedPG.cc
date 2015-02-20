@@ -7678,6 +7678,7 @@ Message * ReplicatedBackend::generate_subop(
 	     << ", pinfo.last_backfill "
 	     << pinfo.last_backfill << ")" << dendl;
     ObjectStore::Transaction t;
+    t.set_use_tbl(op_t->get_use_tbl());
     ::encode(t, wr->get_data());
   } else {
     ::encode(*op_t, wr->get_data());
