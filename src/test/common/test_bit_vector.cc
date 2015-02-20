@@ -202,27 +202,30 @@ TYPED_TEST(BitVectorTest, header_crc) {
 }
 
 TYPED_TEST(BitVectorTest, data_crc) {
-  typename TestFixture::bit_vector_t bit_vector;
+  typename TestFixture::bit_vector_t bit_vector1;
+  typename TestFixture::bit_vector_t bit_vector2;
 
-  uint64_t elements_per_byte = 8 / bit_vector.BIT_COUNT;
-  bit_vector.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
+  uint64_t elements_per_byte = 8 / bit_vector1.BIT_COUNT;
+  bit_vector1.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
+  bit_vector2.resize((CEPH_PAGE_SIZE + 1) * elements_per_byte);
 
   uint64_t byte_offset;
   uint64_t byte_length;
-  bit_vector.get_data_extents(0, bit_vector.size(), &byte_offset, &byte_length);
+  bit_vector1.get_data_extents(0, bit_vector1.size(), &byte_offset,
+			       &byte_length);
 
   bufferlist data;
-  bit_vector.encode_data(data, byte_offset, byte_length);
+  bit_vector1.encode_data(data, byte_offset, byte_length);
 
   bufferlist::iterator data_it = data.begin();
-  bit_vector.decode_data(data_it, byte_offset); 
+  bit_vector1.decode_data(data_it, byte_offset); 
 
-  bit_vector[bit_vector.size() - 1] = 1;
+  bit_vector2[bit_vector2.size() - 1] = 1;
 
   bufferlist dummy_data;
-  bit_vector.encode_data(dummy_data, byte_offset, byte_length);
+  bit_vector2.encode_data(dummy_data, byte_offset, byte_length);
 
   data_it = data.begin();
-  ASSERT_THROW(bit_vector.decode_data(data_it, byte_offset),
+  ASSERT_THROW(bit_vector2.decode_data(data_it, byte_offset),
 	       buffer::malformed_input);
 }
