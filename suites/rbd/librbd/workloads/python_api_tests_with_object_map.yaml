@@ -2,6 +2,6 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - rbd/test_librbd.sh
+        - rbd/test_librbd_python.sh
     env:
       RBD_FEATURES: "13"
