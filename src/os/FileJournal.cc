@@ -1834,7 +1834,6 @@ bool FileJournal::read_entry(
     }
   }
 
-  stringstream errss;
   if (seq && seq < header.committed_up_to) {
     derr << "Unable to read past sequence " << seq
 	 << " but header indicates the journal has committed up through "
@@ -1848,7 +1847,7 @@ bool FileJournal::read_entry(
     }
   }
 
-  dout(25) << errss.str() << dendl;
+  dout(25) << ss.str() << dendl;
   dout(2) << "No further valid entries found, journal is most likely valid"
 	  << dendl;
   return false;
