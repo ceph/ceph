@@ -214,6 +214,8 @@ public:
     }
   } __attribute__((__packed__, aligned(4)));
 
+  bool journalq_empty() { return journalq.empty(); }
+
 private:
   string fn;
 
