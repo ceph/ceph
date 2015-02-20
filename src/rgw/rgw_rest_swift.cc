@@ -45,6 +45,24 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   return 0;
 }
 
+static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
+                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
+{
+  char buf[32];
+  utime_t now = ceph_clock_now(g_ceph_context);
+  snprintf(buf, sizeof(buf), "%0.5f", (double)now);
+  /* Adding X-Timestamp to keep align with Swift API */
+  s->cio->print("X-Timestamp: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
+  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
+  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
+  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
+  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
+  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+}
+
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
 {
   if (ret) {
@@ -53,6 +71,8 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     ret = STATUS_NO_CONTENT;
     set_req_state_err(s, ret);
   }
+  /* Adding account stats in the header to keep align with Swift API */
+  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
   dump_errno(s);
   end_header(s, NULL);
 
@@ -257,20 +277,6 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
       }
     }
   }
-}
-
-static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_count);
-  s->cio->print("X-Account-Container-Count: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_object_count);
-  s->cio->print("X-Account-Object-Count: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size);
-  s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
-  snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
-  s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()
