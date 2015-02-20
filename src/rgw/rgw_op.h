@@ -585,7 +585,7 @@ protected:
   rgw_bucket dest_bucket;
   string dest_object;
   time_t mtime;
-  bool replace_attrs;
+  RGWRados::AttrsMod attrs_mod;
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
   string source_zone;
@@ -616,7 +616,7 @@ public:
     unmod_ptr = NULL;
     ret = 0;
     mtime = 0;
-    replace_attrs = false;
+    attrs_mod = RGWRados::ATTRSMOD_NONE;
     last_ofs = 0;
     olh_epoch = 0;
   }
