@@ -146,9 +146,6 @@ namespace librbd {
     void set_req(AioRead *req) {
       m_req = req;
     }
-    AioRead *get_req() {
-      return m_req;
-    }
   private:
     CephContext *m_cct;
     AioCompletion *m_completion;

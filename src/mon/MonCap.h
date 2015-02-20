@@ -8,7 +8,7 @@
 using std::ostream;
 
 #include "include/types.h"
-#include "msg/msg_types.h"
+#include "common/entity_name.h"
 
 class CephContext;
 
@@ -76,7 +76,7 @@ struct MonCapGrant {
   // needed by expand_profile() (via is_match()) and cached here.
   mutable list<MonCapGrant> profile_grants;
 
-  void expand_profile(entity_name_t name) const;
+  void expand_profile(EntityName name) const;
 
   MonCapGrant() : allow(0) {}
   MonCapGrant(mon_rwxa_t a) : allow(a) {}
@@ -97,7 +97,7 @@ struct MonCapGrant {
    * @return bits we allow
    */
   mon_rwxa_t get_allowed(CephContext *cct,
-			 entity_name_t name,
+			 EntityName name,
 			 const std::string& service,
 			 const std::string& command,
 			 const map<string,string>& command_args) const;
@@ -143,7 +143,7 @@ struct MonCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(CephContext *cct,
-		  entity_name_t name,
+		  EntityName name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,
 		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
