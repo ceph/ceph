@@ -631,7 +631,7 @@ void ObjectCacher::close_object(Object *ob)
 
 
 
-void ObjectCacher::bh_read(BufferHead *bh)
+void ObjectCacher::bh_read(BufferHead *bh, int op_flags)
 {
   assert(lock.is_locked());
   ldout(cct, 7) << "bh_read on " << *bh << " outstanding reads "
@@ -647,7 +647,8 @@ void ObjectCacher::bh_read(BufferHead *bh)
   writeback_handler.read(bh->ob->get_oid(), bh->ob->get_object_number(),
 			 bh->ob->get_oloc(), bh->start(), bh->length(),
 			 bh->ob->get_snap(), &onfinish->bl,
-			 bh->ob->truncate_size, bh->ob->truncate_seq, onfinish);
+			 bh->ob->truncate_size, bh->ob->truncate_seq,
+			 op_flags, onfinish);
 
   ++reads_outstanding;
 }
@@ -1157,7 +1158,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  bh_remove(o, bh_it->second);
 	  delete bh_it->second;
 	} else {
-	  bh_read(bh_it->second);
+	  bh_read(bh_it->second, rd->fadvise_flags);
 	  if (success && onfinish) {
 	    ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			   << " off " << bh_it->first << dendl;

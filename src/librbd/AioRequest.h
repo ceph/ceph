@@ -77,10 +77,6 @@ namespace librbd {
       return m_read_data;
     }
 
-    int get_op_flags() {
-      return m_op_flags;
-    }
-
     std::map<uint64_t, uint64_t> m_ext_map;
 
     friend class C_AioRead;
