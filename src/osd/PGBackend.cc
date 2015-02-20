@@ -161,8 +161,8 @@ int PGBackend::objects_list_range(
   vector<ghobject_t> objects;
   int r = store->collection_list_range(
     coll,
-    start,
-    end,
+    ghobject_t(start, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    ghobject_t(end, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
     seq,
     &objects);
   ls->reserve(objects.size());
