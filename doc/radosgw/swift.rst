@@ -14,6 +14,7 @@ API
    Service Ops <swift/serviceops>
    Container Ops <swift/containerops>
    Object Ops <swift/objectops>
+   Temp URL Ops <swift/tempurl>
    Tutorial <swift/tutorial>
    Java <swift/java>
    Python <swift/python>
