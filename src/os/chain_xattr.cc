@@ -62,7 +62,7 @@ static void get_raw_xattr_name(const char *name, int i, char *raw_name, int raw_
   if (!i) {
     *raw_name = '\0';
   } else {
-    int r = snprintf(raw_name, raw_len, "@%d", i);
+    int r = snprintf(raw_name, raw_len - pos, "@%d", i);
     assert(r < raw_len - pos);
   }
 }
