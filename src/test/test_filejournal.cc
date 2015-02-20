@@ -360,8 +360,10 @@ TEST(TestFileJournal, WriteTrim) {
   while (ls.size()) {
     delete ls.front();
     ls.pop_front();
-    j.committed_thru(committed);
+    j.committed_thru(++committed);
   }
+
+  ASSERT_TRUE(j.journalq_empty());
 
   j.close();
 }
