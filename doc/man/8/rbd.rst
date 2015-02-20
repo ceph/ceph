@@ -123,6 +123,17 @@ Parameters
 
    Map the image read-only.  Equivalent to -o ro.
 
+.. option:: --image-features features
+
+   Specifies which RBD format 2 features are to be enabled when creating
+   an image. The numbers from the desired features below should be added
+   to compute the parameter value:
+
+   +1: layering support
+   +2: striping v2 support
+   +4: exclusive locking support
+   +8: object map support
+
 .. option:: --image-shared
 
    Specifies that the image will be used concurrently by multiple clients.
