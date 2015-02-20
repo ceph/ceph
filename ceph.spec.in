@@ -139,20 +139,6 @@ BuildRequires:	fuse-devel
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
 
-%package devel
-Summary:	Ceph headers
-Group:		Development/Libraries
-License:	LGPL-2.0
-Requires:	%{name} = %{epoch}:%{version}-%{release}
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	libradosstriper1 = %{epoch}:%{version}-%{release}
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
-Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
-%description devel
-This package contains libraries and headers needed to develop programs
-that use Ceph.
-
 %package radosgw
 Summary:	Rados REST gateway
 Group:		Development/Libraries
@@ -197,6 +183,16 @@ developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to access the distributed object
 store using a simple file-like interface.
 
+%package -n librados2-devel
+Summary:	RADOS headers
+Group:		Development/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
+%description -n librados2-devel
+This package contains libraries and headers needed to develop programs
+that use RADOS object store.
+
 %package -n libradosstriper1
 Summary:	RADOS striping interface
 Group:		System Environment/Libraries
@@ -206,6 +202,17 @@ Requires:	librados2 = %{epoch}:%{version}
 Striping interface built on top of the rados library, allowing
 to stripe bigger objects onto several standard rados objects using
 an interface very similar to the rados one.
+
+%package -n libradosstriper1-devel
+Summary:	RADOS striping interface headers
+Group:		Development/Libraries
+License:	LGPL-2.0
+Requires:	libradosstriper1 = %{epoch}:%{version}-%{release}
+Requires:	librados2-devel = %{epoch}:%{version}-%{release}
+Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
+%description -n libradosstriper1-devel
+This package contains libraries and headers needed to develop programs
+that use RADOS striping interface.
 
 %package -n librbd1
 Summary:	RADOS block device client library
@@ -221,6 +228,17 @@ RADOS, a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to manage these block devices.
 
+%package -n librbd1-devel
+Summary:	RADOS block device headers
+Group:		Development/Libraries
+License:	LGPL-2.0
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	librados2-devel = %{epoch}:%{version}-%{release}
+Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
+%description -n librbd1-devel
+This package contains libraries and headers needed to develop programs
+that use RADOS block device.
+
 %package -n libcephfs1
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
@@ -234,6 +252,17 @@ Ceph is a distributed network file system designed to provide excellent
 performance, reliability, and scalability. This is a shared library
 allowing applications to access a Ceph distributed file system via a
 POSIX-like interface.
+
+%package -n libcephfs1-devel
+Summary:	Ceph distributed file system headers
+Group:		Development/Libraries
+License:	LGPL-2.0
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	librados2-devel = %{epoch}:%{version}-%{release}
+Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
+%description -n libcephfs1-devel
+This package contains libraries and headers needed to develop programs
+that use Cephs distributed file system.
 
 %package -n python-ceph
 Summary:	Python libraries for the Ceph distributed filesystem
@@ -281,6 +310,17 @@ BuildRequires:	java-devel
 This package contains the Java Native Interface library for CephFS Java
 bindings.
 
+%package -n libcephfs_jni1-devel
+Summary:	Development files for CephFS Java Native Interface library.
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	java
+Requires:	libcephfs_jni1 = %{epoch}:%{version}-%{release}
+Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
+%description -n libcephfs_jni1-devel
+This package contains the development files for CephFS Java Native Interface
+library.
+
 %package -n cephfs-java
 Summary:	Java libraries for the Ceph File System.
 Group:		System Environment/Libraries
@@ -314,6 +354,24 @@ is included for backwards compatibility with distributions that depend on the
 former ceph-libs package, which is now split up into these three subpackages.
 Packages still depending on ceph-libs should be fixed to depend on librados2,
 librbd1 or libcephfs1 instead.
+
+%package devel-compat
+Summary:	Compatibility package for Ceph headers
+Group:		Development/Libraries
+License:	LGPL-2.0
+Obsoletes:	ceph-devel
+Requires:	%{name} = %{epoch}:%{version}-%{release}
+Requires:	librados2-devel = %{epoch}:%{version}-%{release}
+Requires:	libradosstriper1-devel = %{epoch}:%{version}-%{release}
+Requires:	librbd1-devel = %{epoch}:%{version}-%{release}
+Requires:	libcephfs1-devel = %{epoch}:%{version}-%{release}
+Requires:	libcephfs_jni1-devel = %{epoch}:%{version}-%{release}
+Provides:	ceph-devel
+%description devel-compat
+This is a compatibility package to accommodate ceph-devel split into
+librados2-devel, librbd1-devel and libcephfs1-devel. Packages still depending
+on ceph-devel should be fixed to depend on librados2-devel, librbd1-devel,
+libcephfs1-devel or libradosstriper1-devel instead.
 
 %if 0%{?opensuse} || 0%{?suse_version}
 %debug_package
@@ -593,33 +651,6 @@ fi
 %{_mandir}/man8/rbd-fuse.8*
 
 #################################################################################
-%files devel
-%defattr(-,root,root,-)
-%dir %{_includedir}/cephfs
-%{_includedir}/cephfs/libcephfs.h
-%dir %{_includedir}/rados
-%{_includedir}/rados/librados.h
-%{_includedir}/rados/librados.hpp
-%{_includedir}/rados/buffer.h
-%{_includedir}/rados/page.h
-%{_includedir}/rados/crc32c.h
-%{_includedir}/rados/rados_types.h
-%{_includedir}/rados/rados_types.hpp
-%{_includedir}/rados/memory.h
-%dir %{_includedir}/radosstriper
-%{_includedir}/radosstriper/libradosstriper.h
-%{_includedir}/radosstriper/libradosstriper.hpp
-%dir %{_includedir}/rbd
-%{_includedir}/rbd/librbd.h
-%{_includedir}/rbd/librbd.hpp
-%{_includedir}/rbd/features.h
-%{_libdir}/libcephfs.so
-%{_libdir}/librbd.so
-%{_libdir}/librados.so
-%{_libdir}/libradosstriper.so
-%{_libdir}/libcephfs_jni.so
-
-#################################################################################
 %files radosgw
 %defattr(-,root,root,-)
 %{_initrddir}/ceph-radosgw
@@ -677,6 +708,20 @@ fi
 /sbin/ldconfig
 
 #################################################################################
+%files -n librados2-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/rados
+%{_includedir}/rados/librados.h
+%{_includedir}/rados/librados.hpp
+%{_includedir}/rados/buffer.h
+%{_includedir}/rados/page.h
+%{_includedir}/rados/crc32c.h
+%{_includedir}/rados/rados_types.h
+%{_includedir}/rados/rados_types.hpp
+%{_includedir}/rados/memory.h
+%{_libdir}/librados.so
+
+#################################################################################
 %files -n libradosstriper1
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
@@ -686,6 +731,14 @@ fi
 
 %postun -n libradosstriper1
 /sbin/ldconfig
+
+#################################################################################
+%files -n libradosstriper1-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/radosstriper
+%{_includedir}/radosstriper/libradosstriper.h
+%{_includedir}/radosstriper/libradosstriper.hpp
+%{_libdir}/libradosstriper.so
 
 #################################################################################
 %files -n librbd1
@@ -706,6 +759,15 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 /sbin/ldconfig
 
 #################################################################################
+%files -n librbd1-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/rbd
+%{_includedir}/rbd/librbd.h
+%{_includedir}/rbd/librbd.hpp
+%{_includedir}/rbd/features.h
+%{_libdir}/librbd.so
+
+#################################################################################
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -715,6 +777,13 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 
 %postun -n libcephfs1
 /sbin/ldconfig
+
+#################################################################################
+%files -n libcephfs1-devel
+%defattr(-,root,root,-)
+%dir %{_includedir}/cephfs
+%{_includedir}/cephfs/libcephfs.h
+%{_libdir}/libcephfs.so
 
 #################################################################################
 %files -n python-ceph
@@ -765,17 +834,30 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_bindir}/rbd-replay-prep
 %endif
 
+#################################################################################
 %files -n libcephfs_jni1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs_jni.so.*
 
+#################################################################################
+%files -n libcephfs_jni1-devel
+%defattr(-,root,root,-)
+%{_libdir}/libcephfs_jni.so
+
+#################################################################################
 %files -n cephfs-java
 %defattr(-,root,root,-)
 %{_javadir}/libcephfs.jar
 %{_javadir}/libcephfs-test.jar
 
+#################################################################################
 %files libs-compat
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
+
+#################################################################################
+%files devel-compat
+# We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
+# actually build this meta package.
 
 %changelog
