@@ -440,7 +440,37 @@ void ReplicatedPG::wait_for_all_missing(OpRequestRef op)
   op->mark_delayed("waiting for all missing");
 }
 
-bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
+bool ReplicatedPG::is_degraded_object(const hobject_t &soid, int *healthy_copies)
+{
+  bool degraded = false;
+  assert(healthy_copies);
+  *healthy_copies = 0;
+
+  if (pg_log.get_missing().missing.count(soid)) {
+    degraded = true;
+  } else {
+    *healthy_copies += 1;
+  }
+
+  for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+       i != actingbackfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    if (peer_missing.count(peer) &&
+        peer_missing[peer].missing.count(soid)) {
+      degraded = true;
+      continue;
+    }
+
+    assert(peer_info.count(peer));
+    if (!peer_info[peer].is_incomplete())
+      *healthy_copies += 1;
+  }
+  return degraded;
+}
+
+bool ReplicatedPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
   if (pg_log.get_missing().missing.count(soid))
     return true;
@@ -467,7 +497,7 @@ bool ReplicatedPG::is_degraded_object(const hobject_t& soid)
 
 void ReplicatedPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef op)
 {
-  assert(is_degraded_object(soid));
+  assert(is_degraded_or_backfilling_object(soid));
 
   // we don't have it (yet).
   if (recovering.count(soid)) {
@@ -1453,10 +1483,13 @@ void ReplicatedPG::do_op(OpRequestRef& op)
    *
    * We also block if our peers do not support DEGRADED_WRITES.
    */
-  if ((pool.info.ec_pool() ||
-       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES)) &&
-      write_ordered &&
-      is_degraded_object(head)) {
+  int valid_copies = 0;
+  if (write_ordered &&
+      is_degraded_object(head, &valid_copies) &&
+      (valid_copies < pool.info.min_size ||
+       pool.info.ec_pool() ||
+       !cct->_conf->osd_enable_degraded_writes ||
+       !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES))) {
     wait_for_degraded_object(head, op);
     return;
   }
@@ -1471,7 +1504,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   // degraded object?
-  if (write_ordered && is_degraded_object(snapdir)) {
+  if (write_ordered && is_degraded_or_backfilling_object(snapdir)) {
     wait_for_degraded_object(snapdir, op);
     return;
   }
@@ -1563,7 +1596,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // degraded object?  (the check above was for head; this could be a clone)
     if (write_ordered &&
 	obc->obs.oi.soid.snap != CEPH_NOSNAP &&
-	is_degraded_object(obc->obs.oi.soid)) {
+	is_degraded_or_backfilling_object(obc->obs.oi.soid)) {
       dout(10) << __func__ << ": clone " << obc->obs.oi.soid
 	       << " is degraded, waiting" << dendl;
       wait_for_degraded_object(obc->obs.oi.soid, op);
@@ -1667,9 +1700,9 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	    dout(1) << " src_oid " << sobc->obs.oi.soid << " != "
 		  << obc->obs.oi.soid << dendl;
 	    osd->reply_op_error(op, -EINVAL);
-	  } else if (is_degraded_object(sobc->obs.oi.soid) ||
+	  } else if (is_degraded_or_backfilling_object(sobc->obs.oi.soid) ||
 		   (check_src_targ(sobc->obs.oi.soid, obc->obs.oi.soid))) {
-	    if (is_degraded_object(sobc->obs.oi.soid)) {
+	    if (is_degraded_or_backfilling_object(sobc->obs.oi.soid)) {
 	      wait_for_degraded_object(sobc->obs.oi.soid, op);
 	    } else {
 	      waiting_for_degraded_object[sobc->obs.oi.soid].push_back(op);
@@ -5394,7 +5427,7 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     assert(0 == "unexpected error code in _rollback_to");
   } else { //we got our context, let's use it to do the rollback!
     hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (is_degraded_object(rollback_to_sobject)) {
+    if (is_degraded_or_backfilling_object(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
       wait_for_degraded_object(rollback_to_sobject, ctx->op);
@@ -7608,7 +7641,7 @@ void ReplicatedPG::issue_repop(RepGather *repop, utime_t now)
     repop->ctx->op);
   repop->ctx->op_t = NULL;
 
-  if (is_degraded_object(soid)) {
+  if (is_degraded_or_backfilling_object(soid)) {
     dout(10) << __func__ << ": " << soid
 	     << " degraded, maintaining missing sets"
 	     << dendl;
@@ -7933,7 +7966,7 @@ void ReplicatedPG::handle_watch_timeout(WatchRef watch)
   ObjectContextRef obc = watch->get_obc(); // handle_watch_timeout owns this ref
   dout(10) << "handle_watch_timeout obc " << obc << dendl;
 
-  if (is_degraded_object(obc->obs.oi.soid)) {
+  if (is_degraded_or_backfilling_object(obc->obs.oi.soid)) {
     callbacks_for_degraded_object[obc->obs.oi.soid].push_back(
       watch->get_delayed_cb()
       );
@@ -11858,13 +11891,13 @@ void ReplicatedPG::hit_set_persist()
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end);
 
     // Once we hit a degraded object just skip further trim
-    if (is_degraded_object(aoid))
+    if (is_degraded_or_backfilling_object(aoid))
       return;
   }
 
   oid = get_hit_set_archive_object(start, now);
   // If the current object is degraded we skip this persist request
-  if (is_degraded_object(oid))
+  if (is_degraded_or_backfilling_object(oid))
     return;
 
   // If backfill is in progress and we could possibly overlap with the
@@ -12015,7 +12048,7 @@ void ReplicatedPG::hit_set_trim(RepGather *repop, unsigned max)
     assert(p != updated_hit_set_hist.history.end());
     hobject_t oid = get_hit_set_archive_object(p->begin, p->end);
 
-    assert(!is_degraded_object(oid));
+    assert(!is_degraded_or_backfilling_object(oid));
 
     dout(20) << __func__ << " removing " << oid << dendl;
     ++repop->ctx->at_version.version;
@@ -12165,7 +12198,7 @@ bool ReplicatedPG::agent_work(int start_max)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
-    if (is_degraded_object(*p)) {
+    if (is_degraded_or_backfilling_object(*p)) {
       dout(20) << __func__ << " skip (degraded) " << *p << dendl;
       osd->logger->inc(l_osd_agent_skip);
       continue;
