@@ -25,6 +25,7 @@ OPTION(mon_host, OPT_STR, "")
 OPTION(lockdep, OPT_BOOL, false)
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
+OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()
@@ -252,7 +253,6 @@ OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to r
 OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
 OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
-OPTION(crushtool, OPT_STR, "crushtool")
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
