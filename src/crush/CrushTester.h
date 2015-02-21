@@ -334,8 +334,8 @@ public:
   }
 
   int test();
-  int test_with_crushtool(const string& crushtool,
-			  int timeout);
+  int test_with_crushtool(const char *crushtool_cmd = "crushtool",
+			  int timeout = 0);
 };
 
 #endif

@@ -4663,7 +4663,7 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    int r = tester.test_with_crushtool(g_conf->crushtool,
+    int r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
 				       g_conf->mon_lease);
     if (r < 0) {
       if (r == -EINTR) {
