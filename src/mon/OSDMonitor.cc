@@ -1010,6 +1010,8 @@ void OSDMonitor::share_map_with_random_osd()
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
   s->con->send_message(m);
+  // NOTE: do *not* record osd has up to this epoch (as we do
+  // elsewhere) as they may still need to request older values.
 }
 
 version_t OSDMonitor::get_trim_to()
@@ -2118,10 +2120,13 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     osd = req->get_source().num();
     map<int,epoch_t>::iterator p = osd_epoch.find(osd);
     if (p != osd_epoch.end()) {
-      dout(10) << " osd." << osd << " should have epoch " << p->second << dendl;
-      first = p->second + 1;
-      if (first > osdmap.get_epoch())
-	return;
+      if (first <= p->second) {
+	dout(10) << __func__ << " osd." << osd << " should already have epoch "
+		 << p->second << dendl;
+	first = p->second + 1;
+	if (first > osdmap.get_epoch())
+	  return;
+      }
     }
   }
 
@@ -2142,7 +2147,7 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
     mon->send_reply(req, m);
 
     if (osd >= 0)
-      osd_epoch[osd] = osdmap.get_epoch();
+      note_osd_has_epoch(osd, osdmap.get_epoch());
     return;
   }
 
@@ -2155,7 +2160,27 @@ void OSDMonitor::send_incremental(PaxosServiceMessage *req, epoch_t first)
   mon->send_reply(req, m);
 
   if (osd >= 0)
-    osd_epoch[osd] = last;
+    note_osd_has_epoch(osd, last);
+}
+
+// FIXME: we assume the OSD actually receives this.  if the mon
+// session drops and they reconnect we may not share the same maps
+// with them again, which could cause a strange hang (perhaps stuck
+// 'waiting for osdmap' requests?).  this information should go in the
+// MonSession, but I think these functions need to be refactored in
+// terms of MonSession first for that to work.
+void OSDMonitor::note_osd_has_epoch(int osd, epoch_t epoch)
+{
+  dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
+  map<int,epoch_t>::iterator p = osd_epoch.find(osd);
+  if (p != osd_epoch.end()) {
+    dout(20) << __func__ << " osd." << osd << " epoch " << epoch
+	     << " (was " << p->second << ")" << dendl;
+    p->second = epoch;
+  } else {
+    dout(20) << __func__ << " osd." << osd << " epoch " << epoch << dendl;
+    osd_epoch[osd] = epoch;
+  }
 }
 
 void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
@@ -2187,6 +2212,10 @@ void OSDMonitor::send_incremental(epoch_t first, MonSession *session,
     MOSDMap *m = build_incremental(first, last);
     session->con->send_message(m);
     first = last + 1;
+
+    if (session->inst.name.is_osd())
+      note_osd_has_epoch(session->inst.name.num(), last);
+
     if (onetime)
       break;
   }
