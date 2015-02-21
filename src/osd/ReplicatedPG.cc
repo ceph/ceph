@@ -2089,6 +2089,8 @@ void ReplicatedPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
     in_progress_proxy_reads.erase(oid);
   }
 
+  osd->logger->inc(l_osd_tier_proxy_read);
+
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   OpContext *ctx = new OpContext(op, m->get_reqid(), prdop->ops, this);
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
@@ -2203,8 +2205,6 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   ctx->op_t = pgbackend->get_transaction();
 
   if (op->may_write() || op->may_cache()) {
-    op->mark_started();
-
     // snap
     if (!(m->get_flags() & CEPH_OSD_FLAG_ENFORCE_SNAPC) &&
 	pool.info.is_pool_snaps_mode()) {
@@ -10254,6 +10254,9 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
 
     remove_repop(repop);
   }
+
+  assert(repop_map.empty());
+  assert(repop_queue.empty());
 
   if (requeue) {
     requeue_ops(rq);
