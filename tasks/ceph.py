@@ -76,7 +76,40 @@ def ceph_log(ctx, config):
         yield
 
     finally:
-        pass
+        if ctx.archive is not None and \
+                not (ctx.config.get('archive-on-error') and ctx.summary['success']):
+            # and logs
+            log.info('Compressing logs...')
+            run.wait(
+                ctx.cluster.run(
+                    args=[
+                        'sudo',
+                        'find',
+                        '/var/log/ceph',
+                        '-name',
+                        '*.log',
+                        '-print0',
+                        run.Raw('|'),
+                        'sudo',
+                        'xargs',
+                        '-0',
+                        '--no-run-if-empty',
+                        '--',
+                        'gzip',
+                        '--',
+                        ],
+                    wait=False,
+                    ),
+                )
+
+            log.info('Archiving logs...')
+            path = os.path.join(ctx.archive, 'remote')
+            os.makedirs(path)
+            for remote in ctx.cluster.remotes.iterkeys():
+                sub = os.path.join(path, remote.shortname)
+                os.makedirs(sub)
+                teuthology.pull_directory(remote, '/var/log/ceph',
+                                          os.path.join(sub, 'log'))
 
 
 def assign_devs(roles, devs):
@@ -748,7 +781,8 @@ def cluster(ctx, config):
                 )
 
         if ctx.archive is not None and \
-                not (ctx.config.get('archive-on-error') and ctx.summary['success']):
+           not (ctx.config.get('archive-on-error') and ctx.summary['success']):
+
             # archive mon data, too
             log.info('Archiving mon data...')
             path = os.path.join(ctx.archive, 'data')
@@ -760,40 +794,6 @@ def cluster(ctx, config):
                             remote,
                             '/var/lib/ceph/mon',
                             path + '/' + role + '.tgz')
-
-            # and logs
-            log.info('Compressing logs...')
-            run.wait(
-                ctx.cluster.run(
-                    args=[
-                        'sudo',
-                        'find',
-                        '/var/log/ceph',
-                        '-name',
-                        '*.log',
-                        '-print0',
-                        run.Raw('|'),
-                        'sudo',
-                        'xargs',
-                        '-0',
-                        '--no-run-if-empty',
-                        '--',
-                        'gzip',
-                        '--',
-                        ],
-                    wait=False,
-                    ),
-                )
-
-            log.info('Archiving logs...')
-            path = os.path.join(ctx.archive, 'remote')
-            os.makedirs(path)
-            for remote in ctx.cluster.remotes.iterkeys():
-                sub = os.path.join(path, remote.shortname)
-                os.makedirs(sub)
-                teuthology.pull_directory(remote, '/var/log/ceph',
-                                          os.path.join(sub, 'log'))
-
 
         log.info('Cleaning ceph cluster...')
         run.wait(
