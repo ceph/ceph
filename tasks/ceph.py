@@ -761,16 +761,24 @@ def cluster(ctx, config):
         for remote, dirs in devs_to_clean.iteritems():
             for dir_ in dirs:
                 log.info('Unmounting %s on %s' % (dir_, remote))
-                remote.run(
-                    args=[
-                        'sync',
-                        run.Raw('&&'),
-                        'sudo',
-                        'umount',
-                        '-f',
-                        dir_
+                try:
+                    remote.run(
+                        args=[
+                            'sync',
+                            run.Raw('&&'),
+                            'sudo',
+                            'umount',
+                            '-f',
+                            dir_
                         ]
                     )
+                except Exception as e:
+                    remote.run(args=[
+                            'sudo',
+                            run.Raw('PATH=/usr/sbin:$PATH'),
+                            'lsof'
+                            ])
+                    raise e
 
         if config.get('tmpfs_journal'):
             log.info('tmpfs journal enabled - unmounting tmpfs at /mnt')
