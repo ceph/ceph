@@ -334,7 +334,7 @@ public:
   }
 
   int test();
-  int test_with_crushtool();
+  int test_with_crushtool(const char *crushtool_cmd = "crushtool");
 };
 
 #endif
