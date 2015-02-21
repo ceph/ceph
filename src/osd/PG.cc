@@ -2301,8 +2301,8 @@ void PG::_update_calc_stats()
     uint64_t degraded = 0;
 
     // if acting is smaller than desired, add in those missing replicas
-    if (acting.size() < target)
-      degraded += (target - acting.size()) * num_objects;
+    if (actingset.size() < target)
+      degraded += (target - actingset.size()) * num_objects;
 
     // missing on primary
     info.stats.stats.sum.num_objects_missing_on_primary =
