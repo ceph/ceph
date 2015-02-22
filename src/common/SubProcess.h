@@ -98,6 +98,20 @@ protected:
   std::ostringstream errstr;
 };
 
+class SubProcessTimed : public SubProcess {
+public:
+  SubProcessTimed(const char *cmd, bool pipe_stdin = false,
+		  bool pipe_stdout = false, bool pipe_stderr = false,
+		  int timeout = 0, int sigkill = SIGKILL);
+
+protected:
+  virtual void exec();
+
+private:
+  int timeout;
+  int sigkill;
+};
+
 SubProcess::SubProcess(const char *cmd_, bool stdin, bool stdout, bool stderr) :
   cmd(cmd_),
   cmd_args(),
@@ -324,6 +338,129 @@ int SubProcess::join() {
   }
   errstr << cmd << ": waitpid: unknown status returned\n";
   return EXIT_FAILURE;
+}
+
+SubProcessTimed::SubProcessTimed(const char *cmd, bool pipe_stdin,
+				 bool pipe_stdout, bool pipe_stderr,
+				 int timeout_, int sigkill_) :
+  SubProcess(cmd, pipe_stdin, pipe_stdout, pipe_stderr),
+  timeout(timeout_),
+  sigkill(sigkill_) {
+}
+
+static bool timedout = false; // only used after fork
+static void timeout_sighandler(int sig) {
+  timedout = true;
+}
+static void dummy_sighandler(int sig) {}
+
+void SubProcessTimed::exec() {
+  assert(is_child());
+
+  if (timeout <= 0) {
+    SubProcess::exec();
+    assert(0); // Never reached
+  }
+
+  sigset_t mask, oldmask;
+  std::ostringstream err;
+  int pid;
+
+  // Restore default action for SIGTERM in case the parent process decided
+  // to ignore it.
+  if (signal(SIGTERM, SIG_DFL) == SIG_ERR) {
+    err << cmd << ": signal failed: " << cpp_strerror(errno) << "\n";
+    goto fail_exit;
+  }
+  // Because SIGCHLD is ignored by default, setup dummy handler for it,
+  // so we can mask it.
+  if (signal(SIGCHLD, dummy_sighandler) == SIG_ERR) {
+    err << cmd << ": signal failed: " << cpp_strerror(errno) << "\n";
+    goto fail_exit;
+  }
+  // Setup timeout handler.
+  if (signal(SIGALRM, timeout_sighandler) == SIG_ERR) {
+    err << cmd << ": signal failed: " << cpp_strerror(errno) << "\n";
+    goto fail_exit;
+  }
+  // Block interesting signals.
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+  sigaddset(&mask, SIGCHLD);
+  sigaddset(&mask, SIGALRM);
+  if (sigprocmask(SIG_SETMASK, &mask, &oldmask) == -1) {
+    err << cmd << ": sigprocmask failed: " << cpp_strerror(errno) << "\n";
+    goto fail_exit;
+  }
+
+  pid = fork();
+
+  if (pid == -1) {
+    err << cmd << ": fork failed: " << cpp_strerror(errno) << "\n";
+    goto fail_exit;
+  }
+
+  if (pid == 0) { // Child
+    // Restore old sigmask.
+    if (sigprocmask(SIG_SETMASK, &oldmask, NULL) == -1) {
+      err << cmd << ": sigprocmask failed: " << cpp_strerror(errno) << "\n";
+      goto fail_exit;
+    }
+    (void)setpgid(0, 0); // Become process group leader.
+    SubProcess::exec();
+    assert(0); // Never reached
+  }
+
+  // Parent
+  (void)alarm(timeout);
+
+  for (;;) {
+    int signo;
+    if (sigwait(&mask, &signo) == -1) {
+      err << cmd << ": sigwait failed: " << cpp_strerror(errno) << "\n";
+      goto fail_exit;
+    }
+    switch (signo) {
+    case SIGCHLD:
+      int status;
+      if (waitpid(pid, &status, WNOHANG) == -1) {
+	err << cmd << ": waitpid failed: " << cpp_strerror(errno) << "\n";
+	goto fail_exit;
+      }
+      write(STDERR_FILENO, err.str().c_str(), err.str().size());
+      if (WIFEXITED(status))
+	_exit(WEXITSTATUS(status));
+      if (WIFSIGNALED(status))
+	_exit(128 + WTERMSIG(status));
+      err << cmd << ": unknown status returned\n";
+      goto fail_exit;
+    case SIGINT:
+    case SIGTERM:
+      // Pass SIGINT and SIGTERM, which are usually used to terminate
+      // a process, to the child.
+      if (::kill(pid, signo) == -1) {
+	err << cmd << ": kill failed: " << cpp_strerror(errno) << "\n";
+	goto fail_exit;
+      }
+      continue;
+    case SIGALRM:
+      err << cmd << ": timed out (" << timeout << " sec)\n";
+      write(STDERR_FILENO, err.str().c_str(), err.str().size());
+      if (::killpg(pid, sigkill) == -1) {
+	err << cmd << ": kill failed: " << cpp_strerror(errno) << "\n";
+	goto fail_exit;
+      }
+      continue;
+    default:
+      err << cmd << ": sigwait: invalid signal: " << signo << "\n";
+      goto fail_exit;
+    }
+  }
+
+fail_exit:
+  write(STDERR_FILENO, err.str().c_str(), err.str().size());
+  _exit(EXIT_FAILURE);
 }
 
 #endif
