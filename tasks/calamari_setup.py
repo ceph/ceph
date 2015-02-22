@@ -249,7 +249,7 @@ def calamari_install(config, cal_svr):
                       run.Raw('|'), 'tar', 'xvf', run.Raw('-')])
     if ret.exitstatus:
         raise RuntimeError('remote tar failed')
-    icesetdata = 'yes\n%s\nhttp\n' % client_id
+    icesetdata = 'yes\n\n%s\nhttp\n' % client_id
     ice_in = StringIO(icesetdata)
     ice_setup_io = StringIO()
     ret = cal_svr.run(args=['sudo', 'python', 'ice_setup.py'], stdin=ice_in,
