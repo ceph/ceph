@@ -2910,7 +2910,8 @@ CEPH_RADOS_API int rados_pg_command(rados_t cluster, const char *pgstr,
  *
  * @param cluster cluster handle
  * @param level minimum log level (debug, info, warn|warning, err|error)
- * @param cb callback to run for each log message
+ * @param cb callback to run for each log message. It MUST NOT block
+ * nor call back into librados.
  * @param arg void argument to pass to cb
  *
  * @returns 0 on success, negative code on error

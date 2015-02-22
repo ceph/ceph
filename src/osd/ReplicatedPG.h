@@ -1510,7 +1510,12 @@ public:
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void wait_for_all_missing(OpRequestRef op);
 
-  bool is_degraded_object(const hobject_t& oid);
+  bool is_degraded_or_backfilling_object(const hobject_t& oid);
+
+  /* true if the object is missing on any peer, *healthy_copies will be
+   * set to the number of complete peers not missing the object
+   */
+  bool is_degraded_object(const hobject_t &oid, int *healthy_copies);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   bool maybe_await_blocked_snapset(const hobject_t &soid, OpRequestRef op);
