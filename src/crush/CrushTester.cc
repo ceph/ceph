@@ -353,9 +353,9 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const char *crushtool_cmd)
+int CrushTester::test_with_crushtool(const char *crushtool_cmd, int timeout)
 {
-  SubProcess crushtool(crushtool_cmd, true, false, true);
+  SubProcessTimed crushtool(crushtool_cmd, true, false, true, timeout);
   crushtool.add_cmd_args("-i", "-", "--test", "--output-csv", NULL);
   int ret = crushtool.spawn();
   if (ret != 0) {
