@@ -14,6 +14,7 @@
 %bcond_with system_leveldb
 %bcond_without tests
 %bcond_without tcmalloc
+%bcond_with libs_compat
 
 # this was before: %if (0%{?fedora} >= 20 || 0%{?rhel} == 6)
 # should work on sle12, too
@@ -150,7 +151,10 @@ Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	python-ceph = %{epoch}:%{version}-%{release}
 Requires:	python-requests
+Requires:	python-argparse
+%if 0%{?rhel} || 0%{?centos} || 0%{?fedora}
 Requires:	redhat-lsb-core
+%endif
 %description -n ceph-common
 Common utilities to mount and interact with a ceph storage cluster.
 
@@ -184,7 +188,10 @@ Requires:	apache2-mod_fcgid
 %else
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
+Requires:		mod_fcgid
 %endif
+Requires(post): %{name} = %{epoch}:%{version}-%{release}
+
 %description radosgw
 This package is an S3 HTTP REST gateway for the RADOS object store. It
 is implemented as a FastCGI module using libfcgi, and can be used in
@@ -303,6 +310,9 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
+%if 0%{?suse_version}
+%py_requires
+%endif
 %description -n python-ceph
 This package contains Python libraries for interacting with Cephs RADOS
 object storage.
@@ -376,6 +386,8 @@ This package contains the Java libraries for the Ceph File System.
 
 %endif
 
+%if 0%{with libs_compat}
+
 %package libs-compat
 Summary:	Meta package to include ceph libraries.
 Group:		System Environment/Libraries
@@ -392,6 +404,8 @@ is included for backwards compatibility with distributions that depend on the
 former ceph-libs package, which is now split up into these three subpackages.
 Packages still depending on ceph-libs should be fixed to depend on librados2,
 librbd1 or libcephfs1 instead.
+
+%endif
 
 #################################################################################
 # common
@@ -465,13 +479,27 @@ ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
+%{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
+%{__install} -m 0644 %{SOURCE4} %{buildroot}/%{_tmpfilesdir}/ceph-radosgw.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
+
+# systemd
+mkdir -p $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-osd@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-mds@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-mon@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph-radosgw@.service $RPM_BUILD_ROOT%{_unitdir}
+install -m 0644 -D systemd/ceph.target $RPM_BUILD_ROOT%{_unitdir}
+mkdir -p $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
+install -m 0755 -D src/ceph-radosgw-prestart.sh $RPM_BUILD_ROOT/usr/lib/ceph-radosgw/
+install -m 0755 -D systemd/ceph %{buildroot}/%{_sbindir}/rcceph
+mkdir -p $RPM_BUILD_ROOT/srv/www/radosgw
 
 # udev rules
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/50-rbd.rules
-install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
+install -m 0644 -D systemd/udev-rules.d-95-ceph-osd.rules $RPM_BUILD_ROOT/usr/lib/udev/rules.d/95-ceph-osd.rules
 %else
 install -m 0644 -D udev/50-rbd.rules $RPM_BUILD_ROOT/lib/udev/rules.d/50-rbd.rules
 install -m 0644 -D udev/60-ceph-partuuid-workaround.rules $RPM_BUILD_ROOT/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
@@ -519,6 +547,7 @@ rm -rf $RPM_BUILD_ROOT
 /sbin/ldconfig
 %if 0%{?suse_version}
 systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
+%service_add_post ceph.target
 %else
 /sbin/chkconfig --add ceph
 %endif
@@ -527,6 +556,7 @@ mkdir -p %{_localstatedir}/run/ceph/
 %preun
 %if 0%{?suse_version}
 %stop_on_removal ceph
+%service_del_preun ceph.target
 %else
 if [ $1 = 0 ] ; then
     /sbin/service ceph stop >/dev/null 2>&1
@@ -539,6 +569,7 @@ fi
 # systemd-tmpfiles --create %{_tmpfilesdir}/%{name}.conf
 /sbin/ldconfig
 %if 0%{?suse_version}
+%service_del_postun ceph.target
 %restart_on_update ceph
 %insserv_cleanup
 %endif
@@ -578,6 +609,12 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
+%dir /usr/lib/ceph
+/usr/lib/ceph/ceph-osd-prestart.sh
+%{_unitdir}/ceph-osd@.service
+%{_unitdir}/ceph-mon@.service
+%{_unitdir}/ceph-mds@.service
+%{_unitdir}/ceph.target
 %if 0%{?rhel} >= 7 || 0%{?fedora}
 %{_sbindir}/mount.ceph
 %else
@@ -909,6 +946,8 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %endif
 
 #################################################################################
+%if 0%{with libs_compat}
+
 %files libs-compat
 # We need an empty %%files list for ceph-libs-compat, to tell rpmbuild to actually
 # build this meta package.
@@ -917,5 +956,7 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %files devel-compat
 # We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
 # actually build this meta package.
+
+%endif
 
 %changelog
