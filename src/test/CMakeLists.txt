@@ -1090,6 +1090,7 @@ target_link_libraries(multi_stress_watch librados global radostest
 
 add_executable(test_librbd
   librbd/test_librbd.cc
+  librbd/test_fixture.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c

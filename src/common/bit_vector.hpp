@@ -200,9 +200,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 
     bufferlist bit;
     bit.substr_of(m_data, byte_offset, len);
-    m_data_crcs[byte_offset / CEPH_PAGE_SIZE] =
-      ceph_crc32c(0, reinterpret_cast<unsigned char*>(bit.c_str()),
-		  bit.length());
+    m_data_crcs[byte_offset / CEPH_PAGE_SIZE] = bit.crc32c(0);
 
     bl.claim_append(bit);
     byte_offset += CEPH_PAGE_SIZE;
@@ -388,11 +386,10 @@ typename BitVector<_b>::Reference& BitVector<_b>::Reference::operator=(uint8_t v
   uint64_t shift;
   this->m_bit_vector.compute_index(this->m_offset, &index, &shift);
 
-  // TODO: find out why bufferlist doesn't support char& operator[]()
   uint8_t mask = MASK << shift;
-  char* packed_data = this->m_bit_vector.m_data.c_str();
-  uint8_t packed_value = (packed_data[index] & ~mask) | ((v << shift) & mask);
-  packed_data[index] = packed_value;
+  char packed_value = (this->m_bit_vector.m_data[index] & ~mask) |
+		      ((v << shift) & mask);
+  this->m_bit_vector.m_data.copy_in(index, 1, &packed_value);
   return *this;
 }
 
