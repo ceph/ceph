@@ -166,3 +166,103 @@ TEST(SubProcess, Subshell)
   std::cerr << "err: " << sh.err() << std::endl;
   ASSERT_FALSE(sh.err()[0] == '\0');
 }
+
+TEST(SubProcessTimed, True)
+{
+  SubProcessTimed p("true", false, false, false, 10);
+  ASSERT_EQ(p.spawn(), 0);
+  ASSERT_EQ(p.join(), 0);
+  ASSERT_TRUE(p.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, SleepNoTimeout)
+{
+  SubProcessTimed sleep("sleep", false, false, false, 0);
+  sleep.add_cmd_arg("1");
+
+  ASSERT_EQ(sleep.spawn(), 0);
+  ASSERT_EQ(sleep.join(), 0);
+  ASSERT_TRUE(sleep.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, Killed)
+{
+  SubProcessTimed cat("cat", true, true, true, 5);
+
+  ASSERT_EQ(cat.spawn(), 0);
+  cat.kill();
+  std::string buf;
+  ASSERT_TRUE(read_from_fd(cat.stdout(), buf));
+  ASSERT_TRUE(buf.empty());
+  ASSERT_TRUE(read_from_fd(cat.stderr(), buf));
+  ASSERT_TRUE(buf.empty());
+  ASSERT_EQ(cat.join(), 128 + SIGTERM);
+  std::cerr << "err: " << cat.err() << std::endl;
+  ASSERT_FALSE(cat.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, SleepTimedout)
+{
+  SubProcessTimed sleep("sleep", false, false, true, 1);
+  sleep.add_cmd_arg("10");
+
+  ASSERT_EQ(sleep.spawn(), 0);
+  std::string buf;
+  ASSERT_TRUE(read_from_fd(sleep.stderr(), buf));
+  std::cerr << "stderr: " << buf;
+  ASSERT_FALSE(buf.empty());
+  ASSERT_EQ(sleep.join(), 128 + SIGKILL);
+  std::cerr << "err: " << sleep.err() << std::endl;
+  ASSERT_FALSE(sleep.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, SubshellNoTimeout)
+{
+  SubProcessTimed sh("/bin/sh", true, true, true, 0);
+  sh.add_cmd_args("-c", "cat >&2", NULL);
+  ASSERT_EQ(sh.spawn(), 0);
+  std::string msg("the quick brown fox jumps over the lazy dog");
+  int n = write(sh.stdin(), msg.c_str(), msg.size());
+  ASSERT_EQ(n, (int)msg.size());
+  sh.close_stdin();
+  std::string buf;
+  ASSERT_TRUE(read_from_fd(sh.stdout(), buf));
+  std::cerr << "stdout: " << buf << std::endl;
+  ASSERT_TRUE(buf.empty());
+  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  std::cerr << "stderr: " << buf << std::endl;
+  ASSERT_EQ(buf, msg);
+  ASSERT_EQ(sh.join(), 0);
+  ASSERT_TRUE(sh.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, SubshellKilled)
+{
+  SubProcessTimed sh("/bin/sh", true, true, true, 10);
+  sh.add_cmd_args("-c", "sh -c cat", NULL);
+  ASSERT_EQ(sh.spawn(), 0);
+  std::string msg("etaoin shrdlu");
+  int n = write(sh.stdin(), msg.c_str(), msg.size());
+  ASSERT_EQ(n, (int)msg.size());
+  sh.kill();
+  std::string buf;
+  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  ASSERT_TRUE(buf.empty());
+  ASSERT_EQ(sh.join(), 128 + SIGTERM);
+  std::cerr << "err: " << sh.err() << std::endl;
+  ASSERT_FALSE(sh.err()[0] == '\0');
+}
+
+TEST(SubProcessTimed, SubshellTimedout)
+{
+  SubProcessTimed sh("/bin/sh", true, true, true, 1, SIGTERM);
+  sh.add_cmd_args("-c", "sleep 1000& cat; NEVER REACHED", NULL);
+  ASSERT_EQ(sh.spawn(), 0);
+  std::string buf;
+  ASSERT_TRUE(read_from_fd(sh.stderr(), buf));
+  std::cerr << "stderr: " << buf;
+  ASSERT_FALSE(buf.empty());
+  ASSERT_EQ(sh.join(), 128 + SIGTERM);
+  std::cerr << "err: " << sh.err() << std::endl;
+  ASSERT_FALSE(sh.err()[0] == '\0');
+}
