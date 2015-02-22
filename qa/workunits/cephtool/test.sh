@@ -1435,7 +1435,7 @@ exit 0 # success
 EOF
   chmod +x $TMPDIR/crushtool
   ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
-  ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
+  ceph osd setcrushmap -i $map 2>&1 | grep 'timed out'
   ceph tell mon.* injectargs --crushtool crushtool
   # crushtool validation succeeds
   ceph osd setcrushmap -i $map
