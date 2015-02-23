@@ -56,7 +56,8 @@ TEST(AES, Encrypt) {
   bufferlist cipher;
   std::string error;
   CryptoKeyHandler *kh = h->get_key_handler(secret, error);
-  kh->encrypt(plaintext, cipher, error);
+  int r = kh->encrypt(plaintext, cipher, &error);
+  ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
 
   unsigned char want_cipher[] = {
@@ -101,7 +102,8 @@ TEST(AES, Decrypt) {
   std::string error;
   bufferlist plaintext;
   CryptoKeyHandler *kh = h->get_key_handler(secret, error);
-  kh->decrypt(cipher, plaintext, error);
+  int r = kh->decrypt(cipher, plaintext, &error);
+  ASSERT_EQ(r, 0);
   ASSERT_EQ(error, "");
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
@@ -134,7 +136,8 @@ TEST(AES, Loop) {
 
       std::string error;
       CryptoKeyHandler *kh = h->get_key_handler(secret, error);
-      kh->encrypt(plaintext, cipher, error);
+      int r = kh->encrypt(plaintext, cipher, &error);
+      ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
     }
     plaintext.clear();
@@ -143,7 +146,8 @@ TEST(AES, Loop) {
       CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
       std::string error;
       CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
-      ckh->decrypt(cipher, plaintext, error);
+      int r = ckh->decrypt(cipher, plaintext, &error);
+      ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
     }
   }
@@ -170,7 +174,8 @@ TEST(AES, LoopKey) {
   for (int i=0; i<n; ++i) {
     bufferlist encoded;
     string error;
-    key.encrypt(g_ceph_context, data, encoded, error);
+    int r = key.encrypt(g_ceph_context, data, encoded, &error);
+    ASSERT_EQ(r, 0);
   }
 
   utime_t end = ceph_clock_now(NULL);
