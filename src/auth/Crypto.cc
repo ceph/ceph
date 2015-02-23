@@ -67,13 +67,15 @@ uint64_t get_random(uint64_t min_val, uint64_t max_val)
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
 public:
-  void encrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
+  int encrypt(const bufferlist& in,
+	       bufferlist& out, std::string *error) const {
     out = in;
+    return 0;
   }
-  void decrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
+  int decrypt(const bufferlist& in,
+	      bufferlist& out, std::string *error) const {
     out = in;
+    return 0;
   }
 };
 
@@ -139,8 +141,8 @@ public:
     return 0;
   }
 
-  void encrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
+  int encrypt(const bufferlist& in,
+	      bufferlist& out, std::string *error) const {
     string ciphertext;
     CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
     CryptoPP::CBC_Mode_ExternalCipher::Encryption cbc(
@@ -155,16 +157,19 @@ public:
     try {
       stfEncryptor.MessageEnd();
     } catch (CryptoPP::Exception& e) {
-      ostringstream oss;
-      oss << "encryptor.MessageEnd::Exception: " << e.GetWhat();
-      error = oss.str();
-      return;
+      if (error) {
+	ostringstream oss;
+	oss << "encryptor.MessageEnd::Exception: " << e.GetWhat();
+	*error = oss.str();
+      }
+      return -1;
     }
     out.append((const char *)ciphertext.c_str(), ciphertext.length());
+    return 0;
   }
 
-  void decrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
+  int decrypt(const bufferlist& in,
+	      bufferlist& out, std::string *error) const {
     string decryptedtext;
     CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
     CryptoPP::CBC_Mode_ExternalCipher::Decryption cbc(
@@ -179,13 +184,16 @@ public:
     try {
       stfDecryptor.MessageEnd();
     } catch (CryptoPP::Exception& e) {
-      ostringstream oss;
-      oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
-      error = oss.str();
-      return;
+      if (error) {
+	ostringstream oss;
+	oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
+	*error = oss.str();
+      }
+      return -1;
     }
 
     out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
+    return 0;
   }
 };
 
@@ -194,12 +202,12 @@ public:
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			      CK_MECHANISM_TYPE mechanism,
-			      PK11SymKey *key,
-			      SECItem *param,
-			      const bufferlist& in, bufferlist& out,
-			      std::string &error)
+static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
+			     CK_MECHANISM_TYPE mechanism,
+			     PK11SymKey *key,
+			     SECItem *param,
+			     const bufferlist& in, bufferlist& out,
+			     std::string *error)
 {
   // sample source said this has to be at least size of input + 8,
   // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
@@ -220,10 +228,12 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
 		      in_buf, in.length());
   if (ret != SECSuccess) {
-    ostringstream oss;
-    oss << "NSS AES failed: " << PR_GetError();
-    error = oss.str();
-    return;
+    if (error) {
+      ostringstream oss;
+      oss << "NSS AES failed: " << PR_GetError();
+      *error = oss.str();
+    }
+    return -1;
   }
 
   unsigned int written2;
@@ -231,16 +241,19 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 			 (unsigned char*)out_tmp.c_str()+written, &written2,
 			 out_tmp.length()-written);
   if (ret != SECSuccess) {
-    ostringstream oss;
-    oss << "NSS AES final round failed: " << PR_GetError();
-    error = oss.str();
-    return;
+    if (error) {
+      ostringstream oss;
+      oss << "NSS AES final round failed: " << PR_GetError();
+      *error = oss.str();
+    }
+    return -1;
   }
 
   PK11_DestroyContext(ectx, PR_TRUE);
 
   out_tmp.set_length(written + written2);
   out.append(out_tmp);
+  return 0;
 }
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
@@ -298,13 +311,13 @@ public:
     return 0;
   }
 
-  void encrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
-    nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+  int encrypt(const bufferlist& in,
+	      bufferlist& out, std::string *error) const {
+    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
   }
-  void decrypt(const bufferlist& in,
-	       bufferlist& out, std::string &error) const {
-    nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+  int decrypt(const bufferlist& in,
+	       bufferlist& out, std::string *error) const {
+    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
   }
 };
 

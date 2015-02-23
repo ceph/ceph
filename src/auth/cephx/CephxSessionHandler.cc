@@ -28,7 +28,6 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
 {
   ceph_msg_header& header = m->get_header();
   ceph_msg_footer& footer = m->get_footer();
-  std::string error;
 
   // optimized signature calculation
   // - avoid temporary allocated buffers from encode_encrypt[_enc_bl]
@@ -49,7 +48,10 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
   bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
 
   bufferlist bl_ciphertext;
-  key.encrypt(cct, bl_plaintext, bl_ciphertext, error);
+  if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
+    lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+    return -1;
+  }
 
   bufferlist::iterator ci = bl_ciphertext.begin();
   ::decode(*psig, ci);
