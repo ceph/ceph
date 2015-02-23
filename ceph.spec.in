@@ -109,10 +109,6 @@ BuildRequires:	snappy-devel
 #################################################################################
 # specific
 #################################################################################
-%if ! 0%{?rhel} || ! 0%{?fedora}
-BuildRequires:	sharutils
-%endif
-
 %if 0%{?suse_version}
 Requires:	gptfdisk
 %if 0%{with tcmalloc}
