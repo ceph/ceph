@@ -8,7 +8,7 @@ Development
 -----------
 
 The ``run-make-check.sh`` script will install Ceph dependencies,
-compiles everything in debug mode and runs a number of tests to verify
+compile everything in debug mode and run a number of tests to verify
 the result behaves as expected.
 
 .. code::
