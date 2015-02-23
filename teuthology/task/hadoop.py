@@ -84,34 +84,18 @@ def get_mapred_site_data(ctx):
     return path, data_tmpl.format(namenode=host)
 
 def get_yarn_site_data(ctx):
-    data_tmpl = """
-<configuration>
-<property>
- <name>yarn.resourcemanager.resourcetracker.address</name>
- <value>{namenode}:8025</value>  
-</property>
-<property>
- <name>yarn.resourcemanager.scheduler.address</name>
- <value>{namenode}:8030</value>  
-</property>
-<property>
- <name>yarn.resourcemanager.address</name>
- <value>{namenode}:8050</value>  
-</property>
-<property>
- <name>yarn.resourcemanager.admin.address</name>
- <value>{namenode}:8041</value>  
-</property>
-<property>
-  <name>yarn.resourcemanager.hostname</name>
-  <value>{namenode}</value>
-</property>
-<property>
-  <name>yarn.nodemanager.aux-services</name>
-  <value>mapreduce_shuffle</value>
-</property>
-</configuration>
-"""
+    conf = {}
+    conf.update({
+        'yarn.resourcemanager.resourcetracker.address': '{namenode}:8025',
+        'yarn.resourcemanager.scheduler.address': '{namenode}:8030',
+        'yarn.resourcemanager.address': '{namenode}:8050',
+        'yarn.resourcemanager.admin.address': '{namenode}:8041',
+        'yarn.resourcemanager.hostname': '{namenode}',
+        'yarn.nodemanager.aux-services': 'mapreduce_shuffle',
+        'yarn.nodemanager.sleep-delay-before-sigkill.ms': '10000',
+    })
+    data_tmpl = dict_to_hadoop_conf(conf)
+
     tempdir = teuthology.get_testdir(ctx)
     path = "{tdir}/hadoop/etc/hadoop/yarn-site.xml".format(tdir=tempdir)
     nodes = ctx.cluster.only(teuthology.is_type('hadoop.master'))
