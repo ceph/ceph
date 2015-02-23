@@ -1,3 +1,5 @@
 
 tasks:
-- mds_client_limits:
+    - cephfs_test_runner:
+        modules:
+            - tasks.cephfs.test_client_limits

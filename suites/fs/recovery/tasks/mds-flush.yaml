@@ -1,3 +1,5 @@
 
 tasks:
-- mds_flush:
+    - cephfs_test_runner:
+        modules:
+            - tasks.cephfs.test_flush

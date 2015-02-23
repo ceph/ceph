@@ -7,4 +7,6 @@ overrides:
               memstore device bytes: 100000000
 
 tasks:
-    - mds_full:
+    - cephfs_test_runner:
+        modules:
+            - tasks.cephfs.test_full
