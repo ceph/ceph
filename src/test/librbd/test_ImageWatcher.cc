@@ -260,9 +260,11 @@ TEST_F(TestImageWatcher, TryLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_TRUE(ictx->image_watcher);
 
-  RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->try_lock());
-  ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
@@ -284,8 +286,10 @@ TEST_F(TestImageWatcher, TryLockNotifyAnnounceLocked) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
 
-  RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
