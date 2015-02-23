@@ -464,30 +464,15 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
         args=[
             'sudo', 'yum', 'clean', 'all',
         ])
-    version_no = StringIO()
-    version_url = "{start_of_url}/version".format(start_of_url=start_of_url)
-    while True:
-        r = remote.run(args=['wget', '-q', '-O-', version_url, ],
-                       stdout=version_no, check_status=False)
-        if r.exitstatus != 0:
-            if config.get('wait_for_package'):
-                log.info('Package not there yet, waiting...')
-                time.sleep(15)
-                continue
-            raise VersionNotFoundError(version_url)
-        version = r.stdout.getvalue().strip()
-        log.info('Package version is %s', version)
-        break
 
-    tmp_vers = version_no.getvalue().strip()[1:]
-    if '-' in tmp_vers:
-        tmp_vers = tmp_vers.split('-')[0]
     ldir = _get_local_dir(config, remote)
     for cpack in rpm:
-        pkg2add = "{cpack}-{version}".format(cpack=cpack, version=tmp_vers)
         pkg = None
         if ldir:
-            pkg = "{ldir}/{cpack}-{trailer}".format(ldir=ldir, cpack=cpack, trailer=tmp_vers)
+            pkg = "{ldir}/{cpack}".format(
+                ldir=ldir,
+                cpack=cpack,
+            )
             remote.run(
                 args = ['if', 'test', '-e',
                         run.Raw(pkg), run.Raw(';'), 'then',
@@ -496,12 +481,12 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                         run.Raw(';'), 'fi']
             )
         if pkg is None:
-            remote.run(args=['sudo', 'yum', 'install', pkg2add, '-y'])
+            remote.run(args=['sudo', 'yum', 'install', cpack, '-y'])
         else:
             remote.run(
                 args = ['if', 'test', run.Raw('!'), '-e',
                         run.Raw(pkg), run.Raw(';'), 'then',
-                        'sudo', 'yum', 'install', pkg2add, '-y',
+                        'sudo', 'yum', 'install', cpack, '-y',
                         run.Raw(';'), 'fi'])
 
 
