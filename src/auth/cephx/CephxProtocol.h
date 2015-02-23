@@ -433,8 +433,7 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl
   uint64_t magic;
   bufferlist bl;
 
-  key.decrypt(cct, bl_enc, bl, error);
-  if (!error.empty())
+  if (key.decrypt(cct, bl_enc, bl, &error) < 0)
     return;
 
   bufferlist::iterator iter2 = bl.begin();
@@ -462,7 +461,7 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
   ::encode(magic, bl);
   ::encode(t, bl);
 
-  key.encrypt(cct, bl, out, error);
+  key.encrypt(cct, bl, out, &error);
 }
 
 template <typename T>
