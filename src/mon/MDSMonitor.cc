@@ -1328,13 +1328,12 @@ int MDSMonitor::filesystem_command(
       r = -EEXIST;
       ss << "mds." << who << " not active (" 
 	 << ceph_mds_state_name(pending_mdsmap.get_state(who)) << ")";
-    } else if ((pending_mdsmap.get_root() == who ||
-		pending_mdsmap.get_tableserver() == who) &&
-	       pending_mdsmap.get_num_in_mds() > 1) {
-      r = -EBUSY;
+    } else if (pending_mdsmap.get_root() == who ||
+		pending_mdsmap.get_tableserver() == who) {
+      r = -EINVAL;
       ss << "can't tell the root (" << pending_mdsmap.get_root()
 	 << ") or tableserver (" << pending_mdsmap.get_tableserver()
-	 << " to deactivate unless it is the last mds in the cluster";
+	 << ") to deactivate";
     } else if (pending_mdsmap.get_num_in_mds() <= size_t(pending_mdsmap.get_max_mds())) {
       r = -EBUSY;
       ss << "must decrease max_mds or else MDS will immediately reactivate";
