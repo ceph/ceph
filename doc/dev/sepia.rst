@@ -1,5 +1,5 @@
-Notes on the Sepia community test lab
-=====================================
+Sepia community test lab
+========================
 
 The Ceph community maintains a test lab that is open to active
 contributors to the Ceph project.
