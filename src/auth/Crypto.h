@@ -37,10 +37,10 @@ public:
 
   virtual ~CryptoKeyHandler() {}
 
-  virtual void encrypt(const bufferlist& in,
-		       bufferlist& out, std::string &error) const = 0;
-  virtual void decrypt(const bufferlist& in,
-		       bufferlist& out, std::string &error) const = 0;
+  virtual int encrypt(const bufferlist& in,
+		       bufferlist& out, std::string *error) const = 0;
+  virtual int decrypt(const bufferlist& in,
+		       bufferlist& out, std::string *error) const = 0;
 };
 
 /*
@@ -105,13 +105,13 @@ public:
 
   // --
   int create(CephContext *cct, int type);
-  void encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string &error) const {
-    ckh->encrypt(in, out, error);
+  int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
+	       std::string *error) const {
+    return ckh->encrypt(in, out, error);
   }
-  void decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string &error) const {
-    ckh->decrypt(in, out, error);
+  int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
+	       std::string *error) const {
+    return ckh->decrypt(in, out, error);
   }
 
   void to_str(std::string& s) const;
