@@ -895,6 +895,10 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 
     ::encode(ResponseMessage(r), *out);
     if (r == 0) {
+      // increment now to avoid race due to the delayed notification
+      Mutex::Locker lictx(m_image_ctx.refresh_lock);
+      ++m_image_ctx.refresh_seq;
+
       // cannot notify within a notificiation
       FunctionContext *ctx = new FunctionContext(
 	boost::bind(&ImageWatcher::finalize_header_update, this));
