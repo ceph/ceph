@@ -153,6 +153,7 @@ LIBRADOS = librados.la
 LIBRADOSSTRIPER = libradosstriper.la
 LIBRGW = librgw.la
 LIBRBD = librbd.la
+LIBRBD_TYPES = librbd_types.la
 LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
