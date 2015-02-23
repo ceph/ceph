@@ -479,6 +479,13 @@ namespace librbd {
     if (r < 0)
       return r;
 
+    {
+      RWLock::RLocker l(ictx->snap_lock);
+      if (ictx->get_snap_id(snap_name) != CEPH_NOSNAP) {
+        return -EEXIST;
+      }
+    }
+
     bool lock_owner = false;
     while (ictx->image_watcher->is_lock_supported()) {
       r = prepare_image_update(ictx);
@@ -490,7 +497,9 @@ namespace librbd {
       }
 
       r = ictx->image_watcher->notify_snap_create(snap_name);
-      if (r != -ETIMEDOUT) {
+      if (r == -EEXIST) {
+        return 0;
+      } else if (r != -ETIMEDOUT) {
 	return r;
       }
       ldout(ictx->cct, 5) << "snap_create timed out notifying lock owner" << dendl;
