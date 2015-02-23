@@ -1875,7 +1875,7 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l, uint64_t features
     (*p)->election_finished();
   health_monitor->start(epoch);
 
-  logger->inc(l_mon_election_win);
+  logger->inc(l_mon_election_lose);
 
   finish_election();
 }
