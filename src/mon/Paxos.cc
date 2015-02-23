@@ -86,10 +86,12 @@ void Paxos::init_logger()
   pcb.add_u64_avg(l_paxos_begin_keys, "begin_keys");
   pcb.add_u64_avg(l_paxos_begin_bytes, "begin_bytes");
   pcb.add_time_avg(l_paxos_begin_latency, "begin_latency");
-  pcb.add_u64_counter(l_paxos_commit, "commit");
+  pcb.add_u64_counter(l_paxos_commit, "commit",
+      "Commits", "cmt");
   pcb.add_u64_avg(l_paxos_commit_keys, "commit_keys");
   pcb.add_u64_avg(l_paxos_commit_bytes, "commit_bytes");
-  pcb.add_time_avg(l_paxos_commit_latency, "commit_latency");
+  pcb.add_time_avg(l_paxos_commit_latency, "commit_latency",
+      "Commit latency", "clat");
   pcb.add_u64_counter(l_paxos_collect, "collect");
   pcb.add_u64_avg(l_paxos_collect_keys, "collect_keys");
   pcb.add_u64_avg(l_paxos_collect_bytes, "collect_bytes");
