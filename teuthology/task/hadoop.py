@@ -92,6 +92,7 @@ def get_yarn_site_data(ctx):
         'yarn.resourcemanager.admin.address': '{namenode}:8041',
         'yarn.resourcemanager.hostname': '{namenode}',
         'yarn.nodemanager.aux-services': 'mapreduce_shuffle',
+        'yarn.nodemanager.sleep-delay-before-sigkill.ms': '10000',
     })
     data_tmpl = dict_to_hadoop_conf(conf)
 
