@@ -1964,15 +1964,12 @@ reprotect_and_return_err:
 	    r = cls_client::get_flags(&ictx->md_ctx, ictx->header_oid,
 				      &ictx->flags, new_snapc.snaps,
 				      &snap_flags);
-            if (r == -EOPNOTSUPP || r == -EIO) {
-              // Older OSD doesn't support RBD flags, need to assume the worst
-              ldout(ictx->cct, 10) << "OSD does not support RBD flags" << dendl;
-              ictx->flags = 0;
-              if ((ictx->features & RBD_FEATURE_OBJECT_MAP) != 0) {
-                ldout(ictx->cct, 10) << "disabling object map optimizations"
-                                     << dendl;
-                ictx->flags |= RBD_FLAG_OBJECT_MAP_INVALID;
-              }
+	    if (r == -EOPNOTSUPP || r == -EIO) {
+	      // Older OSD doesn't support RBD flags, need to assume the worst
+	      ldout(ictx->cct, 10) << "OSD does not support RBD flags"
+				   << "disabling object map optimizations"
+				   << dendl;
+	      ictx->flags = RBD_FLAG_OBJECT_MAP_INVALID;
 
 	      vector<uint64_t> default_flags(new_snapc.snaps.size(), ictx->flags);
 	      snap_flags.swap(default_flags);
