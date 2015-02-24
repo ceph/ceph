@@ -64,18 +64,18 @@ Getting librados for Python
 The ``rados.py`` modules provides ``librados`` support to Python
 applications. The ``librados-dev`` package for Debian/Ubuntu
 and the ``librados2-devel`` package for RHEL/CentOS will install the
-``python-ceph`` package for you. You may install ``python-ceph``
+``python-rados`` package for you. You may install ``python-rados``
 directly too.
 
 To install ``librados`` development support files for Python on Debian/Ubuntu
 distributions, execute the following::
 
-	sudo apt-get install python-ceph
+	sudo apt-get install python-rados
 
 To install ``librados`` development support files for C/C++ on RHEL/CentOS
 distributions, execute the following::
 
-	sudo yum install python-ceph
+	sudo yum install python-rados
 
 You can find the module under ``/usr/share/pyshared`` on Debian systems,
 or under ``/usr/lib/python*/site-packages`` on CentOS/RHEL systems.
