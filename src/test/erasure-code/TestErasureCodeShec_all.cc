@@ -317,7 +317,7 @@ int main(int argc, char **argv)
   }
   std::cout << "cannot recovery patterns:" << std::endl;
   for (std::vector<Recover_d>::const_iterator i = cannot_recover.begin();
-       i != cannot_recover.end(); i++) {
+       i != cannot_recover.end(); ++i) {
     std::cout << "---" << std::endl;
     std::cout << "k = " << i->k << ", m = " << i->m << ", c = " << i->c
 	<< std::endl;
