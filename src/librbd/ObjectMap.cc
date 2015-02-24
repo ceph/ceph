@@ -114,7 +114,7 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 {
   // Fall back to default logic if object map is disabled or invalid
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) ||
-      ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0)) {
+      m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID)) {
     return true;
   }
 
@@ -290,7 +290,10 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 }
 
 void ObjectMap::invalidate() {
-  if ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+  assert(m_image_ctx.snap_lock.is_wlocked());
+  uint64_t flags;
+  m_image_ctx.get_flags(m_image_ctx.snap_id, &flags);
+  if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
     return;
   }
 
@@ -351,12 +354,12 @@ bool ObjectMap::Request::should_complete(int r) {
 }
 
 bool ObjectMap::Request::invalidate() {
-  if ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
+  if (m_image_ctx.test_flags(RBD_FLAG_OBJECT_MAP_INVALID)) {
     return true;
   }
 
   CephContext *cct = m_image_ctx.cct;
-  RWLock::WLocker l(m_image_ctx.md_lock);
+  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
 
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_state = STATE_INVALIDATE;
