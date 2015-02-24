@@ -202,7 +202,7 @@ Summary:	Python libraries for the RADOS object store
 Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-Obsoletes:	python-ceph
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %if 0%{defined suse_version}
 %py_requires
 %endif
@@ -262,7 +262,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
-Obsoletes:	python-ceph
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %description -n python-rbd
 This package contains Python libraries for interacting with Cephs RADOS
 block device.
@@ -298,7 +298,7 @@ Group:		System Environment/Libraries
 License:	LGPL-2.0
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Requires:	python-rados = %{epoch}:%{version}-%{release}
-Obsoletes:	python-ceph
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
 %description -n python-cephfs
 This package contains Python libraries for interacting with Cephs distributed
 file system.
