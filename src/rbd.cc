@@ -2719,7 +2719,7 @@ int main(int argc, const char **argv)
       progress = false;
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
       resize_allow_shrink = true;
-    } else if (ceph_argparse_flag(args, i, "--image-features", (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--image-features", (char *)NULL)) {
       features = strict_strtol(val.c_str(), 10, &parse_err);
       if (!parse_err.empty()) {
 	cerr << "rbd: error parsing --image-features: " << parse_err
