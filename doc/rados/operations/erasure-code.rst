@@ -171,3 +171,4 @@ Table of content
 	erasure-code-jerasure
 	erasure-code-isa
 	erasure-code-lrc
+	erasure-code-shec
