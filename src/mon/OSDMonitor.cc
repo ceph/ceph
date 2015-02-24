@@ -1779,8 +1779,13 @@ bool OSDMonitor::prepare_boot(MOSDBoot *m)
 	xi.laggy_probability * (1.0 - g_conf->mon_osd_laggy_weight);
       dout(10) << " laggy, now xi " << xi << dendl;
     }
+
     // set features shared by the osd
-    xi.features = m->get_connection()->get_features();
+    if (m->osd_features)
+      xi.features = m->osd_features;
+    else
+      xi.features = m->get_connection()->get_features();
+
     pending_inc.new_xinfo[from] = xi;
 
     // wait
