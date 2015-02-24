@@ -93,7 +93,7 @@ int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_decode,
 
   if (!minimum_chunks) return -EINVAL;
 
-  for (set<int>::iterator it = available_chunks.begin(); it != available_chunks.end(); it++){
+  for (set<int>::iterator it = available_chunks.begin(); it != available_chunks.end(); ++it){
     if (*it < 0 || k+m <= *it) return -EINVAL;
   }
 
