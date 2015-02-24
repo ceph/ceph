@@ -1154,6 +1154,7 @@ void PGMap::pool_client_io_rate_summary(Formatter *f, ostream *out,
  * @param old_pool_sum      Previous stats sum
  * @param last_ts           Last timestamp for pool
  * @param result_pool_sum   Resulting stats
+ * @param result_pool_delta Resulting pool delta
  * @param result_ts_delta   Resulting timestamp delta
  * @param delta_avg_list    List of last N computed deltas, used to average
  */

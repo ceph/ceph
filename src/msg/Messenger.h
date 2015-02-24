@@ -287,16 +287,16 @@ public:
    */
   virtual Policy get_default_policy() = 0;
   /**
-   * Set a Throttler which is applied to all Messages from the given
-   * type of peer.
+   * Set Throttlers applied to all Messages from the given type of peer
    *
    * This is an init-time function and cannot be called after calling
    * start() or bind().
    *
-   * @param type The peer type this Throttler will apply to.
-   * @param t The Throttler to apply. The Messenger does not take
-   * ownership of this pointer, but you must not destroy it before
-   * you destroy the Messenger.
+   * @param type The peer type the Throttlers will apply to.
+   * @param bytes The Throttle for the number of bytes carried by the message
+   * @param msgs The Throttle for the number of messages for this @p type
+   * @note The Messenger does not take ownership of the Throttle pointers, but
+   * you must not destroy them before you destroy the Messenger.
    */
   virtual void set_policy_throttlers(int type, Throttle *bytes, Throttle *msgs=NULL) = 0;
   /**
