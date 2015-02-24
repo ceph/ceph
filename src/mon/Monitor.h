@@ -232,7 +232,7 @@ private:
   set<string> outside_quorum;
 
   /**
-   * @defgroup scrub
+   * @defgroup Monitor_h_scrub
    * @{
    */
   version_t scrub_version;            ///< paxos version we are scrubbing
@@ -250,7 +250,7 @@ private:
   void scrub_reset();
 
   /**
-   * @defgroup Synchronization
+   * @defgroup Monitor_h_sync Synchronization
    * @{
    */
   /**
