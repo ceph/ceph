@@ -341,7 +341,7 @@ TEST_F(LibRadosMisc, Exec) {
   uint64_t all_features;
   ::decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
-  ASSERT_NE(all_features, 0);
+  ASSERT_NE(all_features, (unsigned)0);
 }
 
 TEST_F(LibRadosMiscPP, ExecPP) {
@@ -354,7 +354,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   uint64_t all_features;
   ::decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
-  ASSERT_NE(all_features, 0);
+  ASSERT_NE(all_features, (unsigned)0);
 }
 
 TEST_F(LibRadosMiscPP, Operate1PP) {
