@@ -13,7 +13,6 @@ from teuthology import contextutil
 from teuthology.exceptions import VersionNotFoundError
 from teuthology.parallel import parallel
 from ..orchestra import run
-from ..orchestra.run import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -62,27 +61,6 @@ PACKAGES['ceph']['rpm'] = [
     'librbd1',
     'python-ceph',
 ]
-
-def _run_and_log_error_if_fails(remote, args):
-    """
-    Yet another wrapper around command execution. This one runs a command on
-    the given remote, then, if execution fails, logs the error and re-raises.
-
-    :param remote: the teuthology.orchestra.remote.Remote object
-    :param args: list of arguments comprising the command the be executed
-    :returns: None
-    :raises: CommandFailedError
-    """
-    response = StringIO()
-    try:
-        remote.run(
-            args=args,
-            stdout=response,
-            stderr=response,
-        )
-    except CommandFailedError:
-        log.error(response.getvalue().strip())
-        raise
 
 
 def _get_config_value_for_remote(ctx, remote, config, key):
@@ -926,27 +904,17 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
             arch=distinfo['arch'],)
     )
 
+    log.info("Getting version and release for the currently installed ceph...")
+    remote.run(args=[
+        'rpm', '-q', 'ceph', '--qf', '%{VERSION}-%{RELEASE}'
+    ])
     base_url = _get_baseurl(ctx, remote, config)
     log.info('Repo base URL: %s', base_url)
-    version = _block_looking_for_package_version(
-        remote,
-        base_url,
-        config.get('wait_for_package', False))
-    # FIXME: 'version' as retreived from the repo is actually the RPM version
-    # PLUS *part* of the release. Example:
-    # Right now, ceph master is given the following version in the repo file:
-    # v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM version is 0.61.7
-    # and the release is 37.g1243c97.el6 (for centos6).
-    # Point being, I have to mangle a little here.
-    if version[0] == 'v':
-        version = version[1:]
-    if '-' in version:
-        version = version.split('-')[0]
     project = config.get('project', 'ceph')
 
     # Remove the -release package before upgrading it
     args = ['sudo', 'rpm', '-ev', '%s-release' % project]
-    _run_and_log_error_if_fails(remote, args)
+    remote.run(args=args)
 
     # Build the new -release package path
     release_rpm = "{base}/noarch/{proj}-release-{release}.{dist_release}.noarch.rpm".format(
@@ -958,25 +926,25 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
 
     # Upgrade the -release package
     args = ['sudo', 'rpm', '-Uv', release_rpm]
-    _run_and_log_error_if_fails(remote, args)
+    remote.run(args=args)
     uri = _get_baseurlinfo_and_dist(ctx, remote, config)['uri']
     _yum_fix_repo_priority(remote, project, uri)
     _yum_fix_repo_host(remote, project)
+    _yum_set_check_obsoletes(remote)
 
     remote.run(
         args=[
             'sudo', 'yum', 'clean', 'all',
         ])
 
-    # Build a space-separated string consisting of $PKG-$VER for yum
-    pkgs_with_vers = ["%s-%s" % (pkg, version) for pkg in pkgs]
-
     # Actually upgrade the project packages
-    # FIXME: This currently outputs nothing until the command is finished
-    # executing. That sucks; fix it.
     args = ['sudo', 'yum', '-y', 'install']
-    args += pkgs_with_vers
-    _run_and_log_error_if_fails(remote, args)
+    args += pkgs
+    remote.run(args=args)
+    log.info("Getting version and release for the newly upgraded ceph...")
+    remote.run(args=[
+        'rpm', '-q', 'ceph', '--qf', '%{VERSION}-%{RELEASE}'
+    ])
 
 
 def upgrade_old_style(ctx, node, remote, pkgs, system_type):
