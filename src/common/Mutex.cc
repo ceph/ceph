@@ -29,7 +29,7 @@ Mutex::Mutex(const char *n, bool r, bool ld,
   if (cct) {
     PerfCountersBuilder b(cct, string("mutex-") + name,
 			  l_mutex_first, l_mutex_last);
-    b.add_time_avg(l_mutex_wait, "wait");
+    b.add_time_avg(l_mutex_wait, "wait", "Average time of mutex in locked state");
     logger = b.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
     logger->set(l_mutex_wait, 0);
