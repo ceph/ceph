@@ -319,7 +319,7 @@ namespace librbd {
     }
 
     {
-      RWLock::RLocker l(ictx->md_lock);
+      RWLock::WLocker l(ictx->snap_lock);
       if (ictx->object_map != NULL) {
 	ictx->object_map->rollback(snap_id);
       }
