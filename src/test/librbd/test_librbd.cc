@@ -2151,7 +2151,6 @@ TEST_F(TestLibRBD, DiffIterateDiscard)
   ASSERT_EQ(1u, extents.size());
   ASSERT_EQ(diff_extent(0, 256, false), extents[0]);
   ASSERT_PASSED(validate_object_map, image);
-  ioctx.close();
 }
 
 TEST_F(TestLibRBD, DiffIterateStress)
@@ -2211,7 +2210,6 @@ TEST_F(TestLibRBD, DiffIterateStress)
   }
 
   ASSERT_PASSED(validate_object_map, image);
-  ioctx.close();
 }
 
 TEST_F(TestLibRBD, DiffIterateRegression6926)
@@ -2252,7 +2250,6 @@ TEST_F(TestLibRBD, DiffIterateRegression6926)
   ASSERT_EQ(0, image.diff_iterate(NULL, 0, size,
       			    vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(static_cast<size_t>(0), extents.size());
-  ioctx.close();
 }
 
 TEST_F(TestLibRBD, ZeroLengthWrite)
