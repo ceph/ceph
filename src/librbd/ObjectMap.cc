@@ -35,7 +35,7 @@ std::string ObjectMap::object_map_name(const std::string &image_id,
 
 int ObjectMap::lock()
 {
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     return 0;
   }
 
@@ -94,7 +94,7 @@ int ObjectMap::lock()
 
 int ObjectMap::unlock()
 {
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     return 0;
   }
 
@@ -113,7 +113,7 @@ int ObjectMap::unlock()
 bool ObjectMap::object_may_exist(uint64_t object_no) const
 {
   // Fall back to default logic if object map is disabled or invalid
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0 ||
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) ||
       ((m_image_ctx.flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0)) {
     return true;
   }
@@ -237,7 +237,7 @@ void ObjectMap::snapshot(uint64_t snap_id) {
 
 void ObjectMap::aio_resize(uint64_t new_size, uint8_t default_object_state,
 			   Context *on_finish) {
-  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
+  assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher->is_lock_owner());
 
@@ -259,7 +259,7 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
                            const boost::optional<uint8_t> &current_state,
                            Context *on_finish)
 {
-  assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
+  assert(m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP));
   assert(m_image_ctx.owner_lock.is_locked());
   assert(m_image_ctx.image_watcher->is_lock_owner());
 

@@ -452,6 +452,14 @@ namespace librbd {
     return -ENOENT;
   }
 
+  bool ImageCtx::test_features(uint64_t test_features) const
+  {
+    RWLock::RLocker l(snap_lock);
+    uint64_t snap_features = 0;
+    get_features(snap_id, &snap_features);
+    return ((snap_features & test_features) == test_features);
+  }
+
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
   {
     if (_snap_id == CEPH_NOSNAP) {
