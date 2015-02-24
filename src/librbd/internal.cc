@@ -320,9 +320,7 @@ namespace librbd {
 
     {
       RWLock::WLocker l(ictx->snap_lock);
-      if (ictx->object_map != NULL) {
-	ictx->object_map->rollback(snap_id);
-      }
+      ictx->object_map.rollback(snap_id);
     }
     return 0;
   }
@@ -584,13 +582,11 @@ namespace librbd {
       }
     }
 
-    if (ictx->object_map != NULL) {
-      r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, snap_id));
-      if (r < 0 && r != -ENOENT) {
-	lderr(ictx->cct) << "snap_remove: failed to remove snapshot object map"
-			 << dendl;
-	return 0;
-      }
+    r = ictx->md_ctx.remove(ObjectMap::object_map_name(ictx->id, snap_id));
+    if (r < 0 && r != -ENOENT) {
+      lderr(ictx->cct) << "snap_remove: failed to remove snapshot object map"
+		       << dendl;
+      return 0;
     }
 
     r = rm_snap(ictx, snap_name);
@@ -1785,9 +1781,7 @@ reprotect_and_return_err:
 
     RWLock::WLocker l(ictx->snap_lock);
     if (!ictx->old_format) {
-      if (ictx->object_map != NULL) {
-	ictx->object_map->snapshot(snap_id);
-      }
+      ictx->object_map.snapshot(snap_id);
       if (lock_owner) {
 	// immediately start using the new snap context if we
 	// own the exclusive lock
@@ -2055,15 +2049,8 @@ reprotect_and_return_err:
 	ictx->snap_exists = false;
       }
 
-      if ((ictx->features & RBD_FEATURE_OBJECT_MAP) == 0) {
-	delete ictx->object_map;
-	ictx->object_map = NULL;
-      } else {
-	ictx->object_map = new ObjectMap(*ictx);
-	if (ictx->snap_exists) {
-	  ictx->object_map->refresh(ictx->snap_id);
-	}
-      }
+      RWLock::WLocker object_map_locker(ictx->object_map_lock);
+      ictx->object_map.refresh(ictx->snap_id);
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
     } // release snap_lock
