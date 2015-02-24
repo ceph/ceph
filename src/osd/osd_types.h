@@ -2300,14 +2300,14 @@ struct pg_log_t {
    *
    * @param other pg_log_t to copy from
    * @param from copy entries after this version
-   * @parem to up to and including this version
+   * @param to up to and including this version
    */
   void copy_range(const pg_log_t &other, eversion_t from, eversion_t to);
 
   /**
    * copy up to N entries
    *
-   * @param o source log
+   * @param other source log
    * @param max max number of entreis to copy
    */
   void copy_up_to(const pg_log_t &other, int max);
@@ -3525,7 +3525,7 @@ struct OSDOp {
    * buffer, including the sobject_t soid.
    *
    * @param ops [in] vector of OSDOps
-   * @param in  [out] combined data buffer
+   * @param out [out] combined data buffer
    */
   static void merge_osd_op_vector_in_data(vector<OSDOp>& ops, bufferlist& out);
 
@@ -3541,7 +3541,7 @@ struct OSDOp {
    * merge outdata members of a vector of OSDOps into a single bufferlist
    *
    * @param ops [in] vector of OSDOps
-   * @param in  [out] combined data buffer
+   * @param out [out] combined data buffer
    */
   static void merge_osd_op_vector_out_data(vector<OSDOp>& ops, bufferlist& out);
 };

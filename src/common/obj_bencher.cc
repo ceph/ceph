@@ -1032,9 +1032,8 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
  * prefix. The list is guaranteed to have at least one item when the
  * function returns true.
  *
- * @in
  * @param prefix the prefix to match against
- * @param objects return list of objects
+ * @param objects [out] return list of objects
  * @returns true if there are any objects in the store which match
  * the prefix, false if there are no more
  */
