@@ -1330,8 +1330,7 @@ reprotect_and_return_err:
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
-    RWLock::RLocker l(ictx->md_lock);
-    RWLock::RLocker l2(ictx->snap_lock);
+    RWLock::RLocker l(ictx->snap_lock);
     return ictx->get_features(ictx->snap_id, features);
   }
 
@@ -2191,12 +2190,14 @@ reprotect_and_return_err:
 
     src->md_lock.get_read();
     src->snap_lock.get_read();
+    uint64_t src_features;
+    src->get_features(src->snap_id, &src_features);
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
     src->md_lock.put_read();
 
     int r = create(dest_md_ctx, destname, src_size, src->old_format,
-		   src->features, &order, src->stripe_unit, src->stripe_count);
+		   src_features, &order, src->stripe_unit, src->stripe_count);
     if (r < 0) {
       lderr(cct) << "header creation failed" << dendl;
       return r;

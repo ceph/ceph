@@ -130,8 +130,11 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 }
 
 void ObjectMap::refresh(uint64_t snap_id)
-{ 
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
+{
+  assert(m_image_ctx.snap_lock.is_locked());
+  uint64_t features;
+  m_image_ctx.get_features(m_image_ctx.snap_id, &features);
+  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
     return;
   }
 
@@ -164,7 +167,10 @@ void ObjectMap::refresh(uint64_t snap_id)
 }
 
 void ObjectMap::rollback(uint64_t snap_id) {
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  assert(m_image_ctx.snap_lock.is_wlocked());
+  uint64_t features;
+  m_image_ctx.get_features(snap_id, &features);
+  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
     return;
   }
 
@@ -197,7 +203,10 @@ void ObjectMap::rollback(uint64_t snap_id) {
 }
 
 void ObjectMap::snapshot(uint64_t snap_id) {
-  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  assert(m_image_ctx.snap_lock.is_wlocked());
+  uint64_t features;
+  m_image_ctx.get_features(CEPH_NOSNAP, &features);
+  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
     return;
   }
 

@@ -439,6 +439,7 @@ namespace librbd {
 
   int ImageCtx::get_features(snap_t in_snap_id, uint64_t *out_features) const
   {
+    assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       *out_features = features;
       return 0;
