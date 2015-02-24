@@ -291,6 +291,7 @@ namespace librbd {
 
   int ImageCtx::snap_set(string in_snap_name)
   {
+    assert(snap_lock.is_wlocked());
     snap_t in_snap_id = get_snap_id(in_snap_name);
     if (in_snap_id != CEPH_NOSNAP) {
       snap_id = in_snap_id;
@@ -308,6 +309,7 @@ namespace librbd {
 
   void ImageCtx::snap_unset()
   {
+    assert(snap_lock.is_wlocked());
     snap_id = CEPH_NOSNAP;
     snap_name = "";
     snap_exists = true;
@@ -320,6 +322,7 @@ namespace librbd {
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
   {
+    assert(snap_lock.is_locked());
     map<string, snap_t>::const_iterator it =
       snap_ids.find(in_snap_name);
     if (it != snap_ids.end())
@@ -329,6 +332,7 @@ namespace librbd {
 
   const SnapInfo* ImageCtx::get_snap_info(snap_t in_snap_id) const
   {
+    assert(snap_lock.is_locked());
     map<snap_t, SnapInfo>::const_iterator it =
       snap_info.find(in_snap_id);
     if (it != snap_info.end())
@@ -339,6 +343,7 @@ namespace librbd {
   int ImageCtx::get_snap_name(snap_t in_snap_id,
 			      string *out_snap_name) const
   {
+    assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *out_snap_name = info->name;
@@ -360,6 +365,7 @@ namespace librbd {
 
   uint64_t ImageCtx::get_current_size() const
   {
+    assert(md_lock.is_locked());
     return size;
   }
 
@@ -392,6 +398,7 @@ namespace librbd {
   int ImageCtx::is_snap_protected(snap_t in_snap_id,
 				  bool *is_protected) const
   {
+    assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_protected =
@@ -404,6 +411,7 @@ namespace librbd {
   int ImageCtx::is_snap_unprotected(snap_t in_snap_id,
 				    bool *is_unprotected) const
   {
+    assert(snap_lock.is_locked());
     const SnapInfo *info = get_snap_info(in_snap_id);
     if (info) {
       *is_unprotected =
@@ -417,6 +425,7 @@ namespace librbd {
 			  uint64_t features, parent_info parent,
 			  uint8_t protection_status, uint64_t flags)
   {
+    assert(snap_lock.is_wlocked());
     snaps.push_back(id);
     SnapInfo info(in_snap_name, in_size, features, parent, protection_status,
 		  flags);
@@ -426,6 +435,8 @@ namespace librbd {
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
+    assert(md_lock.is_locked());
+    assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return size;
     }
@@ -476,6 +487,8 @@ namespace librbd {
 
   const parent_info* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
+    assert(snap_lock.is_locked());
+    assert(parent_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP)
       return &parent_md;
     const SnapInfo *info = get_snap_info(in_snap_id);
