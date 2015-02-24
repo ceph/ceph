@@ -82,7 +82,8 @@ public:
    * Put a whole set of values efficiently and safely.
    *
    * @param a - prefix/directory
-   * @param vals - map of int name -> values
+   * @param start
+   * @param end defines a range of map from int -> values
    * @return 0 for success or negative error code
    */
   void put_bl_sn_map(const char *a,

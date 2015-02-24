@@ -83,8 +83,8 @@ extern int get_json_str_map(
  * Always returns 0, as there is no condition for failure.
  *
  * @param [in] str plain text key/value pairs
+ * @param [in] delims field delimiters to be used for parsing str
  * @param [out] str_map key/value pairs parsed from str
- * @param [in] delim field delimiters to be used for parsing str
  * @return **0**
  */
 extern int get_str_map(

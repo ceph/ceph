@@ -249,9 +249,6 @@ private:
    *
    * @param addr The address of the entity to connect to.
    * @param type The peer type of the entity at the address.
-   * @param con An existing Connection to associate with the new connection. If
-   * NULL, it creates a new Connection.
-   * @param msg an initial message to queue on the new connection
    *
    * @return a pointer to the newly-created connection. Caller does not own a
    * reference; take one if you need it.
@@ -266,7 +263,7 @@ private:
    *
    * @param m The Message to queue up. This function eats a reference.
    * @param con The existing Connection to use, or NULL if you don't know of one.
-   * @param addr The address to send the Message to.
+   * @param dest_addr The address to send the Message to.
    * @param dest_type The peer type of the address we're sending to
    * just drop silently under failure.
    */

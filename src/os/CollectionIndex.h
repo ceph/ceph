@@ -150,7 +150,7 @@ protected:
     ) = 0;
 
   /**
-   * Moves objects matching <match> in the lsb <bits>
+   * Moves objects matching @e match in the lsb @e bits
    *
    * dest and this must be the same subclass
    *

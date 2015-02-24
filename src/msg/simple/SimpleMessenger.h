@@ -215,7 +215,7 @@ private:
    * @param type The peer type of the entity at the address.
    * @param con An existing Connection to associate with the new Pipe. If
    * NULL, it creates a new Connection.
-   * @param msg an initial message to queue on the new pipe
+   * @param first an initial message to queue on the new pipe
    *
    * @return a pointer to the newly-created Pipe. Caller does not own a
    * reference; take one if you need it.

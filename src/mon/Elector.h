@@ -56,7 +56,7 @@ class Elector {
    *
    * @remarks This function assumes as a default firing value the duration of
    *	      the monitor's lease interval, and adds to it the value specified
-   *	      in @plus
+   *	      in @e plus
    *
    * @post expire_event is set
    *
