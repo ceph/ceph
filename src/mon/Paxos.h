@@ -987,7 +987,7 @@ private:
    *
    * @invariant The received message is an operation of type OP_LEASE
    *
-   * @param The message sent by the Leader to the Peon during the
+   * @param lease The message sent by the Leader to the Peon during the
    *	    Paxos::extend_lease function
    */
   void handle_lease(MMonPaxos *lease);
@@ -1084,7 +1084,8 @@ private:
 public:
   /**
    * @param m A monitor
-   * @param mid A machine id
+   * @param name A name for the paxos service. It serves as the naming space
+   * of the underlying persistent storage for this service.
    */
   Paxos(Monitor *m, const string &name) 
 		 : mon(m),
@@ -1272,7 +1273,7 @@ public:
    * Check if a given version is readable.
    *
    * A version may not be readable for a myriad of reasons:
-   *  @li the version @v is higher that the last committed version
+   *  @li the version @e v is higher that the last committed version
    *  @li we are not the Leader nor a Peon (election may be on-going)
    *  @li we do not have a committed value yet
    *  @li we do not have a valid lease
@@ -1282,7 +1283,7 @@ public:
    */
   bool is_readable(version_t seen=0);
   /**
-   * Read version @v and store its value in @bl
+   * Read version @e v and store its value in @e bl
    *
    * @param[in] v The version we want to read
    * @param[out] bl The version's value

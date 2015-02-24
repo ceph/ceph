@@ -460,7 +460,7 @@ namespace librados
      * Get up to max_return keys and values beginning after start_after
      *
      * @param start_after [in] list no keys smaller than start_after
-     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -477,7 +477,7 @@ namespace librados
      *
      * @param start_after [in] list keys starting after start_after
      * @param filter_prefix [in] list only keys beginning with filter_prefix
-     * @parem max_return [in] list no more than max_return key/value pairs
+     * @param max_return [in] list no more than max_return key/value pairs
      * @param out_vals [out] place returned values in out_vals on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -495,7 +495,7 @@ namespace librados
      * Get up to max_return keys beginning after start_after
      *
      * @param start_after [in] list keys starting after start_after
-     * @parem max_return [in] list no more than max_return keys
+     * @param max_return [in] list no more than max_return keys
      * @param out_keys [out] place returned values in out_keys on completion
      * @param prval [out] place error code in prval upon completion
      */
@@ -515,8 +515,8 @@ namespace librados
     /**
      * get key/value pairs for specified keys
      *
-     * @param to_get [in] keys to get
-     * @param out_vals [out] place key/value pairs found here on completion
+     * @param keys [in] keys to get
+     * @param map [out] place key/value pairs found here on completion
      * @param prval [out] place error code in prval upon completion
      */
     void omap_get_vals_by_keys(const std::set<std::string> &keys,
@@ -550,7 +550,7 @@ namespace librados
     /**
      * query dirty state of an object
      *
-     * @param out_dirty [out] pointer to resulting bool
+     * @param isdirty [out] pointer to resulting bool
      * @param prval [out] place error code in prval upon completion
      */
     void is_dirty(bool *isdirty, int *prval);
@@ -864,9 +864,8 @@ namespace librados
      * The return value of the completion will be 0 on success, negative
      * error code on failure.
      *
-     * @param io the context to operate in
      * @param oid the name of the object
-     * @param completion what to do when the remove is safe and complete
+     * @param c what to do when the remove is safe and complete
      * @returns 0 on success, -EROFS if the io context specifies a snap_seq
      * other than SNAP_HEAD
      */
