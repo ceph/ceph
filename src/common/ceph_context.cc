@@ -163,21 +163,26 @@ public:
     if (changed.count("log_to_graylog") || changed.count("err_to_graylog")) {
       int l = conf->log_to_graylog ? 99 : (conf->err_to_graylog ? -1 : -2);
       log->set_graylog_level(l, l);
+
+      if (conf->log_to_graylog || conf->err_to_graylog) {
+	log->start_graylog(conf->log_graylog_host, conf->log_graylog_port);
+      } else if (! (conf->log_to_graylog && conf->err_to_graylog)) {
+	log->stop_graylog();
+      }
     }
 
-    if (changed.count("log_graylog_host") || changed.count("log_graylog_port")) {
-      log->set_graylog_destination(conf->log_graylog_host, conf->log_graylog_port);
+    if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
+      log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
     }
 
     // metadata
-    if (changed.count("host")) {
-      log->set_host(conf->host);
+    if (log->graylog() && changed.count("host")) {
+      log->graylog()->set_hostname(conf->host);
     }
 
-    if (changed.count("fsid")) {
-      log->set_fsid(conf->fsid);
+    if (log->graylog() && changed.count("fsid")) {
+      log->graylog()->set_fsid(conf->fsid);
     }
-
   }
 };
 

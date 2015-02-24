@@ -6,12 +6,14 @@
 
 #include "common/Thread.h"
 
+#include <assert.h>
 #include <pthread.h>
 #include <boost/asio.hpp>
 
 #include "Entry.h"
 #include "EntryQueue.h"
 #include "SubsystemMap.h"
+#include "Graylog.h"
 
 namespace ceph {
 namespace log {
@@ -40,11 +42,7 @@ class Log : private Thread
   int m_stderr_log, m_stderr_crash;
   int m_graylog_log, m_graylog_crash;
 
-  std::string m_host;
-  uuid_d m_fsid;
-
-  boost::asio::ip::udp::endpoint m_graylog_endpoint;
-  boost::asio::io_service m_graylog_io_service;
+  boost::shared_ptr<Graylog> m_graylog;
 
   bool m_stop;
 
@@ -77,16 +75,18 @@ public:
   void set_stderr_level(int log, int crash);
   void set_graylog_level(int log, int crash);
 
+  void start_graylog(const std::string& host, int port);
+  void stop_graylog();
+  void update_graylog(const std::string& host, int port);
+
+  void set_graylog_destination(const std::string& host, int port);
+  boost::shared_ptr<Graylog> graylog() { return m_graylog; };
+
   Entry *create_entry(int level, int subsys);
   void submit_entry(Entry *e);
 
   void start();
   void stop();
-
-  void set_host(std::string host);
-  void set_fsid(uuid_d fdid);
-
-  void set_graylog_destination(std::string host, int port);
 
   /// true if the log lock is held by our thread
   bool is_inside_log_lock();
