@@ -1783,6 +1783,7 @@ reprotect_and_return_err:
       return r;
     }
 
+    RWLock::WLocker l(ictx->snap_lock);
     if (!ictx->old_format) {
       if (ictx->object_map != NULL) {
 	ictx->object_map->snapshot(snap_id);
