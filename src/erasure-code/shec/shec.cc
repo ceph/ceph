@@ -172,6 +172,7 @@ int shec_make_decoding_matrix(bool prepare, int k, int m, int w, int *matrix, in
   }
 
   if (ek > m){
+    free(tmpmat);
     return -1;
   }
 
