@@ -952,8 +952,8 @@ public:
    *
    * @param results A freshly-created validated_data struct, with values set
    * as described in the struct documentation.
-   * @param Context The callback to activate once the validation has
-   * been completed.
+   * @param mdr The request to be responeded upon the completion of the
+   * validation.
    */
   void validate_disk_state(validated_data *results,
                            MDRequestRef& mdr);

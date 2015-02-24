@@ -127,7 +127,7 @@ struct CephContext;
  *
  * @param major where to store the major version number
  * @param minor where to store the minor version number
- * @param extra where to store the extra version number
+ * @param patch where to store the extra version number
  */
 const char *ceph_version(int *major, int *minor, int *patch);
 
@@ -363,7 +363,7 @@ const char* ceph_getcwd(struct ceph_mount_info *cmount);
  * @param path the path to the working directory to change into.
  * @returns 0 on success, negative error code otherwise.
  */
-int ceph_chdir(struct ceph_mount_info *cmount, const char *s);
+int ceph_chdir(struct ceph_mount_info *cmount, const char *path);
 
 /** @} fsops */
 
@@ -655,7 +655,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gi
  * Change the ownership of a file from an open file descriptor.
  *
  * @param cmount the ceph mount handle to use for performing the chown.
- * @param path the path of the file/directory to change the ownership of.
+ * @param fd the fd of the open file/directory to change the ownership of.
  * @param uid the user id to set on the file/directory.
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
@@ -757,8 +757,8 @@ int ceph_close(struct ceph_mount_info *cmount, int fd);
  * @param offset the offset to set the stream to
  * @param whence the flag to indicate what type of seeking to perform:
  *	SEEK_SET: the offset is set to the given offset in the file.
- *      SEEK_CUR: the offset is set to the current location plus @ref offset bytes.
- *      SEEK_END: the offset is set to the end of the file plus @ref offset bytes.
+ *      SEEK_CUR: the offset is set to the current location plus @e offset bytes.
+ *      SEEK_END: the offset is set to the end of the file plus @e offset bytes.
  * @returns 0 on success or a negative error code on failure.
  */
 int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd, int64_t offset, int whence);
@@ -768,7 +768,7 @@ int64_t ceph_lseek(struct ceph_mount_info *cmount, int fd, int64_t offset, int w
  * @param cmount the ceph mount handle to use for performing the read.
  * @param fd the file descriptor of the open file to read from.
  * @param buf the buffer to read data into
- * @param the initial size of the buffer
+ * @param size the initial size of the buffer
  * @param offset the offset in the file to read from.  If this value is negative, the
  *        function reads from the current offset of the file descriptor.
  * @returns the number of bytes read into buf, or a negative error code on failure.
@@ -1144,7 +1144,7 @@ int ceph_get_pool_replication(struct ceph_mount_info *cmount, int pool_id);
  *	anywhere within the stripe unit.
  * @param addr the address of the OSD holding that stripe
  * @param naddr the capacity of the address passed in.
- * @returns the size of the addressed filled into the @ref addr parameter, or a negative
+ * @returns the size of the addressed filled into the @e addr parameter, or a negative
  *	error code on failure.
  */
 int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, int64_t offset,
@@ -1163,7 +1163,7 @@ int ceph_get_file_stripe_address(struct ceph_mount_info *cmount, int fd, int64_t
  * @returns the number of items stored in the output array, or -ERANGE if the
  * array is not large enough.
  */
-int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fh,
+int ceph_get_file_extent_osds(struct ceph_mount_info *cmount, int fd,
                               int64_t offset, int64_t *length, int *osds, int nosds);
 
 /**
@@ -1248,7 +1248,7 @@ int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
  * Get the capabilities currently issued to the client.
  *
  * @param cmount the ceph mount handle to use.
- * @param the path to the file
+ * @param path the path to the file
  * @returns the current capabilities issued to this client
  *       for the file
  */
