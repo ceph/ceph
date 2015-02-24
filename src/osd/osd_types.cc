@@ -1778,7 +1778,7 @@ bool pg_stat_t::is_acting_osd(int32_t osd, bool primary) const
     return true;
   } else if (!primary) {
     for(vector<int32_t>::const_iterator it = acting.begin();
-        it != acting.end(); it++)
+        it != acting.end(); ++it)
     {
       if (*it == osd)
         return true;

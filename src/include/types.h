@@ -112,6 +112,12 @@ inline ostream& operator<<(ostream& out, const deque<A>& v) {
   return out;
 }
 
+template<class A, class B, class C>
+inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
+  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
+  return out;
+}
+
 template<class A>
 inline ostream& operator<<(ostream& out, const list<A>& ilist) {
   for (typename list<A>::const_iterator it = ilist.begin();
@@ -120,12 +126,6 @@ inline ostream& operator<<(ostream& out, const list<A>& ilist) {
     if (it != ilist.begin()) out << ",";
     out << *it;
   }
-  return out;
-}
-
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
-  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
   return out;
 }
 

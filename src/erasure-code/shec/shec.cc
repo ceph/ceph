@@ -84,14 +84,13 @@ int *shec_reedsolomon_coding_matrix(int k, int m, int c, int w, int is_single)
 {
   int *matrix;
   int rr, cc, start, end;
-  int m1, m2, c1, c2, c1_best = -1, m1_best = -1;
-  double min_r_e1;
+  int m1, m2, c1, c2;
 
   if (w != 8 && w != 16 && w != 32) return NULL;
 
   if (!is_single){
-
-    min_r_e1 = 100.0;
+    int c1_best = -1, m1_best = -1;
+    double min_r_e1 = 100.0;
 
     // create all multiple shec pattern and choose best.
 
@@ -173,6 +172,7 @@ int shec_make_decoding_matrix(bool prepare, int k, int m, int w, int *matrix, in
   }
 
   if (ek > m){
+    free(tmpmat);
     return -1;
   }
 
