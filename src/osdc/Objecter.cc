@@ -491,7 +491,14 @@ struct C_DoWatchError : public Context {
     info->_queued_async();
   }
   void finish(int r) {
-    info->watch_context->handle_error(info->get_cookie(), err);
+    objecter->rwlock.get_read();
+    bool canceled = info->canceled;
+    objecter->rwlock.put_read();
+
+    if (!canceled) {
+      info->watch_context->handle_error(info->get_cookie(), err);
+    }
+
     info->finished_async();
     info->put();
     objecter->_linger_callback_finish();
