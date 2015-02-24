@@ -59,7 +59,7 @@ namespace librbd {
       object_cacher(NULL), writeback_handler(NULL), object_set(NULL),
       readahead(),
       total_bytes_read(0), copyup_finisher(NULL),
-      object_map(NULL)
+      object_map(*this)
   {
     md_ctx.dup(p);
     data_ctx.dup(p);
@@ -129,7 +129,6 @@ namespace librbd {
       delete copyup_finisher;
       copyup_finisher = NULL;
     }
-    delete object_map;
     delete[] format_string;
   }
 
@@ -299,8 +298,9 @@ namespace librbd {
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
 
-      if (object_map != NULL) {
-        object_map->refresh(in_snap_id);
+      if (object_map.enabled()) {
+	RWLock::WLocker l(object_map_lock);
+        object_map.refresh(in_snap_id);
       }
       return 0;
     }
@@ -315,8 +315,9 @@ namespace librbd {
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
 
-    if (object_map != NULL) {
-      object_map->refresh(CEPH_NOSNAP);
+    if (object_map.enabled()) {
+      RWLock::WLocker l(object_map_lock);
+      object_map.refresh(CEPH_NOSNAP);
     }
   }
 
