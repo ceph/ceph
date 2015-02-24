@@ -2824,7 +2824,8 @@ reprotect_and_return_err:
     // check parent overlap only if we are comparing to the beginning of time
     interval_set<uint64_t> parent_diff;
     if (from_snap_id == 0) {
-      ictx->parent_lock.get_read();
+      RWLock::RLocker l(ictx->snap_lock);
+      RWLock::RLocker l2(ictx->parent_lock);
       uint64_t overlap = end_size;
       ictx->get_parent_overlap(from_snap_id, &overlap);
       r = 0;
@@ -2832,7 +2833,6 @@ reprotect_and_return_err:
 	ldout(ictx->cct, 10) << " first getting parent diff" << dendl;
 	r = diff_iterate(ictx->parent, NULL, 0, overlap, simple_diff_cb, &parent_diff);
       }
-      ictx->parent_lock.put_read();
       if (r < 0)
 	return r;
     }
