@@ -2968,7 +2968,8 @@ void Monitor::forward_request_leader(PaxosServiceMessage *req)
     routed_requests[rr->tid] = rr;
     session->routed_request_tids.insert(rr->tid);
     
-    dout(10) << "forward_request " << rr->tid << " request " << *req << dendl;
+    dout(10) << "forward_request " << rr->tid << " request " << *req
+	     << " features " << rr->con_features << dendl;
 
     MForward *forward = new MForward(rr->tid, req,
 				     rr->con_features,
