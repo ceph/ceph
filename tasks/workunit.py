@@ -336,6 +336,7 @@ def _run_tests(ctx, refspec, role, tests, env, subdir=None, timeout=None):
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw('CEPH_ID="{id}"'.format(id=id_)),
+                    run.Raw('PATH=$PATH:/usr/sbin')
                     ]
                 if env is not None:
                     for var, val in env.iteritems():
