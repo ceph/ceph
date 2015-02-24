@@ -32,6 +32,8 @@ class Graylog
 
   void log_entry(Entry const * const e);
 
+  typedef ceph::shared_ptr<Graylog> Ref;
+
  private:
   SubsystemMap const * const m_subs;
 

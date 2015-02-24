@@ -42,7 +42,7 @@ class Log : private Thread
   int m_stderr_log, m_stderr_crash;
   int m_graylog_log, m_graylog_crash;
 
-  boost::shared_ptr<Graylog> m_graylog;
+  Graylog::Ref m_graylog;
 
   bool m_stop;
 
@@ -77,7 +77,6 @@ public:
 
   void start_graylog();
   void stop_graylog();
-  void update_graylog(const std::string& host, int port);
 
   Graylog::Ref graylog() { return m_graylog; }
 
