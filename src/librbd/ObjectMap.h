@@ -46,6 +46,8 @@ public:
   void rollback(uint64_t snap_id);
   void snapshot(uint64_t snap_id);
 
+  bool enabled() const;
+
 private:
 
   class Request : public AsyncRequest {
@@ -119,6 +121,8 @@ private:
   ImageCtx &m_image_ctx;
 
   ceph::BitVector<2> m_object_map;
+
+  bool m_enabled;
 
   void invalidate();
 

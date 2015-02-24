@@ -17,7 +17,7 @@
 namespace librbd {
 
 ObjectMap::ObjectMap(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx)
+  : m_image_ctx(image_ctx), m_enabled(false)
 {
 }
 
@@ -33,10 +33,23 @@ std::string ObjectMap::object_map_name(const std::string &image_id,
   return oid;
 }
 
+bool ObjectMap::enabled() const
+{
+  RWLock::RLocker l(m_image_ctx.object_map_lock);
+  return m_enabled;
+}
+
 int ObjectMap::lock()
 {
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     return 0;
+  }
+
+  {
+    RWLock::RLocker l(m_image_ctx.object_map_lock);
+    if (!m_enabled) {
+      return 0;
+    }
   }
 
   int r;
@@ -119,6 +132,9 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
   }
 
   RWLock::RLocker l(m_image_ctx.object_map_lock);
+  if (!m_enabled) {
+    return true;
+  }
   assert(object_no < m_object_map.size());
 
   bool exists = (m_object_map[object_no] == OBJECT_EXISTS ||
@@ -132,16 +148,20 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 void ObjectMap::refresh(uint64_t snap_id)
 {
   assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
   uint64_t features;
-  m_image_ctx.get_features(m_image_ctx.snap_id, &features);
-  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  m_image_ctx.get_features(snap_id, &features);
+  if ((features & RBD_FEATURE_OBJECT_MAP) == 0 ||
+      (m_image_ctx.snap_id == snap_id && !m_image_ctx.snap_exists)) {
+    m_object_map.clear();
+    m_enabled = false;
     return;
   }
+  m_enabled = true;
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << &m_image_ctx << " refreshing object map" << dendl;
 
-  RWLock::WLocker l(m_image_ctx.object_map_lock);
   std::string oid(object_map_name(m_image_ctx.id, snap_id));
   int r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid,
                                       &m_object_map);
@@ -178,6 +198,9 @@ void ObjectMap::rollback(uint64_t snap_id) {
   ldout(cct, 10) << &m_image_ctx << " rollback object map" << dendl;
 
   RWLock::WLocker l(m_image_ctx.object_map_lock);
+  if (!m_enabled) {
+    return;
+  }
 
   std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
   bufferlist bl;
@@ -215,15 +238,16 @@ void ObjectMap::snapshot(uint64_t snap_id) {
 
   int r;
   bufferlist bl;
-  {
-    RWLock::RLocker l(m_image_ctx.object_map_lock);
-    std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
-    r = m_image_ctx.md_ctx.read(oid, bl, 0, 0);
-    if (r < 0) {
-      lderr(cct) << "unable to load object map: " << cpp_strerror(r)
-		 << dendl;
-      invalidate();
-    }
+  RWLock::WLocker l(m_image_ctx.object_map_lock);
+  if (!m_enabled) {
+    return;
+  }
+  std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
+  r = m_image_ctx.md_ctx.read(oid, bl, 0, 0);
+  if (r < 0) {
+    lderr(cct) << "unable to load object map: " << cpp_strerror(r)
+	       << dendl;
+    invalidate();
   }
 
   std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
@@ -291,6 +315,7 @@ bool ObjectMap::aio_update(uint64_t start_object_no, uint64_t end_object_no,
 
 void ObjectMap::invalidate() {
   assert(m_image_ctx.snap_lock.is_wlocked());
+  assert(m_image_ctx.object_map_lock.is_wlocked());
   uint64_t flags;
   m_image_ctx.get_flags(m_image_ctx.snap_id, &flags);
   if ((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0) {
@@ -328,12 +353,8 @@ bool ObjectMap::Request::should_complete(int r) {
     }
 
     {
-      RWLock::RLocker l(m_image_ctx.md_lock);
       RWLock::WLocker l2(m_image_ctx.object_map_lock);
-      ObjectMap *object_map = m_image_ctx.object_map;
-      if (object_map != NULL) {
-	finish(object_map);
-      }
+      finish(&m_image_ctx.object_map);
     }
     return true;
 
@@ -341,7 +362,7 @@ bool ObjectMap::Request::should_complete(int r) {
     ldout(cct, 20) << "INVALIDATE" << dendl;
     if (r < 0) {
       lderr(cct) << "failed to invalidate object map: " << cpp_strerror(r)
-		 << dendl; 
+		 << dendl;
     }
     return true;
 

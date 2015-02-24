@@ -34,12 +34,8 @@ public:
   }
 
   virtual int send() {
-    {
-      RWLock::RLocker l(m_image_ctx.md_lock);
-      if (m_image_ctx.object_map != NULL &&
-          !m_image_ctx.object_map->object_may_exist(m_object_no)) {
-        return 1;
-      }
+    if (!m_image_ctx.object_map.object_may_exist(m_object_no)) {
+      return 1;
     }
 
     RWLock::RLocker l(m_image_ctx.owner_lock);
@@ -163,8 +159,7 @@ void AsyncTrimRequest::send_pre_remove() {
   bool lost_exclusive_lock = false;
   {
     RWLock::RLocker l(m_image_ctx.owner_lock);
-    RWLock::RLocker l2(m_image_ctx.md_lock);
-    if (m_image_ctx.object_map == NULL) {
+    if (!m_image_ctx.object_map.enabled()) {
       remove_objects = true;
     } else {
       ldout(m_image_ctx.cct, 5) << this << " send_pre_remove: "
@@ -177,7 +172,7 @@ void AsyncTrimRequest::send_pre_remove() {
         lost_exclusive_lock = true;
       } else {
         // flag the objects as pending deletion
-        if (!m_image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+        if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 						OBJECT_PENDING, OBJECT_EXISTS,
 						create_callback_context())) {
           remove_objects = true;
@@ -200,8 +195,7 @@ bool AsyncTrimRequest::send_post_remove() {
   bool lost_exclusive_lock = false;
   {
     RWLock::RLocker l(m_image_ctx.owner_lock);
-    RWLock::RLocker l2(m_image_ctx.md_lock);
-    if (m_image_ctx.object_map == NULL) {
+    if (!m_image_ctx.object_map.enabled()) {
       clean_boundary = true;
     } else {
       ldout(m_image_ctx.cct, 5) << this << " send_post_remove: "
@@ -213,7 +207,7 @@ bool AsyncTrimRequest::send_post_remove() {
         ldout(m_image_ctx.cct, 1) << "lost exclusive lock during trim" << dendl;
       } else {
         // flag the pending objects as removed
-        if (!m_image_ctx.object_map->aio_update(m_delete_start, m_num_objects,
+        if (!m_image_ctx.object_map.aio_update(m_delete_start, m_num_objects,
 						OBJECT_NONEXISTENT,
 						OBJECT_PENDING,
 						create_callback_context())) {

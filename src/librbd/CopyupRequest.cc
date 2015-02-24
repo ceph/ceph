@@ -172,8 +172,7 @@ namespace librbd {
     bool copyup = false;
     {
       RWLock::RLocker l(m_ictx->owner_lock);
-      RWLock::RLocker l2(m_ictx->md_lock);
-      if (m_ictx->object_map == NULL) {
+      if (!m_ictx->object_map.enabled()) {
 	copyup = true;
       } else if (!m_ictx->image_watcher->is_lock_owner()) {
 	ldout(m_ictx->cct, 20) << "exclusive lock not held for copy-on-read"
@@ -181,7 +180,7 @@ namespace librbd {
 	return true; 
       } else {
 	m_state = STATE_OBJECT_MAP;
-        if (!m_ictx->object_map->aio_update(m_object_no, OBJECT_EXISTS,
+        if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_EXISTS,
 					    boost::optional<uint8_t>(),
 					    create_callback_context())) {
 	  copyup = true;
