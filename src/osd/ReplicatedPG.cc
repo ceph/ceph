@@ -1843,10 +1843,14 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     dout(25) << __func__ << " " << obc->obs.oi << " "
 	     << (obc->obs.exists ? "exists" : "DNE")
 	     << " missing_oid " << missing_oid
+	     << " must_promote " << (int)must_promote
+	     << " in_hit_set " << (int)in_hit_set
 	     << dendl;
   else
     dout(25) << __func__ << " (no obc)"
 	     << " missing_oid " << missing_oid
+	     << " must_promote " << (int)must_promote
+	     << " in_hit_set " << (int)in_hit_set
 	     << dendl;
 
   // if it is write-ordered and blocked, stop now
@@ -1873,13 +1877,23 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     return true;
   }
 
+  // older versions do not proxy the feature bits.
+  bool can_proxy_read = get_osdmap()->get_up_osd_features() &
+    CEPH_FEATURE_OSD_PROXY_FEATURES;
+  OpRequestRef promote_op;
+
   switch (pool.info.cache_mode) {
   case pg_pool_t::CACHEMODE_WRITEBACK:
     if (agent_state &&
 	agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
       if (!op->may_write() && !op->may_cache() && !write_ordered) {
-	dout(20) << __func__ << " cache pool full, proxying read" << dendl;
-	do_proxy_read(op);
+	if (can_proxy_read) {
+	  dout(20) << __func__ << " cache pool full, proxying read" << dendl;
+	  do_proxy_read(op);
+	} else {
+	  dout(20) << __func__ << " cache pool full, redirect read" << dendl;
+	  do_cache_redirect(op);
+	}
 	return true;
       }
       dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -1894,8 +1908,10 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       return true;
     }
 
-    // Always proxy
-    do_proxy_read(op);
+    if (can_proxy_read)
+      do_proxy_read(op);
+    else
+      promote_op = op;   // for non-proxy case promote_object needs this
 
     // Avoid duplicate promotion
     if (obc.get() && obc->is_blocked()) {
@@ -1905,17 +1921,19 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     // Promote too?
     switch (pool.info.min_read_recency_for_promote) {
     case 0:
-      promote_object(obc, missing_oid, oloc, OpRequestRef());
+      promote_object(obc, missing_oid, oloc, promote_op);
       break;
     case 1:
       // Check if in the current hit set
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
+	promote_object(obc, missing_oid, oloc, promote_op);
+      } else if (!can_proxy_read) {
+	do_cache_redirect(op);
       }
       break;
     default:
       if (in_hit_set) {
-	promote_object(obc, missing_oid, oloc, OpRequestRef());
+	promote_object(obc, missing_oid, oloc, promote_op);
       } else {
 	// Check if in other hit sets
 	map<time_t,HitSetRef>::iterator itor;
@@ -1927,7 +1945,9 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	  }
 	}
 	if (in_other_hit_sets) {
-	  promote_object(obc, missing_oid, oloc, OpRequestRef());
+	  promote_object(obc, missing_oid, oloc, promote_op);
+	} else if (!can_proxy_read) {
+	  do_cache_redirect(op);
 	}
       }
       break;
@@ -2079,7 +2099,8 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
     m->get_snapid(), NULL,
     flags, new C_OnFinisher(fin, &osd->objecter_finisher),
     &prdop->user_version,
-    &prdop->data_offset);
+    &prdop->data_offset,
+    m->get_features());
   fin->tid = tid;
   prdop->objecter_tid = tid;
   proxyread_ops[tid] = prdop;
@@ -6165,7 +6186,8 @@ int ReplicatedPG::fill_in_copy_get(
     return result;
   }
 
-  uint64_t features = ctx->op->get_req()->get_connection()->get_features();
+  MOSDOp *op = reinterpret_cast<MOSDOp*>(ctx->op->get_req());
+  uint64_t features = op->get_features();
 
   bool async_read_started = false;
   object_copy_data_t _reply_obj;
