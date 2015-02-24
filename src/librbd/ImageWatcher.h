@@ -40,6 +40,8 @@ namespace librbd {
     int try_lock();
     int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
 		     AioCompletion* c);
+    void prepare_unlock();
+    void cancel_unlock();
     int unlock();
 
     void assert_header_locked(librados::ObjectWriteOperation *op);
@@ -56,7 +58,8 @@ namespace librbd {
 
     enum LockOwnerState {
       LOCK_OWNER_STATE_NOT_LOCKED,
-      LOCK_OWNER_STATE_LOCKED
+      LOCK_OWNER_STATE_LOCKED,
+      LOCK_OWNER_STATE_RELEASING
     };
 
     enum WatchState {

@@ -2345,6 +2345,19 @@ reprotect_and_return_err:
     // ignore return value, since we may be set to a non-existent
     // snapshot and the user is trying to fix that
     ictx_check(ictx);
+
+    bool unlocking = false;
+    {
+      RWLock::WLocker l(ictx->owner_lock);
+      if (ictx->image_watcher != NULL && ictx->image_watcher->is_lock_owner() &&
+          snap_name != NULL && strlen(snap_name) != 0) {
+        // stop incoming requests since we will release the lock
+        ictx->image_watcher->prepare_unlock();
+        unlocking = true;
+      }
+    }
+
+    ictx->cancel_async_requests();
     ictx->flush_async_operations();
     if (ictx->object_cacher) {
       // complete pending writes before we're set to a snapshot and
@@ -2354,13 +2367,16 @@ reprotect_and_return_err:
     }
     int r = _snap_set(ictx, snap_name);
     if (r < 0) {
+      RWLock::WLocker l(ictx->owner_lock);
+      if (unlocking) {
+        ictx->image_watcher->cancel_unlock();
+      }
       return r;
     }
 
     RWLock::WLocker l(ictx->owner_lock);
     if (ictx->image_watcher != NULL) {
-      if (!ictx->image_watcher->is_lock_supported() &&
-	  ictx->image_watcher->is_lock_owner()) {
+      if (unlocking) {
 	r = ictx->image_watcher->unlock();
 	if (r < 0) {
 	  lderr(ictx->cct) << "error unlocking image: " << cpp_strerror(r)
@@ -2411,6 +2427,15 @@ reprotect_and_return_err:
   {
     ldout(ictx->cct, 20) << "close_image " << ictx << dendl;
 
+    {
+      RWLock::WLocker l(ictx->owner_lock);
+      if (ictx->image_watcher != NULL && ictx->image_watcher->is_lock_owner()) {
+        // stop incoming requests
+        ictx->image_watcher->prepare_unlock();
+      }
+    }
+
+    ictx->cancel_async_requests();
     ictx->readahead.wait_for_pending();
     if (ictx->object_cacher) {
       ictx->shutdown_cache(); // implicitly flushes

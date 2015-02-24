@@ -119,7 +119,7 @@ void AsyncFlattenRequest::send() {
       boost::lambda::_1, &m_image_ctx, m_object_size, m_snapc,
       boost::lambda::_2));
   AsyncObjectThrottle *throttle = new AsyncObjectThrottle(
-    context_factory, create_callback_context(), m_prog_ctx, 0,
+    *this, context_factory, create_callback_context(), m_prog_ctx, 0,
     m_overlap_objects);
   throttle->start_ops(cct->_conf->rbd_concurrent_management_ops);
 }

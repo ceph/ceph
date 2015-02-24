@@ -73,7 +73,8 @@ bool ImageWatcher::is_lock_supported() const {
 
 bool ImageWatcher::is_lock_owner() const {
   assert(m_image_ctx.owner_lock.is_locked());
-  return (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED);
+  return (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED ||
+          m_lock_owner_state == LOCK_OWNER_STATE_RELEASING);
 }
 
 int ImageWatcher::register_watch() {
@@ -328,6 +329,20 @@ int ImageWatcher::lock() {
   return 0;
 }
 
+void ImageWatcher::prepare_unlock() {
+  assert(m_image_ctx.owner_lock.is_wlocked());
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    m_lock_owner_state = LOCK_OWNER_STATE_RELEASING;
+  }
+}
+
+void ImageWatcher::cancel_unlock() {
+  assert(m_image_ctx.owner_lock.is_wlocked());
+  if (m_lock_owner_state == LOCK_OWNER_STATE_RELEASING) {
+    m_lock_owner_state = LOCK_OWNER_STATE_LOCKED;
+  }
+}
+
 int ImageWatcher::unlock()
 {
   assert(m_image_ctx.owner_lock.is_wlocked());
@@ -357,6 +372,14 @@ int ImageWatcher::unlock()
 
 void ImageWatcher::release_lock()
 {
+  ldout(m_image_ctx.cct, 10) << "releasing exclusive lock by request" << dendl;
+  {
+    RWLock::WLocker l(m_image_ctx.owner_lock);
+    prepare_unlock();
+  }
+
+  m_image_ctx.cancel_async_requests();
+
   RWLock::WLocker l(m_image_ctx.owner_lock);
   {
     RWLock::WLocker l2(m_image_ctx.md_lock);
@@ -809,7 +832,7 @@ void ImageWatcher::handle_payload(const FlattenPayload &payload,
 				  bufferlist *out) {
 
   RWLock::RLocker l(m_image_ctx.owner_lock);
-  if (is_lock_owner()) {
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     int r = 0;
     bool new_request = false;
     if (payload.async_request_id.client_id == get_client_id()) {
@@ -848,7 +871,7 @@ void ImageWatcher::handle_payload(const FlattenPayload &payload,
 void ImageWatcher::handle_payload(const ResizePayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
-  if (is_lock_owner()) {
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     int r = 0;
     bool new_request = false;
     if (payload.async_request_id.client_id == get_client_id()) {
@@ -888,7 +911,7 @@ void ImageWatcher::handle_payload(const ResizePayload &payload,
 void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
-  if (is_lock_owner()) {
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << "remote snap_create request: "
 			       << payload.snap_name << dendl;
     int r = librbd::snap_create(&m_image_ctx, payload.snap_name.c_str(), false);
