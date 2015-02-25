@@ -239,11 +239,11 @@ public:
   PerfCountersBuilder(CephContext *cct, const std::string &name,
 		    int first, int last);
   ~PerfCountersBuilder();
-  void add_u64(int key, const char *name, const char *description = "NO_INFO_FIX");
-  void add_u64_counter(int key, const char *name, const char *description = "NO_INFO_FIX");
-  void add_u64_avg(int key, const char *name, const char *description = "NO_INFO_FIX");
-  void add_time(int key, const char *name, const char *description = "NO_INFO_FIX");
-  void add_time_avg(int key, const char *name, const char *description = "NO_INFO_FIX");
+  void add_u64(int key, const char *name, const char *description = NULL);
+  void add_u64_counter(int key, const char *name, const char *description = NULL);
+  void add_u64_avg(int key, const char *name, const char *description = NULL);
+  void add_time(int key, const char *name, const char *description = NULL);
+  void add_time_avg(int key, const char *name, const char *description = NULL);
   PerfCounters* create_perf_counters();
 private:
   PerfCountersBuilder(const PerfCountersBuilder &rhs);
