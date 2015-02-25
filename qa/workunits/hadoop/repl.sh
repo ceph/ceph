@@ -9,8 +9,6 @@ set -x
 # if HADOOP_PREFIX is not set, use default
 [ -z $HADOOP_PREFIX ] && { HADOOP_PREFIX=$TESTDIR/hadoop; }
 
-export JAVA_HOME=/usr/lib/jvm/default-java
-
 # create pools with different replication factors
 for repl in 2 3 7 8 9; do
   name=hadoop.$repl
