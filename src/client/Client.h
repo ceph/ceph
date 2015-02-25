@@ -312,7 +312,8 @@ public:
 			     mds_rank_t mds, int drop, int unless);
   mds_rank_t choose_target_mds(MetaRequest *req);
   void connect_mds_targets(mds_rank_t mds);
-  void send_request(MetaRequest *request, MetaSession *session);
+  void send_request(MetaRequest *request, MetaSession *session,
+		    bool drop_cap_releases=false);
   MClientRequest *build_client_request(MetaRequest *request);
   void kick_requests(MetaSession *session);
   void kick_requests_closed(MetaSession *session);
