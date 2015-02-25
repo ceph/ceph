@@ -16,8 +16,6 @@ num_records=100000
 # if HADOOP_PREFIX is not set, use default
 [ -z $HADOOP_PREFIX ] && { HADOOP_PREFIX=$TESTDIR/hadoop; }
 
-export JAVA_HOME=/usr/lib/jvm/default-java
-
 # Nuke hadoop directories
 $HADOOP_PREFIX/bin/hadoop fs -rm -r $INPUT $OUTPUT $REPORT || true
 
