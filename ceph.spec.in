@@ -24,7 +24,9 @@ Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
-Requires:	python-ceph = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Requires:	python-rbd = %{epoch}:%{version}-%{release}
+Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python
 Requires:	python-argparse
 Requires:	python-requests
@@ -115,7 +117,9 @@ Summary:	Ceph Common
 Group:		System Environment/Base
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	python-ceph = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Requires:	python-rbd = %{epoch}:%{version}-%{release}
+Requires:	python-cephfs = %{epoch}:%{version}-%{release}
 Requires:	python-requests
 Requires:	redhat-lsb-core
 %description -n ceph-common
@@ -193,6 +197,19 @@ Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS object store.
 
+%package -n python-rados
+Summary:	Python libraries for the RADOS object store
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librados2 = %{epoch}:%{version}-%{release}
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
+%if 0%{defined suse_version}
+%py_requires
+%endif
+%description -n python-rados
+This package contains Python libraries for interacting with Cephs RADOS
+object store.
+
 %package -n libradosstriper1
 Summary:	RADOS striping interface
 Group:		System Environment/Libraries
@@ -239,6 +256,17 @@ Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS block device.
 
+%package -n python-rbd
+Summary:	Python libraries for the RADOS block device
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Requires:	librbd1 = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
+%description -n python-rbd
+This package contains Python libraries for interacting with Cephs RADOS
+block device.
+
 %package -n libcephfs1
 Summary:	Ceph distributed file system client library
 Group:		System Environment/Libraries
@@ -264,18 +292,16 @@ Obsoletes:	ceph-devel < %{epoch}:%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use Cephs distributed file system.
 
-%package -n python-ceph
-Summary:	Python libraries for the Ceph distributed filesystem
+%package -n python-cephfs
+Summary:	Python libraries for Ceph distributed file system
 Group:		System Environment/Libraries
 License:	LGPL-2.0
-Requires:	librados2 = %{epoch}:%{version}-%{release}
-Requires:	librbd1 = %{epoch}:%{version}-%{release}
-%if 0%{defined suse_version}
-%py_requires
-%endif
-%description -n python-ceph
-This package contains Python libraries for interacting with Cephs RADOS
-object storage.
+Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Obsoletes:	python-ceph < %{epoch}:%{version}-%{release}
+%description -n python-cephfs
+This package contains Python libraries for interacting with Cephs distributed
+file system.
 
 %package -n rest-bench
 Summary:	RESTful benchmark
@@ -372,6 +398,21 @@ This is a compatibility package to accommodate ceph-devel split into
 librados2-devel, librbd1-devel and libcephfs1-devel. Packages still depending
 on ceph-devel should be fixed to depend on librados2-devel, librbd1-devel,
 libcephfs1-devel or libradosstriper1-devel instead.
+
+%package -n python-ceph-compat
+Summary:	Compatibility package for Cephs python libraries
+Group:		System Environment/Libraries
+License:	LGPL-2.0
+Obsoletes:	python-ceph
+Requires:	python-rados = %{epoch}:%{version}-%{release}
+Requires:	python-rbd = %{epoch}:%{version}-%{release}
+Requires:	python-cephfs = %{epoch}:%{version}-%{release}
+Provides:	python-ceph
+%description -n python-ceph-compat
+This is a compatibility package to accommodate python-ceph split into
+python-rados, python-rbd and python-cephfs. Packages still depending on
+python-ceph should be fixed to depend on python-rados, python-rbd or
+python-cephfs instead.
 
 %if 0%{?opensuse} || 0%{?suse_version}
 %debug_package
@@ -625,6 +666,7 @@ fi
 %config %{_sysconfdir}/bash_completion.d/rbd
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
+%{python_sitelib}/ceph_argparse.py*
 
 %postun -n ceph-common
 # Package removal cleanup
@@ -722,6 +764,11 @@ fi
 %{_libdir}/librados.so
 
 #################################################################################
+%files -n python-rados
+%defattr(-,root,root,-)
+%{python_sitelib}/rados.py*
+
+#################################################################################
 %files -n libradosstriper1
 %defattr(-,root,root,-)
 %{_libdir}/libradosstriper.so.*
@@ -768,6 +815,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_libdir}/librbd.so
 
 #################################################################################
+%files -n python-rbd
+%defattr(-,root,root,-)
+%{python_sitelib}/rbd.py*
+
+#################################################################################
 %files -n libcephfs1
 %defattr(-,root,root,-)
 %{_libdir}/libcephfs.so.*
@@ -786,12 +838,9 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 %{_libdir}/libcephfs.so
 
 #################################################################################
-%files -n python-ceph
+%files -n python-cephfs
 %defattr(-,root,root,-)
-%{python_sitelib}/rados.py*
-%{python_sitelib}/rbd.py*
 %{python_sitelib}/cephfs.py*
-%{python_sitelib}/ceph_argparse.py*
 
 #################################################################################
 %files -n rest-bench
@@ -858,6 +907,11 @@ ln -sf %{_libdir}/librbd.so.1 /usr/lib64/qemu/librbd.so.1
 #################################################################################
 %files devel-compat
 # We need an empty %%files list for ceph-devel-compat, to tell rpmbuild to
+# actually build this meta package.
+
+#################################################################################
+%files -n python-ceph-compat
+# We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
 # actually build this meta package.
 
 %changelog
