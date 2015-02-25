@@ -94,7 +94,6 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   dout(10) << __func__ << " " << *m << dendl;
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- ignore message" << dendl;
-    m->put();
     return false;
   }
 
@@ -196,8 +195,6 @@ out:
   if (!cmd->get_source().is_mon()) {
     string rs = ss.str();
     mon->reply_command(cmd, ret, rs, rdata, 0);
-  } else {
-    cmd->put();
   }
 
   return (ret == 0);

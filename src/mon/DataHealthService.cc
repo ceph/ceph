@@ -246,7 +246,6 @@ bool DataHealthService::service_dispatch_op(MonOpRequestRef op)
   assert(m->get_service_type() == get_type());
   if (!in_quorum()) {
     dout(1) << __func__ << " not in quorum -- drop message" << dendl;
-    m->put();
     return false;
   }
 
@@ -260,6 +259,5 @@ bool DataHealthService::service_dispatch_op(MonOpRequestRef op)
       assert(0 == "Unknown service op");
       break;
   }
-  m->put();
   return true;
 }

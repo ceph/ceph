@@ -105,7 +105,6 @@ protected:
   class C_RetryMessage : public Context {
     PaxosService *svc;
     MonOpRequestRef op;
-//    PaxosServiceMessage *m;
   public:
     C_RetryMessage(PaxosService *s, MonOpRequestRef op_) : svc(s), op(op_) {}
     void finish(int r) {
@@ -113,7 +112,6 @@ protected:
 	svc->dispatch(op);
       else if (r == -ECANCELED)
         return;
-//	m->put();
       else
 	assert(0 == "bad C_RetryMessage return value");
     }
