@@ -298,10 +298,8 @@ namespace librbd {
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
 
-      if (object_map.enabled()) {
-	RWLock::WLocker l(object_map_lock);
-        object_map.refresh(in_snap_id);
-      }
+      RWLock::WLocker l(object_map_lock);
+      object_map.refresh(in_snap_id);
       return 0;
     }
     return -ENOENT;
@@ -315,10 +313,8 @@ namespace librbd {
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
 
-    if (object_map.enabled()) {
-      RWLock::WLocker l(object_map_lock);
-      object_map.refresh(CEPH_NOSNAP);
-    }
+    RWLock::WLocker l(object_map_lock);
+    object_map.refresh(CEPH_NOSNAP);
   }
 
   snap_t ImageCtx::get_snap_id(string in_snap_name) const
