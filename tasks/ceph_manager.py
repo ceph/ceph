@@ -2,6 +2,7 @@
 ceph manager -- Thrasher and CephManager objects
 """
 from cStringIO import StringIO
+from functools import wraps
 import contextlib
 import random
 import time
@@ -10,6 +11,7 @@ import base64
 import json
 import logging
 import threading
+import traceback
 import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
@@ -644,6 +646,17 @@ class Thrasher:
             val -= prob
         return None
 
+    def log_exc(func):
+        @wraps(func)
+        def wrapper(self):
+            try:
+                return func(self)
+            except:
+                self.log(traceback.format_exc())
+                raise
+        return wrapper
+
+    @log_exc
     def do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
