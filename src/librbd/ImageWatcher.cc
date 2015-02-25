@@ -653,43 +653,56 @@ int ImageWatcher::notify_lock_owner(bufferlist &bl) {
   return r;
 }
 
+void ImageWatcher::schedule_async_request_timed_out(const AsyncRequestId &id) {
+  Context *ctx = new FunctionContext(boost::bind(
+    &ImageWatcher::async_request_timed_out, this, id));
+
+  Task task(TASK_CODE_ASYNC_REQUEST, id);
+  m_task_finisher->cancel(task);
+
+  md_config_t *conf = m_image_ctx.cct->_conf;
+  m_task_finisher->add_event_after(task, conf->rbd_request_timed_out_seconds,
+                                   ctx);
+}
+
+void ImageWatcher::async_request_timed_out(const AsyncRequestId &id) {
+  RWLock::RLocker l(m_async_request_lock);
+  std::map<AsyncRequestId, AsyncRequest>::iterator it =
+    m_async_requests.find(id);
+  if (it != m_async_requests.end()) {
+    ldout(m_image_ctx.cct, 10) << "request timed-out: " << id << dendl;
+    it->second.first->complete(-ERESTART);
+  }
+}
+
 int ImageWatcher::notify_async_request(const AsyncRequestId &async_request_id,
 				       bufferlist &in,
 				       ProgressContext& prog_ctx) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   ldout(m_image_ctx.cct, 10) << "async request: " << async_request_id << dendl;
-  Mutex my_lock("librbd::ImageWatcher::notify_async_request::my_lock");
-  Cond cond;
-  bool done = false;
-  int r;
-  Context *ctx = new C_SafeCond(&my_lock, &cond, &done, &r);
+
+  C_SaferCond ctx;
 
   {
     RWLock::WLocker l(m_async_request_lock);
-    m_async_requests[async_request_id] = AsyncRequest(ctx, &prog_ctx);
+    m_async_requests[async_request_id] = AsyncRequest(&ctx, &prog_ctx);
   }
 
-  BOOST_SCOPE_EXIT( (ctx)(async_request_id)(&m_async_requests)
-		    (&m_async_request_lock)(&done) ) {
+  BOOST_SCOPE_EXIT( (&ctx)(async_request_id)(&m_task_finisher)
+                    (&m_async_requests)(&m_async_request_lock) ) {
+    m_task_finisher->cancel(Task(TASK_CODE_ASYNC_REQUEST, async_request_id));
+
     RWLock::WLocker l(m_async_request_lock);
     m_async_requests.erase(async_request_id);
-    if (!done) {
-      delete ctx;
-    }
   } BOOST_SCOPE_EXIT_END
 
-  r = notify_lock_owner(in);
+  schedule_async_request_timed_out(async_request_id);
+  int r = notify_lock_owner(in);
   if (r < 0) {
     return r;
   }
-
-  my_lock.Lock();
-  while (!done) {
-    cond.Wait(my_lock);
-  }
-  my_lock.Unlock();
-  return r;
+  return ctx.wait();
 }
 
 void ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
@@ -775,26 +788,21 @@ void ImageWatcher::handle_payload(const AsyncProgressPayload &payload,
 			       << payload.async_request_id << " @ "
 			       << payload.offset << "/" << payload.total
 			       << dendl;
+    schedule_async_request_timed_out(payload.async_request_id);
     req_it->second.second->update_progress(payload.offset, payload.total);
   }
 }
 
 void ImageWatcher::handle_payload(const AsyncCompletePayload &payload,
                                   bufferlist *out) {
-  Context *ctx = NULL;
-  {
-    RWLock::RLocker l(m_async_request_lock);
-    std::map<AsyncRequestId, AsyncRequest>::iterator req_it =
-      m_async_requests.find(payload.async_request_id);
-    if (req_it != m_async_requests.end()) {
-      ctx = req_it->second.first;
-    }
-  }
-  if (ctx != NULL) {
+  RWLock::RLocker l(m_async_request_lock);
+  std::map<AsyncRequestId, AsyncRequest>::iterator req_it =
+    m_async_requests.find(payload.async_request_id);
+  if (req_it != m_async_requests.end()) {
     ldout(m_image_ctx.cct, 10) << "request finished: "
                                << payload.async_request_id << "="
 			       << payload.result << dendl;
-    ctx->complete(payload.result);
+    req_it->second.first->complete(payload.result);
   }
 }
 
