@@ -38,7 +38,7 @@ public:
       return -ERESTART;
     }
 
-    RWLock::RLocker l2(m_image_ctx.md_lock);
+    RWLock::RLocker l2(m_image_ctx.snap_lock);
     uint64_t overlap;
     {
       RWLock::RLocker l3(m_image_ctx.parent_lock);

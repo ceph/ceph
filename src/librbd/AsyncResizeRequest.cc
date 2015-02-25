@@ -23,7 +23,7 @@ bool AsyncResizeRequest::should_complete(int r)
 
   if (r < 0) {
     lderr(cct) << "resize encountered an error: " << cpp_strerror(r) << dendl;
-    RWLock::WLocker l(m_image_ctx.md_lock);
+    RWLock::WLocker l(m_image_ctx.snap_lock);
     if (m_image_ctx.size == m_new_size) {
       m_image_ctx.size = m_original_size;
     }
@@ -96,7 +96,7 @@ void AsyncResizeRequest::send_trim_image() {
 
   {
     // update in-memory size to clip concurrent IO operations
-    RWLock::WLocker l(m_image_ctx.md_lock);
+    RWLock::WLocker l(m_image_ctx.snap_lock);
     m_image_ctx.size = m_new_size;
 
     RWLock::WLocker l2(m_image_ctx.parent_lock);
@@ -188,13 +188,14 @@ void AsyncResizeRequest::send_update_header() {
 
   {
     RWLock::RLocker l(m_image_ctx.owner_lock); 
-    RWLock::WLocker l2(m_image_ctx.md_lock);
     if (m_image_ctx.image_watcher->is_lock_supported() &&
 	!m_image_ctx.image_watcher->is_lock_owner()) {
       ldout(m_image_ctx.cct, 1) << "lost exclusive lock during header update" << dendl;
       lost_exclusive_lock = true;
     } else {
+      m_image_ctx.snap_lock.get_write();
       m_image_ctx.size = m_new_size;
+      m_image_ctx.snap_lock.put_write();
 
       librados::ObjectWriteOperation op;
       if (m_image_ctx.old_format) {

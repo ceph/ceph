@@ -76,7 +76,7 @@ namespace librbd {
     RWLock owner_lock; // protects exclusive lock leadership updates
     RWLock md_lock; // protects access to the mutable image metadata that
                    // isn't guarded by other locks below
-                   // (size, features, image locks, etc)
+                   // (flush_encountered, etc)
     Mutex cache_lock; // used as client_lock for the ObjectCacher
     RWLock snap_lock; // protects snapshot-related member variables, features, and flags
     RWLock parent_lock; // protects parent_md and parent
