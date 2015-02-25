@@ -9123,13 +9123,13 @@ void MDCache::eval_remote(CDentry *remote_dn)
   }
 
   // refers to stray?
-  if (in->get_parent_dn()->get_dir()->get_inode()->is_stray()) {
-    CDentry *stray_dn = in->get_parent_dn();
-
+  CDentry *primary_dn = in->get_projected_parent_dn();
+  assert(primary_dn != NULL);
+  if (primary_dn->get_dir()->get_inode()->is_stray()) {
     if (in->is_auth()) {
       dout(20) << __func__ << ": have auth for inode, evaluating" << dendl;
 
-      stray_manager.eval_remote_stray(stray_dn, remote_dn);
+      stray_manager.eval_remote_stray(primary_dn, remote_dn);
     } else {
       dout(20) << __func__ << ": do not have auth for inode, migrating " << dendl;
       /*
@@ -9143,7 +9143,7 @@ void MDCache::eval_remote(CDentry *remote_dn)
        * to <me> when <I> handle a client request with a trace referring
        * to a stray inode on another MDS.
        */
-      stray_manager.migrate_stray(stray_dn, mds->get_nodeid());
+      stray_manager.migrate_stray(primary_dn, mds->get_nodeid());
     }
   } else {
     dout(20) << __func__ << ": inode's primary dn not stray" << dendl;
