@@ -61,4 +61,5 @@ noinst_HEADERS += \
 	librbd/ObjectMap.h \
 	librbd/parent_types.h \
 	librbd/SnapInfo.h \
+	librbd/TaskFinisher.h \
 	librbd/WatchNotifyTypes.h
