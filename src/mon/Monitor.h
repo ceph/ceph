@@ -847,7 +847,7 @@ public:
 	mon->reply_command(m, rc, rs, rdata, version);
       }
       else if (r == -ECANCELED)
-	m->put();
+        return;
       else if (r == -EAGAIN)
 	mon->dispatch_op(op);
       else
@@ -859,7 +859,6 @@ public:
   class C_RetryMessage : public Context {
     Monitor *mon;
     MonOpRequestRef op;
-    Message *msg;
   public:
     C_RetryMessage(Monitor *m, MonOpRequestRef o) : mon(m), op(o) {}
     void finish(int r) {

@@ -293,7 +293,6 @@ bool AuthMonitor::preprocess_query(MonOpRequestRef op)
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -311,7 +310,6 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
     return prep_auth(op, true);
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
@@ -363,7 +361,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   MonSession *s = (MonSession *)m->get_connection()->get_priv();
   if (!s) {
     dout(10) << "no session, dropping" << dendl;
-    m->put();
     return true;
   }
 
@@ -513,7 +510,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(m, reply);
-  m->put();
 done:
   s->put();
   return true;
@@ -1013,7 +1009,6 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
   dout(10) << "AuthMonitor::prepare_global_id" << dendl;
   increase_max_global_id();
 
-  //m->put();
   return true;
 }
 

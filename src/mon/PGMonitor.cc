@@ -595,7 +595,6 @@ bool PGMonitor::preprocess_query(MonOpRequestRef op)
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -613,7 +612,6 @@ bool PGMonitor::prepare_update(MonOpRequestRef op)
 
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
@@ -624,11 +622,11 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
   // check caps
   MonSession *session = statfs->get_session();
   if (!session)
-    goto out;
+    return;
   if (!session->is_capable("pg", MON_CAP_R)) {
     dout(0) << "MStatfs received from entity with insufficient privileges "
 	    << session->caps << dendl;
-    goto out;
+    return;
   }
   MStatfsReply *reply;
 
@@ -636,7 +634,7 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
 
   if (statfs->fsid != mon->monmap->fsid) {
     dout(0) << "handle_statfs on fsid " << statfs->fsid << " != " << mon->monmap->fsid << dendl;
-    goto out;
+    return;
   }
 
   // fill out stfs
@@ -650,8 +648,6 @@ void PGMonitor::handle_statfs(MonOpRequestRef op)
 
   // reply
   mon->send_reply(statfs, reply);
- out:
-  statfs->put();
 }
 
 bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
@@ -689,7 +685,6 @@ bool PGMonitor::preprocess_getpoolstats(MonOpRequestRef op)
   mon->send_reply(m, reply);
 
  out:
-  m->put();
   return true;
 }
 
@@ -701,13 +696,11 @@ bool PGMonitor::preprocess_pg_stats(MonOpRequestRef op)
   MonSession *session = stats->get_session();
   if (!session) {
     dout(10) << "PGMonitor::preprocess_pg_stats: no monitor session!" << dendl;
-    stats->put();
     return true;
   }
   if (!session->is_capable("pg", MON_CAP_R)) {
     derr << "PGMonitor::preprocess_pg_stats: MPGStats received from entity "
          << "with insufficient privileges " << session->caps << dendl;
-    stats->put();
     return true;
   }
 
@@ -755,7 +748,6 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
 
   if (stats->fsid != mon->monmap->fsid) {
     dout(0) << "prepare_pg_stats on fsid " << stats->fsid << " != " << mon->monmap->fsid << dendl;
-    stats->put();
     return false;
   }
 
@@ -765,7 +757,6 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
       !mon->osdmon()->osdmap.is_up(from) ||
       stats->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
     dout(1) << " ignoring stats from non-active osd." << dendl;
-    stats->put();
     return false;
   }
       
@@ -779,7 +770,6 @@ bool PGMonitor::prepare_pg_stats(MonOpRequestRef op)
       ack->pg_stat[p->first] = make_pair(p->second.reported_seq, p->second.reported_epoch);
     }
     mon->send_reply(stats, ack);
-    stats->put();
     return false;
   }
 
@@ -852,7 +842,6 @@ void PGMonitor::_updated_stats(MonOpRequestRef op, MonOpRequestRef ack_op)
   MPGStats *ack = static_cast<MPGStats*>(ack_op->get_req());
   dout(7) << "_updated_stats for " << req->get_orig_source_inst() << dendl;
   mon->send_reply(req, ack);
-  req->put();
 }
 
 
