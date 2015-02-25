@@ -41,7 +41,6 @@ bool PaxosService::dispatch(MonOpRequestRef op)
   dout(10) << "dispatch " << *m << " from " << m->get_orig_source_inst() << dendl;
 
   if (mon->is_shutdown()) {
-    m->put();
     return true;
   }
 
@@ -50,7 +49,6 @@ bool PaxosService::dispatch(MonOpRequestRef op)
       m->rx_election_epoch < mon->get_epoch()) {
     dout(10) << " discarding forwarded message from previous election epoch "
 	     << m->rx_election_epoch << " < " << mon->get_epoch() << dendl;
-    m->put();
     return true;
   }
 
@@ -63,7 +61,6 @@ bool PaxosService::dispatch(MonOpRequestRef op)
       m->get_connection()->get_messenger() != NULL) {
     dout(10) << " discarding message from disconnected client "
 	     << m->get_source_inst() << " " << *m << dendl;
-    m->put();
     return true;
   }
 
