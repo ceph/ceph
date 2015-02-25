@@ -520,13 +520,14 @@ v0.87.1 Giant
 This is the first (and possibly final) point release for Giant.  Our focus
 on stability fixes will be directed towards Hammer and Firefly.
 
+We recommend that all v0.87 Giant users upgrade to this release.
+
 Upgrading
 ---------
 
 * Due to a change in the Linux kernel version 3.18 and the limits of the FUSE
   interface, ceph-fuse needs be mounted as root on at least some systems. See
   issues #9997, #10277, and #10542 for details.
-
 
 Notable Changes
 ---------------
@@ -597,6 +598,9 @@ Notable Changes
 * rgw: URL decode HTTP query params correction (#10271 Georgios Dimitrakakis, Yehuda Sadeh)
 * rgw: use cached attrs while reading object attrs (#10307 Yehuda Sadeh)
 * rgw: use strict_strtoll for content length (#10701 Axel Dunkel, Yehuda Sadeh)
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.87.1.txt>`.
+
 
 
 v0.87 Giant
