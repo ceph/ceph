@@ -292,7 +292,10 @@ void PerfCounters::dump_formatted(Formatter *f, bool schema,
     if (schema) {
       f->open_object_section(d->name);
       f->dump_int("type", d->type);
-      f->dump_string("description", d->description);
+      if (d->description)
+        f->dump_string("description", d->description);
+      else 
+        f->dump_string("description", "");
       f->close_section();
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
