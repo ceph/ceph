@@ -61,7 +61,6 @@ bool HealthMonitor::service_dispatch(MonOpRequestRef op)
   if (services.count(service_type) == 0) {
     dout(1) << __func__ << " service type " << service_type
             << " not registered -- drop message!" << dendl;
-    //m->put();
     return false;
   }
   return services[service_type]->service_dispatch(op);

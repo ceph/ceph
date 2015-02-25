@@ -86,8 +86,6 @@ private:
     PGMonitor *pgmon;
     MonOpRequestRef stats_op;
     MonOpRequestRef stats_op_ack;
-//    MPGStats *req;
-//    MPGStatsAck *ack;
     entity_inst_t who;
     C_Stats(PGMonitor *p,
             MonOpRequestRef op,
@@ -98,11 +96,8 @@ private:
 	pgmon->_updated_stats(stats_op, stats_op_ack);
       } else if (r == -ECANCELED) {
         return;
-//	req->put();
-//	ack->put();
       } else if (r == -EAGAIN) {
 	pgmon->dispatch(stats_op);
-//	ack->put();
       } else {
 	assert(0 == "bad C_Stats return value");
       }

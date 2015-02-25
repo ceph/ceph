@@ -137,7 +137,6 @@ bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_join(op);
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -270,7 +269,6 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
     return prepare_join(op);
   default:
     assert(0);
-    m->put();
   }
 
   return false;
@@ -400,18 +398,15 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
   if (!session ||
       !session->is_capable("mon", MON_CAP_W | MON_CAP_X)) {
     dout(10) << " insufficient caps" << dendl;
-    join->put();
     return true;
   }
 
   if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
-    join->put();
     return true;
   }
   if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
     dout(10) << " already have " << join->addr << dendl;
-    join->put();
     return true;
   }
   return false;
@@ -426,7 +421,6 @@ bool MonmapMonitor::prepare_join(MonOpRequestRef op)
     pending_map.remove(pending_map.get_name(join->addr));
   pending_map.add(join->name, join->addr);
   pending_map.last_changed = ceph_clock_now(g_ceph_context);
-  join->put();
   return true;
 }
 

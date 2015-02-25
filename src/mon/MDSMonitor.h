@@ -61,7 +61,6 @@ class MDSMonitor : public PaxosService {
 	mm->_updated(op);   // success
       else if (r == -ECANCELED)
         return;
-//	m->put();
       else
 	mm->dispatch(op);        // try again
     }

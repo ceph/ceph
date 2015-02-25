@@ -333,7 +333,6 @@ private:
   struct C_Booted : public Context {
     OSDMonitor *cmon;
     MonOpRequestRef op;
-    // MOSDBoot *m;
     bool logit;
     C_Booted(OSDMonitor *cm, MonOpRequestRef op_, bool l=true) : 
       cmon(cm), op(op_), logit(l) {}
@@ -342,10 +341,8 @@ private:
 	cmon->_booted(op, logit);
       else if (r == -ECANCELED)
         return;
-//	m->put();
       else if (r == -EAGAIN)
         cmon->dispatch(op);
-//	cmon->dispatch((PaxosServiceMessage*)m);
       else
 	assert(0 == "bad C_Booted return value");
     }
@@ -354,7 +351,6 @@ private:
   struct C_ReplyMap : public Context {
     OSDMonitor *osdmon;
     MonOpRequestRef op;
-//    PaxosServiceMessage *m;
     epoch_t e;
     C_ReplyMap(OSDMonitor *o, MonOpRequestRef op_, epoch_t ee)
       : osdmon(o), op(op_), e(ee) {}
@@ -363,7 +359,6 @@ private:
 	osdmon->_reply_map(op, e);
       else if (r == -ECANCELED)
         return;
-	//m->put();
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
@@ -373,7 +368,6 @@ private:
   struct C_PoolOp : public Context {
     OSDMonitor *osdmon;
     MonOpRequestRef op;
-//    MPoolOp *m;
     int replyCode;
     int epoch;
     bufferlist reply_data;
@@ -387,7 +381,6 @@ private:
 	osdmon->_pool_op_reply(op, replyCode, epoch, &reply_data);
       else if (r == -ECANCELED)
         return;
-	//m->put();
       else if (r == -EAGAIN)
 	osdmon->dispatch(op);
       else
