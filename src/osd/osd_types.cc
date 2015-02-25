@@ -3606,6 +3606,9 @@ void object_copy_data_t::decode(bufferlist::iterator& bl)
     ::decode(data, bl);
     ::decode(omap_data, bl);
     ::decode(cursor, bl);
+    ::decode(omap_header, bl);
+    ::decode(snaps, bl);
+    ::decode(snap_seq, bl);
     if (struct_v >= 4) {
       ::decode(flags, bl);
       ::decode(data_digest, bl);
