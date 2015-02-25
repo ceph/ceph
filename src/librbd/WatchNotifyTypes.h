@@ -67,6 +67,9 @@ struct AsyncRequestId {
       return request_id < rhs.request_id;
     }
   }
+  inline bool operator!=(const AsyncRequestId &rhs) const {
+    return (client_id != rhs.client_id || request_id != rhs.request_id);
+  }
 };
 
 enum NotifyOp {
