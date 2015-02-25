@@ -166,6 +166,7 @@ OPTION(ms_async_set_affinity, OPT_BOOL, true)
 // If ms_async_affinity_cores is empty, all threads will be bind to current running
 // core
 OPTION(ms_async_affinity_cores, OPT_STR, "")
+OPTION(ms_compress_all, OPT_BOOL, false)            // default to no compression
 
 OPTION(inject_early_sigterm, OPT_BOOL, false)
 

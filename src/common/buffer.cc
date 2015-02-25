@@ -34,6 +34,8 @@
 #include <sys/uio.h>
 #include <limits.h>
 
+#include "lz4.h"
+
 namespace ceph {
 
 #ifdef BUFFER_DEBUG
@@ -1864,6 +1866,53 @@ void buffer::list::write_stream(std::ostream &out) const
   }
 }
 
+void buffer::list::compress(compression_type alg)
+{
+  const char* pch_src = c_str();
+  uint32_t input_size = length();
+  if (alg == ALG_LZ4) {
+    uint32_t max_compressed_size = LZ4_compressBound(input_size);
+    bufferptr bp = buffer::create_page_aligned(max_compressed_size);
+    uint32_t actual = LZ4_compress(pch_src, bp.c_str(), input_size);
+    bp.set_length(actual);
+    clear();
+    push_back(bp);
+  }
+}
+
+void buffer::list::compress(compression_type alg, list& dest)
+{
+  const char* pch_src = c_str();
+  uint32_t input_size = length();
+  if (alg == ALG_LZ4) {
+    uint32_t max_compressed_size = LZ4_compressBound(input_size);
+    bufferptr bp = buffer::create_page_aligned(max_compressed_size);
+    uint32_t actual = LZ4_compress(pch_src, bp.c_str(), input_size);
+    bp.set_length(actual);
+    dest.append(bp);
+  }
+}
+
+void buffer::list::decompress(compression_type alg, uint32_t len)
+{
+  const char* pch_src = c_str();
+  if (alg == ALG_LZ4) {
+    bufferptr bp = buffer::create_page_aligned(len);
+    LZ4_decompress_fast(pch_src, bp.c_str(), len);
+    clear();
+    push_back(bp);
+  }
+}
+
+void buffer::list::decompress(compression_type alg, list& dest, uint32_t len)
+{
+  const char* pch_src = c_str();
+  if (alg == ALG_LZ4) {
+    bufferptr bp = buffer::create_page_aligned(len);
+    LZ4_decompress_fast(pch_src, bp.c_str(), len);
+    dest.append(bp);
+  }
+}
 
 void buffer::list::hexdump(std::ostream &out) const
 {
