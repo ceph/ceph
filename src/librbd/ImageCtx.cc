@@ -366,7 +366,7 @@ namespace librbd {
 
   uint64_t ImageCtx::get_current_size() const
   {
-    assert(md_lock.is_locked());
+    assert(snap_lock.is_locked());
     return size;
   }
 
@@ -436,7 +436,6 @@ namespace librbd {
 
   uint64_t ImageCtx::get_image_size(snap_t in_snap_id) const
   {
-    assert(md_lock.is_locked());
     assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
       return size;

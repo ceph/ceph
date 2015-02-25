@@ -124,11 +124,9 @@ namespace librbd {
   void image_info(ImageCtx *ictx, image_info_t& info, size_t infosize)
   {
     int obj_order = ictx->order;
-    ictx->md_lock.get_read();
     ictx->snap_lock.get_read();
     info.size = ictx->get_image_size(ictx->snap_id);
     ictx->snap_lock.put_read();
-    ictx->md_lock.put_read();
     info.obj_size = 1ULL << obj_order;
     info.num_objs = Striper::get_num_objects(ictx->layout, info.size);
     info.order = obj_order;
@@ -163,8 +161,10 @@ namespace librbd {
 	   ictx->image_watcher->is_lock_owner());
 
     C_SaferCond *ctx = new C_SaferCond();
+    ictx->snap_lock.get_read();
     AsyncTrimRequest *req = new AsyncTrimRequest(*ictx, ctx, ictx->size,
 						 newsize, prog_ctx);
+    ictx->snap_lock.put_read();
     req->send();
 
     int r = ctx->wait();
@@ -297,7 +297,7 @@ namespace librbd {
     uint64_t bsize = ictx->get_object_size();
     uint64_t numseg;
     {
-      RWLock::RLocker l(ictx->md_lock);
+      RWLock::RLocker l(ictx->snap_lock);
       numseg = Striper::get_num_objects(ictx->layout, ictx->get_current_size());
     }
 
@@ -1088,13 +1088,11 @@ reprotect_and_return_err:
       goto err_close_parent;
     }
 
-    p_imctx->md_lock.get_read();
     p_imctx->snap_lock.get_read();
     p_imctx->get_features(p_imctx->snap_id, &p_features);
     size = p_imctx->get_image_size(p_imctx->snap_id);
     p_imctx->is_snap_protected(p_imctx->snap_id, &snap_protected);
     p_imctx->snap_lock.put_read();
-    p_imctx->md_lock.put_read();
 
     if ((p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
       lderr(cct) << "parent image must support layering" << dendl;
@@ -1315,7 +1313,6 @@ reprotect_and_return_err:
     int r = ictx_check(ictx);
     if (r < 0)
       return r;
-    RWLock::RLocker l(ictx->md_lock);
     RWLock::RLocker l2(ictx->snap_lock);
     *size = ictx->get_image_size(ictx->snap_id);
     return 0;
@@ -1480,7 +1477,6 @@ reprotect_and_return_err:
       return r;
     }
 
-    RWLock::RLocker l(ictx->md_lock);
     RWLock::RLocker l2(ictx->snap_lock);
     return ictx->get_flags(ictx->snap_id, flags);
   }
@@ -1685,9 +1681,10 @@ reprotect_and_return_err:
     uint64_t original_size;
     {
       RWLock::RLocker l(ictx->md_lock);
+      ictx->snap_lock.get_read();
       original_size = ictx->size;
-      if (size < ictx->size) {
-	ictx->flush_async_operations();
+      ictx->snap_lock.put_read();
+      if (size < original_size) {
 	if (ictx->object_cacher) {
 	  // need to invalidate since we're deleting objects, and
 	  // ObjectCacher doesn't track non-existent objects
@@ -2107,8 +2104,10 @@ reprotect_and_return_err:
 	return -EROFS;
       }
 
+      ictx->snap_lock.get_read();
       original_size = ictx->size;
       new_size = ictx->get_image_size(snap_id);
+      ictx->snap_lock.put_read();
 
       // need to flush any pending writes before resizing and rolling back -
       // writes might create new snapshots. Rolling back will replace
@@ -2173,13 +2172,11 @@ reprotect_and_return_err:
 		   << " -> " << destname << dendl;
     int order = src->order;
 
-    src->md_lock.get_read();
     src->snap_lock.get_read();
     uint64_t src_features;
     src->get_features(src->snap_id, &src_features);
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    src->md_lock.put_read();
 
     int r = create(dest_md_ctx, destname, src_size, src->old_format,
 		   src_features, &order, src->stripe_unit, src->stripe_count);
@@ -2256,17 +2253,13 @@ reprotect_and_return_err:
 
   int copy(ImageCtx *src, ImageCtx *dest, ProgressContext &prog_ctx)
   {
-    src->md_lock.get_read();
     src->snap_lock.get_read();
     uint64_t src_size = src->get_image_size(src->snap_id);
     src->snap_lock.put_read();
-    src->md_lock.put_read();
 
-    dest->md_lock.get_read();
     dest->snap_lock.get_read();
     uint64_t dest_size = dest->get_image_size(dest->snap_id);
     dest->snap_lock.put_read();
-    dest->md_lock.put_read();
 
     CephContext *cct = src->cct;
     if (dest_size < src_size) {
@@ -2507,9 +2500,8 @@ reprotect_and_return_err:
     ::SnapContext snapc;
 
     {
-      RWLock::RLocker l(ictx->md_lock);
-      RWLock::RLocker l2(ictx->snap_lock);
-      RWLock::RLocker l3(ictx->parent_lock);
+      RWLock::RLocker l(ictx->snap_lock);
+      RWLock::RLocker l2(ictx->parent_lock);
 
       // can't flatten a non-clone
       if (ictx->parent_md.spec.pool_id == -1) {
@@ -3129,12 +3121,10 @@ reprotect_and_return_err:
   // validate extent against image size; clip to image size if necessary
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
-    ictx->md_lock.get_read();
     ictx->snap_lock.get_read();
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     bool snap_exists = ictx->snap_exists;
     ictx->snap_lock.put_read();
-    ictx->md_lock.put_read();
 
     if (!snap_exists)
       return -ENOENT;
