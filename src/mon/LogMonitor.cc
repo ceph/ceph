@@ -277,7 +277,6 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -293,7 +292,6 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
     return prepare_log(op);
   default:
     assert(0);
-    m->put();
     return false;
   }
 }
@@ -327,7 +325,6 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   return false;
 
  done:
-  m->put();
   return true;
 }
 
@@ -339,7 +336,6 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
   if (m->fsid != mon->monmap->fsid) {
     dout(0) << "handle_log on fsid " << m->fsid << " != " << mon->monmap->fsid 
 	    << dendl;
-    m->put();
     return false;
   }
 
@@ -361,8 +357,6 @@ void LogMonitor::_updated_log(MonOpRequestRef op)
   MLog *m = static_cast<MLog*>(op->get_req());
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
   mon->send_reply(m, new MLogAck(m->fsid, m->entries.rbegin()->seq));
-
-  m->put();
 }
 
 bool LogMonitor::should_propose(double& delay)

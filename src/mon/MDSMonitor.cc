@@ -225,7 +225,6 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
 
   default:
     assert(0);
-    m->put();
     return true;
   }
 }
@@ -293,7 +292,6 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
     if (state != MDSMap::STATE_BOOT) {
       dout(7) << "mds_beacon " << *m << " is not in mdsmap" << dendl;
       mon->send_reply(m, new MMDSMap(mon->monmap->fsid, &mdsmap));
-      m->put();
       return true;
     } else {
       return false;  // not booted yet.
@@ -361,13 +359,11 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   mon->send_reply(m,
 		  new MMDSBeacon(mon->monmap->fsid, m->get_global_id(), m->get_name(),
 				 mdsmap.get_epoch(), state, seq));
-  m->put();
   return true;
 
  ignore:
   // I won't reply this beacon, drop it.
   mon->no_reply(m);
-  m->put();
   return true;
 }
 
@@ -395,7 +391,6 @@ bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
   return false;
 
  done:
-  m->put();
   return true;
 }
 
@@ -418,7 +413,6 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
   
   default:
     assert(0);
-    m->put();
   }
 
   return true;
@@ -544,7 +538,6 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           info.state = MDSMap::STATE_STANDBY_REPLAY;
           info.state_seq = seq;
         } else {
-          m->put();
           return false;
         }
       } else if (m->get_standby_for_rank() >= 0 &&
@@ -555,7 +548,6 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         info.standby_for_rank = m->get_standby_for_rank();
       } else { //it's a standby for anybody, and is already in the list
         assert(pending_mdsmap.get_mds_info().count(info.global_id));
-        m->put();
         return false;
       }
     } else if (state == MDSMap::STATE_DAMAGED) {
@@ -629,7 +621,6 @@ bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
   } else {
     dout(10) << "prepare_offload_targets " << gid << " not in map" << dendl;
   }
-  m->put();
   return true;
 }
 
@@ -657,7 +648,6 @@ void MDSMonitor::_updated(MonOpRequestRef op)
 				      m->get_state(),
 				      m->get_seq()));
   }
-  m->put();
 }
 
 void MDSMonitor::on_active()

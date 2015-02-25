@@ -237,7 +237,6 @@ void Elector::handle_propose(MonOpRequestRef op)
       mon->start_election();
     } else {
       dout(5) << " ignoring old propose" << dendl;
-      m->put();
       return;
     }
   }
@@ -264,8 +263,6 @@ void Elector::handle_propose(MonOpRequestRef op)
       dout(5) << "no, we already acked " << leader_acked << dendl;
     }
   }
-  
-  m->put();
 }
  
 void Elector::handle_ack(MonOpRequestRef op)
@@ -279,7 +276,6 @@ void Elector::handle_ack(MonOpRequestRef op)
     dout(5) << "woah, that's a newer epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
-    m->put();
     return;
   }
   assert(m->epoch == epoch);
@@ -288,7 +284,6 @@ void Elector::handle_ack(MonOpRequestRef op)
       required_features) {
     dout(5) << " ignoring ack from mon" << from
 	    << " without required features" << dendl;
-    m->put();
     return;
   }
   
@@ -308,8 +303,6 @@ void Elector::handle_ack(MonOpRequestRef op)
     // ignore, i'm deferring already.
     assert(leader_acked >= 0);
   }
-  
-  m->put();
 }
 
 
@@ -329,7 +322,6 @@ void Elector::handle_victory(MonOpRequestRef op)
     dout(5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(m->epoch);
     start();
-    m->put();
     return;
   }
 
@@ -354,8 +346,6 @@ void Elector::handle_victory(MonOpRequestRef op)
     mon->get_classic_monitor_commands(&new_cmds, &cmdsize);
     mon->set_leader_supported_commands(new_cmds, cmdsize);
   }
-
-  m->put();
 }
 
 void Elector::nak_old_peer(MonOpRequestRef op)
@@ -375,7 +365,6 @@ void Elector::nak_old_peer(MonOpRequestRef op)
     mon->features.encode(reply->sharing_bl);
     m->get_connection()->send_message(reply);
   }
-  m->put();
 }
 
 void Elector::handle_nak(MonOpRequestRef op)
@@ -403,12 +392,10 @@ void Elector::dispatch(MonOpRequestRef op)
   case MSG_MON_ELECTION:
     {
       if (!participating) {
-        m->put();
         return;
       }
       if (op->get_req()->get_source().num() >= mon->monmap->size()) {
 	dout(5) << " ignoring bogus election message with bad mon rank " 
-	m->put();
 		<< op->get_req()->get_source() << dendl;
 	return;
       }
@@ -419,14 +406,12 @@ void Elector::dispatch(MonOpRequestRef op)
       if (em->fsid != mon->monmap->fsid) {
 	dout(0) << " ignoring election msg fsid " 
 		<< em->fsid << " != " << mon->monmap->fsid << dendl;
-	m->put();
 	return;
       }
 
       if (!mon->monmap->contains(em->get_source_addr())) {
 	dout(1) << "discarding election message: " << em->get_source_addr()
 		<< " not in my monmap " << *mon->monmap << dendl;
-	m->put();
 	return;
       }
 
@@ -445,7 +430,6 @@ void Elector::dispatch(MonOpRequestRef op)
 	//mon->monmon()->paxos->stash_latest(mon->monmap->epoch, em->monmap_bl);
 	cancel_timer();
 	mon->bootstrap();
-	m->put();
 	delete peermap;
 	return;
       }
@@ -464,7 +448,6 @@ void Elector::dispatch(MonOpRequestRef op)
 
       if (em->epoch < epoch) {
 	dout(5) << "old epoch, dropping" << dendl;
-	em->put();
 	break;
       }
 
