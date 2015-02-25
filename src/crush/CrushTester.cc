@@ -1,4 +1,5 @@
 
+#include "include/stringify.h"
 #include "CrushTester.h"
 
 #include <algorithm>
@@ -355,9 +356,13 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool(const string& crushtool)
+int CrushTester::test_with_crushtool(const string& crushtool,
+                                     int timeout)
 {
+  string timeout_string = stringify(timeout);
   vector<const char *> cmd_args;
+  cmd_args.push_back("timeout");
+  cmd_args.push_back(timeout_string.c_str());
   cmd_args.push_back(crushtool.c_str());
   cmd_args.push_back("-i");
   cmd_args.push_back("-");
@@ -411,6 +416,10 @@ int CrushTester::test_with_crushtool(const string& crushtool)
   if (r == 0) {
     // major success!
     return 0;
+  }
+  if (r == 124) {
+    // the test takes longer than timeout and was interrupted
+    return -EINTR;
   }
 
   if (r == ENOENT) {
