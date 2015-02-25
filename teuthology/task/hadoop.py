@@ -4,6 +4,7 @@ import logging
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from ..orchestra import run
+from ..exceptions import UnsupportedPackageTypeError
 
 log = logging.getLogger(__name__)
 
@@ -153,7 +154,12 @@ def configure(ctx, config, hadoops):
     log.info("Setting JAVA_HOME in hadoop-env.sh...")
     for remote in hadoops.remotes:
         path = "{tdir}/hadoop/etc/hadoop/hadoop-env.sh".format(tdir=tempdir)
-        data = "JAVA_HOME=/usr/lib/jvm/default-java\n" # FIXME: RHEL?
+        if remote.os.package_type == 'rpm':
+            data = "JAVA_HOME=/usr/lib/jvm/java\n"
+        elif remote.os.package_type == 'deb':
+            data = "JAVA_HOME=/usr/lib/jvm/default-java\n"
+        else:
+            raise UnsupportedPackageTypeError(remote)
         teuthology.prepend_lines_to_file(remote, path, data)
 
     if config.get('hdfs', False):
@@ -277,16 +283,25 @@ def install_hadoop(ctx, config):
                 )
             )
 
-        run.wait(
-            hadoops.run(
+        # Copy JNI native bits. Need to do this explicitly because the
+        # handling is dependent on the os-type.
+        for remote in hadoops.remotes:
+            libcephfs_jni_path = None
+            if remote.os.package_type == 'rpm':
+                libcephfs_jni_path = "/usr/lib64/libcephfs_jni.so.1.0.0"
+            elif remote.os.package_type == 'deb':
+                libcephfs_jni_path = "/usr/lib/jni/libcephfs_jni.so"
+            else:
+                raise UnsupportedPackageTypeError(remote)
+
+            libcephfs_jni_fname = "libcephfs_jni.so"
+            remote.run(
                 args = [
                     'cp',
-                    "/usr/lib/jni/libcephfs_jni.so",
-                    "{tdir}/hadoop/lib/native/".format(tdir=testdir),
-                ],
-                wait = False,
-                )
-            )
+                    libcephfs_jni_path,
+                    "{tdir}/hadoop/lib/native/{fname}".format(tdir=testdir,
+                        fname=libcephfs_jni_fname),
+                ])
 
         run.wait(
             hadoops.run(
