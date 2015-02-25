@@ -844,9 +844,11 @@ class SyntheticWorkload {
     for (int i = 0; i < clients; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
                                "client", getpid()+i+servers);
-      snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i+servers);
-      bind_addr.parse(addr);
-      msgr->bind(bind_addr);
+      if (cli_policy.standby) {
+        snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i+servers);
+        bind_addr.parse(addr);
+        msgr->bind(bind_addr);
+      }
       msgr->add_dispatcher_head(&cli_dispatcher);
 
       assert(msgr);
