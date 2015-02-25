@@ -188,14 +188,22 @@ void ObjectMap::refresh(uint64_t snap_id)
 
 void ObjectMap::rollback(uint64_t snap_id) {
   assert(m_image_ctx.snap_lock.is_wlocked());
-  uint64_t features;
-  m_image_ctx.get_features(snap_id, &features);
-  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
-    return;
-  }
+  int r;
+  std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << &m_image_ctx << " rollback object map" << dendl;
+
+  uint64_t features;
+  m_image_ctx.get_features(snap_id, &features);
+  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+    r = m_image_ctx.md_ctx.remove(oid);
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "unable to remove object map: " << cpp_strerror(r)
+		 << dendl;
+    }
+    return;
+  }
 
   RWLock::WLocker l(m_image_ctx.object_map_lock);
   if (!m_enabled) {
@@ -204,7 +212,7 @@ void ObjectMap::rollback(uint64_t snap_id) {
 
   std::string snap_oid(object_map_name(m_image_ctx.id, snap_id));
   bufferlist bl;
-  int r = m_image_ctx.md_ctx.read(snap_oid, bl, 0, 0);
+  r = m_image_ctx.md_ctx.read(snap_oid, bl, 0, 0);
   if (r < 0) {
     lderr(cct) << "unable to load snapshot object map '" << snap_oid << "': "
 	       << cpp_strerror(r) << dendl;
@@ -216,7 +224,6 @@ void ObjectMap::rollback(uint64_t snap_id) {
   rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   op.write_full(bl);
 
-  std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   r = m_image_ctx.md_ctx.operate(oid, &op);
   if (r < 0) {
     lderr(cct) << "unable to rollback object map: " << cpp_strerror(r)
