@@ -245,6 +245,9 @@ next:
 static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
 {
   char buf[32];
+  /* Adding X-Timestamp to keep align with Swift API */
+  snprintf(buf, sizeof(buf), "%lld.00000", (long long)s->bucket_info.creation_time);
+  s->cio->print("X-Timestamp: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.count);
   s->cio->print("X-Container-Object-Count: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)bucket.size);
