@@ -161,7 +161,7 @@ namespace librbd {
     struct HandlePayloadVisitor : public boost::static_visitor<void> {
       ImageWatcher *image_watcher;
       uint64_t notify_id;
-      uint64_t handle; 
+      uint64_t handle;
 
       HandlePayloadVisitor(ImageWatcher *image_watcher_, uint64_t notify_id_,
 			   uint64_t handle_)
@@ -226,6 +226,8 @@ namespace librbd {
     void notify_request_lock();
     int notify_lock_owner(bufferlist &bl);
 
+    void schedule_async_request_timed_out(const WatchNotify::AsyncRequestId &id);
+    void async_request_timed_out(const WatchNotify::AsyncRequestId &id);
     int notify_async_request(const WatchNotify::AsyncRequestId &id,
 			     bufferlist &in, ProgressContext& prog_ctx);
     void notify_request_leadership();
