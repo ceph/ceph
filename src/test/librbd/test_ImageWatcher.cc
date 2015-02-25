@@ -22,6 +22,7 @@
 #include <boost/assign/std/set.hpp>
 #include <boost/assign/std/map.hpp>
 #include <boost/bind.hpp>
+#include <boost/scope_exit.hpp>
 #include <boost/thread/thread.hpp>
 #include <iostream>
 #include <map>
@@ -894,4 +895,36 @@ TEST_F(TestImageWatcher, NotifyAsyncCompleteError) {
 
   ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
   ASSERT_EQ(-ESHUTDOWN, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyAsyncRequestTimedOut) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  md_config_t *conf = ictx->cct->_conf;
+  int timed_out_seconds = conf->rbd_request_timed_out_seconds;
+  conf->set_val("rbd_request_timed_out_seconds", "0");
+  BOOST_SCOPE_EXIT( (timed_out_seconds)(conf) ) {
+    conf->set_val("rbd_request_timed_out_seconds",
+                  stringify(timed_out_seconds).c_str());
+  } BOOST_SCOPE_EXIT_END;
+  ASSERT_EQ(0, conf->rbd_request_timed_out_seconds);
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+			  "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, create_response_message(0)));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(-ERESTART, flatten_task.result);
 }
