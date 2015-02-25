@@ -2539,3 +2539,59 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
   ASSERT_PASSED(validate_object_map, image1);
 }
 
+class RBDWriter : public Thread {
+ public:
+   RBDWriter(librbd::Image &image) : m_image(image) {};
+ protected:
+  void *entry() {
+    librbd::image_info_t info;
+    int r = m_image.stat(info, sizeof(info));
+    assert(r == 0);
+    bufferlist bl;
+    bl.append("foo");
+    for (unsigned i = 0; i < info.num_objs; ++i) {
+      r = m_image.write((1 << info.order) * i, bl.length(), bl);
+      assert(r == (int) bl.length());
+    }
+    return NULL;
+  }
+ private:
+  librbd::Image &m_image;
+};
+
+TEST_F(TestLibRBD, ObjectMapConsistentSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 1 << 20;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  RBDWriter writer(image1);
+  writer.create();
+
+  int num_snaps = 10;
+  for (int i = 0; i < num_snaps; ++i) {
+    std::string snap_name = "snap" + stringify(i);
+    ASSERT_EQ(0, image1.snap_create(snap_name.c_str()));
+  }
+
+  writer.join();
+
+  for (int i = 0; i < num_snaps; ++i) {
+    std::string snap_name = "snap" + stringify(i);
+    ASSERT_EQ(0, image1.snap_set(snap_name.c_str()));
+    ASSERT_PASSED(validate_object_map, image1);
+  }
+
+  ASSERT_EQ(0, image1.snap_set(NULL));
+  ASSERT_PASSED(validate_object_map, image1);
+}
