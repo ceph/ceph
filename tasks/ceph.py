@@ -776,9 +776,9 @@ def cluster(ctx, config):
                     remote.run(args=[
                             'sudo',
                             run.Raw('PATH=/usr/sbin:$PATH'),
-                            'ps', 'auxf',
-                            run.Raw(';'),
                             'lsof'
+                            run.Raw(';'),
+                            'ps', 'auxf',
                             ])
                     raise e
 
