@@ -26,25 +26,15 @@ using std::set;
 
 class MDS;
 class Session;
-class CDir;
 class CInode;
 class CDentry;
-class EMetaBlob;
 struct SnapRealm;
 
 class Message;
 
-class MDiscover;
-class MDiscoverReply;
-class MCacheExpire;
-class MDirUpdate;
-class MDentryUnlink;
 class MLock;
 
-class MClientRequest;
-
 class Capability;
-class LogSegment;
 
 class SimpleLock;
 class ScatterLock;
