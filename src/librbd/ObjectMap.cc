@@ -148,7 +148,8 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 void ObjectMap::refresh(uint64_t snap_id)
 {
   assert(m_image_ctx.snap_lock.is_locked());
-  assert(m_image_ctx.object_map_lock.is_wlocked());
+  RWLock::WLocker l(m_image_ctx.object_map_lock);
+
   uint64_t features;
   m_image_ctx.get_features(snap_id, &features);
   if ((features & RBD_FEATURE_OBJECT_MAP) == 0 ||

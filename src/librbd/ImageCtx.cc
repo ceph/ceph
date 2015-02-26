@@ -297,8 +297,6 @@ namespace librbd {
       snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
-
-      RWLock::WLocker l(object_map_lock);
       object_map.refresh(in_snap_id);
       return 0;
     }
@@ -312,8 +310,6 @@ namespace librbd {
     snap_name = "";
     snap_exists = true;
     data_ctx.snap_set_read(snap_id);
-
-    RWLock::WLocker l(object_map_lock);
     object_map.refresh(CEPH_NOSNAP);
   }
 

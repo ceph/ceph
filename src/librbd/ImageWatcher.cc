@@ -318,7 +318,6 @@ int ImageWatcher::lock() {
       return r;
     }
     RWLock::RLocker l2(m_image_ctx.snap_lock);
-    RWLock::WLocker l3(m_image_ctx.object_map_lock);
     m_image_ctx.object_map.refresh(CEPH_NOSNAP);
   }
 
