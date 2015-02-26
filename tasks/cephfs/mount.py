@@ -226,7 +226,7 @@ class CephFSMount(object):
             """).format(path=path)
 
         log.info("check lock on file {0}".format(basename))
-        r = self.client_remote.run(args=[
+        self.client_remote.run(args=[
             'sudo', 'python', '-c', pyscript
         ])
 
