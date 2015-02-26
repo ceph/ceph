@@ -2043,7 +2043,6 @@ reprotect_and_return_err:
 	ictx->snap_exists = false;
       }
 
-      RWLock::WLocker object_map_locker(ictx->object_map_lock);
       ictx->object_map.refresh(ictx->snap_id);
 
       ictx->data_ctx.selfmanaged_snap_set_write_ctx(ictx->snapc.seq, ictx->snaps);
