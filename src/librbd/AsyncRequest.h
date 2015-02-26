@@ -6,6 +6,7 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
+#include "include/xlist.h"
 
 namespace librbd {
 
@@ -14,21 +15,27 @@ class ImageCtx;
 class AsyncRequest
 {
 public:
-  AsyncRequest(ImageCtx &image_ctx, Context *on_finish)
-    : m_image_ctx(image_ctx), m_on_finish(on_finish)
-  {
-  }
-
-  virtual ~AsyncRequest() {}
+  AsyncRequest(ImageCtx &image_ctx, Context *on_finish);
+  virtual ~AsyncRequest();
 
   void complete(int r) {
-    if (should_complete(r)) {
+    if (m_canceled) {
+      m_on_finish->complete(-ERESTART);
+      delete this;
+    } else if (should_complete(r)) {
       m_on_finish->complete(r);
       delete this;
     }
   }
 
   virtual void send() = 0;
+
+  inline bool is_canceled() const {
+    return m_canceled;
+  }
+  inline void cancel() {
+    m_canceled = true;
+  }
 
 protected:
   ImageCtx &m_image_ctx;
@@ -38,6 +45,10 @@ protected:
   Context *create_callback_context();
 
   virtual bool should_complete(int r) = 0;
+
+private:
+  bool m_canceled;
+  xlist<AsyncRequest *>::item m_xlist_item;
 };
 
 class C_AsyncRequest : public Context
