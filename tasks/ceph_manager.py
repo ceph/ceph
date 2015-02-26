@@ -6,12 +6,14 @@ import random
 import time
 import gevent
 import json
+import logging
 import threading
 import os
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
 from teuthology.orchestra.remote import Remote
-import subprocess
+
+log = logging.getLogger(__name__)
 
 def make_admin_daemon_dir(ctx, remote):
     """
