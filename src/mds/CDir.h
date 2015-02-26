@@ -253,11 +253,7 @@ protected:
   static int num_frozen_trees;
   static int num_freezing_trees;
 
-  int auth_pins;
-#ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
-#endif
-  int nested_auth_pins, dir_auth_pins;
+  int dir_auth_pins;
   int request_pins;
 
   // cache control  (defined for authority; hints for replicas)
@@ -540,7 +536,6 @@ public:
     if (request_pins == 0) put(PIN_REQUEST);
   }
 
-    
   // -- waiters --
 protected:
   compact_map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
@@ -565,7 +560,6 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
-
 
   // -- auth pins --
   bool can_auth_pin() const { return is_auth() && !(is_frozen() || is_freezing()); }
