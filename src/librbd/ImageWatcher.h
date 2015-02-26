@@ -17,13 +17,12 @@
 #include "include/assert.h"
 
 class entity_name_t;
-class Finisher;
-class SafeTimer;
 
 namespace librbd {
 
   class AioCompletion;
   class ImageCtx;
+  template <typename T> class TaskFinisher;
 
   class ImageWatcher {
   public:
@@ -40,6 +39,8 @@ namespace librbd {
     int try_lock();
     int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
 		     AioCompletion* c);
+    void prepare_unlock();
+    void cancel_unlock();
     int unlock();
 
     void assert_header_locked(librados::ObjectWriteOperation *op);
@@ -56,7 +57,8 @@ namespace librbd {
 
     enum LockOwnerState {
       LOCK_OWNER_STATE_NOT_LOCKED,
-      LOCK_OWNER_STATE_LOCKED
+      LOCK_OWNER_STATE_LOCKED,
+      LOCK_OWNER_STATE_RELEASING
     };
 
     enum WatchState {
@@ -65,9 +67,43 @@ namespace librbd {
       WATCH_STATE_ERROR
     };
 
+    enum TaskCode {
+      TASK_CODE_ACQUIRED_LOCK,
+      TASK_CODE_REQUEST_LOCK,
+      TASK_CODE_RELEASING_LOCK,
+      TASK_CODE_RELEASED_LOCK,
+      TASK_CODE_RETRY_AIO_REQUESTS,
+      TASK_CODE_CANCEL_ASYNC_REQUESTS,
+      TASK_CODE_HEADER_UPDATE,
+      TASK_CODE_REREGISTER_WATCH,
+      TASK_CODE_ASYNC_REQUEST,
+      TASK_CODE_ASYNC_PROGRESS
+    };
+
     typedef std::pair<Context *, ProgressContext *> AsyncRequest;
     typedef std::pair<boost::function<int(AioCompletion *)>,
 		      AioCompletion *> AioRequest;
+
+    class Task {
+    public:
+      Task(TaskCode task_code) : m_task_code(task_code) {}
+      Task(TaskCode task_code, const WatchNotify::AsyncRequestId &id)
+        : m_task_code(task_code), m_async_request_id(id) {}
+
+      inline bool operator<(const Task& rhs) const {
+        if (m_task_code != rhs.m_task_code) {
+          return m_task_code < rhs.m_task_code;
+        } else if ((m_task_code == TASK_CODE_ASYNC_REQUEST ||
+                    m_task_code == TASK_CODE_ASYNC_PROGRESS) &&
+                   m_async_request_id != rhs.m_async_request_id) {
+          return m_async_request_id < rhs.m_async_request_id;
+        }
+        return false;
+      }
+    private:
+      TaskCode m_task_code;
+      WatchNotify::AsyncRequestId m_async_request_id;
+    };
 
     struct WatchCtx : public librados::WatchCtx2 {
       ImageWatcher &image_watcher;
@@ -125,7 +161,7 @@ namespace librbd {
     struct HandlePayloadVisitor : public boost::static_visitor<void> {
       ImageWatcher *image_watcher;
       uint64_t notify_id;
-      uint64_t handle; 
+      uint64_t handle;
 
       HandlePayloadVisitor(ImageWatcher *image_watcher_, uint64_t notify_id_,
 			   uint64_t handle_)
@@ -156,19 +192,14 @@ namespace librbd {
 
     LockOwnerState m_lock_owner_state;
 
-    Finisher *m_finisher;
-
-    Mutex m_timer_lock;
-    SafeTimer *m_timer;
+    TaskFinisher<Task> *m_task_finisher;
 
     RWLock m_async_request_lock;
     std::map<WatchNotify::AsyncRequestId, AsyncRequest> m_async_requests;
     std::set<WatchNotify::AsyncRequestId> m_async_pending;
-    std::set<WatchNotify::AsyncRequestId> m_async_progress;
 
     Mutex m_aio_request_lock;
     std::vector<AioRequest> m_aio_requests;
-    Context *m_retry_aio_context;
 
     Mutex m_owner_client_id_lock;
     WatchNotify::ClientId m_owner_client_id;
@@ -184,8 +215,6 @@ namespace librbd {
     void finalize_header_update();
 
     void schedule_retry_aio_requests(bool use_timer);
-    void cancel_retry_aio_requests();
-    void finalize_retry_aio_requests();
     void retry_aio_requests();
 
     void schedule_cancel_async_requests();
@@ -197,6 +226,8 @@ namespace librbd {
     void notify_request_lock();
     int notify_lock_owner(bufferlist &bl);
 
+    void schedule_async_request_timed_out(const WatchNotify::AsyncRequestId &id);
+    void async_request_timed_out(const WatchNotify::AsyncRequestId &id);
     int notify_async_request(const WatchNotify::AsyncRequestId &id,
 			     bufferlist &in, ProgressContext& prog_ctx);
     void notify_request_leadership();
@@ -236,7 +267,6 @@ namespace librbd {
     void acknowledge_notify(uint64_t notify_id, uint64_t handle,
 			    bufferlist &out);
 
-    void schedule_reregister_watch();
     void reregister_watch();
   };
 
