@@ -222,7 +222,7 @@ def build_ceph_cluster(ctx, config):
         # If the following fails, it is OK, it might just be that the monitors
         # are taking way more than a minute/monitor to form quorum, so lets
         # try the next block which will wait up to 15 minutes to gatherkeys.
-        estatus_mon = execute_ceph_deploy(ctx, config, mon_create_nodes)
+        execute_ceph_deploy(ctx, config, mon_create_nodes)
 
         estatus_gather = execute_ceph_deploy(ctx, config, gather_keys)
         max_gather_tries = 90
