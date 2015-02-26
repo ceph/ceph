@@ -1680,7 +1680,6 @@ reprotect_and_return_err:
 
     uint64_t original_size;
     {
-      RWLock::RLocker l(ictx->md_lock);
       ictx->snap_lock.get_read();
       original_size = ictx->size;
       ictx->snap_lock.put_read();
