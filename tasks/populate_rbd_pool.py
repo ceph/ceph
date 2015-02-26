@@ -3,8 +3,6 @@ Populate rbd pools
 """
 import contextlib
 import logging
-from ceph_manager import CephManager
-from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +75,7 @@ def task(ctx, config):
                         imagename
                         ])
                 bench_run()
-            
+
     try:
         yield
     finally:

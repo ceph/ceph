@@ -9,6 +9,7 @@ import time
 import gevent
 import base64
 import json
+import logging
 import threading
 import traceback
 import os
@@ -17,10 +18,11 @@ from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
-import subprocess
 
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+
+log = logging.getLogger(__name__)
 
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
@@ -711,7 +713,7 @@ class ObjectStoreTool:
                       options=options))
         if stdin:
             cmd = ("echo {payload} | base64 --decode | {cmd}".
-                   format(payload=base64.encode(kwargs['stdin']),
+                   format(payload=base64.encode(stdin),
                           cmd=cmd))
         lines.append(cmd)
         return "\n".join(lines)
