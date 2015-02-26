@@ -3,8 +3,6 @@ Remotely run peering tests.
 """
 import logging
 import time
-from teuthology import misc as teuthology
-import ceph_manager
 
 log = logging.getLogger(__name__)
 
