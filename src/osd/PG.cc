@@ -2297,7 +2297,7 @@ void PG::_update_calc_stats()
 
     // a degraded objects has fewer replicas or EC shards than the
     // pool specifies
-    uint64_t degraded = 0;
+    int64_t degraded = 0;
 
     // if acting is smaller than desired, add in those missing replicas
     if (acting.size() < target)
@@ -2319,7 +2319,9 @@ void PG::_update_calc_stats()
       degraded += peer_missing[*i].num_missing();
 
       // not yet backfilled
-      degraded += num_objects - peer_info[*i].stats.stats.sum.num_objects;
+      int64_t diff = num_objects - peer_info[*i].stats.stats.sum.num_objects;
+      if (diff > 0)
+        degraded += diff;
     }
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
