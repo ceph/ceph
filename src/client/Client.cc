@@ -1861,7 +1861,8 @@ void Client::_kick_stale_sessions()
   }
 }
 
-void Client::send_request(MetaRequest *request, MetaSession *session)
+void Client::send_request(MetaRequest *request, MetaSession *session,
+			  bool drop_cap_releases)
 {
   // make the request
   mds_rank_t mds = session->mds_num;
@@ -1875,7 +1876,10 @@ void Client::send_request(MetaRequest *request, MetaSession *session)
     r->set_replayed_op();
   } else {
     encode_cap_releases(request, mds);
-    r->releases.swap(request->cap_releases);
+    if (drop_cap_releases) // we haven't send cap reconnect yet, drop cap releases
+      request->cap_releases.clear();
+    else
+      r->releases.swap(request->cap_releases);
   }
   r->set_mdsmap_epoch(mdsmap->get_epoch());
 
@@ -2286,6 +2290,13 @@ void Client::send_reconnect(MetaSession *session)
     session->release = NULL;
   }
 
+  // reset my cap seq number
+  session->seq = 0;
+  //connect to the mds' offload targets
+  connect_mds_targets(mds);
+  //make sure unsafe requests get saved
+  resend_unsafe_requests(session);
+
   MClientReconnect *m = new MClientReconnect;
 
   // i have an open session.
@@ -2324,15 +2335,6 @@ void Client::send_reconnect(MetaSession *session)
       }	
     }
   }
-  
-  // reset my cap seq number
-  session->seq = 0;
-  
-  //connect to the mds' offload targets
-  connect_mds_targets(mds);
-  //make sure unsafe requests get saved
-  resend_unsafe_requests(session);
-
   session->con->send_message(m);
 
   mount_cond.Signal();
@@ -2373,7 +2375,7 @@ void Client::resend_unsafe_requests(MetaSession *session)
     if (req->retry_attempt == 0)
       continue; // old requests only
     if (req->mds == session->mds_num)
-      send_request(req, session);
+      send_request(req, session, true);
   }
 }
 
