@@ -4,7 +4,7 @@ tasks:
       client.0:
         - rbd/test_librbd.sh
     env:
-      RBD_FEATURES: "5"
+      RBD_FEATURES: "13"
 overrides:
   ceph:
     conf:
