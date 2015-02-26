@@ -242,6 +242,7 @@ class Client : public Dispatcher {
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
   client_getgroups_callback_t getgroups_cb;
+  bool require_remount;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
@@ -954,6 +955,7 @@ public:
   int ll_osdaddr(int osd, char* buf, size_t size);
 
   void ll_register_callbacks(struct client_callback_args *args);
+  int test_remount();
 };
 
 #endif
