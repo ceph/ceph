@@ -5,7 +5,6 @@ from cStringIO import StringIO
 import logging
 import time
 
-import ceph_manager
 from teuthology.orchestra import run
 from util.rados import rados
 from teuthology import misc as teuthology
@@ -51,6 +50,9 @@ def task(ctx, config):
 
     # State NONE -> NEAR
     log.info('1. Verify warning messages when exceeding nearfull_ratio')
+
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
 
     proc = mon.run(
              args=[
