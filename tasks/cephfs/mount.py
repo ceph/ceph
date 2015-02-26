@@ -1,5 +1,4 @@
 from contextlib import contextmanager
-from cStringIO import StringIO
 import logging
 import datetime
 import time
