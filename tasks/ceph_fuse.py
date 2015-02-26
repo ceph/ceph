@@ -6,7 +6,6 @@ import contextlib
 import logging
 
 from teuthology import misc as teuthology
-from teuthology.orchestra import run
 from cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
@@ -14,8 +13,8 @@ log = logging.getLogger(__name__)
 
 def get_client_configs(ctx, config):
     """
-    Get a map of the configuration for each FUSE client in the configuration
-    by combining the configuration of the current task with any global overrides.
+    Get a map of the configuration for each FUSE client in the configuration by
+    combining the configuration of the current task with any global overrides.
 
     :param ctx: Context instance
     :param config: configuration for this task
