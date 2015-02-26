@@ -164,6 +164,7 @@ Client::Client(Messenger *m, MonClient *mc)
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
     getgroups_cb(NULL),
+    require_remount(false),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
     interrupt_finisher(m->cct),
@@ -3449,7 +3450,7 @@ public:
       client_t whoami = client->get_nodeid();
       lderr(client->cct) << "tried to remount (to trim kernel dentries) and got error "
 			 << r << dendl;
-      if (client->cct->_conf->client_die_on_failed_remount) {
+      if (client->require_remount) {
 	assert(0 == "failed to remount for kernel dentry trimming");
       }
     }
@@ -7992,6 +7993,24 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_finisher.start();
   }
   getgroups_cb = args->getgroups_cb;
+}
+
+int Client::test_remount()
+{
+  int r = 0;
+
+  if (remount_cb) {
+    int s = remount_cb(callback_handle);
+    if (s) {
+      lderr(cct) << "Failed to invoke remount, needed to ensure kernel dcache consistency"
+		 << dendl;
+    }
+    if (cct->_conf->client_die_on_failed_remount) {
+      require_remount = true;
+      r = s;
+    }
+  }
+  return r;
 }
 
 int Client::_sync_fs()
