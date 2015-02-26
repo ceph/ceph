@@ -4,7 +4,6 @@ Calamari setup task
 import contextlib
 import logging
 import os
-import re
 import requests
 import shutil
 import subprocess
