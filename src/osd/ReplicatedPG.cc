@@ -4362,6 +4362,11 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	} else {
 	  t->write(soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
 	}
+	if (oi.is_data_digest() &&
+	    op.extent.offset > 0 && op.extent.offset == oi.size) {
+	  // it's an append; we can extend the digest.
+	  oi.set_data_digest(osd_op.indata.crc32c(oi.data_digest));
+	}
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length, true);
 	if (!obs.exists) {
