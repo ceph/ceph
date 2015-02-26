@@ -497,6 +497,8 @@ void RGWPutMetadata_ObjStore_SWIFT::send_response()
       ret = STATUS_ACCEPTED;
   }
   set_req_state_err(s, ret);
+  if (!s->err.is_err())
+    dump_content_length(s, 0);
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
