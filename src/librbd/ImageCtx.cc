@@ -718,9 +718,9 @@ namespace librbd {
   }
 
   void ImageCtx::flush_async_operations() {
-    C_SaferCond *ctx = new C_SaferCond();
-    flush_async_operations(ctx);
-    ctx->wait();
+    C_SaferCond ctx;
+    flush_async_operations(&ctx);
+    ctx.wait();
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {

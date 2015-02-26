@@ -160,14 +160,14 @@ namespace librbd {
     assert(!ictx->image_watcher->is_lock_supported() ||
 	   ictx->image_watcher->is_lock_owner());
 
-    C_SaferCond *ctx = new C_SaferCond();
+    C_SaferCond ctx;
     ictx->snap_lock.get_read();
-    AsyncTrimRequest *req = new AsyncTrimRequest(*ictx, ctx, ictx->size,
+    AsyncTrimRequest *req = new AsyncTrimRequest(*ictx, &ctx, ictx->size,
 						 newsize, prog_ctx);
     ictx->snap_lock.put_read();
     req->send();
 
-    int r = ctx->wait();
+    int r = ctx.wait();
     if (r < 0) {
       lderr(ictx->cct) << "warning: failed to remove some object(s): "
 		       << cpp_strerror(r) << dendl;
@@ -1621,7 +1621,7 @@ reprotect_and_return_err:
     uint64_t request_id = ictx->async_request_seq.inc();
     int r;
     do {
-      C_SaferCond *ctx;
+      C_SaferCond ctx;
       {
 	RWLock::RLocker l(ictx->owner_lock);
 	while (ictx->image_watcher->is_lock_supported()) {
@@ -1639,15 +1639,13 @@ reprotect_and_return_err:
 	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner" << dendl;
 	}
 
-	ctx = new C_SaferCond();
-	r = async_resize(ictx, ctx, size, prog_ctx);
+	r = async_resize(ictx, &ctx, size, prog_ctx);
 	if (r < 0) {
-	  delete ctx;
 	  return r;
 	}
       }
 
-      r = ctx->wait();
+      r = ctx.wait();
       if (r == -ERESTART) {
 	ldout(ictx->cct, 5) << "resize interrupted: restarting" << dendl;
       }
@@ -2118,10 +2116,10 @@ reprotect_and_return_err:
 
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
-    C_SaferCond *ctx = new C_SaferCond();
-    async_resize_helper(ictx, ctx, original_size, new_size, no_op);
+    C_SaferCond ctx;
+    async_resize_helper(ictx, &ctx, original_size, new_size, no_op);
 
-    r = ctx->wait();
+    r = ctx.wait();
     if (r < 0) {
       lderr(cct) << "Error resizing to snapshot size: "
 		 << cpp_strerror(r) << dendl;
@@ -2460,7 +2458,7 @@ reprotect_and_return_err:
     uint64_t request_id = ictx->async_request_seq.inc();
     int r;
     do {
-      C_SaferCond *ctx;
+      C_SaferCond ctx;
       {
         RWLock::RLocker l(ictx->owner_lock);
         while (ictx->image_watcher->is_lock_supported()) {
@@ -2478,15 +2476,13 @@ reprotect_and_return_err:
           ldout(ictx->cct, 5) << "flatten timed out notifying lock owner" << dendl;
         }
 
-	ctx = new C_SaferCond();
-        r = async_flatten(ictx, ctx, prog_ctx);
+        r = async_flatten(ictx, &ctx, prog_ctx);
         if (r < 0) {
-	  delete ctx;
 	  return r;
         }
       }
 
-      r = ctx->wait();
+      r = ctx.wait();
       if (r == -ERESTART) {
 	ldout(ictx->cct, 5) << "flatten interrupted: restarting" << dendl;
       }
