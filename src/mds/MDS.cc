@@ -419,6 +419,11 @@ int MDS::_command_flush_journal(std::stringstream *ss)
     return -EROFS;
   }
 
+  if (!is_active()) {
+    dout(5) << __func__ << ": MDS not active, no-op" << dendl;
+    return 0;
+  }
+
   // I need to seal off the current segment, and then mark all previous segments
   // for expiry
   mdlog->start_new_segment();
@@ -3008,7 +3013,7 @@ void MDS::heartbeat_reset()
   // after a call to suicide() completes, in which case MDS::hb
   // has been freed and we are a no-op.
   if (!hb) {
-      assert(state == CEPH_MDS_STATE_DNE);
+      assert(want_state == CEPH_MDS_STATE_DNE);
       return;
   }
 
