@@ -108,8 +108,8 @@ test_ls() {
     echo "testing ls..."
     remove_images
 
-    rbd create -s 1 test1
-    rbd create -s 1 test2
+    rbd create --image-format 1 -s 1 test1
+    rbd create --image-format 1 -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
@@ -120,8 +120,8 @@ test_ls() {
     rbd rm test1
     rbd rm test2
 
-    rbd create --new-format -s 1 test1
-    rbd create --new-format -s 1 test2
+    rbd create --image-format 2 -s 1 test1
+    rbd create --image-format 2 -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
@@ -132,7 +132,7 @@ test_ls() {
     rbd rm test2
 
     rbd create --new-format -s 1 test1
-    rbd create -s 1 test2
+    rbd create --image-format 1 -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
@@ -177,7 +177,7 @@ test_remove() {
     # by removing some objects manually.
 
     # remove with header missing (old format)
-    rbd create -s 1 test1
+    rbd create --image-format 1 -s 1 test1
     rados rm -p rbd test1.rbd
     rbd rm test1
     rbd ls | wc -l | grep "^0$"
