@@ -9,7 +9,7 @@ import subprocess
 
 from teuthology.config import config as teuth_config
 from teuthology import misc as teuthology
-from teuthology import contextutil
+from teuthology import contextutil, packaging
 from teuthology.exceptions import VersionNotFoundError
 from teuthology.parallel import parallel
 from ..orchestra import run
@@ -238,6 +238,16 @@ def _block_looking_for_package_version(remote, base_url, wait=False):
             raise VersionNotFoundError(base_url)
         break
     version = r.stdout.getvalue().strip()
+    # FIXME: 'version' as retreived from the repo is actually the RPM version
+    # PLUS *part* of the release. Example:
+    # Right now, ceph master is given the following version in the repo file:
+    # v0.67-rc3.164.gd5aa3a9 - whereas in reality the RPM version is 0.61.7
+    # and the release is 37.g1243c97.el6 (for centos6).
+    # Point being, I have to mangle a little here.
+    if version[0] == 'v':
+        version = version[1:]
+    if '-' in version:
+        version = version.split('-')[0]
     return version
 
 def _get_local_dir(config, remote):
@@ -470,6 +480,32 @@ def _update_rpm_package_list_and_install(ctx, remote, rpm, config):
                         run.Raw(';'), 'fi'])
 
 
+def verify_ceph_version(ctx, config, remote):
+    """
+    Ensures that the version of ceph installed is what
+    was asked for in the config.
+    """
+    base_url = _get_baseurl(ctx, remote, config)
+    version = _block_looking_for_package_version(
+        remote,
+        base_url,
+        config.get('wait_for_package', False)
+    )
+    installed_ver = packaging.get_package_version(remote, 'ceph')
+    if installed_ver and version in installed_ver:
+        msg = "The correct ceph version {ver} is installed.".format(
+            ver=version
+        )
+        log.info(msg)
+    else:
+        raise RuntimeError(
+            "Ceph version {ver} was not installed, found {installed}.".format(
+                ver=version,
+                installed=installed_ver
+            )
+        )
+
+
 def purge_data(ctx):
     """
     Purge /var/lib/ceph on every remote in ctx.
@@ -526,6 +562,10 @@ def install_packages(ctx, pkgs, config):
             p.spawn(
                 install_pkgs[system_type],
                 ctx, remote, pkgs[system_type], config)
+
+    for remote in ctx.cluster.remotes.iterkeys():
+        # verifies that the install worked as expected
+        verify_ceph_version(ctx, config, remote)
 
 
 def _remove_deb(ctx, config, remote, debs):
@@ -906,10 +946,6 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
             arch=distinfo['arch'],)
     )
 
-    log.info("Getting version and release for the currently installed ceph...")
-    remote.run(args=[
-        'rpm', '-q', 'ceph', '--qf', '%{VERSION}-%{RELEASE}'
-    ])
     base_url = _get_baseurl(ctx, remote, config)
     log.info('Repo base URL: %s', base_url)
     project = config.get('project', 'ceph')
@@ -943,10 +979,6 @@ def _upgrade_rpm_packages(ctx, config, remote, pkgs):
     args = ['sudo', 'yum', '-y', 'install']
     args += pkgs
     remote.run(args=args)
-    log.info("Getting version and release for the newly upgraded ceph...")
-    remote.run(args=[
-        'rpm', '-q', 'ceph', '--qf', '%{VERSION}-%{RELEASE}'
-    ])
 
 
 def upgrade_old_style(ctx, node, remote, pkgs, system_type):
@@ -1042,6 +1074,7 @@ def upgrade_common(ctx, config, deploy_style):
         node['project'] = project
 
         deploy_style(ctx, node, remote, pkgs, system_type)
+        verify_ceph_version(ctx, node, remote)
 
 
 docstring_for_upgrade = """"
