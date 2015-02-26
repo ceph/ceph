@@ -3,7 +3,6 @@ Test pool repairing after objects are damaged.
 """
 import logging
 import time
-import contextlib
 
 import ceph_manager
 from teuthology import misc as teuthology
