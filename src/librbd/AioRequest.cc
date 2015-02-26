@@ -201,13 +201,9 @@ namespace librbd {
     ldout(m_ictx->cct, 20) << "send " << this << " " << m_oid << " " << m_object_off << "~" << m_object_len << dendl;
 
     // send read request to parent if the object doesn't exist locally
-    {
-      RWLock::RLocker l(m_ictx->md_lock);
-      if (m_ictx->object_map != NULL &&
-	  !m_ictx->object_map->object_may_exist(m_object_no)) {
-	complete(-ENOENT);
-	return 0;
-      }
+    if (!m_ictx->object_map.object_may_exist(m_object_no)) {
+      complete(-ENOENT);
+      return 0;
     }
 
     librados::AioCompletion *rados_completion =
@@ -416,8 +412,7 @@ namespace librbd {
     bool lost_exclusive_lock = false;
     {
       RWLock::RLocker l(m_ictx->owner_lock);
-      RWLock::RLocker l2(m_ictx->md_lock);
-      if (m_ictx->object_map == NULL) {
+      if (!m_ictx->object_map.enabled()) {
 	return false;
       }
 
@@ -435,7 +430,7 @@ namespace librbd {
         m_state = LIBRBD_AIO_WRITE_PRE; 
         FunctionContext *ctx = new FunctionContext(
           boost::bind(&AioRequest::complete, this, _1));
-        if (!m_ictx->object_map->aio_update(m_object_no, new_state,
+        if (!m_ictx->object_map.aio_update(m_object_no, new_state,
 					    current_state, ctx)) {
 	  // no object map update required
 	  return false;
@@ -454,8 +449,7 @@ namespace librbd {
 			   << m_object_off << "~" << m_object_len << dendl;
 
     RWLock::RLocker l(m_ictx->owner_lock);
-    RWLock::RLocker l2(m_ictx->md_lock);
-    if (m_ictx->object_map == NULL || !post_object_map_update()) {
+    if (!m_ictx->object_map.enabled() || !post_object_map_update()) {
       return true;
     }
 
@@ -469,7 +463,7 @@ namespace librbd {
     m_state = LIBRBD_AIO_WRITE_POST;
     FunctionContext *ctx = new FunctionContext(
       boost::bind(&AioRequest::complete, this, _1));
-    if (!m_ictx->object_map->aio_update(m_object_no, OBJECT_NONEXISTENT,
+    if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_NONEXISTENT,
 					OBJECT_PENDING, ctx)) {
       // no object map update required
       return true;
