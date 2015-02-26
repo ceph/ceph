@@ -67,7 +67,10 @@ ImageWatcher::~ImageWatcher()
 
 bool ImageWatcher::is_lock_supported() const {
   assert(m_image_ctx.owner_lock.is_locked());
-  return ((m_image_ctx.features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
+  RWLock::RLocker l(m_image_ctx.snap_lock);
+  uint64_t snap_features;
+  m_image_ctx.get_features(m_image_ctx.snap_id, &snap_features);
+  return ((snap_features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 &&
 	  !m_image_ctx.read_only && m_image_ctx.snap_id == CEPH_NOSNAP);
 }
 
@@ -308,13 +311,14 @@ int ImageWatcher::lock() {
     m_owner_client_id = get_client_id();
   }
 
-  if (m_image_ctx.object_map != NULL) {
-    r = m_image_ctx.object_map->lock();
+  if (m_image_ctx.object_map.enabled()) {
+    r = m_image_ctx.object_map.lock();
     if (r < 0 && r != -ENOENT) {
       unlock();
       return r;
     }
-    m_image_ctx.object_map->refresh(CEPH_NOSNAP);
+    RWLock::RLocker l2(m_image_ctx.snap_lock);
+    m_image_ctx.object_map.refresh(CEPH_NOSNAP);
   }
 
   bufferlist bl;
@@ -345,8 +349,8 @@ int ImageWatcher::unlock()
     return r;
   }
 
-  if (m_image_ctx.object_map != NULL) {
-    m_image_ctx.object_map->unlock();
+  if (m_image_ctx.object_map.enabled()) {
+    m_image_ctx.object_map.unlock();
   }
 
   FunctionContext *ctx = new FunctionContext(
