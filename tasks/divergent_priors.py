@@ -4,7 +4,6 @@ Special case divergence test
 import logging
 import time
 
-import ceph_manager
 from teuthology import misc as teuthology
 from util.rados import rados
 
@@ -54,6 +53,8 @@ def task(ctx, config):
     non_divergent.remove(divergent)
 
     log.info('writing initial objects')
+    first_mon = teuthology.get_first_mon(ctx, config)
+    (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
     # write 1000 objects
     for i in range(1000):
         rados(ctx, mon, ['-p', 'foo', 'put', 'existing_%d' % i, dummyfile])
