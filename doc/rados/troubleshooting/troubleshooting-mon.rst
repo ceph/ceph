@@ -429,8 +429,8 @@ ask you to raise them or even define other debug subsystems to obtain infos
 from -- but at least we started off with some useful information, instead
 of a massively empty log without much to go on with.
 
-Do I need to restart a monitor to adjust deebug levels?
--------------------------------------------------------
+Do I need to restart a monitor to adjust debug levels?
+------------------------------------------------------
 
 No. You may do it in one of two ways:
 
