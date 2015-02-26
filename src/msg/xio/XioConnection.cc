@@ -211,7 +211,7 @@ int XioConnection::on_msg_req(struct xio_session *session,
 
   if (! in_seq.p()) {
     if (!treq->in.header.iov_len) {
-	derr << __func__ << " empty header: packet out of sequence?" << dendl;
+	ldout(msgr->cct,0) << __func__ << " empty header: packet out of sequence?" << dendl;
 	xio_release_msg(req);
 	return 0;
     }
@@ -657,9 +657,8 @@ int XioConnection::CState::state_discon()
   return 0;
 }
 
-int XioConnection::CState::state_flow_controlled(uint32_t flags) {
-  dout(11) << __func__ << " ENTER " << dendl;
-
+int XioConnection::CState::state_flow_controlled(uint32_t flags)
+{
   if (! (flags & OP_FLAG_LOCKED))
     pthread_spin_lock(&xcon->sp);
 
