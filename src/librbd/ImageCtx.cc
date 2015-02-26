@@ -8,6 +8,7 @@
 #include "common/perf_counters.h"
 
 #include "librbd/AsyncOperation.h"
+#include "librbd/AsyncRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
@@ -731,6 +732,22 @@ namespace librbd {
 
     ldout(cct, 20) << "flush async operations: " << on_finish << " "
                    << "count=" << async_ops.size() << dendl;
-    async_ops.back()->add_flush_context(on_finish);
+    async_ops.front()->add_flush_context(on_finish);
+  }
+
+  void ImageCtx::cancel_async_requests() {
+    Mutex::Locker l(async_ops_lock);
+    ldout(cct, 10) << "canceling async requests: count="
+                   << async_requests.size() << dendl;
+
+    for (xlist<AsyncRequest*>::iterator it = async_requests.begin();
+         !it.end(); ++it) {
+      ldout(cct, 10) << "canceling async request: " << *it << dendl;
+      (*it)->cancel();
+    }
+
+    while (!async_requests.empty()) {
+      async_requests_cond.Wait(async_ops_lock);
+    }
   }
 }

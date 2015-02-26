@@ -37,6 +37,7 @@ class PerfCounters;
 namespace librbd {
 
   class AsyncOperation;
+  class AsyncRequest;
   class CopyupRequest;
   class ImageWatcher;
 
@@ -119,6 +120,8 @@ namespace librbd {
     std::map<uint64_t, CopyupRequest*> copyup_list;
 
     xlist<AsyncOperation*> async_ops;
+    xlist<AsyncRequest*> async_requests;
+    Cond async_requests_cond;
 
     ObjectMap object_map;
 
@@ -197,6 +200,8 @@ namespace librbd {
 
     void flush_async_operations();
     void flush_async_operations(Context *on_finish);
+
+    void cancel_async_requests();
   };
 }
 
