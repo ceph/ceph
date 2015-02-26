@@ -3,6 +3,7 @@
 
 #include "librbd/WatchNotifyTypes.h"
 #include "include/assert.h"
+#include "include/stringify.h"
 #include "common/Formatter.h"
 
 namespace librbd {
@@ -97,7 +98,7 @@ void AcquiredLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AcquiredLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "AcquiredLock");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_ACQUIRED_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
@@ -115,7 +116,7 @@ void ReleasedLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void ReleasedLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "ReleasedLock");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_RELEASED_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
@@ -133,7 +134,7 @@ void RequestLockPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void RequestLockPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "RequestLock");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_REQUEST_LOCK));
   f->open_object_section("client_id");
   client_id.dump(f);
   f->close_section();
@@ -147,7 +148,7 @@ void HeaderUpdatePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void HeaderUpdatePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "HeaderUpdate");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_HEADER_UPDATE));
 }
 
 void AsyncProgressPayload::encode(bufferlist &bl) const {
@@ -164,7 +165,7 @@ void AsyncProgressPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AsyncProgressPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "AsyncProgress");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_ASYNC_PROGRESS));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
@@ -184,7 +185,7 @@ void AsyncCompletePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void AsyncCompletePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "AsyncComplete");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_ASYNC_COMPLETE));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
@@ -201,7 +202,7 @@ void FlattenPayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void FlattenPayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "Flatten");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_FLATTEN));
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
   f->close_section();
@@ -219,7 +220,7 @@ void ResizePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void ResizePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "Resize");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_RESIZE));
   f->dump_unsigned("size", size);
   f->open_object_section("async_request_id");
   async_request_id.dump(f);
@@ -236,7 +237,7 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
 }
 
 void SnapCreatePayload::dump(Formatter *f) const {
-  f->dump_string("notify_op", "SnapCreate");
+  f->dump_string("notify_op", stringify(NOTIFY_OP_SNAP_CREATE));
   f->dump_string("snap_name", snap_name);
 }
 
@@ -338,6 +339,45 @@ void ResponseMessage::generate_test_instances(std::list<ResponseMessage *> &o) {
 
 } // namespace WatchNotify
 } // namespace librbd
+
+std::ostream &operator<<(std::ostream &out,
+                         const librbd::WatchNotify::NotifyOp &op) {
+  using namespace librbd::WatchNotify;
+
+  switch (op) {
+  case NOTIFY_OP_ACQUIRED_LOCK:
+    out << "AcquiredLock";
+    break;
+  case NOTIFY_OP_RELEASED_LOCK:
+    out << "ReleasedLock";
+    break;
+  case NOTIFY_OP_REQUEST_LOCK:
+    out << "RequestLock";
+    break;
+  case NOTIFY_OP_HEADER_UPDATE:
+    out << "HeaderUpdate";
+    break;
+  case NOTIFY_OP_ASYNC_PROGRESS:
+    out << "AsyncProgress";
+    break;
+  case NOTIFY_OP_ASYNC_COMPLETE:
+    out << "AsyncComplete";
+    break;
+  case NOTIFY_OP_FLATTEN:
+    out << "Flatten";
+    break;
+  case NOTIFY_OP_RESIZE:
+    out << "Resize";
+    break;
+  case NOTIFY_OP_SNAP_CREATE:
+    out << "SnapCreate";
+    break;
+  default:
+    out << "Unknown (" << static_cast<uint32_t>(op) << ")";
+    break;
+  }
+  return out;
+}
 
 std::ostream &operator<<(std::ostream &out,
                          const librbd::WatchNotify::AsyncRequestId &request) {
