@@ -164,6 +164,7 @@ Client::Client(Messenger *m, MonClient *mc)
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
     getgroups_cb(NULL),
+    can_invalidate_dentries(false),
     require_remount(false),
     async_ino_invalidator(m->cct),
     async_dentry_invalidator(m->cct),
@@ -3459,10 +3460,18 @@ public:
 
 void Client::_invalidate_kernel_dcache()
 {
-  // Hacky:
-  // when remounting a file system, linux kernel trims all unused dentries in the file system
-  if (remount_cb)
+  if (can_invalidate_dentries && dentry_invalidate_cb && root->dir) {
+    for (ceph::unordered_map<string, Dentry*>::iterator p = root->dir->dentries.begin();
+	 p != root->dir->dentries.end();
+	 ++p) {
+      if (p->second->inode)
+	_schedule_invalidate_dentry_callback(p->second, false);
+    }
+  } else if (remount_cb) {
+    // Hacky:
+    // when remounting a file system, linux kernel trims all unused dentries in the fs
     remount_finisher.queue(new C_Client_Remount(this));
+  }
 }
 
 void Client::trim_caps(MetaSession *s, int max)
@@ -3494,6 +3503,13 @@ void Client::trim_caps(MetaSession *s, int max)
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
+	  if (can_invalidate_dentries &&
+	      dn->dir->parent_inode->ino == MDS_INO_ROOT) {
+	    // Only issue one of these per DN for inodes in root: handle
+	    // others more efficiently by calling for root-child DNs at
+	    // the end of this function.
+	    _schedule_invalidate_dentry_callback(dn, true);
+	  }
 	  trim_dentry(dn);
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
@@ -7995,11 +8011,17 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   getgroups_cb = args->getgroups_cb;
 }
 
-int Client::test_remount()
+int Client::test_dentry_handling(bool can_invalidate)
 {
   int r = 0;
 
-  if (remount_cb) {
+  can_invalidate_dentries = can_invalidate;
+
+  if (can_invalidate_dentries) {
+    assert(dentry_invalidate_cb);
+    ldout(cct, 1) << "using dentry_invalidate_cb" << dendl;
+  } else if (remount_cb) {
+    ldout(cct, 1) << "using remount_cb" << dendl;
     int s = remount_cb(callback_handle);
     if (s) {
       lderr(cct) << "Failed to invoke remount, needed to ensure kernel dcache consistency"
@@ -8009,6 +8031,10 @@ int Client::test_remount()
       require_remount = true;
       r = s;
     }
+  } else {
+    lderr(cct) << "no method to invalidate kernel dentry cache; expect issues!" << dendl;
+    if (cct->_conf->client_die_on_failed_remount)
+      assert(0);
   }
   return r;
 }
