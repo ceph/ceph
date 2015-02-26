@@ -281,3 +281,41 @@ TEST_F(TestInternal, AioDiscardRequestsLock) {
   ASSERT_FALSE(is_owner);
   ASSERT_FALSE(c->is_complete());
 }
+
+TEST_F(TestInternal, CancelAsyncResize) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
+
+  uint64_t size;
+  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+
+  uint32_t attempts = 0;
+  while (attempts++ < 20 && size > 0) {
+    C_SaferCond ctx;
+    librbd::NoOpProgressContext prog_ctx;
+
+    size -= MIN(size, 1<<18);
+    {
+      RWLock::RLocker l(ictx->owner_lock);
+      ASSERT_EQ(0, librbd::async_resize(ictx, &ctx, size, prog_ctx));
+    }
+
+    // try to interrupt the in-progress resize
+    ictx->cancel_async_requests();
+
+    int r = ctx.wait();
+    if (r == -ERESTART) {
+      std::cout << "detected canceled async request" << std::endl;
+      break;
+    }
+    ASSERT_EQ(0, r);
+  }
+}

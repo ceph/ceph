@@ -491,7 +491,14 @@ struct C_DoWatchError : public Context {
     info->_queued_async();
   }
   void finish(int r) {
-    info->watch_context->handle_error(info->get_cookie(), err);
+    objecter->rwlock.get_read();
+    bool canceled = info->canceled;
+    objecter->rwlock.put_read();
+
+    if (!canceled) {
+      info->watch_context->handle_error(info->get_cookie(), err);
+    }
+
     info->finished_async();
     info->put();
     objecter->_linger_callback_finish();
@@ -2712,7 +2719,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 			 op->target.target_oid, op->target.target_oloc,
 			 op->target.pgid,
 			 osdmap->get_epoch(),
-			 flags);
+			 flags, op->features);
 
   m->set_snapid(op->snapid);
   m->set_snap_seq(op->snapc.seq);

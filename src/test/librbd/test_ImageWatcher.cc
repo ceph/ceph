@@ -15,11 +15,15 @@
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
+#include "librbd/WatchNotifyTypes.h"
 #include "test/librados/test.h"
 #include "gtest/gtest.h"
 #include <boost/assign/list_of.hpp>
 #include <boost/assign/std/set.hpp>
+#include <boost/assign/std/map.hpp>
 #include <boost/bind.hpp>
+#include <boost/scope_exit.hpp>
+#include <boost/thread/thread.hpp>
 #include <iostream>
 #include <map>
 #include <set>
@@ -28,36 +32,9 @@
 
 using namespace ceph;
 using namespace boost::assign;
+using namespace librbd::WatchNotify;
 
 void register_test_image_watcher() {
-}
-
-enum NotifyOp {
-  NOTIFY_OP_ACQUIRED_LOCK = 0,
-  NOTIFY_OP_RELEASED_LOCK = 1,
-  NOTIFY_OP_REQUEST_LOCK  = 2,
-  NOTIFY_OP_HEADER_UPDATE = 3
-};
-
-std::ostream& operator<<(std::ostream& os, NotifyOp op) {
-  switch (op) {
-  case NOTIFY_OP_ACQUIRED_LOCK:
-    os << "acquired lock";
-    break;
-  case NOTIFY_OP_RELEASED_LOCK:
-    os << "released lock";
-    break;
-  case NOTIFY_OP_REQUEST_LOCK:
-    os << "request lock";
-    break;
-  case NOTIFY_OP_HEADER_UPDATE:
-    os << "header update";
-    break;
-  default:
-    os << "unknown (" << static_cast<uint32_t>(op) << ")";
-    break;
-  }
-  return os;
 }
 
 class TestImageWatcher : public TestFixture {
@@ -95,16 +72,21 @@ public:
 	iter.copy_all(payload);
 	DECODE_FINISH(iter);
 
-	std::cout << "NOTIFY: " << static_cast<NotifyOp>(op) << ", " << notify_id
+        NotifyOp notify_op = static_cast<NotifyOp>(op);
+	std::cout << "NOTIFY: " << notify_op << ", " << notify_id
 		  << ", " << cookie << ", " << notifier_id << std::endl;
 
 	Mutex::Locker l(m_parent.m_callback_lock);
-	bufferlist reply;
-	m_parent.m_ioctx.notify_ack(m_header_oid, notify_id, cookie, reply);
-	m_parent.m_notify_acks.erase(static_cast<NotifyOp>(op));
+        m_parent.m_notify_payloads[notify_op] = payload;
 
-	m_parent.m_notifies += static_cast<NotifyOp>(op);
-	m_parent.m_callback_cond.Signal();
+        bufferlist reply;
+        if (m_parent.m_notify_acks.count(notify_op) > 0) {
+          reply = m_parent.m_notify_acks[notify_op];
+	  m_parent.m_notifies += notify_op;
+	  m_parent.m_callback_cond.Signal();
+        }
+
+	m_parent.m_ioctx.notify_ack(m_header_oid, notify_id, cookie, reply);
       } catch (...) {
 	FAIL();
       }
@@ -133,6 +115,10 @@ public:
   int deregister_image_watch() {
     if (m_watch_ctx != NULL) {
       int r = m_watch_ctx->unwatch();
+
+      librados::Rados rados(m_ioctx);
+      rados.watch_flush();
+
       delete m_watch_ctx;
       m_watch_ctx = NULL;
       return r;
@@ -147,14 +133,14 @@ public:
 
   bool wait_for_notifies(librbd::ImageCtx &ictx) {
     Mutex::Locker l(m_callback_lock);
-    while (!m_notify_acks.empty()) {
+    while (m_notifies.size() < m_notify_acks.size()) {
       int r = m_callback_cond.WaitInterval(ictx.cct, m_callback_lock,
 					 utime_t(10, 0));
       if (r != 0) {
 	break;
       }
     }
-    return m_notify_acks.empty();
+    return (m_notifies.size() == m_notify_acks.size());
   }
 
 
@@ -182,7 +168,8 @@ public:
 
     RWLock::WLocker l2(ictx->owner_lock);
     if (!ictx->image_watcher->is_lock_owner() &&
-	m_aio_completion_restarts < m_expected_aio_restarts) {
+        (m_expected_aio_restarts == 0 ||
+	 m_aio_completion_restarts < m_expected_aio_restarts)) {
       EXPECT_EQ(0, ictx->image_watcher->request_lock(
         boost::bind(&TestImageWatcher::handle_restart_aio, this, ictx, _1),
 	aio_completion));
@@ -214,13 +201,65 @@ public:
     return (r == 0);
   }
 
+  bufferlist create_response_message(int r) {
+    bufferlist bl;
+    ::encode(ResponseMessage(r), bl);
+    return bl;
+  }
+
+  bool extract_async_request_id(NotifyOp op, AsyncRequestId *id) {
+    if (m_notify_payloads.count(op) == 0) {
+      return false;
+    }
+
+    bufferlist payload = m_notify_payloads[op];
+    bufferlist::iterator iter = payload.begin();
+
+    switch (op) {
+    case NOTIFY_OP_FLATTEN:
+      {
+        FlattenPayload payload;
+        payload.decode(2, iter);
+        *id = payload.async_request_id;
+      }
+      return true;
+    case NOTIFY_OP_RESIZE:
+      {
+        ResizePayload payload;
+        payload.decode(2, iter);
+        *id = payload.async_request_id;
+      }
+      return true;
+    default:
+      break;
+    }
+    return false;
+  }
+
+  int notify_async_progress(librbd::ImageCtx *ictx, const AsyncRequestId &id,
+                            uint64_t offset, uint64_t total) {
+    bufferlist bl;
+    ::encode(NotifyMessage(AsyncProgressPayload(id, offset, total)), bl);
+    return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
+  }
+
+  int notify_async_complete(librbd::ImageCtx *ictx, const AsyncRequestId &id,
+                            int r) {
+    bufferlist bl;
+    ::encode(NotifyMessage(AsyncCompletePayload(id, r)), bl);
+    return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
+  }
+
   typedef std::map<NotifyOp, bufferlist> NotifyOpPayloads;
   typedef std::set<NotifyOp> NotifyOps;
 
   WatchCtx *m_watch_ctx;
-  
+
   NotifyOps m_notifies;
+  NotifyOpPayloads m_notify_payloads;
   NotifyOpPayloads m_notify_acks;
+
+  AsyncRequestId m_async_request_id;
 
   std::set<librbd::AioCompletion *> m_aio_completions;
   uint32_t m_aio_completion_restarts;
@@ -229,6 +268,65 @@ public:
   Mutex m_callback_lock;
   Cond m_callback_cond;
 
+};
+
+struct ProgressContext : public librbd::ProgressContext {
+  Mutex mutex;
+  Cond cond;
+  bool received;
+  uint64_t offset;
+  uint64_t total;
+
+  ProgressContext() : mutex("ProgressContext::mutex"), received(false),
+                      offset(0), total(0) {}
+
+  virtual int update_progress(uint64_t offset_, uint64_t total_) {
+    Mutex::Locker l(mutex);
+    offset = offset_;
+    total = total_;
+    received = true;
+    cond.Signal();
+    return 0;
+  }
+
+  bool wait(librbd::ImageCtx *ictx, uint64_t offset_, uint64_t total_) {
+    Mutex::Locker l(mutex);
+    while (!received) {
+      int r = cond.WaitInterval(ictx->cct, mutex, utime_t(10, 0));
+      if (r != 0) {
+	break;
+      }
+    }
+    return (received && offset == offset_ && total == total_);
+  }
+};
+
+struct FlattenTask {
+  librbd::ImageCtx *ictx;
+  ProgressContext *progress_context;
+  int result;
+
+  FlattenTask(librbd::ImageCtx *ictx_, ProgressContext *ctx)
+    : ictx(ictx_), progress_context(ctx), result(0) {}
+
+  void operator()() {
+    RWLock::RLocker l(ictx->owner_lock);
+    result = ictx->image_watcher->notify_flatten(0, *progress_context);
+  }
+};
+
+struct ResizeTask {
+  librbd::ImageCtx *ictx;
+  ProgressContext *progress_context;
+  int result;
+
+  ResizeTask(librbd::ImageCtx *ictx_, ProgressContext *ctx)
+    : ictx(ictx_), progress_context(ctx), result(0) {}
+
+  void operator()() {
+    RWLock::RLocker l(ictx->owner_lock);
+    result = ictx->image_watcher->notify_resize(0, 0, *progress_context);
+  }
 };
 
 TEST_F(TestImageWatcher, IsLockSupported) {
@@ -260,9 +358,11 @@ TEST_F(TestImageWatcher, TryLock) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_TRUE(ictx->image_watcher);
 
-  RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->try_lock());
-  ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+    ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+  }
 
   std::map<rados::cls::lock::locker_id_t,
            rados::cls::lock::locker_info_t> lockers;
@@ -284,12 +384,13 @@ TEST_F(TestImageWatcher, TryLockNotifyAnnounceLocked) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
 
-  RWLock::WLocker l(ictx->owner_lock);
-  ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    ASSERT_EQ(0, ictx->image_watcher->try_lock());
+  }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -380,15 +481,13 @@ TEST_F(TestImageWatcher, UnlockNotifyReleaseLock) {
   }
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
-  m_notify_acks = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
+  m_notify_acks += std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist());
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->unlock());
   }
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_ACQUIRED_LOCK, NOTIFY_OP_RELEASED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -427,17 +526,9 @@ TEST_F(TestImageWatcher, RequestLock) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
 			  "auto " + stringify(m_watch_ctx->get_handle())));
 
-  bufferlist bl;
-  {
-    ENCODE_START(1, 1, bl);
-    ::encode(0, bl);
-    ENCODE_FINISH(bl);
-  }
-
   m_notify_acks = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
+    std::make_pair(NOTIFY_OP_REQUEST_LOCK, create_response_message(0)));
 
-  m_expected_aio_restarts = 2;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
@@ -449,7 +540,6 @@ TEST_F(TestImageWatcher, RequestLock) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -461,7 +551,7 @@ TEST_F(TestImageWatcher, RequestLock) {
     std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()))(
     std::make_pair(NOTIFY_OP_ACQUIRED_LOCK, bufferlist()));
 
-  bl.clear();
+  bufferlist bl;
   {
     ENCODE_START(1, 1, bl);
     ::encode(NOTIFY_OP_RELEASED_LOCK, bl);
@@ -470,7 +560,6 @@ TEST_F(TestImageWatcher, RequestLock) {
   ASSERT_EQ(0, m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL));
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(m_notify_acks.empty());
   expected_notify_ops.clear();
   expected_notify_ops += NOTIFY_OP_RELEASED_LOCK, NOTIFY_OP_ACQUIRED_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -490,7 +579,6 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_REQUEST_LOCK, bufferlist()));
 
-  m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
@@ -499,7 +587,6 @@ TEST_F(TestImageWatcher, RequestLockTimedOut) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -516,17 +603,9 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
                           "auto " + stringify(m_watch_ctx->get_handle())));
 
-  bufferlist bl;
-  {
-    ENCODE_START(1, 1, bl);
-    ::encode(0, bl);
-    ENCODE_FINISH(bl);
-  }
-
   m_notify_acks = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
+    std::make_pair(NOTIFY_OP_REQUEST_LOCK, create_response_message(0)));
 
-  m_expected_aio_restarts = 1;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
@@ -535,7 +614,6 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -544,7 +622,7 @@ TEST_F(TestImageWatcher, RequestLockTryLockRace) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
 
-  bl.clear();
+  bufferlist bl;
   {
     ENCODE_START(1, 1, bl);
     ::encode(NOTIFY_OP_RELEASED_LOCK, bl);
@@ -563,7 +641,6 @@ TEST_F(TestImageWatcher, RequestLockPreTryLockFailed) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, lock_image(*ictx, LOCK_SHARED, "manually 1234"));
 
-  m_expected_aio_restarts = 3;
   {
     RWLock::WLocker l(ictx->owner_lock);
     ASSERT_EQ(0, ictx->image_watcher->request_lock(
@@ -582,15 +659,8 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
   ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
                           "auto " + stringify(m_watch_ctx->get_handle())));
 
-  bufferlist bl;
-  {
-    ENCODE_START(1, 1, bl);
-    ::encode(0, bl);
-    ENCODE_FINISH(bl);
-  }
-
   m_notify_acks = boost::assign::list_of(
-    std::make_pair(NOTIFY_OP_REQUEST_LOCK, bl));
+    std::make_pair(NOTIFY_OP_REQUEST_LOCK, create_response_message(0)));
 
   m_expected_aio_restarts = 1;
   {
@@ -601,7 +671,6 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
   }
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_REQUEST_LOCK;
   ASSERT_EQ(expected_notify_ops, m_notifies);
@@ -613,7 +682,7 @@ TEST_F(TestImageWatcher, RequestLockPostTryLockFailed) {
   m_notify_acks = boost::assign::list_of(
     std::make_pair(NOTIFY_OP_RELEASED_LOCK, bufferlist()));
 
-  bl.clear();
+  bufferlist bl;
   {
     ENCODE_START(1, 1, bl);
     ::encode(NOTIFY_OP_RELEASED_LOCK, bl);
@@ -637,8 +706,225 @@ TEST_F(TestImageWatcher, NotifyHeaderUpdate) {
 
   ASSERT_TRUE(wait_for_notifies(*ictx));
 
-  ASSERT_TRUE(m_notify_acks.empty());
   NotifyOps expected_notify_ops;
   expected_notify_ops += NOTIFY_OP_HEADER_UPDATE;
   ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifyFlatten) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, create_response_message(0)));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_FLATTEN;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  AsyncRequestId async_request_id;
+  ASSERT_TRUE(extract_async_request_id(NOTIFY_OP_FLATTEN, &async_request_id));
+
+  ASSERT_EQ(0, notify_async_progress(ictx, async_request_id, 10, 20));
+  ASSERT_TRUE(progress_context.wait(ictx, 10, 20));
+
+  ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, 0));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(0, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyResize) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_RESIZE, create_response_message(0)));
+
+  ProgressContext progress_context;
+  ResizeTask resize_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(resize_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_RESIZE;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  AsyncRequestId async_request_id;
+  ASSERT_TRUE(extract_async_request_id(NOTIFY_OP_RESIZE, &async_request_id));
+
+  ASSERT_EQ(0, notify_async_progress(ictx, async_request_id, 10, 20));
+  ASSERT_TRUE(progress_context.wait(ictx, 10, 20));
+
+  ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, 0));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(0, resize_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifySnapCreate) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_SNAP_CREATE, create_response_message(0)));
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(0, ictx->image_watcher->notify_snap_create("snap"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifySnapCreateError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_SNAP_CREATE, create_response_message(-EEXIST)));
+
+  RWLock::RLocker l(ictx->owner_lock);
+  ASSERT_EQ(-EEXIST, ictx->image_watcher->notify_snap_create("snap"));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_SNAP_CREATE;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+}
+
+TEST_F(TestImageWatcher, NotifyAsyncTimedOut) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, bufferlist()));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(-ETIMEDOUT, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyAsyncError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, create_response_message(-EIO)));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(-EIO, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyAsyncCompleteError) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+        "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, create_response_message(0)));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  NotifyOps expected_notify_ops;
+  expected_notify_ops += NOTIFY_OP_FLATTEN;
+  ASSERT_EQ(expected_notify_ops, m_notifies);
+
+  AsyncRequestId async_request_id;
+  ASSERT_TRUE(extract_async_request_id(NOTIFY_OP_FLATTEN, &async_request_id));
+
+  ASSERT_EQ(0, notify_async_complete(ictx, async_request_id, -ESHUTDOWN));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(-ESHUTDOWN, flatten_task.result);
+}
+
+TEST_F(TestImageWatcher, NotifyAsyncRequestTimedOut) {
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  md_config_t *conf = ictx->cct->_conf;
+  int timed_out_seconds = conf->rbd_request_timed_out_seconds;
+  conf->set_val("rbd_request_timed_out_seconds", "0");
+  BOOST_SCOPE_EXIT( (timed_out_seconds)(conf) ) {
+    conf->set_val("rbd_request_timed_out_seconds",
+                  stringify(timed_out_seconds).c_str());
+  } BOOST_SCOPE_EXIT_END;
+  ASSERT_EQ(0, conf->rbd_request_timed_out_seconds);
+
+  ASSERT_EQ(0, register_image_watch(*ictx));
+  ASSERT_EQ(0, lock_image(*ictx, LOCK_EXCLUSIVE,
+			  "auto " + stringify(m_watch_ctx->get_handle())));
+
+  m_notify_acks = boost::assign::list_of(
+    std::make_pair(NOTIFY_OP_FLATTEN, create_response_message(0)));
+
+  ProgressContext progress_context;
+  FlattenTask flatten_task(ictx, &progress_context);
+  boost::thread thread(boost::ref(flatten_task));
+
+  ASSERT_TRUE(wait_for_notifies(*ictx));
+
+  ASSERT_TRUE(thread.timed_join(boost::posix_time::seconds(10)));
+  ASSERT_EQ(-ERESTART, flatten_task.result);
 }
