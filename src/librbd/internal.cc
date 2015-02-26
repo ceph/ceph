@@ -1682,6 +1682,7 @@ reprotect_and_return_err:
       original_size = ictx->size;
       ictx->snap_lock.put_read();
       if (size < original_size) {
+        ictx->flush_async_operations();
 	if (ictx->object_cacher) {
 	  // need to invalidate since we're deleting objects, and
 	  // ObjectCacher doesn't track non-existent objects
@@ -2108,6 +2109,7 @@ reprotect_and_return_err:
       // need to flush any pending writes before resizing and rolling back -
       // writes might create new snapshots. Rolling back will replace
       // the current version, so we have to invalidate that too.
+      ictx->flush_async_operations();
       r = ictx->invalidate_cache();
       if (r < 0) {
 	return r;
