@@ -713,7 +713,7 @@ class ObjectStoreTool:
                       options=options))
         if stdin:
             cmd = ("echo {payload} | base64 --decode | {cmd}".
-                   format(payload=base64.encode(kwargs['stdin']),
+                   format(payload=base64.encode(stdin),
                           cmd=cmd))
         lines.append(cmd)
         return "\n".join(lines)
