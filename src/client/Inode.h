@@ -17,7 +17,8 @@ struct MetaSession;
 class Dentry;
 class Dir;
 struct SnapRealm;
-class Inode;
+struct Inode;
+class ceph_lock_state_t;
 
 struct Cap {
   MetaSession *session;
@@ -210,6 +211,10 @@ class Inode {
     ll_ref -= n;
   }
 
+  // file locks
+  ceph_lock_state_t *fcntl_locks;
+  ceph_lock_state_t *flock_locks;
+
   Inode(CephContext *cct_, vinodeno_t vino, ceph_file_layout *newlayout)
     : cct(cct_), ino(vino.ino), snapid(vino.snapid),
       rdev(0), mode(0), uid(0), gid(0), nlink(0),
@@ -224,8 +229,8 @@ class Inode {
       snaprealm(0), snaprealm_item(this), snapdir_parent(0),
       oset((void *)this, newlayout->fl_pg_pool, ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), 
-      dir(0), dn_set()
+      _ref(0), ll_ref(0), dir(0), dn_set(),
+      fcntl_locks(NULL), flock_locks(NULL)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&layout, 0, sizeof(layout));

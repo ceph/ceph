@@ -5,6 +5,7 @@
 
 class Inode;
 class Cond;
+class ceph_lock_state_t;
 
 // file handle for any open file state
 
@@ -23,8 +24,13 @@ struct Fh {
   loff_t consec_read_bytes;
   int nr_consec_read;
 
+  // file lock
+  ceph_lock_state_t *fcntl_locks;
+  ceph_lock_state_t *flock_locks;
+
   Fh() : inode(0), pos(0), mds(0), mode(0), flags(0), pos_locked(false),
-	 last_pos(0), consec_read_bytes(0), nr_consec_read(0) {}
+	 last_pos(0), consec_read_bytes(0), nr_consec_read(0),
+	 fcntl_locks(NULL), flock_locks(NULL)  {}
 };
 
 

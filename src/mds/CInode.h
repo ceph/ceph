@@ -442,6 +442,7 @@ private:
     parent(0),
     inode_auth(CDIR_AUTH_DEFAULT),
     replica_caps_wanted(0),
+    fcntl_locks(g_ceph_context), flock_locks(g_ceph_context),
     item_dirty(this), item_caps(this), item_open_file(this), item_dirty_parent(this),
     item_dirty_dirfrag_dir(this), 
     item_dirty_dirfrag_nest(this), 

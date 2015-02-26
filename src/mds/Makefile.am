@@ -4,7 +4,6 @@ libmds_la_SOURCES = \
 	mds/Dumper.cc \
 	mds/Resetter.cc \
 	mds/MDS.cc \
-	mds/flock.cc \
 	mds/locks.c \
 	mds/journal.cc \
 	mds/Server.cc \

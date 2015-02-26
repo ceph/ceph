@@ -119,6 +119,7 @@ struct CapSnap;
 
 struct MetaSession;
 struct MetaRequest;
+class ceph_lock_state_t;
 
 
 typedef void (*client_ino_callback_t)(void *handle, vinodeno_t ino, int64_t off, int64_t len);
@@ -127,6 +128,7 @@ typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
 
 typedef int (*client_getgroups_callback_t)(void *handle, uid_t uid, gid_t **sgids);
+typedef void(*client_switch_interrupt_callback_t)(void *req, void *data);
 
 // ========================================================
 // client interface
@@ -214,6 +216,8 @@ class Client : public Dispatcher {
 
   SafeTimer timer;
 
+  client_switch_interrupt_callback_t switch_interrupt_cb;
+
   client_ino_callback_t ino_invalidate_cb;
   void *ino_invalidate_cb_handle;
 
@@ -225,6 +229,7 @@ class Client : public Dispatcher {
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
+  Finisher interrupt_finisher;
 
   Context *tick_event;
   utime_t last_cap_renew;
@@ -374,6 +379,7 @@ protected:
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
+  friend class C_Client_RequestInterrupt;
 
   //int get_cache_size() { return lru.lru_get_size(); }
   //void set_cache_size(int m) { lru.lru_set_max(m); }
@@ -604,6 +610,9 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _sync_fs();
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
+  int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
+  int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req=NULL);
+  int _flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req=NULL);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
@@ -613,6 +622,12 @@ private:
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
 
+  int _do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
+		   struct flock *fl, uint64_t owner, void *fuse_req=NULL);
+  int _interrupt_filelock(MetaRequest *req);
+  void _encode_filelocks(Inode *in, bufferlist& bl);
+  void _release_filelocks(Fh *fh);
+  void _update_lock_state(struct flock *fl, uint64_t owner, ceph_lock_state_t *lock_state);
 public:
   int mount(const std::string &mount_root);
   void unmount();
@@ -818,6 +833,10 @@ public:
   int ll_fsync(Fh *fh, bool syncdataonly);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
+  int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
+  int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep, void *fuse_req);
+  int ll_flock(Fh *fh, int cmd, uint64_t owner, void *fuse_req);
+  void ll_interrupt(void *d);
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			ceph_file_layout* layout);
   uint64_t ll_get_internal_offset(struct Inode *in, uint64_t blockno);
@@ -825,11 +844,11 @@ public:
   int ll_num_osds(void);
   int ll_osdaddr(int osd, uint32_t *addr);
   int ll_osdaddr(int osd, char* buf, size_t size);
+
   void ll_register_ino_invalidate_cb(client_ino_callback_t cb, void *handle);
-
   void ll_register_dentry_invalidate_cb(client_dentry_callback_t cb, void *handle);
-
   void ll_register_getgroups_cb(client_getgroups_callback_t cb, void *handle);
+  void ll_register_switch_interrupt_cb(client_switch_interrupt_callback_t cb);
 };
 
 #endif
