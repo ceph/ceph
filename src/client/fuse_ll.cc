@@ -757,14 +757,19 @@ static void dentry_invalidate_cb(void *handle, vinodeno_t dirino,
 #endif
 }
 
-static void remount_cb(void *handle)
+static int remount_cb(void *handle)
 {
   // used for trimming kernel dcache. when remounting a file system, linux kernel
   // trims all unused dentries in the file system
   char cmd[1024];
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   snprintf(cmd, sizeof(cmd), "mount -i -o remount %s", cfuse->mountpoint);
-  system(cmd);
+  int r = system(cmd);
+  if (r != 0 && r != -1) {
+    r = WEXITSTATUS(r);
+  }
+
+  return r;
 }
 
 static void do_init(void *data, fuse_conn_info *bar)
@@ -864,8 +869,6 @@ CephFuse::Handle::~Handle()
 
 void CephFuse::Handle::finalize()
 {
-  client->ll_register_callbacks(NULL);
-
   if (se)
     fuse_remove_signal_handlers(se);
   if (ch)
