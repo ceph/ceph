@@ -221,8 +221,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   if (auth) 
     state |= STATE_AUTH;
  
-  auth_pins = 0;
-  nested_auth_pins = 0;
   dir_auth_pins = 0;
   request_pins = 0;
 

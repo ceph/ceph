@@ -511,14 +511,7 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
 
-private:
-  // auth pin
-  int auth_pins;
-  int nested_auth_pins;
 public:
-#ifdef MDS_AUTHPIN_SET
-  multiset<void*> auth_pin_set;
-#endif
   int auth_pin_freeze_allowance;
 
   inode_load_vec_t pop;
@@ -549,7 +542,6 @@ public:
     item_dirty_dirfrag_dir(this), 
     item_dirty_dirfrag_nest(this), 
     item_dirty_dirfrag_dirfragtree(this), 
-    auth_pins(0), nested_auth_pins(0),
     auth_pin_freeze_allowance(0),
     pop(ceph_clock_now(g_ceph_context)),
     versionlock(this, &versionlock_type),
@@ -884,15 +876,10 @@ public:
   bool issued_caps_need_gather(SimpleLock *lock);
   void replicate_relax_locks();
 
-
   // -- authority --
   mds_authority_t authority() const;
 
-
   // -- auth pins --
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
-  int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
   void adjust_nested_auth_pins(int a, void *by);
   bool can_auth_pin() const;
   void auth_pin(void *by);
