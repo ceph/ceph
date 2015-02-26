@@ -130,6 +130,9 @@ void Server::dispatch(Message *m)
 	  dout(3) << "queuing completed op" << dendl;
 	  queue_replay = true;
 	}
+	// this request was created before the cap reconnect message, drop any embedded
+	// cap releases.
+	req->releases.clear();
       }
       if (queue_replay) {
 	mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
