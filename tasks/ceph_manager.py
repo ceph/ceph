@@ -8,6 +8,7 @@ import time
 import gevent
 import base64
 import json
+import logging
 import threading
 import os
 from teuthology import misc as teuthology
@@ -15,10 +16,11 @@ from tasks.scrub import Scrubber
 from util.rados import cmd_erasure_code_profile
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
-import subprocess
 
 
 DEFAULT_CONF_PATH = '/etc/ceph/ceph.conf'
+
+log = logging.getLogger(__name__)
 
 
 def write_conf(ctx, conf_path=DEFAULT_CONF_PATH):
