@@ -644,26 +644,26 @@ int XioMessenger::bind(const entity_addr_t& addr)
   if (a->is_blank_ip()) {
     a = &_addr;
     std::vector <std::string> my_sections;
-    g_conf->get_my_sections(my_sections);
+    cct->_conf->get_my_sections(my_sections);
     std::string rdma_local_str;
-    if (g_conf->get_val_from_conf_file(my_sections, "rdma local",
+    if (cct->_conf->get_val_from_conf_file(my_sections, "rdma local",
 				      rdma_local_str, true) == 0) {
       struct entity_addr_t local_rdma_addr;
       local_rdma_addr = *a;
       const char *ep;
       if (!local_rdma_addr.parse(rdma_local_str.c_str(), &ep)) {
-	derr << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
+	ldout(cct,0) << "ERROR:  Cannot parse rdma local: " << rdma_local_str << dendl;
 	return -EINVAL;
       }
       if (*ep) {
-	derr << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
+	ldout(cct,0) << "WARNING: 'rdma local trailing garbage ignored: '" << ep << dendl;
       }
       int p = _addr.get_port();
       _addr.set_sockaddr(reinterpret_cast<struct sockaddr *>(
 			  &local_rdma_addr.ss_addr()));
       _addr.set_port(p);
     } else {
-      derr << "WARNING: need 'rdma local' config for remote use!" <<dendl;
+      ldout(cct,0) << "WARNING: need 'rdma local' config for remote use!" <<dendl;
     }
   }
 
