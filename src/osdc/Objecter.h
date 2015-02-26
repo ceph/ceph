@@ -1146,6 +1146,7 @@ public:
     op_target_t target;
 
     ConnectionRef con;  // for rx buffer only
+    uint64_t features;  // explicitly specified op features
 
     vector<OSDOp> ops;
 
@@ -1190,6 +1191,7 @@ public:
       session(NULL), incarnation(0),
       target(o, ol, f),
       con(NULL),
+      features(CEPH_FEATURES_SUPPORTED_DEFAULT),
       snapid(CEPH_NOSNAP),
       outbl(NULL),
       priority(0),
@@ -2038,10 +2040,13 @@ public:
     return o;
   }
   ceph_tid_t read(const object_t& oid, const object_locator_t& oloc,
-	     ObjectOperation& op,
-	     snapid_t snapid, bufferlist *pbl, int flags,
-	     Context *onack, version_t *objver = NULL, int *data_offset = NULL) {
+		  ObjectOperation& op,
+		  snapid_t snapid, bufferlist *pbl, int flags,
+		  Context *onack, version_t *objver = NULL, int *data_offset = NULL,
+		  uint64_t features = 0) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver, data_offset);
+    if (features)
+      o->features = features;
     return op_submit(o);
   }
   ceph_tid_t pg_read(uint32_t hash, object_locator_t oloc,

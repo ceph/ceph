@@ -60,6 +60,7 @@ ceph_dencoder_SOURCES = \
 	test/encoding/ceph_dencoder.cc \
 	$(DENCODER_SOURCES)
 ceph_dencoder_LDADD = \
+	$(LIBRBD_TYPES) \
 	$(LIBOSD_TYPES) \
 	$(LIBOS_TYPES) \
 	$(LIBMDS) \
@@ -781,7 +782,7 @@ noinst_LTLIBRARIES += librbd_test.la
 unittest_librbd_SOURCES =
 nodist_EXTRA_unittest_librbd_SOURCES = dummy.cc
 unittest_librbd_LDADD = \
-	librbd_test.la librbd_api.la librbd_internal.la \
+	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
 	libcls_rbd_client.la libcls_lock_client.la \
 	librados_test_stub.la librados_internal.la \
 	$(LIBOSDC) $(UNITTEST_LDADD) \
@@ -791,7 +792,7 @@ check_PROGRAMS += unittest_librbd
 ceph_test_librbd_SOURCES =
 nodist_EXTRA_ceph_test_librbd_SOURCES = dummy.cc
 ceph_test_librbd_LDADD = \
-	librbd_test.la librbd_api.la librbd_internal.la \
+	librbd_test.la librbd_api.la librbd_internal.la $(LIBRBD_TYPES) \
         libcls_rbd_client.la libcls_lock_client.la \
 	librados_api.la $(LIBRADOS_DEPS) $(UNITTEST_LDADD) \
 	$(CEPH_GLOBAL) $(RADOS_TEST_LDADD)

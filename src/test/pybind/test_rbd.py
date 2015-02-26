@@ -1,6 +1,5 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
 import functools
-import random
 import socket
 import struct
 import os
@@ -138,7 +137,7 @@ def check_default_params(format, order=None, features=None, stripe_count=None,
 
                     expected_features = features
                     if expected_features is None or format == 1:
-                        expected_features = 0 if format == 1 else 7
+                        expected_features = 0 if format == 1 else 3
                     eq(expected_features, image.features())
 
                     expected_stripe_count = stripe_count
@@ -264,8 +263,7 @@ def test_rename():
     eq([image_name], rbd.list(ioctx))
 
 def rand_data(size):
-    l = [random.Random().getrandbits(64) for _ in xrange(size/8)]
-    return struct.pack((size/8)*'Q', *l)
+    return os.urandom(size)
 
 def check_stat(info, size, order):
     assert 'block_name_prefix' in info

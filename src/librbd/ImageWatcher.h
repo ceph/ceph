@@ -8,6 +8,7 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "librbd/WatchNotifyTypes.h"
 #include <set>
 #include <string>
 #include <utility>
@@ -16,33 +17,12 @@
 #include "include/assert.h"
 
 class entity_name_t;
-class Finisher;
-class SafeTimer;
 
 namespace librbd {
 
   class AioCompletion;
   class ImageCtx;
-
-  struct RemoteAsyncRequest {
-    uint64_t gid;
-    uint64_t handle;
-    uint64_t request_id;
-
-    RemoteAsyncRequest() : gid(), handle(), request_id() {}
-    RemoteAsyncRequest(uint64_t gid_, uint64_t handle_, uint64_t request_id_)
-      : gid(gid_), handle(handle_), request_id(request_id_) {}
-
-    inline bool operator<(const RemoteAsyncRequest &rhs) const {
-      if (gid != rhs.gid) {
-	return gid < rhs.gid;
-      } else if (handle != rhs.handle) {
-	return handle < rhs.handle;
-      } else {
-	return request_id < rhs.request_id;
-      }
-    }
-  };
+  template <typename T> class TaskFinisher;
 
   class ImageWatcher {
   public:
@@ -59,6 +39,8 @@ namespace librbd {
     int try_lock();
     int request_lock(const boost::function<int(AioCompletion*)>& restart_op,
 		     AioCompletion* c);
+    void prepare_unlock();
+    void cancel_unlock();
     int unlock();
 
     void assert_header_locked(librados::ObjectWriteOperation *op);
@@ -85,9 +67,43 @@ namespace librbd {
       WATCH_STATE_ERROR
     };
 
+    enum TaskCode {
+      TASK_CODE_ACQUIRED_LOCK,
+      TASK_CODE_REQUEST_LOCK,
+      TASK_CODE_RELEASING_LOCK,
+      TASK_CODE_RELEASED_LOCK,
+      TASK_CODE_RETRY_AIO_REQUESTS,
+      TASK_CODE_CANCEL_ASYNC_REQUESTS,
+      TASK_CODE_HEADER_UPDATE,
+      TASK_CODE_REREGISTER_WATCH,
+      TASK_CODE_ASYNC_REQUEST,
+      TASK_CODE_ASYNC_PROGRESS
+    };
+
     typedef std::pair<Context *, ProgressContext *> AsyncRequest;
     typedef std::pair<boost::function<int(AioCompletion *)>,
 		      AioCompletion *> AioRequest;
+
+    class Task {
+    public:
+      Task(TaskCode task_code) : m_task_code(task_code) {}
+      Task(TaskCode task_code, const WatchNotify::AsyncRequestId &id)
+        : m_task_code(task_code), m_async_request_id(id) {}
+
+      inline bool operator<(const Task& rhs) const {
+        if (m_task_code != rhs.m_task_code) {
+          return m_task_code < rhs.m_task_code;
+        } else if ((m_task_code == TASK_CODE_ASYNC_REQUEST ||
+                    m_task_code == TASK_CODE_ASYNC_PROGRESS) &&
+                   m_async_request_id != rhs.m_async_request_id) {
+          return m_async_request_id < rhs.m_async_request_id;
+        }
+        return false;
+      }
+    private:
+      TaskCode m_task_code;
+      WatchNotify::AsyncRequestId m_async_request_id;
+    };
 
     struct WatchCtx : public librados::WatchCtx2 {
       ImageWatcher &image_watcher;
@@ -104,30 +120,29 @@ namespace librbd {
     class RemoteProgressContext : public ProgressContext {
     public:
       RemoteProgressContext(ImageWatcher &image_watcher,
-			    const RemoteAsyncRequest &remote_async_request)
-        : m_image_watcher(image_watcher),
-          m_remote_async_request(remote_async_request)
+			    const WatchNotify::AsyncRequestId &id)
+        : m_image_watcher(image_watcher), m_async_request_id(id)
       {
       }
 
       virtual int update_progress(uint64_t offset, uint64_t total) {
-	m_image_watcher.schedule_async_progress(m_remote_async_request, offset,
+	m_image_watcher.schedule_async_progress(m_async_request_id, offset,
 						total);
         return 0;
       }
 
     private:
       ImageWatcher &m_image_watcher;
-      RemoteAsyncRequest m_remote_async_request;
+      WatchNotify::AsyncRequestId m_async_request_id;
     };
 
     class RemoteContext : public Context {
     public:
       RemoteContext(ImageWatcher &image_watcher,
-		    const RemoteAsyncRequest &remote_async_request,
+		    const WatchNotify::AsyncRequestId &id,
 		    RemoteProgressContext *prog_ctx)
-        : m_image_watcher(image_watcher),
-          m_remote_async_request(remote_async_request), m_prog_ctx(prog_ctx)
+        : m_image_watcher(image_watcher), m_async_request_id(id),
+	  m_prog_ctx(prog_ctx)
       {
       }
 
@@ -139,8 +154,33 @@ namespace librbd {
 
     private:
       ImageWatcher &m_image_watcher;
-      RemoteAsyncRequest m_remote_async_request;
+      WatchNotify::AsyncRequestId m_async_request_id;
       RemoteProgressContext *m_prog_ctx;
+    };
+
+    struct HandlePayloadVisitor : public boost::static_visitor<void> {
+      ImageWatcher *image_watcher;
+      uint64_t notify_id;
+      uint64_t handle;
+
+      HandlePayloadVisitor(ImageWatcher *image_watcher_, uint64_t notify_id_,
+			   uint64_t handle_)
+	: image_watcher(image_watcher_), notify_id(notify_id_), handle(handle_)
+      {
+      }
+
+      inline void operator()(const WatchNotify::HeaderUpdatePayload &payload) const {
+	bufferlist out;
+	image_watcher->handle_payload(payload, &out);
+	image_watcher->acknowledge_notify(notify_id, handle, out);
+      }
+
+      template <typename Payload>
+      inline void operator()(const Payload &payload) const {
+	bufferlist out;
+	image_watcher->handle_payload(payload, &out);
+	image_watcher->acknowledge_notify(notify_id, handle, out);
+      }
     };
 
     ImageCtx &m_image_ctx;
@@ -152,19 +192,17 @@ namespace librbd {
 
     LockOwnerState m_lock_owner_state;
 
-    Finisher *m_finisher;
-
-    Mutex m_timer_lock;
-    SafeTimer *m_timer;
+    TaskFinisher<Task> *m_task_finisher;
 
     RWLock m_async_request_lock;
-    std::map<uint64_t, AsyncRequest> m_async_requests;
-    std::set<RemoteAsyncRequest> m_async_pending;
-    std::set<RemoteAsyncRequest> m_async_progress;
+    std::map<WatchNotify::AsyncRequestId, AsyncRequest> m_async_requests;
+    std::set<WatchNotify::AsyncRequestId> m_async_pending;
 
     Mutex m_aio_request_lock;
     std::vector<AioRequest> m_aio_requests;
-    Context *m_retry_aio_context;
+
+    Mutex m_owner_client_id_lock;
+    WatchNotify::ClientId m_owner_client_id;
 
     std::string encode_lock_cookie() const;
     static bool decode_lock_cookie(const std::string &cookie, uint64_t *handle);
@@ -174,54 +212,61 @@ namespace librbd {
     int lock();
     void release_lock();
     bool try_request_lock();
-    void finalize_request_lock();
     void finalize_header_update();
 
     void schedule_retry_aio_requests(bool use_timer);
-    void cancel_retry_aio_requests();
-    void finalize_retry_aio_requests();
     void retry_aio_requests();
 
     void schedule_cancel_async_requests();
     void cancel_async_requests();
 
-    void encode_async_request(uint64_t request_id, bufferlist &bl);
-    static int decode_response_code(bufferlist &bl);
+    WatchNotify::ClientId get_client_id();
 
     void notify_released_lock();
     void notify_request_lock();
-    int notify_lock_owner(bufferlist &bl, bufferlist &response);
+    int notify_lock_owner(bufferlist &bl);
 
-    int notify_async_request(uint64_t async_request_id, bufferlist &in,
-			     ProgressContext& prog_ctx);
+    void schedule_async_request_timed_out(const WatchNotify::AsyncRequestId &id);
+    void async_request_timed_out(const WatchNotify::AsyncRequestId &id);
+    int notify_async_request(const WatchNotify::AsyncRequestId &id,
+			     bufferlist &in, ProgressContext& prog_ctx);
     void notify_request_leadership();
 
-    void schedule_async_progress(const RemoteAsyncRequest &remote_async_request,
+    void schedule_async_progress(const WatchNotify::AsyncRequestId &id,
 				 uint64_t offset, uint64_t total);
-    int notify_async_progress(const RemoteAsyncRequest &remote_async_request,
+    int notify_async_progress(const WatchNotify::AsyncRequestId &id,
 			      uint64_t offset, uint64_t total);
-    void schedule_async_complete(const RemoteAsyncRequest &remote_async_request,
+    void schedule_async_complete(const WatchNotify::AsyncRequestId &id,
 				 int r);
-    int notify_async_complete(const RemoteAsyncRequest &remote_async_request,
+    int notify_async_complete(const WatchNotify::AsyncRequestId &id,
 			      int r);
 
-    void handle_header_update();
-    void handle_acquired_lock();
-    void handle_released_lock();
-    void handle_request_lock(bufferlist *out);
+    void handle_payload(const WatchNotify::HeaderUpdatePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::AcquiredLockPayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::ReleasedLockPayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::RequestLockPayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::AsyncProgressPayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::AsyncCompletePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::FlattenPayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::ResizePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::SnapCreatePayload& payload,
+		        bufferlist *out);
+    void handle_payload(const WatchNotify::UnknownPayload& payload,
+		        bufferlist *out);
 
-    void handle_async_progress(bufferlist::iterator iter);
-    void handle_async_complete(bufferlist::iterator iter);
-    void handle_flatten(bufferlist::iterator iter, bufferlist *out);
-    void handle_resize(bufferlist::iterator iter, bufferlist *out);
-    void handle_snap_create(bufferlist::iterator iter, bufferlist *out);
-    void handle_unknown_op(bufferlist *out);
     void handle_notify(uint64_t notify_id, uint64_t handle, bufferlist &bl);
     void handle_error(uint64_t cookie, int err);
     void acknowledge_notify(uint64_t notify_id, uint64_t handle,
 			    bufferlist &out);
 
-    void schedule_reregister_watch();
     void reregister_watch();
   };
 

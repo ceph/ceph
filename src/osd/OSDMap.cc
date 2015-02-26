@@ -1090,22 +1090,26 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
   return features;
 }
 
-uint64_t OSDMap::get_up_osd_features() const
+void OSDMap::_calc_up_osd_features()
 {
   bool first = true;
-  uint64_t features = 0;
+  cached_up_osd_features = 0;
   for (int osd = 0; osd < max_osd; ++osd) {
     if (!is_up(osd))
       continue;
     const osd_xinfo_t &xi = get_xinfo(osd);
     if (first) {
-      features = xi.features;
+      cached_up_osd_features = xi.features;
       first = false;
     } else {
-      features &= xi.features;
+      cached_up_osd_features &= xi.features;
     }
   }
-  return features;
+}
+
+uint64_t OSDMap::get_up_osd_features() const
+{
+  return cached_up_osd_features;
 }
 
 void OSDMap::dedup(const OSDMap *o, OSDMap *n)
@@ -1258,6 +1262,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
     return -EINVAL;
   
   assert(inc.epoch == epoch+1);
+
   epoch++;
   modified = inc.modified;
 
@@ -1439,6 +1444,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   }
 
   calc_num_osds();
+  _calc_up_osd_features();
   return 0;
 }
 
@@ -2196,6 +2202,7 @@ void OSDMap::post_decode()
   }
 
   calc_num_osds();
+  _calc_up_osd_features();
 }
 
 void OSDMap::dump_erasure_code_profiles(const map<string,map<string,string> > &profiles,

@@ -691,7 +691,7 @@ cluster, we recommend upgrading ``ceph-common`` and client libraries
 #. Upgrade the package:: 
 
 	ssh {client-host}
-	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-ceph
+	apt-get update && sudo apt-get install ceph-common librados2 librbd1 python-rados python-rbd
 
 #. Ensure that you have the latest version::
 

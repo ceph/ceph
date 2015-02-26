@@ -85,10 +85,10 @@ void usage()
 "                                              (-l includes snapshots/clones)\n"
 "  info <image-name>                           show information about image size,\n"
 "                                              striping, etc.\n"
-"  create [--order <bits>] [--image-shared] --size <MB> <name>\n"
-"                                              create an empty image\n"
-"  clone [--order <bits>] [--image-shared] <parentsnap> <clonename>\n"
-"                                              clone a snapshot into a COW\n"
+"  create [--order <bits>] [--image-features <features>] [--image-shared]\n"
+"         --size <MB> <name>                   create an empty image\n"
+"  clone [--order <bits>] [--image-features <features>] [--image-shared]\n"
+"        <parentsnap> <clonename>              clone a snapshot into a COW\n"
 "                                              child image\n"
 "  children <snap-name>                        display children of snapshot\n"
 "  flatten <image-name>                        fill clone with parent data\n"
@@ -97,10 +97,10 @@ void usage()
 "  rm <image-name>                             delete an image\n"
 "  export <image-name> <path>                  export image to file\n"
 "                                              \"-\" for stdout\n"
-"  import [--image-shared] <path> <image-name> import image from file\n"
-"                                              (dest defaults\n"
-"                                               as the filename part of file)\n"
-"                                              \"-\" for stdin\n"
+"  import [--image-features <features>] [--image-shared]\n"
+"         <path> <image-name>                  import image from file (dest\n"
+"                                              defaults as the filename part\n"
+"                                              of file). \"-\" for stdin\n"
 "  diff <image-name> [--from-snap <snap-name>] print extents that differ since\n"
 "                                              a previous snap, or image creation\n"
 "  export-diff <image-name> [--from-snap <snap-name>] <path>\n"
@@ -154,6 +154,9 @@ void usage()
 "  --image-format <format-number>     format to use when creating an image\n"
 "                                     format 1 is the original format (default)\n"
 "                                     format 2 supports cloning\n"
+"  --image-features <features>        optional format 2 features to enable\n"
+"                                     +1 layering support, +2 striping v2,\n"
+"                                     +4 exclusive lock, +8 object map\n"
 "  --image-shared                     image will be used concurrently (disables\n"
 "                                     RBD exclusive lock and dependent features)\n"
 "  --id <username>                    rados user (without 'client.'prefix) to\n"
@@ -474,15 +477,11 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     }
     r = rbd.create(io_ctx, imgname, size, order);
   } else {
-    if (features == 0) {
-      features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
-    }
-    if (g_conf->rbd_object_map) {
-      features |= RBD_FEATURE_OBJECT_MAP;
-    }
     if ((stripe_unit || stripe_count) &&
 	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
       features |= RBD_FEATURE_STRIPINGV2;
+    } else {
+      features &= ~RBD_FEATURE_STRIPINGV2;
     }
     r = rbd.create3(io_ctx, imgname, size, features, order,
 		    stripe_unit, stripe_count);
@@ -497,14 +496,8 @@ static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
 		    librados::IoCtx &c_ioctx, const char *c_name,
 		    uint64_t features, int *c_order)
 {
-  if (features == 0) {
-    features = (RBD_FEATURES_ALL & ~RBD_FEATURE_OBJECT_MAP);
-  }
-  else if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
+  if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     return -EINVAL;
-  }
-  if (g_conf->rbd_object_map) {
-    features |= RBD_FEATURE_OBJECT_MAP;
   }
 
   return rbd.clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
@@ -2620,7 +2613,10 @@ int main(int argc, const char **argv)
   bool format_specified = false,
     output_format_specified = false;
   int format = 1;
-  uint64_t features = RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK;
+
+  uint64_t features = g_conf->rbd_default_features;
+  bool shared = false;
+
   const char *imgname = NULL, *snapname = NULL, *destname = NULL,
     *dest_poolname = NULL, *dest_snapname = NULL, *path = NULL,
     *devpath = NULL, *lock_cookie = NULL, *lock_client = NULL,
@@ -2723,8 +2719,15 @@ int main(int argc, const char **argv)
       progress = false;
     } else if (ceph_argparse_flag(args, i , "--allow-shrink", (char *)NULL)) {
       resize_allow_shrink = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--image-features", (char *)NULL)) {
+      features = strict_strtol(val.c_str(), 10, &parse_err);
+      if (!parse_err.empty()) {
+	cerr << "rbd: error parsing --image-features: " << parse_err
+             << std::endl;
+	return EXIT_FAILURE;
+      }
     } else if (ceph_argparse_flag(args, i, "--image-shared", (char *)NULL)) {
-      features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
+      shared = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char *) NULL)) {
       long long ret = strict_strtoll(val.c_str(), 10, &parse_err);
       if (parse_err.empty()) {
@@ -2742,6 +2745,16 @@ int main(int argc, const char **argv)
     } else {
       ++i;
     }
+  }
+
+  if (shared) {
+    features &= ~(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
+  }
+  if (((features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) &&
+      ((features & RBD_FEATURE_OBJECT_MAP) != 0)) {
+    cerr << "rbd: exclusive lock image feature must be enabled to use "
+         << "the object map" << std::endl;
+    return EXIT_FAILURE;
   }
 
   common_init_finish(g_ceph_context);
