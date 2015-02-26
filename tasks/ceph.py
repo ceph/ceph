@@ -9,7 +9,6 @@ import argparse
 import contextlib
 import logging
 import os
-import struct
 import json
 import time
 
