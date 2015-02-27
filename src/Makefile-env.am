@@ -152,6 +152,7 @@ LIBCLIENT_FUSE = libclient_fuse.la
 LIBRADOS = librados.la
 LIBRADOSSTRIPER = libradosstriper.la
 LIBRGW = librgw.la
+LIBCIVETWEB = libcivetweb.la
 LIBRBD = librbd.la
 LIBKRBD = libkrbd.la
 LIBCEPHFS = libcephfs.la
