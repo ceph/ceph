@@ -30,8 +30,8 @@ namespace librados
   struct ObjListCtx;
   struct PoolAsyncCompletionImpl;
   class RadosClient;
-  class ListObjectImpl;
-  struct NObjectIteratorImpl;
+  struct ListObjectImpl;
+  class NObjectIteratorImpl;
 
   typedef void *list_ctx_t;
   typedef uint64_t auid_t;
