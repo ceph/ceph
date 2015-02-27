@@ -1798,8 +1798,8 @@ void Pipe::writer()
 	m->encode(features, msgr->crcflags);
 
 	// prepare everything
-	ceph_msg_header& header = m->get_header();
-	ceph_msg_footer& footer = m->get_footer();
+	const ceph_msg_header& header = m->get_header();
+	const ceph_msg_footer& footer = m->get_footer();
 
 	// Now that we have all the crcs calculated, handle the
 	// digital signature for the message, if the pipe has session
@@ -2237,7 +2237,7 @@ int Pipe::write_keepalive2(char tag, const utime_t& t)
 }
 
 
-int Pipe::write_message(ceph_msg_header& header, ceph_msg_footer& footer, bufferlist& blist)
+int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist)
 {
   int ret;
 

@@ -63,7 +63,7 @@ class AsyncConnection : public Connection {
   int randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _send_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
-  int write_message(ceph_msg_header& header, ceph_msg_footer& footer, bufferlist& blist);
+  int write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist);
   int _reply_accept(char tag, ceph_msg_connect &connect, ceph_msg_connect_reply &reply,
                     bufferlist authorizer_reply) {
     bufferlist reply_bl;
@@ -203,7 +203,6 @@ class AsyncConnection : public Connection {
       return statenames[state];
   }
 
-  CephContext *cc;
   AsyncMessenger *async_msgr;
   int global_seq;
   __u32 connect_seq, peer_global_seq;
