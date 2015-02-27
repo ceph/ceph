@@ -1694,10 +1694,8 @@ void Pipe::writer()
 			<< " policy.server=" << policy.server << dendl;
 
     // standby?
-    if (is_queued() && state == STATE_STANDBY && !policy.server) {
-      connect_seq++;
+    if (is_queued() && state == STATE_STANDBY && !policy.server)
       state = STATE_CONNECTING;
-    }
 
     // connect?
     if (state == STATE_CONNECTING) {
