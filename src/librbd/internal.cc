@@ -454,12 +454,19 @@ namespace librbd {
 
     // need to upgrade to a write lock
     int r = 0;
+    bool acquired_lock = false;
     ictx->owner_lock.put_read();
     {
       RWLock::WLocker l(ictx->owner_lock);
       if (!ictx->image_watcher->is_lock_owner()) {
 	r = ictx->image_watcher->try_lock();
+        acquired_lock = ictx->image_watcher->is_lock_owner();
       }
+    }
+    if (acquired_lock) {
+      // finish any AIO that was previously waiting on acquiring the
+      // exclusive lock
+      ictx->flush_async_operations();
     }
     ictx->owner_lock.get_read();
     return r;
