@@ -285,7 +285,6 @@ int AsyncConnection::_try_send(bufferlist send_bl, bool send)
   // standby?
   if (is_queued() && state == STATE_STANDBY && !policy.server) {
     assert(!outcoming_bl.length());
-    connect_seq++;
     state = STATE_CONNECTING;
     center->dispatch_event_external(read_handler);
     return 0;
@@ -2038,7 +2037,7 @@ void AsyncConnection::fault()
 
   if (!(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY)) {
     // policy maybe empty when state is in accept
-    if (policy.server || (state >= STATE_ACCEPTING && state < STATE_ACCEPTING_WAIT_SEQ)) {
+    if (policy.server) {
       ldout(async_msgr->cct, 0) << __func__ << " server, going to standby" << dendl;
       state = STATE_STANDBY;
     } else {
