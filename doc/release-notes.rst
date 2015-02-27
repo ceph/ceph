@@ -1970,7 +1970,7 @@ Adjusting CRUSH maps
   fixing it may trigger movement *back* to the more correct location.
   For this reason, you must manually opt-in to the fixed behavior.
 
-  In order to set the new tunable ``straw_calc_version=1``::
+  In order to set the new tunable to correct the behavior::
 
      ceph osd crush set-tunable straw_calc_version 1
 
