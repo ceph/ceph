@@ -40,9 +40,9 @@ inline std::ostream& operator<<(std::ostream& out, const struct ListObjectImpl& 
   return out;
 }
 
-class ObjListCtx;
+struct ObjListCtx;
 
-struct NObjectIteratorImpl {
+class NObjectIteratorImpl {
   public:
     NObjectIteratorImpl() {}
     ~NObjectIteratorImpl();
@@ -57,7 +57,7 @@ struct NObjectIteratorImpl {
     NObjectIteratorImpl operator++(int); // Postincrement
     const ListObject *get_listobjectp() { return &cur_obj; }
     friend class IoCtx;
-    friend class ListObjectImpl;
+    friend struct ListObjectImpl;
     //friend class ListObject;
     friend class NObjectIterator;
 
