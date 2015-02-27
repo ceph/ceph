@@ -725,6 +725,7 @@ public:
 
   void reply_command(MMonCommand *m, int rc, const string &rs, version_t version);
   void reply_command(MMonCommand *m, int rc, const string &rs, bufferlist& rdata, version_t version);
+  void reply_command(MonOpRequestRef op, int rc, const string &rs, bufferlist& rdata, version_t version);
 
 
   void handle_probe(MonOpRequestRef op);
@@ -767,6 +768,7 @@ public:
   void handle_forward(MonOpRequestRef op);
   void try_send_message(Message *m, const entity_inst_t& to);
   void send_reply(PaxosServiceMessage *req, Message *reply);
+  void send_reply(MonOpRequestRef op, Message *reply);
   void no_reply(PaxosServiceMessage *req);
   void resend_routed_requests();
   void remove_session(MonSession *s);
