@@ -2702,7 +2702,9 @@ reprotect_and_return_err:
       return r;
 
     uint64_t mylen = len;
+    ictx->snap_lock.get_read();
     r = clip_io(ictx, off, &mylen);
+    ictx->snap_lock.put_read();
     if (r < 0)
       return r;
 
@@ -2784,7 +2786,9 @@ reprotect_and_return_err:
     if (r < 0)
       return r;
 
+    ictx->snap_lock.get_read();
     r = clip_io(ictx, off, &len);
+    ictx->snap_lock.put_read();
     if (r < 0)
       return r;
 
@@ -2988,7 +2992,9 @@ reprotect_and_return_err:
     int ret;
 
     uint64_t mylen = len;
+    ictx->snap_lock.get_read();
     int r = clip_io(ictx, off, &mylen);
+    ictx->snap_lock.put_read();
     if (r < 0) {
       return r;
     }
@@ -3131,10 +3137,9 @@ reprotect_and_return_err:
   // validate extent against image size; clip to image size if necessary
   int clip_io(ImageCtx *ictx, uint64_t off, uint64_t *len)
   {
-    ictx->snap_lock.get_read();
+    assert(ictx->snap_lock.is_locked());
     uint64_t image_size = ictx->get_image_size(ictx->snap_id);
     bool snap_exists = ictx->snap_exists;
-    ictx->snap_lock.put_read();
 
     if (!snap_exists)
       return -ENOENT;
@@ -3253,32 +3258,37 @@ reprotect_and_return_err:
       return r;
     }
 
-    uint64_t mylen = len;
-    r = clip_io(ictx, off, &mylen);
-    if (r < 0) {
-      return r;
-    }
-
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::RLocker md_locker(ictx->md_lock);
 
-    ictx->snap_lock.get_read();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.get_read();
+    uint64_t clip_len = len;
+    snapid_t snap_id;
+    ::SnapContext snapc;
     uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.put_read();
-    ictx->snap_lock.put_read();
+    {
+      // prevent image size from changing between computing clip and recording
+      // pending async operation
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      r = clip_io(ictx, off, &clip_len);
+      if (r < 0) {
+        return r;
+      }
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-      return -EROFS;
+      snap_id = ictx->snap_id;
+      snapc = ictx->snapc;
+      ictx->parent_lock.get_read();
+      ictx->get_parent_overlap(ictx->snap_id, &overlap);
+      ictx->parent_lock.put_read();
+
+      if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+        return -EROFS;
+      }
+
+      ldout(cct, 20) << "  parent overlap " << overlap << dendl;
+
+      c->get();
+      c->init_time(ictx, AIO_TYPE_WRITE);
     }
-
-    ldout(cct, 20) << "  parent overlap " << overlap << dendl;
-
-    c->get();
-    c->init_time(ictx, AIO_TYPE_WRITE);
 
     if (ictx->image_watcher->is_lock_supported() &&
 	!ictx->image_watcher->is_lock_owner()) {
@@ -3291,7 +3301,7 @@ reprotect_and_return_err:
     vector<ObjectExtent> extents;
     if (len > 0) {
       Striper::file_to_extents(ictx->cct, ictx->format_string,
-			       &ictx->layout, off, mylen, 0, extents);
+			       &ictx->layout, off, clip_len, 0, extents);
     }
 
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
@@ -3335,7 +3345,7 @@ reprotect_and_return_err:
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_wr);
-    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, mylen);
+    ictx->perfcounter->inc(l_librbd_aio_wr_bytes, clip_len);
     return r;
   }
 
@@ -3350,30 +3360,36 @@ reprotect_and_return_err:
       return r;
     }
 
-    r = clip_io(ictx, off, &len);
-    if (r < 0) {
-      return r;
-    }
-
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::RLocker md_locker(ictx->md_lock);
 
-    // TODO: check for snap
-    ictx->snap_lock.get_read();
-    snapid_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->parent_lock.get_read();
-    uint64_t overlap = 0;
-    ictx->get_parent_overlap(ictx->snap_id, &overlap);
-    ictx->parent_lock.put_read();
-    ictx->snap_lock.put_read();
+    uint64_t clip_len = len;
+    snapid_t snap_id;
+    ::SnapContext snapc;
+    uint64_t overlap;
+    {
+      // prevent image size from changing between computing clip and recording
+      // pending async operation
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      r = clip_io(ictx, off, &clip_len);
+      if (r < 0) {
+        return r;
+      }
 
-    if (snap_id != CEPH_NOSNAP || ictx->read_only) {
-      return -EROFS;
+      // TODO: check for snap
+      snap_id = ictx->snap_id;
+      snapc = ictx->snapc;
+      ictx->parent_lock.get_read();
+      ictx->get_parent_overlap(ictx->snap_id, &overlap);
+      ictx->parent_lock.put_read();
+
+      if (snap_id != CEPH_NOSNAP || ictx->read_only) {
+        return -EROFS;
+      }
+
+      c->get();
+      c->init_time(ictx, AIO_TYPE_DISCARD);
     }
-
-    c->get();
-    c->init_time(ictx, AIO_TYPE_DISCARD);
 
     if (ictx->image_watcher->is_lock_supported() &&
 	!ictx->image_watcher->is_lock_owner()) {
@@ -3386,7 +3402,7 @@ reprotect_and_return_err:
     vector<ObjectExtent> extents;
     if (len > 0) {
       Striper::file_to_extents(ictx->cct, ictx->format_string,
-			       &ictx->layout, off, len, 0, extents);
+			       &ictx->layout, off, clip_len, 0, extents);
     }
 
     for (vector<ObjectExtent>::iterator p = extents.begin(); p != extents.end(); ++p) {
@@ -3435,7 +3451,7 @@ reprotect_and_return_err:
     c->put();
 
     ictx->perfcounter->inc(l_librbd_aio_discard);
-    ictx->perfcounter->inc(l_librbd_aio_discard_bytes, len);
+    ictx->perfcounter->inc(l_librbd_aio_discard_bytes, clip_len);
     return r;
   }
 
@@ -3524,11 +3540,6 @@ reprotect_and_return_err:
       return r;
     }
 
-    ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->snap_id;
-    ::SnapContext snapc = ictx->snapc;
-    ictx->snap_lock.put_read();
-
     // readahead
     const md_config_t *conf = ictx->cct->_conf;
     if (ictx->object_cacher && conf->rbd_readahead_max_bytes > 0 &&
@@ -3536,34 +3547,44 @@ reprotect_and_return_err:
       readahead(ictx, image_extents, conf);
     }
 
-    // map
+    snap_t snap_id;
+    ::SnapContext snapc;
     map<object_t,vector<ObjectExtent> > object_extents;
-
     uint64_t buffer_ofs = 0;
-    for (vector<pair<uint64_t,uint64_t> >::const_iterator p = image_extents.begin();
-	 p != image_extents.end();
-	 ++p) {
-      uint64_t len = p->second;
-      r = clip_io(ictx, p->first, &len);
-      if (r < 0) {
-	return r;
-      }
-      if (len == 0)
-	continue;
+    {
+      // prevent image size from changing between computing clip and recording
+      // pending async operation
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      snap_id = ictx->snap_id;
+      snapc = ictx->snapc;
 
-      Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
-			       p->first, len, 0, object_extents, buffer_ofs);
-      buffer_ofs += len;
+      // map
+      for (vector<pair<uint64_t,uint64_t> >::const_iterator p =
+             image_extents.begin();
+	   p != image_extents.end(); ++p) {
+        uint64_t len = p->second;
+        r = clip_io(ictx, p->first, &len);
+        if (r < 0) {
+	  return r;
+        }
+        if (len == 0) {
+	  continue;
+        }
+
+        Striper::file_to_extents(ictx->cct, ictx->format_string, &ictx->layout,
+			         p->first, len, 0, object_extents, buffer_ofs);
+        buffer_ofs += len;
+      }
+
+      c->get();
+      c->init_time(ictx, AIO_TYPE_READ);
     }
 
     int64_t ret;
-
     c->read_buf = buf;
     c->read_buf_len = buffer_ofs;
     c->read_bl = pbl;
 
-    c->get();
-    c->init_time(ictx, AIO_TYPE_READ);
     for (map<object_t,vector<ObjectExtent> >::iterator p = object_extents.begin(); p != object_extents.end(); ++p) {
       for (vector<ObjectExtent>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
 	ldout(ictx->cct, 20) << " oid " << q->oid << " " << q->offset << "~" << q->length
