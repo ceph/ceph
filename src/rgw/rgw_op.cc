@@ -2445,7 +2445,6 @@ void RGWPutACLs::execute()
   RGWAccessControlPolicy_S3 new_policy(s->cct);
   stringstream ss;
   char *new_data = NULL;
-  ACLOwner owner;
   rgw_obj obj;
 
   ret = 0;
@@ -2455,8 +2454,10 @@ void RGWPutACLs::execute()
     return;
   }
 
-  owner.set_id(s->user.user_id);
-  owner.set_name(s->user.display_name);
+
+  RGWAccessControlPolicy *existing_policy = (s->object.empty() ? s->bucket_acl : s->object_acl);
+
+  owner = existing_policy->get_owner();
 
   ret = get_params();
   if (ret < 0)
