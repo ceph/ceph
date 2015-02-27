@@ -230,7 +230,7 @@ class DispatchQueue;
 
     int read_message(Message **pm,
 		     AuthSessionHandler *session_security_copy);
-    int write_message(ceph_msg_header& h, ceph_msg_footer& f, bufferlist& body);
+    int write_message(const ceph_msg_header& h, const ceph_msg_footer& f, bufferlist& body);
     /**
      * Write the given data (of length len) to the Pipe's socket. This function
      * will loop until all passed data has been written out.
