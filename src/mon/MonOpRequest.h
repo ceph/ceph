@@ -94,6 +94,8 @@ public:
   }
 
   typedef ceph::shared_ptr<MonOpRequest> Ref;
+
+  void send_reply(Message *reply);
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
