@@ -136,7 +136,7 @@ Notable Changes
 * osd,mon: add 'norebalance' flag (Kefu Chai)
 * osd,mon: specify OSD features explicitly in MOSDBoot (#10911 Sage Weil)
 * osd: add option to prioritize heartbeat network traffic (Jian Wen)
-* osd: add support for the SHEC erasure-code algorithm (****, Loic Dachary)
+* osd: add support for the SHEC erasure-code algorithm (Takeshi Miyamae, Loic Dachary)
 * osd: allow recovery while below min_size (Samuel Just)
 * osd: allow recovery with fewer than min_size OSDs (Samuel Just)
 * osd: allow writes to degraded objects (Samuel Just)
