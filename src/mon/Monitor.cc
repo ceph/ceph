@@ -3008,6 +3008,17 @@ void Monitor::reply_command(MMonCommand *m, int rc, const string &rs, bufferlist
   send_reply(m, reply);
 }
 
+void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
+                            bufferlist& rdata, version_t version)
+{
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  assert(m->get_type() == MSG_MON_COMMAND);
+  MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
+  reply->set_tid(m->get_tid());
+  reply->set_data(rdata);
+  send_reply(op, reply);
+}
+
 
 // ------------------------
 // request/reply routing
@@ -3158,6 +3169,13 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
       messenger->send_message(new MRoute(bl, to), monmap->get_inst(i));
   }
 }
+
+void Monitor::send_reply(MonOpRequestRef op, Message *reply)
+{
+  dout(2) << __func__ << " " << op << " " << *reply << dendl;
+  op->send_reply(reply);
+}
+
 
 void Monitor::send_reply(PaxosServiceMessage *req, Message *reply)
 {
