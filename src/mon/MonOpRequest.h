@@ -96,6 +96,8 @@ public:
   void set_src_is_mon(bool s) { src_is_mon = s; }
 
   typedef ceph::shared_ptr<MonOpRequest> Ref;
+
+  void send_reply(Message *reply);
 };
 
 typedef MonOpRequest::Ref MonOpRequestRef;
