@@ -321,16 +321,16 @@ void RGWStatBucket_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-static int create_s3_policy(struct req_state *s, RGWRados *store, RGWAccessControlPolicy_S3& s3policy)
+static int create_s3_policy(struct req_state *s, RGWRados *store, RGWAccessControlPolicy_S3& s3policy, ACLOwner& owner)
 {
   if (s->has_acl_header) {
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(store, s->info.env, s->owner);
+    return s3policy.create_from_headers(store, s->info.env, owner);
   }
 
-  return s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
+  return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
 }
 
 class RGWLocationConstraint : public XMLObj
@@ -386,7 +386,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
-  int r = create_s3_policy(s, store, s3policy);
+  int r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
     return r;
 
@@ -487,7 +487,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  int r = create_s3_policy(s, store, s3policy);
+  int r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
     return r;
 
@@ -1198,7 +1198,7 @@ int RGWCopyObj_ObjStore_S3::init_dest_policy()
   RGWAccessControlPolicy_S3 s3policy(s->cct);
 
   /* build a policy for the target object */
-  int r = create_s3_policy(s, store, s3policy);
+  int r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
     return r;
 
@@ -1313,7 +1313,7 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(RGWRados *store, struct req_st
       s->canned_acl.clear();
   }
 
-  int r = create_s3_policy(s, store, s3policy);
+  int r = create_s3_policy(s, store, s3policy, owner);
   if (r < 0)
     return r;
 
@@ -1455,7 +1455,7 @@ void RGWOptionsCORS_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  ret = create_s3_policy(s, store, s3policy);
+  ret = create_s3_policy(s, store, s3policy, s->owner);
   if (ret < 0)
     return ret;
 
