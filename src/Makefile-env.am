@@ -150,6 +150,7 @@ LIBCLIENT = libclient.la
 LIBCLIENT_FUSE = libclient_fuse.la
 LIBRADOS = librados.la
 LIBRGW = librgw.la
+LIBCIVETWEB = libcivetweb.la
 LIBRBD = librbd.la
 LIBCEPHFS = libcephfs.la
 LIBERASURE_CODE = liberasure_code.la
