@@ -7820,6 +7820,13 @@ bool OSD::_recover_now()
 
 void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
 {
+  if (g_conf->osd_recovery_sleep > 0) {
+    utime_t t;
+    t.set_from_double(g_conf->osd_recovery_sleep);
+    t.sleep();
+    dout(20) << __func__ << " slept for " << t << dendl;
+  }
+
   // see how many we should try to start.  note that this is a bit racy.
   recovery_wq.lock();
   int max = MIN(cct->_conf->osd_recovery_max_active - recovery_ops_active,
