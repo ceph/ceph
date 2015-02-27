@@ -556,6 +556,7 @@ protected:
   int ret;
   size_t len;
   char *data;
+  ACLOwner owner;
 
 public:
   RGWPutACLs() {
