@@ -362,7 +362,6 @@ int CrushTester::test_with_crushtool()
   cmd_args.push_back("-i");
   cmd_args.push_back("-");
   cmd_args.push_back("--test");
-  cmd_args.push_back("--output-csv");
   cmd_args.push_back(NULL);
 
   int pipefds[2];
