@@ -204,14 +204,19 @@ next:
 
   s->formatter->close_section();
 
-  if (!ret && s->formatter->get_len() == 0)
-    ret = STATUS_NO_CONTENT;
-  else if (ret > 0)
+  int64_t content_len = 0;
+  if (!ret) {
+    content_len = s->formatter->get_len();
+    if (content_len == 0) {
+      ret = STATUS_NO_CONTENT;
+    }
+  } else if (ret > 0) {
     ret = 0;
+  }
 
   set_req_state_err(s, ret);
   dump_errno(s);
-  end_header(s, this);
+  end_header(s, this, NULL, content_len);
   if (ret < 0) {
     return;
   }
