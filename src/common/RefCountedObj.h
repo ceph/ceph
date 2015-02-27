@@ -52,7 +52,7 @@ public:
     cct = c;
   }
 
-  uint64_t get_nref() {
+  uint64_t get_nref() const {
     return nref.read();
   }
 };

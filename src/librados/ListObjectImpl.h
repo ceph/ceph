@@ -28,9 +28,9 @@ struct ListObjectImpl {
   ListObjectImpl(std::string n, std::string o, std::string l):
       nspace(n), oid(o), locator(l) {}
 
-  const std::string& get_nspace() { return nspace; }
-  const std::string& get_oid() { return oid; }
-  const std::string& get_locator() { return locator; }
+  const std::string& get_nspace() const { return nspace; }
+  const std::string& get_oid() const { return oid; }
+  const std::string& get_locator() const { return locator; }
 };
 WRITE_EQ_OPERATORS_3(ListObjectImpl, nspace, oid, locator)
 WRITE_CMP_OPERATORS_3(ListObjectImpl, nspace, oid, locator)
