@@ -553,7 +553,7 @@ void AsyncConnection::process()
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
           ceph_msg_header_old oldheader;
-          __u32 header_crc;
+          __u32 header_crc = 0;
           int len;
           if (has_feature(CEPH_FEATURE_NOSRCADDR))
             len = sizeof(header);
@@ -572,7 +572,7 @@ void AsyncConnection::process()
 
           if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
             header = *((ceph_msg_header*)state_buffer);
-            if (msgr->crcflags & MSG_CRC_HEADER)
+            if (msgr->crcflags & MSG_CRC_HEADER && header.crc)
               header_crc = ceph_crc32c(0, (unsigned char *)&header,
                                        sizeof(header) - sizeof(header.crc));
           } else {
@@ -581,7 +581,7 @@ void AsyncConnection::process()
             memcpy(&header, &oldheader, sizeof(header));
             header.src = oldheader.src.name;
             header.reserved = oldheader.reserved;
-            if (msgr->crcflags & MSG_CRC_HEADER) {
+            if (msgr->crcflags & MSG_CRC_HEADER && oldheader.crc) {
               header.crc = oldheader.crc;
               header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
             }

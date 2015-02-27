@@ -1900,7 +1900,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
     if (tcp_read((char*)&header, sizeof(header)) < 0)
       return -1;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
+    if (msgr->crcflags & MSG_CRC_HEADER && header.crc) {
       header_crc = ceph_crc32c(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
     }
   } else {
@@ -1911,7 +1911,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
     memcpy(&header, &oldheader, sizeof(header));
     header.src = oldheader.src.name;
     header.reserved = oldheader.reserved;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
+    if (msgr->crcflags & MSG_CRC_HEADER && oldheader.crc) {
       header.crc = oldheader.crc;
       header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
     }
