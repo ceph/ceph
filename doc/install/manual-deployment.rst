@@ -445,11 +445,11 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    In this case, to allow the start of the daemon at each reboot you
    must create an empty file like this::
 
-	sudo touch /var/lib/ceph/mon/{cluster-name}-{hostname}/sysvinit
+	sudo touch /var/lib/ceph/osd/{cluster-name}-{hostname}/sysvinit
 
    For example::
 
-	sudo touch /var/lib/ceph/mon/ceph-node1/sysvinit
+	sudo touch /var/lib/ceph/osd/ceph-node1/sysvinit
 
    Once you start your OSD, it is ``up`` and ``in``.
 
