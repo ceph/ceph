@@ -53,6 +53,18 @@ LIBRGW_DEPS += \
 	-lfcgi \
 	-ldl
 
+CIVETWEB_INCLUDE = --include civetweb/include/civetweb_conf.h
+
+libcivetweb_la_SOURCES =  \
+	rgw/rgw_civetweb.cc \
+	rgw/rgw_civetweb_log.cc \
+	civetweb/src/civetweb.c
+
+libcivetweb_la_CXXFLAGS = ${CIVETWEB_INCLUDE} -Woverloaded-virtual ${AM_CXXFLAGS}
+libcivetweb_la_CFLAGS = -Icivetweb/include ${CIVETWEB_INCLUDE}
+
+noinst_LTLIBRARIES += libcivetweb.la
+
 radosgw_SOURCES = \
 	rgw/rgw_resolve.cc \
 	rgw/rgw_rest.cc \
@@ -71,12 +83,9 @@ radosgw_SOURCES = \
 	rgw/rgw_swift.cc \
 	rgw/rgw_swift_auth.cc \
 	rgw/rgw_loadgen.cc \
-	rgw/rgw_civetweb.cc \
-	rgw/rgw_civetweb_log.cc \
-	civetweb/src/civetweb.c \
 	rgw/rgw_main.cc
 radosgw_CFLAGS = -I$(srcdir)/civetweb/include
-radosgw_LDADD = $(LIBRGW) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
+radosgw_LDADD = $(LIBRGW) $(LIBCIVETWEB) $(LIBRGW_DEPS) $(RESOLV_LIBS) $(CEPH_GLOBAL)
 bin_PROGRAMS += radosgw
 
 radosgw_admin_SOURCES = rgw/rgw_admin.cc
@@ -162,4 +171,5 @@ noinst_HEADERS += \
 	rgw/rgw_civetweb_log.h \
 	civetweb/civetweb.h \
 	civetweb/include/civetweb.h \
+	civetweb/include/civetweb_conf.h \
 	civetweb/src/md5.h
