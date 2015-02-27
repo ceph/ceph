@@ -1132,8 +1132,3 @@ void md_config_t::diff(
       diff->insert(make_pair(opt->name, make_pair(local_val, other_val)));
   }
 }
-
-md_config_obs_t::
-~md_config_obs_t()
-{
-}
