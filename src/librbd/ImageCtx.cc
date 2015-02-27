@@ -741,15 +741,21 @@ namespace librbd {
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
-    Mutex::Locker l(async_ops_lock);
-    if (async_ops.empty()) {
-      on_finish->complete(0);
-      return;
+    bool complete = false;
+    {
+      Mutex::Locker l(async_ops_lock);
+      if (async_ops.empty()) {
+        complete = true;
+      } else {
+        ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                       << "count=" << async_ops.size() << dendl;
+        async_ops.front()->add_flush_context(on_finish);
+      }
     }
 
-    ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                   << "count=" << async_ops.size() << dendl;
-    async_ops.front()->add_flush_context(on_finish);
+    if (complete) {
+      on_finish->complete(0);
+    }
   }
 
   void ImageCtx::cancel_async_requests() {
