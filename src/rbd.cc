@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "common/strtol.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/safe_io.h"
 #include "include/krbd.h"
 #include "include/stringify.h"
@@ -2170,6 +2171,14 @@ private:
   string m_header_oid;
 };
 
+/*
+ * Don't do anything, it only make pause() return
+ */
+static void sigint_handle(int sig)
+{
+  ;
+}
+
 static int do_watch(librados::IoCtx& pp, librbd::Image &image,
 		    const char *imgname)
 {
@@ -2207,8 +2216,9 @@ static int do_watch(librados::IoCtx& pp, librbd::Image &image,
     return r;
   }
 
-  cout << "press enter to exit..." << std::endl;
-  getchar();
+  cout << "Press Ctl+c or kill -SIGINT " << getpid() << "(if in background) to exit..." <<std::endl;
+  install_sighandler(SIGINT, sigint_handle, SA_RESETHAND);
+  pause();
 
   r = pp.unwatch2(cookie);
   if (r < 0) {
