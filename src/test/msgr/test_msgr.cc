@@ -624,6 +624,80 @@ TEST_P(MessengerTest, AuthTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, CRCTest) {
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  // 1. crc all enabled
+  client_msgr->crcflags = server_msgr->crcflags = MSG_CRC_HEADER | MSG_CRC_DATA;
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 1);
+
+  // 2. client disable data crc
+  client_msgr->crcflags = MSG_CRC_HEADER;
+  m = new MPing();
+  conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 2);
+
+  // 3. client disable header crc
+  client_msgr->crcflags = MSG_CRC_DATA;
+  m = new MPing();
+  conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 3);
+
+  // 4. client disable all crc
+  client_msgr->crcflags = 0;
+  m = new MPing();
+  conn = client_msgr->get_connection(server_msgr->get_myinst());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_TRUE((static_cast<Session*>(conn->get_priv()))->get_count() == 4);
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
+
 class SyntheticDispatcher : public Dispatcher {
  public:
   Mutex lock;
