@@ -147,7 +147,11 @@ Each subsystem has a logging level for its output logs, and for its logs
 in-memory. You may set different values for each of these subsystems by setting
 a log file level and a memory level for debug logging. Ceph's logging levels
 operate on a scale of ``1`` to ``20``, where ``1`` is terse and ``20`` is
-verbose. 
+verbose. In general, the logs in-memory are not sent to the output log unless:
+
+- a fatal signal is raised or
+- an ``assert`` in source code is triggered or
+- upon requested. Please consult document on admin socket for more details.
 
 A debug logging setting can take a single value for the log level and the
 memory level, which sets them both as the same value. For example, if you
