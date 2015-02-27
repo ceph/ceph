@@ -1135,7 +1135,6 @@ int MDSMonitor::management_command(
     map<string, cmd_vartype> &cmdmap,
     std::stringstream &ss)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   if (prefix == "mds newfs") {
     /* Legacy `newfs` command, takes pool numbers instead of
      * names, assumes fs name to be MDS_FS_NAME_DEFAULT, and

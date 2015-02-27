@@ -780,7 +780,6 @@ public:
   struct C_Command : public Context {
     Monitor *mon;
     MonOpRequestRef op;
-//    MMonCommand *m;
     int rc;
     string rs;
     bufferlist rdata;
