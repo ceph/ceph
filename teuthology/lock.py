@@ -8,7 +8,6 @@ import collections
 import os
 import requests
 import urllib
-from distutils.spawn import find_executable
 
 import teuthology
 from . import misc
@@ -47,7 +46,7 @@ def get_distro_from_downburst():
                                  u'14.04(trusty)', u'utopic(utopic)'],
                      u'sles': [u'11-sp2'],
                      u'debian': [u'6.0', u'7.0']}
-    executable_cmd = find_executable('downburst')
+    executable_cmd = provision.downburst_executable()
     if not executable_cmd:
         log.warn("Downburst not found!")
         log.info('Using default values for supported os_type/os_version')
