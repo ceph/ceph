@@ -2174,7 +2174,7 @@ int AsyncConnection::_send(Message *m)
   return rc;
 }
 
-int AsyncConnection::write_message(ceph_msg_header& header, ceph_msg_footer& footer,
+int AsyncConnection::write_message(const ceph_msg_header& header, const ceph_msg_footer& footer,
                                   bufferlist& blist)
 {
   bufferlist bl;
