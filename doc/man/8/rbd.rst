@@ -322,14 +322,17 @@ bottleneck when individual images get large or busy.
 The striping is controlled by three parameters:
 
 .. option:: order
+
   The size of objects we stripe over is a power of two, specifically 2^[*order*] bytes.  The default
   is 22, or 4 MB.
 
 .. option:: stripe_unit
+
   Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
   to the next object.
 
 .. option:: stripe_count
+
   After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
   and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
   point, we move on to the next [*stripe_count*] objects.
