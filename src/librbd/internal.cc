@@ -1684,6 +1684,7 @@ reprotect_and_return_err:
       original_size = ictx->size;
       ictx->snap_lock.put_read();
       if (size < original_size) {
+	ictx->flush_async_operations();
 	if (ictx->object_cacher) {
 	  // need to invalidate since we're deleting objects, and
 	  // ObjectCacher doesn't track non-existent objects
