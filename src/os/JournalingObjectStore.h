@@ -111,6 +111,7 @@ protected:
 protected:
   void journal_start();
   void journal_stop();
+  void journal_write_close();
   int journal_replay(uint64_t fs_op_seq);
 
   void _op_journal_transactions(list<ObjectStore::Transaction*>& tls, uint64_t op,

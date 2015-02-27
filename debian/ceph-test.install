@@ -1,8 +1,7 @@
 usr/bin/ceph-coverage
 usr/bin/ceph_bench_log
 usr/bin/ceph_dupstore
-usr/bin/ceph_filestore_dump
-usr/bin/ceph_filestore_tool
+usr/bin/ceph-objectstore-tool
 usr/bin/ceph_kvstorebench
 usr/bin/ceph_multi_stress_watch
 usr/bin/ceph_erasure_code
