@@ -1,5 +1,5 @@
 tasks:
 - qemu:
     all:
-      test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/workunits/suites/fsstress.sh
+      test: https://ceph.com/git/?p=ceph.git;a=blob_plain;f=qa/workunits/suites/fsstress.sh;h=firefly
 exclude_arch: armv7l
