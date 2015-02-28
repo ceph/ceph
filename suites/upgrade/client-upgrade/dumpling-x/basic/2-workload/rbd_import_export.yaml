@@ -3,4 +3,4 @@ tasks:
     branch: dumpling
     clients:
       client.0:
-      - cls/test_cls_rbd.sh
+      - rbd/import_export.sh
