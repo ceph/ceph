@@ -251,8 +251,8 @@ TEST(EventCenterTest, FileEventExpansion) {
   center.init(100);
   EventCallbackRef e(new FakeEvent());
   for (int i = 0; i < 10000; i++) {
-    (void)::socket(AF_INET, SOCK_STREAM, 0);
-    center.create_file_event(i, EVENT_READABLE, e);
+    int sd = ::socket(AF_INET, SOCK_STREAM, 0);
+    center.create_file_event(sd, EVENT_READABLE, e);
     sds.push_back(::socket(AF_INET, SOCK_STREAM, 0));
   }
 
