@@ -13,9 +13,12 @@
 - |
   #!/bin/bash
 
-  # mount a 9p fs for storing logs
+  # mount a NFS share for storing logs
+  apt-get update
+  apt-get -y install nfs-common
   mkdir /mnt/log
-  mount -t 9p -o trans=virtio test_log /mnt/log
+  # 10.0.2.2 is the host
+  mount -v -t nfs -o proto=tcp 10.0.2.2:{mnt_dir} /mnt/log
 
   # mount the iso image that has the test script
   mkdir /mnt/cdrom
