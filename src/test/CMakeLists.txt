@@ -92,6 +92,8 @@ target_link_libraries(test_keys mon global ${CMAKE_DL_LIBS} ${TCMALLOC_LIBS})
 ## dencoder
 set(dencoder_srcs
   encoding/ceph_dencoder.cc
+  ${CMAKE_SOURCE_DIR}/src/krbd.cc
+  ${CMAKE_SOURCE_DIR}/src/common/secret.c
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   )
 if(${WITH_RADOSGW})
@@ -106,11 +108,15 @@ endif(${WITH_RADOSGW})
 add_executable(dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
 target_link_libraries(dencoder
   librados
+  librbd
   global
   osd
   mds
   mon
   osdc
+  blkid
+  udev
+  keyutils
   ${EXTRALIBS}
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
@@ -1091,6 +1097,9 @@ target_link_libraries(multi_stress_watch librados global radostest
 add_executable(test_librbd
   librbd/test_librbd.cc
   librbd/test_fixture.cc
+  librbd/test_ImageWatcher.cc
+  librbd/test_internal.cc
+  librbd/test_main.cc
   $<TARGET_OBJECTS:heap_profiler_objs>
   ${CMAKE_SOURCE_DIR}/src/common/TextTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/secret.c
