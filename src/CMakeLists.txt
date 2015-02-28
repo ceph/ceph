@@ -658,6 +658,7 @@ if(${WITH_RBD})
     librbd/CopyupRequest.cc
     librbd/ImageCtx.cc
     librbd/ImageWatcher.cc
+    librbd/WatchNotifyTypes.cc
     librbd/internal.cc
     librbd/librbd.cc
     librbd/LibrbdWriteback.cc
