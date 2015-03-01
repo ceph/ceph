@@ -277,8 +277,8 @@ class RBD(object):
         ret = self.librbd.rbd_clone(p_ioctx.io, c_char_p(p_name),
                                     c_char_p(p_snapname),
                                     c_ioctx.io, c_char_p(c_name),
-                                          c_uint64(features),
-                                          byref(c_int(order)))
+                                    c_uint64(features),
+                                    byref(c_int(order)))
         if ret < 0:
             raise make_ex(ret, 'error creating clone')
 
