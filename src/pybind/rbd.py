@@ -31,53 +31,70 @@ RBD_FEATURE_EXCLUSIVE_LOCK = 4
 
 RBD_FLAG_OBJECT_MAP_INVALID = 1
 
+
 class Error(Exception):
     pass
+
 
 class PermissionError(Error):
     pass
 
+
 class ImageNotFound(Error):
     pass
+
 
 class ImageExists(Error):
     pass
 
+
 class IOError(Error):
     pass
+
 
 class NoSpace(Error):
     pass
 
+
 class IncompleteWriteError(Error):
     pass
+
 
 class InvalidArgument(Error):
     pass
 
+
 class LogicError(Error):
     pass
+
 
 class ReadOnlyImage(Error):
     pass
 
+
 class ImageBusy(Error):
     pass
+
 
 class ImageHasSnapshots(Error):
     pass
 
+
 class FunctionNotSupported(Error):
     pass
+
 
 class ArgumentOutOfRange(Error):
     pass
 
+
 class ConnectionShutdown(Error):
     pass
 
+
 class Timeout(Error):
     pass
+
 
 def make_ex(ret, msg):
     """
@@ -110,6 +127,7 @@ def make_ex(ret, msg):
     else:
         return Error(msg + (": error code %d" % ret))
 
+
 class rbd_image_info_t(Structure):
     _fields_ = [("size", c_uint64),
                 ("obj_size", c_uint64),
@@ -119,10 +137,12 @@ class rbd_image_info_t(Structure):
                 ("parent_pool", c_int64),
                 ("parent_name", c_char * 96)]
 
+
 class rbd_snap_info_t(Structure):
     _fields_ = [("id", c_uint64),
                 ("size", c_uint64),
                 ("name", c_char_p)]
+
 
 def load_librbd():
     """
@@ -138,6 +158,7 @@ def load_librbd():
         return CDLL('librbd.so.1')
     except OSError as e:
         raise EnvironmentError("Unable to load librbd: %s" % e)
+
 
 class RBD(object):
     """
@@ -319,6 +340,7 @@ class RBD(object):
         ret = self.librbd.rbd_rename(ioctx.io, c_char_p(src), c_char_p(dest))
         if ret != 0:
             raise make_ex(ret, 'error renaming image')
+
 
 class Image(object):
     """
@@ -980,6 +1002,7 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, 'error unlocking image')
 
+
 class DiffIterateCB(object):
     def __init__(self, cb):
         self.cb = cb
@@ -987,6 +1010,7 @@ class DiffIterateCB(object):
     def callback(self, offset, length, exists, unused):
         self.cb(offset, length, exists == 1)
         return 0
+
 
 class SnapIterator(object):
     """

@@ -6,32 +6,42 @@ from ctypes import CDLL, c_char_p, c_size_t, c_void_p, c_int, c_long, c_uint, c_
 from ctypes.util import find_library
 import errno
 
+
 class Error(Exception):
     pass
+
 
 class PermissionError(Error):
     pass
 
+
 class ObjectNotFound(Error):
     pass
+
 
 class NoData(Error):
     pass
 
+
 class ObjectExists(Error):
     pass
+
 
 class IOError(Error):
     pass
 
+
 class NoSpace(Error):
     pass
+
 
 class IncompleteWriteError(Error):
     pass
 
+
 class LibCephFSStateError(Error):
     pass
+
 
 def make_ex(ret, msg):
     """
@@ -58,6 +68,7 @@ def make_ex(ret, msg):
     else:
         return Error(msg + (": error code %d" % ret))
 
+
 class cephfs_statvfs(Structure):
     _fields_ = [("f_bsize", c_uint),
                 ("f_frsize", c_uint),
@@ -71,6 +82,7 @@ class cephfs_statvfs(Structure):
                 ("f_flag", c_uint),
                 ("f_namemax", c_uint)]
 
+
 # struct timespec {
 #   long int tv_sec;
 #   long int tv_nsec;
@@ -78,6 +90,7 @@ class cephfs_statvfs(Structure):
 class cephfs_timespec(Structure):
     _fields_ = [('tv_sec', c_long),
                 ('tv_nsec', c_long)]
+
 
 # struct stat {
 #   unsigned long st_dev;
@@ -115,6 +128,7 @@ class cephfs_stat(Structure):
                 ('__unused2', c_long),
                 ('__unused3', c_long) ]
 
+
 def load_libcephfs():
     """
     Load the libcephfs shared library.
@@ -129,6 +143,7 @@ def load_libcephfs():
         return CDLL('libcephfs.so.1')
     except OSError as e:
         raise EnvironmentError("Unable to load libcephfs: %s" % e)
+
 
 class LibCephFS(object):
     """libcephfs python wrapper"""
