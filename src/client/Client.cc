@@ -8417,6 +8417,15 @@ int Client::lgetxattr(const char *path, const char *name, void *value, size_t si
   return Client::_getxattr(ceph_inode, name, value, size, getuid(), getgid());
 }
 
+int Client::fgetxattr(int fd, const char *name, void *value, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_getxattr(f->inode, name, value, size, getuid(), getgid());
+}
+
 int Client::listxattr(const char *path, char *list, size_t size)
 {
   Mutex::Locker lock(client_lock);
@@ -8435,6 +8444,15 @@ int Client::llistxattr(const char *path, char *list, size_t size)
   if (r < 0)
     return r;
   return Client::_listxattr(ceph_inode, list, size, getuid(), getgid());
+}
+
+int Client::flistxattr(int fd, char *list, size_t size)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_listxattr(f->inode, list, size, getuid(), getgid());
 }
 
 int Client::removexattr(const char *path, const char *name)
@@ -8457,6 +8475,15 @@ int Client::lremovexattr(const char *path, const char *name)
   return Client::_removexattr(ceph_inode, name, getuid(), getgid());
 }
 
+int Client::fremovexattr(int fd, const char *name)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_removexattr(f->inode, name, getuid(), getgid());
+}
+
 int Client::setxattr(const char *path, const char *name, const void *value, size_t size, int flags)
 {
   Mutex::Locker lock(client_lock);
@@ -8475,6 +8502,15 @@ int Client::lsetxattr(const char *path, const char *name, const void *value, siz
   if (r < 0)
     return r;
   return Client::_setxattr(ceph_inode, name, value, size, flags, getuid(), getgid());
+}
+
+int Client::fsetxattr(int fd, const char *name, const void *value, size_t size, int flags)
+{
+  Mutex::Locker lock(client_lock);
+  Fh *f = get_filehandle(fd);
+  if (!f)
+    return -EBADF;
+  return Client::_setxattr(f->inode, name, value, size, flags, getuid(), getgid());
 }
 
 int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,

@@ -632,6 +632,14 @@ extern "C" int ceph_lgetxattr(struct ceph_mount_info *cmount, const char *path, 
   return cmount->get_client()->lgetxattr(path, name, value, size);
 }
 
+extern "C" int ceph_fgetxattr(struct ceph_mount_info *cmount, int fd, const char *name, void *value, size_t size)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fgetxattr(fd, name, value, size);
+}
+
+
 extern "C" int ceph_listxattr(struct ceph_mount_info *cmount, const char *path, char *list, size_t size)
 {
   if (!cmount->is_mounted())
@@ -644,6 +652,13 @@ extern "C" int ceph_llistxattr(struct ceph_mount_info *cmount, const char *path,
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->llistxattr(path, list, size);
+}
+
+extern "C" int ceph_flistxattr(struct ceph_mount_info *cmount, int fd, char *list, size_t size)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->flistxattr(fd, list, size);
 }
 
 extern "C" int ceph_removexattr(struct ceph_mount_info *cmount, const char *path, const char *name)
@@ -660,6 +675,13 @@ extern "C" int ceph_lremovexattr(struct ceph_mount_info *cmount, const char *pat
   return cmount->get_client()->lremovexattr(path, name);
 }
 
+extern "C" int ceph_fremovexattr(struct ceph_mount_info *cmount, int fd, const char *name)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fremovexattr(fd, name);
+}
+
 extern "C" int ceph_setxattr(struct ceph_mount_info *cmount, const char *path, const char *name, const void *value, size_t size, int flags)
 {
   if (!cmount->is_mounted())
@@ -672,6 +694,13 @@ extern "C" int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, 
   if (!cmount->is_mounted())
     return -ENOTCONN;
   return cmount->get_client()->lsetxattr(path, name, value, size, flags);
+}
+
+extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char *name, const void *value, size_t size, int flags)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fsetxattr(fd, name, value, size, flags);
 }
 /* end xattr support */
 
