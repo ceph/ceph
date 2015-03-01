@@ -494,7 +494,7 @@ class Image(object):
             if ret == -errno.ERANGE:
                 size *= 2
 
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
         return (pool.value, name.value, snapname.value)
 
@@ -506,7 +506,7 @@ class Image(object):
         """
         old = c_uint8()
         ret = self.librbd.rbd_get_old_format(self.image, byref(old))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting old_format for image' % (self.name))
         return old.value != 0
 
@@ -519,7 +519,7 @@ class Image(object):
         """
         image_size = c_uint64()
         ret = self.librbd.rbd_get_size(self.image, byref(image_size))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting size for image' % (self.name))
         return image_size.value
 
@@ -531,7 +531,7 @@ class Image(object):
         """
         features = c_uint64()
         ret = self.librbd.rbd_get_features(self.image, byref(features))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting features for image' % (self.name))
         return features.value
 
@@ -546,7 +546,7 @@ class Image(object):
         """
         overlap = c_uint64()
         ret = self.librbd.rbd_get_overlap(self.image, byref(overlap))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting overlap for image' % (self.name))
         return overlap.value
 
@@ -558,7 +558,7 @@ class Image(object):
         """
         flags = c_uint64()
         ret = self.librbd.rbd_get_flags(self.image, byref(flags))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting flags for image' % (self.name))
         return flags.value
 
@@ -570,7 +570,7 @@ class Image(object):
         """
         owner = c_int()
         ret = self.librbd.rbd_is_exclusive_lock_owner(self.image, byref(owner))
-        if (ret != 0):
+        if ret != 0:
             raise make_ex(ret, 'error getting lock status for image' % (self.name))
         return owner.value == 1
 
@@ -875,7 +875,7 @@ written." % (self.name, ret, length))
         Flatten clone image (copy all blocks from parent to child)
         """
         ret = self.librbd.rbd_flatten(self.image)
-        if (ret < 0):
+        if ret < 0:
             raise make_ex(ret, "error flattening %s" % self.name)
 
     def list_children(self):
