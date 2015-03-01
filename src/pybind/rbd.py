@@ -714,8 +714,8 @@ class Image(object):
         :type offset: int
         :param length: how many bytes to read
         :type length: int
-	:param fadvise_flags: fadvise flags for this read
-	:type fadvise_flags: int
+        :param fadvise_flags: fadvise flags for this read
+        :type fadvise_flags: int
         :returns: str - the data read
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
@@ -793,8 +793,8 @@ class Image(object):
         :type data: str
         :param offset: where to start writing data
         :type offset: int
-	:param fadvise_flags: fadvise flags for this write
-	:type fadvise_flags: int
+        :param fadvise_flags: fadvise flags for this write
+        :type fadvise_flags: int
         :returns: int - the number of bytes written
         :raises: :class:`IncompleteWriteError`, :class:`LogicError`,
                  :class:`InvalidArgument`, :class:`IOError`
