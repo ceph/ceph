@@ -41,6 +41,7 @@ LOGLEVELS = {
     'debug':logging.DEBUG,
 }
 
+
 def find_up_osd(app):
     '''
     Find an up OSD.  Return the last one that's up.
@@ -61,6 +62,7 @@ def find_up_osd(app):
 
 
 METHOD_DICT = {'r':['GET'], 'w':['PUT', 'DELETE']}
+
 
 def api_setup(app, conf, cluster, clientname, clientid, args):
     '''
@@ -247,7 +249,6 @@ def generate_url_and_params(app, sig, flavor):
 #
 # end setup (import-time) functions, begin request-time functions
 #
-
 def concise_sig_for_uri(sig, flavor):
     '''
     Return a generic description of how one would send a REST request for sig
@@ -266,6 +267,7 @@ def concise_sig_for_uri(sig, flavor):
     if args:
         ret += '?' + '&'.join(args)
     return ret
+
 
 def show_human_help(prefix):
     '''
@@ -301,6 +303,7 @@ def show_human_help(prefix):
     else:
         return ''
 
+
 @app.before_request
 def log_request():
     '''
@@ -309,9 +312,11 @@ def log_request():
     app.logger.info(flask.request.url + " from " + flask.request.remote_addr + " " + flask.request.user_agent.string)
     app.logger.debug("Accept: %s", flask.request.accept_mimetypes.values())
 
+
 @app.route('/')
 def root_redir():
     return flask.redirect(app.ceph_baseurl)
+
 
 def make_response(fmt, output, statusmsg, errorcode):
     '''
@@ -355,6 +360,7 @@ def make_response(fmt, output, statusmsg, errorcode):
             response = response + '\n' + statusmsg + '\n'
 
     return flask.make_response(response, errorcode)
+
 
 def handler(catchall_path=None, fmt=None, target=None):
     '''
@@ -487,6 +493,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         contenttype = 'text/plain'
     response.headers['Content-Type'] = contenttype
     return response
+
 
 #
 # Main entry point from wrapper/WSGI server: call with cmdline args,

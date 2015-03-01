@@ -20,11 +20,13 @@ import sys
 import types
 import uuid
 
+
 class ArgumentError(Exception):
     """
     Something wrong with arguments
     """
     pass
+
 
 class ArgumentNumber(ArgumentError):
     """
@@ -32,11 +34,13 @@ class ArgumentNumber(ArgumentError):
     """
     pass
 
+
 class ArgumentFormat(ArgumentError):
     """
     Argument value has wrong format
     """
     pass
+
 
 class ArgumentValid(ArgumentError):
     """
@@ -44,11 +48,13 @@ class ArgumentValid(ArgumentError):
     """
     pass
 
+
 class ArgumentTooFew(ArgumentError):
     """
     Fewer arguments than descriptors in signature; may mean to continue
     the search, so gets a special exception type
     """
+
 
 class ArgumentPrefix(ArgumentError):
     """
@@ -56,11 +62,13 @@ class ArgumentPrefix(ArgumentError):
     """
     pass
 
+
 class JsonFormat(Exception):
     """
     some syntactic or semantic issue with the JSON
     """
     pass
+
 
 class CephArgtype(object):
     """
@@ -109,6 +117,7 @@ class CephArgtype(object):
         as it would be useful in a command usage message.
         """
         return '<{0}>'.format(self.__class__.__name__)
+
 
 class CephInt(CephArgtype):
     """
@@ -178,6 +187,7 @@ class CephFloat(CephArgtype):
             r = '[{0}-{1}]'.format(self.range[0], self.range[1])
         return '<float{0}>'.format(r)
 
+
 class CephString(CephArgtype):
     """
     String; pretty generic.  goodchars is a RE char class of valid chars
@@ -207,6 +217,7 @@ class CephString(CephArgtype):
             b += '(goodchars {0})'.format(self.goodchars)
         return '<string{0}>'.format(b)
 
+
 class CephSocketpath(CephArgtype):
     """
     Admin socket path; check that it's readable and S_ISSOCK
@@ -219,6 +230,7 @@ class CephSocketpath(CephArgtype):
 
     def __str__(self):
         return '<admin-socket-path>'
+
 
 class CephIPAddr(CephArgtype):
     """
@@ -273,6 +285,7 @@ class CephIPAddr(CephArgtype):
     def __str__(self):
         return '<IPaddr[:port]>'
 
+
 class CephEntityAddr(CephIPAddr):
     """
     EntityAddress, that is, IP address[/nonce]
@@ -300,12 +313,14 @@ class CephEntityAddr(CephIPAddr):
     def __str__(self):
         return '<EntityAddr>'
 
+
 class CephPoolname(CephArgtype):
     """
     Pool name; very little utility
     """
     def __str__(self):
         return '<poolname>'
+
 
 class CephObjectname(CephArgtype):
     """
@@ -314,6 +329,7 @@ class CephObjectname(CephArgtype):
     """
     def __str__(self):
         return '<objectname>'
+
 
 class CephPgid(CephArgtype):
     """
@@ -333,6 +349,7 @@ class CephPgid(CephArgtype):
 
     def __str__(self):
         return '<pgid>'
+
 
 class CephName(CephArgtype):
     """
@@ -369,6 +386,7 @@ class CephName(CephArgtype):
     def __str__(self):
         return '<name (type.id)>'
 
+
 class CephOsdName(CephArgtype):
     """
     Like CephName, but specific to osds: allow <id> alone
@@ -401,6 +419,7 @@ class CephOsdName(CephArgtype):
     def __str__(self):
         return '<osdname (id|osd.id)>'
 
+
 class CephChoices(CephArgtype):
     """
     Set of string literals; init with valid choices
@@ -429,6 +448,7 @@ class CephChoices(CephArgtype):
         else:
             return '{0}'.format('|'.join(self.strings))
 
+
 class CephFilepath(CephArgtype):
     """
     Openable file
@@ -443,6 +463,7 @@ class CephFilepath(CephArgtype):
 
     def __str__(self):
         return '<outfilename>'
+
 
 class CephFragment(CephArgtype):
     """
@@ -588,11 +609,13 @@ class argdesc(object):
             s = '{' + s + '}'
         return s
 
+
 def concise_sig(sig):
     """
     Return string representation of sig useful for syntax reference in help
     """
     return ' '.join([d.helpstr() for d in sig])
+
 
 def descsort(sh1, sh2):
     """
@@ -600,6 +623,7 @@ def descsort(sh1, sh2):
     strings in the descriptor; this works out to just the leading strings.
     """
     return cmp(concise_sig(sh1['sig']), concise_sig(sh2['sig']))
+
 
 def parse_funcsig(sig):
     """
@@ -693,6 +717,7 @@ def parse_json_funcsigs(s, consumer):
         sigdict[cmdtag] = cmd
     return sigdict
 
+
 def validate_one(word, desc, partial=False):
     """
     validate_one(word, desc, partial=False)
@@ -706,6 +731,7 @@ def validate_one(word, desc, partial=False):
     desc.numseen += 1
     if desc.N:
         desc.n = desc.numseen + 1
+
 
 def matchnum(args, signature, partial=False):
     """
@@ -748,6 +774,7 @@ def matchnum(args, signature, partial=False):
             matchcnt += 1
     return matchcnt
 
+
 def get_next_arg(desc, args):
     '''
     Get either the value matching key 'desc.name' or the next arg in
@@ -773,6 +800,7 @@ def get_next_arg(desc, args):
             arg = arg[0]
     return arg
 
+
 def store_arg(desc, d):
     '''
     Store argument described by, and held in, thanks to valid(),
@@ -796,6 +824,7 @@ def store_arg(desc, d):
     else:
         # if first CephPrefix or any other type, just set it
         d[desc.name] = desc.instance.val
+
 
 def validate(args, signature, partial=False):
     """
@@ -891,10 +920,12 @@ def validate(args, signature, partial=False):
     # Finally, success
     return d
 
+
 def cmdsiglen(sig):
     sigdict = sig.values()
     assert len(sigdict) == 1
     return len(sig.values()[0]['sig'])
+
 
 def validate_command(sigdict, args, verbose=False):
     """
@@ -976,6 +1007,7 @@ def validate_command(sigdict, args, verbose=False):
 
         return valid_dict
 
+
 def find_cmd_target(childargs):
     """
     Using a minimal validation, figure out whether the command
@@ -1042,6 +1074,7 @@ def find_cmd_target(childargs):
             return 'pg', valid_dict['pgid']
 
     return 'mon', ''
+
 
 def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
                  verbose=False):
@@ -1121,6 +1154,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf='', timeout=0,
 
     return ret, outbuf, outs
 
+
 def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
                  inbuf='', timeout=0, verbose=False):
     """
@@ -1163,5 +1197,4 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             raise
 
     return ret, outbuf, outs
-
 
