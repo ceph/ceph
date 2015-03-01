@@ -183,8 +183,8 @@ class LibCephFS(object):
     def conf_parse_argv(self, argv):
         self.require_state("configuring")
         c_argv = (c_char_p * len(argv))(*argv)
-        ret = self.libcephfs.ceph_conf_parse_argv(
-                self.cluster, len(argv), c_argv)
+        ret = self.libcephfs.ceph_conf_parse_argv(self.cluster, len(argv),
+                                                  c_argv)
         if ret != 0:
             raise make_ex(ret, "error calling conf_parse_argv")
 
@@ -228,7 +228,7 @@ class LibCephFS(object):
         while True:
             ret_buf = create_string_buffer(length)
             ret = self.libcephfs.ceph_conf_get(self.cluster, option,
-                                                ret_buf, c_size_t(length))
+                                               ret_buf, c_size_t(length))
             if ret == 0:
                 return ret_buf.value
             elif ret == -errno.ENAMETOOLONG:
@@ -245,7 +245,7 @@ class LibCephFS(object):
         if not isinstance(val, str):
             raise TypeError('val must be a string')
         ret = self.libcephfs.ceph_conf_set(self.cluster, c_char_p(option),
-                                            c_char_p(val))
+                                           c_char_p(val))
         if ret != 0:
             raise make_ex(ret, "error calling conf_set")
 
@@ -344,13 +344,9 @@ class LibCephFS(object):
         if not isinstance(value, str):
             raise TypeError('value must be a string')
         self.require_state("mounted")
-        ret = self.libcephfs.ceph_setxattr(
-                    self.cluster,
-                    c_char_p(path),
-                    c_char_p(name),
-                    c_char_p(value),
-                    c_size_t(len(value)),
-                    c_int(flags))
+        ret = self.libcephfs.ceph_setxattr(self.cluster, c_char_p(path),
+                                           c_char_p(name), c_char_p(value),
+                                           c_size_t(len(value)), c_int(flags))
         if ret < 0:
             raise make_ex(ret, "error in setxattr")
 
@@ -359,10 +355,8 @@ class LibCephFS(object):
         if not isinstance(path, str):
             raise TypeError('path must be a string')
         statbuf = cephfs_stat()
-        ret = self.libcephfs.ceph_stat(
-                self.cluster,
-                c_char_p(path),
-                byref(statbuf))
+        ret = self.libcephfs.ceph_stat(self.cluster, c_char_p(path),
+                                       byref(statbuf))
         if ret < 0:
             raise make_ex(ret, "error in stat: %s" % path)
         return {'st_dev': statbuf.st_dev,
@@ -399,15 +393,12 @@ class LibCephFS(object):
         outsp = pointer(pointer(c_char()))
         outslen = c_long()
 
-        ret = self.libcephfs.ceph_mds_command(
-                self.cluster,
-                c_char_p(mds_spec),
-                cmdarr,
-                len(args),
-                c_char_p(input_data), len(input_data),
-                outbufp, byref(outbuflen),
-                outsp, byref(outslen)
-        )
+        ret = self.libcephfs.ceph_mds_command(self.cluster, c_char_p(mds_spec),
+                                              cmdarr, len(args),
+                                              c_char_p(input_data),
+                                              len(input_data), outbufp,
+                                              byref(outbuflen), outsp,
+                                              byref(outslen))
 
         my_outbuf = outbufp.contents[:(outbuflen.value)]
         my_outs = outsp.contents[:(outslen.value)]
