@@ -489,7 +489,8 @@ class Image(object):
             name = create_string_buffer(size)
             snapname = create_string_buffer(size)
             ret = self.librbd.rbd_get_parent_info(self.image, pool, len(pool),
-                name, len(name), snapname, len(snapname))
+                                                  name, len(name), snapname,
+                                                  len(snapname))
             if ret == -errno.ERANGE:
                 size *= 2
 
@@ -719,14 +720,16 @@ class Image(object):
         :raises: :class:`InvalidArgument`, :class:`IOError`
         """
         ret_buf = create_string_buffer(length)
-	if fadvise_flags == 0:
-	  ret = self.librbd.rbd_read(self.image, c_uint64(offset),
-				      c_size_t(length), byref(ret_buf))
-	else:
-	  ret = self.librbd.rbd_read2(self.image, c_uint64(offset),
-					c_size_t(length), byref(ret_buf), c_int(fadvise_flags))
+        if fadvise_flags == 0:
+            ret = self.librbd.rbd_read(self.image, c_uint64(offset),
+                                       c_size_t(length), byref(ret_buf))
+        else:
+            ret = self.librbd.rbd_read2(self.image, c_uint64(offset),
+                                        c_size_t(length), byref(ret_buf),
+                                        c_int(fadvise_flags))
         if ret < 0:
             raise make_ex(ret, 'error reading %s %ld~%ld' % (self.image, offset, length))
+
         return ctypes.string_at(ret_buf, ret)
 
     def diff_iterate(self, offset, length, from_snapshot, iterate_cb):
@@ -799,12 +802,14 @@ class Image(object):
         if not isinstance(data, str):
             raise TypeError('data must be a string')
         length = len(data)
-	if fadvise_flags == 0:
-	  ret = self.librbd.rbd_write(self.image, c_uint64(offset),
-	                              c_size_t(length), c_char_p(data))
-	else:
-	  ret = self.librbd.rbd_write2(self.image, c_uint64(offset),
-	                              c_size_t(length), c_char_p(data), c_int(fadvise_flags))
+
+        if fadvise_flags == 0:
+            ret = self.librbd.rbd_write(self.image, c_uint64(offset),
+                                        c_size_t(length), c_char_p(data))
+        else:
+            ret = self.librbd.rbd_write2(self.image, c_uint64(offset),
+                                         c_size_t(length), c_char_p(data),
+                                         c_int(fadvise_flags))
 
         if ret == length:
             return ret
