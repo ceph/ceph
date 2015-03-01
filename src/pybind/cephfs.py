@@ -126,7 +126,7 @@ class cephfs_stat(Structure):
                 ('st_ctime', cephfs_timespec),  # time of last status change
                 ('__unused1', c_long),
                 ('__unused2', c_long),
-                ('__unused3', c_long) ]
+                ('__unused3', c_long)]
 
 
 def load_libcephfs():
@@ -281,7 +281,7 @@ class LibCephFS(object):
                 'f_favail': statbuf.f_favail,
                 'f_fsid': statbuf.f_fsid,
                 'f_flag': statbuf.f_flag,
-                'f_namemax': statbuf.f_namemax }
+                'f_namemax': statbuf.f_namemax}
 
     def sync_fs(self):
         self.require_state("mounted")
@@ -377,7 +377,7 @@ class LibCephFS(object):
                 'st_blocks': statbuf.st_blocks,
                 'st_atime': statbuf.st_atime,
                 'st_mtime': statbuf.st_mtime,
-                'st_ctime': statbuf.st_ctime }
+                'st_ctime': statbuf.st_ctime}
 
     def unlink(self, path):
         self.require_state("mounted")
