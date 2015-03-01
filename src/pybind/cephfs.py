@@ -110,20 +110,20 @@ class cephfs_timespec(Structure):
 #   long int __unused[3];
 # };
 class cephfs_stat(Structure):
-    _fields_ = [('st_dev', c_ulong), # ID of device containing file
-                ('st_ino', c_ulong), # inode number
-                ('st_nlink', c_ulong), # number of hard links
-                ('st_mode', c_uint), # protection
-                ('st_uid', c_uint), # user ID of owner
-                ('st_gid', c_uint), # group ID of owner
+    _fields_ = [('st_dev', c_ulong),            # ID of device containing file
+                ('st_ino', c_ulong),            # inode number
+                ('st_nlink', c_ulong),          # number of hard links
+                ('st_mode', c_uint),            # protection
+                ('st_uid', c_uint),             # user ID of owner
+                ('st_gid', c_uint),             # group ID of owner
                 ('__pad0', c_int),
-                ('st_rdev', c_ulong), # device ID (if special file)
-                ('st_size', c_long), # total size, in bytes
-                ('st_blksize', c_long), # blocksize for file system I/O
-                ('st_blocks', c_long), # number of 512B blocks allocated
-                ('st_atime', cephfs_timespec), # time of last access
-                ('st_mtime', cephfs_timespec), # time of last modification
-                ('st_ctime', cephfs_timespec), # time of last status change
+                ('st_rdev', c_ulong),           # device ID (if special file)
+                ('st_size', c_long),            # total size, in bytes
+                ('st_blksize', c_long),         # blocksize for file system I/O
+                ('st_blocks', c_long),          # num of 512B blocks allocated
+                ('st_atime', cephfs_timespec),  # time of last access
+                ('st_mtime', cephfs_timespec),  # time of last modification
+                ('st_ctime', cephfs_timespec),  # time of last status change
                 ('__unused1', c_long),
                 ('__unused2', c_long),
                 ('__unused3', c_long) ]
