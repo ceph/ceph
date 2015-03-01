@@ -23,65 +23,81 @@ LIBRADOS_OP_FLAG_FADVISE_WILLNEED   = 0x10
 LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20
 LIBRADOS_OP_FLAG_FADVISE_NOCACHE    = 0x40
 
+
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
     pass
+
 
 class InterruptedOrTimeoutError(Error):
     """ `InterruptedOrTimeoutError` class, derived from `Error` """
     pass
 
+
 class PermissionError(Error):
     """ `PermissionError` class, derived from `Error` """
     pass
+
 
 class ObjectNotFound(Error):
     """ `ObjectNotFound` class, derived from `Error` """
     pass
 
+
 class NoData(Error):
     """ `NoData` class, derived from `Error` """
     pass
+
 
 class ObjectExists(Error):
     """ `ObjectExists` class, derived from `Error` """
     pass
 
+
 class ObjectBusy(Error):
     """ `ObjectBusy` class, derived from `Error` """
     pass
+
 
 class IOError(Error):
     """ `IOError` class, derived from `Error` """
     pass
 
+
 class NoSpace(Error):
     """ `NoSpace` class, derived from `Error` """
     pass
+
 
 class IncompleteWriteError(Error):
     """ `IncompleteWriteError` class, derived from `Error` """
     pass
 
+
 class RadosStateError(Error):
     """ `RadosStateError` class, derived from `Error` """
     pass
+
 
 class IoctxStateError(Error):
     """ `IoctxStateError` class, derived from `Error` """
     pass
 
+
 class ObjectStateError(Error):
     """ `ObjectStateError` class, derived from `Error` """
     pass
+
 
 class LogicError(Error):
     """ `` class, derived from `Error` """
     pass
 
+
 class TimedOut(Error):
     """ `TimedOut` class, derived from `Error` """
     pass
+
 
 def make_ex(ret, msg):
     """
@@ -111,6 +127,7 @@ def make_ex(ret, msg):
     else:
         return Error(msg + (": errno %s" % errno.errorcode[ret]))
 
+
 class rados_pool_stat_t(Structure):
     """ Usage information for a pool """
     _fields_ = [("num_bytes", c_uint64),
@@ -126,12 +143,14 @@ class rados_pool_stat_t(Structure):
                 ("num_wr", c_uint64),
                 ("num_wr_kb", c_uint64)]
 
+
 class rados_cluster_stat_t(Structure):
     """ Cluster-wide usage information """
     _fields_ = [("kb", c_uint64),
                 ("kb_used", c_uint64),
                 ("kb_avail", c_uint64),
                 ("num_objects", c_uint64)]
+
 
 class timeval(Structure):
     _fields_ = [("tv_sec", c_long), ("tv_usec", c_long)]
@@ -147,6 +166,7 @@ class Version(object):
     def __str__(self):
         return "%d.%d.%d" % (self.major, self.minor, self.extra)
 
+
 class RadosThread(threading.Thread):
     def __init__(self, target, args=None):
         self.args = args
@@ -158,6 +178,7 @@ class RadosThread(threading.Thread):
 
 # time in seconds between each call to t.join() for child thread
 POLL_TIME_INCR = 0.5
+
 
 def run_in_thread(target, args, timeout=0):
     interrupt = False
@@ -193,6 +214,7 @@ def run_in_thread(target, args, timeout=0):
     if interrupt:
         t.retval = -errno.EINTR
     return t.retval
+
 
 class Rados(object):
     """librados python wrapper"""
@@ -784,6 +806,7 @@ Rados object in state %s." % self.state)
         if ret < 0:
             raise make_ex(ret, "error blacklisting client '%s'" % client_address)
 
+
 class ObjectIterator(object):
     """rados.Ioctx Object iterator"""
     def __init__(self, ioctx):
@@ -816,6 +839,7 @@ class ObjectIterator(object):
 
     def __del__(self):
         run_in_thread(self.ioctx.librados.rados_nobjects_list_close, (self.ctx,))
+
 
 class XattrIterator(object):
     """Extended attribute iterator"""
@@ -850,6 +874,7 @@ in '%s'" % self.oid)
 
     def __del__(self):
         run_in_thread(self.ioctx.librados.rados_getxattrs_end, (self.it,))
+
 
 class SnapIterator(object):
     """Snapshot iterator"""
@@ -900,6 +925,7 @@ ioctx '%s'" % self.ioctx.name)
         self.cur_snap = self.cur_snap + 1
         return snap
 
+
 class Snap(object):
     """Snapshot object"""
     def __init__(self, ioctx, name, snap_id):
@@ -924,6 +950,7 @@ class Snap(object):
         if (ret != 0):
             raise make_ex(ret, "rados_ioctx_snap_get_stamp error")
         return datetime.fromtimestamp(snap_time.value)
+
 
 class Completion(object):
     """completion object"""
@@ -1019,6 +1046,7 @@ class Completion(object):
                       (self.rados_comp,))
 
 RADOS_CB = CFUNCTYPE(c_int, c_void_p, c_void_p)
+
 
 class Ioctx(object):
     """rados.Ioctx object"""
@@ -1922,7 +1950,6 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Ioctx.rados_lock_exclusive(%s): failed to set lock %s on %s" % (self.name, name, key))
 
 
-
 def set_object_locator(func):
     def retfunc(self, *args, **kwargs):
         if self.locator_key is not None:
@@ -1935,6 +1962,7 @@ def set_object_locator(func):
             return func(self, *args, **kwargs)
     return retfunc
 
+
 def set_object_namespace(func):
     def retfunc(self, *args, **kwargs):
         if self.nspace is None:
@@ -1945,6 +1973,7 @@ def set_object_namespace(func):
         self.ioctx.set_namespace(old_nspace)
         return retval
     return retfunc
+
 
 class Object(object):
     """Rados object wrapper, makes the object look like a file"""
