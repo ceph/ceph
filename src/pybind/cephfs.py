@@ -162,7 +162,7 @@ class LibCephFS(object):
             raise TypeError('conffile must be a string or None')
         ret = self.libcephfs.ceph_create(byref(self.cluster), c_char_p(0))
         if ret != 0:
-            raise Error("libcephfs_initialize failed with error code: %d" %ret)
+            raise Error("libcephfs_initialize failed with error code: %d" % ret)
         self.state = "configuring"
         if conffile is not None:
             # read the default conf file when '' is given
