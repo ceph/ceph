@@ -31,25 +31,35 @@ protected:
    * Resize goes through the following state machine to resize the image
    * and update the object map:
    *
-   * <start> ----> STATE_FINISHED --------------------------------\
-   *  |  .                                                        |
-   *  |  . . . . . . . . . . . . . . . . . .                      |
-   *  |                                    .                      |
-   *  |                                    v                      |
-   *  |---> STATE_GROW_OBJECT_MAP ---> STATE_UPDATE_HEADER -------|
-   *  |                                                           |
-   *  |                                                           |
-   *  \---> STATE_TRIM_IMAGE --------> STATE_UPDATE_HEADER . . .  |
-   *                                       |                   .  |
-   *                                       |                   .  |
-   *                                       v                   v  v
-   *                            STATE_SHRINK_OBJECT_MAP ---> <finish>
+   * <start> -------------> STATE_FINISHED -----------------------------\
+   *  |  .    (no change)                                               |
+   *  |  .                                                              |
+   *  |  . . . . . . . . . . . . . . . . . . . . .                      |
+   *  |                                          .                      |
+   *  |                                          v                      |
+   *  |----------> STATE_GROW_OBJECT_MAP ---> STATE_UPDATE_HEADER ------|
+   *  | (grow)                                                          |
+   *  |                                                                 |
+   *  |                                                                 |
+   *  \----------> STATE_FLUSH -------------> STATE_INVALIDATE_CACHE    |
+   *    (shrink)                                 |                      |
+   *                                             |                      |
+   *                      /----------------------/                      |
+   *                      |                                             |
+   *                      v                                             |
+   *              STATE_TRIM_IMAGE --------> STATE_UPDATE_HEADER . . .  |
+   *                                             |                   .  |
+   *                                             |                   .  |
+   *                                             v                   v  v
+   *                                  STATE_SHRINK_OBJECT_MAP ---> <finish>
    *
    * The _OBJECT_MAP states are skipped if the object map isn't enabled.
    * The state machine will immediately transition to _FINISHED if there
    * are no objects to trim.
-   */ 
+   */
   enum State {
+    STATE_FLUSH,
+    STATE_INVALIDATE_CACHE,
     STATE_TRIM_IMAGE,
     STATE_GROW_OBJECT_MAP,
     STATE_UPDATE_HEADER,
@@ -66,6 +76,8 @@ protected:
 
   virtual bool should_complete(int r);
 
+  void send_flush();
+  void send_invalidate_cache();
   void send_trim_image();
   void send_grow_object_map();
   bool send_shrink_object_map();
