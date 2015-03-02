@@ -17,7 +17,7 @@ License: LGPL2 or later
 
 Files: src/os/btrfs_ioctl.h
 Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
-License: GPL2
+License: GPL2 (see COPYING-GPL2)
 
 Files: src/include/ceph_hash.cc
 Copyright: None

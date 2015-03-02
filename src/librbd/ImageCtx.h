@@ -190,6 +190,8 @@ namespace librbd {
     int flush_cache();
     void shutdown_cache();
     int invalidate_cache();
+    void invalidate_cache(Context *on_finish);
+    void invalidate_cache_completion(int r, Context *on_finish);
     void clear_nonexistence_cache();
     int register_watch();
     void unregister_watch();
