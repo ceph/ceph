@@ -233,11 +233,15 @@ test_locking() {
     rbd lock list test1 | grep ' 2 '
     rbd lock add test1 id2 --shared tag
     rbd lock list test1 | grep ' 3 '
-    LOCKER=$(rbd lock list test1 | tail -n 1 | awk '{print $1;}')
-    ID=$(rbd lock list test1 | tail -n 1 | awk '{print $2;}')
-    rbd lock remove test1 $ID $LOCKER
-    # locks don't prevent you from removing an image,
-    # just from taking a lock
+    rbd lock list test1 | tail -n 1 | awk '{print $2, $1;}' | xargs rbd lock remove test1
+    if rbd info test1 | grep -qE "features:.*exclusive"
+    then
+      # new locking functionality requires all locks to be released
+      while [ -n "$(rbd lock list test1)" ]
+      do
+        rbd lock list test1 | tail -n 1 | awk '{print $2, $1;}' | xargs rbd lock remove test1
+      done
+    fi
     rbd rm test1
 }
 
