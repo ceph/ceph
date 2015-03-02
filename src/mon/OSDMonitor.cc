@@ -106,7 +106,7 @@ void OSDMonitor::create_initial()
     newmap.set_fsid(mon->monmap->fsid);
   } else {
     newmap.build_simple(g_ceph_context, 0, mon->monmap->fsid, 0,
-			g_conf->osd_pg_bits, g_conf->osd_pgp_bits);
+			g_conf->osd_pool_default_pg_num, g_conf->osd_pool_default_pgp_num);
   }
   newmap.set_epoch(1);
   newmap.created = newmap.modified = ceph_clock_now(g_ceph_context);
