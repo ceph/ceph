@@ -1,9 +1,0 @@
-/scripts/gtest-config
-/build-aux/config.h
-/build-aux/config.h.in
-/build-aux/test-driver
-/lib/
-/m4/libtool.m4
-/m4/ltoptions.m4
-/m4/ltversion.m4
-/m4/lt~obsolete.m4
