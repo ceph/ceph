@@ -251,6 +251,7 @@ OPTION(mon_osd_min_down_reporters, OPT_INT, 1)   // number of OSDs who need to r
 OPTION(mon_osd_min_down_reports, OPT_INT, 3)     // number of times a down OSD must be reported for it to count
 OPTION(mon_osd_force_trim_to, OPT_INT, 0)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous, use with care)
 OPTION(mon_mds_force_trim_to, OPT_INT, 0)   // force mon to trim mdsmaps to this point (dangerous, use with care)
+OPTION(crushtool, OPT_STR, "crushtool")
 
 // dump transactions
 OPTION(mon_debug_dump_transactions, OPT_BOOL, false)
