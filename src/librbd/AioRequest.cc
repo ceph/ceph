@@ -446,17 +446,18 @@ namespace librbd {
         boost::optional<uint8_t> current_state;
         pre_object_map_update(&new_state);
 
-        m_state = LIBRBD_AIO_WRITE_PRE; 
+        m_state = LIBRBD_AIO_WRITE_PRE;
         FunctionContext *ctx = new FunctionContext(
           boost::bind(&AioRequest::complete, this, _1));
         if (!m_ictx->object_map.aio_update(m_object_no, new_state,
 					    current_state, ctx)) {
 	  // no object map update required
+	  delete ctx;
 	  return false;
 	}
       }
     }
-    
+
     if (lost_exclusive_lock) {
       complete(-ERESTART);
     }
@@ -485,10 +486,11 @@ namespace librbd {
     if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_NONEXISTENT,
 					OBJECT_PENDING, ctx)) {
       // no object map update required
+      delete ctx;
       return true;
     }
-    return false;  
-  } 
+    return false;
+  }
 
   void AbstractWrite::send_write() {
     ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "
