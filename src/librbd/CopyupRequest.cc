@@ -94,10 +94,11 @@ namespace librbd {
     int r = aio_read(m_ictx->parent, m_image_extents, NULL, &m_copyup_data,
 		     comp, 0);
     if (r < 0) {
+      lderr(m_ictx->cct) << __func__ << " " << this
+                         << ": error reading from parent: "
+                         << cpp_strerror(r) << dendl;
       comp->release();
-
-      remove_from_list();
-      complete_requests(r);
+      complete(r);
     }
   }
 
