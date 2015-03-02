@@ -186,9 +186,10 @@ namespace librbd {
 	return true;
       } else {
 	m_state = STATE_OBJECT_MAP;
+        Context *ctx = create_callback_context();
         if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_EXISTS,
-					    boost::optional<uint8_t>(),
-					    create_callback_context())) {
+					   boost::optional<uint8_t>(), ctx)) {
+          delete ctx;
 	  copyup = true;
 	}
       }
