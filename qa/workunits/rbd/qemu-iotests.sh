@@ -8,19 +8,17 @@
 # This will only work with particular qemu versions, like 1.0. Later
 # versions of qemu include qemu-iotests directly in the qemu
 # repository.
-codevers=`lsb_release -sc`
-iotests=qemu-iotests
 testlist='001 002 003 004 005 008 009 010 011 021 025'
 
 # See if we need to use the iotests suites in qemu (newer version).
-# Right now, trusty is the only version that uses this.
-for chkcode in "trusty"
-do
-    if [ "$chkcode" = "$codevers" ]
-    then
+case `lsb_release -sc` in
+    trusty|Maipo)
         iotests=qemu/tests/qemu-iotests
-    fi
-done
+        ;;
+    *)
+        iotests=qemu-iotests
+        ;;
+esac
 
 if [ "$iotests" = "qemu/tests/qemu-iotests" ]
 then
