@@ -2132,6 +2132,8 @@ int main(int argc, char **argv)
 
   vector<const char *> ceph_options;
   env_to_vec(ceph_options);
+  vector<string> ceph_option_strings = po::collect_unrecognized(
+    parsed.options, po::include_positional);
   ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
