@@ -355,10 +355,10 @@ void CrushTester::write_integer_indexed_scalar_data_string(vector<string> &dst, 
   dst.push_back( data_buffer.str() );
 }
 
-int CrushTester::test_with_crushtool()
+int CrushTester::test_with_crushtool(const string& crushtool)
 {
   vector<const char *> cmd_args;
-  cmd_args.push_back("crushtool");
+  cmd_args.push_back(crushtool.c_str());
   cmd_args.push_back("-i");
   cmd_args.push_back("-");
   cmd_args.push_back("--test");
@@ -414,7 +414,7 @@ int CrushTester::test_with_crushtool()
   }
 
   if (r == ENOENT) {
-    err << "unable to find 'crushtool' to test the map";
+    err << "unable to find " << cmd_args << " to test the map";
     return -ENOENT;
   }
 
