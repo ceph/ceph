@@ -124,11 +124,16 @@ def ship_apache_configs(ctx, config, role_endpoints):
         fcgi_config = os.path.join(template_dir,
                                    'mod_proxy_fcgi.tcp.conf.template')
         if ctx.rgw.use_fastcgi:
+            log.info("Apache is configured to use mod_fastcgi")
             fcgi_config = os.path.join(template_dir,
                                        'mod_fastcgi.conf.template')
         elif _use_uds_with_fcgi(remote):
+            log.info("Apache is configured to use mod_proxy_fcgi with UDS")
             fcgi_config = os.path.join(template_dir,
                                        'mod_proxy_fcgi.uds.conf.template')
+        else:
+            log.info("Apache is configured to use mod_proxy_fcgi with TCP")
+
         with file(fcgi_config, 'rb') as f:
             fcgi_config = f.read()
         with file(src, 'rb') as f:
