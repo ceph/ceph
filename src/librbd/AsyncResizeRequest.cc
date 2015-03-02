@@ -37,6 +37,16 @@ bool AsyncResizeRequest::should_complete(int r)
   }
 
   switch (m_state) {
+  case STATE_FLUSH:
+    ldout(cct, 5) << "FLUSH" << dendl;
+    send_invalidate_cache();
+    break;
+
+  case STATE_INVALIDATE_CACHE:
+    ldout(cct, 5) << "INVALIDATE_CACHE" << dendl;
+    send_trim_image();
+    break;
+
   case STATE_TRIM_IMAGE:
     ldout(cct, 5) << "TRIM_IMAGE" << dendl;
     send_update_header();
@@ -74,25 +84,25 @@ void AsyncResizeRequest::send() {
   CephContext *cct = m_image_ctx.cct;
   if (m_original_size == m_new_size) {
     ldout(cct, 2) << this << " no change in size (" << m_original_size
-		  << " -> " << m_new_size << ")" << dendl; 
+		  << " -> " << m_new_size << ")" << dendl;
     m_state = STATE_FINISHED;
     complete(0);
   } else if (m_new_size > m_original_size) {
     ldout(cct, 2) << this << " expanding image (" << m_original_size
-		  << " -> " << m_new_size << ")" << dendl; 
+		  << " -> " << m_new_size << ")" << dendl;
     send_grow_object_map();
   } else {
     ldout(cct, 2) << this << " shrinking image (" << m_original_size
-		  << " -> " << m_new_size << ")" << dendl; 
-    send_trim_image();
+		  << " -> " << m_new_size << ")" << dendl;
+    send_flush();
   }
 }
 
-void AsyncResizeRequest::send_trim_image() {
-  ldout(m_image_ctx.cct, 5) << this << " send_trim_image: "
+void AsyncResizeRequest::send_flush() {
+  ldout(m_image_ctx.cct, 5) << this << " send_flush: "
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
-  m_state = STATE_TRIM_IMAGE;
+  m_state = STATE_FLUSH;
 
   {
     // update in-memory size to clip concurrent IO operations
@@ -106,6 +116,28 @@ void AsyncResizeRequest::send_trim_image() {
       m_image_ctx.parent_md.overlap = m_new_parent_overlap;
     }
   }
+
+  // with clipping adjusted, ensure that write / copy-on-read operations won't
+  // (re-)create objects that we just removed
+  m_image_ctx.flush_async_operations(create_callback_context());
+}
+
+void AsyncResizeRequest::send_invalidate_cache() {
+  ldout(m_image_ctx.cct, 5) << this << " send_invalidate_cache: "
+                            << " original_size=" << m_original_size
+                            << " new_size=" << m_new_size << dendl;
+  m_state = STATE_INVALIDATE_CACHE;
+
+  // need to invalidate since we're deleting objects, and
+  // ObjectCacher doesn't track non-existent objects
+  m_image_ctx.invalidate_cache(create_callback_context());
+}
+
+void AsyncResizeRequest::send_trim_image() {
+  ldout(m_image_ctx.cct, 5) << this << " send_trim_image: "
+                            << " original_size=" << m_original_size
+                            << " new_size=" << m_new_size << dendl;
+  m_state = STATE_TRIM_IMAGE;
 
   AsyncTrimRequest *req = new AsyncTrimRequest(m_image_ctx,
 					       create_callback_context(),

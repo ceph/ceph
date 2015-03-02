@@ -14,6 +14,8 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 
+#include <boost/bind.hpp>
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ImageCtx: "
@@ -628,34 +630,49 @@ namespace librbd {
   }
 
   void ImageCtx::shutdown_cache() {
+    flush_async_operations();
     invalidate_cache();
     object_cacher->stop();
   }
 
   int ImageCtx::invalidate_cache() {
-    if (!object_cacher)
-      return 0;
-    flush_async_operations();
+    C_SaferCond ctx;
+    invalidate_cache(&ctx);
+    return ctx.wait();
+  }
+
+  void ImageCtx::invalidate_cache(Context *on_finish) {
+    if (object_cacher == NULL) {
+      on_finish->complete(0);
+      return;
+    }
+
     cache_lock.Lock();
     object_cacher->release_set(object_set);
     cache_lock.Unlock();
-    int r = flush_cache();
+
+    flush_cache_aio(new FunctionContext(boost::bind(
+      &ImageCtx::invalidate_cache_completion, this, _1, on_finish)));
+  }
+
+  void ImageCtx::invalidate_cache_completion(int r, Context *on_finish) {
+    assert(cache_lock.is_locked());
     if (r == -EBLACKLISTED) {
-      Mutex::Locker l(cache_lock);
       lderr(cct) << "Blacklisted during flush!  Purging cache..." << dendl;
       object_cacher->purge_set(object_set);
-    } else if (r) {
+    } else if (r != 0) {
       lderr(cct) << "flush_cache returned " << r << dendl;
     }
-    cache_lock.Lock();
+
     loff_t unclean = object_cacher->release_set(object_set);
-    cache_lock.Unlock();
-    if (unclean) {
+    if (unclean == 0) {
+      r = 0;
+    } else {
       lderr(cct) << "could not release all objects from cache: "
                  << unclean << " bytes remain" << dendl;
-      return -EBUSY;
+      r = -EBUSY;
     }
-    return r;
+    on_finish->complete(r);
   }
 
   void ImageCtx::clear_nonexistence_cache() {
@@ -718,21 +735,27 @@ namespace librbd {
   }
 
   void ImageCtx::flush_async_operations() {
-    C_SaferCond *ctx = new C_SaferCond();
-    flush_async_operations(ctx);
-    ctx->wait();
+    C_SaferCond ctx;
+    flush_async_operations(&ctx);
+    ctx.wait();
   }
 
   void ImageCtx::flush_async_operations(Context *on_finish) {
-    Mutex::Locker l(async_ops_lock);
-    if (async_ops.empty()) {
-      on_finish->complete(0);
-      return;
+    bool complete = false;
+    {
+      Mutex::Locker l(async_ops_lock);
+      if (async_ops.empty()) {
+        complete = true;
+      } else {
+        ldout(cct, 20) << "flush async operations: " << on_finish << " "
+                       << "count=" << async_ops.size() << dendl;
+        async_ops.front()->add_flush_context(on_finish);
+      }
     }
 
-    ldout(cct, 20) << "flush async operations: " << on_finish << " "
-                   << "count=" << async_ops.size() << dendl;
-    async_ops.front()->add_flush_context(on_finish);
+    if (complete) {
+      on_finish->complete(0);
+    }
   }
 
   void ImageCtx::cancel_async_requests() {
