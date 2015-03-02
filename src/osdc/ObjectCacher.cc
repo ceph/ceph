@@ -1142,6 +1142,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 
     if (!missing.empty() || !rx.empty()) {
       // read missing
+      map<loff_t, BufferHead*>::iterator last = missing.end();
       for (map<loff_t, BufferHead*>::iterator bh_it = missing.begin();
            bh_it != missing.end();
            ++bh_it) {
@@ -1162,14 +1163,19 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  delete bh_it->second;
 	} else {
 	  bh_read(bh_it->second, rd->fadvise_flags);
-	  if (success && onfinish) {
-	    ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
-			   << " off " << bh_it->first << dendl;
-	    bh_it->second->waitfor_read[bh_it->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
-	  }
+	  if ((success && onfinish) || last != missing.end())
+	    last = bh_it;
 	}
         bytes_not_in_cache += bh_it->second->length();
 	success = false;
+      }
+
+      //add wait in last bh avoid wakeup early. Because read is order
+      if (last != missing.end()) {
+	ldout(cct, 10) << "readx missed, waiting on " << *last->second
+	  << " off " << last->first << dendl;
+	last->second->waitfor_read[last->first].push_back( new C_RetryRead(this, rd, oset, onfinish) );
+
       }
 
       // bump rx
