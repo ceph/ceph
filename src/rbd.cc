@@ -171,61 +171,20 @@ void usage()
 "  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
 
-static string feature_str(uint64_t feature)
-{
-  switch (feature) {
-  case RBD_FEATURE_LAYERING:
-    return "layering";
-  case RBD_FEATURE_STRIPINGV2:
-    return "striping";
-  case RBD_FEATURE_EXCLUSIVE_LOCK:
-    return "exclusive";
-  case RBD_FEATURE_OBJECT_MAP:
-    return "object map";
-  default:
-    return "";
-  }
-}
-
-static string features_str(uint64_t features)
-{
-  string s = "";
-
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
-       feature <<= 1) {
-    if (feature & features) {
-      if (s.size())
-	s += ", ";
-      s += feature_str(feature);
-    }
-  }
-  return s;
-}
-
-static void format_features(Formatter *f, uint64_t features)
-{
-  f->open_array_section("features");
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
-       feature <<= 1) {
-    f->dump_string("feature", feature_str(feature));
-  }
-  f->close_section();
-}
-
-static void format_flags(Formatter *f, uint64_t flags)
+static void format_bitmask(Formatter *f, const std::string &name,
+                           const std::map<uint64_t, std::string>& mapping,
+                           uint64_t bitmask)
 {
   int count = 0;
-  std::map<uint64_t, std::string> flag_mapping = boost::assign::map_list_of(
-    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
-
+  std::string group_name(name + "s");
   if (f == NULL) {
-    cout << "\tflags: ";
+    cout << "\t" << group_name << ": ";
   } else {
-    f->open_array_section("flags");
+    f->open_array_section(group_name.c_str());
   }
-  for (std::map<uint64_t, std::string>::iterator it = flag_mapping.begin();
-       it != flag_mapping.end(); ++it) {
-    if ((it->first & flags) == 0) {
+  for (std::map<uint64_t, std::string>::const_iterator it = mapping.begin();
+       it != mapping.end(); ++it) {
+    if ((it->first & bitmask) == 0) {
       continue;
     }
 
@@ -235,7 +194,7 @@ static void format_flags(Formatter *f, uint64_t flags)
       }
       cout << it->second;
     } else {
-      f->dump_string("flag", it->second);
+      f->dump_string(name.c_str(), it->second);
     }
   }
   if (f == NULL) {
@@ -243,6 +202,23 @@ static void format_flags(Formatter *f, uint64_t flags)
   } else {
     f->close_section();
   }
+}
+
+static void format_features(Formatter *f, uint64_t features)
+{
+  std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
+    RBD_FEATURE_LAYERING, "layering")(
+    RBD_FEATURE_STRIPINGV2, "striping")(
+    RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive")(
+    RBD_FEATURE_OBJECT_MAP, "object map");
+  format_bitmask(f, "feature", mapping, features);
+}
+
+static void format_flags(Formatter *f, uint64_t flags)
+{
+  std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
+    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
+  format_bitmask(f, "flag", mapping, flags);
 }
 
 struct MyProgressContext : public librbd::ProgressContext {
@@ -590,10 +566,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   }
 
   if (!old_format) {
-    if (f)
-      format_features(f, features);
-    else
-      cout << "\tfeatures: " << features_str(features) << std::endl;
+    format_features(f, features);
     format_flags(f, flags);
   }
 
