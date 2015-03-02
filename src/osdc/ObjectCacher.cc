@@ -886,6 +886,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       }
     }
 
+    list <BufferHead*> hit;
     // apply to bh's!
     for (map<loff_t, BufferHead*>::iterator p = ob->data_lower_bound(start);
          p != ob->data.end();
@@ -917,6 +918,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
       if (r >= 0) {
 	// ok!  mark bh clean and error-free
 	mark_clean(bh);
+	hit.push_back(bh);
 	ldout(cct, 10) << "bh_write_commit clean " << *bh << dendl;
       } else {
 	mark_dirty(bh);
@@ -924,6 +926,13 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid, loff_t start,
 		       << *bh << " r = " << r << " " << cpp_strerror(-r)
 		       << dendl;
       }
+    }
+
+    for (list<BufferHead*>::iterator bh = hit.begin();
+	bh != hit.end();
+	++bh) {
+      assert(*bh);
+      ob->try_merge_bh(*bh);
     }
 
     // update last_commit.
