@@ -565,7 +565,6 @@ fi
 %{_bindir}/ceph-mon
 %{_bindir}/ceph-mds
 %{_bindir}/ceph-osd
-%{_bindir}/ceph-rbdnamer
 %{_bindir}/librados-config
 %{_bindir}/ceph-client-debug
 %{_bindir}/cephfs-journal-tool
@@ -622,7 +621,6 @@ fi
 %{_mandir}/man8/monmaptool.8*
 %{_mandir}/man8/cephfs.8*
 %{_mandir}/man8/mount.ceph.8*
-%{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-debugpack.8*
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/librados-config.8*
@@ -643,6 +641,7 @@ fi
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
 %{_bindir}/ceph-dencoder
+%{_bindir}/ceph-rbdnamer
 %{_bindir}/ceph-syn
 %{_bindir}/ceph-crush-location
 %{_bindir}/rados
@@ -652,6 +651,7 @@ fi
 %{_mandir}/man8/ceph-authtool.8*
 %{_mandir}/man8/ceph-conf.8*
 %{_mandir}/man8/ceph-dencoder.8*
+%{_mandir}/man8/ceph-rbdnamer.8*
 %{_mandir}/man8/ceph-syn.8*
 %{_mandir}/man8/ceph-post-file.8*
 %{_mandir}/man8/ceph.8*
@@ -667,6 +667,11 @@ fi
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_initrddir}/rbdmap
 %{python_sitelib}/ceph_argparse.py*
+%if 0%{?rhel} >= 7 || 0%{?fedora}
+/usr/lib/udev/rules.d/50-rbd.rules
+%else
+/lib/udev/rules.d/50-rbd.rules
+%endif
 
 %postun -n ceph-common
 # Package removal cleanup
@@ -791,11 +796,6 @@ fi
 %files -n librbd1
 %defattr(-,root,root,-)
 %{_libdir}/librbd.so.*
-%if 0%{?rhel} >= 7 || 0%{?fedora}
-/usr/lib/udev/rules.d/50-rbd.rules
-%else
-/lib/udev/rules.d/50-rbd.rules
-%endif
 
 %post -n librbd1
 /sbin/ldconfig
