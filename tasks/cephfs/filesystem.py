@@ -192,17 +192,27 @@ class Filesystem(object):
         else:
             return self.mds_ids[0]
 
-    def _one_or_all(self, mds_id, cb):
+    def _one_or_all(self, mds_id, cb, in_parallel=True):
         """
-        Call a callback for a single named MDS, or for all
+        Call a callback for a single named MDS, or for all.
+
+        Note that the parallelism here isn't for performance, it's to avoid being overly kind
+        to the cluster by waiting a graceful ssh-latency of time between doing things, and to
+        avoid being overly kind by executing them in a particular order.  However, some actions
+        don't cope with being done in parallel, so it's optional (`in_parallel`)
 
         :param mds_id: MDS daemon name, or None
         :param cb: Callback taking single argument of MDS daemon name
+        :param in_parallel: whether to invoke callbacks concurrently (else one after the other)
         """
         if mds_id is None:
-            with parallel() as p:
+            if in_parallel:
+                with parallel() as p:
+                    for mds_id in self.mds_ids:
+                        p.spawn(cb, mds_id)
+            else:
                 for mds_id in self.mds_ids:
-                    p.spawn(cb, mds_id)
+                    cb(mds_id)
         else:
             cb(mds_id)
 
@@ -347,7 +357,7 @@ class Filesystem(object):
                 args=["sudo", "iptables", da_flag, "INPUT", "-p", "tcp", "--dport", port_str, "-j", "REJECT", "-m",
                       "comment", "--comment", "teuthology"])
 
-        self._one_or_all(mds_id, set_block)
+        self._one_or_all(mds_id, set_block, in_parallel=False)
 
     def clear_firewall(self):
         clear_firewall(self._ctx)
