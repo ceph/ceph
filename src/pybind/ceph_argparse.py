@@ -198,7 +198,7 @@ class CephString(CephArgtype):
             re.compile(goodchars)
         except:
             raise ValueError('CephString(): "{0}" is not a valid RE'.
-                format(goodchars))
+                             format(goodchars))
         self.goodchars = goodchars
         self.goodset = frozenset(
             [c for c in printable if re.match(goodchars, c)]
@@ -208,7 +208,7 @@ class CephString(CephArgtype):
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
             raise ArgumentFormat("invalid chars {0} in {1}".
-                format(''.join(sset - self.goodset), s))
+                                 format(''.join(sset - self.goodset), s))
         self.val = s
 
     def __str__(self):
@@ -583,7 +583,7 @@ class argdesc(object):
 
     def __str__(self):
         if ((self.t == CephChoices and len(self.instance.strings) == 1)
-            or (self.t == CephPrefix)):
+           or (self.t == CephPrefix)):
             s = str(self.instance)
         else:
             s = '{0}({1})'.format(self.name, str(self.instance))
@@ -869,7 +869,7 @@ def validate(args, signature, partial=False):
                         return d
                     raise ArgumentNumber(
                         'saw {0} of {1}, expected at least 1'.
-                         format(desc.numseen, desc)
+                        format(desc.numseen, desc)
                     )
                 elif not desc.N and desc.numseen < desc.n:
                     # wanted n, got too few
@@ -948,15 +948,17 @@ def validate_command(sigdict, args, verbose=False):
             if (matched > best_match_cnt):
                 if verbose:
                     print >> sys.stderr, \
-                        "better match: {0} > {1}: {2}:{3} ".format(matched,
-                                      best_match_cnt, cmdtag, concise_sig(sig))
+                        "better match: {0} > {1}: {2}:{3} ".\
+                        format(matched, best_match_cnt, cmdtag,
+                               concise_sig(sig))
                 best_match_cnt = matched
                 bestcmds = [{cmdtag: cmd}]
             elif matched == best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
-                        "equal match: {0} > {1}: {2}:{3} ".format(matched,
-                                      best_match_cnt, cmdtag, concise_sig(sig))
+                        "equal match: {0} > {1}: {2}:{3} ".\
+                        format(matched, best_match_cnt, cmdtag,
+                               concise_sig(sig))
                 bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
@@ -987,7 +989,7 @@ def validate_command(sigdict, args, verbose=False):
                     # the next one matches completely.  Whine, but pass.
                     if verbose:
                         print >> sys.stderr, 'Not enough args supplied for ', \
-                                              concise_sig(sig)
+                            concise_sig(sig)
                 except ArgumentError as e:
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
