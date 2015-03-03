@@ -157,7 +157,7 @@ public:
     ret = 0;
  }
 
-  virtual bool prefetch_data() { return true; }
+  virtual bool prefetch_data() { return get_data; }
 
   void set_get_data(bool get_data) {
     this->get_data = get_data;
