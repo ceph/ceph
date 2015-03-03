@@ -43,7 +43,13 @@ stop_osd() {
         osd_index=$1
         pidfile="out/osd.$osd_index.pid"
         if [ -e $pidfile ]; then
-                kill `cat $pidfile` && return 0
+                if kill `cat $pidfile` ; then
+                        poll_cmd "eval test -e $pidfile ; echo \$?" "1" 1 30
+                        [ $? -eq 1 ] && return 0
+                        echo "ceph-osd process did not terminate correctly"
+                else
+                        echo "kill `cat $pidfile` failed"
+                fi
         else
                 echo "ceph-osd process $osd_index is not running"
         fi
