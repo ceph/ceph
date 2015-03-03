@@ -3453,7 +3453,7 @@ public:
       client_t whoami = client->get_nodeid();
       lderr(client->cct) << "tried to remount (to trim kernel dentries) and got error "
 			 << r << dendl;
-      if (client->require_remount) {
+      if (client->require_remount && !client->unmounting) {
 	assert(0 == "failed to remount for kernel dentry trimming");
       }
     }
