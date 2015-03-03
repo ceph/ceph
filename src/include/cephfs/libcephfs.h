@@ -33,6 +33,13 @@ typedef off_t off64_t;
 extern "C" {
 #endif
 
+#define LIBCEPHFS_VER_MAJOR 0
+#define LIBCEPHFS_VER_MINOR 94
+#define LIBCEPHFS_VER_EXTRA 0
+
+#define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+#define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
+
 /*
  * On FreeBSD and Apple the offset is 64 bit, but libc doesn't announce it in
  * the way glibc does.
