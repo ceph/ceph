@@ -149,3 +149,8 @@ class TestFakeNamespace(TestYamlConfig):
         del conf_obj.foo
         with pytest.raises(AttributeError):
             conf_obj.foo
+
+    def test_to_str(self):
+        in_str = "foo: bar"
+        conf_obj = self.test_class.from_str(in_str)
+        assert conf_obj.to_str() == "{'foo': 'bar'}"
