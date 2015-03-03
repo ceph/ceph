@@ -17,11 +17,11 @@ ANONYMOUS_AUID = 0xffffffffffffffff
 ADMIN_AUID = 0
 LIBRADOS_ALL_NSPACES = '\001'
 
-LIBRADOS_OP_FLAG_FADVISE_RANDOM	    = 0x4
+LIBRADOS_OP_FLAG_FADVISE_RANDOM = 0x4
 LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8
-LIBRADOS_OP_FLAG_FADVISE_WILLNEED   = 0x10
-LIBRADOS_OP_FLAG_FADVISE_DONTNEED   = 0x20
-LIBRADOS_OP_FLAG_FADVISE_NOCACHE    = 0x40
+LIBRADOS_OP_FLAG_FADVISE_WILLNEED = 0x10
+LIBRADOS_OP_FLAG_FADVISE_DONTNEED = 0x20
+LIBRADOS_OP_FLAG_FADVISE_NOCACHE = 0x40
 
 
 class Error(Exception):
@@ -231,7 +231,7 @@ Rados object in state %s." % self.state)
 
     def __init__(self, rados_id=None, name=None, clustername=None,
                  conf_defaults=None, conffile=None, conf=None, flags=0):
-        library_path  = find_library('rados')
+        library_path = find_library('rados')
         # maybe find_library can not find it correctly on all platforms,
         # so fall back to librados.so.2 in such case.
         self.librados = CDLL(library_path if library_path is not None else 'librados.so.2')
@@ -252,7 +252,7 @@ Rados object in state %s." % self.state)
         if rados_id and name:
             raise Error("Rados(): can't supply both rados_id and name")
         elif rados_id:
-            name = 'client.' +  rados_id
+            name = 'client.' + rados_id
         elif name is None:
             name = 'client.admin'
         if clustername is None:
@@ -413,29 +413,29 @@ Rados object in state %s." % self.state)
     def ping_monitor(self, mon_id):
         """
         Ping a monitor to assess liveness
-        
+
         May be used as a simply way to assess liveness, or to obtain
         information about the monitor in a simple way even in the
         absence of quorum.
-        
+
         :param mon_id: the ID portion of the monitor's name (i.e., mon.<ID>)
         :type mon_id: str
         :returns: the string reply from the monitor
         """
-        
+
         self.require_state("configuring", "connected")
-        
+
         outstrp = pointer(pointer(c_char()))
         outstrlen = c_long()
-        
+
         ret = run_in_thread(self.librados.rados_ping_monitor,
                             (self.cluster, c_char_p(mon_id),
                              outstrp, byref(outstrlen)))
-        
+
         my_outstr = outstrp.contents[:(outstrlen.value)]
         if outstrlen.value:
             run_in_thread(self.librados.rados_buffer_free, (outstrp.contents,))
-        
+
         if ret != 0:
             raise make_ex(ret, "error calling ping_monitor")
         return my_outstr
@@ -788,7 +788,7 @@ Rados object in state %s." % self.state)
         self.require_state("connected")
         return run_in_thread(self.librados.rados_wait_for_latest_osdmap, (self.cluster,))
 
-    def blacklist_add(self, client_address, expire_seconds = 0):
+    def blacklist_add(self, client_address, expire_seconds=0):
         """
         Blacklist a client from the OSDs
 
@@ -1255,6 +1255,7 @@ class Ioctx(object):
         :returns: completion object
         """
         buf = create_string_buffer(length)
+
         def oncomplete_(completion_v):
             return_value = completion_v.get_return_value()
             return oncomplete(completion_v,
@@ -1565,7 +1566,7 @@ returned %d, but should return zero on success." % (self.name, ret))
                 "num_rd": stats.num_rd,
                 "num_rd_kb": stats.num_rd_kb,
                 "num_wr": stats.num_wr,
-                "num_wr_kb": stats.num_wr_kb }
+                "num_wr_kb": stats.num_wr_kb}
 
     def remove_object(self, key):
         """
@@ -1995,7 +1996,7 @@ class Object(object):
 
     @set_object_locator
     @set_object_namespace
-    def read(self, length = 1024*1024):
+    def read(self, length=1024 * 1024):
         self.require_object_exists()
         ret = self.ioctx.read(self.key, length, self.offset)
         self.offset += len(ret)
@@ -2093,15 +2094,15 @@ class MonitorLog(object):
         self.level = level
         self.callback = callback
         self.arg = arg
-        callback_factory = CFUNCTYPE(c_int,    # return type (really void)
-                                     c_void_p, # arg
-                                     c_char_p, # line
-                                     c_char_p, # who
-                                     c_uint64, # timestamp_sec
-                                     c_uint64, # timestamp_nsec
-                                     c_ulong,  # seq
-                                     c_char_p, # level
-                                     c_char_p) # msg
+        callback_factory = CFUNCTYPE(c_int,     # return type (really void)
+                                     c_void_p,  # arg
+                                     c_char_p,  # line
+                                     c_char_p,  # who
+                                     c_uint64,  # timestamp_sec
+                                     c_uint64,  # timestamp_nsec
+                                     c_ulong,   # seq
+                                     c_char_p,  # level
+                                     c_char_p)  # msg
         self.internal_callback = callback_factory(self.monitor_log_callback)
 
         r = run_in_thread(cluster.librados.rados_monitor_log,
