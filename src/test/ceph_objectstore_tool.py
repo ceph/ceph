@@ -1,7 +1,25 @@
-#! /usr/bin/python
+#!/usr/bin/env python
 
 from subprocess import call
-from subprocess import check_output
+try:
+    from subprocess import check_output
+except ImportError:
+    def check_output(*popenargs, **kwargs):
+        import subprocess
+        # backported from python 2.7 stdlib
+        process = subprocess.Popen(
+           stdout=subprocess.PIPE, *popenargs, **kwargs)
+        output, unused_err = process.communicate()
+        retcode = process.poll()
+        if retcode:
+            cmd = kwargs.get("args")
+            if cmd is None:
+                cmd = popenargs[0]
+            error = subprocess.CalledProcessError(retcode, cmd)
+            error.output = output
+            raise error
+        return output
+
 import subprocess
 import os
 import time
@@ -16,7 +34,7 @@ logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
 
 def wait_for_health():
     print "Wait for health_ok...",
-    while call("./ceph health 2> /dev/null | grep -v HEALTH_OK > /dev/null", shell=True) == 0:
+    while call("./ceph health 2> /dev/null | grep -v 'HEALTH_OK\|HEALTH_WARN' > /dev/null", shell=True) == 0:
         time.sleep(5)
     print "DONE"
 
@@ -109,12 +127,16 @@ def cat_file(level, filename):
 def vstart(new):
     print "vstarting....",
     OPT = new and "-n" or ""
-    call("OSD=4 ./vstart.sh -l {opt} -d > /dev/null 2>&1".format(opt=OPT), shell=True)
+    call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
     print "DONE"
 
-
-def test_failure(cmd, errmsg):
-    ttyfd = open("/dev/tty", "rw")
+def test_failure_tty(cmd, errmsg):
+    try:
+        ttyfd = open("/dev/tty", "rw")
+    except Exception, e:
+        logging.info(str(e))
+        logging.info("SKIP " + cmd)
+        return 0
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     tmpfd = open(TMPFILE, "w")
 
@@ -134,6 +156,19 @@ def test_failure(cmd, errmsg):
         logging.error("Bad message to stderr \"" + line + "\"")
         return 1
 
+def test_failure(cmd, errmsg):
+    logging.debug(cmd)
+    try:
+        out = check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        logging.error("Should have failed, but got exit 0")
+        return 1
+    except subprocess.CalledProcessError, e:
+        if errmsg in e.output:
+            logging.info("Correctly failed with message \"" + errmsg + "\"")
+            return 0
+        else:
+            logging.error("Bad message to stderr \"" + e.output + "\"")
+            return 1
 
 def get_nspace(num):
     if num == 0:
@@ -168,34 +203,53 @@ def verify(DATADIR, POOL, NAME_PREFIX):
             pass
     return ERRORS
 
+CEPH_DIR = "ceph_objectstore_tool_dir"
+CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
-def main():
+def kill_daemons():
+    call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
+
+def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
-    OSDDIR = "dev"
+    call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
+    os.environ["CEPH_DIR"] = CEPH_DIR;
+    OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
     EC_POOL = "ec_pool"
     EC_NAME = "ECobject"
-    NUM_REP_OBJECTS = 800
-    NUM_EC_OBJECTS = 12
-    NUM_NSPACES = 4
-    # Larger data sets for first object per namespace
-    DATALINECOUNT = 50000
-    # Number of objects to do xattr/omap testing on
-    ATTR_OBJS = 10
+    if len(argv) > 0 and argv[0] == 'large':
+        PG_COUNT = 12
+        NUM_REP_OBJECTS = 800
+        NUM_EC_OBJECTS = 12
+        NUM_NSPACES = 4
+        # Larger data sets for first object per namespace
+        DATALINECOUNT = 50000
+        # Number of objects to do xattr/omap testing on
+        ATTR_OBJS = 10
+    else:
+        PG_COUNT = 4
+        NUM_REP_OBJECTS = 2
+        NUM_EC_OBJECTS = 2
+        NUM_NSPACES = 2
+        # Larger data sets for first object per namespace
+        DATALINECOUNT = 10
+        # Number of objects to do xattr/omap testing on
+        ATTR_OBJS = 2
     ERRORS = 0
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = "./ceph_objectstore_tool --data-path dev/{osd} --journal-path dev/{osd}.journal "
+    CFSD_PREFIX = "./ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --journal-path " + OSDDIR + "/{osd}.journal "
     PROFNAME = "testecprofile"
 
+    os.environ['CEPH_CONF'] = CEPH_CONF
     vstart(new=True)
     wait_for_health()
 
-    cmd = "./ceph osd pool create {pool} 12 12 replicated".format(pool=REP_POOL)
+    cmd = "./ceph osd pool create {pool} {pg} {pg} replicated".format(pool=REP_POOL, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     REPID = get_pool_id(REP_POOL, nullfd)
@@ -208,7 +262,7 @@ def main():
     cmd = "./ceph osd erasure-code-profile get {prof}".format(prof=PROFNAME)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
-    cmd = "./ceph osd pool create {pool} 12 12 erasure {prof}".format(pool=EC_POOL, prof=PROFNAME)
+    cmd = "./ceph osd pool create {pool} {pg} {pg} erasure {prof}".format(pool=EC_POOL, prof=PROFNAME, pg=PG_COUNT)
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
     ECID = get_pool_id(EC_POOL, nullfd)
@@ -253,11 +307,11 @@ def main():
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
                 logging.critical("Replicated pool object creation failed with {ret}".format(ret=ret))
-                sys.exit(1)
+                return 1
 
             db[nspace][NAME] = {}
 
-            if i < ATTR_OBJS:
+            if i < ATTR_OBJS + 1:
                 keys = range(i)
             else:
                 keys = range(0)
@@ -276,7 +330,7 @@ def main():
                 db[nspace][NAME]["xattr"][mykey] = myval
 
             # Create omap header in all objects but REPobject1
-            if i < ATTR_OBJS and i != 1:
+            if i < ATTR_OBJS + 1 and i != 1:
                 myhdr = "hdr{i}".format(i=i)
                 cmd = "./rados -p {pool} -N '{nspace}' setomapheader {name} {hdr}".format(pool=REP_POOL, name=NAME, hdr=myhdr, nspace=nspace)
                 logging.debug(cmd)
@@ -330,12 +384,12 @@ def main():
             ret = call(cmd, shell=True, stderr=nullfd)
             if ret != 0:
                 logging.critical("Erasure coded pool creation failed with {ret}".format(ret=ret))
-                sys.exit(1)
+                return 1
 
             db[nspace][NAME] = {}
 
             db[nspace][NAME]["xattr"] = {}
-            if i < ATTR_OBJS:
+            if i < ATTR_OBJS + 1:
                 keys = range(i)
             else:
                 keys = range(0)
@@ -357,11 +411,11 @@ def main():
 
     logging.debug(db)
 
-    call("./stop.sh", stderr=nullfd)
+    kill_daemons()
 
     if ERRORS:
         logging.critical("Unable to set up test")
-        sys.exit(1)
+        return 1
 
     ALLREPPGS = get_pgs(OSDDIR, REPID)
     logging.debug(ALLREPPGS)
@@ -382,7 +436,11 @@ def main():
     print "Test invalid parameters"
     # On export can't use stdout to a terminal
     cmd = (CFSD_PREFIX + "--op export --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "stdout is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
+
+    # On export can't use stdout to a terminal
+    cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure_tty(cmd, "stdout is a tty and no --file filename specified")
 
     OTHERFILE = "/tmp/foo.{pid}".format(pid=pid)
     foofd = open(OTHERFILE, "w")
@@ -398,24 +456,85 @@ def main():
 
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
-    ERRORS += test_failure(cmd, "stdin is a tty and no --file option specified")
+    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
+
+    # On import can't use stdin from a terminal
+    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file -").format(osd=ONEOSD, pg=ONEPG)
+    ERRORS += test_failure_tty(cmd, "stdin is a tty and no --file filename specified")
 
     # Specify a bad --type
     cmd = (CFSD_PREFIX + "--type foobar --op list --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --type (filestore, memstore, keyvaluestore-dev)")
 
     # Don't specify a data-path
-    cmd = "./ceph_objectstore_tool --journal-path dev/{osd}.journal --type memstore --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --journal-path {dir}/{osd}.journal --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     # Don't specify a journal-path for filestore
-    cmd = "./ceph_objectstore_tool --type filestore --data-path dev/{osd} --op list --pgid {pg}".format(osd=ONEOSD, pg=ONEPG)
+    cmd = "./ceph-objectstore-tool --type filestore --data-path {dir}/{osd} --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "Must provide --journal-path")
 
     # Test --op list and generate json for all objects
-    print "Test --op list by generating json for all objects"
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
+
+    print "Test --op list variants"
+    OSDS = get_osds(ALLPGS[0], OSDDIR)
+    osd = OSDS[0]
+
+    # retrieve all objects from all PGs
+    cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
+    logging.debug(cmd);
+    tmpfd = open(TMPFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(TMPFILE)
+    JSONOBJ = sorted(set(lines))
+    (pgid, jsondict) = json.loads(JSONOBJ[0])[0]
+
+    # retrieve all objects in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) = json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg}".format(pg=pgid))
+        ERRORS += 1
+
+    # retrieve all objects with a given name in a given PG
+    cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
+    logging.debug(cmd);
+    tmpfd = open(OTHERFILE, "a")
+    logging.debug(cmd)
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    lines = get_lines(OTHERFILE)
+    JSONOBJ = sorted(set(lines))
+    (other_pgid, other_jsondict) in json.loads(JSONOBJ[0])[0]
+
+    if pgid != other_pgid or jsondict != other_jsondict:
+        logging.error("the first line of --op list is different "
+                      "from the first line of --op list --pgid {pg} {object}".format(pg=pgid, object=jsondict['oid']))
+        ERRORS += 1
+
+    print "Test --op list by generating json for all objects using default format"
     for pg in ALLPGS:
         OSDS = get_osds(pg, OSDDIR)
         for osd in OSDS:
@@ -431,8 +550,12 @@ def main():
     lines = get_lines(TMPFILE)
     JSONOBJ = sorted(set(lines))
     for JSON in JSONOBJ:
-        jsondict = json.loads(JSON)
-        db[jsondict['namespace']][jsondict['oid']]['json'] = JSON
+        (pgid, jsondict) = json.loads(JSON)
+        db[jsondict['namespace']][jsondict['oid']]['json'] = json.dumps((pgid, jsondict))
+        # print db[jsondict['namespace']][jsondict['oid']]['json']
+        if string.find(jsondict['oid'], EC_NAME) == 0 and 'shard_id' not in jsondict:
+            logging.error("Malformed JSON {json}".format(json=JSON))
+            ERRORS += 1
 
     # Test get-bytes
     print "Test get-bytes and set-bytes"
@@ -552,7 +675,14 @@ def main():
                     logging.error("{json} hinfo_key found {found} times instead of 3".format(json=JSON, found=found))
                     ERRORS += 1
 
-            for pg in OBJREPPGS:
+            for pg in ALLPGS:
+                # Make sure rep obj with rep pg or ec obj with ec pg
+                if ('shard_id' in jsondict) != (pg.find('s') > 0):
+                    continue
+                if 'shard_id' in jsondict:
+                    # Fix shard_id since we only have one json instance for each object
+                    jsondict['shard_id'] = int(string.split(pg, 's')[1])
+                    JSON = json.dumps(jsondict)
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
                     DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
@@ -572,11 +702,11 @@ def main():
                     keys = get_lines(ATTRFILE)
                     values = dict(db[nspace][basename]["xattr"])
                     for key in keys:
-                        if key == "_" or key == "snapset":
+                        if key == "_" or key == "snapset" or key == "hinfo_key":
                             continue
                         key = key.strip("_")
                         if key not in values:
-                            logging.error("The key {key} should be present".format(key=key))
+                            logging.error("Unexpected key {key} present".format(key=key))
                             ERRORS += 1
                             continue
                         exp = values.pop(key)
@@ -663,7 +793,12 @@ def main():
         for osd in get_osds(pg, OSDDIR):
             mydir = os.path.join(TESTDIR, osd)
             fname = os.path.join(mydir, pg)
-            cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+            if pg == ALLREPPGS[0]:
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} > {file}").format(osd=osd, pg=pg, file=fname)
+            elif pg == ALLREPPGS[1]:
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file - > {file}").format(osd=osd, pg=pg, file=fname)
+            else:
+              cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             if ret != 0:
@@ -690,9 +825,15 @@ def main():
         print "Test pg import"
         for osd in [f for f in os.listdir(OSDDIR) if os.path.isdir(os.path.join(OSDDIR, f)) and string.find(f, "osd") == 0]:
             dir = os.path.join(TESTDIR, osd)
-            for pg in [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]:
+            PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
+            for pg in PGS:
                 file = os.path.join(dir, pg)
-                cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
+                if pg == PGS[0]:
+                    cmd = ("cat {file} |".format(file=file) + CFSD_PREFIX + "--op import").format(osd=osd)
+                elif pg == PGS[1]:
+                    cmd = (CFSD_PREFIX + "--op import --file - < {file}").format(osd=osd, file=file)
+                else:
+                    cmd = (CFSD_PREFIX + "--op import --file {file}").format(osd=osd, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
@@ -716,7 +857,7 @@ def main():
             ret = call(cmd, shell=True, stdout=tmpfd)
             if ret:
                 logging.critical("INTERNAL ERROR")
-                sys.exit(1)
+                return 1
             tmpfd.close()
             obj_locs = get_lines(TMPFILE)
             if len(obj_locs) == 0:
@@ -752,7 +893,7 @@ def main():
                 if string.find(pg, "{id}.".format(id=REPID)) != 0:
                     continue
                 file = os.path.join(dir, pg)
-                cmd = "./ceph_objectstore_tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
+                cmd = "./ceph-objectstore-tool import-rados {pool} {file}".format(pool=NEWPOOL, file=file)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
                 if ret != 0:
@@ -763,17 +904,21 @@ def main():
     else:
         logging.warning("SKIPPING IMPORT-RADOS TESTS DUE TO PREVIOUS FAILURES")
 
-    call("./stop.sh", stderr=nullfd)
-
     call("/bin/rm -rf {dir}".format(dir=TESTDIR), shell=True)
     call("/bin/rm -rf {dir}".format(dir=DATADIR), shell=True)
 
     if ERRORS == 0:
         print "TEST PASSED"
-        sys.exit(0)
+        return 0
     else:
         print "TEST FAILED WITH {errcount} ERRORS".format(errcount=ERRORS)
-        sys.exit(1)
+        return 1
 
 if __name__ == "__main__":
-    main()
+    status = 1
+    try:
+        status = main(sys.argv[1:])
+    finally:
+        kill_daemons()
+        call("/bin/rm -fr ceph_objectstore_tool_dir", shell=True)
+    sys.exit(status)
