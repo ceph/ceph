@@ -50,7 +50,7 @@ namespace librbd {
     void *complete_arg;
     rbd_completion_t rbd_comp;
     int pending_count;   ///< number of requests
-    bool building;       ///< true if we are still building this completion
+    uint32_t blockers;
     int ref;
     bool released;
     ImageCtx *ictx;
@@ -67,7 +67,7 @@ namespace librbd {
     AioCompletion() : lock("AioCompletion::lock", true),
 		      done(false), rval(0), complete_cb(NULL),
 		      complete_arg(NULL), rbd_comp(NULL),
-		      pending_count(0), building(true),
+		      pending_count(0), blockers(1),
 		      ref(1), released(false), ictx(NULL),
 		      aio_type(AIO_TYPE_NONE),
 		      read_bl(NULL), read_buf(NULL), read_buf_len(0) {
@@ -133,6 +133,20 @@ namespace librbd {
       lock.Unlock();
       if (!n)
 	delete this;
+    }
+
+    void block() {
+      Mutex::Locker l(lock);
+      ++blockers;
+    }
+    void unblock(CephContext *cct) {
+      Mutex::Locker l(lock);
+      assert(blockers > 0);
+      --blockers;
+      if (pending_count == 0 && blockers == 0) {
+        finalize(cct, rval);
+        complete();
+      }
     }
   };
 
