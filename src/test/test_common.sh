@@ -150,7 +150,7 @@ start_recovery() {
         CEPH_NUM_OSD=$1
         osd=0
         while [ $osd -lt $CEPH_NUM_OSD ]; do
-                ./ceph -c ./ceph.conf osd tell $osd debug kick_recovery_wq 0
+                ./ceph -c ./ceph.conf tell osd.$osd debug kick_recovery_wq 0
                 osd=$((osd+1))
         done
 }
