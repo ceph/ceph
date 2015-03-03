@@ -64,9 +64,7 @@ recovery1() {
         recovery1_impl
 }
 
-lost1_impl() {
-	try_to_fetch_unfound=$1
-
+make_unfound() {
         # Write lots and lots of objects
         write_objects 1 1 20 8000 $TEST_POOL
 
@@ -90,6 +88,12 @@ lost1_impl() {
 	# Since recovery can't proceed, stuff should be unfound.
 	poll_cmd "./ceph pg debug unfound_objects_exist" TRUE 3 120
         [ $? -eq 1 ] || die "Failed to see unfound objects."
+}
+
+lost1_impl() {
+	try_to_fetch_unfound=$1
+
+	make_unfound
 
 	if [ "$try_to_fetch_unfound" -eq 1 ]; then
 	  # Ask for an object while it's still unfound, and
@@ -130,6 +134,67 @@ lost2() {
         lost1_impl 1
 }
 
+mark_unfound_lost1_impl() {
+	local mark_osd_lost=$1
+	local rm_osd=$2
+	local pgs_unfound pg
+
+	make_unfound
+
+	pgs_unfound=`./ceph health detail |awk '$1 = "pg" && /[0-9] unfound$/ {print $2}'`
+
+	[ -n "$pgs_unfound" ] || die "no pg with unfound objects"
+
+	for pg in $pgs_unfound; do
+	    ceph pg $pg mark_unfound_lost revert &&
+	      die "mark_unfound_lost unexpectedly succeeded for pg $pg"
+	done
+
+	if [ "$mark_osd_lost" -ne 1 -a "$rm_osd" -ne 1 ]; then
+	    return
+	fi
+
+	if [ "$mark_osd_lost" -eq 1 ]; then
+	  ./ceph osd lost 0 --yes-i-really-mean-it
+	fi
+
+	if [ "$rm_osd" -eq 1 ]; then
+	    ./ceph osd rm 0
+	fi
+
+	for pg in $pgs_unfound; do
+	    ceph pg $pg mark_unfound_lost revert ||
+	      die "mark_unfound_lost failed for pg $pg"
+	done
+
+	start_recovery 2
+
+	# Unfound objects go away and are turned into lost objects.
+	poll_cmd "./ceph pg debug unfound_objects_exist" FALSE 3 120
+        [ $? -eq 1 ] || die "Unfound objects didn't go away."
+
+	for pg in `ceph pg ls | awk '/^[0-9]/ {print $1}'`; do
+	    ceph pg $pg mark_unfound_lost revert 2>&1 |
+	      grep 'pg has no unfound objects' ||
+	      die "pg $pg has unfound objects"
+	done
+}
+
+mark_unfound_lost1() {
+        setup 2 'osd recovery delay start = 10000'
+        mark_unfound_lost1_impl 1 1
+}
+
+mark_unfound_lost2() {
+        setup 2 'osd recovery delay start = 10000'
+        mark_unfound_lost1_impl 1 0
+}
+
+mark_unfound_lost3() {
+        setup 2 'osd recovery delay start = 10000'
+        mark_unfound_lost1_impl 0 1
+}
+
 all_osds_die_impl() {
         poll_cmd "./ceph osd stat -o -" '3 up, 3 in' 20 240
         [ $? -eq 1 ] || die "didn't start 3 osds"
@@ -157,6 +222,12 @@ run() {
         lost1 || die "test failed"
 
         lost2 || die "test failed"
+
+	mark_unfound_lost1 || die "test failed"
+
+	mark_unfound_lost2 || die "test failed"
+
+	mark_unfound_lost3 || die "test failed"
 
         all_osds_die || die "test failed"
 }
