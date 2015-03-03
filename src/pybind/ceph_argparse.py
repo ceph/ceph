@@ -197,7 +197,7 @@ class CephString(CephArgtype):
         try:
             re.compile(goodchars)
         except:
-            raise ValueError('CephString(): "{0}" is not a valid RE'.\
+            raise ValueError('CephString(): "{0}" is not a valid RE'.
                 format(goodchars))
         self.goodchars = goodchars
         self.goodset = frozenset(
@@ -207,7 +207,7 @@ class CephString(CephArgtype):
     def valid(self, s, partial=False):
         sset = set(s)
         if self.goodset and not sset <= self.goodset:
-            raise ArgumentFormat("invalid chars {0} in {1}".\
+            raise ArgumentFormat("invalid chars {0} in {1}".
                 format(''.join(sset - self.goodset), s))
         self.val = s
 
@@ -305,7 +305,7 @@ class CephEntityAddr(CephIPAddr):
                 pass
             if nonce_long is None or nonce_long < 0:
                 raise ArgumentValid(
-                    '{0}: invalid entity, nonce {1} not integer > 0'.\
+                    '{0}: invalid entity, nonce {1} not integer > 0'.
                     format(s, nonce)
                 )
         self.val = s
@@ -868,7 +868,7 @@ def validate(args, signature, partial=False):
                     if partial:
                         return d
                     raise ArgumentNumber(
-                        'saw {0} of {1}, expected at least 1'.\
+                        'saw {0} of {1}, expected at least 1'.
                          format(desc.numseen, desc)
                     )
                 elif not desc.N and desc.numseen < desc.n:
@@ -881,7 +881,7 @@ def validate(args, signature, partial=False):
                             'missing required parameter {0}'.format(desc)
                         )
                     raise ArgumentNumber(
-                        'saw {0} of {1}, expected {2}'.\
+                        'saw {0} of {1}, expected {2}'.
                         format(desc.numseen, desc, desc.n)
                     )
                 break
