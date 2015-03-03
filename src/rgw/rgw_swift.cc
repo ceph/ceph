@@ -523,6 +523,8 @@ int RGWSwift::validate_keystone_token(RGWRados *store, const string& token, stru
   if (ret < 0)
     return ret;
 
+  keystone_token_cache->add(token_id, t);
+
   ret = update_user_info(store, info, rgw_user);
   if (ret < 0)
     return ret;
