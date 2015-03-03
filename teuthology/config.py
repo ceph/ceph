@@ -202,6 +202,9 @@ class FakeNamespace(YamlConfig):
             return self._defaults[name]
         raise AttributeError(name)
 
+    def __repr__(self):
+        return repr(self._conf)
+
 
 def _get_config_path():
     system_config_path = '/etc/teuthology.yaml'
