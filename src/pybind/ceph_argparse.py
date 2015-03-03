@@ -247,7 +247,7 @@ class CephIPAddr(CephArgtype):
             port = s.find(':')
             if (port != -1):
                 a = s[:port]
-                p = s[port+1:]
+                p = s[port + 1:]
                 if int(p) > 65535:
                     raise ArgumentValid('{0}: invalid IPv4 port'.format(p))
             else:
@@ -263,9 +263,9 @@ class CephIPAddr(CephArgtype):
                 end = s.find(']')
                 if end == -1:
                     raise ArgumentFormat('{0} missing terminating ]'.format(s))
-                if s[end+1] == ':':
+                if s[end + 1] == ':':
                     try:
-                        p = int(s[end+2])
+                        p = int(s[end + 2])
                     except:
                         raise ArgumentValid('{0}: bad port number'.format(s))
                 a = s[1:end]
@@ -551,7 +551,7 @@ class argdesc(object):
     def __init__(self, t, name=None, n=1, req=True, **kwargs):
         if isinstance(t, types.StringTypes):
             self.t = CephPrefix
-            self.typeargs = {'prefix':t}
+            self.typeargs = {'prefix': t}
             self.req = True
         else:
             self.t = t
@@ -636,7 +636,7 @@ def parse_funcsig(sig):
         argnum += 1
         if isinstance(desc, types.StringTypes):
             t = CephPrefix
-            desc = {'type':t, 'name':'prefix', 'prefix':desc}
+            desc = {'type': t, 'name': 'prefix', 'prefix': desc}
         else:
             # not a simple string, must be dict
             if not 'type' in desc:
@@ -951,18 +951,18 @@ def validate_command(sigdict, args, verbose=False):
                         "better match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
                 best_match_cnt = matched
-                bestcmds = [{cmdtag:cmd}]
+                bestcmds = [{cmdtag: cmd}]
             elif matched == best_match_cnt:
                 if verbose:
                     print >> sys.stderr, \
                         "equal match: {0} > {1}: {2}:{3} ".format(matched,
                                       best_match_cnt, cmdtag, concise_sig(sig))
-                bestcmds.append({cmdtag:cmd})
+                bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
         # (relies on a cmdsig being key,val where val is a list of len 1)
         bestcmds_sorted = sorted(bestcmds,
-                                 cmp=lambda x,y:cmp(cmdsiglen(x), cmdsiglen(y)))
+                                 cmp=lambda x, y: cmp(cmdsiglen(x), cmdsiglen(y)))
 
         if verbose:
             print >> sys.stderr, "bestcmds_sorted: "
@@ -1016,7 +1016,7 @@ def find_cmd_target(childargs):
     right daemon.
     Returns ('osd', osdid), ('pg', pgid), or ('mon', '')
     """
-    sig = parse_funcsig(['tell', {'name':'target', 'type':'CephName'}])
+    sig = parse_funcsig(['tell', {'name': 'target', 'type': 'CephName'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
@@ -1030,7 +1030,7 @@ def find_cmd_target(childargs):
             name.valid(valid_dict['target'])
             return name.nametype, name.nameid
 
-    sig = parse_funcsig(['tell', {'name':'pgid', 'type':'CephPgid'}])
+    sig = parse_funcsig(['tell', {'name': 'pgid', 'type': 'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
@@ -1064,7 +1064,7 @@ def find_cmd_target(childargs):
         name.valid(childargs[1])
         return name.nametype, name.nameid
 
-    sig = parse_funcsig(['pg', {'name':'pgid', 'type':'CephPgid'}])
+    sig = parse_funcsig(['pg', {'name': 'pgid', 'type': 'CephPgid'}])
     try:
         valid_dict = validate(childargs, sig, partial=True)
     except ArgumentError:
@@ -1166,7 +1166,7 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
     """
     cmddict = {}
     if prefix:
-        cmddict.update({'prefix':prefix})
+        cmddict.update({'prefix': prefix})
     if argdict:
         cmddict.update(argdict)
 
