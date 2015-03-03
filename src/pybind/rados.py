@@ -579,7 +579,7 @@ Rados object in state %s." % self.state)
                 ret = run_in_thread(self.librados.rados_pool_create,
                                     (self.cluster, c_char_p(pool_name)))
             else:
-                ret = run_in_thread(self.librados.\
+                ret = run_in_thread(self.librados.
                                     rados_pool_create_with_crush_rule,
                                     (self.cluster, c_char_p(pool_name),
                                      c_ubyte(crush_rule)))
@@ -814,7 +814,7 @@ class ObjectIterator(object):
         ret = run_in_thread(self.ioctx.librados.rados_nobjects_list_open,
                             (self.ioctx.io, byref(self.ctx)))
         if ret < 0:
-            raise make_ex(ret, "error iterating over the objects in ioctx '%s'" \
+            raise make_ex(ret, "error iterating over the objects in ioctx '%s'"
                           % self.ioctx.name)
 
     def __iter__(self):
@@ -1315,8 +1315,8 @@ class Ioctx(object):
         ret = run_in_thread(self.librados.rados_ioctx_pool_set_auid,
                             (self.io, ctypes.c_uint64(auid)))
         if ret < 0:
-            raise make_ex(ret, "error changing auid of '%s' to %d" %\
-                          (self.name, auid))
+            raise make_ex(ret, "error changing auid of '%s' to %d"
+                          % (self.name, auid))
 
     def set_locator_key(self, loc_key):
         """
@@ -1420,8 +1420,8 @@ class Ioctx(object):
         if ret == 0:
             return ret
         elif ret < 0:
-            raise make_ex(ret, "Ioctx.write(%s): failed to write %s" % \
-                          (self.name, key))
+            raise make_ex(ret, "Ioctx.write(%s): failed to write %s"
+                          % (self.name, key))
         else:
             raise LogicError("Ioctx.write(%s): rados_write \
 returned %d, but should return zero on success." % (self.name, ret))
@@ -1454,8 +1454,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret == 0:
             return ret
         elif ret < 0:
-            raise make_ex(ret, "Ioctx.write_full(%s): failed to write %s" % \
-                          (self.name, key))
+            raise make_ex(ret, "Ioctx.write_full(%s): failed to write %s"
+                          % (self.name, key))
         else:
             raise LogicError("Ioctx.write_full(%s): rados_write_full \
 returned %d, but should return zero on success." % (self.name, ret))
@@ -1485,8 +1485,8 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret == 0:
             return ret
         elif ret < 0:
-            raise make_ex(ret, "Ioctx.append(%s): failed to append %s" % \
-                          (self.name, key))
+            raise make_ex(ret, "Ioctx.append(%s): failed to append %s"
+                          % (self.name, key))
         else:
             raise LogicError("Ioctx.append(%s): rados_append \
 returned %d, but should return zero on success." % (self.name, ret))
