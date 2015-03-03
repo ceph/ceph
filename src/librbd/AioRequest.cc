@@ -48,6 +48,18 @@ namespace librbd {
     }
   }
 
+  void AioRequest::complete(int r)
+  {
+    if (should_complete(r)) {
+      ldout(m_ictx->cct, 20) << "complete " << this << dendl;
+      if (m_hide_enoent && r == -ENOENT) {
+	r = 0;
+      }
+      m_completion->complete(r);
+      delete this;
+    }
+  }
+
   void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
   {
     assert(!m_parent_completion);
