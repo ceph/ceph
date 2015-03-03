@@ -12,7 +12,7 @@
 # include "acconfig.h"
 #endif
 
-class CephContext;
+struct CephContext;
 
 #ifdef __cplusplus
 namespace ceph {
@@ -65,7 +65,7 @@ struct FailedAssertion {
 # define __CEPH_ASSERT_FUNCTION ((__const char *) 0)
 #endif
 
-extern void register_assert_context(CephContext *cct);
+extern void register_assert_context(struct CephContext *cct);
 extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function)
   __attribute__ ((__noreturn__));
 extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...)
