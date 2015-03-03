@@ -420,7 +420,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         prefix = ' '.join(rel_ep.split('/')).strip()
 
     # show "match as much as you gave me" help for unknown endpoints
-    if not ep in app.ceph_urls:
+    if ep not in app.ceph_urls:
         helptext = show_human_help(prefix)
         if helptext:
             resp = flask.make_response(helptext, 400)

@@ -371,7 +371,7 @@ class CephName(CephArgtype):
             raise ArgumentFormat('CephName: no . in {0}'.format(s))
         else:
             t, i = s.split('.')
-            if not t in ('osd', 'mon', 'client', 'mds'):
+            if t not in ('osd', 'mon', 'client', 'mds'):
                 raise ArgumentValid('unknown type ' + t)
             if t == 'osd':
                 if i != '*':
@@ -429,7 +429,7 @@ class CephChoices(CephArgtype):
 
     def valid(self, s, partial=False):
         if not partial:
-            if not s in self.strings:
+            if s not in self.strings:
                 # show as __str__ does: {s1|s2..}
                 raise ArgumentValid("{0} not in {1}".format(s, self))
             self.val = s
@@ -639,7 +639,7 @@ def parse_funcsig(sig):
             desc = {'type': t, 'name': 'prefix', 'prefix': desc}
         else:
             # not a simple string, must be dict
-            if not 'type' in desc:
+            if 'type' not in desc:
                 s = 'JSON descriptor {0} has no type'.format(sig)
                 raise JsonFormat(s)
             # look up type string in our globals() dict; if it's an
@@ -704,12 +704,12 @@ def parse_json_funcsigs(s, consumer):
         raise e
     sigdict = {}
     for cmdtag, cmd in overall.iteritems():
-        if not 'sig' in cmd:
+        if 'sig' not in cmd:
             s = "JSON descriptor {0} has no 'sig'".format(cmdtag)
             raise JsonFormat(s)
         # check 'avail' and possibly ignore this command
         if 'avail' in cmd:
-            if not consumer in cmd['avail']:
+            if consumer not in cmd['avail']:
                 continue
         # rewrite the 'sig' item with the argdesc-ized version, and...
         cmd['sig'] = parse_funcsig(cmd['sig'])
