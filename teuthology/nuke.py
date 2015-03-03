@@ -245,8 +245,9 @@ def dpkg_configure(ctx):
         proc = remote.run(
             args=[
                 'sudo', 'dpkg', '--configure', '-a',
-                run.Raw('&&'),
-                'sudo', 'apt-get', '-f', 'install',
+                run.Raw(';'),
+                'sudo', 'DEBIAN_FRONTEND=noninteractive',
+                'apt-get', '-y', '--force-yes', '-f', 'install',
                 run.Raw('||'),
                 ':',
             ],
