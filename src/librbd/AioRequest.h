@@ -40,7 +40,8 @@ namespace librbd {
     virtual int send() = 0;
 
   protected:
-    void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents,
+                          bool block_completion);
 
     ImageCtx *m_ictx;
     std::string m_oid;
