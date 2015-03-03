@@ -110,15 +110,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -137,9 +137,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
@@ -147,16 +146,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: True (esc)
   $ rbd info bar@snap --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -176,9 +175,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>true</protected>
   </image>
   $ rbd info bar@snap2
@@ -187,16 +185,16 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: False (esc)
   $ rbd info bar@snap2 --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "bar", 
       "object_size": 4194304, 
@@ -216,9 +214,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>false</protected>
   </image>
   $ rbd info baz
@@ -227,15 +224,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info baz --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "baz", 
       "object_size": 4194304, 
@@ -254,9 +251,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info quux
   rbd image 'quux':
@@ -290,15 +286,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "child", 
       "object_size": 4194304, 
@@ -317,9 +313,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
   </image>
   $ rbd info rbd_other/child@snap
   rbd image 'child':
@@ -327,7 +322,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
-  \tfeatures: layering, exclusive (esc)
+  \tfeatures: layering (esc)
+  \tflags:  (esc)
   \tprotected: False (esc)
   \tparent: rbd/bar@snap (esc)
   \toverlap: 512 MB (esc)
@@ -335,10 +331,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   {
       "block_name_prefix": "rbd_data.*",  (glob)
       "features": [
-          "layering", 
-          "striping", 
-          "exclusive"
+          "layering"
       ], 
+      "flags": [], 
       "format": 2, 
       "name": "child", 
       "object_size": 4194304, 
@@ -364,9 +359,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <format>2</format>
     <features>
       <feature>layering</feature>
-      <feature>striping</feature>
-      <feature>exclusive</feature>
     </features>
+    <flags></flags>
     <protected>false</protected>
     <parent>
       <pool>rbd</pool>
