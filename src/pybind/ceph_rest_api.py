@@ -106,7 +106,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     app.ceph_cluster.connect()
 
     app.ceph_baseurl = app.ceph_cluster.conf_get('restapi_base_url') \
-         or DEFAULT_BASEURL
+        or DEFAULT_BASEURL
     if app.ceph_baseurl.endswith('/'):
         app.ceph_baseurl = app.ceph_baseurl[:-1]
     addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
@@ -178,8 +178,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
                    'module': cmddict['module'],
                    'perm': perm,
                    'flavor': flavor,
-                   'methods': methods,
-                  }
+                   'methods': methods, }
 
         # app.ceph_urls contains a list of urldicts (usually only one long)
         if url not in app.ceph_urls:
@@ -228,17 +227,17 @@ def generate_url_and_params(app, sig, flavor):
         # CephChoices with 1 required string (not --) do too, unless
         # we've already started collecting params, in which case they
         # too are params
-        elif desc.t == CephChoices and \
-             len(desc.instance.strings) == 1 and \
-             desc.req and \
-             not str(desc.instance).startswith('--') and \
-             not params:
+        elif (desc.t == CephChoices and
+              len(desc.instance.strings) == 1 and
+              desc.req and
+              not str(desc.instance).startswith('--') and
+              not params):
             url += '/' + str(desc.instance)
         else:
             # tell/<target> is a weird case; the URL includes what
             # would everywhere else be a parameter
-            if flavor == 'tell' and  \
-              (desc.t, desc.name) == (CephOsdName, 'target'):
+            if flavor == 'tell' and ((desc.t, desc.name) ==
+               (CephOsdName, 'target')):
                 url += '/<target>'
             else:
                 params.append(desc)
@@ -438,8 +437,10 @@ def handler(catchall_path=None, fmt=None, target=None):
 
         # allow '?help' for any specifically-known endpoint
         if 'help' in flask.request.args:
-            response = flask.make_response('{0}: {1}'.\
-                format(prefix + concise_sig(paramsig), urldict['help']))
+            response = flask.make_response('{0}: {1}'.
+                                           format(prefix +
+                                                  concise_sig(paramsig),
+                                                  urldict['help']))
             response.headers['Content-Type'] = 'text/plain'
             return response
 
