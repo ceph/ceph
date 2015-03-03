@@ -48,7 +48,7 @@ function setup_container() {
         os_version=$os_version user_id=$(id -u) \
             perl -p -e 's/%%(\w+)%%/$ENV{$1}/g' \
             dockerfile/Dockerfile.in > dockerfile/Dockerfile
-        docker $opts build --rm=true --tag=$image dockerfile
+        docker $opts build --tag=$image dockerfile
         rm -fr dockerfile
     fi
 }
