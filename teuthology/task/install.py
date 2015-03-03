@@ -45,6 +45,7 @@ PACKAGES['ceph']['deb'] = [
     'librados2-dbg',
     'librbd1',
     'librbd1-dbg',
+    'rbd-fuse',
 ]
 PACKAGES['ceph']['rpm'] = [
     'ceph-debuginfo',
@@ -60,6 +61,7 @@ PACKAGES['ceph']['rpm'] = [
     'librados2',
     'librbd1',
     'python-ceph',
+    'rbd-fuse',
 ]
 
 
