@@ -647,7 +647,7 @@ def parse_funcsig(sig):
             # locally-defined class. otherwise, we haven't a clue.
             if desc['type'] in globals():
                 t = globals()[desc['type']]
-                if type(t) != types.TypeType:
+                if not isinstance(t, types.TypeType):
                     s = 'unknown type {0}'.format(desc['type'])
                     raise JsonFormat(s)
             else:
