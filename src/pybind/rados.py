@@ -574,8 +574,8 @@ Rados object in state %s." % self.state)
             raise TypeError('pool_name must be a string')
         if crush_rule is not None and not isinstance(crush_rule, str):
             raise TypeError('cruse_rule must be a string')
-        if (auid == None):
-            if (crush_rule == None):
+        if auid is None:
+            if crush_rule is None:
                 ret = run_in_thread(self.librados.rados_pool_create,
                                     (self.cluster, c_char_p(pool_name)))
             else:
@@ -584,7 +584,7 @@ Rados object in state %s." % self.state)
                                     (self.cluster, c_char_p(pool_name),
                                      c_ubyte(crush_rule)))
 
-        elif (crush_rule == None):
+        elif crush_rule is None:
             ret = run_in_thread(self.librados.rados_pool_create_with_auid,
                                 (self.cluster, c_char_p(pool_name),
                                  c_uint64(auid)))
@@ -865,7 +865,7 @@ class XattrIterator(object):
         if (ret != 0):
             raise make_ex(ret, "error iterating over the extended attributes \
 in '%s'" % self.oid)
-        if name_.value == None:
+        if name_.value is None:
             raise StopIteration()
         name = ctypes.string_at(name_)
         val = ctypes.string_at(val_, len_)
