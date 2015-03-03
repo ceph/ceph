@@ -38,7 +38,12 @@ Major features since Giant include:
 Upgrading
 ---------
 
-* No special restrictions when upgrading from firefly or giant
+* If you are upgrading from v0.92, you must stop all OSD daemons and flush their
+  journals (``ceph-osd -i NNN --flush-journal'') before upgrading.  There was
+  a transaction encoding bug in v0.92 that broke compatibility.  Upgrading from
+  v0.91 or anything earlier is safe.
+
+* No special restrictions when upgrading from firefly or giant.
 
 Notable Changes
 ---------------
