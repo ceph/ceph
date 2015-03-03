@@ -648,6 +648,10 @@ void FileJournal::stop_writer()
     commit_cond.Signal();
   }
   write_thread.join();
+ 
+  // write jouranl header right now, so that
+  // committed_up_to in journal header is newer enough.
+  write_header();
 
 #ifdef HAVE_LIBAIO
   // stop aio completeion thread *after* writer thread has stopped
@@ -733,7 +737,14 @@ bufferptr FileJournal::prepare_header()
   return bp;
 }
 
-
+void FileJournal::write_header()
+{
+  Mutex::Locker locker(write_lock);
+  must_write_header = true;
+  bufferlist bl;
+  do_write(bl);
+  dout(20) << __func__ << " finish" << dendl;
+}
 
 int FileJournal::check_for_full(uint64_t seq, off64_t pos, off64_t size)
 {
