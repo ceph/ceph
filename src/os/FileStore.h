@@ -526,6 +526,13 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0,
     bool allow_eio = false);
+  int _do_fiemap(int fd, uint64_t offset, size_t len,
+                 map<uint64_t, uint64_t> *m);
+#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
+  int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
+                         map<uint64_t, uint64_t> *m,
+                         bool *fallback_to_fiemap);
+#endif
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const ghobject_t& oid);
