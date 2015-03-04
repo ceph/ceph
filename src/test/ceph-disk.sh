@@ -204,6 +204,170 @@ function test_activate_dir() {
     $diff $DIR/BAR $DIR/BAR.copy || return 1
 }
 
+function test_activate_dir() {
+    run_mon
+
+    local osd_data=$DIR/dir
+    $mkdir -p $osd_data
+    test_activate $osd_data $osd_data || return 1
+    $rm -fr $osd_data
+}
+
+function create_dev() {
+    local name=$1
+
+    dd if=/dev/zero of=$name bs=1024k count=200
+    set -x
+    echo create_dev $name >&2
+    losetup --find $name
+    local dev=$(losetup --associated $name | cut -f1 -d:)
+    ceph-disk zap $dev > /dev/null 2>&1
+    echo $dev
+    set +x
+}
+
+function destroy_dev() {
+    local name=$1
+    local dev=$2
+
+    set -x
+    echo destroy_dev $name $dev >&2
+    for partition in 1 2 3 4 ; do
+        umount ${dev}p${partition} > /dev/null 2>&1 || true
+    done
+    ceph-disk zap $dev > /dev/null 2>&1
+    losetup --detach $dev
+    rm $name
+    set +x
+}
+
+function activate_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+
+    setup
+    run_mon
+    test_activate $disk ${disk}p1 $journal || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    teardown
+
+    # reuse the journal partition
+    setup
+    run_mon
+    test_activate $newdisk ${newdisk}p1 ${journal}p1 || return 1
+    kill_daemons
+    umount ${newdisk}p1 || return 1
+    teardown
+}
+
+function test_activate_dev() {
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dev_body $disk $journal $newdisk
+    status=$?
+    test $status != 0 && teardown
+
+    destroy_dev vdf.disk $disk
+    destroy_dev vdg.disk $journal
+    destroy_dev vdh.disk $newdisk
+
+    return $status
+}
+
+function destroy_dmcrypt_dev() {
+    local name=$1
+    local dev=$2
+    local uuid=$3
+
+    for partition in 1 2 3 4 ; do
+        umount /dev/mapper/$uuid || true
+	/sbin/cryptsetup remove /dev/mapper/$uuid || true
+	dmsetup remove /dev/mapper/$uuid || true
+    done
+    losetup --detach $dev
+    rm $name
+}
+
+function activate_dmcrypt_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
+
+    setup
+    run_mon
+    test_activate_dmcrypt $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_dev() {
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dmcrypt_dev_body $disk $journal $newdisk
+    status=$?
+    test $status != 0 && teardown
+
+    destroy_dmcrypt_dev vdf.disk $disk
+    destroy_dmcrypt_dev vdg.disk $journal
+    destroy_dmcrypt_dev vdh.disk $newdisk
+
+    return $status
+}
+
+function activate_dmcrypt_plain_dev_body() {
+    local disk=$1
+    local journal=$2
+    local newdisk=$3
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
+
+    setup
+    run_mon
+    test_activate_dmcrypt_plain $disk ${disk}p1 $journal p1 $uuid $juuid|| return 1
+    kill_daemons
+    umount /dev/mapper/$uuid || return 1
+    teardown
+}
+
+function test_activate_dmcrypt_plain_dev() {
+    if test $(id -u) != 0 ; then
+        echo "SKIP because not root"
+        return 0
+    fi
+
+    local disk=$(create_dev vdf.disk)
+    local journal=$(create_dev vdg.disk)
+    local newdisk=$(create_dev vdh.disk)
+
+    activate_dmcrypt_plain_dev_body $disk $journal $newdisk
+    status=$?
+
+    destroy_dmcrypt_dev vdf.disk $disk
+    destroy_dmcrypt_dev vdg.disk $journal
+    destroy_dmcrypt_dev vdh.disk $newdisk
+
+    return $status
+}
+
 function test_find_cluster_by_uuid() {
     setup
     test_activate_dir 2>&1 | tee $DIR/test_find
