@@ -58,8 +58,10 @@ int main(int argc, const char **argv)
   bool createsimple = false;
   bool create_from_conf = false;
   int num_osd = 0;
-  int pg_bits = g_conf->osd_pg_bits;
-  int pgp_bits = g_conf->osd_pgp_bits;
+  int pg_bits =0;
+  int pgp_bits = 0;
+  int pg_num = g_conf->osd_pool_default_pg_num;
+  int pgp_num = g_conf->osd_pool_default_pgp_num;
   bool clobber = false;
   bool modified = false;
   std::string export_crush, import_crush, test_map_pg, test_map_object;
@@ -111,11 +113,13 @@ int main(int argc, const char **argv)
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
+      pg_num = 1 << pg_bits;
     } else if (ceph_argparse_withint(args, i, &pgp_bits, &err, "--pgp_bits", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
+      pgp_num = 1 << pgp_bits;
     } else if (ceph_argparse_witharg(args, i, &val, "--export_crush", (char*)NULL)) {
       export_crush = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--import_crush", (char*)NULL)) {
@@ -211,7 +215,7 @@ int main(int argc, const char **argv)
     }
     uuid_d fsid;
     memset(&fsid, 0, sizeof(uuid_d));
-    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
+    osdmap.build_simple(g_ceph_context, 0, fsid, num_osd, pg_num, pgp_num);
     modified = true;
   }
 

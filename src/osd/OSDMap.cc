@@ -2338,7 +2338,7 @@ void OSDMap::generate_test_instances(list<OSDMap*>& o)
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
   o.push_back(new OSDMap);
   uuid_d fsid;
-  o.back()->build_simple(cct, 1, fsid, 16, 7, 8);
+  o.back()->build_simple(cct, 1, fsid, 16, 128, 256);
   o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
   o.back()->blacklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
@@ -2619,10 +2619,10 @@ bool OSDMap::crush_ruleset_in_use(int ruleset) const
 }
 
 int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-			  int nosd, int pg_bits, int pgp_bits)
+			  int nosd, int pg_num, int pgp_num)
 {
   ldout(cct, 10) << "build_simple on " << num_osd
-		 << " osds with " << pg_bits << " pg bits per osd, "
+		 << " osds with " << pg_num << " pg bits per osd, "
 		 << dendl;
   epoch = e;
   set_fsid(fsid);
@@ -2659,8 +2659,8 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
   }
 
   // pgp_num <= pg_num
-  if (pgp_bits > pg_bits)
-    pgp_bits = pg_bits;
+  if (pgp_num > pg_num)
+    pgp_num = pg_num;
 
   vector<string> pool_names;
   pool_names.push_back("rbd");
@@ -2671,8 +2671,6 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     r = build_simple_crush_map(cct, *crush, nosd, &ss);
   else
     r = build_simple_crush_map_from_conf(cct, *crush, &ss);
-
-  int poolbase = get_max_osd() ? get_max_osd() : 1;
 
   int const default_replicated_ruleset = crush->get_osd_pool_default_crush_replicated_ruleset(cct);
   assert(default_replicated_ruleset >= 0);
@@ -2694,8 +2692,8 @@ int OSDMap::build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
     pools[pool].min_size = cct->_conf->get_osd_pool_default_min_size();
     pools[pool].crush_ruleset = default_replicated_ruleset;
     pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
-    pools[pool].set_pg_num(poolbase << pg_bits);
-    pools[pool].set_pgp_num(poolbase << pgp_bits);
+    pools[pool].set_pg_num(pg_num);
+    pools[pool].set_pgp_num(pgp_num);
     pools[pool].last_change = epoch;
     pool_name[pool] = *p;
     name_pool[*p] = pool;

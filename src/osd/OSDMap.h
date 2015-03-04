@@ -817,7 +817,7 @@ public:
    * @return **0** on success, negative errno on error.
    */
   int build_simple(CephContext *cct, epoch_t e, uuid_d &fsid,
-		   int num_osd, int pg_bits, int pgp_bits);
+		   int num_osd, int pg_num, int pgp_num);
   static int _build_crush_types(CrushWrapper& crush);
   static int build_simple_crush_map(CephContext *cct, CrushWrapper& crush,
 				    int num_osd, ostream *ss);

@@ -32,7 +32,7 @@ public:
 
   void set_up_map() {
     uuid_d fsid;
-    osdmap.build_simple(g_ceph_context, 0, fsid, num_osds, 6, 6);
+    osdmap.build_simple(g_ceph_context, 0, fsid, num_osds, 64, 64);
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
     pending_inc.fsid = osdmap.get_fsid();
     entity_addr_t sample_addr;
