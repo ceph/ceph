@@ -682,6 +682,11 @@ unittest_bit_vector_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bit_vector
 
+unittest_subprocess_SOURCES = test/test_subprocess.cc
+unittest_subprocess_LDADD = $(LIBCOMMON) $(UNITTEST_LDADD)
+unittest_subprocess_CXXFLAGS = $(UNITTEST_CXXFLAGS)
+check_PROGRAMS += unittest_subprocess
+
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
 
 if WITH_RADOSGW

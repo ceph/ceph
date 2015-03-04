@@ -25,6 +25,7 @@ OPTION(mon_host, OPT_STR, "")
 OPTION(lockdep, OPT_BOOL, false)
 OPTION(run_dir, OPT_STR, "/var/run/ceph")       // the "/var/run/ceph" dir, created on daemon startup
 OPTION(admin_socket, OPT_STR, "$run_dir/$cluster-$name.asok") // default changed by common_preinit()
+OPTION(crushtool, OPT_STR, "crushtool") // crushtool utility path
 
 OPTION(daemonize, OPT_BOOL, false) // default changed by common_preinit()
 OPTION(pid_file, OPT_STR, "") // default changed by common_preinit()

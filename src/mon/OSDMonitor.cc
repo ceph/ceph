@@ -4526,7 +4526,11 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    int r = tester.test_with_crushtool();
+    // XXX: Use mon_lease as a timeout value for crushtool.
+    // If crushtool takes longer than mon_lease and blocks the mon, an election
+    // will happen and the command will run again, indefinitely.
+    int r = tester.test_with_crushtool(g_conf->crushtool.c_str(),
+				       g_conf->mon_lease);
     if (r < 0) {
       derr << "error on crush map: " << ess.str() << dendl;
       ss << "Failed to parse crushmap: " << ess.str();

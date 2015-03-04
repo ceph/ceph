@@ -1394,6 +1394,104 @@ function test_mon_tell()
   ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
+function test_mon_crushtool()
+{
+
+  if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
+      (set +x
+	  echo "WARNING: test_mon_crushtool needs to be run from vstart_wrapper.sh." >&2
+	  echo "WARNING: It requires CEPH_DIR added to PATH before starting mons." >&2
+	  echo "WARNING: Skipping test_mon_crushtool." >&2
+      )
+      return
+  fi
+  test -n "${CEPH_DIR}"
+
+  local crushtool=`ceph-conf --show-config-value crushtool`
+  test -n "${crushtool}"
+
+  if echo "${crushtool}" | grep -q /; then
+      (set +x
+	  echo "WARNING: crushtool config value (${crushtool}) contains a slash (/)" >&2
+	  echo "WARNING: test_mon_crushtool requires the parameter without a slash" >&2
+	  echo "WARNING: for PATH search to work" >&2
+	  echo "WARNING: Skipping test_mon_crushtool." >&2
+      )
+      return
+  fi
+
+  local crushtool_path="${CEPH_DIR}/${crushtool}"
+
+  if [ -f "${crushtool_path}" ]; then
+      (set +x
+	  echo "WARNING: Can't use CEPH_DIR (${CEPH_DIR}) for placing ${crushtool}:" >&2
+	  echo "WARNING: It already contains one." >&2
+	  echo "WARNING: Skipping test_mon_crushtool." >&2
+      )
+      return
+  fi
+
+  touch "${crushtool_path}"
+  chmod +x "${crushtool_path}"
+
+  if [ `which "${crushtool}"` != "${crushtool_path}" ]; then
+      echo "WARNING: Can't use CEPH_DIR (${CEPH_DIR}) for placing ${crushtool}" >&2
+      echo "WARNING: It is not first in PATH (${PATH})" >&2
+      echo "WARNING: Skipping test_mon_crushtool." >&2
+      rm -f "${crushtool_path}"
+      return
+  fi
+
+  local map=$TMPDIR/map
+  ceph osd getcrushmap -o $map
+
+  local script=
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 0" > "${crushtool_path}"
+
+  ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       echo 'TEST FAIL' >&2
+       exit 1" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: TEST FAIL"
+
+  local mon_lease=`ceph-conf --show-config-value mon_lease`
+
+  test "${mon_lease}" -gt 0
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease - 1))" > "${crushtool_path}"
+
+  ceph osd setcrushmap -i $map
+
+  printf "%s\n" \
+      "#!/bin/sh
+       cat > /dev/null
+       sleep $((mon_lease + 1))" > "${crushtool_path}"
+
+  expect_false ceph osd setcrushmap -i $map 2> $TMPFILE
+  check_response "Error EINVAL: Failed to parse crushmap: ${crushtool}: timed out (${mon_lease} sec)"
+
+  rm -f "${crushtool_path}"
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1428,6 +1526,7 @@ MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
+MON_TESTS+=" mon_crushtool"
 
 OSD_TESTS+=" osd_bench"
 
