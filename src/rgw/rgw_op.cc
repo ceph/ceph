@@ -2028,10 +2028,13 @@ done:
 
 int RGWPutMetadata::verify_permission()
 {
-  if (!s->object.empty()) {
+  const bool is_object_op = (!s->object.empty());
+  const bool is_bucket_op = (!s->bucket_name_str.empty() && !is_object_op);
+
+  if (is_object_op) {
     if (!verify_object_permission(s, RGW_PERM_WRITE))
       return -EACCES;
-  } else {
+  } else if (is_bucket_op) {
     if (!verify_bucket_permission(s, RGW_PERM_WRITE))
       return -EACCES;
   }
@@ -2041,7 +2044,11 @@ int RGWPutMetadata::verify_permission()
 
 void RGWPutMetadata::pre_exec()
 {
-  rgw_bucket_object_pre_exec(s);
+  const bool is_account_op = s->bucket_name_str.empty();
+
+  if (!is_account_op) {
+    rgw_bucket_object_pre_exec(s);
+  }
 }
 
 void RGWPutMetadata::execute()
@@ -2051,17 +2058,29 @@ void RGWPutMetadata::execute()
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
   map<string, bufferlist>::iterator iter;
   bufferlist bl, cors_bl;
+  rgw_obj obj;
+  RGWObjVersionTracker acct_ot;
 
-  rgw_obj obj(s->bucket, s->object);
+  const bool is_object_op = (!s->object.empty());
+  const bool is_bucket_op = (!s->bucket_name_str.empty() && !is_object_op);
+
+  if (is_object_op || is_bucket_op) {
+    obj = rgw_obj(s->bucket, s->object);
+  } else {
+    string buckets_obj_id;
+    rgw_get_buckets_obj(s->user.user_id, buckets_obj_id);
+
+    obj = rgw_obj(store->zone.user_uid_pool, buckets_obj_id);
+  }
 
   store->set_atomic(s->obj_ctx, obj);
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
     return;
+  }
 
   RGWObjVersionTracker *ptracker = NULL;
-  bool is_object_op = (!s->object.empty());
 
   rgw_get_request_metadata(s->cct, s->info, attrs, is_object_op);
 
@@ -2070,7 +2089,7 @@ void RGWPutMetadata::execute()
     ret = get_obj_attrs(store, s, obj, orig_attrs);
     if (ret < 0)
       return;
-  } else {
+  } else if (is_bucket_op) {
     ptracker = &s->bucket_info.objv_tracker;
     orig_attrs = s->bucket_attrs;
 
@@ -2079,6 +2098,9 @@ void RGWPutMetadata::execute()
       ret = -EEXIST;
       return;
     }
+  } else {
+    ptracker = &acct_ot;
+    rgw_get_user_attrs_by_uid(store, s->user.user_id, orig_attrs, ptracker);
   }
 
   for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
@@ -2122,8 +2144,10 @@ void RGWPutMetadata::execute()
   }
   if (is_object_op) {
     ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs, ptracker);
-  } else {
+  } else if (is_bucket_op) {
     ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &rmattrs, ptracker);
+  } else {
+    ret = rgw_store_user_attrs(store, s->user.user_id, attrs, &rmattrs, ptracker);
   }
 }
 
