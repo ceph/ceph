@@ -6200,6 +6200,8 @@ done:
     }
     const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
     assert(p);
+    const pg_pool_t *overlay_p = osdmap.get_pg_pool(overlaypool_id);
+    assert(overlay_p);
     if (p->tiers.count(overlaypool_id) == 0) {
       ss << "tier pool '" << overlaypoolstr << "' is not a tier of '" << poolstr << "'";
       err = -EINVAL;
@@ -6224,6 +6226,8 @@ done:
     np->write_tier = overlaypool_id;
     np->last_force_op_resend = pending_inc.epoch;
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
+    if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
+      ss <<" (WARNING: overlay pool cache_mode is still NONE)";
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
@@ -6370,6 +6374,13 @@ done:
     np->flags |= pg_pool_t::FLAG_INCOMPLETE_CLONES;
     ss << "set cache-mode for pool '" << poolstr
 	<< "' to " << pg_pool_t::get_cache_mode_name(mode);
+    if (mode == pg_pool_t::CACHEMODE_NONE) {
+      const pg_pool_t *base_pool = osdmap.get_pg_pool(np->tier_of);
+      assert(base_pool);
+      if (base_pool->read_tier == pool_id ||
+	  base_pool->write_tier == pool_id)
+	ss <<" (WARNING: pool is still configured as read or write tier)";
+    }
     wait_for_finished_proposal(new Monitor::C_Command(mon, m, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
