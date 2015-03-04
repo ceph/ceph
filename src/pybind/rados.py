@@ -548,15 +548,15 @@ Rados object in state %s." % (self.state))
         :param auid: the id of the owner of the new pool
         :type auid: int
         :param crush_rule: rule to use for placement in the new pool
-        :type crush_rule: str
+        :type crush_rule: int
 
         :raises: :class:`TypeError`, :class:`Error`
         """
         self.require_state("connected")
         if not isinstance(pool_name, str):
             raise TypeError('pool_name must be a string')
-        if crush_rule is not None and not isinstance(crush_rule, str):
-            raise TypeError('cruse_rule must be a string')
+        if crush_rule is not None and not isinstance(crush_rule, int):
+            raise TypeError('crush_rule must be an int')
         if (auid == None):
             if (crush_rule == None):
                 ret = run_in_thread(self.librados.rados_pool_create,
@@ -565,7 +565,7 @@ Rados object in state %s." % (self.state))
                 ret = run_in_thread(self.librados.\
                                     rados_pool_create_with_crush_rule,
                                     (self.cluster, c_char_p(pool_name),
-                                    c_ubyte(int(crush_rule))))
+                                    c_ubyte(crush_rule)))
 
         elif (crush_rule == None):
             ret = run_in_thread(self.librados.rados_pool_create_with_auid,
@@ -574,7 +574,7 @@ Rados object in state %s." % (self.state))
         else:
             ret = run_in_thread(self.librados.rados_pool_create_with_all,
                                 (self.cluster, c_char_p(pool_name),
-                                c_uint64(auid), c_ubyte(int(crush_rule))))
+                                c_uint64(auid), c_ubyte(crush_rule)))
         if ret < 0:
             raise make_ex(ret, "error creating pool '%s'" % pool_name)
 
