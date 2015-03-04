@@ -979,17 +979,13 @@ def upgrade_with_ceph_deploy(ctx, node, remote, pkgs, sys_type):
     subprocess.call(['ceph-deploy', 'install'] + params)
     remote.run(args=['sudo', 'restart', 'ceph-all'])
 
+
 def upgrade_common(ctx, config, deploy_style):
     """
     Common code for upgrading
     """
-
     assert config is None or isinstance(config, dict), \
         "install.upgrade only supports a dictionary for configuration"
-
-    for i in config.keys():
-            assert config.get(i) is None or isinstance(
-                config.get(i), dict), 'host supports dictionary'
 
     project = config.get('project', 'ceph')
 
@@ -997,7 +993,8 @@ def upgrade_common(ctx, config, deploy_style):
     # unspecified/implicit.
     install_overrides = ctx.config.get(
         'overrides', {}).get('install', {}).get(project, {})
-    log.info('project %s config %s overrides %s', project, config, install_overrides)
+    log.info('project %s config %s overrides %s', project, config,
+             install_overrides)
 
     # FIXME: extra_pkgs is not distro-agnostic
     extra_pkgs = config.get('extra_packages', [])
@@ -1010,7 +1007,11 @@ def upgrade_common(ctx, config, deploy_style):
             remotes[remote] = config.get('all')
     else:
         for role in config.keys():
-            (remote,) = ctx.cluster.only(role).remotes.iterkeys()
+            remotes_dict = ctx.cluster.only(role).remotes
+            if not remotes_dict:
+                # This is a regular config argument, not a role
+                continue
+            remote = remotes_dict.keys()[0]
             if remote in remotes:
                 log.warn('remote %s came up twice (role %s)', remote, role)
                 continue
