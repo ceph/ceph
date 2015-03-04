@@ -357,9 +357,22 @@ function activate_dev_body() {
 
     setup
     run_mon
+    #
+    # Create an OSD and reuse an existing journal partition
+    #
     test_activate $newdisk ${newdisk}p1 ${journal}p1 || return 1
+    #
+    # Create an OSD and get a journal partition from a disk that
+    # already contains a journal partition which is in use. Updates of
+    # the kernel partition table may behave differently when a
+    # partition is in use. See http://tracker.ceph.com/issues/7334 for
+    # more information.
+    #
+    ceph-disk zap $disk || return 1
+    test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${newdisk}p1 || return 1
+    umount ${disk}p1 || return 1
     teardown
 }
 
