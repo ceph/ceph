@@ -2027,7 +2027,7 @@ void Objecter::_send_op_account(Op *op)
   } else {
     ldout(cct, 20) << " note: not requesting ack" << dendl;
   }
-  if (op->oncommit) {
+  if (op->oncommit || op->oncommit_sync) {
     num_uncommitted.inc();
   } else {
     ldout(cct, 20) << " note: not requesting commit" << dendl;
@@ -2906,7 +2906,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 5) << " got redirect reply; redirecting" << dendl;
     if (op->onack)
       num_unacked.dec();
-    if (op->oncommit)
+    if (op->oncommit || op->oncommit_sync)
       num_uncommitted.dec();
     _session_op_remove(s, op);
     s->lock.unlock();
@@ -3007,6 +3007,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (op->oncommit_sync) {
     op->oncommit_sync->complete(rc);
     op->oncommit_sync = NULL;
+    num_uncommitted.dec();
+    logger->inc(l_osdc_op_commit);
   }
 
   /* get it before we call _finish_op() */
