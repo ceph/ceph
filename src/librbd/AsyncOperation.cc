@@ -29,7 +29,7 @@ void AsyncOperation::finish_op() {
     assert(m_xlist_item.remove_myself());
 
     // linked list stored newest -> oldest ops
-    if (!iter.end()) {
+    if (!iter.end() && !m_flush_contexts.empty()) {
       ldout(m_image_ctx->cct, 20) << "moving flush contexts to previous op: "
                                   << *iter << dendl;
       (*iter)->m_flush_contexts.insert((*iter)->m_flush_contexts.end(),
