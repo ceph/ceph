@@ -6,6 +6,7 @@ import logging
 import time
 import commands
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description='watch ceph perf')
     parser.add_argument(
