@@ -34,12 +34,13 @@ APPNAME = '__main__'
 app = flask.Flask(APPNAME)
 
 LOGLEVELS = {
-    'critical':logging.CRITICAL,
-    'error':logging.ERROR,
-    'warning':logging.WARNING,
-    'info':logging.INFO,
-    'debug':logging.DEBUG,
+    'critical': logging.CRITICAL,
+    'error': logging.ERROR,
+    'warning': logging.WARNING,
+    'info': logging.INFO,
+    'debug': logging.DEBUG,
 }
+
 
 def find_up_osd(app):
     '''
@@ -60,7 +61,8 @@ def find_up_osd(app):
     return int(osds[-1])
 
 
-METHOD_DICT = {'r':['GET'], 'w':['PUT', 'DELETE']}
+METHOD_DICT = {'r': ['GET'], 'w': ['PUT', 'DELETE']}
+
 
 def api_setup(app, conf, cluster, clientname, clientid, args):
     '''
@@ -72,7 +74,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     signatures, module, perms, and help; stuff them away in the app.ceph_urls
     dict.  Also save app.ceph_sigdict for help() handling.
     '''
-    def get_command_descriptions(cluster, target=('mon','')):
+    def get_command_descriptions(cluster, target=('mon', '')):
         ret, outbuf, outs = json_command(cluster, target,
                                          prefix='get_command_descriptions',
                                          timeout=30)
@@ -104,7 +106,7 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     app.ceph_cluster.connect()
 
     app.ceph_baseurl = app.ceph_cluster.conf_get('restapi_base_url') \
-         or DEFAULT_BASEURL
+        or DEFAULT_BASEURL
     if app.ceph_baseurl.endswith('/'):
         app.ceph_baseurl = app.ceph_baseurl[:-1]
     addr = app.ceph_cluster.conf_get('public_addr') or DEFAULT_ADDR
@@ -171,13 +173,12 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
         for k in METHOD_DICT.iterkeys():
             if k in perm:
                 methods = METHOD_DICT[k]
-        urldict = {'paramsig':params,
-                   'help':cmddict['help'],
-                   'module':cmddict['module'],
-                   'perm':perm,
-                   'flavor':flavor,
-                   'methods':methods,
-                  }
+        urldict = {'paramsig': params,
+                   'help': cmddict['help'],
+                   'module': cmddict['module'],
+                   'perm': perm,
+                   'flavor': flavor,
+                   'methods': methods, }
 
         # app.ceph_urls contains a list of urldicts (usually only one long)
         if url not in app.ceph_urls:
@@ -216,7 +217,7 @@ def generate_url_and_params(app, sig, flavor):
     # tack it onto the front of sig
     if flavor == 'tell':
         tellsig = parse_funcsig(['tell',
-                                {'name':'target', 'type':'CephOsdName'}])
+                                {'name': 'target', 'type': 'CephOsdName'}])
         sig = tellsig + sig
 
     for desc in sig:
@@ -226,17 +227,17 @@ def generate_url_and_params(app, sig, flavor):
         # CephChoices with 1 required string (not --) do too, unless
         # we've already started collecting params, in which case they
         # too are params
-        elif desc.t == CephChoices and \
-             len(desc.instance.strings) == 1 and \
-             desc.req and \
-             not str(desc.instance).startswith('--') and \
-             not params:
+        elif (desc.t == CephChoices and
+              len(desc.instance.strings) == 1 and
+              desc.req and
+              not str(desc.instance).startswith('--') and
+              not params):
             url += '/' + str(desc.instance)
         else:
             # tell/<target> is a weird case; the URL includes what
             # would everywhere else be a parameter
-            if flavor == 'tell' and  \
-              (desc.t, desc.name) == (CephOsdName, 'target'):
+            if flavor == 'tell' and ((desc.t, desc.name) ==
+               (CephOsdName, 'target')):
                 url += '/<target>'
             else:
                 params.append(desc)
@@ -247,7 +248,6 @@ def generate_url_and_params(app, sig, flavor):
 #
 # end setup (import-time) functions, begin request-time functions
 #
-
 def concise_sig_for_uri(sig, flavor):
     '''
     Return a generic description of how one would send a REST request for sig
@@ -267,6 +267,7 @@ def concise_sig_for_uri(sig, flavor):
         ret += '?' + '&'.join(args)
     return ret
 
+
 def show_human_help(prefix):
     '''
     Dump table showing commands matching prefix
@@ -274,7 +275,7 @@ def show_human_help(prefix):
     # XXX There ought to be a better discovery mechanism than an HTML table
     s = '<html><body><table border=1><th>Possible commands:</th><th>Method</th><th>Description</th>'
 
-    permmap = {'r':'GET', 'rw':'PUT', 'rx':'GET', 'rwx':'PUT'}
+    permmap = {'r': 'GET', 'rw': 'PUT', 'rx': 'GET', 'rwx': 'PUT'}
     line = ''
     for cmdsig in sorted(app.ceph_sigdict.itervalues(), cmp=descsort):
         concise = concise_sig(cmdsig['sig'])
@@ -301,6 +302,7 @@ def show_human_help(prefix):
     else:
         return ''
 
+
 @app.before_request
 def log_request():
     '''
@@ -309,9 +311,11 @@ def log_request():
     app.logger.info(flask.request.url + " from " + flask.request.remote_addr + " " + flask.request.user_agent.string)
     app.logger.debug("Accept: %s", flask.request.accept_mimetypes.values())
 
+
 @app.route('/')
 def root_redir():
     return flask.redirect(app.ceph_baseurl)
+
 
 def make_response(fmt, output, statusmsg, errorcode):
     '''
@@ -324,8 +328,8 @@ def make_response(fmt, output, statusmsg, errorcode):
         if 'json' in fmt:
             try:
                 native_output = json.loads(output or '[]')
-                response = json.dumps({"output":native_output,
-                                       "status":statusmsg})
+                response = json.dumps({"output": native_output,
+                                       "status": statusmsg})
             except:
                 return flask.make_response("Error decoding JSON from " +
                                            output, 500)
@@ -334,13 +338,13 @@ def make_response(fmt, output, statusmsg, errorcode):
             # one is tempted to do this with xml.etree, but figuring out how
             # to 'un-XML' the XML-dumped output so it can be reassembled into
             # a piece of the tree here is beyond me right now.
-            #ET = xml.etree.ElementTree
-            #resp_elem = ET.Element('response')
-            #o = ET.SubElement(resp_elem, 'output')
-            #o.text = output
-            #s = ET.SubElement(resp_elem, 'status')
-            #s.text = statusmsg
-            #response = ET.tostring(resp_elem)
+            # ET = xml.etree.ElementTree
+            # resp_elem = ET.Element('response')
+            # o = ET.SubElement(resp_elem, 'output')
+            # o.text = output
+            # s = ET.SubElement(resp_elem, 'status')
+            # s.text = statusmsg
+            # response = ET.tostring(resp_elem)
             response = '''
 <response>
   <output>
@@ -355,6 +359,7 @@ def make_response(fmt, output, statusmsg, errorcode):
             response = response + '\n' + statusmsg + '\n'
 
     return flask.make_response(response, errorcode)
+
 
 def handler(catchall_path=None, fmt=None, target=None):
     '''
@@ -374,7 +379,7 @@ def handler(catchall_path=None, fmt=None, target=None):
     if not ep.startswith(app.ceph_baseurl):
         return make_response(fmt, '', 'Page not found', 404)
 
-    rel_ep = ep[len(app.ceph_baseurl)+1:]
+    rel_ep = ep[len(app.ceph_baseurl) + 1:]
 
     # Extensions override Accept: headers override defaults
     if not fmt:
@@ -414,7 +419,7 @@ def handler(catchall_path=None, fmt=None, target=None):
         prefix = ' '.join(rel_ep.split('/')).strip()
 
     # show "match as much as you gave me" help for unknown endpoints
-    if not ep in app.ceph_urls:
+    if ep not in app.ceph_urls:
         helptext = show_human_help(prefix)
         if helptext:
             resp = flask.make_response(helptext, 400)
@@ -432,8 +437,10 @@ def handler(catchall_path=None, fmt=None, target=None):
 
         # allow '?help' for any specifically-known endpoint
         if 'help' in flask.request.args:
-            response = flask.make_response('{0}: {1}'.\
-                format(prefix + concise_sig(paramsig), urldict['help']))
+            response = flask.make_response('{0}: {1}'.
+                                           format(prefix +
+                                                  concise_sig(paramsig),
+                                                  urldict['help']))
             response.headers['Content-Type'] = 'text/plain'
             return response
 
@@ -482,11 +489,12 @@ def handler(catchall_path=None, fmt=None, target=None):
 
     response = make_response(fmt, outbuf, outs or 'OK', 200)
     if fmt:
-        contenttype = 'application/' + fmt.replace('-pretty','')
+        contenttype = 'application/' + fmt.replace('-pretty', '')
     else:
         contenttype = 'text/plain'
     response.headers['Content-Type'] = contenttype
     return response
+
 
 #
 # Main entry point from wrapper/WSGI server: call with cmdline args,
