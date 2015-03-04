@@ -984,6 +984,8 @@ int DBObjectMap::upgrade_to_v2()
   }
 
   state.v = 2;
+
+  Mutex::Locker l(header_lock);
   KeyValueDB::Transaction t = db->get_transaction();
   write_state(t);
   db->submit_transaction_sync(t);
@@ -1031,7 +1033,6 @@ int DBObjectMap::init(bool do_upgrade)
 int DBObjectMap::sync(const ghobject_t *oid,
 		      const SequencerPosition *spos) {
   KeyValueDB::Transaction t = db->get_transaction();
-  write_state(t);
   if (oid) {
     assert(spos);
     MapHeaderLock hl(this, *oid);
@@ -1042,11 +1043,18 @@ int DBObjectMap::sync(const ghobject_t *oid,
       header->spos = *spos;
       set_map_header(hl, *oid, *header, t);
     }
+    Mutex::Locker l(header_lock);
+    write_state(t);
+    return db->submit_transaction_sync(t);
+  } else {
+    Mutex::Locker l(header_lock);
+    write_state(t);
+    return db->submit_transaction_sync(t);
   }
-  return db->submit_transaction_sync(t);
 }
 
 int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
+  assert(header_lock.is_locked_by_me());
   dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
   KeyValueDB::Transaction t = _t ? _t : db->get_transaction();
   bufferlist bl;
