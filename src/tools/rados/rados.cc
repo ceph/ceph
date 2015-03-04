@@ -1316,14 +1316,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret) {
-     cerr << "couldn't initialize rados! error " << ret << std::endl;
+     cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }
 
   ret = rados.connect();
   if (ret) {
-     cerr << "couldn't connect to cluster! error " << ret << std::endl;
+     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
      ret = -1;
      goto out;
   }
