@@ -302,9 +302,9 @@ function test_activate_dir() {
 function create_dev() {
     local name=$1
 
-    dd if=/dev/zero of=$name bs=1024k count=200
     set -x
     echo create_dev $name >&2
+    dd if=/dev/zero of=$name bs=1024k count=400 > /dev/null
     losetup --find $name
     local dev=$(losetup --associated $name | cut -f1 -d:)
     ceph-disk zap $dev > /dev/null 2>&1
@@ -334,12 +334,27 @@ function activate_dev_body() {
 
     setup
     run_mon
+    #
+    # Create an OSD with data on a disk, journal on another
+    #
     test_activate $disk ${disk}p1 $journal || return 1
     kill_daemons
     umount ${disk}p1 || return 1
     teardown
 
-    # reuse the journal partition
+    setup
+    run_mon
+    #
+    # Create an OSD with data on a disk, journal on another
+    # This will add a new partition to $journal, the previous
+    # one will remain.
+    #
+    ceph-disk zap $disk || return 1
+    test_activate $disk ${disk}p1 $journal || return 1
+    kill_daemons
+    umount ${disk}p1 || return 1
+    teardown
+
     setup
     run_mon
     test_activate $newdisk ${newdisk}p1 ${journal}p1 || return 1
