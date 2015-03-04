@@ -832,6 +832,8 @@ function test_mon_mds()
 
 function test_mon_mon()
 {
+  # print help message
+  ceph mon
   # no mon add/remove
   ceph mon dump
   ceph mon getmap -o $TMPDIR/monmap.$$
@@ -954,6 +956,7 @@ function test_mon_osd()
   [ "$id" = "$id2" ]
   ceph osd rm $id
 
+  ceph osd
   ceph osd ls
   ceph osd pool create data 10
   ceph osd lspools | grep data
