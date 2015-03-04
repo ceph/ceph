@@ -303,21 +303,28 @@ function create_dev() {
     local name=$1
 
     dd if=/dev/zero of=$name bs=1024k count=200
+    set -x
+    echo create_dev $name >&2
     losetup --find $name
     local dev=$(losetup --associated $name | cut -f1 -d:)
     ceph-disk zap $dev > /dev/null 2>&1
     echo $dev
+    set +x
 }
 
 function destroy_dev() {
     local name=$1
     local dev=$2
 
+    set -x
+    echo destroy_dev $name $dev >&2
     for partition in 1 2 3 4 ; do
-        umount ${dev}p${partition} || true
+        umount ${dev}p${partition} > /dev/null 2>&1 || true
     done
+    ceph-disk zap $dev > /dev/null 2>&1
     losetup --detach $dev
     rm $name
+    set +x
 }
 
 function activate_dev_body() {
