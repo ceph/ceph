@@ -48,16 +48,43 @@ namespace librbd {
     }
   }
 
-  void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents)
+  void AioRequest::complete(int r)
+  {
+    if (should_complete(r)) {
+      ldout(m_ictx->cct, 20) << "complete " << this << dendl;
+      if (m_hide_enoent && r == -ENOENT) {
+	r = 0;
+      }
+      m_completion->complete(r);
+      delete this;
+    }
+  }
+
+  void AioRequest::read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents,
+                                    bool block_completion)
   {
     assert(!m_parent_completion);
     m_parent_completion = aio_create_completion_internal(this, rbd_req_cb);
+    if (block_completion) {
+      // prevent the parent image from being deleted while this
+      // request is still in-progress
+      m_parent_completion->get();
+      m_parent_completion->block();
+    }
+
     ldout(m_ictx->cct, 20) << "read_from_parent this = " << this
 			   << " parent completion " << m_parent_completion
 			   << " extents " << image_extents
 			   << dendl;
-    aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
-	     m_parent_completion, 0);
+    int r = aio_read(m_ictx->parent, image_extents, NULL, &m_read_data,
+	             m_parent_completion, 0);
+    if (r < 0) {
+      lderr(m_ictx->cct) << "read_from_parent " << this
+                         << ": error reading from parent: "
+                         << cpp_strerror(r) << dendl;
+      m_parent_completion->release();
+      complete(r);
+    }
   }
 
   static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
@@ -116,36 +143,46 @@ namespace librbd {
 
       // This is the step to read from parent
       if (!m_tried_parent && r == -ENOENT) {
-        RWLock::RLocker l(m_ictx->snap_lock);
-        RWLock::RLocker l2(m_ictx->parent_lock);
-
-        if (m_ictx->parent == NULL) {
-	  ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
-	  m_state = LIBRBD_AIO_READ_FLAT;
-	  finished = false;
-	  break;
-	}
-
-        // calculate reverse mapping onto the image
-        vector<pair<uint64_t,uint64_t> > image_extents;
-        Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
-			        m_object_no, m_object_off, m_object_len,
-			        image_extents);
-
-        uint64_t image_overlap = 0;
-        r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
-        if (r < 0) {
-          assert(0 == "FIXME");
-        }
-        uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents, image_overlap);
-        if (object_overlap) {
-          m_tried_parent = true;
-          if (is_copy_on_read(m_ictx, m_snap_id)) {
-            m_state = LIBRBD_AIO_READ_COPYUP; 
+        {
+          RWLock::RLocker l(m_ictx->snap_lock);
+          RWLock::RLocker l2(m_ictx->parent_lock);
+          if (m_ictx->parent == NULL) {
+	    ldout(m_ictx->cct, 20) << "parent is gone; do nothing" << dendl;
+	    m_state = LIBRBD_AIO_READ_FLAT;
+	    finished = false;
+	    break;
 	  }
 
-          read_from_parent(image_extents);
-          finished = false;
+          // calculate reverse mapping onto the image
+          vector<pair<uint64_t,uint64_t> > image_extents;
+          Striper::extent_to_file(m_ictx->cct, &m_ictx->layout,
+			          m_object_no, m_object_off, m_object_len,
+			          image_extents);
+
+          uint64_t image_overlap = 0;
+          r = m_ictx->get_parent_overlap(m_snap_id, &image_overlap);
+          if (r < 0) {
+            assert(0 == "FIXME");
+          }
+          uint64_t object_overlap = m_ictx->prune_parent_extents(image_extents,
+                                                                 image_overlap);
+          if (object_overlap) {
+            m_tried_parent = true;
+            if (is_copy_on_read(m_ictx, m_snap_id)) {
+              m_state = LIBRBD_AIO_READ_COPYUP;
+	    }
+
+            read_from_parent(image_extents, true);
+            finished = false;
+          }
+        }
+
+        if (m_tried_parent) {
+          // release reference to the parent read completion.  this request
+          // might be completed after unblock is invoked.
+          AioCompletion *parent_completion = m_parent_completion;
+          parent_completion->unblock(m_ictx->cct);
+          parent_completion->put();
         }
       }
       break;
@@ -336,7 +373,7 @@ namespace librbd {
               m_ictx->copyup_list_lock.Unlock();
             }
           } else {
-            read_from_parent(m_object_image_extents);
+            read_from_parent(m_object_image_extents, false);
           }
 	} else {
 	  ldout(m_ictx->cct, 20) << "should_complete(" << this
@@ -427,17 +464,18 @@ namespace librbd {
         boost::optional<uint8_t> current_state;
         pre_object_map_update(&new_state);
 
-        m_state = LIBRBD_AIO_WRITE_PRE; 
+        m_state = LIBRBD_AIO_WRITE_PRE;
         FunctionContext *ctx = new FunctionContext(
           boost::bind(&AioRequest::complete, this, _1));
         if (!m_ictx->object_map.aio_update(m_object_no, new_state,
 					    current_state, ctx)) {
 	  // no object map update required
+	  delete ctx;
 	  return false;
 	}
       }
     }
-    
+
     if (lost_exclusive_lock) {
       complete(-ERESTART);
     }
@@ -466,10 +504,11 @@ namespace librbd {
     if (!m_ictx->object_map.aio_update(m_object_no, OBJECT_NONEXISTENT,
 					OBJECT_PENDING, ctx)) {
       // no object map update required
+      delete ctx;
       return true;
     }
-    return false;  
-  } 
+    return false;
+  }
 
   void AbstractWrite::send_write() {
     ldout(m_ictx->cct, 20) << "send_write " << this << " " << m_oid << " "

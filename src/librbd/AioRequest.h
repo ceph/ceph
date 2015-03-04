@@ -34,21 +34,14 @@ namespace librbd {
                Context *completion, bool hide_enoent);
     virtual ~AioRequest();
 
-    void complete(int r)
-    {
-      if (should_complete(r)) {
-	if (m_hide_enoent && r == -ENOENT)
-	  r = 0;
-	m_completion->complete(r);
-	delete this;
-      }
-    }
+    void complete(int r);
 
     virtual bool should_complete(int r) = 0;
     virtual int send() = 0;
 
   protected:
-    void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents);
+    void read_from_parent(vector<pair<uint64_t,uint64_t> >& image_extents,
+                          bool block_completion);
 
     ImageCtx *m_ictx;
     std::string m_oid;
