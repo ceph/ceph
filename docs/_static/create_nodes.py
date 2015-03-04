@@ -9,13 +9,14 @@ import logging
 import sys
 from teuthology.orchestra.remote import Remote
 from teuthology.lock import update_inventory
-paddles_url = 'http://pulpito.example.com:8080/nodes/'
+paddles_url = 'http://paddles.example.com/nodes/'
 
-machine_type = 'magna'
+machine_type = 'typica'
 lab_domain = 'example.com'
+# Don't change the user. It won't work at this time.
 user = 'ubuntu'
-# We are populating 'magna003' -> 'magna122'
-machine_index_range = range(3, 123)
+# We are populating 'typica003' -> 'typica192'
+machine_index_range = range(3, 192)
 
 log = logging.getLogger(sys.argv[0])
 logging.getLogger("requests.packages.urllib3.connectionpool").setLevel(
@@ -36,25 +37,28 @@ def get_info(user, fqdn):
     remote = Remote('@'.join((user, fqdn)))
     return remote.inventory_info
 
+
 def main():
-    shortnames = [get_shortname(machine_type, i) for i in range(3, 123)]
+    shortnames = [get_shortname(machine_type, i) for i in machine_index_range]
     fqdns = ['.'.join((name, lab_domain)) for name in shortnames]
     for fqdn in fqdns:
         log.info("Creating %s", fqdn)
-        try:
-            info = get_info(user, fqdn)
-        except Exception:
-            info = dict(
-                name=fqdn,
-                up=False,
-            )
-        info.update(dict(
+        base_info = dict(
+            name=fqdn,
             locked=True,
             locked_by='initial@setup',
             machine_type=machine_type,
             description="Initial node creation",
-        ))
-        update_inventory(info)
+        )
+        try:
+            info = get_info(user, fqdn)
+            base_info.update(info)
+            base_info['up'] = True
+        except Exception as exc:
+            log.error("{fqdn} is down".format(fqdn=fqdn))
+            base_info['up'] = False
+            base_info['description'] = repr(exc)
+        update_inventory(base_info)
 
 if __name__ == '__main__':
     main()
