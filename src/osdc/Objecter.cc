@@ -1293,6 +1293,9 @@ void Objecter::_check_op_pool_dne(Op *op, bool session_locked)
       if (op->oncommit) {
 	op->oncommit->complete(-ENOENT);
       }
+      if (op->oncommit_sync) {
+	op->oncommit_sync->complete(-ENOENT);
+      }
 
       OSDSession *s = op->session;
       assert(s != NULL);
@@ -2197,6 +2200,10 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     op->oncommit->complete(r);
     op->oncommit = NULL;
   }
+  if (op->oncommit_sync) {
+    op->oncommit_sync->complete(r);
+    op->oncommit_sync = NULL;
+  }
   _op_cancel_map_check(op);
   _finish_op(op);
   s->lock.unlock();
@@ -2656,6 +2663,7 @@ void Objecter::_cancel_linger_op(Op *op)
   assert(!op->should_resend);
   delete op->onack;
   delete op->oncommit;
+  delete op->oncommit_sync;
 
   _finish_op(op);
 }
@@ -2997,25 +3005,28 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     num_unacked.dec();
     logger->inc(l_osdc_op_ack);
   }
-  if (op->oncommit && (m->is_ondisk() || rc)) {
-    ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
-    oncommit = op->oncommit;
-    op->oncommit = 0;
-    num_uncommitted.dec();
-    logger->inc(l_osdc_op_commit);
-  }
-  if (op->oncommit_sync) {
-    op->oncommit_sync->complete(rc);
-    op->oncommit_sync = NULL;
-    num_uncommitted.dec();
-    logger->inc(l_osdc_op_commit);
+  if (m->is_ondisk() || rc) {
+    if (op->oncommit) {
+      ldout(cct, 15) << "handle_osd_op_reply safe" << dendl;
+      oncommit = op->oncommit;
+      op->oncommit = NULL;
+      num_uncommitted.dec();
+      logger->inc(l_osdc_op_commit);
+    }
+    if (op->oncommit_sync) {
+      ldout(cct, 15) << "handle_osd_op_reply safe (sync)" << dendl;
+      op->oncommit_sync->complete(rc);
+      op->oncommit_sync = NULL;
+      num_uncommitted.dec();
+      logger->inc(l_osdc_op_commit);
+    }
   }
 
   /* get it before we call _finish_op() */
   Mutex *completion_lock = (op->target.base_oid.name.size() ? s->get_lock(op->target.base_oid) : NULL);
 
   // done with this tid?
-  if (!op->onack && !op->oncommit) {
+  if (!op->onack && !op->oncommit && !op->oncommit_sync) {
     ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
     _finish_op(op);
   }
