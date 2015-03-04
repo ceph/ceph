@@ -2699,31 +2699,27 @@ void PG::_upgrade_v7(ObjectStore *store, const interval_set<snapid_t> &snapcolls
   }
 }
 
-int PG::_write_info(ObjectStore::Transaction& t, epoch_t epoch,
-		    pg_info_t &info, coll_t coll,
-		    map<epoch_t,pg_interval_t> &past_intervals,
-		    ghobject_t &pgmeta_oid,
-		    bool dirty_big_info)
+int PG::_prepare_write_info(map<string,bufferlist> *km,
+			    epoch_t epoch,
+			    pg_info_t &info, coll_t coll,
+			    map<epoch_t,pg_interval_t> &past_intervals,
+			    ghobject_t &pgmeta_oid,
+			    bool dirty_big_info)
 {
-  // pg state
-  map<string,bufferlist> v;
-
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
-  ::encode(epoch, v[epoch_key]);
+  ::encode(epoch, (*km)[epoch_key]);
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, v[info_key]);
+  ::encode(info, (*km)[info_key]);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
-    bufferlist& bigbl = v[biginfo_key];
+    bufferlist& bigbl = (*km)[biginfo_key];
     ::encode(past_intervals, bigbl);
     ::encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
   }
-
-  t.omap_setkeys(coll, pgmeta_oid, v);
 
   return 0;
 }
@@ -2757,14 +2753,14 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
-void PG::write_info(ObjectStore::Transaction& t)
+void PG::prepare_write_info(map<string,bufferlist> *km)
 {
   info.stats.stats.add(unstable_stats);
   unstable_stats.clear();
 
-  int ret = _write_info(t, get_osdmap()->get_epoch(), info, coll,
-			past_intervals, pgmeta_oid,
-			dirty_big_info);
+  int ret = _prepare_write_info(km, get_osdmap()->get_epoch(), info, coll,
+				past_intervals, pgmeta_oid,
+				dirty_big_info);
   assert(ret == 0);
   last_persisted_osdmap_ref = osdmap_ref;
 
@@ -2867,8 +2863,11 @@ epoch_t PG::peek_map_epoch(ObjectStore *store,
 
 void PG::write_if_dirty(ObjectStore::Transaction& t)
 {
-  if (dirty_big_info || dirty_info)
-    write_info(t);
+  map<string,bufferlist> km;
+  if (dirty_big_info || dirty_info) {
+    prepare_write_info(&km);
+    t.omap_setkeys(coll, pgmeta_oid, km);
+  }
   pg_log.write_log(t, coll, pgmeta_oid);
 }
 
