@@ -376,7 +376,7 @@ private:
   void _journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk);
   friend struct C_JournaledAhead;
 
-  int open_journal();
+  void new_journal();
 
   PerfCounters *logger;
 
