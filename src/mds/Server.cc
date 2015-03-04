@@ -3618,6 +3618,10 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
 
   journal_and_reply(mdr, in, dn, le, new C_MDS_inode_update_finish(mds, mdr, in, old_size > 0,
 								   changed_ranges));
+  // Although the `open` part can give an early reply, the truncation won't
+  // happen until our EUpdate is persistent, to give the client a prompt
+  // response we must also flush that event.
+  mdlog->flush();
 }
 
 
