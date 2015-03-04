@@ -666,6 +666,9 @@ def main():
         print >> sys.stderr, '"{0} tell" is deprecated; try "tell {0}.<id>" instead (id can be "*") '.format(childargs[0])
         return 1
 
+    if childargs in [['mon'], ['osd']]:
+        parsed_args.help = True
+
     if parsed_args.help:
         # short default timeout for -h
         if not timeout:
