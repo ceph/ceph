@@ -667,7 +667,7 @@ class SyntheticDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     list<uint64_t> c = conn_sent[con];
     for (list<uint64_t>::iterator it = c.begin();
-         it != c.end(); it++)
+         it != c.end(); ++it)
       sent.erase(*it);
     conn_sent.erase(con);
     got_remote_reset = true;
