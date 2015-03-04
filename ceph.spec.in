@@ -50,6 +50,9 @@ Group:		System Environment/Base
 %endif
 URL:		http://ceph.com/
 Source0:	http://ceph.com/download/%{name}-%{version}.tar.xz
+Source1:	ceph-tmpfiles.d.conf
+Source2:	ceph-radosgw-tmpfiles.d.conf
+Source3:	ceph-rpmlintrc
 Requires:	librbd1 = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 Requires:	libcephfs1 = %{epoch}:%{version}-%{release}
@@ -472,11 +475,13 @@ install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
-ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
+#ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
 install -m 0644 -D src/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/ceph
 install -m 0644 -D src/rgw/logrotate.conf $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/radosgw
 %{__install} -d -m 0755 %{buildroot}/%{_tmpfilesdir}
-%{__install} -m 0644 %{SOURCE4} %{buildroot}/%{_tmpfilesdir}/ceph-radosgw.conf
+%{__install} -m 0644 %{SOURCE1} %{buildroot}/%{_tmpfilesdir}/%{name}.conf
+%{__install} -m 0644 %{SOURCE2} %{buildroot}/%{_tmpfilesdir}/ceph-radosgw.conf
+
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.ceph.conf
 chmod 0644 $RPM_BUILD_ROOT%{_docdir}/ceph/sample.fetch_config
 
@@ -605,8 +610,6 @@ fi
 %{_sbindir}/ceph-disk-udev
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/rcceph
-%dir /usr/lib/ceph
-/usr/lib/ceph/ceph-osd-prestart.sh
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mds@.service
@@ -635,7 +638,6 @@ fi
 %dir %{_libdir}/ceph/erasure-code
 %{_libdir}/ceph/erasure-code/libec_*.so*
 %if 0%{?rhel} >= 7 || 0%{?fedora} || 0%{?suse_version}
-/usr/lib/udev/rules.d/60-ceph-partuuid-workaround.rules
 /usr/lib/udev/rules.d/95-ceph-osd.rules
 %else
 /lib/udev/rules.d/60-ceph-partuuid-workaround.rules
@@ -667,13 +669,12 @@ fi
 %dir %{_localstatedir}/lib/ceph/mds
 %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-# %if 0%{?suse_version}
-# %dir %{_tmpfilesdir}/
-# %{_tmpfilesdir}/%{name}.conf
-# %else
-# %ghost %dir %{_localstatedir}/run/ceph/
-# %endif
-# hmmm - so upstream is also not creating the file?!
+%if 0%{?suse_version}
+%dir %{_tmpfilesdir}/
+%{_tmpfilesdir}/%{name}.conf
+%else
+%ghost %dir %{_localstatedir}/run/ceph/
+%endif
 
 #################################################################################
 %files -n ceph-common
@@ -741,10 +742,18 @@ fi
 %{_bindir}/radosgw-admin
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/radosgw-admin.8*
-%{_sbindir}/rcceph-radosgw
 %config(noreplace) %{_sysconfdir}/logrotate.d/radosgw
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %dir %{_localstatedir}/log/radosgw/
+%if 0%{?suse_version} >= 1310
+%dir %{_tmpfilesdir}/
+%{_tmpfilesdir}/ceph-radosgw.conf
+%{_unitdir}/ceph-radosgw@.service
+%dir /usr/lib/ceph-radosgw
+/usr/lib/ceph-radosgw/ceph-radosgw-prestart.sh
+%else
+%{_sbindir}/rcceph-radosgw
+%endif
 
 %post radosgw
 /sbin/ldconfig
