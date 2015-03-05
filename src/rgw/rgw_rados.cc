@@ -975,6 +975,8 @@ int RGWPutObjProcessor_Aio::drain_pending()
 
 int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
 {
+  bool _wait = need_to_wait;
+
   if (handle) {
     struct put_obj_aio_info info;
     info.handle = handle;
@@ -988,7 +990,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
     if (r < 0)
       return r;
 
-    need_to_wait = false;
+    _wait = false;
   }
 
   /* resize window in case messages are draining too fast */
@@ -997,13 +999,10 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
   }
 
   /* now throttle. Note that need_to_wait should only affect the first IO operation */
-  if (pending.size() > max_chunks ||
-      need_to_wait) {
+  if (pending.size() > max_chunks || _wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
-
-    need_to_wait = false;
   }
   return 0;
 }
