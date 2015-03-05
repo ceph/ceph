@@ -131,10 +131,6 @@ private:
       avgcount2.set(a.second);
     }
 
-    // this functions are not used, for what are they?
-    void write_schema_json(char *buf, size_t buf_sz) const;
-    void  write_json(char *buf, size_t buf_sz) const;
-
     const char *name;
     const char *description;
     enum perfcounter_type_d type;
