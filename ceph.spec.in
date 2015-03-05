@@ -185,9 +185,9 @@ Group:		Development/Libraries
 Requires:	ceph-common = %{epoch}:%{version}-%{release}
 Requires:	librados2 = %{epoch}:%{version}-%{release}
 %if 0%{?suse_version}
-BuildRequires:	libexpat-devel
-BuildRequires:	FastCGI-devel
-Requires:	apache2-mod_fcgid
+BuildRequires:  FastCGI-devel
+BuildRequires:  libexpat-devel
+Requires:       apache2-mod_fastcgi
 %else
 BuildRequires:	expat-devel
 BuildRequires:	fcgi-devel
