@@ -97,13 +97,6 @@ libcommon_internal_la_SOURCES += \
 LIBCOMMON_DEPS += libcommon_internal.la
 noinst_LTLIBRARIES += libcommon_internal.la
 
-libcommon_api_la_SOURCES = \
-	common/buffer.cc
-if LINUX
-libcommon_api_la_CXXFLAGS = -fvisibility=hidden -fvisibility-inlines-hidden
-endif # LINUX
-noinst_LTLIBRARIES += libcommon_api.la
-
 # inject crc in common
 libcommon_crc_la_SOURCES = \
 	common/sctp_crc32.c \
@@ -135,8 +128,8 @@ if LINUX
 LIBCOMMON_DEPS += -lrt
 endif # LINUX
 
-libcommon_la_SOURCES =
-libcommon_la_LIBADD = $(LIBCOMMON_DEPS) libcommon_api.la
+libcommon_la_SOURCES = common/buffer.cc
+libcommon_la_LIBADD = $(LIBCOMMON_DEPS)
 noinst_LTLIBRARIES += libcommon.la
 
 noinst_HEADERS += \
