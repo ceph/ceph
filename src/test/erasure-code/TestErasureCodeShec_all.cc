@@ -275,9 +275,9 @@ int main(int argc, char **argv)
   for (unsigned int k = 1; k <= 12; k++) {
     for (unsigned int m = 1; (m <= k) && (k + m <= 20); m++) {
       for (unsigned int c = 1; c <= m; c++) {
-	sprintf(param[i].sk, "%d", k);
-	sprintf(param[i].sm, "%d", m);
-	sprintf(param[i].sc, "%d", c);
+	sprintf(param[i].sk, "%u", k);
+	sprintf(param[i].sm, "%u", m);
+	sprintf(param[i].sc, "%u", c);
 
 	param[i].k = param[i].sk;
 	param[i].m = param[i].sm;
