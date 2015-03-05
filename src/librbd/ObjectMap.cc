@@ -52,11 +52,11 @@ int ObjectMap::lock()
     }
   }
 
-  int r;
   bool broke_lock = false;
   CephContext *cct = m_image_ctx.cct;
   std::string oid(object_map_name(m_image_ctx.id, CEPH_NOSNAP));
   while (true) {
+    int r;
     ldout(cct, 10) << &m_image_ctx << " locking object map" << dendl;
     r = rados::cls::lock::lock(&m_image_ctx.md_ctx, oid,
 			       RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "", "",
@@ -73,9 +73,9 @@ int ObjectMap::lock()
     lockers_t lockers;
     ClsLockType lock_type;
     std::string lock_tag;
-    int r = rados::cls::lock::get_lock_info(&m_image_ctx.md_ctx, oid,
-                                            RBD_LOCK_NAME, &lockers,
-                                            &lock_type, &lock_tag);
+    r = rados::cls::lock::get_lock_info(&m_image_ctx.md_ctx, oid,
+                                        RBD_LOCK_NAME, &lockers,
+                                        &lock_type, &lock_tag);
     if (r == -ENOENT) {
       continue;
     } else if (r < 0) {
