@@ -102,7 +102,6 @@ void* thread1(void* pParam)
   TestParam* param = static_cast<TestParam*>(pParam);
 
   time_t start, end;
-  int r;
 
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
 
@@ -136,6 +135,7 @@ void* thread1(void* pParam)
 
   while (kTestSec >= (end - start)) {
     //init
+    int r;
     ErasureCodeShec* shec = new ErasureCodeShecReedSolomonVandermonde(
 				    tcache,
 				    ErasureCodeShec::MULTIPLE);
