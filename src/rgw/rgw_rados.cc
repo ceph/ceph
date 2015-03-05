@@ -1221,6 +1221,12 @@ int RGWRados::unwatch(uint64_t watch_handle)
 {
   int r = control_pool_ctx.unwatch2(watch_handle);
   if (r < 0) {
+    ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
+    return r;
+  }
+  r = rados->watch_flush();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
   }
   return 0;
