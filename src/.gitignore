@@ -1,6 +1,5 @@
 # generic entries
 Makefile
-*.csv
 
 # local directory specific entries
 /.git_version
