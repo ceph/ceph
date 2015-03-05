@@ -1,0 +1,34 @@
+if WITH_RADOS
+
+ceph_scratchtool_SOURCES = tools/scratchtool.c
+ceph_scratchtool_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_scratchtool
+
+ceph_scratchtoolpp_SOURCES = tools/scratchtoolpp.cc
+ceph_scratchtoolpp_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_scratchtoolpp
+
+ceph_radosacl_SOURCES = tools/radosacl.cc
+ceph_radosacl_LDADD = $(LIBRADOS) $(CEPH_GLOBAL)
+bin_DEBUGPROGRAMS += ceph_radosacl
+
+rados_SOURCES = \
+	tools/rados/rados.cc \
+	tools/rados/rados_import.cc \
+	tools/rados/rados_export.cc \
+	tools/rados/rados_sync.cc
+rados_SOURCES += common/obj_bencher.cc # needs cleanup so it can go in libcommon.la
+rados_LDADD = libcls_lock_client.la $(LIBRADOS) $(CEPH_GLOBAL)
+bin_PROGRAMS += rados
+
+
+if WITH_CEPHFS
+
+ceph_client_debug_SOURCES = tools/ceph-client-debug.cc
+ceph_client_debug_LDADD = $(LIBCEPHFS) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_DEBUGPROGRAMS += ceph-client-debug
+
+endif # WITH_CEPHFS
+
+
+endif # WITH_RADOS
