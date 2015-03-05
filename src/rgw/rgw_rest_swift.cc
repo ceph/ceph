@@ -45,8 +45,12 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
   return 0;
 }
 
-static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
-                                  uint64_t buckets_object_count, uint64_t buckets_size, uint64_t buckets_size_rounded)
+static void dump_account_metadata(struct req_state * const s,
+                                  const uint32_t buckets_count,
+                                  const uint64_t buckets_object_count,
+                                  const uint64_t buckets_size,
+                                  const uint64_t buckets_size_rounded,
+                                  map<string, bufferlist>& attrs)
 {
   char buf[32];
   utime_t now = ceph_clock_now(g_ceph_context);
@@ -61,6 +65,18 @@ static void dump_account_metadata(struct req_state *s, uint32_t buckets_count,
   s->cio->print("X-Account-Bytes-Used: %s\r\n", buf);
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
   s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
+
+  // Dump user-defined metadata items
+  const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
+  map<string, bufferlist>::iterator iter;
+  for (iter = attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != attrs.end(); ++iter) {
+    const char *name = iter->first.c_str();
+    if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
+      s->cio->print("X-Account-Meta-%s: %s\r\n", name + PREFIX_LEN, iter->second.c_str());
+    } else {
+      break;
+    }
+  }
 }
 
 void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
@@ -72,7 +88,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
     set_req_state_err(s, ret);
   }
   /* Adding account stats in the header to keep align with Swift API */
-  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
+  dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
   dump_errno(s);
   end_header(s, NULL);
 
@@ -285,11 +301,18 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   }
 }
 
+void RGWStatAccount_ObjStore_SWIFT::execute()
+{
+  RGWStatAccount_ObjStore::execute();
+
+  ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+}
+
 void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (ret >= 0) {
     ret = STATUS_NO_CONTENT;
-    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded);
+    dump_account_metadata(s, buckets_count, buckets_objcount, buckets_size, buckets_size_rounded, attrs);
   }
 
   set_req_state_err(s, ret);
