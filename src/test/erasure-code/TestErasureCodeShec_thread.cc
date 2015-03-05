@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 
 void* thread1(void* pParam)
 {
-  TestParam* param = (TestParam*) pParam;
+  TestParam* param = static_cast<TestParam*>(pParam);
 
   time_t start, end;
   int r;
