@@ -1033,6 +1033,8 @@ def upgrade_common(ctx, config, deploy_style):
         system_type = teuthology.get_system_type(remote)
         assert system_type in ('deb', 'rpm')
         pkgs = PACKAGES[project][system_type]
+        excluded_packages = config.get('exclude_packages', list())
+        pkgs = list(set(pkgs).difference(set(excluded_packages)))
         log.info("Upgrading {proj} {system_type} packages: {pkgs}".format(
             proj=project, system_type=system_type, pkgs=', '.join(pkgs)))
             # FIXME: again, make extra_pkgs distro-agnostic
@@ -1073,6 +1075,12 @@ docstring_for_upgrade = """"
 
     (HACK: the overrides will *only* apply the sha1/branch/tag if those
     keys are not present in the config.)
+
+    It is also possible to attempt to exclude packages from the upgrade set:
+
+        tasks:
+        - install.{cmd_parameter}:
+            exclude_packages: ['ceph-test', 'ceph-test-dbg']
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
