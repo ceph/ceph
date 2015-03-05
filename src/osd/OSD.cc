@@ -2106,18 +2106,18 @@ void OSD::create_logger()
   osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency", 
       "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
 
-  osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
-  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
-  osd_plb.add_time_avg(l_osd_sop_lat,   "subop_latency");     // subop latency
+  osd_plb.add_u64_counter(l_osd_sop,       "subop", "Suboperations");         // subops
+  osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes", "Suboperations total size");     // subop in bytes
+  osd_plb.add_time_avg(l_osd_sop_lat,   "subop_latency", "Suboperations latency");     // subop latency
 
-  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w");          // replicated (client) writes
-  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes");      // replicated write in bytes
-  osd_plb.add_time_avg(l_osd_sop_w_lat, "subop_w_latency");      // replicated write latency
-  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull");       // pull request
-  osd_plb.add_time_avg(l_osd_sop_pull_lat, "subop_pull_latency");
-  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push");       // push (write)
-  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes");
-  osd_plb.add_time_avg(l_osd_sop_push_lat, "subop_push_latency");
+  osd_plb.add_u64_counter(l_osd_sop_w,     "subop_w", "Replicated writes");          // replicated (client) writes
+  osd_plb.add_u64_counter(l_osd_sop_w_inb, "subop_w_in_bytes", "Replicated written data size");      // replicated write in bytes
+  osd_plb.add_time_avg(l_osd_sop_w_lat, "subop_w_latency", "Replicated writes latency");      // replicated write latency
+  osd_plb.add_u64_counter(l_osd_sop_pull,     "subop_pull", "Suboperations pull requests");       // pull request
+  osd_plb.add_time_avg(l_osd_sop_pull_lat, "subop_pull_latency", "Suboperations pull latency");
+  osd_plb.add_u64_counter(l_osd_sop_push,     "subop_push", "Suboperations push messages");       // push (write)
+  osd_plb.add_u64_counter(l_osd_sop_push_inb, "subop_push_in_bytes", "Suboperations pushed size");
+  osd_plb.add_time_avg(l_osd_sop_push_lat, "subop_push_latency", "Suboperations push latency");
 
   osd_plb.add_u64_counter(l_osd_pull,      "pull", "Pull requests sent");       // pull requests sent
   osd_plb.add_u64_counter(l_osd_push,      "push", "Push messages sent");       // push messages
@@ -2138,37 +2138,36 @@ void OSD::create_logger()
   osd_plb.add_u64(l_osd_pg_stray, "numpg_stray", "Placement groups ready to be deleted from this osd");   // num stray pgs
   osd_plb.add_u64(l_osd_hb_to, "heartbeat_to_peers", "Heartbeat (ping) peers we send to");     // heartbeat peers we send to
   osd_plb.add_u64(l_osd_hb_from, "heartbeat_from_peers", "Heartbeat (ping) peers we recv from"); // heartbeat peers we recv from
-  osd_plb.add_u64_counter(l_osd_map, "map_messages");           // osdmap messages
-  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs");         // osdmap epochs
-  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups"); // dup osdmap epochs
-  osd_plb.add_u64_counter(l_osd_waiting_for_map,
-			  "messages_delayed_for_map"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_map, "map_messages", "OSD map messages");           // osdmap messages
+  osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");         // osdmap epochs
+  osd_plb.add_u64_counter(l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates"); // dup osdmap epochs
+  osd_plb.add_u64_counter(l_osd_waiting_for_map, "messages_delayed_for_map", "Operations waiting for OSD map"); // dup osdmap epochs
 
-  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes");
-  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used");
-  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail");
+  osd_plb.add_u64(l_osd_stat_bytes, "stat_bytes", "OSD size");
+  osd_plb.add_u64(l_osd_stat_bytes_used, "stat_bytes_used", "Used space");
+  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space");
 
-  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom");
+  osd_plb.add_u64_counter(l_osd_copyfrom, "copyfrom", "Rados \"copy-from\" operations");
 
-  osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote");
-  osd_plb.add_u64_counter(l_osd_tier_flush, "tier_flush");
-  osd_plb.add_u64_counter(l_osd_tier_flush_fail, "tier_flush_fail");
-  osd_plb.add_u64_counter(l_osd_tier_try_flush, "tier_try_flush");
-  osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail");
-  osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict");
-  osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout");
-  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty");
-  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean");
-  osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay");
-  osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read");
+  osd_plb.add_u64_counter(l_osd_tier_promote, "tier_promote", "Tier promotions");
+  osd_plb.add_u64_counter(l_osd_tier_flush, "tier_flush", "Tier flushes");
+  osd_plb.add_u64_counter(l_osd_tier_flush_fail, "tier_flush_fail", "Failed tier flushes");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush, "tier_try_flush", "Tier flush attempts");
+  osd_plb.add_u64_counter(l_osd_tier_try_flush_fail, "tier_try_flush_fail", "Failed tier flush attempts");
+  osd_plb.add_u64_counter(l_osd_tier_evict, "tier_evict", "Tier evictions");
+  osd_plb.add_u64_counter(l_osd_tier_whiteout, "tier_whiteout", "Tier whiteouts");
+  osd_plb.add_u64_counter(l_osd_tier_dirty, "tier_dirty", "Dirty tier flag set");
+  osd_plb.add_u64_counter(l_osd_tier_clean, "tier_clean", "Dirty tier flag cleaned");
+  osd_plb.add_u64_counter(l_osd_tier_delay, "tier_delay", "Tier delays (agent waiting)");
+  osd_plb.add_u64_counter(l_osd_tier_proxy_read, "tier_proxy_read", "Tier proxy reads");
 
-  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake");
-  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip");
-  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush");
-  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict");
+  osd_plb.add_u64_counter(l_osd_agent_wake, "agent_wake", "Tiering agent wake up");
+  osd_plb.add_u64_counter(l_osd_agent_skip, "agent_skip", "Objects skipped by agent");
+  osd_plb.add_u64_counter(l_osd_agent_flush, "agent_flush", "Tiering agent flushes");
+  osd_plb.add_u64_counter(l_osd_agent_evict, "agent_evict", "Tiering agent evictions");
 
-  osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit");
-  osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total");
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_hit, "object_ctx_cache_hit", "Object context cache hits");
+  osd_plb.add_u64_counter(l_osd_object_ctx_cache_total, "object_ctx_cache_total", "Object context cache lookups");
 
   logger = osd_plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -2180,35 +2179,35 @@ void OSD::create_recoverystate_perf()
 
   PerfCountersBuilder rs_perf(cct, "recoverystate_perf", rs_first, rs_last);
 
-  rs_perf.add_time_avg(rs_initial_latency, "initial_latency");
-  rs_perf.add_time_avg(rs_started_latency, "started_latency");
-  rs_perf.add_time_avg(rs_reset_latency, "reset_latency");
-  rs_perf.add_time_avg(rs_start_latency, "start_latency");
-  rs_perf.add_time_avg(rs_primary_latency, "primary_latency");
-  rs_perf.add_time_avg(rs_peering_latency, "peering_latency");
-  rs_perf.add_time_avg(rs_backfilling_latency, "backfilling_latency");
-  rs_perf.add_time_avg(rs_waitremotebackfillreserved_latency, "waitremotebackfillreserved_latency");
-  rs_perf.add_time_avg(rs_waitlocalbackfillreserved_latency, "waitlocalbackfillreserved_latency");
-  rs_perf.add_time_avg(rs_notbackfilling_latency, "notbackfilling_latency");
-  rs_perf.add_time_avg(rs_repnotrecovering_latency, "repnotrecovering_latency");
-  rs_perf.add_time_avg(rs_repwaitrecoveryreserved_latency, "repwaitrecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_repwaitbackfillreserved_latency, "repwaitbackfillreserved_latency");
-  rs_perf.add_time_avg(rs_RepRecovering_latency, "RepRecovering_latency");
-  rs_perf.add_time_avg(rs_activating_latency, "activating_latency");
-  rs_perf.add_time_avg(rs_waitlocalrecoveryreserved_latency, "waitlocalrecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_waitremoterecoveryreserved_latency, "waitremoterecoveryreserved_latency");
-  rs_perf.add_time_avg(rs_recovering_latency, "recovering_latency");
-  rs_perf.add_time_avg(rs_recovered_latency, "recovered_latency");
-  rs_perf.add_time_avg(rs_clean_latency, "clean_latency");
-  rs_perf.add_time_avg(rs_active_latency, "active_latency");
-  rs_perf.add_time_avg(rs_replicaactive_latency, "replicaactive_latency");
-  rs_perf.add_time_avg(rs_stray_latency, "stray_latency");
-  rs_perf.add_time_avg(rs_getinfo_latency, "getinfo_latency");
-  rs_perf.add_time_avg(rs_getlog_latency, "getlog_latency");
-  rs_perf.add_time_avg(rs_waitactingchange_latency, "waitactingchange_latency");
-  rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency");
-  rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency");
-  rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency");
+  rs_perf.add_time_avg(rs_initial_latency, "initial_latency", "Initial recovery state latency");
+  rs_perf.add_time_avg(rs_started_latency, "started_latency", "Started recovery state latency");
+  rs_perf.add_time_avg(rs_reset_latency, "reset_latency", "Reset recovery state latency");
+  rs_perf.add_time_avg(rs_start_latency, "start_latency", "Start recovery state latency");
+  rs_perf.add_time_avg(rs_primary_latency, "primary_latency", "Primary recovery state latency");
+  rs_perf.add_time_avg(rs_peering_latency, "peering_latency", "Peering recovery state latency");
+  rs_perf.add_time_avg(rs_backfilling_latency, "backfilling_latency", "Backfilling recovery state latency");
+  rs_perf.add_time_avg(rs_waitremotebackfillreserved_latency, "waitremotebackfillreserved_latency", "Wait remote backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitlocalbackfillreserved_latency, "waitlocalbackfillreserved_latency", "Wait local backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_notbackfilling_latency, "notbackfilling_latency", "Notbackfilling recovery state latency");
+  rs_perf.add_time_avg(rs_repnotrecovering_latency, "repnotrecovering_latency", "Repnotrecovering recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitrecoveryreserved_latency, "repwaitrecoveryreserved_latency", "Rep wait recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_repwaitbackfillreserved_latency, "repwaitbackfillreserved_latency", "Rep wait backfill reserved recovery state latency");
+  rs_perf.add_time_avg(rs_RepRecovering_latency, "RepRecovering_latency", "RepRecovering recovery state latency");
+  rs_perf.add_time_avg(rs_activating_latency, "activating_latency", "Activating recovery state latency");
+  rs_perf.add_time_avg(rs_waitlocalrecoveryreserved_latency, "waitlocalrecoveryreserved_latency", "Wait local recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitremoterecoveryreserved_latency, "waitremoterecoveryreserved_latency", "Wait remote recovery reserved recovery state latency");
+  rs_perf.add_time_avg(rs_recovering_latency, "recovering_latency", "Recovering recovery state latency");
+  rs_perf.add_time_avg(rs_recovered_latency, "recovered_latency", "Recovered recovery state latency");
+  rs_perf.add_time_avg(rs_clean_latency, "clean_latency", "Clean recovery state latency");
+  rs_perf.add_time_avg(rs_active_latency, "active_latency", "Active recovery state latency");
+  rs_perf.add_time_avg(rs_replicaactive_latency, "replicaactive_latency", "Replicaactive recovery state latency");
+  rs_perf.add_time_avg(rs_stray_latency, "stray_latency", "Stray recovery state latency");
+  rs_perf.add_time_avg(rs_getinfo_latency, "getinfo_latency", "Getinfo recovery state latency");
+  rs_perf.add_time_avg(rs_getlog_latency, "getlog_latency", "Getlog recovery state latency");
+  rs_perf.add_time_avg(rs_waitactingchange_latency, "waitactingchange_latency", "Waitactingchange recovery state latency");
+  rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency", "Incomplete recovery state latency");
+  rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
+  rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);
