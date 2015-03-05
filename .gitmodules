@@ -25,3 +25,4 @@
 [submodule "src/gmock"]
 	path = src/gmock
 	url = https://github.com/ceph/gmock.git
+        branch = ceph-release-1.7.0
