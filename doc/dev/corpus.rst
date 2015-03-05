@@ -24,7 +24,7 @@ We can generate an object corpus for a particular version of ceph like so.
 
 	git clone ceph.git
 	cd ceph
-	git submodule update --init --recursive
+	git submodule update --init
 
 #. Build with flag to dump objects to /tmp/foo::
 
