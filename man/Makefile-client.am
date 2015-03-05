@@ -1,5 +1,3 @@
-if ENABLE_CLIENT
-
 dist_man_MANS += \
 	ceph-syn.8 \
 	ceph-conf.8 \
@@ -39,5 +37,3 @@ dist_man_MANS += \
 	radosgw.8 \
 	radosgw-admin.8
 endif
-
-endif # ENABLE_CLIENT
