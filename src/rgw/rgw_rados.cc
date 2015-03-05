@@ -4914,7 +4914,6 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   CephContext *cct = store->ctx();
 
   bufferlist etag;
-  time_t ctime;
 
   off_t ofs = 0;
   off_t end = -1;
@@ -4950,7 +4949,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
   /* Convert all times go GMT to make them compatible */
   if (conds.mod_ptr || conds.unmod_ptr) {
-    ctime = astate->mtime;
+    time_t ctime = astate->mtime;
 
     if (conds.mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *conds.mod_ptr << " Last-Modified: " << ctime << dendl;
