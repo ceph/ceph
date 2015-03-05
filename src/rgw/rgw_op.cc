@@ -993,8 +993,16 @@ void RGWListBuckets::execute()
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
   ret = get_params();
-  if (ret < 0)
+  if (ret < 0) {
     goto send_end;
+  }
+
+  if (supports_account_metadata()) {
+    ret = rgw_get_user_attrs_by_uid(store, s->user.user_id, attrs);
+    if (ret < 0) {
+      goto send_end;
+    }
+  }
 
   do {
     RGWUserBuckets buckets;

@@ -191,6 +191,7 @@ protected:
   uint64_t buckets_objcount;
   uint64_t buckets_size;
   uint64_t buckets_size_rounded;
+  map<string, bufferlist> attrs;
 
 public:
   RGWListBuckets() : ret(0), sent_data(false) {
@@ -211,6 +212,7 @@ public:
   virtual void send_response() {}
 
   virtual bool should_get_stats() { return false; }
+  virtual bool supports_account_metadata() { return false; }
 
   virtual const string name() { return "list_buckets"; }
   virtual RGWOpType get_type() { return RGW_OP_LIST_BUCKETS; }
@@ -235,7 +237,7 @@ public:
   }
 
   int verify_permission();
-  void execute();
+  virtual void execute();
 
   virtual void send_response() = 0;
   virtual const string name() { return "stat_account"; }

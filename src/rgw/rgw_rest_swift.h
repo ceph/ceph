@@ -28,6 +28,7 @@ public:
   void send_response_end();
 
   bool should_get_stats() { return need_stats; }
+  bool supports_account_metadata() { return true; }
 };
 
 class RGWListBucket_ObjStore_SWIFT : public RGWListBucket_ObjStore {
@@ -44,11 +45,13 @@ public:
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
+  map<string, bufferlist> attrs;
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }
   ~RGWStatAccount_ObjStore_SWIFT() {}
 
+  void execute();
   void send_response();
 };
 
