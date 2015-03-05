@@ -1866,6 +1866,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   }
 
   if (obc.get() && obc->obs.exists) {
+    osd->logger->inc(l_osd_op_cache_hit);
     return false;
   }
 
