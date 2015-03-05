@@ -1,5 +1,3 @@
-if ENABLE_SERVER
-
 dist_man_MANS += \
 	ceph-deploy.8 \
 	crushtool.8 \
@@ -26,5 +24,3 @@ if WITH_MDS
 dist_man_MANS += \
 	ceph-mds.8
 endif
-
-endif # ENABLE_SERVER
