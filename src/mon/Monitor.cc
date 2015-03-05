@@ -437,6 +437,7 @@ void Monitor::write_features(MonitorDBStore::TransactionRef t)
 const char** Monitor::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "crushtool", // helpful for testing
     "mon_lease",
     "mon_lease_renew_interval",
     "mon_lease_ack_timeout",
