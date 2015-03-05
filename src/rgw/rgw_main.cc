@@ -1068,10 +1068,9 @@ int main(int argc, const char **argv)
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_quota_threads);
   if (!store) {
     derr << "Couldn't init storage provider (RADOS)" << dendl;
-    r = EIO;
+    return EIO;
   }
-  if (!r)
-    r = rgw_perf_start(g_ceph_context);
+  r = rgw_perf_start(g_ceph_context);
 
   rgw_rest_init(g_ceph_context, store->region);
 
