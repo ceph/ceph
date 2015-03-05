@@ -1,12 +1,6 @@
-libcephfs_includedir = $(includedir)/cephfs
-libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
+if ENABLE_CLIENT
 
-librbd_includedir = $(includedir)/rbd
-librbd_include_DATA = \
-	$(srcdir)/include/rbd/features.h \
-	$(srcdir)/include/rbd/librbd.h \
-	$(srcdir)/include/rbd/librbd.hpp
-
+if WITH_RADOS
 rados_includedir = $(includedir)/rados
 rados_include_DATA = \
 	$(srcdir)/include/rados/librados.h \
@@ -17,11 +11,30 @@ rados_include_DATA = \
 	$(srcdir)/include/page.h \
 	$(srcdir)/include/crc32c.h \
 	$(srcdir)/include/memory.h
+endif # WITH_RADOS
 
+if WITH_RBD
+librbd_includedir = $(includedir)/rbd
+librbd_include_DATA = \
+	$(srcdir)/include/rbd/features.h \
+	$(srcdir)/include/rbd/librbd.h \
+	$(srcdir)/include/rbd/librbd.hpp
+endif # WITH_RBD
+
+if WITH_RADOSSTRIPER
 radosstriper_includedir = $(includedir)/radosstriper
 radosstriper_include_DATA = \
 	$(srcdir)/include/radosstriper/libradosstriper.h \
 	$(srcdir)/include/radosstriper/libradosstriper.hpp
+endif # WITH_RADOSSTRIPER
+
+if WITH_CEPHFS
+libcephfs_includedir = $(includedir)/cephfs
+libcephfs_include_DATA = $(srcdir)/include/cephfs/libcephfs.h
+endif # WITH_CEPHFS
+
+endif # WITH_RADOS
+
 
 noinst_HEADERS += \
 	include/Context.h \
@@ -93,3 +106,5 @@ noinst_HEADERS += \
 	include/hash_namespace.h \
 	include/unordered_set.h \
 	include/unordered_map.h
+
+endif # ENABLE_CLIENT
