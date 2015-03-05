@@ -1886,9 +1886,9 @@ reprotect_and_return_err:
     vector<uint8_t> snap_protection;
     vector<uint64_t> snap_flags;
     {
-      int r;
       RWLock::WLocker l(ictx->snap_lock);
       {
+	int r;
 	RWLock::WLocker l2(ictx->parent_lock);
 	ictx->lockers.clear();
 	if (ictx->old_format) {
@@ -2512,11 +2512,11 @@ reprotect_and_return_err:
     }
 
     uint64_t object_size;
-    uint64_t overlap;
     uint64_t overlap_objects;
     ::SnapContext snapc;
 
     {
+      uint64_t overlap;
       RWLock::RLocker l(ictx->snap_lock);
       RWLock::RLocker l2(ictx->parent_lock);
 
