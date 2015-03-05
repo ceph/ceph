@@ -369,4 +369,4 @@ else
         rocksdb/utilities/ttl/db_ttl_impl.cc \
         rocksdb/utilities/ttl/db_ttl_impl.h \
         rocksdb/utilities/ttl/ttl_test.cc
-endif
+endif # WITH_SLIBROCKSDB

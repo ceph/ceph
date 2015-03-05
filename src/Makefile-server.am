@@ -1,30 +1,3 @@
-if ENABLE_SERVER
-
-if WITH_MON
-ceph_mon_SOURCES = ceph_mon.cc
-ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
-bin_PROGRAMS += ceph-mon
-endif
-
-if WITH_OSD
-ceph_osd_SOURCES = ceph_osd.cc
-ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
-bin_PROGRAMS += ceph-osd
-endif
-
-if WITH_MDS
-ceph_mds_SOURCES = ceph_mds.cc
-ceph_mds_LDADD = $(LIBMDS) $(LIBOSDC) $(CEPH_GLOBAL) $(LIBCOMMON)
-bin_PROGRAMS += ceph-mds
-endif
-
-mount_ceph_SOURCES = mount/mount.ceph.c
-mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
-if LINUX
-su_sbin_PROGRAMS += mount.ceph
-endif # LINUX
-su_sbin_SCRIPTS += mount.fuse.ceph
-
 ceph_sbin_SCRIPTS = ceph-create-keys
 
 bin_SCRIPTS += \
@@ -33,7 +6,35 @@ bin_SCRIPTS += \
 	ceph-debugpack \
 	ceph-crush-location
 
+python_PYTHON += pybind/ceph_rest_api.py
+
+shell_scripts += ceph-coverage
+
+bin_SCRIPTS += ceph-coverage
+
+BUILT_SOURCES += init-ceph
+
+shell_scripts += init-ceph
+
+mount_ceph_SOURCES = mount/mount.ceph.c
+mount_ceph_LDADD = $(LIBSECRET) $(LIBCOMMON)
+if LINUX
+su_sbin_PROGRAMS += mount.ceph
+endif # LINUX
+su_sbin_SCRIPTS += mount.fuse.ceph
+
+
+if WITH_MON
+
+ceph_mon_SOURCES = ceph_mon.cc
+ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_PROGRAMS += ceph-mon
+
+endif # WITH_MON
+
+
 if WITH_OSD
+
 ceph_sbin_SCRIPTS += \
 	ceph-disk \
 	ceph-disk-prepare \
@@ -42,22 +43,27 @@ ceph_sbin_SCRIPTS += \
 
 bin_SCRIPTS += \
 	ceph-clsinfo
-endif
 
-python_PYTHON += pybind/ceph_rest_api.py
+ceph_osd_SOURCES = ceph_osd.cc
+ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_PROGRAMS += ceph-osd
 
-shell_scripts += ceph-coverage
-bin_SCRIPTS += ceph-coverage
+endif # WITH_OSD
+
+
+if WITH_MDS
+
+ceph_mds_SOURCES = ceph_mds.cc
+ceph_mds_LDADD = $(LIBMDS) $(LIBOSDC) $(CEPH_GLOBAL) $(LIBCOMMON)
+bin_PROGRAMS += ceph-mds
+
+endif # WITH_MDS
+
 
 if ENABLE_COVERAGE
+
 COV_DIR = $(DESTDIR)$(libdir)/ceph/coverage
 COV_FILES = $(srcdir)/*.gcno
 COV_LIB_FILES = $(srcdir)/.libs/*.gcno
-endif
 
-BUILT_SOURCES += init-ceph
-
-shell_scripts += init-ceph
-
-
-endif # ENABLE_SERVER
+endif # ENABLE_COVERAGE
