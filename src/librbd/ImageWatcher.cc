@@ -100,7 +100,6 @@ int ImageWatcher::unregister_watch() {
   int r = 0;
   {
     RWLock::WLocker l(m_watch_lock);
-    assert(m_watch_state != WATCH_STATE_UNREGISTERED);
     if (m_watch_state == WATCH_STATE_REGISTERED) {
       r = m_image_ctx.md_ctx.unwatch2(m_watch_handle);
     }
