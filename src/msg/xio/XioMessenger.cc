@@ -138,8 +138,8 @@ static int on_msg(struct xio_session *session,
 
   ldout(cct,25) << "on_msg session " << session << " xcon " << xcon << dendl;
 
-  static uint32_t nreqs;
   if (unlikely(XioPool::trace_mempool)) {
+    static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
       xp_stats.dump(__func__, nreqs);
     }
@@ -525,7 +525,7 @@ xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
 
   const std::list<buffer::ptr>& buffers = bl.buffers();
   list<bufferptr>::const_iterator pb;
-  size_t size, off, count;
+  size_t size, off;
   int result;
   int first = 1;
 
@@ -541,7 +541,7 @@ xio_count_buffers(buffer::list& bl, int& req_size, int& msg_off, int& req_off)
       size = pb->length();
       first = 0;
     }
-    count = size - off;
+    size_t count = size - off;
     if (!count) continue;
     if (req_size + count > MAX_XIO_BUF_SIZE) {
 	count = MAX_XIO_BUF_SIZE - req_size;
@@ -573,7 +573,7 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
   const std::list<buffer::ptr>& buffers = bl.buffers();
   list<bufferptr>::const_iterator pb;
   struct xio_iovec_ex* iov;
-  size_t size, off, count;
+  size_t size, off;
   const char *data = NULL;
   int first = 1;
 
@@ -589,7 +589,7 @@ xio_place_buffers(buffer::list& bl, XioMsg *xmsg, struct xio_msg*& req,
       data = pb->c_str();	 // is c_str() efficient?
       first = 0;
     }
-    count = size - off;
+    size_t count = size - off;
     if (!count) continue;
     if (req_size + count > MAX_XIO_BUF_SIZE) {
 	count = MAX_XIO_BUF_SIZE - req_size;
@@ -755,9 +755,9 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
 {
   int code = 0;
 
-  static uint32_t nreqs;
   Mutex::Locker l(xcon->lock);
   if (unlikely(XioPool::trace_mempool)) {
+    static uint32_t nreqs;
     if (unlikely((++nreqs % 65536) == 0)) {
       xp_stats.dump(__func__, nreqs);
     }
