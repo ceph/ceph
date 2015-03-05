@@ -4,7 +4,6 @@ SUBDIRS += ocf java tracing
 DIST_SUBDIRS += gmock ocf libs3 java tracing
 
 
-
 # subdirs
 
 include arch/Makefile.am
@@ -35,6 +34,7 @@ include key_value_store/Makefile.am
 include rbd_replay/Makefile.am
 include test/Makefile.am
 include tools/Makefile.am
+include Makefile-rocksdb.am
 
 
 # shell scripts
@@ -283,6 +283,11 @@ coverity-submit:
 	scp project.tgz ceph.com:/home/ceph_site/ceph.com/coverity/`git describe`.tgz
 	curl --data "project=ceph&password=`cat ~/coverity.build.pass.txt`&email=sage@newdream.net&url=http://ceph.com/coverity/`git describe`.tgz" http://scan5.coverity.com/cgi-bin/submit_build.py
 
-include Makefile-rocksdb.am
+if ENABLE_CLIENT
 include Makefile-client.am
+endif
+
+if ENABLE_SERVER
 include Makefile-server.am
+endif
+
