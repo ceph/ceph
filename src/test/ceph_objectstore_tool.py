@@ -525,7 +525,7 @@ def main(argv):
     # retrieve all objects with a given name in a given PG
     cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
     logging.debug(cmd);
-    tmpfd = open(OTHERFILE, "a")
+    tmpfd = open(OTHERFILE, "w")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
