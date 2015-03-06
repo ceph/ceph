@@ -1,3 +1,6 @@
+if ENABLE_SERVER
+if WITH_OSD
+
 check_SCRIPTS += \
 	test/erasure-code/test-erasure-code.sh
 
@@ -232,3 +235,6 @@ noinst_HEADERS += test/erasure-code/ErasureCodeExample.h
 unittest_erasure_code_example_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_erasure_code_example_LDADD = $(LIBOSD) $(LIBCOMMON) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_erasure_code_example
+
+endif # WITH_OSD
+endif # ENABLE_SERVER

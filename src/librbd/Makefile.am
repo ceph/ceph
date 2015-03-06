@@ -2,6 +2,10 @@ librbd_types_la_SOURCES = \
 	librbd/WatchNotifyTypes.cc
 noinst_LTLIBRARIES += librbd_types.la
 
+if ENABLE_CLIENT
+if WITH_RADOS
+if WITH_RBD
+
 librbd_internal_la_SOURCES = \
 	librbd/AioCompletion.cc \
 	librbd/AioRequest.cc \
@@ -63,3 +67,7 @@ noinst_HEADERS += \
 	librbd/SnapInfo.h \
 	librbd/TaskFinisher.h \
 	librbd/WatchNotifyTypes.h
+
+endif # WITH_RBD
+endif # WITH_RADOS
+endif # ENABLE_CLIENT
