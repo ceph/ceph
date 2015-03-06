@@ -1,6 +1,3 @@
-if ENABLE_SERVER
-if WITH_OSD
-
 ## erasure code plugins
 
 erasure_codelibdir = $(pkglibdir)/erasure-code
@@ -27,6 +24,3 @@ noinst_HEADERS += \
 	erasure-code/ErasureCode.h \
 	erasure-code/ErasureCodeInterface.h \
 	erasure-code/ErasureCodePlugin.h
-
-endif # WITH_OSD -- nothing else needs it
-endif # ENABLE_SERVER
