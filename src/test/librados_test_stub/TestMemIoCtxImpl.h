@@ -59,6 +59,7 @@ private:
   TestMemRadosClient *m_client;
   TestMemRadosClient::Pool *m_pool;
 
+  void append_clone(bufferlist& src, bufferlist* dest);
   size_t clip_io(size_t off, size_t len, size_t bl_len);
   void ensure_minimum_length(size_t len, bufferlist *bl);
 
