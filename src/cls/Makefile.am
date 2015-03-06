@@ -1,7 +1,7 @@
 if ENABLE_CLIENT
-include Makefile-client.am
+include cls/Makefile-client.am
 endif
 
 if ENABLE_SERVER
-include Makefile-server.am
+include cls/Makefile-server.am
 endif
