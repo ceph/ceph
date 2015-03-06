@@ -2,6 +2,7 @@ tasks:
 - workunit:
     branch: firefly
     clients:
+      exclude_packages: ['ceph-test', 'ceph-test-dbg']
       client.0:
         - rbd/import_export.sh
     env:
