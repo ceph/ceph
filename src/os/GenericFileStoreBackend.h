@@ -24,6 +24,7 @@ private:
   bool ioctl_fiemap;
   bool seek_data_hole;
   bool m_filestore_fiemap;
+  bool m_filestore_seek_data_hole;
   bool m_filestore_fsync_flushes_journal_data;
 public:
   GenericFileStoreBackend(FileStore *fs);

@@ -59,6 +59,7 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
   ioctl_fiemap(false),
   seek_data_hole(false),
   m_filestore_fiemap(g_conf->filestore_fiemap),
+  m_filestore_seek_data_hole(g_conf->filestore_seek_data_hole),
   m_filestore_fsync_flushes_journal_data(g_conf->filestore_fsync_flushes_journal_data) {}
 
 int GenericFileStoreBackend::detect_features()
@@ -132,28 +133,33 @@ int GenericFileStoreBackend::detect_features()
   }
 
   // SEEK_DATA/SEEK_HOLE detection
-#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
-  // If compiled on an OS with SEEK_HOLE/SEEK_DATA support, but running
-  // on an OS that doesn't support SEEK_HOLE/SEEK_DATA, EINVAL is returned.
-  // Fall back to use fiemap.
-  off_t hole_pos;
-
-  hole_pos = lseek(fd, 0, SEEK_HOLE);
-  if (hole_pos < 0) {
-    if (errno == EINVAL) {
-      dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
-      seek_data_hole = false;
-    } else {
-      r = -errno;
-      derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(r) << dendl;
-      VOID_TEMP_FAILURE_RETRY(::close(fd));
-      return r;
-    }
+  if (!m_filestore_seek_data_hole) {
+    dout(0) << "detect_features: SEEK_DATA/SEEK_HOLE is disabled via 'filestore seek data hole' config option" << dendl;
+    seek_data_hole = false;
   } else {
-    dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is supported" << dendl;
-    seek_data_hole = true;
-  }
+#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
+    // If compiled on an OS with SEEK_HOLE/SEEK_DATA support, but running
+    // on an OS that doesn't support SEEK_HOLE/SEEK_DATA, EINVAL is returned.
+    // Fall back to use fiemap.
+    off_t hole_pos;
+
+    hole_pos = lseek(fd, 0, SEEK_HOLE);
+    if (hole_pos < 0) {
+      if (errno == EINVAL) {
+        dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
+        seek_data_hole = false;
+      } else {
+        r = -errno;
+        derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(r) << dendl;
+        VOID_TEMP_FAILURE_RETRY(::close(fd));
+        return r;
+      }
+    } else {
+      dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is supported" << dendl;
+      seek_data_hole = true;
+    }
 #endif
+  }
 
   ::unlink(fn);
   VOID_TEMP_FAILURE_RETRY(::close(fd));
