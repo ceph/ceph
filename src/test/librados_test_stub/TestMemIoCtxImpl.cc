@@ -236,7 +236,9 @@ int TestMemIoCtxImpl::read(const std::string& oid, size_t len, uint64_t off,
   }
   len = clip_io(off, len, file->data.length());
   if (bl != NULL && len > 0) {
-    bl->substr_of(file->data, off, len);
+    bufferlist bit;
+    bit.substr_of(file->data, off, len);
+    append_clone(bit, bl);
   }
   return 0;
 }
@@ -352,7 +354,9 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
     }
   }
   if (data_bl != NULL && len > 0) {
-    data_bl->substr_of(file->data, off, len);
+    bufferlist bit;
+    bit.substr_of(file->data, off, len);
+    append_clone(bit, data_bl);
   }
   return 0;
 }
@@ -508,6 +512,17 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
   bufferlist bl;
   bl.append_zero(len);
   return write(oid, bl, len, off);
+}
+
+void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {
+  // deep-copy the src to ensure our memory-based mock RADOS data cannot
+  // be modified by callers
+  if (src.length() > 0) {
+    bufferlist::iterator iter = src.begin();
+    buffer::ptr ptr;
+    iter.copy(src.length(), ptr);
+    dest->append(ptr);
+  }
 }
 
 size_t TestMemIoCtxImpl::clip_io(size_t off, size_t len, size_t bl_len) {
