@@ -206,6 +206,84 @@ def verify(DATADIR, POOL, NAME_PREFIX):
             pass
     return ERRORS
 
+
+def check_journal(jsondict):
+    errors = 0
+    if 'header' not in jsondict:
+        logging.error("Key 'header' not in dump-journal")
+        errors += 1
+    elif 'max_size' not in jsondict['header']:
+        logging.error("Key 'max_size' not in dump-journal header")
+        errors += 1
+    else:
+        print "\tJournal max_size = {size}".format(size=jsondict['header']['max_size'])
+    if 'entries' not in jsondict:
+        logging.error("Key 'entries' not in dump-journal output")
+        errors += 1
+    elif len(jsondict['entries']) == 0:
+        logging.warning("No entries in journal found, probably a problem")
+        errors += 1
+    else:
+        errors += check_journal_entries(jsondict['entries'])
+    return errors
+
+
+def check_journal_entries(entries):
+    errors = 0
+    for enum in range(len(entries)):
+        if 'offset' not in entries[enum]:
+            logging.error("No 'offset' key in entry {e}".format(e=enum))
+            errors += 1
+        if 'seq' not in entries[enum]:
+            logging.error("No 'seq' key in entry {e}".format(e=enum))
+            errors += 1
+        if 'transactions' not in entries[enum]:
+            logging.error("No 'transactions' key in entry {e}".format(e=enum))
+            errors += 1
+        elif len(entries[enum]['transactions']) == 0:
+            logging.error("No transactions found in entry {e}".format(e=enum))
+            errors += 1
+        else:
+            errors += check_entry_transactions(entries[enum], enum)
+    return errors
+
+
+def check_entry_transactions(entry, enum):
+    errors = 0
+    for tnum in range(len(entry['transactions'])):
+        if 'trans_num' not in entry['transactions'][tnum]:
+            logging.error("Key 'trans_num' missing from entry {e} trans {t}".format(e=enum, t=tnum))
+            errors += 1
+        elif entry['transactions'][tnum]['trans_num'] != tnum:
+            ft = entry['transactions'][tnum]['trans_num']
+            logging.error("Bad trans_num ({ft}) entry {e} trans {t}".format(ft=ft, e=enum, t=tnum))
+            errors += 1
+        if 'ops' not in entry['transactions'][tnum]:
+            logging.error("Key 'ops' missing from entry {e} trans {t}".format(e=enum, t=tnum))
+            errors += 1
+        else:
+            errors += check_transaction_ops(entry['transactions'][tnum]['ops'], enum, tnum)
+    return errors
+
+
+def check_transaction_ops(ops, enum, tnum):
+    if len(ops) is 0:
+        logging.warning("No ops found in entry {e} trans {t}".format(e=enum, t=tnum))
+    errors = 0
+    for onum in range(len(ops)):
+        if 'op_num' not in ops[onum]:
+            logging.error("Key 'op_num' missing from entry {e} trans {t} op {o}".format(e=enum, t=tnum, o=onum))
+            errors += 1
+        elif ops[onum]['op_num'] != onum:
+            fo = ops[onum]['op_num']
+            logging.error("Bad op_num ({fo}) from entry {e} trans {t} op {o}".format(fo=fo, e=enum, t=tnum, o=onum))
+            errors += 1
+        if 'op_name' not in ops[onum]:
+            logging.error("Key 'op_name' missing from entry {e} trans {t} op {o}".format(e=enum, t=tnum, o=onum))
+            errors += 1
+    return errors
+
+
 CEPH_DIR = "ceph_objectstore_tool_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
@@ -486,18 +564,38 @@ def main(argv):
     cmd = CFSD_PREFIX.format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide --op or object command...")
 
-    # Test --op list and generate json for all objects
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=pid)
     ALLPGS = OBJREPPGS + OBJECPGS
-
-    print "Test --op list variants"
     OSDS = get_osds(ALLPGS[0], OSDDIR)
     osd = OSDS[0]
+
+    # Test --op dump-journal by loading json
+    print "Test --op dump-journal"
+    cmd = (CFSD_PREFIX + "--op dump-journal --format json").format(osd=osd)
+    logging.debug(cmd)
+    tmpfd = open(TMPFILE, "w")
+    ret = call(cmd, shell=True, stdout=tmpfd)
+    if ret != 0:
+        logging.error("Bad exit status {ret} from {cmd}".format(ret=ret, cmd=cmd))
+        ERRORS += 1
+    tmpfd.close()
+    tmpfd = open(TMPFILE, "r")
+    jsondict = json.load(tmpfd)
+    tmpfd.close()
+    os.unlink(TMPFILE)
+
+    journal_errors = check_journal(jsondict)
+    if journal_errors is not 0:
+        logging.error(jsondict)
+    ERRORS += journal_errors
+
+    # Test --op list and generate json for all objects
+    print "Test --op list variants"
 
     # retrieve all objects from all PGs
     cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
     logging.debug(cmd)
-    tmpfd = open(TMPFILE, "a")
+    tmpfd = open(TMPFILE, "w")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
     if ret != 0:
