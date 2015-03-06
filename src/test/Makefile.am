@@ -683,6 +683,7 @@ unittest_bit_vector_LDADD = $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_PROGRAMS += unittest_bit_vector
 
 check_SCRIPTS += test/pybind/test_ceph_argparse.py
+check_SCRIPTS += test/pybind/test_ceph_daemon.py
 
 if WITH_RADOSGW
 ceph_test_cors_SOURCES = test/test_cors.cc

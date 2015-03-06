@@ -53,17 +53,20 @@ void MDLog::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_log", l_mdl_first, l_mdl_last);
 
-  plb.add_u64_counter(l_mdl_evadd, "evadd");
+  plb.add_u64_counter(l_mdl_evadd, "evadd",
+      "Events submitted", "subm");
   plb.add_u64_counter(l_mdl_evex, "evex");
   plb.add_u64_counter(l_mdl_evtrm, "evtrm");
-  plb.add_u64(l_mdl_ev, "ev");
+  plb.add_u64(l_mdl_ev, "ev",
+      "Events", "evts");
   plb.add_u64(l_mdl_evexg, "evexg");
   plb.add_u64(l_mdl_evexd, "evexd");
 
   plb.add_u64_counter(l_mdl_segadd, "segadd");
   plb.add_u64_counter(l_mdl_segex, "segex");
   plb.add_u64_counter(l_mdl_segtrm, "segtrm");
-  plb.add_u64(l_mdl_seg, "seg");
+  plb.add_u64(l_mdl_seg, "seg",
+      "Segments", "segs");
   plb.add_u64(l_mdl_segexg, "segexg");
   plb.add_u64(l_mdl_segexd, "segexd");
 
