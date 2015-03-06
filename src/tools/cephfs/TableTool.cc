@@ -261,14 +261,112 @@ public:
   }
 };
 
+template <typename A>
+class TableHandlerOmap
+{
+private:
+  // The RADOS object ID for the table
+  std::string object_name;
+
+  // The rank in question (may be NONE)
+  mds_rank_t rank;
+
+  // Whether this is an MDSTable subclass (i.e. has leading version field to decode)
+  bool mds_table;
+
+public:
+  TableHandlerOmap(mds_rank_t r, std::string const &name, bool mds_table_)
+    : rank(r), mds_table(mds_table_)
+  {
+    // Compose object name of the table we will dump
+    std::ostringstream oss;
+    oss << "mds";
+    if (rank != MDS_RANK_NONE) {
+      oss << rank;
+    }
+    oss << "_" << name;
+    object_name = oss.str();
+  }
+
+  int load_and_dump(librados::IoCtx *io, Formatter *f)
+  {
+    assert(io != NULL);
+    assert(f != NULL);
+
+    // Read in the header
+    bufferlist header_bl;
+    int r = io->omap_get_header(object_name, &header_bl);
+    if (r != 0) {
+      derr << "error reading header: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    // Decode the header
+    A table_inst;
+    table_inst.set_rank(rank);
+    try {
+      table_inst.decode_header(header_bl);
+    } catch (buffer::error &e) {
+      derr << "table " << object_name << " is corrupt" << dendl;
+      return -EIO;
+    }
+
+    // Read and decode OMAP values in chunks
+    std::string last_key = "";
+    while(true) {
+      std::map<std::string, bufferlist> values;
+      int r = io->omap_get_vals(object_name, last_key,
+          g_conf->mds_sessionmap_keys_per_op, &values);
+
+      if (r != 0) {
+        derr << "error reading values: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      if (values.empty()) {
+        break;
+      }
+
+      try {
+        table_inst.decode_values(values);
+      } catch (buffer::error &e) {
+        derr << "table " << object_name << " is corrupt" << dendl;
+        return -EIO;
+      }
+      last_key = values.rbegin()->first;
+    }
+
+    table_inst.dump(f);
+
+    return 0;
+  }
+
+  int reset(librados::IoCtx *io)
+  {
+    A table_inst;
+    table_inst.set_rank(rank);
+    table_inst.reset_state();
+
+    bufferlist header_bl;
+    table_inst.encode_header(&header_bl);
+
+    // Compose a transaction to clear and write header
+    librados::ObjectWriteOperation op;
+    op.omap_clear();
+    op.omap_set_header(header_bl);
+    
+    return io->operate(object_name, &op);
+  }
+};
+
 int TableTool::_show_session_table(mds_rank_t rank, Formatter *f)
 {
-  return TableHandler<SessionMapStore>(rank, "sessionmap", false).load_and_dump(&io, f);
+  return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).load_and_dump(&io, f);
 }
 
 int TableTool::_reset_session_table(mds_rank_t rank, Formatter *f)
 {
-  return TableHandler<SessionMapStore>(rank, "sessionmap", false).reset(&io);
+  return TableHandlerOmap<SessionMapStore>(rank, "sessionmap", false).reset(&io);
 }
 
 int TableTool::_show_ino_table(mds_rank_t rank, Formatter *f)

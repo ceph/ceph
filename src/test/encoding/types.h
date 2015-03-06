@@ -180,9 +180,6 @@ TYPE(InoTable)
 #include "mds/SnapServer.h"
 TYPEWITHSTRAYDATA(SnapServer)
 
-#include "mds/SessionMap.h"
-TYPE(SessionMapStore)
-
 #include "mds/events/ECommitted.h"
 TYPE(ECommitted)
 #include "mds/events/EExport.h"
