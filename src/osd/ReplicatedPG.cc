@@ -4313,6 +4313,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
 	if (!obs.exists) {
+	  if (pool.info.require_rollback() && op.extent.offset) {
+	    result = -EOPNOTSUPP;
+	    break;
+	  }
 	  ctx->mod_desc.create();
 	} else if (op.extent.offset == oi.size) {
 	  ctx->mod_desc.append(oi.size);
