@@ -365,7 +365,8 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response()
     ret = STATUS_ACCEPTED;
   set_req_state_err(s, ret);
   dump_errno(s);
-  end_header(s, NULL);
+  /* Propose ending HTTP header with 0 Content-Length header. */
+  end_header(s, NULL, NULL, 0);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
