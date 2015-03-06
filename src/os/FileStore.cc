@@ -2891,11 +2891,6 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
   struct fiemap_extent *extent = NULL;
   int r = 0;
 
-  if (!backend->has_fiemap()) {
-    (*m)[offset] = len;
-    return 0;
-  }
-
   r = backend->do_fiemap(fd, offset, len, &fiemap);
   if (r < 0)
     return r;
@@ -2942,35 +2937,12 @@ int FileStore::_do_fiemap(int fd, uint64_t offset, size_t len,
   return r;
 }
 
-#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
 int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
-                                  map<uint64_t, uint64_t> *m,
-                                  bool *fallback_to_fiemap)
+                                  map<uint64_t, uint64_t> *m)
 {
+#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
   off_t hole_pos, data_pos;
   int r = 0;
-
-  // If compiled on an OS with SEEK_HOLE/SEEK_DATA support, but running
-  // on an OS that doesn't support SEEK_HOLE/SEEK_DATA, EINVAL is returned.
-  // Fall back to use fiemap.
-  hole_pos = lseek(fd, 0, SEEK_HOLE);
-  if (hole_pos < 0) {
-    if (errno == EINVAL) {
-      *fallback_to_fiemap = true;
-    }
-    r = -errno;
-    return r;
-  }
-
-  // Seek back to pos 0 first if there is a hole.
-  if (hole_pos > 0) {
-    off_t tmp_pos;
-    tmp_pos = lseek(fd, 0, SEEK_SET);
-    if (tmp_pos != 0) {
-      r = -errno;
-      return r;
-    }
-  }
 
   // If lseek fails with errno setting to be ENXIO, this means the current
   // file offset is beyond the end of the file.
@@ -2982,6 +2954,7 @@ int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
         break;
       else {
         r = -errno;
+        dout(10) << "failed to lseek: " << cpp_strerror(r) << dendl;
 	return r;
       }
     } else if (data_pos > (off_t)(offset + len)) {
@@ -2994,11 +2967,12 @@ int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
         break;
       } else {
         r = -errno;
+        dout(10) << "failed to lseek: " << cpp_strerror(r) << dendl;
 	return r;
       }
     }
 
-    if (hole_pos > (off_t)(offset + len)) {
+    if (hole_pos >= (off_t)(offset + len)) {
       (*m)[data_pos] = offset + len - data_pos;
       break;
     }
@@ -3007,8 +2981,11 @@ int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
   }
 
   return r;
-}
+#else
+  (*m)[offset] = len;
+  return 0;
 #endif
+}
 
 int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
                     uint64_t offset, size_t len,
@@ -3016,7 +2993,8 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
 {
   tracepoint(objectstore, fiemap_enter, cid.c_str(), offset, len);
 
-  if (len <= (size_t)m_filestore_fiemap_threshold) {
+  if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
+      len <= (size_t)m_filestore_fiemap_threshold) {
     map<uint64_t, uint64_t> m;
     m[offset] = len;
     ::encode(m, bl);
@@ -3026,7 +3004,6 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
   dout(15) << "fiemap " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
   map<uint64_t, uint64_t> exomap;
-  bool fallback_to_fiemap = false;
   FDRef fd;
 
   int r = lfn_open(cid, oid, false, &fd);
@@ -3035,14 +3012,13 @@ int FileStore::fiemap(coll_t cid, const ghobject_t& oid,
     goto done;
   }
   
-#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
-  r = _do_seek_hole_data(**fd, offset, len, &exomap, &fallback_to_fiemap);
-  if (!fallback_to_fiemap) {
-    goto done;
+  if (backend->has_seek_data_hole()) {
+    dout(15) << "seek_data/seek_hole " << cid << "/" << oid << " " << offset << "~" << len << dendl;
+    r = _do_seek_hole_data(**fd, offset, len, &exomap);
+  } else if (backend->has_fiemap()) {
+    dout(15) << "fiemap ioctl" << cid << "/" << oid << " " << offset << "~" << len << dendl;
+    r = _do_fiemap(**fd, offset, len, &exomap);
   }
-#endif
-
-  r = _do_fiemap(**fd, offset, len, &exomap);
 
 done:
   if (r >= 0) {

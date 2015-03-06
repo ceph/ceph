@@ -528,11 +528,8 @@ public:
     bool allow_eio = false);
   int _do_fiemap(int fd, uint64_t offset, size_t len,
                  map<uint64_t, uint64_t> *m);
-#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
   int _do_seek_hole_data(int fd, uint64_t offset, size_t len,
-                         map<uint64_t, uint64_t> *m,
-                         bool *fallback_to_fiemap);
-#endif
+                         map<uint64_t, uint64_t> *m);
   int fiemap(coll_t cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl);
 
   int _touch(coll_t cid, const ghobject_t& oid);
@@ -795,6 +792,7 @@ public:
   virtual int destroy_checkpoint(const string& name) = 0;
   virtual int syncfs() = 0;
   virtual bool has_fiemap() = 0;
+  virtual bool has_seek_data_hole() = 0;
   virtual int do_fiemap(int fd, off_t start, size_t len, struct fiemap **pfiemap) = 0;
   virtual int clone_range(int from, int to, uint64_t srcoff, uint64_t len, uint64_t dstoff) = 0;
   virtual int set_alloc_hint(int fd, uint64_t hint) = 0;
