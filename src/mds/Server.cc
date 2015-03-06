@@ -90,9 +90,12 @@ class ServerContext : public MDSInternalContextBase {
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
-  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request");
-  plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request");
-  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session");
+  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request",
+      "Client requests", "hcr");
+  plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request",
+      "Slave requests", "hsr");
+  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
+      "Client session messages", "hcs");
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request");
   logger = plb.create_perf_counters();
