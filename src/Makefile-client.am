@@ -31,7 +31,7 @@ ceph: ceph.in ./ceph_ver.h Makefile
 if WITH_RADOS
 
 bash_completion_DATA += \
-	$(srcdir)/bash_completion/rados
+	$(srcdir)/bash_completion/rados \
 	$(srcdir)/bash_completion/radosgw-admin
 
 python_PYTHON += pybind/rados.py
@@ -43,7 +43,7 @@ bin_PROGRAMS += librados-config
 if WITH_RBD
 
 bash_completion_DATA += \
-	$(srcdir)/bash_completion/rbd \
+	$(srcdir)/bash_completion/rbd
 
 bin_SCRIPTS += \
 	ceph-rbdnamer \

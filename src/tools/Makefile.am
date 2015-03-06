@@ -1,9 +1,9 @@
 if ENABLE_CLIENT
-include Makefile-client.am
+include tools/Makefile-client.am
 endif
 
 if ENABLE_SERVER
-include Makefile-server.am
+include tools/Makefile-server.am
 endif
 
 monmaptool_SOURCES = tools/monmaptool.cc
