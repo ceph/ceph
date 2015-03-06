@@ -2257,6 +2257,10 @@ def main_activate_journal(args):
         osd_uuid = get_journal_osd_uuid(args.dev)
         path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
 
+        if is_suppressed(path):
+            LOG.info('suppressed activate request on %s', path)
+            return
+
         (cluster, osd_id) = mount_activate(
             dev=path,
             activate_key_template=args.activate_key_template,
@@ -2292,6 +2296,10 @@ def main_activate_all(args):
                 path = os.path.join('/dev/mapper', uuid)
             else:
                 path = os.path.join(dir, name)
+
+            if is_suppressed(path):
+                LOG.info('suppressed activate request on %s', path)
+                continue
 
             LOG.info('Activating %s', path)
             activate_lock.acquire()  # noqa
@@ -2631,7 +2639,7 @@ def main_list(args):
 def is_suppressed(path):
     disk = os.path.realpath(path)
     try:
-        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(path).st_mode):
+        if not disk.startswith('/dev/') or not stat.S_ISBLK(os.lstat(disk).st_mode):
             return False
         base = get_dev_name(disk)
         while len(base):
