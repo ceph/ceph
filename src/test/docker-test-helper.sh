@@ -95,7 +95,7 @@ function setup_downstream() {
         fi
         cd $downstream
         git reset --hard $ref || return 1
-        git submodule sync || return 1
+        git submodule sync --recursive || return 1
         git submodule update --init --recursive || return 1
     )
 }
