@@ -413,6 +413,7 @@ private:
 
   int dump(ostream& out);
   int simple_dump(ostream& out);
+  int _fdump(Formatter &f, bool simple);
 
   void flush();
 
