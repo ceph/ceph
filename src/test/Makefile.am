@@ -2,11 +2,11 @@ include test/erasure-code/Makefile.am
 include test/messenger/Makefile.am
 
 if ENABLE_CLIENT
-include Makefile-client.am
+include test/Makefile-client.am
 endif
 
 if ENABLE_SERVER
-include Makefile-server.am
+include test/Makefile-server.am
 endif
 
 ## Unknown/other tests
