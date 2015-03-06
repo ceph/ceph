@@ -2062,29 +2062,49 @@ void OSD::create_logger()
 
   PerfCountersBuilder osd_plb(cct, "osd", l_osd_first, l_osd_last);
 
-  osd_plb.add_u64(l_osd_op_wip, "op_wip", "Replication operations currently being processed (primary)");   // rep ops currently being processed (primary)
+  osd_plb.add_u64(l_osd_op_wip, "op_wip",
+      "Replication operations currently being processed (primary)");   // rep ops currently being processed (primary)
+  osd_plb.add_u64_counter(l_osd_op,       "op",
+      "Client operations", "ops");           // client ops
+  osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes",
+      "Client operations total write size", "wr");       // client op in bytes (writes)
+  osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes",
+      "Client operations total read size", "rd");      // client op out bytes (reads)
+  osd_plb.add_time_avg(l_osd_op_lat,   "op_latency", 
+      "Latency of client operations (including queue time)", "lat");       // client op latency
+  osd_plb.add_time_avg(l_osd_op_process_lat, "op_process_latency", 
+      "Latency of client operations (excluding queue time)");   // client op process latency
 
-  osd_plb.add_u64_counter(l_osd_op,       "op", "Client operations");           // client ops
-  osd_plb.add_u64_counter(l_osd_op_inb,   "op_in_bytes", "Client operations total write size");       // client op in bytes (writes)
-  osd_plb.add_u64_counter(l_osd_op_outb,  "op_out_bytes", "Client operations total read size");      // client op out bytes (reads)
-  osd_plb.add_time_avg(l_osd_op_lat,   "op_latency", "Latency of client operations (including queue time)");       // client op latency
-  osd_plb.add_time_avg(l_osd_op_process_lat, "op_process_latency", "Latency of client operations (excluding queue time)");   // client op process latency
-
-  osd_plb.add_u64_counter(l_osd_op_r,      "op_r", "Client read operations");        // client reads
-  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes", "Client data read");   // client read out bytes
-  osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency", "Latency of read operation (including queue time)");    // client read latency
-  osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency", "Latency of read operation (excluding queue time)");   // client read process latency
-  osd_plb.add_u64_counter(l_osd_op_w,      "op_w", "Client write operations");        // client writes
-  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes", "Client data written");    // client write in bytes
-  osd_plb.add_time_avg(l_osd_op_w_rlat, "op_w_rlat", "Client write operation readable/applied latency");   // client write readable/applied latency
-  osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency", "Latency of write operation (including queue time)");    // client write latency
-  osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency", "Latency of write operation (excluding queue time)");   // client write process latency
-  osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw", "Client read-modify-write operations");       // client rmw
-  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes", "Client read-modify-write operations write in");   // client rmw in bytes
-  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes", "Client read-modify-write operations read out ");  // client rmw out bytes
-  osd_plb.add_time_avg(l_osd_op_rw_rlat,"op_rw_rlat", "Client read-modify-write operation readable/applied latency");  // client rmw readable/applied latency
-  osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency", "Latency of read-modify-write operation (including queue time)");   // client rmw latency
-  osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency", "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
+  osd_plb.add_u64_counter(l_osd_op_r,      "op_r", 
+      "Client read operations");        // client reads
+  osd_plb.add_u64_counter(l_osd_op_r_outb, "op_r_out_bytes", 
+      "Client data read");   // client read out bytes
+  osd_plb.add_time_avg(l_osd_op_r_lat,  "op_r_latency", 
+      "Latency of read operation (including queue time)");    // client read latency
+  osd_plb.add_time_avg(l_osd_op_r_process_lat, "op_r_process_latency", 
+      "Latency of read operation (excluding queue time)");   // client read process latency
+  osd_plb.add_u64_counter(l_osd_op_w,      "op_w", 
+      "Client write operations");        // client writes
+  osd_plb.add_u64_counter(l_osd_op_w_inb,  "op_w_in_bytes", 
+      "Client data written");    // client write in bytes
+  osd_plb.add_time_avg(l_osd_op_w_rlat, "op_w_rlat", 
+      "Client write operation readable/applied latency");   // client write readable/applied latency
+  osd_plb.add_time_avg(l_osd_op_w_lat,  "op_w_latency", 
+      "Latency of write operation (including queue time)");    // client write latency
+  osd_plb.add_time_avg(l_osd_op_w_process_lat, "op_w_process_latency", 
+      "Latency of write operation (excluding queue time)");   // client write process latency
+  osd_plb.add_u64_counter(l_osd_op_rw,     "op_rw", 
+      "Client read-modify-write operations");       // client rmw
+  osd_plb.add_u64_counter(l_osd_op_rw_inb, "op_rw_in_bytes", 
+      "Client read-modify-write operations write in");   // client rmw in bytes
+  osd_plb.add_u64_counter(l_osd_op_rw_outb,"op_rw_out_bytes", 
+      "Client read-modify-write operations read out ");  // client rmw out bytes
+  osd_plb.add_time_avg(l_osd_op_rw_rlat,"op_rw_rlat", 
+      "Client read-modify-write operation readable/applied latency");  // client rmw readable/applied latency
+  osd_plb.add_time_avg(l_osd_op_rw_lat, "op_rw_latency", 
+      "Latency of read-modify-write operation (including queue time)");   // client rmw latency
+  osd_plb.add_time_avg(l_osd_op_rw_process_lat, "op_rw_process_latency", 
+      "Latency of read-modify-write operation (excluding queue time)");   // client rmw process latency
 
   osd_plb.add_u64_counter(l_osd_sop,       "subop");         // subops
   osd_plb.add_u64_counter(l_osd_sop_inb,   "subop_in_bytes");     // subop in bytes
@@ -2106,7 +2126,8 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(l_osd_push_in,    "push_in", "Inbound push messages");        // inbound push messages
   osd_plb.add_u64_counter(l_osd_push_inb,   "push_in_bytes", "Inbound pushed size");  // inbound pushed bytes
 
-  osd_plb.add_u64_counter(l_osd_rop, "recovery_ops", "Started recovery operations");       // recovery ops (started)
+  osd_plb.add_u64_counter(l_osd_rop, "recovery_ops",
+      "Started recovery operations", "recop");       // recovery ops (started)
 
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");       // total ceph::buffer bytes

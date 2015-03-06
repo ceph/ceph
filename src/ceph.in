@@ -73,6 +73,8 @@ from ceph_argparse import \
     matchnum, validate_command, find_cmd_target, \
     send_command, json_command
 
+from ceph_daemon import DaemonWatcher, admin_socket
+
 # just a couple of globals
 
 verbose = False
@@ -303,60 +305,6 @@ def format_help(cmddict, partial=None):
 
     return fullusage
 
-def admin_socket(asok_path, cmd, format=''):
-    """
-    Send a daemon (--admin-daemon) command 'cmd'.  asok_path is the
-    path to the admin socket; cmd is a list of strings; format may be
-    set to one of the formatted forms to get output in that form
-    (daemon commands don't support 'plain' output).
-    """
-
-    def do_sockio(path, cmd):
-        """ helper: do all the actual low-level stream I/O """
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.connect(path)
-        try:
-            sock.sendall(cmd + '\0')
-            len_str = sock.recv(4)
-            if len(len_str) < 4:
-                raise RuntimeError("no data returned from admin socket")
-            l, = struct.unpack(">I", len_str)
-            ret = ''
-
-            got = 0
-            while got < l:
-                bit = sock.recv(l - got)
-                ret += bit
-                got += len(bit)
-
-        except Exception as e:
-            raise RuntimeError('exception: ' + str(e))
-        return ret
-
-    try:
-        cmd_json = do_sockio(asok_path,
-            json.dumps({"prefix":"get_command_descriptions"}))
-    except Exception as e:
-        raise RuntimeError('exception getting command descriptions: ' + str(e))
-
-    if cmd == 'get_command_descriptions':
-        return cmd_json
-
-    sigdict = parse_json_funcsigs(cmd_json, 'cli')
-    valid_dict = validate_command(sigdict, cmd)
-    if not valid_dict:
-        raise RuntimeError('invalid command')
-
-    if format:
-        valid_dict['format'] = format
-
-    try:
-        ret = do_sockio(asok_path, json.dumps(valid_dict))
-    except Exception as e:
-        raise RuntimeError('exception: ' + str(e))
-
-    return ret
-
 
 def ceph_conf(parsed_args, field, name):
     args=['ceph-conf']
@@ -573,12 +521,16 @@ def main():
 
     format = parsed_args.output_format
 
+    daemon_perf = False
     sockpath = None
     if parsed_args.admin_socket:
         sockpath = parsed_args.admin_socket
-    elif len(childargs) > 0 and childargs[0] == "daemon":
+    elif len(childargs) > 0 and childargs[0] in ["daemon", "daemonperf"]:
+        daemon_perf = (childargs[0] == "daemonperf")
         # Treat "daemon <path>" or "daemon <name>" like --admin_daemon <path>
-        if len(childargs) > 2:
+        # Handle "daemonperf <path>" the same but requires no trailing args
+        require_args = 2 if daemon_perf else 3
+        if len(childargs) >= require_args:
             if childargs[1].find('/') >= 0:
                 sockpath = childargs[1]
             else:
@@ -596,7 +548,10 @@ def main():
             print >> sys.stderr, 'daemon requires at least 3 arguments'
             return errno.EINVAL
 
-    if sockpath:
+    if sockpath and daemon_perf:
+        DaemonWatcher(sockpath).run()
+        return 0
+    elif sockpath:
         try:
             print admin_socket(sockpath, childargs, format)
         except Exception as e:
