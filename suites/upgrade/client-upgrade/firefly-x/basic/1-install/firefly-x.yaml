@@ -2,5 +2,6 @@ tasks:
 - install:
    branch: firefly 
 - install.upgrade:
+   exclude_packages: ['ceph-test', 'ceph-test-dbg']
    client.0:
-- ceph:
+- ceph: 
