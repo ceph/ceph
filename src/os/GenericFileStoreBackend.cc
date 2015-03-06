@@ -112,24 +112,25 @@ int GenericFileStoreBackend::detect_features()
   }
 
   // fiemap an extent inside that
-  struct fiemap *fiemap;
-  int r = do_fiemap(fd, 2430421, 59284, &fiemap);
-  if (r < 0) {
-    dout(0) << "detect_features: FIEMAP ioctl is NOT supported" << dendl;
-    ioctl_fiemap = false;
-  } else {
-    if (fiemap->fm_mapped_extents == 0) {
-      dout(0) << "detect_features: FIEMAP ioctl is supported, but buggy -- upgrade your kernel" << dendl;
-      ioctl_fiemap = false;
-    } else {
-      dout(0) << "detect_features: FIEMAP ioctl is supported and appears to work" << dendl;
-      ioctl_fiemap = true;
-    }
-    free(fiemap);
-  }
   if (!m_filestore_fiemap) {
     dout(0) << "detect_features: FIEMAP ioctl is disabled via 'filestore fiemap' config option" << dendl;
     ioctl_fiemap = false;
+  } else {
+    struct fiemap *fiemap;
+    int r = do_fiemap(fd, 2430421, 59284, &fiemap);
+    if (r < 0) {
+      dout(0) << "detect_features: FIEMAP ioctl is NOT supported" << dendl;
+      ioctl_fiemap = false;
+    } else {
+      if (fiemap->fm_mapped_extents == 0) {
+        dout(0) << "detect_features: FIEMAP ioctl is supported, but buggy -- upgrade your kernel" << dendl;
+        ioctl_fiemap = false;
+      } else {
+        dout(0) << "detect_features: FIEMAP ioctl is supported and appears to work" << dendl;
+        ioctl_fiemap = true;
+      }
+      free(fiemap);
+    }
   }
 
   // SEEK_DATA/SEEK_HOLE detection
@@ -149,10 +150,9 @@ int GenericFileStoreBackend::detect_features()
         dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
         seek_data_hole = false;
       } else {
-        r = -errno;
-        derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(r) << dendl;
+        derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(-errno) << dendl;
         VOID_TEMP_FAILURE_RETRY(::close(fd));
-        return r;
+        return -errno;
       }
     } else {
       dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is supported" << dendl;
