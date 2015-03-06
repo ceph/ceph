@@ -1,3 +1,7 @@
+if ENABLE_CLIENT
+if WITH_RADOS
+if WITH_RBD
+
 # librbd_replay_la exists only to help with unit tests
 librbd_replay_la_SOURCES = rbd_replay/actions.cc \
 	rbd_replay/Deser.cc \
@@ -51,3 +55,7 @@ rbd_replay_prep_LDADD = $(LIBRBD) \
 if WITH_BABELTRACE
 bin_PROGRAMS += rbd-replay-prep
 endif
+
+endif # WITH_RBD
+endif # WITH_RADOS
+endif # ENABLE_CLIENT
