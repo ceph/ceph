@@ -370,7 +370,7 @@ TEST(TestFileJournal, WriteTrim) {
 
 TEST(TestFileJournal, WriteTrimSmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
