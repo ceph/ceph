@@ -19,6 +19,7 @@ char path[200];
 uuid_d fsid;
 bool directio = false;
 bool aio = false;
+bool faio = false;
 
 // ----
 Cond cond;
@@ -107,6 +108,7 @@ int main(int argc, char **argv) {
     if (r >= 0) {
       cout << "DIRECTIO ON  AIO ON" << std::endl;
       aio = true;
+      faio = true;
       r = RUN_ALL_TESTS();
     }
   }
@@ -120,13 +122,13 @@ int main(int argc, char **argv) {
 
 TEST(TestFileJournal, Create) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
 }
 
 TEST(TestFileJournal, WriteSmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -140,7 +142,7 @@ TEST(TestFileJournal, WriteSmall) {
 
 TEST(TestFileJournal, WriteBig) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -158,7 +160,7 @@ TEST(TestFileJournal, WriteBig) {
 
 TEST(TestFileJournal, WriteMany) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -181,7 +183,7 @@ TEST(TestFileJournal, WriteMany) {
 
 TEST(TestFileJournal, WriteManyVecs) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -218,7 +220,7 @@ TEST(TestFileJournal, WriteManyVecs) {
 
 TEST(TestFileJournal, ReplaySmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
@@ -263,7 +265,7 @@ TEST(TestFileJournal, ReplaySmall) {
 
 TEST(TestFileJournal, ReplayCorrupt) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
   
@@ -330,7 +332,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
 
 TEST(TestFileJournal, WriteTrim) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -370,7 +372,7 @@ TEST(TestFileJournal, WriteTrim) {
 
 TEST(TestFileJournal, WriteTrimSmall) {
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -413,7 +415,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -463,7 +465,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
@@ -513,7 +515,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
   g_ceph_context->_conf->apply_changes(NULL);
 
   fsid.generate_random();
-  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio);
+  FileJournal j(fsid, finisher, &sync_cond, path, directio, aio, faio);
   ASSERT_EQ(0, j.create());
   j.make_writeable();
 
