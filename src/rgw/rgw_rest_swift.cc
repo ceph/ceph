@@ -478,10 +478,10 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-#define REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_CONTAINER_META_"
-#define PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
-#define REMOVE_ATTR_PREFIX_LEN sizeof(REMOVE_ATTR_PREFIX) - 1
-#define PUT_ATTR_PREFIX_LEN    sizeof(PUT_ATTR_PREFIX) - 1
+#define ACCT_REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_ACCOUNT_META_"
+#define ACCT_PUT_ATTR_PREFIX        "HTTP_X_ACCOUNT_META_"
+#define CONT_REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_CONTAINER_META_"
+#define CONT_PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
 
 int RGWPutMetadata_ObjStore_SWIFT::get_params()
 {
@@ -491,6 +491,18 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
   const bool is_bucket_op  = (!s->bucket_name_str.empty() && s->object.empty());
   const bool is_account_op = (s->bucket_name_str.empty());
 
+  const char *put_attr_prefix;
+  const char *del_attr_prefix;
+  if (is_bucket_op) {
+    put_attr_prefix = CONT_PUT_ATTR_PREFIX;
+    del_attr_prefix = CONT_REMOVE_ATTR_PREFIX;
+  } else {
+    put_attr_prefix = ACCT_PUT_ATTR_PREFIX;
+    del_attr_prefix = ACCT_REMOVE_ATTR_PREFIX;
+  }
+
+  const size_t put_attr_prefix_len = strlen(put_attr_prefix);
+  const size_t del_attr_prefix_len = strlen(del_attr_prefix);
   if (is_bucket_op) {
     int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
     if (r < 0) {
@@ -504,12 +516,12 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     for (iter = m.begin(); iter != m.end(); ++iter) {
       size_t prefix_len = 0;
       const char *p = iter->first.c_str();
-      if (strncasecmp(p, REMOVE_ATTR_PREFIX, REMOVE_ATTR_PREFIX_LEN) == 0) {
+      if (strncasecmp(p, del_attr_prefix, del_attr_prefix_len) == 0) {
         // Explicitly requested removal
-        prefix_len = REMOVE_ATTR_PREFIX_LEN;
-      } else if ((strncasecmp(p, PUT_ATTR_PREFIX, PUT_ATTR_PREFIX_LEN) == 0) && iter->second.empty()) {
+        prefix_len = del_attr_prefix_len;
+      } else if ((strncasecmp(p, put_attr_prefix, put_attr_prefix_len) == 0) && iter->second.empty()) {
         // Removal requested by putting an empty value
-        prefix_len = PUT_ATTR_PREFIX_LEN;
+        prefix_len = put_attr_prefix_len;
       }
       if (prefix_len > 0) {
         string name(RGW_ATTR_META_PREFIX);
