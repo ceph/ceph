@@ -3,6 +3,6 @@ tasks:
 - install:
 - ceph:
 - hadoop:
-- workunit: 
+- workunit:
     clients:
-      client.0: [hadoop/internal-tests.sh]
+      client.0: [hadoop/repl.sh]
