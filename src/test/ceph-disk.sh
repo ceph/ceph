@@ -51,6 +51,7 @@ timeout=$(which timeout)
 diff=$(which diff)
 mkdir=$(which mkdir)
 rm=$(which rm)
+uuidgen=$(which uuidgen)
 
 function setup() {
     teardown
@@ -170,7 +171,7 @@ function test_no_path() {
 # ceph-disk prepare returns immediately on success if the magic file
 # exists in the --osd-data directory.
 function test_activate_dir_magic() {
-    local uuid=$(uuidgen)
+    local uuid=$($uuidgen)
     local osd_data=$DIR/osd
 
     echo a failure to create the fsid file implies the magic file is not created
@@ -192,7 +193,7 @@ function test_activate_dir_magic() {
 
     echo will not override an existing OSD
 
-    CEPH_ARGS="--fsid $(uuidgen)" \
+    CEPH_ARGS="--fsid $($uuidgen)" \
      ./ceph-disk $CEPH_DISK_ARGS prepare $osd_data 2>&1 | tee $DIR/out
     grep --quiet 'ceph-disk:Data dir .* already exists' $DIR/out || return 1
     grep --quiet $uuid $osd_data/ceph_fsid || return 1
@@ -202,7 +203,7 @@ function test_activate() {
     local to_prepare=$1
     local to_activate=$2
     local journal=$3
-    local osd_uuid=$(uuidgen)
+    local osd_uuid=$($uuidgen)
 
     $mkdir -p $OSD_DATA
 
@@ -378,8 +379,8 @@ function activate_dmcrypt_dev_body() {
     local disk=$1
     local journal=$2
     local newdisk=$3
-    local uuid=$(uuidgen)
-    local juuid=$(uuidgen)
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
 
     setup
     run_mon
@@ -414,8 +415,8 @@ function activate_dmcrypt_plain_dev_body() {
     local disk=$1
     local journal=$2
     local newdisk=$3
-    local uuid=$(uuidgen)
-    local juuid=$(uuidgen)
+    local uuid=$($uuidgen)
+    local juuid=$($uuidgen)
 
     setup
     run_mon
