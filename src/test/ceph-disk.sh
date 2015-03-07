@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Copyright (C) 2014 Cloudwatt <libre.licensing@cloudwatt.com>
-# Copyright (C) 2014 Red Hat <contact@redhat.com>
+# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -350,6 +350,7 @@ function test_activate_dev() {
 
     activate_dev_body $disk $journal $newdisk
     status=$?
+    test $status != 0 && teardown
 
     destroy_dev vdf.disk $disk
     destroy_dev vdg.disk $journal
@@ -399,6 +400,7 @@ function test_activate_dmcrypt_dev() {
 
     activate_dmcrypt_dev_body $disk $journal $newdisk
     status=$?
+    test $status != 0 && teardown
 
     destroy_dmcrypt_dev vdf.disk $disk
     destroy_dmcrypt_dev vdg.disk $journal
