@@ -26,6 +26,7 @@ FSID=$(uuidgen)
 export CEPH_CONF=/dev/null
 export CEPH_ARGS="--fsid $FSID"
 CEPH_ARGS+=" --chdir="
+CEPH_ARGS+=" --journal-dio=false"
 CEPH_ARGS+=" --run-dir=$DIR"
 CEPH_ARGS+=" --mon-host=$MONA"
 CEPH_ARGS+=" --log-file=$DIR/\$name.log"
