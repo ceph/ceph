@@ -31,6 +31,7 @@ FSID=$(uuidgen)
 export CEPH_CONF=$DIR/ceph.conf
 export CEPH_ARGS="--fsid $FSID"
 CEPH_ARGS+=" --chdir="
+CEPH_ARGS+=" --journal-dio=false"
 CEPH_ARGS+=" --run-dir=$DIR"
 CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
 CEPH_ARGS+=" --mon-host=$MONA"
