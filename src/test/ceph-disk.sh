@@ -202,11 +202,12 @@ function test_activate() {
     local to_prepare=$1
     local to_activate=$2
     local journal=$3
+    local osd_uuid=$(uuidgen)
 
     $mkdir -p $OSD_DATA
 
     ./ceph-disk $CEPH_DISK_ARGS \
-        prepare $to_prepare $journal || return 1
+        prepare --osd-uuid $osd_uuid $to_prepare $journal || return 1
 
     $timeout $TIMEOUT ./ceph-disk $CEPH_DISK_ARGS \
         activate \
@@ -214,7 +215,7 @@ function test_activate() {
         $to_activate || return 1
     $timeout $TIMEOUT ./ceph osd pool set $TEST_POOL size 1 || return 1
 
-    local id=$($cat $OSD_DATA/ceph-?/whoami || $cat $to_activate/whoami)
+    local id=$(ceph osd create $osd_uuid)
     local weight=1
     ./ceph osd crush add osd.$id $weight root=default host=localhost || return 1
     echo FOO > $DIR/BAR
