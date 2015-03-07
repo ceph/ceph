@@ -8485,6 +8485,7 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
+  string shard_marker;
   char buf[64];
   for(; iter != headers.end(); ++iter, ++viter) {
     accumulate_raw_stats(iter->second, stats);
@@ -8492,11 +8493,17 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_
     ver_mgr.add(viter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->second.master_ver);
     master_ver_mgr.add(viter->first, string(buf));
-    marker_mgr.add(viter->first, iter->second.max_marker);
+    if (shard_id >= 0) {
+      *max_marker = iter->second.max_marker;
+    } else {
+      marker_mgr.add(viter->first, iter->second.max_marker);
+    }
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
-  marker_mgr.to_string(max_marker);
+  if (shard_id < 0) {
+    marker_mgr.to_string(max_marker);
+  }
   return 0;
 }
 

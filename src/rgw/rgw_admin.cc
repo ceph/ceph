@@ -717,7 +717,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->close_section();
 }
 
-int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
+int bucket_stats(rgw_bucket& bucket, int shard_id, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   time_t mtime;
@@ -729,7 +729,7 @@ int bucket_stats(rgw_bucket& bucket, Formatter *formatter)
   map<RGWObjCategory, RGWStorageStats> stats;
   string bucket_ver, master_ver;
   string max_marker;
-  int ret = store->get_bucket_stats(bucket, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret = store->get_bucket_stats(bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0) {
     cerr << "error getting bucket stats ret=" << ret << std::endl;
     return ret;
