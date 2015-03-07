@@ -8469,12 +8469,12 @@ int RGWRados::raw_obj_stat(rgw_obj& obj, uint64_t *psize, time_t *pmtime, uint64
   return 0;
 }
 
-int RGWRados::get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *master_ver,
+int RGWRados::get_bucket_stats(rgw_bucket& bucket, int shard_id, string *bucket_ver, string *master_ver,
     map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker)
 {
   map<string, rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = cls_bucket_head(bucket, headers, &bucket_instance_ids);
+  int r = cls_bucket_head(bucket, shard_id, headers, &bucket_instance_ids);
   if (r < 0)
     return r;
 
@@ -8539,7 +8539,7 @@ public:
   }
 };
 
-int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *ctx)
+int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, int shard_id, RGWGetBucketStats_CB *ctx)
 {
   RGWBucketInfo binfo;
   RGWObjectCtx obj_ctx(this);
@@ -8551,7 +8551,7 @@ int RGWRados::get_bucket_stats_async(rgw_bucket& bucket, RGWGetBucketStats_CB *c
   int num_aio = 0;
   RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, binfo.num_shards);
   assert(get_ctx);
-  r = cls_bucket_head_async(bucket, get_ctx, &num_aio);
+  r = cls_bucket_head_async(bucket, shard_id, get_ctx, &num_aio);
   get_ctx->put();
   if (r < 0) {
     ctx->put();
@@ -8961,7 +8961,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     rgw_bucket& bucket = ent.bucket;
 
     map<string, rgw_bucket_dir_header> headers;
-    int r = cls_bucket_head(bucket, headers);
+    int r = cls_bucket_head(bucket, RGW_NO_SHARD, headers);
     if (r < 0)
       return r;
 
@@ -9741,12 +9741,12 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::cls_bucket_head(rgw_bucket& bucket, int shard_id, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
 {
   librados::IoCtx index_ctx;
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
-  int r = open_bucket_index(bucket, index_ctx, oids, list_results, -1, bucket_instance_ids);
+  int r = open_bucket_index(bucket, index_ctx, oids, list_results, shard_id, bucket_instance_ids);
   if (r < 0)
     return r;
 
@@ -9761,11 +9761,11 @@ int RGWRados::cls_bucket_head(rgw_bucket& bucket, map<string, struct rgw_bucket_
   return 0;
 }
 
-int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, RGWGetDirHeader_CB *ctx, int *num_aio)
+int RGWRados::cls_bucket_head_async(rgw_bucket& bucket, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio)
 {
   librados::IoCtx index_ctx;
   map<int, string> bucket_objs;
-  int r = open_bucket_index(bucket, index_ctx, bucket_objs);
+  int r = open_bucket_index(bucket, index_ctx, bucket_objs, shard_id);
   if (r < 0)
     return r;
 
@@ -9831,7 +9831,7 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
 int RGWRados::cls_user_sync_bucket_stats(rgw_obj& user_obj, rgw_bucket& bucket)
 {
   map<string, struct rgw_bucket_dir_header> headers;
-  int r = cls_bucket_head(bucket, headers);
+  int r = cls_bucket_head(bucket, RGW_NO_SHARD, headers);
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
     return r;

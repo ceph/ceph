@@ -411,6 +411,12 @@ void RGWOp_BILog_Info::execute() {
     return;
   }
 
+  int shard_id;
+  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
+  if (http_ret < 0) {
+    return;
+  }
+
   if (!bucket_instance.empty()) {
     http_ret = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, NULL, NULL);
     if (http_ret < 0) {
@@ -425,7 +431,7 @@ void RGWOp_BILog_Info::execute() {
     }
   }
   map<RGWObjCategory, RGWStorageStats> stats;
-  int ret =  store->get_bucket_stats(bucket_info.bucket, &bucket_ver, &master_ver, stats, &max_marker);
+  int ret =  store->get_bucket_stats(bucket_info.bucket, shard_id, &bucket_ver, &master_ver, stats, &max_marker);
   if (ret < 0 && ret != -ENOENT) {
     http_ret = ret;
     return;
