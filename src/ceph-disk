@@ -1023,17 +1023,20 @@ def update_partition(action, dev, description):
      # On RHEL and CentOS distros, calling partprobe forces a reboot of the
      # server. Since we are not resizing partitons so we rely on calling
      # partx
-     if platform_distro().startswith(('centos', 'red', 'scientific')):
-         LOG.info('calling partx on %s device %s', description, dev)
-         LOG.info('re-reading known partitions will display errors')
-         command(
-             [
-                 'partx',
-                 action,
-                 dev,
-             ],
-         )
-
+     if platform_distro().startswith('red'):
+          # This was fixed in rhel 7.x, checking for it.
+          _, version, _ = platform_information()
+          if not version.startswith('7'):
+               if platform_distro().startswith(('centos', 'red', 'scientific')):
+                    LOG.info('calling partx on %s device %s', description, dev)
+                    LOG.info('re-reading known partitions will display errors')
+                    command(
+                        [
+                            'partx',
+                            action,
+                            dev,
+                        ],
+                    )
      else:
          LOG.debug('Calling partprobe on %s device %s', description, dev)
          command(
