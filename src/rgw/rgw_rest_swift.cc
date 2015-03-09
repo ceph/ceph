@@ -66,7 +66,21 @@ static void dump_account_metadata(struct req_state * const s,
   snprintf(buf, sizeof(buf), "%lld", (long long)buckets_size_rounded);
   s->cio->print("X-Account-Bytes-Used-Actual: %s\r\n", buf);
 
-  // Dump user-defined metadata items
+  /* Dump TempURL-related stuff */
+  if (s->perm_mask == RGW_PERM_FULL_CONTROL) {
+    map<int, string>::iterator iter;
+    iter = s->user.temp_url_keys.find(0);
+    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+      s->cio->print("X-Account-Meta-Temp-Url-Key: %s\r\n", iter->second.c_str());
+    }
+
+    iter = s->user.temp_url_keys.find(1);
+    if (iter != s->user.temp_url_keys.end() && !iter->second.empty()) {
+      s->cio->print("X-Account-Meta-Temp-Url-Key-2: %s\r\n", iter->second.c_str());
+    }
+  }
+
+  /* Dump user-defined metadata items */
   const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
   map<string, bufferlist>::iterator iter;
   for (iter = attrs.lower_bound(RGW_ATTR_META_PREFIX); iter != attrs.end(); ++iter) {
