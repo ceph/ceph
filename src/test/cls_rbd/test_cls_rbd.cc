@@ -54,6 +54,9 @@ using ::librbd::cls_client::object_map_resize;
 using ::librbd::cls_client::object_map_update;
 using ::librbd::cls_client::get_flags;
 using ::librbd::cls_client::set_flags;
+using ::librbd::cls_client::metadata_set;
+using ::librbd::cls_client::metadata_remove;
+using ::librbd::cls_client::metadata_list;
 
 static char *random_buf(size_t len)
 {
@@ -1061,6 +1064,36 @@ TEST_F(TestClsRbd, flags)
   ASSERT_EQ(6U, flags);
   ASSERT_EQ(snap_ids.size(), snap_flags.size());
   ASSERT_EQ(2U, snap_flags[0]);
+
+  ioctx.close();
+}
+
+
+TEST_F(TestClsRbd, metadata)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
+
+  map<string, string> pairs;
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_TRUE(pairs.empty());
+
+  ASSERT_EQ(0, metadata_set(&ioctx, oid, "key1", "value1"));
+  ASSERT_EQ(0, metadata_set(&ioctx, oid, "key2", "value2"));
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_EQ(2U, pairs.size());
+  ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
+  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
+
+  pairs.clear();
+  ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key1"));
+  ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key3"));
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_EQ(1U, pairs.size());
+  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
 
   ioctx.close();
 }
