@@ -147,7 +147,7 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 
 void ObjectMap::refresh(uint64_t snap_id)
 {
-  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.snap_lock.is_wlocked());
   RWLock::WLocker l(m_image_ctx.object_map_lock);
 
   uint64_t features;
@@ -173,10 +173,10 @@ void ObjectMap::refresh(uint64_t snap_id)
     m_object_map.clear();
     return;
   }
-  
+
   ldout(cct, 20) << "refreshed object map: " << m_object_map.size()
                  << dendl;
-  
+
   uint64_t num_objs = Striper::get_num_objects(
     m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
   if (m_object_map.size() != num_objs) {
