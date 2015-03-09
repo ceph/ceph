@@ -10,7 +10,7 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool bar
-  strict_strtoll: expected integer, got: 'bar'
+  Invalid value for option --pool
   [1]
 
   $ osdmaptool myosdmap --test-map-object foo --pool 123
@@ -35,7 +35,7 @@
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool baz
-  strict_strtoll: expected integer, got: 'baz'
+  Invalid value for option --pool
   [1]
 
   $ osdmaptool myosdmap --test-map-pgs --pool 123

@@ -295,20 +295,20 @@ static bool va_ceph_argparse_witharg(std::vector<const char*> &args,
     dashes_to_underscores(a, a2);
     if (strncmp(a2, first, strlen(a2)) == 0) {
       if (first[strlen_a] == '=') {
-	*ret = first + strlen_a + 1;
-	i = args.erase(i);
-	return true;
+        *ret = first + strlen_a + 1;
+        i = args.erase(i);
+        return true;
       }
       else if (first[strlen_a] == '\0') {
-	// find second part (or not)
-	if (i+1 == args.end()) {
-	  cerr << "Option " << *i << " requires an argument." << std::endl;
-	  _exit(1);
-	}
-	i = args.erase(i);
-	*ret = *i;
-	i = args.erase(i);
-	return true;
+        // find second part (or not)
+        if (i+1 == args.end() || strncmp(*(i+1), "--", 2) == 0) {
+          cerr << "Option " << *i << " requires an argument." << std::endl;
+          _exit(1);
+        }
+        i = args.erase(i);
+        *ret = *i;
+        i = args.erase(i);
+        return true;
       }
     }
   }
@@ -331,7 +331,7 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
 {
   bool r;
   va_list ap;
-  std::string str;
+  std::string str, opt = *i;
   va_start(ap, oss);
   r = va_ceph_argparse_witharg(args, i, &str, ap);
   va_end(ap);
@@ -343,7 +343,7 @@ bool ceph_argparse_withint(std::vector<const char*> &args,
   int myret = strict_strtol(str.c_str(), 10, &err);
   *ret = myret;
   if (!err.empty()) {
-    *oss << err;
+    *oss << "Invalid value for option " << opt;
   }
   return true;
 }
@@ -354,7 +354,7 @@ bool ceph_argparse_withlonglong(std::vector<const char*> &args,
 {
   bool r;
   va_list ap;
-  std::string str;
+  std::string str, opt = *i;
   va_start(ap, oss);
   r = va_ceph_argparse_witharg(args, i, &str, ap);
   va_end(ap);
@@ -366,7 +366,7 @@ bool ceph_argparse_withlonglong(std::vector<const char*> &args,
   long long myret = strict_strtoll(str.c_str(), 10, &err);
   *ret = myret;
   if (!err.empty()) {
-    *oss << err;
+    *oss << "Invalid value for option " << opt;
   }
   return true;
 }
@@ -377,7 +377,7 @@ bool ceph_argparse_withfloat(std::vector<const char*> &args,
 {
   bool r;
   va_list ap;
-  std::string str;
+  std::string str, opt = *i;
   va_start(ap, oss);
   r = va_ceph_argparse_witharg(args, i, &str, ap);
   va_end(ap);
@@ -389,7 +389,7 @@ bool ceph_argparse_withfloat(std::vector<const char*> &args,
   float myret = strict_strtof(str.c_str(), &err);
   *ret = myret;
   if (!err.empty()) {
-    *oss << err;
+    *oss << "Invalid value for option " << opt;
   }
   return true;
 }
