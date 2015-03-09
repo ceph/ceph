@@ -40,7 +40,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << cache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") "
 
-
+int CDir::num_frozen_trees = 0;
+int CDir::num_freezing_trees = 0;
 
 class CDirContext : public MDSInternalContextBase
 {
@@ -1029,8 +1030,8 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
       steal_dentry(dir->items.begin()->second);
     
     // merge replica map
-    for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
-	 p != dir->replica_map.end();
+    for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+	 p != dir->replicas_end();
 	 ++p) {
       unsigned cur = replica_map[p->first];
       if (p->second > cur)
@@ -1166,7 +1167,7 @@ void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t las
   
   string_snap_t lb(dname, first);
   string_snap_t ub(dname, last);
-  map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.lower_bound(lb);
+  compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.lower_bound(lb);
   while (p != waiting_on_dentry.end() &&
 	 !(ub < p->first)) {
     dout(10) << "take_dentry_waiting dentry " << dname
@@ -1185,7 +1186,7 @@ void CDir::take_sub_waiting(list<MDSInternalContextBase*>& ls)
 {
   dout(10) << "take_sub_waiting" << dendl;
   if (!waiting_on_dentry.empty()) {
-    for (map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin(); 
+    for (compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin();
 	 p != waiting_on_dentry.end();
 	 ++p) 
       ls.splice(ls.end(), p->second);
@@ -1232,7 +1233,7 @@ void CDir::take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls)
   if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
     while (!waiting_on_dentry.empty()) {
-      map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin(); 
+      compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin();
       dout(10) << "take_waiting dentry " << p->first.name
 	       << " snap " << p->first.snapid << " on " << *this << dendl;
       ls.splice(ls.end(), p->second);
@@ -1707,8 +1708,8 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 	  in->dirfragtree.swap(inode_data.dirfragtree);
 	  in->xattrs.swap(inode_data.xattrs);
 	  in->old_inodes.swap(inode_data.old_inodes);
-	  in->decode_snap_blob(inode_data.snap_blob);
 	  in->oldest_snap = inode_data.oldest_snap;
+	  in->decode_snap_blob(inode_data.snap_blob);
 	  if (snaps && !in->snaprealm)
 	    in->purge_stale_snap_data(*snaps);
 
@@ -2012,9 +2013,9 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     if (in->is_multiversion() && snaps && !in->snaprealm)
       in->purge_stale_snap_data(*snaps);
 
-    in->encode_snap_blob(in->snap_blob);
-    in->encode_bare(bl);
-    in->snap_blob.clear();
+    bufferlist snap_blob;
+    in->encode_snap_blob(snap_blob);
+    in->encode_bare(bl, &snap_blob);
   }
 }
 
@@ -2142,9 +2143,9 @@ void CDir::_committed(int r, version_t v)
   // finishers?
   bool were_waiters = !waiting_for_commit.empty();
   
-  map<version_t, list<MDSInternalContextBase*> >::iterator p = waiting_for_commit.begin();
+  compact_map<version_t, list<MDSInternalContextBase*> >::iterator p = waiting_for_commit.begin();
   while (p != waiting_for_commit.end()) {
-    map<version_t, list<MDSInternalContextBase*> >::iterator n = p;
+    compact_map<version_t, list<MDSInternalContextBase*> >::iterator n = p;
     ++n;
     if (p->first > committed_version) {
       dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
@@ -2511,6 +2512,7 @@ bool CDir::freeze_tree()
     return true;
   } else {
     state_set(STATE_FREEZINGTREE);
+    ++num_freezing_trees;
     dout(10) << "freeze_tree waiting " << *this << dendl;
     return false;
   }
@@ -2522,8 +2524,12 @@ void CDir::_freeze_tree()
   assert(is_freezeable(true));
 
   // twiddle state
-  state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+  if (state_test(STATE_FREEZINGTREE)) {
+    state_clear(STATE_FREEZINGTREE);   // actually, this may get set again by next context?
+    --num_freezing_trees;
+  }
   state_set(STATE_FROZENTREE);
+  ++num_frozen_trees;
   get(PIN_FROZEN);
 
   // auth_pin inode for duration of freeze, if we are not a subtree root.
@@ -2538,6 +2544,8 @@ void CDir::unfreeze_tree()
   if (state_test(STATE_FROZENTREE)) {
     // frozen.  unfreeze.
     state_clear(STATE_FROZENTREE);
+    --num_frozen_trees;
+
     put(PIN_FROZEN);
 
     // unpin  (may => FREEZEABLE)   FIXME: is this order good?
@@ -2552,6 +2560,7 @@ void CDir::unfreeze_tree()
     // freezing.  stop it.
     assert(state_test(STATE_FREEZINGTREE));
     state_clear(STATE_FREEZINGTREE);
+    --num_freezing_trees;
     auth_unpin(this);
     
     finish_waiting(WAIT_UNFREEZE);
@@ -2560,6 +2569,8 @@ void CDir::unfreeze_tree()
 
 bool CDir::is_freezing_tree() const
 {
+  if (num_freezing_trees == 0)
+    return false;
   const CDir *dir = this;
   while (1) {
     if (dir->is_freezing_tree_root()) return true;
@@ -2573,6 +2584,8 @@ bool CDir::is_freezing_tree() const
 
 bool CDir::is_frozen_tree() const
 {
+  if (num_frozen_trees == 0)
+    return false;
   const CDir *dir = this;
   while (1) {
     if (dir->is_frozen_tree_root()) return true;
@@ -2720,8 +2733,9 @@ void CDir::dump(Formatter *f) const
   f->open_object_section("auth_state");
   {
     f->open_object_section("replica_map");
-    for (std::map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
-         i != replica_map.end(); ++i) {
+    for (compact_map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
+	 i != replica_map.end();
+	 ++i) {
       std::ostringstream rank_str;
       rank_str << i->first;
       f->dump_int(rank_str.str().c_str(), i->second);

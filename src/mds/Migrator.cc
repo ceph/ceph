@@ -966,7 +966,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   MExportDirPrep *prep = new MExportDirPrep(dir->dirfrag(), it->second.tid);
 
   // include list of bystanders
-  for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first != it->second.peer) {
@@ -1146,7 +1146,7 @@ void Migrator::handle_export_prep_ack(MExportDirPrepAck *m)
 	  it->second.warning_ack_waiting.count(MDS_RANK_NONE) > 0));
   assert(it->second.notify_ack_waiting.empty());
 
-  for (map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
+  for (compact_map<mds_rank_t,unsigned>::iterator p = dir->replicas_begin();
        p != dir->replicas_end();
        ++p) {
     if (p->first == it->second.peer) continue;
