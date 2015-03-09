@@ -57,6 +57,7 @@ using ::librbd::cls_client::set_flags;
 using ::librbd::cls_client::metadata_set;
 using ::librbd::cls_client::metadata_remove;
 using ::librbd::cls_client::metadata_list;
+using ::librbd::cls_client::metadata_get;
 
 static char *random_buf(size_t len)
 {
@@ -1078,11 +1079,14 @@ TEST_F(TestClsRbd, metadata)
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
 
   map<string, string> pairs;
+  string value;
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_TRUE(pairs.empty());
 
   ASSERT_EQ(0, metadata_set(&ioctx, oid, "key1", "value1"));
   ASSERT_EQ(0, metadata_set(&ioctx, oid, "key2", "value2"));
+  ASSERT_EQ(0, metadata_get(&ioctx, oid, "key1", &value));
+  ASSERT_EQ(0, strcmp("value1", value.c_str()));
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_EQ(2U, pairs.size());
   ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
@@ -1091,6 +1095,7 @@ TEST_F(TestClsRbd, metadata)
   pairs.clear();
   ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key1"));
   ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key3"));
+  ASSERT_TRUE(metadata_get(&ioctx, oid, "key1", &value) < 0);
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
