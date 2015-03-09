@@ -3371,6 +3371,19 @@ reprotect_and_return_err:
     return r;
   }
 
+  int metadata_get(ImageCtx *ictx, const string &key, string *value)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "metadata_get " << ictx << " key=" << key << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    return cls_client::metadata_get(&ictx->md_ctx, ictx->header_oid, key, value);
+  }
+
   int metadata_set(ImageCtx *ictx, const string &key, const string &value)
   {
     CephContext *cct = ictx->cct;
