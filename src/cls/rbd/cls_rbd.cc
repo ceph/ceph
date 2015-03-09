@@ -96,14 +96,19 @@ cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
 cls_method_handle_t h_object_map_resize;
 cls_method_handle_t h_object_map_update;
+cls_method_handle_t h_metadata_set;
+cls_method_handle_t h_metadata_remove;
+cls_method_handle_t h_metadata_list;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
+#define RBD_MAX_MEATADATA_KEYS 1024
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
+#define RBD_METADATA_KEY_PREFIX "metadata_"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -2109,6 +2114,120 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return r;
 }
 
+
+static const string metadata_key_for_name(const string &name)
+{
+  return RBD_METADATA_KEY_PREFIX + name;
+}
+
+static const string metadata_name_from_key(const string &key)
+{
+  return key.substr(strlen(RBD_METADATA_KEY_PREFIX));
+}
+
+/**
+ * Input:
+ * @param in ignored
+ *
+ * Output:
+ * @param value
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  map<string, bufferlist> vals;
+  map<string, string> out_map;
+  int r = cls_cxx_map_get_vals(hctx, RBD_METADATA_KEY_PREFIX, RBD_METADATA_KEY_PREFIX,
+                               RBD_MAX_MEATADATA_KEYS, &vals);
+  if (r < 0) {
+    CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  bufferlist::iterator iter;
+  string v;
+  for (map<string, bufferlist>::iterator it = vals.begin();
+       it != vals.end(); ++it) {
+    iter = it->second.begin();
+    try {
+      ::decode(v, iter);
+    } catch (const buffer::error &err) {
+      CLS_ERR("failed to decode the vals off of disk");
+      return -EINVAL;
+    }
+
+    assert(it->first.find(
+            RBD_METADATA_KEY_PREFIX, 0, sizeof(sizeof(RBD_METADATA_KEY_PREFIX))-1) == 0);
+    out_map[metadata_name_from_key(it->first)] = v;
+  }
+
+  ::encode(out_map, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param key
+ * @param value
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key, value;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(key, iter);
+    ::decode(value, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "metdata_set key=%s value=%s", key.c_str(), value.c_str());
+
+  bufferlist bl;
+  ::encode(value, bl);
+  int r = cls_cxx_map_set_val(hctx, metadata_key_for_name(key), &bl);
+  if (r < 0) {
+    CLS_ERR("error writing metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param key
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(key, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "metdata_set key=%s", key.c_str());
+
+  int r = cls_cxx_map_remove_key(hctx, metadata_key_for_name(key));
+  if (r < 0) {
+    CLS_ERR("error remove metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -2370,6 +2489,15 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_flags",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           set_flags, &h_set_flags);
+  cls_register_cxx_method(h_class, "metadata_list",
+                          CLS_METHOD_RD,
+			  metadata_list, &h_metadata_list);
+  cls_register_cxx_method(h_class, "metadata_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  metadata_set, &h_metadata_set);
+  cls_register_cxx_method(h_class, "metadata_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  metadata_remove, &h_metadata_remove);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
@@ -2421,7 +2549,7 @@ void __cls_init()
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_update, &h_object_map_update);
 
-  /* methods for the old format */
+ /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
 			  CLS_METHOD_RD,
 			  old_snapshots_list, &h_old_snapshots_list);
