@@ -505,37 +505,51 @@ public:
   Mutex sched_scrub_lock;
   int scrubs_pending;
   int scrubs_active;
-  set< pair<utime_t,spg_t> > last_scrub_pg;
+  struct ScrubJob {
+    /// pg to be scrubbed
+    spg_t pgid;
+    /// a time scheduled for scrub. but the scrub could be delayed if system
+    /// load is too high or it fails to fall in the scrub hours
+    utime_t sched_time;
+    /// the hard upper bound of scrub time
+    utime_t deadline;
+    ScrubJob() {}
+    explicit ScrubJob(const spg_t& pg, const utime_t& timestamp, bool must = true);
+    /// order the jobs by sched_time
+    bool operator<(const ScrubJob& rhs) const;
+  };
+  set<ScrubJob> sched_scrub_pg;
 
-  void reg_last_pg_scrub(spg_t pgid, utime_t t) {
+  /// @returns the scrub_reg_stamp used for unregister the scrub job
+  utime_t reg_pg_scrub(spg_t pgid, utime_t t, bool must) {
+    ScrubJob scrub(pgid, t, must);
     Mutex::Locker l(sched_scrub_lock);
-    last_scrub_pg.insert(pair<utime_t,spg_t>(t, pgid));
+    sched_scrub_pg.insert(scrub);
+    return scrub.sched_time;
   }
-  void unreg_last_pg_scrub(spg_t pgid, utime_t t) {
+  void unreg_pg_scrub(spg_t pgid, utime_t t) {
     Mutex::Locker l(sched_scrub_lock);
-    pair<utime_t,spg_t> p(t, pgid);
-    set<pair<utime_t,spg_t> >::iterator it = last_scrub_pg.find(p);
-    assert(it != last_scrub_pg.end());
-    last_scrub_pg.erase(it);
+    size_t removed = sched_scrub_pg.erase(ScrubJob(pgid, t));
+    assert(removed);
   }
-  bool first_scrub_stamp(pair<utime_t, spg_t> *out) {
+  bool first_scrub_stamp(ScrubJob *out) {
     Mutex::Locker l(sched_scrub_lock);
-    if (last_scrub_pg.empty())
+    if (sched_scrub_pg.empty())
       return false;
-    set< pair<utime_t, spg_t> >::iterator iter = last_scrub_pg.begin();
+    set<ScrubJob>::iterator iter = sched_scrub_pg.begin();
     *out = *iter;
     return true;
   }
-  bool next_scrub_stamp(pair<utime_t, spg_t> next,
-			pair<utime_t, spg_t> *out) {
+  bool next_scrub_stamp(const ScrubJob& next,
+			ScrubJob *out) {
     Mutex::Locker l(sched_scrub_lock);
-    if (last_scrub_pg.empty())
+    if (sched_scrub_pg.empty())
       return false;
-    set< pair<utime_t, spg_t> >::iterator iter = last_scrub_pg.lower_bound(next);
-    if (iter == last_scrub_pg.end())
+    set<ScrubJob>::iterator iter = sched_scrub_pg.lower_bound(next);
+    if (iter == sched_scrub_pg.end())
       return false;
     ++iter;
-    if (iter == last_scrub_pg.end())
+    if (iter == sched_scrub_pg.end())
       return false;
     *out = *iter;
     return true;
@@ -2095,7 +2109,7 @@ protected:
   // -- scrubbing --
   void sched_scrub();
   bool scrub_random_backoff();
-  bool scrub_should_schedule();
+  bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
 
   xlist<PG*> scrub_queue;
