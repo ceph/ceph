@@ -661,6 +661,11 @@ void MDSMonitor::dump_info(Formatter *f)
   f->dump_unsigned("mdsmap_last_committed", get_last_committed());
 }
 
+void MDSMonitor::print_nodes(ostream& out) const
+{
+  mdsmap.print_nodes(out);
+}
+
 bool MDSMonitor::preprocess_command(MMonCommand *m)
 {
   int r = -1;

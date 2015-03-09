@@ -2837,6 +2837,23 @@ void Monitor::handle_command(MMonCommand *m)
     ss2 << "report " << rdata.crc32c(6789);
     rs = ss2.str();
     r = 0;
+  } else if (prefix == "node ls") {
+    string node_type("all");
+    cmd_getval(g_ceph_context, cmdmap, "type", node_type);
+    if (node_type == "all") {
+      monmon()->print_nodes(ds);
+      osdmon()->print_nodes(ds);
+      mdsmon()->print_nodes(ds);
+    } else if (node_type == "mon") {
+      monmon()->print_nodes(ds);
+    } else if (node_type == "osd") {
+      osdmon()->print_nodes(ds);
+    } else if (node_type == "mds") {
+      mdsmon()->print_nodes(ds);
+    }
+    rdata.append(ds);
+    rs = "";
+    r = 0;
   } else if (prefix == "quorum_status") {
     // make sure our map is readable and up to date
     if (!is_leader() && !is_peon()) {

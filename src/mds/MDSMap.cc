@@ -153,6 +153,15 @@ void MDSMap::dump(Formatter *f) const
   f->dump_string("fs_name", fs_name);
 }
 
+void MDSMap::print_nodes(ostream& out) const
+{
+  for (map<mds_gid_t, mds_info_t>::const_iterator p = mds_info.begin();
+       p!= mds_info.end();
+       ++p) {
+    out << "mds " << p->second.name << "\n";
+  }
+}
+
 void MDSMap::generate_test_instances(list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();

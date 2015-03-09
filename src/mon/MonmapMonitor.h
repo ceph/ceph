@@ -57,6 +57,7 @@ class MonmapMonitor : public PaxosService {
   void on_active();
 
   void dump_info(Formatter *f);
+  void print_nodes(ostream& out) const;
 
   bool preprocess_query(PaxosServiceMessage *m);
   bool prepare_update(PaxosServiceMessage *m);

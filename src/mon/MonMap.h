@@ -234,6 +234,7 @@ class MonMap {
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
   void dump(ceph::Formatter *f) const;
+  void print_nodes(ostream& out) const;
 
   static void generate_test_instances(list<MonMap*>& o);
 };

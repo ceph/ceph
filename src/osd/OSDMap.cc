@@ -2572,6 +2572,40 @@ void OSDMap::print_tree(ostream *out, Formatter *f) const
     OSDTreeFormattingDumper(crush.get(), this).dump(f);
 }
 
+namespace {
+  class FlattenedDumper : public CrushTreeDumper::Dumper<ostream> {
+  public:
+    FlattenedDumper(const CrushWrapper *crush) :
+      CrushTreeDumper::Dumper<ostream>(crush),
+      parent("n/a")
+    {}
+
+  protected:
+    virtual void dump_item(const CrushTreeDumper::Item& qi,
+			   ostream *out) {
+      const char* name = crush->get_item_name(qi.id);
+      if (qi.is_bucket()) {
+	assert(name);
+	parent = name;
+      } else {
+	*out << "osd " << parent << " ";
+	if (name) {
+	  *out << name << "\n";
+	} else {
+	  *out << "osd." << qi.id << "\n";
+	}
+      }
+    }
+  private:
+    string parent;
+  };
+}
+
+void OSDMap::print_list(ostream *out) const
+{
+  FlattenedDumper(crush.get()).dump(out);
+}
+
 void OSDMap::print_summary(Formatter *f, ostream& out) const
 {
   if (f) {

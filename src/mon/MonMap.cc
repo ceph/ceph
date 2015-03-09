@@ -128,6 +128,15 @@ void MonMap::print(ostream& out) const
     out << i++ << ": " << p->first << " mon." << p->second << "\n";
 }
 
+void MonMap::print_nodes(ostream &out) const
+{
+  for (map<entity_addr_t,string>::const_iterator p = addr_name.begin();
+       p != addr_name.end();
+       ++p) {
+    out << "mon " << p->second << "\n";
+  }
+}
+
 void MonMap::dump(Formatter *f) const
 {
   f->dump_unsigned("epoch", epoch);

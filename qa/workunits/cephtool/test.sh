@@ -550,6 +550,10 @@ function test_mon_misc()
   ceph health detail
   ceph health --format json-pretty
   ceph health detail --format xml-pretty
+  ceph node ls
+  for t in mon osd mds; do
+      ceph node ls $t
+  done
 
   ceph_watch_start
   mymsg="this is a test log message $$.$(date)"
