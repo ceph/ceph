@@ -2095,7 +2095,7 @@ protected:
   // -- scrubbing --
   void sched_scrub();
   bool scrub_random_backoff();
-  bool scrub_should_schedule();
+  bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
 
   xlist<PG*> scrub_queue;

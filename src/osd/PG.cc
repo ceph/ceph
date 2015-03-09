@@ -12,6 +12,9 @@
  * 
  */
 
+
+#include <boost/random.hpp>
+
 #include "PG.h"
 #include "common/errno.h"
 #include "common/config.h"
@@ -3308,8 +3311,17 @@ void PG::reg_next_scrub()
   } else {
     scrubber.scrub_reg_stamp = info.history.last_scrub_stamp;
   }
-  if (is_primary())
-    osd->reg_last_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
+  if (is_primary()) {
+    utime_t next_scrub_stamp = scrubber.scrub_reg_stamp;
+    if (!scrubber.must_scrub) {
+      // if not explicitly requested, postpone the scrub with a random delay
+      boost::rand48 rng;
+      boost::uniform_int<> time_range(g_conf->osd_scrub_min_interval,
+				      g_conf->osd_scrub_max_interval);
+      next_scrub_stamp += time_range(rng);
+    }
+    osd->reg_last_pg_scrub(info.pgid, next_scrub_stamp);
+  }
 }
 
 void PG::unreg_next_scrub()
