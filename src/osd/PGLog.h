@@ -497,6 +497,19 @@ public:
     missing.split_into(child_pgid, split_bits, &(opg_log->missing));
     opg_log->mark_dirty_to(eversion_t::max());
     mark_dirty_to(eversion_t::max());
+
+    unsigned mask = ~((~0)<<split_bits);
+    for (map<eversion_t, hobject_t>::iterator i = divergent_priors.begin();
+	 i != divergent_priors.end();
+	 ) {
+      if ((i->second.get_hash() & mask) == child_pgid.m_seed) {
+	opg_log->add_divergent_prior(i->first, i->second);
+	divergent_priors.erase(i++);
+	dirty_divergent_priors = true;
+      } else {
+	++i;
+      }
+    }
   }
 
   void recover_got(hobject_t oid, eversion_t v, pg_info_t &info) {
