@@ -86,25 +86,25 @@ void *ObjBencher::status_printer(void *_bencher) {
 
     if (i % 20 == 0) {
       if (i > 0)
-	cur_time.localtime(cout) << "min lat: " << data.min_latency
-	     << " max lat: " << data.max_latency
-	     << " avg lat: " << data.avg_latency << std::endl;
+        cur_time.localtime(cout) << " min lat: " << data.min_latency
+          << " max lat: " << data.max_latency
+          << " avg lat: " << data.avg_latency << std::endl;
       //I'm naughty and don't reset the fill
       bencher->out(cout, cur_time) << setfill(' ')
-	   << setw(5) << "sec"
-	   << setw(8) << "Cur ops"
-	   << setw(10) << "started"
-	   << setw(10) << "finished"
-	   << setw(10) << "avg MB/s"
-	   << setw(10) << "cur MB/s"
-	   << setw(10) << "last lat"
-	   << setw(10) << "avg lat" << std::endl;
+          << setw(5) << "sec"
+          << setw(8) << "Cur ops"
+          << setw(10) << "started"
+          << setw(10) << "finished"
+          << setw(10) << "avg MB/s"
+          << setw(10) << "cur MB/s"
+          << setw(10) << "last lat"
+          << setw(10) << "avg lat" << std::endl;
     }
     if (cycleSinceChange)
       bandwidth = (double)(data.finished - previous_writes)
-	* (data.trans_size)
-	/ (1024*1024)
-	/ cycleSinceChange;
+        * (data.trans_size)
+        / (1024*1024)
+        / cycleSinceChange;
     else
       bandwidth = 0;
 
@@ -123,25 +123,25 @@ void *ObjBencher::status_printer(void *_bencher) {
       previous_writes = data.finished;
       cycleSinceChange = 0;
       bencher->out(cout, cur_time) << setfill(' ')
-	   << setw(5) << i
-	   << setw(8) << data.in_flight
-	   << setw(10) << data.started
-	   << setw(10) << data.finished
-	   << setw(10) << avg_bandwidth
-	   << setw(10) << bandwidth
-	   << setw(10) << (double)data.cur_latency
-	   << setw(10) << data.avg_latency << std::endl;
+          << setw(5) << i
+          << setw(8) << data.in_flight
+          << setw(10) << data.started
+          << setw(10) << data.finished
+          << setw(10) << avg_bandwidth
+          << setw(10) << bandwidth
+          << setw(10) << (double)data.cur_latency
+          << setw(10) << data.avg_latency << std::endl;
     }
     else {
       bencher->out(cout, cur_time) << setfill(' ')
-	   << setw(5) << i
-	   << setw(8) << data.in_flight
-	   << setw(10) << data.started
-	   << setw(10) << data.finished
-	   << setw(10) << avg_bandwidth
-	   << setw(10) << '0'
-	   << setw(10) << '-'
-	   << setw(10) << data.avg_latency << std::endl;
+          << setw(5) << i
+          << setw(8) << data.in_flight
+          << setw(10) << data.started
+          << setw(10) << data.finished
+          << setw(10) << avg_bandwidth
+          << setw(10) << '0'
+          << setw(10) << '-'
+          << setw(10) << data.avg_latency << std::endl;
     }
     ++i;
     ++cycleSinceChange;
@@ -172,7 +172,7 @@ int ObjBencher::aio_bench(
     r = fetch_bench_metadata(run_name_meta, &object_size, &num_objects, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
-	cerr << "Must write data before running a read benchmark!" << std::endl;
+        cerr << "Must write data before running a read benchmark!" << std::endl;
       return r;
     }
   } else {
@@ -215,10 +215,10 @@ int ObjBencher::aio_bench(
     r = fetch_bench_metadata(run_name_meta, &object_size, &num_objects, &prevPid);
     if (r < 0) {
       if (r == -ENOENT)
-	cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
+        cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
       goto out;
     }
- 
+
     r = clean_up(num_objects, prevPid, concurrentios);
     if (r != 0) goto out;
 
@@ -290,17 +290,17 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file, int* obje
 }
 
 int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
-			    int concurrentios, const string& run_name_meta) {
-  if (concurrentios <= 0) 
+                            int concurrentios, const string& run_name_meta) {
+  if (concurrentios <= 0)
     return -EINVAL;
 
   if (maxObjectsToCreate > 0 && concurrentios > maxObjectsToCreate)
     concurrentios = maxObjectsToCreate;
   out(cout) << "Maintaining " << concurrentios << " concurrent writes of "
-	    << data.object_size << " bytes for up to "
-	    << secondsToRun << " seconds or "
-	    << maxObjectsToCreate << " objects"
-	    << std::endl;
+            << data.object_size << " bytes for up to "
+            << secondsToRun << " seconds or "
+            << maxObjectsToCreate << " objects"
+            << std::endl;
   bufferlist* newContents = 0;
 
   std::string prefix = generate_object_prefix();
@@ -359,15 +359,15 @@ int ObjBencher::write_bench(int secondsToRun, int maxObjectsToCreate,
   slot = 0;
   lock.Lock();
   while( ceph_clock_now(cct) < stopTime &&
-	 (!maxObjectsToCreate || data.started < maxObjectsToCreate)) {
+         (!maxObjectsToCreate || data.started < maxObjectsToCreate)) {
     bool found = false;
     while (1) {
       int old_slot = slot;
       do {
-	if (completion_is_done(slot)) {
-          found = true;
-	  break;
-	}
+        if (completion_is_done(slot)) {
+            found = true;
+            break;
+        }
         slot++;
         if (slot == concurrentios) {
           slot = 0;
@@ -558,17 +558,17 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     bool found = false;
     while (1) {
       do {
-	if (completion_is_done(slot)) {
+        if (completion_is_done(slot)) {
           found = true;
-	  break;
-	}
+          break;
+        }
         slot++;
         if (slot == concurrentios) {
           slot = 0;
         }
       } while (slot != old_slot);
       if (found) {
-	break;
+        break;
       }
       lc.cond.Wait(lock);
     }
@@ -681,9 +681,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 {
   lock_cond lc(&lock);
 
-  if (concurrentios <= 0) 
+  if (concurrentios <= 0)
     return -EINVAL;
- 
+
   std::vector<string> name(concurrentios);
   std::string newName;
   bufferlist* contents[concurrentios];
@@ -951,17 +951,17 @@ int ObjBencher::clean_up(int num_objects, int prevPid, int concurrentios) {
     bool found = false;
     while (1) {
       do {
-	if (completion_is_done(slot)) {
+        if (completion_is_done(slot)) {
           found = true;
-	  break;
-	}
+          break;
+        }
         slot++;
         if (slot == concurrentios) {
           slot = 0;
         }
       } while (slot != old_slot);
       if (found) {
-	break;
+        break;
       }
       lc.cond.Wait(lock);
     }
@@ -1125,17 +1125,17 @@ int ObjBencher::clean_up_slow(const std::string& prefix, int concurrentios) {
     bool found = false;
     while (1) {
       do {
-	if (completion_is_done(slot)) {
+        if (completion_is_done(slot)) {
           found = true;
-	  break;
-	}
+          break;
+        }
         slot++;
         if (slot == concurrentios) {
           slot = 0;
         }
       } while (slot != old_slot);
       if (found) {
-	break;
+        break;
       }
       lc.cond.Wait(lock);
     }
