@@ -18,6 +18,8 @@
 #include "include/frag.h"
 #include "include/xlist.h"
 #include "include/interval_set.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
 
 #include "inode_backtrace.h"
 
@@ -356,6 +358,51 @@ inline bool operator==(const client_writeable_range_t& l,
     l.follows == r.follows;
 }
 
+struct inline_data_t {
+private:
+  bufferlist *blp;
+public:
+  version_t version;
+
+  void free_data() {
+    delete blp;
+    blp = NULL;
+  }
+  bufferlist& get_data() {
+    if (!blp)
+      blp = new bufferlist;
+    return *blp;
+  }
+  size_t length() const { return blp ? blp->length() : 0; }
+
+  inline_data_t() : blp(0), version(1) {}
+  inline_data_t(const inline_data_t& o) : blp(0), version(o.version) {
+    if (o.blp)
+      get_data() = *o.blp;
+  }
+  ~inline_data_t() {
+    free_data();
+  }
+  inline_data_t& operator=(const inline_data_t& o) {
+    version = o.version;
+    if (o.blp)
+      get_data() = *o.blp;
+    else
+      free_data();
+    return *this;
+  }
+  bool operator==(const inline_data_t& o) const {
+   return length() == o.length() &&
+	  (length() == 0 ||
+	   (*const_cast<bufferlist*>(blp) == *const_cast<bufferlist*>(o.blp)));
+  }
+  bool operator!=(const inline_data_t& o) const {
+    return !(*this == o);
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator& bl);
+};
+WRITE_CLASS_ENCODER(inline_data_t)
 
 /*
  * inode_t
@@ -384,7 +431,7 @@ struct inode_t {
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
   ceph_file_layout layout;
-  vector <int64_t> old_pools;
+  compact_set <int64_t> old_pools;
   uint64_t   size;        // on directory, # dentries
   uint64_t   max_size_ever; // max size the file has ever been
   uint32_t   truncate_seq;
@@ -393,8 +440,7 @@ struct inode_t {
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
   uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
-  bufferlist inline_data;
-  version_t  inline_version;
+  inline_data_t inline_data;
 
   std::map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
@@ -420,7 +466,6 @@ struct inode_t {
 	      truncate_seq(0), truncate_size(0), truncate_from(0),
 	      truncate_pending(0),
 	      time_warp_seq(0),
-	      inline_version(1),
 	      version(0), file_data_version(0), xattr_version(0), backtrace_version(0) {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
@@ -503,7 +548,7 @@ struct inode_t {
 
   void add_old_pool(int64_t l) {
     backtrace_version = version;
-    old_pools.push_back(l);
+    old_pools.insert(l);
   }
 
   void encode(bufferlist &bl) const;
@@ -1289,15 +1334,6 @@ protected:
 #endif
     return ref;
   }
-#ifdef MDS_REF_SET
-  int get_pin_totals() {
-    int total = 0;
-    for(std::map<int,int>::iterator i = ref_map.begin(); i != ref_map.end(); ++i) {
-      total += i->second;
-    }
-    return total;
-  }
-#endif
   virtual const char *pin_name(int by) const = 0;
   //bool is_pinned_by(int by) { return ref_set.count(by); }
   //multiset<int>& get_ref_set() { return ref_set; }
@@ -1321,7 +1357,6 @@ protected:
       ref--;
 #ifdef MDS_REF_SET
       ref_map[by]--;
-      assert(ref == get_pin_totals());
 #endif
       if (ref == 0)
 	last_put();
@@ -1345,7 +1380,6 @@ protected:
     if (ref_map.find(by) == ref_map.end())
       ref_map[by] = 0;
     ref_map[by]++;
-    assert(ref == get_pin_totals());
 #endif
   }
 
@@ -1378,7 +1412,7 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce; // [replica] defined on replica
-  std::map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
+  compact_map<mds_rank_t,unsigned>	replica_map;   // [auth] mds -> nonce
 
  public:
   bool is_replicated() const { return !replica_map.empty(); }
@@ -1411,13 +1445,13 @@ protected:
       put(PIN_REPLICATED);
     replica_map.clear();
   }
-  std::map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
-  std::map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
-  const std::map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
+  compact_map<mds_rank_t,unsigned>::iterator replicas_begin() { return replica_map.begin(); }
+  compact_map<mds_rank_t,unsigned>::iterator replicas_end() { return replica_map.end(); }
+  const compact_map<mds_rank_t,unsigned>& get_replicas() const { return replica_map; }
   void list_replicas(std::set<mds_rank_t>& ls) const {
-    for (std::map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
+    for (compact_map<mds_rank_t,unsigned>::const_iterator p = replica_map.begin();
 	 p != replica_map.end();
-	 ++p) 
+	 ++p)
       ls.insert(p->first);
   }
 
@@ -1428,7 +1462,7 @@ protected:
   // ---------------------------------------------
   // waiting
  protected:
-  multimap<uint64_t, MDSInternalContextBase*>  waiting;
+  compact_multimap<uint64_t, MDSInternalContextBase*>  waiting;
 
  public:
   bool is_waiter_for(uint64_t mask, uint64_t min=0) {
@@ -1437,7 +1471,7 @@ protected:
       while (min & (min-1))  // if more than one bit is set
 	min &= min-1;        //  clear LSB
     }
-    for (multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
+    for (compact_multimap<uint64_t,MDSInternalContextBase*>::iterator p = waiting.lower_bound(min);
 	 p != waiting.end();
 	 ++p) {
       if (p->first & mask) return true;
@@ -1457,7 +1491,7 @@ protected:
   }
   virtual void take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls) {
     if (waiting.empty()) return;
-    multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
+    compact_multimap<uint64_t,MDSInternalContextBase*>::iterator it = waiting.begin();
     while (it != waiting.end()) {
       if (it->first & mask) {
 	ls.push_back(it->second);
