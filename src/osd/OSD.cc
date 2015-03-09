@@ -5926,11 +5926,11 @@ bool OSD::scrub_time_permit(utime_t now)
     }    
   }
   if (!time_permit) {
-    dout(20) << "scrub_should_schedule should run between " << cct->_conf->osd_scrub_begin_hour
+    dout(20) << __func__ << " should run between " << cct->_conf->osd_scrub_begin_hour
             << " - " << cct->_conf->osd_scrub_end_hour
             << " now " << bdt.tm_hour << " = no" << dendl;
   } else {
-    dout(20) << "scrub_should_schedule should run between " << cct->_conf->osd_scrub_begin_hour
+    dout(20) << __func__ << " should run between " << cct->_conf->osd_scrub_begin_hour
             << " - " << cct->_conf->osd_scrub_end_hour
             << " now " << bdt.tm_hour << " = yes" << dendl;
   }
@@ -5944,12 +5944,12 @@ bool OSD::scrub_should_schedule()
   }
   double loadavgs[1];
   if (getloadavg(loadavgs, 1) != 1) {
-    dout(10) << "scrub_should_schedule couldn't read loadavgs\n" << dendl;
+    dout(10) << __func__ << " couldn't read loadavgs\n" << dendl;
     return false;
   }
 
   if (loadavgs[0] >= cct->_conf->osd_scrub_load_threshold) {
-    dout(20) << "scrub_should_schedule loadavg " << loadavgs[0]
+    dout(20) << __func__ << " loadavg " << loadavgs[0]
 	     << " >= max " << cct->_conf->osd_scrub_load_threshold
 	     << " = no, load too high" << dendl;
     return false;
