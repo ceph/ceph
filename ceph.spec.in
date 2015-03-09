@@ -5,6 +5,15 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
+# Use systemd files on RHEL 7 and above.
+# Note: We don't install unit files for the services yet. For now,
+# the _with_systemd variable only implies that we'll install
+# /etc/tmpfiles.d/ceph.conf in order to set up the socket directory in
+# /var/run/ceph.
+%if 0%{?rhel} > 7
+  %global _with_systemd 1
+%endif
+
 #################################################################################
 # common
 #################################################################################
@@ -37,6 +46,10 @@ Requires:	util-linux
 Requires:	hdparm
 Requires:	cryptsetup
 Requires(post):	binutils
+# We require this to be present for %%{_tmpfilesdir}
+%if 0%{_with_systemd}
+Requires: systemd
+%endif
 BuildRequires:	gcc-c++
 BuildRequires:	boost-devel
 BuildRequires:  bzip2-devel
@@ -472,6 +485,9 @@ install -D src/init-ceph $RPM_BUILD_ROOT%{_initrddir}/ceph
 install -D src/init-radosgw.sysv $RPM_BUILD_ROOT%{_initrddir}/ceph-radosgw
 install -D src/init-rbdmap $RPM_BUILD_ROOT%{_initrddir}/rbdmap
 install -D src/rbdmap $RPM_BUILD_ROOT%{_sysconfdir}/ceph/rbdmap
+%if 0%{_with_systemd}
+  install -m 0644 -D systemd/ceph.tmpfiles.d $RPM_BUILD_ROOT%{_tmpfilesdir}/%{name}.conf
+%endif
 mkdir -p $RPM_BUILD_ROOT%{_sbindir}
 ln -sf ../../etc/init.d/ceph %{buildroot}/%{_sbindir}/rcceph
 ln -sf ../../etc/init.d/ceph-radosgw %{buildroot}/%{_sbindir}/rcceph-radosgw
@@ -525,7 +541,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add ceph
-mkdir -p %{_localstatedir}/run/ceph/
 
 %preun
 %if %{defined suse_version}
@@ -570,6 +585,9 @@ fi
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-coverage
 %{_initrddir}/ceph
+%if 0%{_with_systemd}
+%{_tmpfilesdir}/%{name}.conf
+%endif
 %{_sbindir}/ceph-disk
 %{_sbindir}/ceph-disk-activate
 %{_sbindir}/ceph-disk-prepare
@@ -630,7 +648,7 @@ fi
 %dir %{_localstatedir}/lib/ceph/mds
 %dir %{_localstatedir}/lib/ceph/bootstrap-osd
 %dir %{_localstatedir}/lib/ceph/bootstrap-mds
-%ghost %dir %{_localstatedir}/run/ceph/
+%dir %{_localstatedir}/run/ceph/
 
 #################################################################################
 %files -n ceph-common
