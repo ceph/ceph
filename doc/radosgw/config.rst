@@ -351,9 +351,8 @@ Then, disable the default site. ::
 Adjust Path Ownership/Permissions
 =================================
 
-On some distributions, you must change ownership for ``/var/log/httpd`` or 
-``/var/log/apache2`` and ``/var/run/ceph`` to ensure that Apache has permissions 
-to create a socket or log file. ::
+On some distributions, you must change ownership for ``/var/run/ceph`` to
+ensure that Apache has permissions to create a socket ::
 
 	sudo chown apache:apache /path/to/file   
 
