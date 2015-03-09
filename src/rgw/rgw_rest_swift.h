@@ -89,10 +89,28 @@ public:
   void send_response();
 };
 
-class RGWPutMetadata_ObjStore_SWIFT : public RGWPutMetadata_ObjStore {
+class RGWPutMetadataAccount_ObjStore_SWIFT : public RGWPutMetadataAccount_ObjStore {
 public:
-  RGWPutMetadata_ObjStore_SWIFT() {}
-  ~RGWPutMetadata_ObjStore_SWIFT() {}
+  RGWPutMetadataAccount_ObjStore_SWIFT() {}
+  ~RGWPutMetadataAccount_ObjStore_SWIFT() {}
+
+  int get_params();
+  void send_response();
+};
+
+class RGWPutMetadataBucket_ObjStore_SWIFT : public RGWPutMetadataBucket_ObjStore {
+public:
+  RGWPutMetadataBucket_ObjStore_SWIFT() {}
+  ~RGWPutMetadataBucket_ObjStore_SWIFT() {}
+
+  int get_params();
+  void send_response();
+};
+
+class RGWPutMetadataObject_ObjStore_SWIFT : public RGWPutMetadataObject_ObjStore {
+public:
+  RGWPutMetadataObject_ObjStore_SWIFT() {}
+  ~RGWPutMetadataObject_ObjStore_SWIFT() {}
 
   int get_params();
   void send_response();
