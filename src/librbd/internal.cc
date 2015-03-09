@@ -1077,6 +1077,7 @@ reprotect_and_return_err:
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
+    map<string, string> pairs;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
     r = open_image(p_imctx);
@@ -1141,6 +1142,20 @@ reprotect_and_return_err:
     if (r < 0) {
       lderr(cct) << "couldn't add child: " << r << dendl;
       goto err_close_child;
+    }
+
+    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, &pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      goto err_close_child;
+    }
+    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); it++) {
+      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid,
+                                   it->first, it->second);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        goto err_close_child;
+      }
     }
 
     p_imctx->md_lock.get_write();
