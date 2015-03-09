@@ -2604,10 +2604,11 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
   librbd::RBD rbd;
-  std::string name = get_temp_image_name();
+  string name = get_temp_image_name();
   uint64_t size = 2 << 20;
   int order = 0;
   uint64_t features;
+  string value;
   ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
 
   librbd::Image image1;
@@ -2618,6 +2619,8 @@ TEST_F(TestLibRBD, Metadata)
 
   ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
   ASSERT_EQ(0, image1.metadata_set("key2", "value2"));
+  ASSERT_EQ(0, image1.metadata_get("key1", &value));
+  ASSERT_EQ(0, strcmp("value1", value.c_str()));
   ASSERT_EQ(0, image1.metadata_list(&pairs));
   ASSERT_EQ(2U, pairs.size());
   ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
@@ -2626,6 +2629,7 @@ TEST_F(TestLibRBD, Metadata)
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_remove("key1"));
   ASSERT_EQ(0, image1.metadata_remove("key3"));
+  ASSERT_TRUE(image1.metadata_get("key3", &value) < 0);
   ASSERT_EQ(0, image1.metadata_list(&pairs));
   ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
@@ -2665,4 +2669,5 @@ TEST_F(TestLibRBD, Metadata)
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_list(&pairs));
   ASSERT_EQ(3U, pairs.size());
+  ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
 }
