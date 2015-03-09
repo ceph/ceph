@@ -793,6 +793,18 @@ namespace librbd {
     return r;
   }
 
+  int Image::metadata_get(const std::string &key, std::string *value)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, metadata_get_enter, ictx, key.c_str());
+    int r = librbd::metadata_get(ictx, key, value);
+    if (r < 0)
+      tracepoint(librbd, metadata_get_exit, r, key.c_str(), NULL);
+    else
+      tracepoint(librbd, metadata_get_exit, r, key.c_str(), value->c_str());
+    return r;
+  }
+
   int Image::metadata_set(const std::string &key, const std::string &value)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -1728,6 +1740,27 @@ extern "C" int rbd_invalidate_cache(rbd_image_t image)
   tracepoint(librbd, invalidate_cache_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
   int r = librbd::invalidate_cache(ictx);
   tracepoint(librbd, invalidate_cache_exit, r);
+  return r;
+}
+
+extern "C" int rbd_metadata_get(rbd_image_t image, const char *key, char *value, size_t *vallen)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  string val_s;
+  tracepoint(librbd, metadata_get_enter, ictx, key);
+  int r = librbd::metadata_get(ictx, key, &val_s);
+  if (r < 0) {
+    tracepoint(librbd, metadata_get_exit, r, key, NULL);
+    return r;
+  }
+  if (*vallen < val_s.size()) {
+    r = -ERANGE;
+    *vallen = val_s.size();
+    tracepoint(librbd, metadata_get_exit, r, key, NULL);
+  } else {
+    strncpy(value, val_s.c_str(), val_s.size());
+    tracepoint(librbd, metadata_get_exit, r, key, value);
+  }
   return r;
 }
 

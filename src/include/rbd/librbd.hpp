@@ -241,6 +241,7 @@ public:
    */
   int invalidate_cache();
 
+  int metadata_get(const std::string &key, std::string *value);
   int metadata_set(const std::string &key, const std::string &value);
   int metadata_remove(const std::string &key);
   /**

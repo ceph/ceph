@@ -99,6 +99,7 @@ cls_method_handle_t h_object_map_update;
 cls_method_handle_t h_metadata_set;
 cls_method_handle_t h_metadata_remove;
 cls_method_handle_t h_metadata_list;
+cls_method_handle_t h_metadata_get;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -2227,6 +2228,37 @@ int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Input:
+ * @param key
+ *
+ * Output:
+ * @param metadata value associated with the key
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key, value;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(key, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "metdata_get key=%s", key.c_str());
+
+  int r = read_key(hctx, metadata_key_for_name(key), &value);
+  if (r < 0) {
+    CLS_ERR("error get metadata: %d", r);
+    return r;
+  }
+
+  ::encode(value, *out);
+  return 0;
+}
+
 
 /****************************** Old format *******************************/
 
@@ -2498,6 +2530,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "metadata_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  metadata_remove, &h_metadata_remove);
+  cls_register_cxx_method(h_class, "metadata_get",
+                          CLS_METHOD_RD,
+			  metadata_get, &h_metadata_get);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

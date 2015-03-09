@@ -114,9 +114,10 @@ void usage()
 "                                              path or \"-\" for stdin\n"
 "  (cp | copy) <src> <dest>                    copy src image to dest\n"
 "  (mv | rename) <src> <dest>                  rename src image to dest\n"
-"  metadata-set <key> <value>                  metadata set key with value\n"
-"  metadata-remove <key>                       metadata remove key\n"
-"  metadata-list                               metadata list keys with values\n"
+"  image-meta list <image-name>                image metadata list keys with values\n"
+"  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
+"  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
+"  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
 "  snap ls <image-name>                        dump list of image snapshots\n"
 "  snap create <snap-name>                     create a snapshot\n"
 "  snap rollback <snap-name>                   rollback image to snapshot\n"
@@ -2156,6 +2157,16 @@ static int do_metadata_remove(librbd::Image& image, const char *key)
   return image.metadata_remove(key);
 }
 
+static int do_metadata_get(librbd::Image& image, const char *key)
+{
+  string s;
+  int r = image.metadata_get(key, &s);
+  if (r < 0)
+    return r;
+  cout << s;
+  return 0;
+}
+
 static int do_copy(librbd::Image &src, librados::IoCtx& dest_pp,
 		   const char *destname)
 {
@@ -2517,12 +2528,13 @@ enum {
   OPT_LOCK_REMOVE,
   OPT_BENCH_WRITE,
   OPT_MERGE_DIFF,
-  OPT_METADATA_SET,
-  OPT_METADATA_REMOVE,
   OPT_METADATA_LIST,
+  OPT_METADATA_SET,
+  OPT_METADATA_GET,
+  OPT_METADATA_REMOVE,
 };
 
-static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
+static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd, bool metacmd)
 {
   if (!snapcmd && !lockcmd) {
     if (strcmp(cmd, "ls") == 0 ||
@@ -2572,12 +2584,6 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
       return OPT_UNMAP;
     if (strcmp(cmd, "bench-write") == 0)
       return OPT_BENCH_WRITE;
-    if (strcmp(cmd, "metadata-set") == 0)
-      return OPT_METADATA_SET;
-    if (strcmp(cmd, "metadata-remove") == 0)
-      return OPT_METADATA_REMOVE;
-    if (strcmp(cmd, "metadata-list") == 0)
-      return OPT_METADATA_LIST;
   } else if (snapcmd) {
     if (strcmp(cmd, "create") == 0 ||
         strcmp(cmd, "add") == 0)
@@ -2597,6 +2603,15 @@ static int get_cmd(const char *cmd, bool snapcmd, bool lockcmd)
       return OPT_SNAP_PROTECT;
     if (strcmp(cmd, "unprotect") == 0)
       return OPT_SNAP_UNPROTECT;
+  } else if (metacmd) {
+    if (strcmp(cmd, "list") == 0)
+      return OPT_METADATA_LIST;
+    if (strcmp(cmd, "set") == 0)
+      return OPT_METADATA_SET;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_METADATA_GET;
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_METADATA_REMOVE;
   } else {
     if (strcmp(cmd, "ls") == 0 ||
         strcmp(cmd, "list") == 0)
@@ -2807,16 +2822,23 @@ int main(int argc, const char **argv)
       cerr << "rbd: which snap command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, true, false);
+    opt_cmd = get_cmd(*i, true, false, false);
   } else if (strcmp(*i, "lock") == 0) {
     i = args.erase(i);
     if (i == args.end()) {
       cerr << "rbd: which lock command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, false, true);
+    opt_cmd = get_cmd(*i, false, true, false);
+  } else if (strcmp(*i, "image-meta") == 0) {
+    i = args.erase(i);
+    if (i == args.end()) {
+      cerr << "rbd: which image-meta command do you want?" << std::endl;
+      return EXIT_FAILURE;
+    }
+    opt_cmd = get_cmd(*i, false, false, true);
   } else {
-    opt_cmd = get_cmd(*i, false, false);
+    opt_cmd = get_cmd(*i, false, false, false);
   }
   if (opt_cmd == OPT_NO_CMD) {
     cerr << "rbd: error parsing command '" << *i << "'; -h or --help for usage" << std::endl;
@@ -2895,6 +2917,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_METADATA_SET:
 	SET_CONF_PARAM(v, &imgname, &key, &value);
 	break;
+      case OPT_METADATA_GET:
       case OPT_METADATA_REMOVE:
 	SET_CONF_PARAM(v, &imgname, &key, NULL);
 	break;
@@ -3128,7 +3151,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT_DIFF || opt_cmd == OPT_COPY ||
        opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
-       opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_METADATA_REMOVE ||
+       opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST ||
+       opt_cmd == OPT_METADATA_REMOVE || opt_cmd == OPT_METADATA_GET ||
        opt_cmd == OPT_STATUS)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
@@ -3563,6 +3587,14 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = do_metadata_remove(image, key);
     if (r < 0) {
       cerr << "rbd: removing metadata failed: " << cpp_strerror(r) << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_METADATA_GET:
+    r = do_metadata_get(image, key);
+    if (r < 0) {
+      cerr << "rbd: getting metadata failed: " << cpp_strerror(r) << std::endl;
       return -r;
     }
     break;

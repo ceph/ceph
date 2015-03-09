@@ -87,6 +87,14 @@ namespace librbd {
 			      uint64_t *stripe_unit, uint64_t *stripe_count);
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
+    int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
+                      map<string, string> *pairs);
+    int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, const std::string &data);
+    int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
+                        const std::string &key);
+    int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, string *v);
 
     // operations on rbd_id objects
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
@@ -118,14 +126,6 @@ namespace librbd {
 			   uint64_t start_object_no, uint64_t end_object_no,
 			   uint8_t new_object_state,
 			   const boost::optional<uint8_t> &current_object_state);
-
-    // operations on the rbd_object_map.$image_id object
-    int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
-                     const std::string &key, const std::string &data);
-    int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
-                        const std::string &key);
-    int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
-                      map<string, string> *pairs);
 
     // class operations on the old format, kept for
     // backwards compatability

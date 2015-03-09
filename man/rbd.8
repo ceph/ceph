@@ -301,14 +301,17 @@ dest\-image will have the same size, order, and image format as src\-image.
 .B \fBmv\fP [\fIsrc\-image\fP] [\fIdest\-image\fP]
 Renames an image.  Note: rename across pools is not supported.
 .TP
-.B \fBmetadata-list\fP [\fIimage\-name\fP]
+.B \fBimage-meta list\fP [\fIimage\-name\fP]
 Show metadata held on the image. The first column is the key
 and the second column is the value.
 .TP
-.B \fBmetadata-set\fP [\fIimage\-name\fP] [\fIkey\fP] [\fIvalue\fP]
+.B \fBimage-meta get\fP [\fIimage\-name\fP] [\fIkey\fP]
+Get metadata value with the key.
+.TP
+.B \fBimage-meta set\fP [\fIimage\-name\fP] [\fIkey\fP] [\fIvalue\fP]
 Set metadata key with the value. They will displayed in \fImetadata-list\fP
 .TP
-.B \fBmetadata-remove\fP [\fIimage\-name\fP] [\fIkey\fP]
+.B \fBimage-meta remove\fP [\fIimage\-name\fP] [\fIkey\fP]
 Remove metadata key with the value.
 .TP
 .B \fBsnap\fP ls [\fIimage\-name\fP]
