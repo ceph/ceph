@@ -1622,11 +1622,18 @@ reprotect_and_return_err:
   int resize(ImageCtx *ictx, uint64_t size, ProgressContext& prog_ctx)
   {
     CephContext *cct = ictx->cct;
+
+    ictx->snap_lock.get_read();
     ldout(cct, 20) << "resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
+    ictx->snap_lock.put_read();
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    int r;
     do {
       C_SaferCond ctx;
       {
@@ -1639,11 +1646,17 @@ reprotect_and_return_err:
 	    break;
 	  }
 
+          RWLock::RLocker snap_locker(ictx->snap_lock);
+          if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
+            return -EROFS;
+          }
+
 	  r = ictx->image_watcher->notify_resize(request_id, size, prog_ctx);
 	  if (r != -ETIMEDOUT && r != -ERESTART) {
 	    return r;
 	  }
-	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner" << dendl;
+	  ldout(ictx->cct, 5) << "resize timed out notifying lock owner"
+                              << dendl;
 	}
 
 	r = async_resize(ictx, &ctx, size, prog_ctx);
@@ -1663,6 +1676,7 @@ reprotect_and_return_err:
     ldout(cct, 2) << "resize finished" << dendl;
     return r;
   }
+
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx)
   {
@@ -1671,12 +1685,10 @@ reprotect_and_return_err:
 	   ictx->image_watcher->is_lock_owner());
 
     CephContext *cct = ictx->cct;
+    ictx->snap_lock.get_read();
     ldout(cct, 20) << "async_resize " << ictx << " " << ictx->size << " -> "
 		   << size << dendl;
-
-    if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
-      return -EROFS;
-    }
+    ictx->snap_lock.put_read();
 
     int r = ictx_check(ictx);
     if (r < 0) {
@@ -1685,9 +1697,11 @@ reprotect_and_return_err:
 
     uint64_t original_size;
     {
-      ictx->snap_lock.get_read();
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
+        return -EROFS;
+      }
       original_size = ictx->size;
-      ictx->snap_lock.put_read();
     }
 
     async_resize_helper(ictx, ctx, original_size, size, prog_ctx);
@@ -2449,12 +2463,19 @@ reprotect_and_return_err:
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flatten" << dendl;
 
-    if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
-      return -EROFS;
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+        return -EROFS;
+      }
     }
 
     uint64_t request_id = ictx->async_request_seq.inc();
-    int r;
     do {
       C_SaferCond ctx;
       {
@@ -2471,7 +2492,8 @@ reprotect_and_return_err:
           if (r != -ETIMEDOUT && r != -ERESTART) {
             return r;
           }
-          ldout(ictx->cct, 5) << "flatten timed out notifying lock owner" << dendl;
+          ldout(ictx->cct, 5) << "flatten timed out notifying lock owner"
+                              << dendl;
         }
 
         r = async_flatten(ictx, &ctx, prog_ctx);
@@ -2500,10 +2522,6 @@ reprotect_and_return_err:
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "flatten" << dendl;
 
-    if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
-      return -EROFS;
-    }
-
     int r;
     // ictx_check also updates parent data
     if ((r = ictx_check(ictx)) < 0) {
@@ -2519,6 +2537,10 @@ reprotect_and_return_err:
     {
       RWLock::RLocker l(ictx->snap_lock);
       RWLock::RLocker l2(ictx->parent_lock);
+
+      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+        return -EROFS;
+      }
 
       // can't flatten a non-clone
       if (ictx->parent_md.spec.pool_id == -1) {
