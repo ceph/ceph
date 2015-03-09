@@ -52,7 +52,7 @@ Create a Pool
 
 Before creating pools, refer to the `Pool, PG and CRUSH Config Reference`_.
 Ideally, you should override the default value for the number of placement
-groups in you Ceph configuration file, as the default is NOT ideal. 
+groups in your Ceph configuration file, as the default is NOT ideal.
 For example:: 
 
 	osd pool default pg num = 100
