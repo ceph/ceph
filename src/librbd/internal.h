@@ -207,6 +207,9 @@ namespace librbd {
   int flush(ImageCtx *ictx);
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
+  int metadata_list(ImageCtx *ictx, map<string, string> *pairs);
+  int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
+  int metadata_remove(ImageCtx *ictx, const std::string &key);
 
   ssize_t handle_sparse_read(CephContext *cct,
 			     ceph::bufferlist data_bl,
