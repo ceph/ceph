@@ -920,6 +920,12 @@ OPTION(rgw_override_bucket_index_max_shards, OPT_U32, 0)
  */
 OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
 
+/**
+ * whether or not the quota/gc threads should be started
+ */
+OPTION(rgw_enable_quota_threads, OPT_BOOL, true)
+OPTION(rgw_enable_gc_threads, OPT_BOOL, true)
+
 OPTION(rgw_data, OPT_STR, "/var/lib/ceph/radosgw/$cluster-$id")
 OPTION(rgw_enable_apis, OPT_STR, "s3, swift, swift_auth, admin")
 OPTION(rgw_cache_enabled, OPT_BOOL, true)   // rgw cache enabled
