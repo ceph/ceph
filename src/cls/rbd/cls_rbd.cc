@@ -2157,8 +2157,7 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       return -EINVAL;
     }
 
-    assert(it->first.find(
-            RBD_METADATA_KEY_PREFIX, 0, sizeof(sizeof(RBD_METADATA_KEY_PREFIX))-1) == 0);
+    assert(it->first.find(RBD_METADATA_KEY_PREFIX, 0) == 0);
     out_map[metadata_name_from_key(it->first)] = v;
   }
 
