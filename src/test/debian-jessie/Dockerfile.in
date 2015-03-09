@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2014, 2015 Red Hat <contact@redhat.com>
+# Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
 # Author: Loic Dachary <loic@dachary.org>
 #
@@ -18,7 +18,7 @@
 # user_id=$(id -u)
 # os_version= the desired REPOSITORY TAG
 #
-FROM ubuntu:%%os_version%%
+FROM debian:%%os_version%%
 
 COPY install-deps.sh /root/
 RUN mkdir /root/debian
@@ -27,5 +27,5 @@ RUN apt-get update
 # build dependencies
 RUN cd /root ; ./install-deps.sh
 # development tools
-RUN apt-get install -y ccache valgrind gdb python-virtualenv gdisk kpartx hdparm xmlstarlet
+RUN apt-get install -y ccache valgrind gdb python-virtualenv gdisk kpartx hdparm jq xmlstarlet
 RUN useradd -M --uid %%user_id%% %%USER%% && echo '%%USER%% ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
