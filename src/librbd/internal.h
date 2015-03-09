@@ -208,6 +208,7 @@ namespace librbd {
   int _flush(ImageCtx *ictx);
   int invalidate_cache(ImageCtx *ictx);
   int metadata_list(ImageCtx *ictx, map<string, string> *pairs);
+  int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
   int metadata_set(ImageCtx *ictx, const std::string &key, const std::string &value);
   int metadata_remove(ImageCtx *ictx, const std::string &key);
 

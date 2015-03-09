@@ -786,5 +786,26 @@ namespace librbd {
 
       return 0;
     }
+
+    int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, string *s)
+    {
+      assert(s);
+      bufferlist in, out;
+      ::encode(key, in);
+      int r = ioctx->exec(oid, "rbd", "metadata_get", in, out);
+      if (r < 0)
+        return r;
+
+      bufferlist::iterator iter = out.begin();
+      try {
+        ::decode(*s, iter);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+
+      return 0;
+    }
+
   } // namespace cls_client
 } // namespace librbd
