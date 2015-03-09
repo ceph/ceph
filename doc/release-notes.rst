@@ -1961,6 +1961,8 @@ locks to ceph-fuse and libcephfs.
 
 We recommend that all Firefly users upgrade.
 
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.9.txt>`.
+
 Adjusting CRUSH maps
 --------------------
 
@@ -2017,23 +2019,27 @@ Notable Changes
 * librbd: fix read caching performance regression (#9854 Jason Dillaman)
 * librbd: gracefully handle deleted/renamed pools (#10270 Jason Dillaman)
 * mon: fix dump of chooseleaf_vary_r tunable (Sage Weil)
+* osd: fix PG ref leak in snaptrimmer on peering (#10421 Kefu Chai)
 * osd: handle no-op write with snapshot (#10262 Sage Weil)
 * radosgw-admin: create subuser when creating user (#10103 Yehuda Sadeh)
-* rgw: S3 object copy content-type fix (#9478 Yehuda Sadeh)
-* rgw: URL decode query params correctly (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
 * rgw: change multipart uplaod id magic (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
+* rgw: don't overwrite bucket/object owner when setting ACLs (#10978 Yehuda Sadeh)
+* rgw: enable IPv6 for embedded civetweb (#10965 Yehuda Sadeh)
 * rgw: fix partial swift GET (#10553 Yehuda Sadeh)
 * rgw: fix quota disable (#9907 Dong Lei)
 * rgw: index swift keys appropriately (#10471 Hemant Burman, Yehuda Sadeh)
 * rgw: make setattrs update bucket index (#5595 Yehuda Sadeh)
+* rgw: pass civetweb configurables (#10907 Yehuda Sadeh)
 * rgw: remove swift user manifest (DLO) hash calculation (#9973 Yehuda Sadeh)
 * rgw: return correct len for 0-len objects (#9877 Yehuda Sadeh)
+* rgw: S3 object copy content-type fix (#9478 Yehuda Sadeh)
 * rgw: send ETag on S3 object copy (#9479 Yehuda Sadeh)
 * rgw: send HTTP status reason explicitly in fastcgi (Yehuda Sadeh)
 * rgw: set ulimit -n from sysvinit (el6) init script (#9587 Sage Weil)
 * rgw: update swift subuser permission masks when authenticating (#9918 Yehuda Sadeh)
-* rgw: use \r\n for http headers (#9254 Benedikt Fraunhofer, Yehuda Sadeh)
+* rgw: URL decode query params correctly (#10271 Georgio Dimitrakakis, Yehuda Sadeh)
 * rgw: use attrs when reading object attrs (#10307 Yehuda Sadeh)
+* rgw: use \r\n for http headers (#9254 Benedikt Fraunhofer, Yehuda Sadeh)
 
 
 v0.80.8 Firefly
@@ -2046,6 +2052,8 @@ fix, and some packaging updates.
 
 We recommend that all users for v0.80.x firefly upgrade when it is
 convenient to do so.
+
+For more detailed information, see :download:`the complete changelog <changelog/v0.80.8.txt>`.
 
 Notable Changes
 ---------------
