@@ -119,6 +119,14 @@ namespace librbd {
 			   uint8_t new_object_state,
 			   const boost::optional<uint8_t> &current_object_state);
 
+    // operations on the rbd_object_map.$image_id object
+    int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
+                     const std::string &key, const std::string &data);
+    int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
+                        const std::string &key);
+    int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
+                      map<string, string> *pairs);
+
     // class operations on the old format, kept for
     // backwards compatability
     int old_snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
