@@ -241,6 +241,13 @@ public:
    */
   int invalidate_cache();
 
+  int metadata_set(const std::string &key, const std::string &value);
+  int metadata_remove(const std::string &key);
+  /**
+   * Returns a pair of key/value for this image
+   */
+  int metadata_list(std::map<std::string, std::string> *pairs);
+
 private:
   friend class RBD;
 
