@@ -541,7 +541,6 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params()
 void RGWPutMetadataAccount_ObjStore_SWIFT::send_response()
 {
   if (!ret) {
-    /* FIXME: check the proper HTTP return code. */
     ret = STATUS_NO_CONTENT;
   }
   set_req_state_err(s, ret);

@@ -2093,7 +2093,9 @@ static void prepare_add_del_attrs(const map<string, bufferlist>& orig_attrs,
 
 int RGWPutMetadataAccount::verify_permission()
 {
-  /* FIXME: check perms! */
+  if (!rgw_user_is_authenticated(s->user)) {
+    return -EACCES;
+  }
   return 0;
 }
 
