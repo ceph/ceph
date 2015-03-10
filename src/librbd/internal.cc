@@ -2554,11 +2554,12 @@ reprotect_and_return_err:
 
       snapc = ictx->snapc;
       assert(ictx->parent != NULL);
-      assert(ictx->parent_md.overlap <= ictx->size);
+      r = ictx->get_parent_overlap(CEPH_NOSNAP, &overlap);
+      assert(r == 0);
+      assert(overlap <= ictx->size);
 
       object_size = ictx->get_object_size();
-      overlap = ictx->parent_md.overlap;
-      overlap_objects = Striper::get_num_objects(ictx->layout, overlap); 
+      overlap_objects = Striper::get_num_objects(ictx->layout, overlap);
     }
 
     AsyncFlattenRequest *req =
