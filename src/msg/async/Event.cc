@@ -364,17 +364,19 @@ int EventCenter::process_events(int timeout_microseconds)
   if (trigger_time)
     numevents += process_time_events();
 
-  {
-    external_lock.Lock();
-    while (!external_events.empty()) {
-      EventCallbackRef e = external_events.front();
-      external_events.pop_front();
-      external_lock.Unlock();
+  external_lock.Lock();
+  if (external_events.empty()) {
+    external_lock.Unlock();
+  } else {
+    deque<EventCallbackRef> cur_process;
+    cur_process.swap(external_events);
+    external_lock.Unlock();
+    while (!cur_process.empty()) {
+      EventCallbackRef e = cur_process.front();
+      cur_process.pop_front();
       if (e)
         e->do_request(0);
-      external_lock.Lock();
     }
-    external_lock.Unlock();
   }
   return numevents;
 }
