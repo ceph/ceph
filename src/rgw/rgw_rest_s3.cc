@@ -300,8 +300,11 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (version_id.empty()) {
         version_id = "null";
       }
-      if (s->system_request && iter->versioned_epoch > 0) {
-        s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+      if (s->system_request) {
+        if (iter->versioned_epoch > 0) {
+          s->formatter->dump_int("VersionedEpoch", iter->versioned_epoch);
+        }
+        s->formatter->dump_string("RgwxTag", iter->tag);
       }
       s->formatter->dump_string("VersionId", version_id);
       s->formatter->dump_bool("IsLatest", iter->is_current());
@@ -377,6 +380,9 @@ void RGWListBucket_ObjStore_S3::send_response()
       s->formatter->dump_int("Size", iter->size);
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_owner(s, iter->owner, iter->owner_display_name);
+      if (s->system_request) {
+        s->formatter->dump_string("RgwxTag", iter->tag);
+      }
       s->formatter->close_section();
     }
     if (!common_prefixes.empty()) {
