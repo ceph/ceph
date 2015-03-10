@@ -106,6 +106,16 @@ if(${WITH_RADOSGW})
   )
 endif(${WITH_RADOSGW})
 add_executable(dencoder ${dencoder_srcs} $<TARGET_OBJECTS:heap_profiler_objs>)
+if(${WITH_RADOSGW})
+  set(DENCODER_EXTRALIBS
+    rgw_a
+    cls_rgw_client
+    curl
+    expat
+    fcgi
+    resolv
+  )
+endif(${WITH_RADOSGW})
 target_link_libraries(dencoder
   librados
   librbd
@@ -114,6 +124,15 @@ target_link_libraries(dencoder
   mds
   mon
   osdc
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_version_client
+  cls_replica_log_client
+  cls_kvs
+  cls_user_client
+  ${DENCODER_EXTRALIBS}
   blkid
   udev
   keyutils
@@ -121,27 +140,6 @@ target_link_libraries(dencoder
   ${TCMALLOC_LIBS}
   ${CMAKE_DL_LIBS}
   )
-if(${WITH_RADOSGW})
-  target_link_libraries(dencoder
-    ${EXTRALIBS}
-    ${TCMALLOC_LIBS}
-    ${CMAKE_DL_LIBS}
-    rgw_a
-    cls_rgw_client
-    cls_lock_client
-    cls_refcount_client
-    cls_log_client
-    cls_statelog_client
-    cls_version_client
-    cls_replica_log_client
-    cls_kvs
-    cls_user_client
-    curl
-    expat
-    fcgi
-    resolv
-  )
-endif(${WITH_RADOSGW})
 
 # get_command_descriptions
 add_executable(get_command_descriptions
