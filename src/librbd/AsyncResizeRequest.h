@@ -79,7 +79,6 @@ private:
   uint64_t m_original_size;
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
-  uint64_t m_original_parent_overlap;
   uint64_t m_new_parent_overlap;
 
   xlist<AsyncResizeRequest *>::item m_xlist_item;
@@ -92,6 +91,10 @@ private:
   void send_grow_object_map();
   bool send_shrink_object_map();
   void send_update_header();
+
+  void compute_parent_overlap();
+  void increment_refresh_seq();
+  void update_size_and_overlap();
 
 };
 
