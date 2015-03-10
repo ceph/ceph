@@ -9012,6 +9012,7 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
 	  !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
 	return;
       in->snaprealm->prune_past_parents();
+      in->purge_stale_snap_data(in->snaprealm->get_snaps());
     }
     if (in->is_dir()) {
       if (in->snaprealm && in->snaprealm->has_past_parents()) {
@@ -9056,7 +9057,9 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
 	num_strays_delayed++;
 	logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
       }
-    } else if (in->snaprealm && in->snaprealm->has_past_parents()) {
+    // don't purge multiversion inode with snap data
+    } else if (in->snaprealm && in->snaprealm->has_past_parents() &&
+	       !in->old_inodes.empty()) {
       assert(!in->is_dir());
       dout(20) << " file has past parents " << in->snaprealm->srnode.past_parents << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0)
