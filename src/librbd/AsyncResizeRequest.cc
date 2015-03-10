@@ -17,16 +17,16 @@ namespace librbd
 {
 
 AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
-		                       uint64_t original_size,
                                        uint64_t new_size,
-		                       ProgressContext &prog_ctx)
+                                       ProgressContext &prog_ctx)
   : AsyncRequest(image_ctx, on_finish),
-    m_original_size(original_size), m_new_size(new_size),
+    m_original_size(0), m_new_size(new_size),
     m_prog_ctx(prog_ctx), m_new_parent_overlap(0),
     m_xlist_item(this)
 {
   RWLock::WLocker l(m_image_ctx.snap_lock);
   m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
+  m_original_size = m_image_ctx.size;
   compute_parent_overlap();
 }
 
@@ -37,6 +37,7 @@ AsyncResizeRequest::~AsyncResizeRequest() {
     assert(m_xlist_item.remove_myself());
     if (!m_image_ctx.async_resize_reqs.empty()) {
       next_req = m_image_ctx.async_resize_reqs.front();
+      next_req->m_original_size = m_image_ctx.size;
       next_req->compute_parent_overlap();
     }
   }
