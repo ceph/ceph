@@ -38,6 +38,7 @@ namespace librbd {
 
   class AsyncOperation;
   class AsyncRequest;
+  class AsyncResizeRequest;
   class CopyupRequest;
   class ImageWatcher;
 
@@ -89,7 +90,7 @@ namespace librbd {
     RWLock parent_lock; // protects parent_md and parent
     Mutex refresh_lock; // protects refresh_seq and last_refresh
     RWLock object_map_lock; // protects object map updates and object_map itself
-    Mutex async_ops_lock; // protects async_ops
+    Mutex async_ops_lock; // protects async_ops and async_requests
     Mutex copyup_list_lock; // protects copyup_waiting_list
 
     unsigned extra_read_flags;
@@ -126,6 +127,8 @@ namespace librbd {
     ObjectMap object_map;
 
     atomic_t async_request_seq;
+
+    xlist<AsyncResizeRequest*> async_resize_reqs;
 
     /**
      * Either image_name or image_id must be set.
