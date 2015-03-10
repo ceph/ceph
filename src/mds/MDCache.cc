@@ -1710,17 +1710,19 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 
   if (cur->last >= floor)
     _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
-      
-  for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
-       p != cur->dirty_old_rstats.end();
-       ++p) {
-    old_inode_t& old = cur->old_inodes[*p];
-    snapid_t ofirst = MAX(old.first, floor);
-    set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
-    if (q == snaps.end() || *q > *p)
-      continue;
-    if (*p >= floor)
-      _project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+
+  if (g_conf->mds_snap_rstat) {
+    for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+	 p != cur->dirty_old_rstats.end();
+	 ++p) {
+      old_inode_t& old = cur->old_inodes[*p];
+      snapid_t ofirst = MAX(old.first, floor);
+      set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
+      if (q == snaps.end() || *q > *p)
+	continue;
+      if (*p >= floor)
+	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+    }
   }
   cur->dirty_old_rstats.clear();
 }
@@ -1757,7 +1759,10 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
     snapid_t first;
     fnode_t *pf = parent->get_projected_fnode();
     if (last == CEPH_NOSNAP) {
-      first = MAX(ofirst, parent->first);
+      if (g_conf->mds_snap_rstat)
+	first = MAX(ofirst, parent->first);
+      else
+	first = parent->first;
       prstat = &pf->rstat;
       dout(20) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
 
@@ -1772,6 +1777,9 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
 	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
       }
       parent->first = first;
+    } else if (!g_conf->mds_snap_rstat) {
+      // drop snapshots' rstats
+      break;
     } else if (last >= parent->first) {
       first = parent->first;
       parent->dirty_old_rstat[last].first = first;
@@ -2233,10 +2241,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       // first, if the frag is stale, bring it back in sync.
       parent->resync_accounted_rstat();
 
-      for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
-	   p != parent->dirty_old_rstat.end();
-	   ++p)
-	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
+      if (g_conf->mds_snap_rstat) {
+	for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	     p != parent->dirty_old_rstat.end();
+	     ++p)
+	  project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
+				      p->first, pin, true);//false);
+      }
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
 
