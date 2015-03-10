@@ -71,13 +71,16 @@ struct C_SR_RetryOpenParents : public MDSInternalContextBase {
   MDSInternalContextBase* fin;
   C_SR_RetryOpenParents(SnapRealm *s, snapid_t f, snapid_t l, snapid_t pl,
 			inodeno_t p, MDSInternalContextBase *c) :
-    sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {}
+    sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {
+    sr->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
+  }
   MDS *get_mds() { return sr->mdcache->mds; }
   void finish(int r) {
     if (r < 0)
       sr->_remove_missing_parent(parent_last, parent, r);
     if (sr->_open_parents(fin, first, last))
       fin->complete(0);
+    sr->inode->put(CInode::PIN_OPENINGSNAPPARENTS);
   }
 };
 
