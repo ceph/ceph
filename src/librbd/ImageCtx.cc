@@ -9,6 +9,7 @@
 
 #include "librbd/AsyncOperation.h"
 #include "librbd/AsyncRequest.h"
+#include "librbd/AsyncResizeRequest.h"
 #include "librbd/internal.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageWatcher.h"
@@ -433,6 +434,10 @@ namespace librbd {
   {
     assert(snap_lock.is_locked());
     if (in_snap_id == CEPH_NOSNAP) {
+      if (!async_resize_reqs.empty() &&
+          async_resize_reqs.front()->shrinking()) {
+        return async_resize_reqs.front()->get_image_size();
+      }
       return size;
     }
 
@@ -527,6 +532,13 @@ namespace librbd {
 
   int ImageCtx::get_parent_overlap(snap_t in_snap_id, uint64_t *overlap) const
   {
+    assert(snap_lock.is_locked());
+    if (in_snap_id == CEPH_NOSNAP && !async_resize_reqs.empty() &&
+        async_resize_reqs.front()->shrinking()) {
+      *overlap = async_resize_reqs.front()->get_parent_overlap();
+      return 0;
+    }
+
     const parent_info *info = get_parent_info(in_snap_id);
     if (info) {
       *overlap = info->overlap;
