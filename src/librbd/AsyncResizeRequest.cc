@@ -16,8 +16,35 @@
 namespace librbd
 {
 
-bool AsyncResizeRequest::should_complete(int r)
+AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
+		                       uint64_t original_size,
+                                       uint64_t new_size,
+		                       ProgressContext &prog_ctx)
+  : AsyncRequest(image_ctx, on_finish),
+    m_original_size(original_size), m_new_size(new_size),
+    m_prog_ctx(prog_ctx), m_original_parent_overlap(0),
+    m_new_parent_overlap(0), m_xlist_item(this)
 {
+  RWLock::WLocker l(m_image_ctx.snap_lock);
+  m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
+}
+
+AsyncResizeRequest::~AsyncResizeRequest() {
+  AsyncResizeRequest *next_req = NULL;
+  {
+    RWLock::WLocker l(m_image_ctx.snap_lock);
+    assert(m_xlist_item.remove_myself());
+    if (!m_image_ctx.async_resize_reqs.empty()) {
+      next_req = m_image_ctx.async_resize_reqs.front();
+    }
+  }
+
+  if (next_req != NULL) {
+    next_req->send();
+  }
+}
+
+bool AsyncResizeRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
@@ -81,8 +108,20 @@ bool AsyncResizeRequest::should_complete(int r)
 }
 
 void AsyncResizeRequest::send() {
+  {
+    RWLock::RLocker l(m_image_ctx.snap_lock);
+    assert(!m_image_ctx.async_resize_reqs.empty());
+
+    // only allow a single concurrent resize request
+    if (m_image_ctx.async_resize_reqs.front() != this) {
+      return;
+    }
+  }
+
   CephContext *cct = m_image_ctx.cct;
-  if (m_original_size == m_new_size) {
+  if (is_canceled()) {
+    complete(-ERESTART);
+  } else if (m_original_size == m_new_size) {
     ldout(cct, 2) << this << " no change in size (" << m_original_size
 		  << " -> " << m_new_size << ")" << dendl;
     m_state = STATE_FINISHED;
