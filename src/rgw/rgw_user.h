@@ -670,6 +670,6 @@ public:
 
 class RGWMetadataManager;
 
-extern void rgw_user_init(RGWMetadataManager *mm);
+extern void rgw_user_init(RGWRados *store);
 
 #endif
