@@ -166,7 +166,7 @@ void ObjectMap::refresh(uint64_t snap_id)
   std::string oid(object_map_name(m_image_ctx.id, snap_id));
   int r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid,
                                       &m_object_map);
-  if (r < 0) { 
+  if (r < 0) {
     lderr(cct) << "error refreshing object map: " << cpp_strerror(r)
                << dendl;
     invalidate();
@@ -179,11 +179,14 @@ void ObjectMap::refresh(uint64_t snap_id)
 
   uint64_t num_objs = Striper::get_num_objects(
     m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
-  if (m_object_map.size() != num_objs) {
-    // resize op might have been interrupted
-    lderr(cct) << "incorrect object map size: " << m_object_map.size()
-               << " != " << num_objs << dendl;
+  if (m_object_map.size() < num_objs) {
+    lderr(cct) << "object map smaller than current object count: "
+               << m_object_map.size() << " != " << num_objs << dendl;
     invalidate();
+  } else if (m_object_map.size() > num_objs) {
+    // resize op might have been interrupted
+    ldout(cct, 1) << "object map larger than current object count: "
+                  << m_object_map.size() << " != " << num_objs << dendl;
   }
 }
 
