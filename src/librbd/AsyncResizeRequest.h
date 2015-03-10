@@ -83,6 +83,7 @@ private:
 
   xlist<AsyncResizeRequest *>::item m_xlist_item;
 
+  virtual bool safely_cancel(int r);
   virtual bool should_complete(int r);
 
   void send_flush();
