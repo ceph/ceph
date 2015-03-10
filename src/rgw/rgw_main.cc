@@ -1083,7 +1083,7 @@ int main(int argc, const char **argv)
   if (r) 
     return 1;
 
-  rgw_user_init(store->meta_mgr);
+  rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
   rgw_log_usage_init(g_ceph_context, store);
 

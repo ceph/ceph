@@ -437,6 +437,7 @@ void Monitor::write_features(MonitorDBStore::TransactionRef t)
 const char** Monitor::get_tracked_conf_keys() const
 {
   static const char* KEYS[] = {
+    "crushtool", // helpful for testing
     "mon_lease",
     "mon_lease_renew_interval",
     "mon_lease_ack_timeout",
@@ -3667,7 +3668,7 @@ void Monitor::timecheck_start_round()
     dout(10) << __func__ << " there's a timecheck going on" << dendl;
     utime_t curr_time = ceph_clock_now(g_ceph_context);
     double max = g_conf->mon_timecheck_interval*3;
-    if (curr_time - timecheck_round_start > max) {
+    if (curr_time - timecheck_round_start < max) {
       dout(10) << __func__ << " keep current round going" << dendl;
       goto out;
     } else {

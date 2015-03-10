@@ -4526,12 +4526,17 @@ bool OSDMonitor::prepare_command_impl(MMonCommand *m,
     dout(10) << " testing map" << dendl;
     stringstream ess;
     CrushTester tester(crush, ess);
-    int r = tester.test_with_crushtool();
+    int r = tester.test_with_crushtool(g_conf->crushtool,
+				       g_conf->mon_lease);
     if (r < 0) {
-      derr << "error on crush map: " << ess.str() << dendl;
-      ss << "Failed to parse crushmap: " << ess.str();
-      err = r;
-      goto reply;
+      if (r == -EINTR) {
+	ss << "(note: crushtool tests not run because they took too long) ";
+      } else {
+	derr << "error on crush map: " << ess.str() << dendl;
+	ss << "Failed to parse crushmap: " << ess.str();
+	err = r;
+	goto reply;
+      }
     }
 
     dout(10) << " result " << ess.str() << dendl;

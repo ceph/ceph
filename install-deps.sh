@@ -38,6 +38,7 @@ Ubuntu|Debian|Devuan)
         packages=$(dpkg-checkbuilddeps --admindir=$DIR debian/control 2>&1 | \
             perl -p -e 's/.*Unmet build dependencies: *//;' \
             -e 's/build-essential:native/build-essential/;' \
+            -e 's/\|//g;' \
             -e 's/\(.*?\)//g;' \
             -e 's/ +/\n/g;' | sort)
         case $(lsb_release -sc) in
@@ -45,7 +46,8 @@ Ubuntu|Debian|Devuan)
                 packages=$(echo $packages | perl -pe 's/[-\w]*babeltrace[-\w]*//g')
                 ;;
         esac
-        $SUDO apt-get install -y $packages
+        packages=$(echo $packages) # change newlines into spaces
+        $SUDO bash -c "DEBIAN_FRONTEND=noninteractive apt-get install -y $packages"
         ;;
 CentOS|Fedora|SUSE*|RedHatEnterpriseServer)
         case $(lsb_release -si) in

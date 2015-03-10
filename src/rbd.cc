@@ -159,6 +159,8 @@ void usage()
 "                                     +4 exclusive lock, +8 object map\n"
 "  --image-shared                     image will be used concurrently (disables\n"
 "                                     RBD exclusive lock and dependent features)\n"
+"  --stripe-unit <size-in-bytes>      size (in bytes) of a block of data\n"
+"  --stripe-count <num>               number of consecutive objects in a stripe\n"
 "  --id <username>                    rados user (without 'client.'prefix) to\n"
 "                                     authenticate as\n"
 "  --keyfile <path>                   file containing secret key for use with cephx\n"
@@ -171,61 +173,20 @@ void usage()
 "  --allow-shrink                     allow shrinking of an image when resizing\n";
 }
 
-static string feature_str(uint64_t feature)
-{
-  switch (feature) {
-  case RBD_FEATURE_LAYERING:
-    return "layering";
-  case RBD_FEATURE_STRIPINGV2:
-    return "striping";
-  case RBD_FEATURE_EXCLUSIVE_LOCK:
-    return "exclusive";
-  case RBD_FEATURE_OBJECT_MAP:
-    return "object map";
-  default:
-    return "";
-  }
-}
-
-static string features_str(uint64_t features)
-{
-  string s = "";
-
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
-       feature <<= 1) {
-    if (feature & features) {
-      if (s.size())
-	s += ", ";
-      s += feature_str(feature);
-    }
-  }
-  return s;
-}
-
-static void format_features(Formatter *f, uint64_t features)
-{
-  f->open_array_section("features");
-  for (uint64_t feature = 1; feature <= RBD_FEATURE_OBJECT_MAP;
-       feature <<= 1) {
-    f->dump_string("feature", feature_str(feature));
-  }
-  f->close_section();
-}
-
-static void format_flags(Formatter *f, uint64_t flags)
+static void format_bitmask(Formatter *f, const std::string &name,
+                           const std::map<uint64_t, std::string>& mapping,
+                           uint64_t bitmask)
 {
   int count = 0;
-  std::map<uint64_t, std::string> flag_mapping = boost::assign::map_list_of(
-    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
-
+  std::string group_name(name + "s");
   if (f == NULL) {
-    cout << "\tflags: ";
+    cout << "\t" << group_name << ": ";
   } else {
-    f->open_array_section("flags");
+    f->open_array_section(group_name.c_str());
   }
-  for (std::map<uint64_t, std::string>::iterator it = flag_mapping.begin();
-       it != flag_mapping.end(); ++it) {
-    if ((it->first & flags) == 0) {
+  for (std::map<uint64_t, std::string>::const_iterator it = mapping.begin();
+       it != mapping.end(); ++it) {
+    if ((it->first & bitmask) == 0) {
       continue;
     }
 
@@ -235,7 +196,7 @@ static void format_flags(Formatter *f, uint64_t flags)
       }
       cout << it->second;
     } else {
-      f->dump_string("flag", it->second);
+      f->dump_string(name.c_str(), it->second);
     }
   }
   if (f == NULL) {
@@ -243,6 +204,23 @@ static void format_flags(Formatter *f, uint64_t flags)
   } else {
     f->close_section();
   }
+}
+
+static void format_features(Formatter *f, uint64_t features)
+{
+  std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
+    RBD_FEATURE_LAYERING, "layering")(
+    RBD_FEATURE_STRIPINGV2, "striping")(
+    RBD_FEATURE_EXCLUSIVE_LOCK, "exclusive")(
+    RBD_FEATURE_OBJECT_MAP, "object map");
+  format_bitmask(f, "feature", mapping, features);
+}
+
+static void format_flags(Formatter *f, uint64_t flags)
+{
+  std::map<uint64_t, std::string> mapping = boost::assign::map_list_of(
+    RBD_FLAG_OBJECT_MAP_INVALID, "object map invalid");
+  format_bitmask(f, "flag", mapping, flags);
 }
 
 struct MyProgressContext : public librbd::ProgressContext {
@@ -477,12 +455,6 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
     }
     r = rbd.create(io_ctx, imgname, size, order);
   } else {
-    if ((stripe_unit || stripe_count) &&
-	(stripe_unit != (1ull << *order) && stripe_count != 1)) {
-      features |= RBD_FEATURE_STRIPINGV2;
-    } else {
-      features &= ~RBD_FEATURE_STRIPINGV2;
-    }
     r = rbd.create3(io_ctx, imgname, size, features, order,
 		    stripe_unit, stripe_count);
   }
@@ -494,14 +466,15 @@ static int do_create(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 static int do_clone(librbd::RBD &rbd, librados::IoCtx &p_ioctx,
 		    const char *p_name, const char *p_snapname,
 		    librados::IoCtx &c_ioctx, const char *c_name,
-		    uint64_t features, int *c_order)
+		    uint64_t features, int *c_order,
+                    uint64_t stripe_unit, uint64_t stripe_count)
 {
   if ((features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     return -EINVAL;
   }
 
-  return rbd.clone(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
-		    c_order);
+  return rbd.clone2(p_ioctx, p_name, p_snapname, c_ioctx, c_name, features,
+		    c_order, stripe_unit, stripe_count);
 }
 
 static int do_flatten(librbd::Image& image)
@@ -590,10 +563,7 @@ static int do_show_info(const char *imgname, librbd::Image& image,
   }
 
   if (!old_format) {
-    if (f)
-      format_features(f, features);
-    else
-      cout << "\tfeatures: " << features_str(features) << std::endl;
+    format_features(f, features);
     format_flags(f, flags);
   }
 
@@ -1472,7 +1442,8 @@ private:
 
 static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 		     const char *imgname, int *order, const char *path,
-		     int format, uint64_t features, uint64_t size)
+		     int format, uint64_t features, uint64_t size,
+                     uint64_t stripe_unit, uint64_t stripe_count)
 {
   int fd, r;
   struct stat stat_buf;
@@ -1534,7 +1505,8 @@ static int do_import(librbd::RBD &rbd, librados::IoCtx& io_ctx,
 
     posix_fadvise(fd, 0, 0, POSIX_FADV_SEQUENTIAL);
   }
-  r = do_create(rbd, io_ctx, imgname, size, order, format, features, 0, 0);
+  r = do_create(rbd, io_ctx, imgname, size, order, format, features,
+                stripe_unit, stripe_count);
   if (r < 0) {
     cerr << "rbd: image creation failed" << std::endl;
     goto done;
@@ -3116,16 +3088,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     }
   }
 
-  switch (opt_cmd) {
-  case OPT_LIST:
-    r = do_list(rbd, io_ctx, lflag, formatter.get());
-    if (r < 0) {
-      cerr << "rbd: list: " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-    break;
-
-  case OPT_CREATE:
+  if (opt_cmd == OPT_CREATE || opt_cmd == OPT_CLONE || opt_cmd == OPT_IMPORT) {
     if (order && (order < 12 || order > 25)) {
       cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
 	   << std::endl;
@@ -3137,6 +3100,25 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       usage();
       return EINVAL;
     }
+
+    if ((stripe_unit || stripe_count) &&
+	(stripe_unit != (1ll << order) && stripe_count != 1)) {
+      features |= RBD_FEATURE_STRIPINGV2;
+    } else {
+      features &= ~RBD_FEATURE_STRIPINGV2;
+    }
+  }
+
+  switch (opt_cmd) {
+  case OPT_LIST:
+    r = do_list(rbd, io_ctx, lflag, formatter.get());
+    if (r < 0) {
+      cerr << "rbd: list: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_CREATE:
     r = do_create(rbd, io_ctx, imgname, size, &order, format, features,
 		  stripe_unit, stripe_count);
     if (r < 0) {
@@ -3146,14 +3128,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     break;
 
   case OPT_CLONE:
-    if (order && (order < 12 || order > 25)) {
-      cerr << "rbd: order must be between 12 (4 KB) and 25 (32 MB)"
-	   << std::endl;
-      return EINVAL;
-    }
-
     r = do_clone(rbd, io_ctx, imgname, snapname, dest_io_ctx, destname,
-		 features, &order);
+		 features, &order, stripe_unit, stripe_count);
     if (r < 0) {
       cerr << "rbd: clone error: " << cpp_strerror(-r) << std::endl;
       return -r;
@@ -3372,7 +3348,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       return EINVAL;
     }
     r = do_import(rbd, dest_io_ctx, destname, &order, path,
-		  format, features, size);
+		  format, features, size, stripe_unit, stripe_count);
     if (r < 0) {
       cerr << "rbd: import failed: " << cpp_strerror(-r) << std::endl;
       return -r;

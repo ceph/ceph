@@ -1397,6 +1397,24 @@ function test_mon_tell()
   ceph_watch_wait 'mon.1 \[DBG\] from.*cmd=\[{"prefix": "version"}\]: dispatch'
 }
 
+function test_mon_crushmap_validation()
+{
+  local map=$TMPDIR/map
+  ceph osd getcrushmap -o $map
+  # crushtool validation timesout and is ignored
+  cat > $TMPDIR/crushtool <<EOF
+#!/bin/sh
+sleep 1000
+exit 0 # success
+EOF
+  chmod +x $TMPDIR/crushtool
+  ceph tell mon.* injectargs --crushtool $TMPDIR/crushtool
+  ceph osd setcrushmap -i $map 2>&1 | grep 'took too long'
+  ceph tell mon.* injectargs --crushtool crushtool
+  # crushtool validation succeeds
+  ceph osd setcrushmap -i $map
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -1431,6 +1449,7 @@ MON_TESTS+=" mon_osd_erasure_code"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_heap_profiler"
 MON_TESTS+=" mon_tell"
+MON_TESTS+=" mon_crushmap_validation"
 
 OSD_TESTS+=" osd_bench"
 
