@@ -1567,32 +1567,39 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
   if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
     // multiversion inode.
     CInode *in = dnl->get_inode();
+    SnapRealm *realm = NULL;
 
     if (in->get_projected_parent_dn() != dn) {
       assert(follows == CEPH_NOSNAP);
-      snapid_t dir_follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
+      realm = dn->dir->inode->find_snaprealm();
+      snapid_t dir_follows = realm->get_newest_snap();
 
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
-	CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
-						    oldfirst, dir_follows);
-	olddn->pre_dirty();
-	dout(10) << " olddn " << *olddn << dendl;
-	metablob->add_remote_dentry(olddn, true);
-	mut->add_cow_dentry(olddn);
-	// FIXME: adjust link count here?  hmm.
+	if (realm->has_snaps_in_range(oldfirst, dn->last)) {
+	  CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+						      oldfirst, dir_follows);
+	  olddn->pre_dirty();
+	  dout(10) << " olddn " << *olddn << dendl;
+	  metablob->add_remote_dentry(olddn, true);
+	  mut->add_cow_dentry(olddn);
+	  // FIXME: adjust link count here?  hmm.
 
-	if (dir_follows+1 > in->first)
-	  in->cow_old_inode(dir_follows, false);
+	  if (dir_follows+1 > in->first)
+	    in->cow_old_inode(dir_follows, false);
+	}
       }
 
-      if (in->snaprealm)
-	follows = in->snaprealm->get_newest_seq();
-      else
+      if (in->snaprealm) {
+	realm = in->snaprealm;
+	follows = realm->get_newest_seq();
+      } else
 	follows = dir_follows;
-    } else if (follows == CEPH_NOSNAP) {
-      follows = in->find_snaprealm()->get_newest_seq();
+    } else {
+      realm = in->find_snaprealm();
+      if (follows == CEPH_NOSNAP)
+	follows = realm->get_newest_seq();
     }
 
     // already cloned?
@@ -1601,26 +1608,41 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
+    if (!realm->has_snaps_in_range(in->first, in->last)) {
+      dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *in << dendl;
+      in->first = follows + 1;
+      return;
+    }
+
     in->cow_old_inode(follows, false);
 
   } else {
+    SnapRealm *realm = dn->dir->inode->find_snaprealm();
     if (follows == CEPH_NOSNAP)
-      follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
-    
+      follows = realm->get_newest_seq();
+
     // already cloned?
     if (follows < dn->first) {
       dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *dn << dendl;
       return;
     }
-       
+
     // update dn.first before adding old dentry to cdir's map
     snapid_t oldfirst = dn->first;
     dn->first = follows+1;
+
+    CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+
+    if (!realm->has_snaps_in_range(oldfirst, dn->last)) {
+      dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
+      if (in)
+	in->first = follows+1;
+      return;
+    }
     
     dout(10) << "    dn " << *dn << dendl;
-    if (dnl->is_primary()) {
-      assert(oldfirst == dnl->get_inode()->first);
-      CInode *oldin = cow_inode(dnl->get_inode(), follows);
+    if (in) {
+      CInode *oldin = cow_inode(in, follows);
       mut->add_cow_inode(oldin);
       if (pcow_inode)
 	*pcow_inode = oldin;
