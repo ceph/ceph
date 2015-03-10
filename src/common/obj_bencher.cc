@@ -245,23 +245,24 @@ void _aio_cb(void *cb, void *arg) {
   lc->lock->Unlock();
 }
 
-static double vec_stddev(vector<double>& v)
+template<class T>
+static T vec_stddev(vector<T>& v)
 {
-  double mean = 0;
+  T mean = 0;
 
   if (v.size() < 2)
     return 0;
 
-  vector<double>::iterator iter;
+  typename vector<T>::iterator iter;
   for (iter = v.begin(); iter != v.end(); ++iter) {
     mean += *iter;
   }
 
   mean /= v.size();
 
-  double stddev = 0;
+  T stddev = 0;
   for (iter = v.begin(); iter != v.end(); ++iter) {
-    double dev = *iter - mean;
+    T dev = *iter - mean;
     dev *= dev;
     stddev += dev;
   }
