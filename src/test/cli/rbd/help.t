@@ -79,6 +79,8 @@
                                        +4 exclusive lock, +8 object map
     --image-shared                     image will be used concurrently (disables
                                        RBD exclusive lock and dependent features)
+    --stripe-unit <size-in-bytes>      size (in bytes) of a block of data
+    --stripe-count <num>               number of consecutive objects in a stripe
     --id <username>                    rados user (without 'client.'prefix) to
                                        authenticate as
     --keyfile <path>                   file containing secret key for use with cephx

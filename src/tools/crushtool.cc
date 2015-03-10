@@ -499,7 +499,6 @@ int main(int argc, const char **argv)
 
   if (test && !display && !write_to_file) {
     cerr << "WARNING: no output selected; use --output-csv or --show-X" << std::endl;
-    exit(EXIT_FAILURE);
   }
 
   if (decompile + compile + build > 1) {

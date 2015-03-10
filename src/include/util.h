@@ -30,12 +30,46 @@ struct ceph_data_stats
   uint64_t byte_avail;
   int avail_percent;
 
+  ceph_data_stats() :
+    byte_total(0),
+    byte_used(0),
+    byte_avail(0),
+    avail_percent(0)
+  { }
+
   void dump(Formatter *f) const {
     assert(f != NULL);
     f->dump_int("total", byte_total);
     f->dump_int("used", byte_used);
     f->dump_int("avail", byte_avail);
     f->dump_int("avail_percent", avail_percent);
+  }
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(byte_total, bl);
+    ::encode(byte_used, bl);
+    ::encode(byte_avail, bl);
+    ::encode(avail_percent, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator &p) {
+    DECODE_START(1, p);
+    ::decode(byte_total, p);
+    ::decode(byte_used, p);
+    ::decode(byte_avail, p);
+    ::decode(avail_percent, p);
+    DECODE_FINISH(p);
+  }
+
+  static void generate_test_instances(list<ceph_data_stats*>& ls) {
+    ls.push_back(new ceph_data_stats);
+    ls.push_back(new ceph_data_stats);
+    ls.back()->byte_total = 1024*1024;
+    ls.back()->byte_used = 512*1024;
+    ls.back()->byte_avail = 512*1024;
+    ls.back()->avail_percent = 50;
   }
 };
 typedef struct ceph_data_stats ceph_data_stats_t;

@@ -53,7 +53,8 @@ Build-Depends: autoconf,
                xfslibs-dev,
                xfsprogs,
                xmlstarlet,
-               yasm [amd64]
+               yasm [amd64],
+               zlib1g-dev
 Standards-Version: 3.9.3
 
 Package: ceph
