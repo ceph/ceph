@@ -265,6 +265,9 @@ check_SCRIPTS += test/ceph-disk.sh
 endif
 
 EXTRA_DIST += \
+	$(srcdir)/test/debian-jessie/Dockerfile.in \
+	$(srcdir)/test/debian-jessie/install-deps.sh \
+	$(srcdir)/test/debian-jessie/debian \
 	$(srcdir)/test/ubuntu-12.04/Dockerfile.in \
 	$(srcdir)/test/ubuntu-12.04/install-deps.sh \
 	$(srcdir)/test/ubuntu-12.04/debian \
