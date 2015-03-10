@@ -1487,6 +1487,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   if (write_ordered &&
       is_degraded_object(head, &valid_copies) &&
       (valid_copies < pool.info.min_size ||
+       waiting_for_degraded_object.count(head) ||
        pool.info.ec_pool() ||
        !cct->_conf->osd_enable_degraded_writes ||
        !(get_min_peer_features() & CEPH_FEATURE_OSD_DEGRADED_WRITES))) {
