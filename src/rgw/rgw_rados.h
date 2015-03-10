@@ -1130,6 +1130,7 @@ public:
   virtual ~RGWChainedCache() {}
   virtual void chain_cb(const string& key, void *data) = 0;
   virtual void invalidate(const string& key) = 0;
+  virtual void invalidate_all() = 0;
 
   struct Entry {
     RGWChainedCache *cache;
@@ -1154,6 +1155,8 @@ struct RGWObjectCtx {
   void set_prefetch_data(rgw_obj& obj);
   void invalidate(rgw_obj& obj);
 };
+
+class Finisher;
 
 class RGWRados
 {
@@ -1186,6 +1189,7 @@ class RGWRados
   void get_bucket_instance_ids(RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
   Mutex lock;
+  Mutex watchers_lock;
   SafeTimer *timer;
 
   class C_Tick : public Context {
@@ -1203,10 +1207,12 @@ class RGWRados
 
   int num_watchers;
   RGWWatcher **watchers;
-  uint64_t *watch_handles;
+  std::set<int> watchers_set;
   librados::IoCtx root_pool_ctx;      // .rgw
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
+
+  friend class RGWWatcher;
 
   Mutex bucket_id_lock;
 
@@ -1240,10 +1246,12 @@ protected:
 
   RGWQuotaHandler *quota_handler;
 
+  Finisher *finisher;
+
 public:
-  RGWRados() : lock("rados_timer_lock"), timer(NULL),
+  RGWRados() : lock("rados_timer_lock"), watchers_lock("watchers_lock"), timer(NULL),
                gc(NULL), use_gc_thread(false), quota_threads(false),
-               num_watchers(0), watchers(NULL), watch_handles(NULL),
+               num_watchers(0), watchers(NULL),
                watch_initialized(false),
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
@@ -1251,6 +1259,7 @@ public:
                cct(NULL), rados(NULL),
                pools_initialized(false),
                quota_handler(NULL),
+               finisher(NULL),
                rest_master_conn(NULL),
                meta_mgr(NULL), data_log(NULL) {}
 
@@ -1311,6 +1320,8 @@ public:
   int init_complete();
   virtual int initialize();
   virtual void finalize();
+
+  void schedule_context(Context *c);
 
   /** set up a bucket listing. handle is filled in. */
   virtual int list_buckets_init(RGWAccessHandle *handle);
@@ -1821,6 +1832,7 @@ public:
                              bufferlist& bl, off_t ofs, off_t end,
                              rgw_cache_entry_info *cache_info);
 
+  virtual void register_chained_cache(RGWChainedCache *cache) {}
   virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(RGWObjectCtx& ctx, rgw_obj& obj,
@@ -1884,12 +1896,21 @@ public:
   virtual int update_containers_stats(map<string, RGWBucketEnt>& m);
   virtual int append_async(rgw_obj& obj, size_t size, bufferlist& bl);
 
+  int watch(const string& oid, uint64_t *watch_handle, librados::WatchCtx2 *ctx);
+  int unwatch(uint64_t watch_handle);
+  void add_watcher(int i);
+  void remove_watcher(int i);
   virtual bool need_watch_notify() { return false; }
   virtual int init_watch();
   virtual void finalize_watch();
   virtual int distribute(const string& key, bufferlist& bl);
-  virtual int watch_cb(int opcode, uint64_t ver, bufferlist& bl) { return 0; }
+  virtual int watch_cb(uint64_t notify_id,
+		       uint64_t cookie,
+		       uint64_t notifier_id,
+		       bufferlist& bl) { return 0; }
   void pick_control_oid(const string& key, string& notify_oid);
+
+  virtual void set_cache_enabled(bool state) {}
 
   void set_atomic(void *ctx, rgw_obj& obj) {
     RGWObjectCtx *rctx = static_cast<RGWObjectCtx *>(ctx);
@@ -2124,6 +2145,10 @@ class RGWChainedCacheImpl : public RGWChainedCache {
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
+  void init(RGWRados *store) {
+    store->register_chained_cache(this);
+  }
+
   bool find(const string& key, T *entry) {
     RWLock::RLocker rl(lock);
     typename map<string, T>::iterator iter = entries.find(key);
@@ -2151,6 +2176,11 @@ public:
   void invalidate(const string& key) {
     RWLock::WLocker wl(lock);
     entries.erase(key);
+  }
+
+  void invalidate_all() {
+    RWLock::WLocker wl(lock);
+    entries.clear();
   }
 };
 
