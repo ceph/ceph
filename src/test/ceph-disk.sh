@@ -299,6 +299,73 @@ function test_activate_dir() {
     $rm -fr $osd_data
 }
 
+function loop_sanity_check_body() {
+    local dev=$1
+    local guid=$2
+
+    #
+    # Check if /dev/loop is configured with max_part > 0 to handle
+    # partition tables and expose the partition devices in /dev
+    #
+    sgdisk --largest-new=1 --partition-guid=1:$guid $dev
+    if ! test -e ${dev}p1 ; then
+        if grep loop.max_part /proc/cmdline ; then
+            echo "the loop module max_part parameter is configured but when"
+            echo "creating a new partition on $dev, it the expected node"
+            echo "${dev}p1 does not exist"
+            return 1
+        fi
+        perl -pi -e 's/$/ loop.max_part=16/ if(/kernel/ && !/max_part/)' /boot/grub/grub.conf
+        echo "the loop.max_part=16 was added to the kernel in /boot/grub/grub.conf"
+        cat /boot/grub/grub.conf
+        echo "you need to reboot for it to be taken into account"
+        return 1
+    fi
+    
+    #
+    # Install the minimal files supporting the maintenance of /dev/disk/by-partuuid
+    #
+    udevadm trigger --sysname-match=$(basename $dev)
+    udevadm settle
+    if test ! -e /dev/disk/by-partuuid/$guid ; then
+        cp -a ../udev/95-ceph-osd-alt.rules /lib/udev/rules.d/95-ceph-osd.rules
+        cp -a ceph-disk ceph-disk-udev /usr/sbin
+        udevadm trigger --sysname-match=$(basename $dev)
+        if test ! -e /dev/disk/by-partuuid/$guid ; then
+            echo "/dev/disk/by-partuuid/$guid not found although the"
+            echo "following support files are installed: "
+            ls -l /lib/udev/rules.d/95-ceph-osd.rules /usr/sbin/ceph-disk{,-udev}
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+function loop_sanity_check() {
+    local id=$(lsb_release -si)
+    local major=$(lsb_release -rs | cut -f1 -d.)
+    if test $major != 6 || test $id != CentOS -a $id != RedHatEnterpriseServer ; then
+        echo "/dev/loop is assumed to be configured with max_part > 0"
+        echo "and /dev/disk/by-partuuid to be populated by udev"
+        return 0
+    fi
+    local name=$DIR/sanity.disk
+    dd if=/dev/zero of=$name bs=1024k count=10 > /dev/null
+    losetup --find $name
+    local dev=$(losetup --associated $name | cut -f1 -d:)
+    local guid=$($uuidgen)
+
+    loop_sanity_check_body $dev $guid
+    status=$?
+
+    losetup --detach $dev
+    rm $name
+    rm -f /dev/disk/by-partuuid/$guid
+
+    return $status
+}
+
 function create_dev() {
     local name=$1
 
@@ -382,6 +449,8 @@ function test_activate_dev() {
         return 0
     fi
 
+    loop_sanity_check || return 1
+
     local disk=$(create_dev vdf.disk)
     local journal=$(create_dev vdg.disk)
     local newdisk=$(create_dev vdh.disk)
@@ -431,6 +500,8 @@ function test_activate_dmcrypt_dev() {
         echo "SKIP because not root"
         return 0
     fi
+
+    loop_sanity_check || return 1
 
     local disk=$(create_dev vdf.disk)
     local journal=$(create_dev vdg.disk)
