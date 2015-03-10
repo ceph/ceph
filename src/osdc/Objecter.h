@@ -89,6 +89,13 @@ struct ObjectOperation {
     void finish(int r) {
       first->complete(r);
       second->complete(r);
+      first = NULL;
+      second = NULL;
+    }
+
+    virtual ~C_TwoContexts() {
+        delete first;
+        delete second;
     }
   };
 
