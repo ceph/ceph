@@ -1292,6 +1292,9 @@ void RGWListBucket::execute()
   }
 
   RGWRados::Bucket target(store, s->bucket);
+  if (shard_id >= 0) {
+    target.set_shard_id(shard_id);
+  }
   RGWRados::Bucket::List list_op(&target);
 
   list_op.params.prefix = prefix;

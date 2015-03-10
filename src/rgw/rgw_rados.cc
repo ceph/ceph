@@ -3595,6 +3595,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
   rgw_bucket& bucket = target->get_bucket();
+  int shard_id = target->get_shard_id();
 
   int count = 0;
   bool truncated = true;
@@ -3654,7 +3655,7 @@ int RGWRados::Bucket::List::list_objects(int max, vector<RGWObjEnt> *result,
       ldout(cct, 20) << "setting cur_marker=" << cur_marker.name << "[" << cur_marker.instance << "]" << dendl;
     }
     std::map<string, RGWObjEnt> ent_map;
-    int r = store->cls_bucket_list(bucket, cur_marker, cur_prefix, max + 1 - count, params.list_versions, ent_map,
+    int r = store->cls_bucket_list(bucket, shard_id, cur_marker, cur_prefix, max + 1 - count, params.list_versions, ent_map,
                             &truncated, &cur_marker);
     if (r < 0)
       return r;
@@ -5584,7 +5585,7 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
 
   do {
 #define NUM_ENTRIES 1000
-    r = cls_bucket_list(bucket, marker, prefix, NUM_ENTRIES, true, ent_map,
+    r = cls_bucket_list(bucket, RGW_NO_SHARD, marker, prefix, NUM_ENTRIES, true, ent_map,
                         &is_truncated, &marker);
     if (r < 0)
       return r;
@@ -9435,7 +9436,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(rgw_bucket& bucket, uint64_t timeou
   return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
 }
 
-int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const string& prefix,
+int RGWRados::cls_bucket_list(rgw_bucket& bucket, int shard_id, rgw_obj_key& start, const string& prefix,
 		              uint32_t num_entries, bool list_versions, map<string, RGWObjEnt>& m,
 			      bool *is_truncated, rgw_obj_key *last_entry,
 			      bool (*force_check_filter)(const string&  name))
@@ -9447,7 +9448,7 @@ int RGWRados::cls_bucket_list(rgw_bucket& bucket, rgw_obj_key& start, const stri
   // value - list result for the corresponding oid (shard), it is filled by the AIO callback
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
-  int r = open_bucket_index(bucket, index_ctx, oids);
+  int r = open_bucket_index(bucket, index_ctx, oids, shard_id);
   if (r < 0)
     return r;
 

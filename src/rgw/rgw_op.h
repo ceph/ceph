@@ -269,11 +269,13 @@ protected:
   int default_max;
   bool is_truncated;
 
+  int shard_id;
+
   int parse_max_keys();
 
 public:
   RGWListBucket() : list_versions(false), max(0), ret(0),
-                    default_max(0), is_truncated(false) {}
+                    default_max(0), is_truncated(false), shard_id(-1) {}
   int verify_permission();
   void pre_exec();
   void execute();

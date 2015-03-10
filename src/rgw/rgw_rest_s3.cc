@@ -244,6 +244,17 @@ int RGWListBucket_ObjStore_S3::get_params()
   }
   delimiter = s->info.args.get("delimiter");
   encoding_type = s->info.args.get("encoding-type");
+  if (s->system_request) {
+    const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
+    if (shard_id_str) {
+      string err;
+      shard_id = strict_strtol(shard_id_str, 10, &err);
+      if (!err.empty()) {
+        ldout(s->cct, 5) << "bad shard id specified: " << shard_id_str << dendl;
+        return -EINVAL;
+      }
+    }
+  }
   return 0;
 }
 
