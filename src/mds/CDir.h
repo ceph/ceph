@@ -247,6 +247,7 @@ protected:
   version_t committing_version;
   version_t committed_version;
 
+  compact_set<string> stale_items;
 
   // lock nesting, freeze
   static int num_frozen_trees;
