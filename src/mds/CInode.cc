@@ -946,6 +946,9 @@ void CInode::store(MDSInternalContextBase *fin)
   dout(10) << "store " << get_version() << dendl;
   assert(is_base());
 
+  if (snaprealm)
+    purge_stale_snap_data(snaprealm->get_snaps());
+
   // encode
   bufferlist bl;
   string magic = CEPH_FS_ONDISK_MAGIC;

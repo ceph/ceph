@@ -7901,6 +7901,10 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   // yay
   mdr->in[0] = diri;
   respond_to_request(mdr, 0);
+
+  // purge snapshot data
+  if (diri->snaprealm->have_past_parents_open())
+    diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
 

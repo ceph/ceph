@@ -2032,8 +2032,14 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
 
-    if (in->is_multiversion() && snaps && !in->snaprealm)
-      in->purge_stale_snap_data(*snaps);
+    if (in->is_multiversion()) {
+      if (!in->snaprealm) {
+	if (snaps)
+	  in->purge_stale_snap_data(*snaps);
+      } else if (in->snaprealm->have_past_parents_open()) {
+	in->purge_stale_snap_data(in->snaprealm->get_snaps());
+      }
+    }
 
     bufferlist snap_blob;
     in->encode_snap_blob(snap_blob);
