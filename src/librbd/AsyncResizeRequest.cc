@@ -46,6 +46,23 @@ AsyncResizeRequest::~AsyncResizeRequest() {
   }
 }
 
+bool AsyncResizeRequest::safely_cancel(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " safely_cancel: " << " r=" << r << dendl;
+
+  // avoid interrupting the object map / header updates
+  switch (m_state) {
+  case STATE_GROW_OBJECT_MAP:
+  case STATE_UPDATE_HEADER:
+  case STATE_SHRINK_OBJECT_MAP:
+    ldout(cct, 5) << "delaying cancel request" << dendl;
+    return false;
+  default:
+    break;
+  }
+  return true;
+}
+
 bool AsyncResizeRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
