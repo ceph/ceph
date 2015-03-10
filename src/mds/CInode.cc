@@ -2414,7 +2414,8 @@ old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
 
   old.inode.trim_client_ranges(follows);
 
-  if (!(old.inode.rstat == old.inode.accounted_rstat))
+  if (g_conf->mds_snap_rstat &&
+      !(old.inode.rstat == old.inode.accounted_rstat))
     dirty_old_rstats.insert(follows);
   
   first = follows+1;
