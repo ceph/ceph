@@ -15,9 +15,8 @@ class ProgressContext;
 class AsyncResizeRequest : public AsyncRequest
 {
 public:
-  AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
-		     uint64_t original_size, uint64_t new_size,
-		     ProgressContext &prog_ctx);
+  AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
+                     ProgressContext &prog_ctx);
   virtual ~AsyncResizeRequest();
 
   virtual void send();

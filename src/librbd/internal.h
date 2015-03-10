@@ -193,8 +193,8 @@ namespace librbd {
   int async_flatten(ImageCtx *ictx, Context *ctx, ProgressContext &prog_ctx);
   int async_resize(ImageCtx *ictx, Context *ctx, uint64_t size,
 		   ProgressContext &prog_ctx);
-  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-			   uint64_t new_size, ProgressContext& prog_ctx);
+  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
+                           ProgressContext& prog_ctx);
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c, int op_flags);

@@ -1695,25 +1695,23 @@ reprotect_and_return_err:
       return r;
     }
 
-    uint64_t original_size;
     {
       RWLock::RLocker snap_locker(ictx->snap_lock);
       if (ictx->snap_id != CEPH_NOSNAP || ictx->read_only) {
         return -EROFS;
       }
-      original_size = ictx->size;
     }
 
-    async_resize_helper(ictx, ctx, original_size, size, prog_ctx);
+    async_resize_helper(ictx, ctx, size, prog_ctx);
     return 0;
   }
 
-  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t original_size,
-		           uint64_t new_size, ProgressContext& prog_ctx)
+  void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
+                           ProgressContext& prog_ctx)
   {
     assert(ictx->owner_lock.is_locked());
-    AsyncResizeRequest *req = new AsyncResizeRequest(*ictx, ctx, original_size,
-						     new_size, prog_ctx);
+    AsyncResizeRequest *req = new AsyncResizeRequest(*ictx, ctx, new_size,
+                                                     prog_ctx);
     req->send();
   }
 
@@ -2080,7 +2078,6 @@ reprotect_and_return_err:
 
     RWLock::RLocker l(ictx->owner_lock);
     snap_t snap_id;
-    uint64_t original_size;
     uint64_t new_size;
     {
       RWLock::WLocker l2(ictx->md_lock);
@@ -2112,7 +2109,6 @@ reprotect_and_return_err:
       }
 
       ictx->snap_lock.get_read();
-      original_size = ictx->size;
       new_size = ictx->get_image_size(snap_id);
       ictx->snap_lock.put_read();
 
@@ -2129,7 +2125,7 @@ reprotect_and_return_err:
     ldout(cct, 2) << "resizing to snapshot size..." << dendl;
     NoOpProgressContext no_op;
     C_SaferCond ctx;
-    async_resize_helper(ictx, &ctx, original_size, new_size, no_op);
+    async_resize_helper(ictx, &ctx, new_size, no_op);
 
     r = ctx.wait();
     if (r < 0) {
