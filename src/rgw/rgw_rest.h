@@ -184,12 +184,6 @@ public:
   ~RGWPutMetadataObject_ObjStore() {}
 };
 
-class RGWSetTempUrl_ObjStore : public RGWSetTempUrl {
-public:
-  RGWSetTempUrl_ObjStore() {}
-  ~RGWSetTempUrl_ObjStore() {}
-};
-
 class RGWDeleteObj_ObjStore : public RGWDeleteObj {
 public:
   RGWDeleteObj_ObjStore() {}

@@ -116,15 +116,6 @@ public:
   void send_response();
 };
 
-class RGWSetTempUrl_ObjStore_SWIFT : public RGWSetTempUrl_ObjStore {
-public:
-  RGWSetTempUrl_ObjStore_SWIFT() {}
-  ~RGWSetTempUrl_ObjStore_SWIFT() {}
-
-  int get_params();
-  void send_response();
-};
-
 class RGWDeleteObj_ObjStore_SWIFT : public RGWDeleteObj_ObjStore {
 public:
   RGWDeleteObj_ObjStore_SWIFT() {}
