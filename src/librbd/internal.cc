@@ -2277,6 +2277,21 @@ reprotect_and_return_err:
       return -EINVAL;
     }
     int r;
+    map<string, string> pairs;
+
+    r = cls_client::metadata_list(&src->md_ctx, src->header_oid, &pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      return r;
+    }
+    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); it++) {
+      r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, it->first, it->second);
+      if (r < 0) {
+        lderr(cct) << "couldn't set metadata: " << r << dendl;
+        return r;
+      }
+    }
+
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
     for (uint64_t offset = 0; offset < src_size; offset += period) {
