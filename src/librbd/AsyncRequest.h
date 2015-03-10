@@ -19,7 +19,7 @@ public:
   virtual ~AsyncRequest();
 
   void complete(int r) {
-    if (m_canceled) {
+    if (m_canceled && safely_cancel(r)) {
       m_on_finish->complete(-ERESTART);
       delete this;
     } else if (should_complete(r)) {
@@ -44,6 +44,9 @@ protected:
   librados::AioCompletion *create_callback_completion();
   Context *create_callback_context();
 
+  virtual bool safely_cancel(int r) {
+    return true;
+  }
   virtual bool should_complete(int r) = 0;
 
 private:
