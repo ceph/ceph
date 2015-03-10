@@ -16,23 +16,60 @@
 namespace librbd
 {
 
-bool AsyncResizeRequest::should_complete(int r)
+AsyncResizeRequest::AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
+                                       uint64_t new_size,
+                                       ProgressContext &prog_ctx)
+  : AsyncRequest(image_ctx, on_finish),
+    m_original_size(0), m_new_size(new_size),
+    m_prog_ctx(prog_ctx), m_new_parent_overlap(0),
+    m_xlist_item(this)
 {
+  RWLock::WLocker l(m_image_ctx.snap_lock);
+  m_image_ctx.async_resize_reqs.push_back(&m_xlist_item);
+  m_original_size = m_image_ctx.size;
+  compute_parent_overlap();
+}
+
+AsyncResizeRequest::~AsyncResizeRequest() {
+  AsyncResizeRequest *next_req = NULL;
+  {
+    RWLock::WLocker l(m_image_ctx.snap_lock);
+    assert(m_xlist_item.remove_myself());
+    if (!m_image_ctx.async_resize_reqs.empty()) {
+      next_req = m_image_ctx.async_resize_reqs.front();
+      next_req->m_original_size = m_image_ctx.size;
+      next_req->compute_parent_overlap();
+    }
+  }
+
+  if (next_req != NULL) {
+    next_req->send();
+  }
+}
+
+bool AsyncResizeRequest::safely_cancel(int r) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 5) << this << " safely_cancel: " << " r=" << r << dendl;
+
+  // avoid interrupting the object map / header updates
+  switch (m_state) {
+  case STATE_GROW_OBJECT_MAP:
+  case STATE_UPDATE_HEADER:
+  case STATE_SHRINK_OBJECT_MAP:
+    ldout(cct, 5) << "delaying cancel request" << dendl;
+    return false;
+  default:
+    break;
+  }
+  return true;
+}
+
+bool AsyncResizeRequest::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "resize encountered an error: " << cpp_strerror(r) << dendl;
-    RWLock::WLocker l(m_image_ctx.snap_lock);
-    if (m_image_ctx.size == m_new_size) {
-      m_image_ctx.size = m_original_size;
-    }
-
-    RWLock::WLocker l2(m_image_ctx.parent_lock);
-    if (m_image_ctx.parent != NULL &&
-	m_image_ctx.parent_md.overlap == m_new_parent_overlap) {
-      m_image_ctx.parent_md.overlap = m_original_parent_overlap;
-    }
     return true;
   }
 
@@ -60,12 +97,16 @@ bool AsyncResizeRequest::should_complete(int r)
   case STATE_UPDATE_HEADER:
     ldout(cct, 5) << "UPDATE_HEADER" << dendl;
     if (send_shrink_object_map()) {
+      update_size_and_overlap();
+      increment_refresh_seq();
       return true;
     }
     break;
 
   case STATE_SHRINK_OBJECT_MAP:
     ldout(cct, 5) << "SHRINK_OBJECT_MAP" << dendl;
+    update_size_and_overlap();
+    increment_refresh_seq();
     return true;
 
   case STATE_FINISHED:
@@ -81,8 +122,20 @@ bool AsyncResizeRequest::should_complete(int r)
 }
 
 void AsyncResizeRequest::send() {
+  {
+    RWLock::RLocker l(m_image_ctx.snap_lock);
+    assert(!m_image_ctx.async_resize_reqs.empty());
+
+    // only allow a single concurrent resize request
+    if (m_image_ctx.async_resize_reqs.front() != this) {
+      return;
+    }
+  }
+
   CephContext *cct = m_image_ctx.cct;
-  if (m_original_size == m_new_size) {
+  if (is_canceled()) {
+    complete(-ERESTART);
+  } else if (m_original_size == m_new_size) {
     ldout(cct, 2) << this << " no change in size (" << m_original_size
 		  << " -> " << m_new_size << ")" << dendl;
     m_state = STATE_FINISHED;
@@ -103,19 +156,6 @@ void AsyncResizeRequest::send_flush() {
                             << " original_size=" << m_original_size
                             << " new_size=" << m_new_size << dendl;
   m_state = STATE_FLUSH;
-
-  {
-    // update in-memory size to clip concurrent IO operations
-    RWLock::WLocker l(m_image_ctx.snap_lock);
-    m_image_ctx.size = m_new_size;
-
-    RWLock::WLocker l2(m_image_ctx.parent_lock);
-    if (m_image_ctx.parent != NULL) {
-      m_original_parent_overlap = m_image_ctx.parent_md.overlap;
-      m_new_parent_overlap = MIN(m_new_size, m_original_parent_overlap);
-      m_image_ctx.parent_md.overlap = m_new_parent_overlap;
-    }
-  }
 
   // with clipping adjusted, ensure that write / copy-on-read operations won't
   // (re-)create objects that we just removed
@@ -183,8 +223,7 @@ bool AsyncResizeRequest::send_shrink_object_map() {
   bool lost_exclusive_lock = false;
   {
     RWLock::RLocker l(m_image_ctx.owner_lock);
-    if (!m_image_ctx.object_map.enabled() ||
-	m_new_size > m_original_size) {
+    if (!m_image_ctx.object_map.enabled() || m_new_size > m_original_size) {
       return true;
     }
 
@@ -219,16 +258,12 @@ void AsyncResizeRequest::send_update_header() {
   m_state = STATE_UPDATE_HEADER;
 
   {
-    RWLock::RLocker l(m_image_ctx.owner_lock); 
+    RWLock::RLocker l(m_image_ctx.owner_lock);
     if (m_image_ctx.image_watcher->is_lock_supported() &&
 	!m_image_ctx.image_watcher->is_lock_owner()) {
       ldout(m_image_ctx.cct, 1) << "lost exclusive lock during header update" << dendl;
       lost_exclusive_lock = true;
     } else {
-      m_image_ctx.snap_lock.get_write();
-      m_image_ctx.size = m_new_size;
-      m_image_ctx.snap_lock.put_write();
-
       librados::ObjectWriteOperation op;
       if (m_image_ctx.old_format) {
 	// rewrite header
@@ -254,6 +289,31 @@ void AsyncResizeRequest::send_update_header() {
   // avoid possible recursive lock attempts
   if (lost_exclusive_lock) {
     complete(-ERESTART);
+  }
+}
+
+void AsyncResizeRequest::compute_parent_overlap() {
+  RWLock::RLocker l2(m_image_ctx.parent_lock);
+  if (m_image_ctx.parent == NULL) {
+    m_new_parent_overlap = 0;
+  } else {
+    m_new_parent_overlap = MIN(m_new_size, m_image_ctx.parent_md.overlap);
+  }
+}
+
+void AsyncResizeRequest::increment_refresh_seq() {
+  m_image_ctx.refresh_lock.Lock();
+  ++m_image_ctx.refresh_seq;
+  m_image_ctx.refresh_lock.Unlock();
+}
+
+void AsyncResizeRequest::update_size_and_overlap() {
+  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  m_image_ctx.size = m_new_size;
+
+  RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
+  if (m_image_ctx.parent != NULL && m_new_size < m_original_size) {
+    m_image_ctx.parent_md.overlap = m_new_parent_overlap;
   }
 }
 

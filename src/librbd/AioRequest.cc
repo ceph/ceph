@@ -209,8 +209,12 @@ namespace librbd {
           }
 
           // If parent still exists, overlap might also have changed.
+          uint64_t parent_overlap;
+          r = m_ictx->get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
+          assert(r == 0);
+
           uint64_t newlen = m_ictx->prune_parent_extents(
-            m_image_extents, m_ictx->parent_md.overlap);
+            m_image_extents, parent_overlap);
           if (newlen != 0) {
             // create and kick off a CopyupRequest
             CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
@@ -340,13 +344,17 @@ namespace librbd {
 	}
 
 	// If parent still exists, overlap might also have changed.
+	uint64_t parent_overlap;
+        r = m_ictx->get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
+        assert(r == 0);
+
 	uint64_t newlen = m_ictx->prune_parent_extents(
-	  m_object_image_extents, m_ictx->parent_md.overlap);
+	  m_object_image_extents, parent_overlap);
 
 	// copyup the entire object up to the overlap point, if any
 	if (newlen != 0) {
 	  ldout(m_ictx->cct, 20) << "should_complete(" << this << ") overlap "
-				 << m_ictx->parent_md.overlap << " newlen "
+				 << parent_overlap << " newlen "
 				 << newlen << " image_extents"
 				 << m_object_image_extents << dendl;
 
