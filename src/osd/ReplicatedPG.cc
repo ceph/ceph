@@ -2242,7 +2242,8 @@ void ReplicatedPG::promote_object(ObjectContextRef obc,
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 	     CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
 	     CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
-	     obc->obs.oi.soid.snap == CEPH_NOSNAP);
+	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
+	     0, 0);
 
   assert(obc->is_blocked());
 
@@ -5243,7 +5244,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->copy_cb = cb;
 	  start_copy(cb, ctx->obc, src, src_oloc, src_version,
 		     op.copy_from.flags,
-		     false);
+		     false,
+		     op.copy_from.src_fadvise_flags,
+		     op.flags);
 	  result = -EINPROGRESS;
 	} else {
 	  // finish
@@ -6227,7 +6230,7 @@ int ReplicatedPG::fill_in_copy_get(
 	async_read_started = true;
 	ctx->pending_async_reads.push_back(
 	  make_pair(
-	    boost::make_tuple(cursor.data_offset, left, 0),
+	    boost::make_tuple(cursor.data_offset, left, osd_op.op.flags),
 	    make_pair(&bl, cb)));
 	result = MIN(oi.size - cursor.data_offset, (uint64_t)left);
 	cb->len = result;
@@ -6317,7 +6320,9 @@ int ReplicatedPG::fill_in_copy_get(
 void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 			      hobject_t src, object_locator_t oloc,
 			      version_t version, unsigned flags,
-			      bool mirror_snapset)
+			      bool mirror_snapset,
+			      unsigned src_obj_fadvise_flags,
+			      unsigned dest_obj_fadvise_flags)
 {
   const hobject_t& dest = obc->obs.oi.soid;
   dout(10) << __func__ << " " << dest
@@ -6338,7 +6343,8 @@ void ReplicatedPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   }
 
   CopyOpRef cop(new CopyOp(cb, obc, src, oloc, version, flags,
-			   mirror_snapset));
+			   mirror_snapset, src_obj_fadvise_flags,
+			   dest_obj_fadvise_flags));
   copy_ops[dest] = cop;
   obc->start_block();
 
@@ -6389,6 +6395,7 @@ void ReplicatedPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 	      &cop->results.source_omap_digest,
 	      &cop->results.reqids,
 	      &cop->rval);
+  op.set_last_op_flags(cop->src_obj_fadvise_flags);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
 				   get_last_peering_reset(), cop);
@@ -6597,7 +6604,7 @@ void ReplicatedPG::_write_copy_chunk(CopyOpRef cop, PGBackend::PGTransaction *t)
       cop->temp_cursor.data_offset,
       cop->data.length(),
       cop->data,
-      0);
+      cop->dest_obj_fadvise_flags);
     cop->data.clear();
   }
   if (!pool.info.require_rollback()) {
