@@ -17,6 +17,7 @@
  */
 
 #include <sstream>
+#include <boost/assign.hpp>
 
 #include "OSDMonitor.h"
 #include "Monitor.h"
@@ -2615,6 +2616,30 @@ void OSDMonitor::dump_info(Formatter *f)
   f->close_section();
 }
 
+namespace {
+  enum osd_pool_get_choices { 
+    SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL, 
+    PG_NUM, PGP_NUM, CRUSH_RULESET, HIT_SET_TYPE,
+    HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
+    AUID, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
+    CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_FULL_RATIO,
+    CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
+    ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
+    WRITE_FADVISE_DONTNEED};
+
+  std::set<osd_pool_get_choices> 
+    subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
+				const std::set<osd_pool_get_choices>& second)
+    {
+      std::set<osd_pool_get_choices> result;
+      std::set_difference(first.begin(), first.end(),
+			  second.begin(), second.end(),
+			  std::inserter(result, result.end()));
+      return result;
+    }
+}
+
+
 bool OSDMonitor::preprocess_command(MMonCommand *m)
 {
   int r = 0;
@@ -3034,145 +3059,257 @@ bool OSDMonitor::preprocess_command(MMonCommand *m)
     string var;
     cmd_getval(g_ceph_context, cmdmap, "var", var);
 
-    if (!p->is_tier() &&
-        (var == "hit_set_type" || var == "hit_set_period" ||
-         var == "hit_set_count" || var == "hit_set_fpp" ||
-         var == "target_max_objects" || var == "target_max_bytes" ||
-         var == "cache_target_full_ratio" ||
-         var == "cache_target_dirty_ratio" ||
-         var == "cache_min_flush_age" || var == "cache_min_evict_age")) {
-      ss << "pool '" << poolstr
-         << "' is not a tier pool: variable not applicable";
-      r = -EACCES;
-      goto reply;
-    }
+    typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
+    const choices_map_t ALL_CHOICES = boost::assign::map_list_of
+      ("size", SIZE)
+      ("min_size", MIN_SIZE)
+      ("crash_replay_interval", CRASH_REPLAY_INTERVAL)
+      ("pg_num", PG_NUM)("pgp_num", PGP_NUM)("crush_ruleset", CRUSH_RULESET)
+      ("hit_set_type", HIT_SET_TYPE)("hit_set_period", HIT_SET_PERIOD)
+      ("hit_set_count", HIT_SET_COUNT)("hit_set_fpp", HIT_SET_FPP)
+      ("auid", AUID)("target_max_objects", TARGET_MAX_OBJECTS)
+      ("target_max_bytes", TARGET_MAX_BYTES)
+      ("cache_target_dirty_ratio", CACHE_TARGET_DIRTY_RATIO)
+      ("cache_target_full_ratio", CACHE_TARGET_FULL_RATIO)
+      ("cache_min_flush_age", CACHE_MIN_FLUSH_AGE)
+      ("cache_min_evict_age", CACHE_MIN_EVICT_AGE)
+      ("erasure_code_profile", ERASURE_CODE_PROFILE)
+      ("min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE)
+      ("write_fadvise_dontneed", WRITE_FADVISE_DONTNEED);
 
-    if (!p->is_erasure() && var == "erasure_code_profile") {
-      ss << "pool '" << poolstr
-         << "' is not a erasure pool: variable not applicable";
-      r = -EACCES;
-      goto reply;
-    }
+    typedef std::set<osd_pool_get_choices> choices_set_t;
+
+    const choices_set_t ONLY_TIER_CHOICES = boost::assign::list_of
+      (HIT_SET_TYPE)(HIT_SET_PERIOD)(HIT_SET_COUNT)(HIT_SET_FPP)
+      (TARGET_MAX_OBJECTS)(TARGET_MAX_BYTES)(CACHE_TARGET_FULL_RATIO)
+      (CACHE_TARGET_DIRTY_RATIO)(CACHE_MIN_FLUSH_AGE)(CACHE_MIN_EVICT_AGE);
+
+    const choices_set_t ONLY_ERASURE_CHOICES = boost::assign::list_of
+      (ERASURE_CODE_PROFILE);
+
+    choices_set_t selected_choices;
+    if (var == "all") {
+      for(choices_map_t::const_iterator it = ALL_CHOICES.begin();
+	  it != ALL_CHOICES.end(); ++it) {
+	selected_choices.insert(it->second);
+      }
+
+      if(!p->is_tier()) {
+	selected_choices = subtract_second_from_first(selected_choices,
+						      ONLY_TIER_CHOICES);
+      }
+
+      if(!p->is_erasure()) {
+	selected_choices = subtract_second_from_first(selected_choices,
+						      ONLY_ERASURE_CHOICES);
+      }
+    } else /* var != "all" */  { 
+      choices_map_t::const_iterator found = ALL_CHOICES.find(var);
+      osd_pool_get_choices selected = found->second;
+
+      if (!p->is_tier() && 
+	  ONLY_TIER_CHOICES.find(selected) != ONLY_TIER_CHOICES.end()) {
+	ss << "pool '" << poolstr
+	   << "' is not a tier pool: variable not applicable";
+	r = -EACCES;
+	goto reply;
+      }
+
+      if (!p->is_erasure() && 
+	  ONLY_ERASURE_CHOICES.find(selected)
+	  != ONLY_ERASURE_CHOICES.end()) {
+	ss << "pool '" << poolstr
+	   << "' is not a erasure pool: variable not applicable";
+	r = -EACCES;
+	goto reply;
+      }
+
+      selected_choices.insert(selected);
+    } 
 
     if (f) {
-      f->open_object_section("pool");
-      f->dump_string("pool", poolstr);
-      f->dump_int("pool_id", pool);
-
-      if (var == "pg_num") {
-        f->dump_int("pg_num", p->get_pg_num());
-      } else if (var == "pgp_num") {
-        f->dump_int("pgp_num", p->get_pgp_num());
-      } else if (var == "auid") {
-        f->dump_int("auid", p->get_auid());
-      } else if (var == "size") {
-        f->dump_int("size", p->get_size());
-      } else if (var == "min_size") {
-        f->dump_int("min_size", p->get_min_size());
-      } else if (var == "crash_replay_interval") {
-        f->dump_int("crash_replay_interval", p->get_crash_replay_interval());
-      } else if (var == "crush_ruleset") {
-        f->dump_int("crush_ruleset", p->get_crush_ruleset());
-      } else if (var == "hit_set_period") {
-	f->dump_int("hit_set_period", p->hit_set_period);
-      } else if (var == "hit_set_count") {
-	f->dump_int("hit_set_count", p->hit_set_count);
-      } else if (var == "hit_set_type") {
-	f->dump_string("hit_set_type", HitSet::get_type_name(p->hit_set_params.get_type()));
-      } else if (var == "hit_set_fpp") {
-	if (p->hit_set_params.get_type() != HitSet::TYPE_BLOOM) {
-	  f->close_section();
-	  ss << "hit set is no of type Bloom; invalid to get a false positive rate!";
-	  r = -EINVAL;
-	  goto reply;
-	} else {
-	  BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
-	  f->dump_float("hit_set_fpp", bloomp->get_fpp());
+      for(choices_set_t::const_iterator it = selected_choices.begin();
+	  it != selected_choices.end(); ++it) {
+	f->open_object_section("pool");
+	f->dump_string("pool", poolstr);
+	f->dump_int("pool_id", pool);
+	switch(*it) {
+	  case PG_NUM:
+	    f->dump_int("pg_num", p->get_pg_num());
+	    break;
+	  case PGP_NUM:
+	    f->dump_int("pgp_num", p->get_pgp_num());
+	    break;
+	  case AUID:
+	    f->dump_int("auid", p->get_auid());
+	    break;
+	  case SIZE:
+	    f->dump_int("size", p->get_size());
+	    break;
+	  case MIN_SIZE:
+	    f->dump_int("min_size", p->get_min_size());
+	    break;
+	  case CRASH_REPLAY_INTERVAL:
+	    f->dump_int("crash_replay_interval",
+			p->get_crash_replay_interval());
+	    break;
+	  case CRUSH_RULESET:
+	    f->dump_int("crush_ruleset", p->get_crush_ruleset());
+	    break;
+	  case HIT_SET_PERIOD:
+	    f->dump_int("hit_set_period", p->hit_set_period);
+	    break;
+	  case HIT_SET_COUNT:
+	    f->dump_int("hit_set_count", p->hit_set_count);
+	    break;
+	  case HIT_SET_TYPE:
+	    f->dump_string("hit_set_type",
+			   HitSet::get_type_name(p->hit_set_params.get_type()));
+	    break;
+	  case HIT_SET_FPP:
+	    {
+	      if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
+		BloomHitSet::Params *bloomp =
+		  static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
+		f->dump_float("hit_set_fpp", bloomp->get_fpp());
+	      } else if(var != "all") {
+		f->close_section();
+		ss << "hit set is not of type Bloom; " <<
+		  "invalid to get a false positive rate!";
+		r = -EINVAL;
+		goto reply;
+	      }
+	    }
+	    break;
+	  case TARGET_MAX_OBJECTS:
+	    f->dump_unsigned("target_max_objects", p->target_max_objects);
+	    break;
+	  case TARGET_MAX_BYTES:
+	    f->dump_unsigned("target_max_bytes", p->target_max_bytes);
+	    break;
+	  case CACHE_TARGET_DIRTY_RATIO:
+	    f->dump_unsigned("cache_target_dirty_ratio_micro",
+			     p->cache_target_dirty_ratio_micro);
+	    f->dump_float("cache_target_dirty_ratio",
+			  ((float)p->cache_target_dirty_ratio_micro/1000000));
+	    break;
+	  case CACHE_TARGET_FULL_RATIO:
+	    f->dump_unsigned("cache_target_full_ratio_micro",
+			     p->cache_target_full_ratio_micro);
+	    f->dump_float("cache_target_full_ratio",
+			  ((float)p->cache_target_full_ratio_micro/1000000));
+	    break;
+	  case CACHE_MIN_FLUSH_AGE:
+	    f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
+	    break;
+	  case CACHE_MIN_EVICT_AGE:
+	    f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
+	    break;
+	  case ERASURE_CODE_PROFILE:
+	    f->dump_string("erasure_code_profile", p->erasure_code_profile);
+	    break;
+	  case MIN_READ_RECENCY_FOR_PROMOTE:
+	    f->dump_int("min_read_recency_for_promote",
+			p->min_read_recency_for_promote);
+	    break;
+	  case WRITE_FADVISE_DONTNEED:
+	    f->dump_string("write_fadvise_dontneed",
+			   p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
+			   "true" : "false");
+	    break;
 	}
-      } else if (var == "target_max_objects") {
-        f->dump_unsigned("target_max_objects", p->target_max_objects);
-      } else if (var == "target_max_bytes") {
-        f->dump_unsigned("target_max_bytes", p->target_max_bytes);
-      } else if (var == "cache_target_dirty_ratio") {
-        f->dump_unsigned("cache_target_dirty_ratio_micro",
-                         p->cache_target_dirty_ratio_micro);
-        f->dump_float("cache_target_dirty_ratio",
-                      ((float)p->cache_target_dirty_ratio_micro/1000000));
-      } else if (var == "cache_target_full_ratio") {
-        f->dump_unsigned("cache_target_full_ratio_micro",
-                         p->cache_target_full_ratio_micro);
-        f->dump_float("cache_target_full_ratio",
-                      ((float)p->cache_target_full_ratio_micro/1000000));
-      } else if (var == "cache_min_flush_age") {
-        f->dump_unsigned("cache_min_flush_age", p->cache_min_flush_age);
-      } else if (var == "cache_min_evict_age") {
-        f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
-      } else if (var == "erasure_code_profile") {
-       f->dump_string("erasure_code_profile", p->erasure_code_profile);
-      } else if (var == "min_read_recency_for_promote") {
-	f->dump_int("min_read_recency_for_promote", p->min_read_recency_for_promote);
-      } else if (var == "write_fadvise_dontneed") {
-	f->dump_string("write_fadvise_dontneed", p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
+	f->close_section();
+	f->flush(rdata);
       }
 
-      f->close_section();
-      f->flush(rdata);
-    } else {
-      if (var == "pg_num") {
-        ss << "pg_num: " << p->get_pg_num();
-      } else if (var == "pgp_num") {
-        ss << "pgp_num: " << p->get_pgp_num();
-      } else if (var == "auid") {
-        ss << "auid: " << p->get_auid();
-      } else if (var == "size") {
-        ss << "size: " << p->get_size();
-      } else if (var == "min_size") {
-        ss << "min_size: " << p->get_min_size();
-      } else if (var == "crash_replay_interval") {
-        ss << "crash_replay_interval: " << p->get_crash_replay_interval();
-      } else if (var == "crush_ruleset") {
-        ss << "crush_ruleset: " << p->get_crush_ruleset();
-      } else if (var == "hit_set_period") {
-	ss << "hit_set_period: " << p->hit_set_period;
-      } else if (var == "hit_set_count") {
-	ss << "hit_set_count: " << p->hit_set_count;
-      } else if (var == "hit_set_type") {
-	ss << "hit_set_type: " <<  HitSet::get_type_name(p->hit_set_params.get_type());
-      } else if (var == "hit_set_fpp") {
-	if (p->hit_set_params.get_type() != HitSet::TYPE_BLOOM) {
-	  ss << "hit set is no of type Bloom; invalid to get a false positive rate!";
-	  r = -EINVAL;
-	  goto reply;
+    } else /* !f */ {
+      for(choices_set_t::const_iterator it = selected_choices.begin();
+	  it != selected_choices.end(); ++it) {
+	switch(*it) {
+	  case PG_NUM:
+	    ss << "pg_num: " << p->get_pg_num() << "\n";
+	    break;
+	  case PGP_NUM:
+	    ss << "pgp_num: " << p->get_pgp_num() << "\n";
+	    break;
+	  case AUID:
+	    ss << "auid: " << p->get_auid() << "\n";
+	    break;
+	  case SIZE:
+	    ss << "size: " << p->get_size() << "\n";
+	    break;
+	  case MIN_SIZE:
+	    ss << "min_size: " << p->get_min_size() << "\n";
+	    break;
+	  case CRASH_REPLAY_INTERVAL:
+	    ss << "crash_replay_interval: " <<
+	      p->get_crash_replay_interval() << "\n";
+	    break;
+	  case CRUSH_RULESET:
+	    ss << "crush_ruleset: " << p->get_crush_ruleset() << "\n";
+	    break;
+	  case HIT_SET_PERIOD:
+	    ss << "hit_set_period: " << p->hit_set_period << "\n";
+	    break;
+	  case HIT_SET_COUNT:
+	    ss << "hit_set_count: " << p->hit_set_count << "\n";
+	    break;
+	  case HIT_SET_TYPE:
+	    ss << "hit_set_type: " <<
+	      HitSet::get_type_name(p->hit_set_params.get_type()) << "\n";
+	    break;
+	  case HIT_SET_FPP:
+	    {
+	      if (p->hit_set_params.get_type() == HitSet::TYPE_BLOOM) {
+		BloomHitSet::Params *bloomp =
+		  static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
+		ss << "hit_set_fpp: " << bloomp->get_fpp() << "\n";
+	      } else if(var != "all") {
+		ss << "hit set is not of type Bloom; " <<
+		  "invalid to get a false positive rate!";
+		r = -EINVAL;
+		goto reply;
+	      }
+	    }
+	    break;
+	  case TARGET_MAX_OBJECTS:
+	    ss << "target_max_objects: " << p->target_max_objects << "\n";
+	    break;
+	  case TARGET_MAX_BYTES:
+	    ss << "target_max_bytes: " << p->target_max_bytes << "\n";
+	    break;
+	  case CACHE_TARGET_DIRTY_RATIO:
+	    ss << "cache_target_dirty_ratio: "
+	       << ((float)p->cache_target_dirty_ratio_micro/1000000) << "\n";
+	    break;
+	  case CACHE_TARGET_FULL_RATIO:
+	    ss << "cache_target_full_ratio: "
+	       << ((float)p->cache_target_full_ratio_micro/1000000) << "\n";
+	    break;
+	  case CACHE_MIN_FLUSH_AGE:
+	    ss << "cache_min_flush_age: " << p->cache_min_flush_age << "\n";
+	    break;
+	  case CACHE_MIN_EVICT_AGE:
+	    ss << "cache_min_evict_age: " << p->cache_min_evict_age << "\n";
+	    break;
+	  case ERASURE_CODE_PROFILE:
+	    ss << "erasure_code_profile: " << p->erasure_code_profile << "\n";
+	    break;
+	  case MIN_READ_RECENCY_FOR_PROMOTE:
+	    ss << "min_read_recency_for_promote: " <<
+	      p->min_read_recency_for_promote << "\n";
+	    break;
+	  case WRITE_FADVISE_DONTNEED:
+	    ss << "write_fadvise_dontneed: " <<
+	      (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ?
+	       "true" : "false") << "\n";
+	    break;
 	}
-	BloomHitSet::Params *bloomp = static_cast<BloomHitSet::Params*>(p->hit_set_params.impl.get());
-	ss << "hit_set_fpp: " << bloomp->get_fpp();
-      } else if (var == "target_max_objects") {
-        ss << "target_max_objects: " << p->target_max_objects;
-      } else if (var == "target_max_bytes") {
-        ss << "target_max_bytes: " << p->target_max_bytes;
-      } else if (var == "cache_target_dirty_ratio") {
-        ss << "cache_target_dirty_ratio: "
-          << ((float)p->cache_target_dirty_ratio_micro/1000000);
-      } else if (var == "cache_target_full_ratio") {
-        ss << "cache_target_full_ratio: "
-          << ((float)p->cache_target_full_ratio_micro/1000000);
-      } else if (var == "cache_min_flush_age") {
-        ss << "cache_min_flush_age: " << p->cache_min_flush_age;
-      } else if (var == "cache_min_evict_age") {
-        ss << "cache_min_evict_age: " << p->cache_min_evict_age;
-      } else if (var == "erasure_code_profile") {
-       ss << "erasure_code_profile: " << p->erasure_code_profile;
-      } else if (var == "min_read_recency_for_promote") {
-	ss << "min_read_recency_for_promote: " << p->min_read_recency_for_promote;
-      } else if (var == "write_fadvise_dontneed") {
-	ss << "write_fadvise_dontneed: " <<  (p->has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED) ? "true" : "false");
+	rdata.append(ss.str());
+	ss.str("");
       }
-
-      rdata.append(ss);
-      ss.str("");
     }
     r = 0;
-
   } else if (prefix == "osd pool stats") {
     string pool_name;
     cmd_getval(g_ceph_context, cmdmap, "name", pool_name);
