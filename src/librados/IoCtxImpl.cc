@@ -1294,6 +1294,22 @@ void librados::IoCtxImpl::set_notify_timeout(uint32_t timeout)
   notify_timeout = timeout;
 }
 
+int librados::IoCtxImpl::cache_pin(const object_t& oid)
+{
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.cache_pin();
+  return operate(oid, &wr, NULL);
+}
+
+int librados::IoCtxImpl::cache_unpin(const object_t& oid)
+{
+  ::ObjectOperation wr;
+  prepare_assert_ops(&wr);
+  wr.cache_unpin();
+  return operate(oid, &wr, NULL);
+}
+
 
 ///////////////////////////// C_aio_Ack ////////////////////////////////
 
