@@ -284,19 +284,21 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
 /**
  * Input:
- * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t)
+ * @param snap_id which snapshot to query, or CEPH_NOSNAP (uint64_t) (deprecated)
+ * @param read_only true if the image will be used read-only (bool)
  *
  * Output:
  * @param features list of enabled features for the given snapshot (uint64_t)
+ * @param incompatible incompatible feature bits
  * @returns 0 on success, negative error code on failure
  */
 int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  uint64_t features, snap_id;
   bool read_only = false;
 
   bufferlist::iterator iter = in->begin();
   try {
+    uint64_t snap_id;
     ::decode(snap_id, iter);
     if (!iter.end()) {
       ::decode(read_only, iter);
@@ -305,30 +307,19 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "get_features snap_id=%llu", (unsigned long long)snap_id);
+  CLS_LOG(20, "get_features read_only=%d", read_only);
 
-  if (snap_id == CEPH_NOSNAP) {
-    int r = read_key(hctx, "features", &features);
-    if (r < 0) {
-      CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
-      return r;
-    }
-  } else {
-    cls_rbd_snap snap;
-    string snapshot_key;
-    key_from_snap_id(snap_id, &snapshot_key);
-    int r = read_key(hctx, snapshot_key, &snap);
-    if (r < 0)
-      return r;
-
-    features = snap.features;
+  uint64_t features;
+  int r = read_key(hctx, "features", &features);
+  if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
   }
 
   uint64_t incompatible = (read_only ? features & RBD_FEATURES_INCOMPATIBLE :
 				       features & RBD_FEATURES_RW_INCOMPATIBLE);
   ::encode(features, *out);
   ::encode(incompatible, *out);
-
   return 0;
 }
 
