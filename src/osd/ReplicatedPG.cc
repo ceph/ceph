@@ -11376,6 +11376,11 @@ bool ReplicatedPG::agent_maybe_flush(ObjectContextRef& obc)
     osd->logger->inc(l_osd_agent_skip);
     return false;
   }
+  if (obc->obs.oi.is_cache_pinned()) {
+    dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
+    osd->logger->inc(l_osd_agent_skip);
+    return false;
+  }
 
   utime_t now = ceph_clock_now(NULL);
   utime_t ob_local_mtime;
@@ -11434,6 +11439,10 @@ bool ReplicatedPG::agent_maybe_evict(ObjectContextRef& obc)
   }
   if (obc->is_blocked()) {
     dout(20) << __func__ << " skip (blocked) " << obc->obs.oi << dendl;
+    return false;
+  }
+  if (obc->obs.oi.is_cache_pinned()) {
+    dout(20) << __func__ << " skip (cache_pinned) " << obc->obs.oi << dendl;
     return false;
   }
 
