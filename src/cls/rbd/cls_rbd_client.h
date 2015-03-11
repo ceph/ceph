@@ -74,7 +74,6 @@ namespace librbd {
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
 		      std::vector<uint64_t> *sizes,
-		      std::vector<uint64_t> *features,
 		      std::vector<parent_info> *parents,
 		      std::vector<uint8_t> *protection_statuses);
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
