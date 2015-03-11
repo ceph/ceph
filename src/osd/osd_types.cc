@@ -1591,11 +1591,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_flush_mode_low", num_flush_mode_low);
   f->dump_int("num_evict_mode_some", num_evict_mode_some);
   f->dump_int("num_evict_mode_full", num_evict_mode_full);
+  f->dump_int("num_objects_pinned", num_objects_pinned);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(13, 3, bl);
+  ENCODE_START(14, 3, bl);
   ::encode(num_bytes, bl);
   ::encode(num_objects, bl);
   ::encode(num_object_clones, bl);
@@ -1628,12 +1629,13 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   ::encode(num_flush_mode_low, bl);
   ::encode(num_evict_mode_some, bl);
   ::encode(num_evict_mode_full, bl);
+  ::encode(num_objects_pinned, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(13, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(14, 3, 3, bl);
   ::decode(num_bytes, bl);
   if (struct_v < 3) {
     uint64_t num_kb;
@@ -1721,6 +1723,11 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     num_evict_mode_some = 0;
     num_evict_mode_full = 0;
   }
+  if (struct_v >= 14) {
+    ::decode(num_objects_pinned, bl);
+  } else {
+    num_objects_pinned = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -1757,6 +1764,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_flush_mode_low = 1;
   a.num_evict_mode_some = 1;
   a.num_evict_mode_full = 0;
+  a.num_objects_pinned = 20;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -1794,6 +1802,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_flush_mode_low += o.num_flush_mode_low;
   num_evict_mode_some += o.num_evict_mode_some;
   num_evict_mode_full += o.num_evict_mode_full;
+  num_objects_pinned += o.num_objects_pinned;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -1830,6 +1839,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_flush_mode_low -= o.num_flush_mode_low;
   num_evict_mode_some -= o.num_evict_mode_some;
   num_evict_mode_full -= o.num_evict_mode_full;
+  num_objects_pinned -= o.num_objects_pinned;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -1866,7 +1876,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_flush_mode_high == r.num_flush_mode_high &&
     l.num_flush_mode_low == r.num_flush_mode_low &&
     l.num_evict_mode_some == r.num_evict_mode_some &&
-    l.num_evict_mode_full == r.num_evict_mode_full;
+    l.num_evict_mode_full == r.num_evict_mode_full &&
+    l.num_objects_pinned == r.num_objects_pinned;
 }
 
 // -- object_stat_collection_t --
@@ -1993,7 +2004,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(21, 8, bl);
+  ENCODE_START(22, 8, bl);
   ::encode(version, bl);
   ::encode(reported_seq, bl);
   ::encode(reported_epoch, bl);
@@ -2033,12 +2044,13 @@ void pg_stat_t::encode(bufferlist &bl) const
   ::encode(hitset_bytes_stats_invalid, bl);
   ::encode(last_peered, bl);
   ::encode(last_became_peered, bl);
+  ::encode(pin_stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(20, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(22, 8, 8, bl);
   ::decode(version, bl);
   ::decode(reported_seq, bl);
   ::decode(reported_epoch, bl);
@@ -2172,6 +2184,13 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
     last_peered = last_active;
     last_became_peered = last_became_active;
   }
+  if (struct_v >= 22) {
+    ::decode(pin_stats_invalid, bl);
+  } else {
+    // if we are decoding an old encoding of this object, then the
+    // encoder may not have supported num_objects_pinned accounting.
+    pin_stats_invalid = true;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -2262,7 +2281,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.hitset_stats_invalid == r.hitset_stats_invalid &&
     l.hitset_bytes_stats_invalid == r.hitset_bytes_stats_invalid &&
     l.up_primary == r.up_primary &&
-    l.acting_primary == r.acting_primary;
+    l.acting_primary == r.acting_primary &&
+    l.pin_stats_invalid == r.pin_stats_invalid;
 }
 
 // -- pool_stat_t --
