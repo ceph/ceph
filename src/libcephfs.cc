@@ -718,6 +718,14 @@ extern "C" int ceph_utime(struct ceph_mount_info *cmount, const char *path,
   return cmount->get_client()->utime(path, buf);
 }
 
+extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
+			  uint64_t owner)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->flock(fd, operation, owner);
+}
+
 extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 			     int64_t size)
 {

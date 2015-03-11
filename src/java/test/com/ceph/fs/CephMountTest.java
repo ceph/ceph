@@ -791,6 +791,35 @@ public class CephMountTest {
   }
 
   /*
+   * flock
+   */
+
+  @Test
+  public void test_flock() throws Exception {
+    String path = makePath();
+    int fd = createFile(path, 123);
+    mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 42);
+    mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 43);
+    mount.flock(fd, CephMount.LOCK_UN, 42);
+    mount.flock(fd, CephMount.LOCK_UN, 43);
+    mount.flock(fd, CephMount.LOCK_EX | CephMount.LOCK_NB, 42);
+    try {
+      mount.flock(fd, CephMount.LOCK_SH | CephMount.LOCK_NB, 43);
+      assertTrue(false);
+    } catch(IOException io) {}
+    try {
+      mount.flock(fd, CephMount.LOCK_EX | CephMount.LOCK_NB, 43);
+      assertTrue(false);
+    } catch(IOException io) {}
+    mount.flock(fd, CephMount.LOCK_SH, 42);  // downgrade
+    mount.flock(fd, CephMount.LOCK_SH, 43);
+    mount.flock(fd, CephMount.LOCK_UN, 42);
+    mount.flock(fd, CephMount.LOCK_UN, 43);
+    mount.close(fd);
+    mount.unlink(path);
+  }
+
+  /*
    * fstat
    *
    * success case is handled in test_stat along with lstat.
