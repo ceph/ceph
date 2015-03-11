@@ -442,6 +442,14 @@ namespace librados
     void set_alloc_hint(uint64_t expected_object_size,
                         uint64_t expected_write_size);
 
+    /**
+     * Pin/unpin an object in cache tier
+     *
+     * @returns 0 on success, negative error code on failure
+     */
+    void cache_pin();
+    void cache_unpin();
+
     friend class IoCtx;
   };
 
@@ -1033,6 +1041,15 @@ namespace librados
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
     void set_assert_src_version(const std::string& o, uint64_t ver);
+
+    /**
+     * Pin/unpin an object in cache tier
+     *
+     * @param o the name of the object
+     * @returns 0 on success, negative error code on failure
+     */
+    int cache_pin(const std::string& o);
+    int cache_unpin(const std::string& o);
 
     const std::string& get_pool_name() const;
 
