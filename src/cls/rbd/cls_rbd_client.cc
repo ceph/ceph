@@ -154,6 +154,18 @@ namespace librbd {
       return 0;
     }
 
+    int set_features(librados::IoCtx *ioctx, const std::string &oid,
+                      uint64_t features, uint64_t mask)
+    {
+      bufferlist inbl;
+      ::encode(features, inbl);
+      ::encode(mask, inbl);
+
+      librados::ObjectWriteOperation op;
+      op.exec("rbd", "set_features", inbl);
+      return ioctx->operate(oid, &op);
+    }
+
     int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 			  std::string *object_prefix)
     {
