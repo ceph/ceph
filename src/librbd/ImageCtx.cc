@@ -568,23 +568,8 @@ namespace librbd {
     wr->extents.push_back(extent);
     {
       Mutex::Locker l(cache_lock);
-      object_cacher->writex(wr, object_set, cache_lock, onfinish);
+      object_cacher->writex(wr, object_set, onfinish);
     }
-  }
-
-  int ImageCtx::read_from_cache(object_t o, uint64_t object_no, bufferlist *bl,
-				size_t len, uint64_t off) {
-    int r;
-    Mutex mylock("librbd::ImageCtx::read_from_cache");
-    Cond cond;
-    bool done;
-    Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-    aio_read_from_cache(o, object_no, bl, len, off, onfinish, 0);
-    mylock.Lock();
-    while (!done)
-      cond.Wait(mylock);
-    mylock.Unlock();
-    return r;
   }
 
   void ImageCtx::user_flushed() {
@@ -631,14 +616,26 @@ namespace librbd {
 
   void ImageCtx::shutdown_cache() {
     flush_async_operations();
-    invalidate_cache();
+    invalidate_cache(true);
     object_cacher->stop();
   }
 
-  int ImageCtx::invalidate_cache() {
+  int ImageCtx::invalidate_cache(bool purge_on_error) {
+    int result;
     C_SaferCond ctx;
     invalidate_cache(&ctx);
-    return ctx.wait();
+    result = ctx.wait();
+
+    if (result && purge_on_error) {
+      cache_lock.Lock();
+      if (object_cacher != NULL) {
+	lderr(cct) << "invalidate cache met error " << cpp_strerror(result) << " !Purging cache..." << dendl;
+	object_cacher->purge_set(object_set);
+      }
+      cache_lock.Unlock();
+    }
+
+    return result;
   }
 
   void ImageCtx::invalidate_cache(Context *on_finish) {
