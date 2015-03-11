@@ -64,6 +64,7 @@ CLS_NAME(rbd)
 cls_handle_t h_class;
 cls_method_handle_t h_create;
 cls_method_handle_t h_get_features;
+cls_method_handle_t h_set_features;
 cls_method_handle_t h_get_size;
 cls_method_handle_t h_set_size;
 cls_method_handle_t h_get_parent;
@@ -320,6 +321,60 @@ int get_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 				       features & RBD_FEATURES_RW_INCOMPATIBLE);
   ::encode(features, *out);
   ::encode(incompatible, *out);
+  return 0;
+}
+
+/**
+ * set the image features
+ *
+ * Input:
+ * @params features image features
+ * @params mask image feature mask
+ *
+ * Output:
+ * none
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t features;
+  uint64_t mask;
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(features, iter);
+    ::decode(mask, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if ((mask & RBD_FEATURES_MUTABLE) != mask) {
+    CLS_ERR("Attempting to set immutable feature: %" PRIu64,
+            mask & ~RBD_FEATURES_MUTABLE);
+    return -EINVAL;
+  }
+
+  // check that features exists to make sure this is a header object
+  // that was created correctly
+  uint64_t orig_features = 0;
+  int r = read_key(hctx, "features", &orig_features);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read image's features off disk: %s",
+            cpp_strerror(r).c_str());
+    return r;
+  }
+
+  features = (orig_features & ~mask) | (features & mask);
+  CLS_LOG(10, "set_features features=%" PRIu64 " orig_features=%" PRIu64,
+          features, orig_features);
+
+  bufferlist bl;
+  ::encode(features, bl);
+  r = cls_cxx_map_set_val(hctx, "features", &bl);
+  if (r < 0) {
+    CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+    return r;
+  }
   return 0;
 }
 
@@ -2501,6 +2556,9 @@ void __cls_init()
   cls_register_cxx_method(h_class, "get_features",
 			  CLS_METHOD_RD,
 			  get_features, &h_get_features);
+  cls_register_cxx_method(h_class, "set_features",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  set_features, &h_set_features);
   cls_register_cxx_method(h_class, "get_size",
 			  CLS_METHOD_RD,
 			  get_size, &h_get_size);
