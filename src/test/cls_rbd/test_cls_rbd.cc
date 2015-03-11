@@ -19,6 +19,7 @@
 using namespace std;
 using ::librbd::cls_client::create_image;
 using ::librbd::cls_client::get_features;
+using ::librbd::cls_client::set_features;
 using ::librbd::cls_client::get_size;
 using ::librbd::cls_client::get_object_prefix;
 using ::librbd::cls_client::set_size;
@@ -1109,4 +1110,35 @@ TEST_F(TestClsRbd, metadata)
   }
 
   ioctx.close();
+}
+
+TEST_F(TestClsRbd, set_features)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
+
+  uint64_t features = RBD_FEATURES_MUTABLE;
+  uint64_t mask = RBD_FEATURES_MUTABLE;
+  ASSERT_EQ(0, set_features(&ioctx, oid, features, mask));
+
+  uint64_t actual_features;
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &actual_features));
+
+  uint64_t expected_features = RBD_FEATURES_MUTABLE;
+  ASSERT_EQ(expected_features, actual_features);
+
+  features = 0;
+  mask = RBD_FEATURE_OBJECT_MAP;
+  ASSERT_EQ(0, set_features(&ioctx, oid, features, mask));
+
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &actual_features));
+
+  expected_features = RBD_FEATURES_MUTABLE & ~RBD_FEATURE_OBJECT_MAP;
+  ASSERT_EQ(expected_features, actual_features);
+
+  mask = RBD_FEATURE_LAYERING;
+  ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, features, mask));
 }
