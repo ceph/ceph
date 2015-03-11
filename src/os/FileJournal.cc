@@ -946,8 +946,11 @@ void FileJournal::queue_completions_thru(uint64_t seq)
     }
     if (next.finish)
       finisher->queue(next.finish);
-    if (next.tracked_op)
+    if (next.tracked_op) {
       next.tracked_op->mark_event("journaled_completion_queued");
+      BLKIN_OP_TRACE_EVENT(next.tracked_op, journal, "journaled_completion_queued");
+      BLKIN_OP_TRACE_EVENT(next.tracked_op, journal, "span_ended");
+    }
   }
   finisher_cond.Signal();
 }
@@ -1006,8 +1009,10 @@ int FileJournal::prepare_single_write(bufferlist& bl, off64_t& queue_pos, uint64
   }
   bl.append((const char*)&h, sizeof(h));
 
-  if (next_write.tracked_op)
+  if (next_write.tracked_op) {
     next_write.tracked_op->mark_event("write_thread_in_journal_buffer");
+    BLKIN_OP_TRACE_EVENT(next_write.tracked_op, journal, "write_thread_in_journal_buffer");
+  }
 
   // pop from writeq
   pop_write();
@@ -1570,8 +1575,11 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, int alignment,
 
   throttle_ops.take(1);
   throttle_bytes.take(e.length());
-  if (osd_op)
+  if (osd_op) {
     osd_op->mark_event("commit_queued_for_journal_write");
+    BLKIN_OP_CREATE_TRACE(osd_op, journal, journal_endpoint);
+    BLKIN_OP_TRACE_EVENT(osd_op, journal, "commit_queued_for_journal_write");
+  }
   if (logger) {
     logger->set(l_os_jq_max_ops, throttle_ops.get_max());
     logger->set(l_os_jq_max_bytes, throttle_bytes.get_max());

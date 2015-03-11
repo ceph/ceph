@@ -222,6 +222,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
 #ifdef PG_DEBUG_REFS
   osd->add_pgid(p, this);
 #endif
+  BLKIN_OSS(oss, "PG " << info.pgid);
+  BLKIN_MSG_END(pg_endpoint, "", 0, oss.str());
 }
 
 PG::~PG()

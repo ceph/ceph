@@ -136,3 +136,77 @@ void OpRequest::mark_flag_point(uint8_t flag, const string& s) {
 	     reqid.name._num, reqid.tid, reqid.inc, rmw_flags,
 	     flag, s.c_str(), old_flags, hit_flag_points);
 }
+
+#ifdef WITH_BLKIN
+bool OpRequest::create_osd_trace(TrackedOpEndpointRef ep)
+{
+  string name = "OSD Handling op";
+  if (!request) {
+    return false;
+  }
+
+  TrackedOpTraceRef mt = request->get_master_trace();
+  if (!mt) {
+    return false;
+  }
+
+  osd_trace = ZTracer::create_ZTrace(name, mt, ep);
+  if(!osd_trace){
+    return false;
+  }
+
+  return true;
+}
+
+bool OpRequest::create_pg_trace(TrackedOpEndpointRef ep)
+{
+  string name = "PG";
+  if (!request) {
+    return false;
+  }
+
+  TrackedOpTraceRef mt = request->get_master_trace();
+  if (!mt) {
+    return false;
+  }
+
+  pg_trace = ZTracer::create_ZTrace(name, mt, ep);
+  if(!pg_trace){
+    return false;
+  }
+
+  return true;
+}
+
+bool OpRequest::create_journal_trace(TrackedOpEndpointRef ep)
+{
+  string name = "Journal access";
+
+  if (!osd_trace) {
+    return false;
+  }
+
+  journal_trace = ZTracer::create_ZTrace(name, osd_trace, ep);
+  if(!journal_trace){
+    return false;
+  }
+
+  return true;
+}
+
+bool OpRequest::create_filestore_trace(TrackedOpEndpointRef ep)
+{
+  string name = "Filestore access";
+
+  if (!osd_trace) {
+    return false;
+  }
+
+  filestore_trace = ZTracer::create_ZTrace(name, osd_trace, ep);
+  if(!filestore_trace){
+    return false;
+  }
+
+  return true;
+}
+#endif // WITH_BLKIN

@@ -217,6 +217,7 @@ public:
   bool journalq_empty() { return journalq.empty(); }
 
 private:
+  BLKIN_END_REF(journal_endpoint)
   string fn;
 
   char *zero_buf;
@@ -390,7 +391,6 @@ private:
     aio_stop(true),
     write_thread(this),
     write_finish_thread(this) {
-
       if (aio && !directio) {
         derr << "FileJournal::_open_any: aio not supported without directio; disabling aio" << dendl;
         aio = false;
@@ -401,6 +401,7 @@ private:
         aio = false;
       }
 #endif
+      BLKIN_MSG_END(journal_endpoint, "", 0, "Journal (" + fn + ")");
   }
   ~FileJournal() {
     assert(fd == -1);

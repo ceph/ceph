@@ -197,6 +197,7 @@ public:
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
   }
+  BLKIN_END_REF(pg_endpoint)
 protected:
   // Ops waiting for map, should be queued at back
   Mutex map_lock;

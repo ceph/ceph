@@ -78,6 +78,13 @@ struct OpRequest : public TrackedOp {
 
   void _dump(utime_t now, Formatter *f) const;
 
+#ifdef WITH_BLKIN
+  bool create_osd_trace(TrackedOpEndpointRef ep);
+  bool create_pg_trace(TrackedOpEndpointRef ep);
+  bool create_journal_trace(TrackedOpEndpointRef ep);
+  bool create_filestore_trace(TrackedOpEndpointRef ep);
+#endif // WITH_BLKIN
+
   bool has_feature(uint64_t f) const {
     return request->get_connection()->has_feature(f);
   }
@@ -149,9 +156,11 @@ public:
   }
   void mark_sub_op_sent(const string& s) {
     mark_flag_point(flag_sub_op_sent, s);
+    BLKIN_TYPE_TRACE_EVENT(pg, "sub_op_sent | " + s);
   }
   void mark_commit_sent() {
     mark_flag_point(flag_commit_sent, "commit_sent");
+    BLKIN_TYPE_TRACE_EVENT(pg, "commit_sent");
   }
 
   utime_t get_dequeued_time() const {

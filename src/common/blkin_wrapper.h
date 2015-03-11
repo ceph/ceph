@@ -33,26 +33,28 @@
 
 #define BLKIN_MSG_ENCODE_TRACE() \
   do { \
+    ceph::bufferlist trace_bl; \
     if (blkin_master_trace) { \
       struct blkin_trace_info tinfo; \
       blkin_master_trace->get_trace_info(&tinfo); \
-      ::encode(tinfo.trace_id, payload); \
-      ::encode(tinfo.span_id, payload); \
-      ::encode(tinfo.parent_span_id, payload); \
-    } else { \
-      int64_t zero = 0; \
-      ::encode(zero, payload); \
-      ::encode(zero, payload); \
-      ::encode(zero, payload); \
+      ::encode(tinfo.trace_id, trace_bl); \
+      ::encode(tinfo.span_id, trace_bl); \
+      ::encode(tinfo.parent_span_id, trace_bl); \
     }; \
+    ::encode(trace_bl, payload); \
   } while(0)
 
 #define BLKIN_MSG_DECODE_TRACE(V) \
   do { \
     if (header.version >= V) { \
-      ::decode(tinfo.trace_id, p); \
-      ::decode(tinfo.span_id, p); \
-      ::decode(tinfo.parent_span_id, p); \
+      ceph::bufferlist trace_bl; \
+      ::decode(trace_bl, p); \
+      if (trace_bl.length()) { \
+        ceph::bufferlist::iterator it = trace_bl.begin(); \
+        ::decode(tinfo.trace_id, it); \
+        ::decode(tinfo.span_id, it); \
+        ::decode(tinfo.parent_span_id, it); \
+      } \
     }; \
     init_trace_info(&tinfo); \
   } while(0)
@@ -144,8 +146,21 @@ typedef ZTracer::ZTraceRef TrackedOpTraceRef;
 #define BLKIN_MSG_INIT_TRACE(M, T) do { } while(0)
 #define BLKIN_MSG_INIT_TRACE_IF(C, M, T) do { } while(0)
 #define BLKIN_MSG_DO_INIT_TRACE() do { } while(0)
-#define BLKIN_MSG_ENCODE_TRACE() do { } while(0)
-#define BLKIN_MSG_DECODE_TRACE(V) do { } while(0)
+
+#define BLKIN_MSG_ENCODE_TRACE() \
+  do { \
+    ceph::bufferlist trace_bl; \
+    ::encode(trace_bl, payload); \
+  } while(0)
+
+#define BLKIN_MSG_DECODE_TRACE(V) \
+  do { \
+    if (header.version >= V) { \
+      ceph::bufferlist trace_bl; \
+      ::decode(trace_bl, p); \
+    }; \
+  } while(0)
+
 #define BLKIN_MSG_CHECK_SPAN() do { } while(0)
 #define BLKIN_MSG_INFO_DECL(TYPE)
 #define BLKIN_MSG_END_DECL(TYPE)

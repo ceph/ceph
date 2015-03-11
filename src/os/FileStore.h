@@ -117,6 +117,7 @@ public:
   }
 
 private:
+  BLKIN_END_REF(filestore_endpoint)
   string internal_name;         ///< internal name, used to name the perfcounter instance
   string basedir, journalpath;
   osflagbits_t generic_flags;

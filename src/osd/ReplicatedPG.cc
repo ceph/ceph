@@ -1245,6 +1245,7 @@ void ReplicatedPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
+  BLKIN_OP_TRACE_EVENT(op, pg, "starting_request");
   if (!op_has_sufficient_caps(op)) {
     osd->reply_op_error(op, -EPERM);
     return;
@@ -1370,6 +1371,7 @@ bool ReplicatedPG::check_src_targ(const hobject_t& soid, const hobject_t& toid) 
  */
 void ReplicatedPG::do_op(OpRequestRef& op)
 {
+  BLKIN_OP_TRACE_EVENT(op, pg, "do_op");
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   assert(m->get_type() == CEPH_MSG_OSD_OP);
   if (op->includes_pg_op()) {
@@ -1380,6 +1382,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     return do_pg_op(op);
   }
 
+  BLKIN_OP_TRACE_KEYVAL(op, osd, "object", m->get_oid().name);
   if (get_osdmap()->is_blacklisted(m->get_source_addr())) {
     dout(10) << "do_op " << m->get_source_addr() << " is blacklisted" << dendl;
     osd->reply_op_error(op, -EBLACKLISTED);
@@ -1465,6 +1468,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	if (m->wants_ack()) {
 	  if (already_ack(replay_version)) {
 	    MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, false);
+	    BLKIN_MSG_INIT_TRACE(reply, op->get_osd_trace());
 	    reply->add_flags(CEPH_OSD_FLAG_ACK);
 	    reply->set_reply_versions(replay_version, user_version);
 	    osd->send_message_osd_client(reply, m->get_connection());
@@ -2228,6 +2232,8 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   const hobject_t& soid = obc->obs.oi.soid;
   map<hobject_t,ObjectContextRef>& src_obc = ctx->src_obc;
 
+  BLKIN_OP_TRACE_EVENT(op, pg, "executing_ctx");
+
   // this method must be idempotent since we may call it several times
   // before we finally apply the resulting transaction.
   delete ctx->op_t;
@@ -2330,6 +2336,7 @@ void ReplicatedPG::execute_ctx(OpContext *ctx)
   // prepare the reply
   ctx->reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0,
 			       successful_write);
+  BLKIN_MSG_INIT_TRACE(ctx->reply, op->get_osd_trace());
 
   // Write operations aren't allowed to return a data payload because
   // we can't do so reliably. If the client has to resend the request
@@ -2478,6 +2485,8 @@ void ReplicatedPG::do_sub_op(OpRequestRef op)
   assert(have_same_or_newer_map(m->map_epoch));
   assert(m->get_type() == MSG_OSD_SUBOP);
   dout(15) << "do_sub_op " << *op->get_req() << dendl;
+
+  BLKIN_OP_TRACE_EVENT(op, pg, "do_sub_op");
 
   OSDOp *first = NULL;
   if (m->ops.size() >= 1) {
@@ -3439,6 +3448,13 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       // fall through
     case CEPH_OSD_OP_READ:
       ++ctx->num_read;
+      {
+        BLKIN_OP_TRACE_KEYVAL(ctx->op, osd, "type", "read");
+        BLKIN_OSS(oss1, op.extent.offset);
+        BLKIN_OP_TRACE_KEYVAL(ctx->op, osd, "offset", oss1.str());
+        BLKIN_OSS(oss2, op.extent.length);
+        BLKIN_OP_TRACE_KEYVAL(ctx->op, osd, "length", oss2.str());
+      }
       {
 	__u32 seq = oi.truncate_seq;
 	uint64_t size = oi.size;
@@ -7370,12 +7386,14 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	repop->ctx->reply = NULL;
       else {
 	reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	BLKIN_MSG_INIT_TRACE(reply, repop->ctx->op->get_osd_trace());
 	reply->set_reply_versions(repop->ctx->at_version,
 				  repop->ctx->user_at_version);
       }
       reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
       dout(10) << " sending commit on " << *repop << " " << reply << dendl;
       osd->send_message_osd_client(reply, m->get_connection());
+      BLKIN_MSG_TRACE_EVENT(m, "replied_commit");
       repop->sent_disk = true;
       repop->ctx->op->mark_commit_sent();
     }
@@ -7393,10 +7411,12 @@ void ReplicatedPG::eval_repop(RepGather *repop)
 	   ++i) {
 	MOSDOp *m = static_cast<MOSDOp*>(i->first->get_req());
 	MOSDOpReply *reply = new MOSDOpReply(m, 0, get_osdmap()->get_epoch(), 0, true);
+	BLKIN_MSG_INIT_TRACE(reply, repop->ctx->op->get_osd_trace());
 	reply->set_reply_versions(repop->ctx->at_version,
 				  i->second);
 	reply->add_flags(CEPH_OSD_FLAG_ACK);
 	osd->send_message_osd_client(reply, m->get_connection());
+	BLKIN_MSG_TRACE_EVENT(m, "replied_ack");
       }
       waiting_for_ack.erase(repop->v);
     }
@@ -7450,6 +7470,8 @@ void ReplicatedPG::eval_repop(RepGather *repop)
       dout(0) << "   q front is " << *repop_queue.front() << dendl; 
       assert(repop_queue.front() == repop);
     }
+    BLKIN_OP_TRACE_EVENT(repop->ctx->op, pg, "all_done");
+    BLKIN_MSG_TRACE_EVENT(m, "span_ended");
     repop_queue.pop_front();
     remove_repop(repop);
   }
@@ -7468,6 +7490,8 @@ void ReplicatedPG::issue_repop(RepGather *repop)
   dout(7) << "issue_repop rep_tid " << repop->rep_tid
           << " o " << soid
           << dendl;
+
+  BLKIN_OP_TRACE_EVENT(ctx->op, pg, "issuing_repop");
 
   repop->v = ctx->at_version;
   if (ctx->at_version > eversion_t()) {

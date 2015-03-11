@@ -159,6 +159,7 @@ bool ReplicatedBackend::handle_message(
   OpRequestRef op
   )
 {
+  BLKIN_OP_TRACE_EVENT(op, pg, "handling_message");
   dout(10) << __func__ << ": " << op << dendl;
   switch (op->get_req()->get_type()) {
   case MSG_OSD_PG_PUSH:
@@ -639,8 +640,10 @@ void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
   dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
+  if (op->op) {
     op->op->mark_event("op_applied");
+    BLKIN_OP_TRACE_EVENT(op->op, pg, "op_applied");
+  }
 
   op->waiting_for_applied.erase(get_parent()->whoami_shard());
   parent->op_applied(op->v);
@@ -659,8 +662,10 @@ void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
   dout(10) << __func__ << ": " << op->tid << dendl;
-  if (op->op)
+  if (op->op) {
     op->op->mark_event("op_commit");
+    BLKIN_OP_TRACE_EVENT(op->op, pg, "op_commit");
+  }
 
   op->waiting_for_commit.erase(get_parent()->whoami_shard());
 
@@ -715,6 +720,8 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
         ostringstream ss;
         ss << "sub_op_commit_rec from " << from;
 	ip_op.op->mark_event(ss.str());
+	BLKIN_OP_TRACE_EVENT(ip_op.op, pg, "sub_op_commit_rec");
+	BLKIN_MSG_TRACE_EVENT(op->get_req(), "span_ended");
       }
     } else {
       assert(ip_op.waiting_for_applied.count(from));
@@ -722,6 +729,8 @@ void ReplicatedBackend::sub_op_modify_reply(OpRequestRef op)
         ostringstream ss;
         ss << "sub_op_applied_rec from " << from;
 	ip_op.op->mark_event(ss.str());
+	BLKIN_OP_TRACE_EVENT(ip_op.op, pg, "sub_op_applied_rec");
+	BLKIN_MSG_TRACE_EVENT(op->get_req(), "span_ended");
       }
     }
     ip_op.waiting_for_applied.erase(from);
@@ -1050,6 +1059,7 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction *op_t)
 {
+  BLKIN_OP_TRACE_EVENT(op->op, pg, "issuing_replication");
 
   if (parent->get_actingbackfill_shards().size() > 1) {
     ostringstream ss;
@@ -1086,6 +1096,7 @@ void ReplicatedBackend::issue_op(
 	    op_t,
 	    peer,
 	    pinfo);
+      BLKIN_MSG_INIT_TRACE_IF(op->op->get_req(), wr, op->op->get_osd_trace());
     } else {
       wr = generate_subop<MOSDRepOp, MSG_OSD_REPOP>(
 	    soid,
@@ -1219,6 +1230,7 @@ void ReplicatedBackend::sub_op_modify_impl(OpRequestRef op)
 void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
 {
   rm->op->mark_event("sub_op_applied");
+  BLKIN_OP_TRACE_EVENT(rm->op, pg, "sub_op_applied");
   rm->applied = true;
 
   dout(10) << "sub_op_modify_applied on " << rm << " op "
@@ -1250,6 +1262,9 @@ void ReplicatedBackend::sub_op_modify_applied(RepModifyRef rm)
   // send ack to acker only if we haven't sent a commit already
   if (ack) {
     ack->set_priority(CEPH_MSG_PRIO_HIGH); // this better match commit priority!
+    BLKIN_MSG_INIT_TRACE(ack, rm->op->get_osd_trace());
+    BLKIN_MSG_TRACE_EVENT(rm->op->get_req(), "replied_apply");
+    BLKIN_MSG_TRACE_EVENT(rm->op->get_req(), "span_ended");
     get_parent()->send_message_osd_cluster(
       rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
@@ -1293,6 +1308,9 @@ void ReplicatedBackend::sub_op_modify_commit(RepModifyRef rm)
   }
 
   commit->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
+  BLKIN_MSG_INIT_TRACE(commit, rm->op->get_osd_trace());
+  BLKIN_MSG_TRACE_EVENT(rm->op->get_req(), "replied_commit");
+  BLKIN_MSG_TRACE_EVENT(rm->op->get_req(), "span_ended");
   get_parent()->send_message_osd_cluster(
     rm->ackerosd, commit, get_osdmap()->get_epoch());
 
