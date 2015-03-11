@@ -508,6 +508,17 @@ if test "x$enable_coverage" != xno; then
 fi
 AC_SUBST(GCOV_PREFIX_STRIP, `echo $(pwd)/src | tr -dc / | wc -c`)
 
+# blkin (lttng+zipkin) tracing?
+AC_ARG_WITH([blkin],
+	    [AS_HELP_STRING([--with-blkin], [blkin (lttng + zipkin) tracing])],
+	    [],
+	    [with_blkin=no])
+have_blkin=no
+AS_IF([test "x$with_blkin" == "xyes"],
+    [PKG_CHECK_MODULES([BLKIN], [blkin], [have_blkin=yes])])
+AM_CONDITIONAL(WITH_BLKIN, test "x$have_blkin" == xyes)
+AM_COND_IF([WITH_BLKIN], [AC_DEFINE([WITH_BLKIN], [1], [Defined if using BlkKin])])
+
 # is radosgw available?
 RADOSGW=0
 AS_IF([test "x$with_radosgw" != xno],

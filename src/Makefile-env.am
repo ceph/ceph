@@ -258,6 +258,12 @@ endif # ENABLE_COVERAGE
 
 LIBCOMMON += -luuid
 
+if WITH_BLKIN
+AM_CPPFLAGS += -DWITH_BLKIN
+AM_CXXFLAGS += $(BLKIN_CFLAGS)
+EXTRALIBS += $(BLKIN_LIBS)
+endif
+
 # Libosd always needs osdc and os
 LIBOSD += $(LIBOSDC) $(LIBOS)
 
