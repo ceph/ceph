@@ -86,11 +86,6 @@ int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_decode,
 				       const set<int> &available_chunks,
 				       set<int> *minimum_chunks)
 {
-  int erased[k + m];
-  int avails[k + m];
-  int minimum[k + m];
-  int dm_ids[k];
-
   if (!minimum_chunks) return -EINVAL;
 
   for (set<int>::iterator it = available_chunks.begin(); it != available_chunks.end(); ++it){
@@ -101,6 +96,11 @@ int ErasureCodeShec::minimum_to_decode(const set<int> &want_to_decode,
 	       want_to_decode.begin(), want_to_decode.end())) {
     *minimum_chunks = want_to_decode;
   } else {
+    int erased[k + m];
+    int avails[k + m];
+    int minimum[k + m];
+    int dm_ids[k];
+
     for (int i = 0; i < k + m; i++) {
       erased[i] = 0;
       if (available_chunks.find(i) == available_chunks.end()) {

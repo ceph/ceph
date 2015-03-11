@@ -192,9 +192,10 @@ class PerfCase {
   }
 
   uint64_t rados_write_4k(int times) {
-    uint64_t start_time = 0, ticks = 0;
+    uint64_t ticks = 0;
     uint64_t len = Kib *4;
     for (int i = 0; i < times; i++) {
+      uint64_t start_time = 0;
       {
         Transaction t;
         ghobject_t oid = create_object();
