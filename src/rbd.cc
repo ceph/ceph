@@ -2267,18 +2267,19 @@ static int do_kernel_map(const char *poolname, const char *imgname,
   if (r < 0)
     return r;
 
-  for (map<string, string>::const_iterator it = map_options.begin();
-       it != map_options.end();
-       ++it) {
+  for (map<string, string>::iterator it = map_options.begin();
+       it != map_options.end(); ) {
     // for compatibility with < 3.7 kernels, assume that rw is on by
     // default and omit it even if it was specified by the user
     // (see ceph.git commit fb0f1986449b)
-    if (it->first == "rw" && it->second == "rw")
-      continue;
-
-    if (it != map_options.begin())
-      oss << ",";
-    oss << it->second;
+    if (it->first == "rw" && it->second == "rw") {
+      map_options.erase(it++);
+    } else {
+      if (it != map_options.begin())
+        oss << ",";
+      oss << it->second;
+      ++it;
+    }
   }
 
   r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);
