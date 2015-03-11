@@ -589,6 +589,8 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
       ret = STATUS_CREATED;
     set_req_state_err(s, ret);
     dump_errno(s);
+    dump_etag(s, etag.c_str());
+    dump_last_modified(s, mtime);
     end_header(s, this);
   } else {
     s->formatter->close_section();
