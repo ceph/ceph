@@ -352,6 +352,6 @@ public:
   }
 };
 
-typedef boost::intrusive_ptr<XioLoopbackConnection> LoopbackConnectionRef;
+typedef boost::intrusive_ptr<XioLoopbackConnection> XioLoopbackConnectionRef;
 
 #endif /* XIO_CONNECTION_H */
