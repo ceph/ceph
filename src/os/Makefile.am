@@ -88,6 +88,13 @@ libos_rocksdb_la_LIBADD = -lrocksdb
 noinst_LTLIBRARIES += libos_rocksdb.la
 noinst_HEADERS += os/RocksDBStore.h
 endif
+if WITH_LIBLMDB
+libos_lmdb_la_SOURCES = os/LMDBStore.cc
+libos_lmdb_la_CXXFLAGS =  ${AM_CXXFLAGS} ${LIBLMDB_CFLAGS}
+libos_lmdb_la_LIBADD = -llmdb
+noinst_LTLIBRARIES += libos_lmdb.la
+noinst_HEADERS += os/LMDBStore.h
+endif
 if WITH_LIBZFS
 libos_zfs_a_SOURCES = os/ZFS.cc
 libos_zfs_a_CXXFLAGS = ${AM_CXXFLAGS} ${LIBZFS_CFLAGS}
