@@ -4932,9 +4932,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CACHE_PIN:
+      tracepoint(osd, do_osd_op_pre_cache_pin, soid.oid.name.c_str(), soid.snap.val);
+      if ((!pool.info.is_tier() ||
+	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)) {
+        result = -EINVAL;
+        dout(10) << " pin object is only allowed on the cache tier " << dendl;
+        break;
+      }
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_cache_pin, soid.oid.name.c_str(), soid.snap.val);
         if (!obs.exists) {
 	  assert(!oi.is_cache_pinned());
           ctx->mod_desc.create();
@@ -4955,9 +4961,15 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CACHE_UNPIN:
+      tracepoint(osd, do_osd_op_pre_cache_unpin, soid.oid.name.c_str(), soid.snap.val);
+      if ((!pool.info.is_tier() ||
+	  pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE)) {
+        result = -EINVAL;
+        dout(10) << " pin object is only allowed on the cache tier " << dendl;
+        break;
+      }
       ++ctx->num_write;
       {
-	tracepoint(osd, do_osd_op_pre_cache_unpin, soid.oid.name.c_str(), soid.snap.val);
         if (!obs.exists) {
 	  result = 0;
 	  break;
