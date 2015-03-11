@@ -2137,6 +2137,29 @@ CEPH_RADOS_API int rados_watch_flush(rados_t cluster);
 /** @} Watch/Notify */
 
 /**
+ * Pin an object in the cache tier
+ *
+ * When an object is pinned in the cache tier, it stays in the cache
+ * tier, and won't be flushed out.
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_pin(rados_ioctx_t io, const char *o);
+
+/**
+ * Unpin an object in the cache tier
+ *
+ * After an object is unpinned in the cache tier, it can be flushed out
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_cache_unpin(rados_ioctx_t io, const char *o);
+
+/**
  * @name Hints
  *
  * @{
