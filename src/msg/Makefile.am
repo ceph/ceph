@@ -4,6 +4,10 @@ libmsg_la_SOURCES = \
 	msg/DispatchQueue.cc \
 	msg/msg_types.cc
 
+if WITH_BLKIN
+libmsg_la_LIBADD = $(BLKIN_LIBS)
+endif
+
 noinst_HEADERS += \
 	msg/Connection.h \
 	msg/Dispatcher.h \
