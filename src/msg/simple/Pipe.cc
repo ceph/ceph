@@ -114,6 +114,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
 
   recv_max_prefetch = msgr->cct->_conf->ms_tcp_prefetch_max_size;
   recv_buf = new char[recv_max_prefetch];
+  BLKIN_PIPE_ENDPOINT();
 }
 
 Pipe::~Pipe()
@@ -123,6 +124,33 @@ Pipe::~Pipe()
   delete delay_thread;
   delete[] recv_buf;
 }
+
+#ifdef WITH_BLKIN
+void Pipe::set_endpoint()
+{
+  string type;
+  entity_inst_t inst = msgr->get_myinst();
+
+  if (inst.name.is_client()) {
+    type = "MON";
+  } else if (inst.name.is_mds()) {
+    type = "MDS";
+  } else if (inst.name.is_osd()) {
+    type = "OSD";
+  } else if (inst.name.is_client()) {
+    type = "CLIENT";
+  } else {
+    type = "UNKNOWN";
+  }
+
+  string host;
+  int port;
+
+  inst.addr.to_string(host, port);
+
+  pipe_endpoint = ZTracer::create_ZTraceEndpoint(host, port, "Messenger-" + type);
+}
+#endif // WITH_BLKIN
 
 void Pipe::handle_ack(uint64_t seq)
 {
@@ -1587,6 +1615,7 @@ void Pipe::reader()
 	  fault(true);
 	continue;
       }
+      BLKIN_MSG_TRACE_EVENT(m, "message_read");
 
       if (state == STATE_CLOSED ||
 	  state == STATE_CONNECTING) {
@@ -1821,6 +1850,8 @@ void Pipe::writer()
 	blist.append(m->get_data());
 
         pipe_lock.Unlock();
+
+	BLKIN_MSG_TRACE_EVENT(m, "writer_sending");
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);

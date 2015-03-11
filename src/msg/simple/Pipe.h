@@ -195,6 +195,7 @@ class DispatchQueue;
     ceph::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
+    BLKIN_END_REF(pipe_endpoint)
     friend class SimpleMessenger;
     PipeConnectionRef connection_state;
 
@@ -219,6 +220,9 @@ class DispatchQueue;
     uint64_t in_seq, in_seq_acked;
     
     void set_socket_options();
+#ifdef WITH_BLKIN
+    void set_endpoint();
+#endif
 
     int accept();   // server handshake
     int connect();  // client handshake

@@ -821,3 +821,79 @@ Message *decode_message(CephContext *cct, int crcflags, bufferlist::iterator& p)
   return decode_message(cct, crcflags, h, f, fr, mi, da);
 }
 
+#ifdef WITH_BLKIN
+int Message::trace_basic_info()
+{
+  if (!master_trace) {
+    return 0;
+  }
+
+  master_trace->event("Message allocated");
+  trace_msg_info();
+  return 0;
+}
+
+int Message::init_trace_info()
+{
+  create_message_endpoint();
+  master_trace = ZTracer::create_ZTrace("Main", message_endpoint);
+  if (!master_trace) {
+    return -ENOMEM;
+  }
+
+  return trace_basic_info();
+}
+
+int Message::init_trace_info(ZTracer::ZTraceRef t)
+{
+  if (!t) {
+    return -EINVAL;
+  }
+
+  create_message_endpoint();
+  master_trace = ZTracer::create_ZTrace("Main", t, message_endpoint);
+  if (!master_trace) {
+    return -ENOMEM;
+  }
+
+  return trace_basic_info();
+}
+
+int Message::init_trace_info(struct blkin_trace_info *tinfo)
+{
+  if (!(tinfo->trace_id == 0 && tinfo->span_id == 0 && tinfo->parent_span_id == 0)) {
+    create_message_endpoint();
+    master_trace = ZTracer::create_ZTrace("Main", message_endpoint, tinfo);
+    return trace_basic_info();
+  }
+  return init_trace_info();
+}
+
+void Message::trace(string event)
+{
+  if (!master_trace) {
+    return;
+  }
+
+  master_trace->event(event);
+}
+
+void Message::trace(string key, string val)
+{
+  if (!master_trace) {
+    return;
+  }
+
+  master_trace->keyval(key, val);
+}
+
+bool Message::create_message_endpoint()
+{
+  message_endpoint = ZTracer::create_ZTraceEndpoint("0.0.0.0", 0, "NaN");
+  if (!message_endpoint) {
+    return false;
+  }
+
+  return true;
+}
+#endif // WITH_BLKIN

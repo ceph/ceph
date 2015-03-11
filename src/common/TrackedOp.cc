@@ -293,8 +293,22 @@ void OpTracker::_mark_event(TrackedOp *op, const string &evt,
      
 }
 
+#ifdef WITH_BLKIN
+void OpTracker::trace_event(TrackedOp *op, TrackedOpTraceRef t, const string &evt, TrackedOpEndpointRef ep)
+{
+  t->event(evt, ep);
+}
+
+void OpTracker::trace_keyval(TrackedOp *op, TrackedOpTraceRef t, const string &key,
+			     const string &val, TrackedOpEndpointRef ep)
+{
+  t->keyval(key, val, ep);
+}
+#endif
+
 void OpTracker::RemoveOnDelete::operator()(TrackedOp *op) {
   op->mark_event("done");
+  BLKIN_OP_TRACE_EVENT(op, osd, "span_ended");
   if (!tracker->tracking_enabled) {
     op->_unregistered();
     delete op;
@@ -332,3 +346,71 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
     f->close_section();
   }
 }
+
+#ifdef WITH_BLKIN
+void TrackedOp::trace_osd(string event)
+{
+  if (!osd_trace) {
+    dout(5) << "trace_osd failed, osd_trace doesn't exist, event: " << event << dendl;
+    return;
+  }
+
+  tracker->trace_event(this, osd_trace, event, osd_trace->get_endpoint());
+}
+
+void TrackedOp::trace_osd(string key, string val)
+{
+  if (!osd_trace) {
+    dout(5) << "trace_osd failed, osd_trace doesn't exist, key: " << key << " val: " << val << dendl;
+    return;
+  }
+
+  tracker->trace_keyval(this, osd_trace, key, val, osd_trace->get_endpoint());
+}
+
+void TrackedOp::trace_pg(string event)
+{
+  if (!pg_trace) {
+    dout(5) << "trace_pg failed, pg_trace doesn't exist, event: " << event << dendl;
+    return;
+  } else if (!osd_trace) {
+    dout(5) << "trace_pg failed, osd_trace doesn't exist, event: " << event << dendl;
+    return;
+  }
+
+  tracker->trace_event(this, osd_trace, event, pg_trace->get_endpoint());
+}
+
+void TrackedOp::get_pg_trace_info(struct blkin_trace_info *info)
+{
+  if (!pg_trace) {
+    dout(5) << "get_pg_trace failed, pg_trace doesn't exist" << dendl;
+    return;
+  } else if (!osd_trace) {
+    dout(5) << "get_pg_trace failed, osd_trace doesn't exist" << dendl;
+    return;
+  }
+
+  osd_trace->get_trace_info(info);
+}
+
+void TrackedOp::trace_journal(string event)
+{
+  if (!journal_trace) {
+    dout(5) << "trace_journal failed, journal_trace doesn't exist, event: " << event << dendl;
+    return;
+  }
+
+  tracker->trace_event(this, journal_trace, event, journal_trace->get_endpoint());
+}
+
+void TrackedOp::trace_filestore(string event)
+{
+  if (!filestore_trace) {
+    dout(5) << "trace_filestore failed, filestore_trace doesn't exist, event: " << event << dendl;
+    return;
+  }
+
+  tracker->trace_event(this, filestore_trace, event, filestore_trace->get_endpoint());
+}
+#endif // WITH_BLKIN
