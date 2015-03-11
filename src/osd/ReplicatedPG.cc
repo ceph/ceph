@@ -3776,6 +3776,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_UNDIRTY:
     case CEPH_OSD_OP_COPY_FROM:  // we handle user_version update explicitly
+    case CEPH_OSD_OP_CACHE_PIN:
+    case CEPH_OSD_OP_CACHE_UNPIN:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -4924,6 +4926,46 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    dout(10) << " can't remove: no watch by " << entity << dendl;
 	  }
         }
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_PIN:
+      ++ctx->num_write;
+      {
+	tracepoint(osd, do_osd_op_pre_cache_pin, soid.oid.name.c_str(), soid.snap.val);
+        if (!obs.exists) {
+	  assert(!oi.is_cache_pinned());
+          ctx->mod_desc.create();
+          t->touch(soid);
+          ctx->delta_stats.num_objects++;
+          obs.exists = true;
+	  obs.oi.new_object();
+        }
+
+	if (!oi.is_cache_pinned()) {
+	  oi.set_flag(object_info_t::FLAG_CACHE_PIN);
+	  ctx->modify = true;
+	  ctx->delta_stats.num_wr++;
+	}
+	result = 0;
+      }
+      break;
+
+    case CEPH_OSD_OP_CACHE_UNPIN:
+      ++ctx->num_write;
+      {
+	tracepoint(osd, do_osd_op_pre_cache_unpin, soid.oid.name.c_str(), soid.snap.val);
+        if (!obs.exists) {
+	  result = 0;
+	  break;
+        }
+
+	if (oi.is_cache_pinned()) {
+	  oi.clear_flag(object_info_t::FLAG_CACHE_PIN);
+	  ctx->modify = true;
+	  ctx->delta_stats.num_wr++;
+	}
+	result = 0;
       }
       break;
 

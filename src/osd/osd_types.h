@@ -2992,6 +2992,7 @@ struct object_info_t {
     FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
     FLAG_DATA_DIGEST = 1 << 4,  // has data crc
     FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
+    FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
     // ...
     FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
   } flag_t;
@@ -3014,6 +3015,8 @@ struct object_info_t {
       s += "|data_digest";
     if (flags & FLAG_OMAP_DIGEST)
       s += "|omap_digest";
+    if (flags & FLAG_CACHE_PIN)
+      s += "|cache_pin";
     if (s.length())
       return s.substr(1);
     return s;
@@ -3063,6 +3066,9 @@ struct object_info_t {
   }
   bool is_omap_digest() const {
     return test_flag(FLAG_OMAP_DIGEST);
+  }
+  bool is_cache_pinned() const {
+    return test_flag(FLAG_CACHE_PIN);
   }
 
   void set_data_digest(__u32 d) {

@@ -5111,6 +5111,8 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_CACHE_FLUSH:
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
     case CEPH_OSD_OP_CACHE_EVICT:
+    case CEPH_OSD_OP_CACHE_PIN:
+    case CEPH_OSD_OP_CACHE_UNPIN:
       break;
     case CEPH_OSD_OP_ASSERT_VER:
       out << " v" << op.op.assert_ver.ver;
