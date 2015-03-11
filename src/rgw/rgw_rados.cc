@@ -975,6 +975,8 @@ int RGWPutObjProcessor_Aio::drain_pending()
 
 int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
 {
+  bool _wait = need_to_wait;
+
   if (handle) {
     struct put_obj_aio_info info;
     info.handle = handle;
@@ -988,7 +990,7 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
     if (r < 0)
       return r;
 
-    need_to_wait = false;
+    _wait = false;
   }
 
   /* resize window in case messages are draining too fast */
@@ -997,13 +999,10 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, bool need_to_wait)
   }
 
   /* now throttle. Note that need_to_wait should only affect the first IO operation */
-  if (pending.size() > max_chunks ||
-      need_to_wait) {
+  if (pending.size() > max_chunks || _wait) {
     int r = wait_pending_front();
     if (r < 0)
       return r;
-
-    need_to_wait = false;
   }
   return 0;
 }
@@ -3216,8 +3215,6 @@ int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, time_t *mtime,
   op.mtime(&set_mtime);
   op.write_full(data);
 
-  string etag;
-  string content_type;
   bufferlist acl_bl;
 
   for (map<string, bufferlist>::iterator iter = attrs.begin(); iter != attrs.end(); ++iter) {
@@ -4351,7 +4348,6 @@ int RGWRados::Object::Delete::delete_obj()
 
   index_op.set_bilog_flags(params.bilog_flags);
 
-  string tag;
   r = index_op.prepare(CLS_RGW_OP_DEL);
   if (r < 0)
     return r;
@@ -4441,7 +4437,6 @@ int RGWRados::delete_obj_index(rgw_obj& obj)
   std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, bucket, oid, key);
 
-  string tag;
   RGWRados::Bucket bop(this, bucket);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, NULL);
 
@@ -4845,7 +4840,6 @@ int RGWRados::set_attrs(void *ctx, rgw_obj& obj,
   RGWRados::Bucket bop(this, bucket);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj, state);
 
-  string tag;
   if (state) {
     r = index_op.prepare(CLS_RGW_OP_ADD);
     if (r < 0)
@@ -4919,7 +4913,6 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
   CephContext *cct = store->ctx();
 
   bufferlist etag;
-  time_t ctime;
 
   off_t ofs = 0;
   off_t end = -1;
@@ -4955,7 +4948,7 @@ int RGWRados::Object::Read::prepare(int64_t *pofs, int64_t *pend)
 
   /* Convert all times go GMT to make them compatible */
   if (conds.mod_ptr || conds.unmod_ptr) {
-    ctime = astate->mtime;
+    time_t ctime = astate->mtime;
 
     if (conds.mod_ptr) {
       ldout(cct, 10) << "If-Modified-Since: " << *conds.mod_ptr << " Last-Modified: " << ctime << dendl;

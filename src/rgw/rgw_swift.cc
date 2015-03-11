@@ -550,7 +550,7 @@ int authenticate_temp_url(RGWRados *store, req_state *s)
   /* need to get user info of bucket owner */
   RGWBucketInfo bucket_info;
 
-  int ret = store->get_bucket_info(*(RGWObjectCtx *)s->obj_ctx, s->bucket_name_str, bucket_info, NULL);
+  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx), s->bucket_name_str, bucket_info, NULL);
   if (ret < 0)
     return -EPERM;
 

@@ -47,7 +47,7 @@ protected:
     uint64_t added_bytes;
     uint64_t removed_bytes;
   public:
-    StatsAsyncTestSet() {}
+    StatsAsyncTestSet() : objs_delta(0), added_bytes(0), removed_bytes(0) {}
     bool update(RGWQuotaCacheStats *entry) {
       if (entry->async_refresh_time.sec() == 0)
         return false;

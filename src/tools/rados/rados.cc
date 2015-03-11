@@ -501,7 +501,7 @@ public:
     librados::AioCompletion *completion;
 
     LoadGenOp() {}
-    LoadGenOp(LoadGen *_lg) : lg(_lg), completion(NULL) {}
+    LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
   };
 
   int max_op;
@@ -543,6 +543,7 @@ public:
     min_op_len = 1024;
     target_throughput = 5 * 1024 * 1024; // B/sec
     max_op_len = 2 * 1024 * 1024;
+    max_ops = 0; 
     max_backlog = target_throughput * 2;
     run_length = 60;
 
