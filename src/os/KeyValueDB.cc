@@ -9,6 +9,9 @@
 #ifdef HAVE_KINETIC
 #include "KineticStore.h"
 #endif
+#ifdef HAVE_LIBLMDB
+#include "LMDBStore.h"
+#endif
 
 KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
 			       const string& dir)
@@ -28,6 +31,12 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
     return new RocksDBStore(cct, dir);
   }
 #endif
+#ifdef HAVE_LIBLMDB
+  if (type == "lmdb" &&
+      cct->check_experimental_feature_enabled("lmdb")) {
+    return new LMDBStore(cct, dir);
+  }
+#endif
   return NULL;
 }
 
@@ -44,6 +53,11 @@ int KeyValueDB::test_init(const string& type, const string& dir)
 #ifdef HAVE_LIBROCKSDB
   if (type == "rocksdb") {
     return RocksDBStore::_test_init(dir);
+  }
+#endif
+#ifdef HAVE_LIBLMDB
+  if (type == "lmdb") {
+    return LMDBStore::_test_init(dir);
   }
 #endif
   return -EINVAL;
