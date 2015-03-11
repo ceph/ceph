@@ -684,6 +684,21 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
 int ceph_utime(struct ceph_mount_info *cmount, const char *path, struct utimbuf *buf);
 
 /**
+ * Apply or remove an advisory lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to change advisory lock.
+ * @param operation the advisory lock operation to be performed on the file
+ * descriptor among LOCK_SH (shared lock), LOCK_EX (exclusive lock),
+ * or LOCK_UN (remove lock). The LOCK_NB value can be ORed to perform a
+ * non-blocking operation.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @returns 0 on success or negative error code on failure.
+ */
+int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
+	       uint64_t owner);
+
+/**
  * Truncate the file to the given size.  If this operation causes the
  * file to expand, the empty bytes will be filled in with zeros.
  *
