@@ -3,6 +3,14 @@ libmsg_la_SOURCES = \
 	msg/Messenger.cc \
 	msg/msg_types.cc
 
+libmsg_la_CPPFLAGS = $(AM_CPPFLAGS)
+libmsg_la_CXXFLAGS = $(AM_CXXFLAGS)
+if WITH_BLKIN
+libmsg_la_CPPFLAGS += -DWITH_BLKIN
+libmsg_la_CXXFLAGS += $(BLKIN_CFLAGS)
+libmsg_la_LIBADD = $(BLKIN_LIBS)
+endif
+
 noinst_HEADERS += \
 	msg/Connection.h \
 	msg/Dispatcher.h \

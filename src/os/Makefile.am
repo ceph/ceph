@@ -38,10 +38,18 @@ if WITH_LIBZFS
 libos_la_SOURCES += os/ZFSFileStoreBackend.cc
 endif
 
+libos_la_CPPFLAGS = $(AM_CPPFLAGS)
 libos_la_CXXFLAGS = ${AM_CXXFLAGS}
 libos_la_LIBADD = $(LIBOS_TYPES)
+
 if WITH_LTTNG
 libos_la_LIBADD += $(LIBOS_TP)
+endif
+
+if WITH_BLKIN
+libos_la_CPPFLAGS += -DWITH_BLKIN
+libos_la_CXXFLAGS += $(BLKIN_CFLAGS)
+libos_la_LIBADD += $(BLKIN_LIBS)
 endif
 
 noinst_LTLIBRARIES += libos.la

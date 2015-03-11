@@ -517,6 +517,8 @@ int main(int argc, const char **argv)
       prefork.exit(1);
   }
 
+  BLKIN_ZTRACE_INIT();
+
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
   err = store->open(std::cerr);
   if (err < 0) {

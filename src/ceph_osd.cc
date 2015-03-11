@@ -207,6 +207,8 @@ int main(int argc, const char **argv)
     usage();
   }
 
+  BLKIN_ZTRACE_INIT();
+
   // the store
   ObjectStore *store = ObjectStore::create(g_ceph_context,
 					   g_conf->osd_objectstore,

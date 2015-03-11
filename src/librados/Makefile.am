@@ -17,6 +17,8 @@ librados_la_SOURCES = \
 	common/buffer.cc \
 	librados/librados.cc
 
+librados_la_CPPFLAGS = $(AM_CPPFLAGS)
+
 # We need this to avoid basename conflicts with the librados build tests in test/Makefile.am
 librados_la_CXXFLAGS = ${AM_CXXFLAGS}
 
@@ -28,6 +30,13 @@ LIBRADOS_DEPS += $(LIBRADOS_TP)
 endif
 
 librados_la_LIBADD = $(LIBRADOS_DEPS) $(PTHREAD_LIBS) $(CRYPTO_LIBS) $(EXTRALIBS)
+
+if WITH_BLKIN
+librados_la_CPPFLAGS += -DWITH_BLKIN
+librados_la_CXXFLAGS += $(BLKIN_CXXFLAGS)
+librados_la_LIBADD += $(BLKIN_LIBS)
+endif
+
 librados_la_LDFLAGS = ${AM_LDFLAGS} -version-info 2:0:0
 if LINUX
 librados_la_CXXFLAGS += -fvisibility=hidden -fvisibility-inlines-hidden

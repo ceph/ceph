@@ -27,7 +27,14 @@ su_sbin_SCRIPTS += mount.fuse.ceph
 if WITH_MON
 
 ceph_mon_SOURCES = ceph_mon.cc
+ceph_mon_CPPFLAGS = $(AM_CPPFLAGS)
+ceph_mon_CXXFLAGS = $(AM_CXXFLAGS)
 ceph_mon_LDADD = $(LIBMON) $(LIBOS) $(CEPH_GLOBAL) $(LIBCOMMON)
+if WITH_BLKIN
+ceph_mon_CPPFLAGS += -DWITH_BLKIN
+ceph_mon_CXXFLAGS += $(BLKIN_CFLAGS)
+ceph_mon_LDADD += $(BLKIN_LIBS)
+endif
 bin_PROGRAMS += ceph-mon
 
 endif # WITH_MON
@@ -45,7 +52,14 @@ bin_SCRIPTS += \
 	ceph-clsinfo
 
 ceph_osd_SOURCES = ceph_osd.cc
+ceph_osd_CPPFLAGS = $(AM_CPPFLAGS)
+ceph_osd_CXXFLAGS = $(AM_CXXFLAGS)
 ceph_osd_LDADD = $(LIBOSD) $(CEPH_GLOBAL) $(LIBCOMMON)
+if WITH_BLKIN
+ceph_osd_CPPFLAGS += -DWITH_BLKIN
+ceph_osd_CXXFLAGS += $(BLKIN_CFLAGS)
+ceph_osd_LDADD += $(BLKIN_LIBS)
+endif
 bin_PROGRAMS += ceph-osd
 
 endif # WITH_OSD

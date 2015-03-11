@@ -198,6 +198,8 @@ int main(int argc, const char **argv)
 
   msgr->start();
 
+  BLKIN_ZTRACE_INIT();
+
   // start mds
   mds = new MDS(g_conf->name.get_id().c_str(), msgr, &mc);
 
