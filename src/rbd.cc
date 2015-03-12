@@ -2356,11 +2356,6 @@ static string map_option_int_cb(const char *value_char)
 
 static void put_map_option(const string key, string val)
 {
-  map<string, string>::const_iterator it = map_options.find(key);
-  if (it != map_options.end()) {
-    cerr << "rbd: warning: redefining map option " << key << ": '"
-         << it->second << "' -> '" << val << "'" << std::endl;
-  }
   map_options[key] = val;
 }
 
