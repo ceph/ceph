@@ -125,6 +125,7 @@ void usage()
 "  image-meta get <image-name> <key>           image metadata get the value associated with the key\n"
 "  image-meta set <image-name> <key> <value>   image metadata set key with value\n"
 "  image-meta remove <image-name> <key>        image metadata remove the key and value associated\n"
+"  object-map rebuild <image-name>             rebuild an invalid object map\n"
 "  snap ls <image-name>                        dump list of image snapshots\n"
 "  snap create <snap-name>                     create a snapshot\n"
 "  snap rollback <snap-name>                   rollback image to snapshot\n"
@@ -2358,6 +2359,18 @@ static int do_show_status(librados::IoCtx &io_ctx, librbd::Image &image,
   return 0;
 }
 
+static int do_object_map_rebuild(librbd::Image &image)
+{
+  MyProgressContext pc("Object Map Rebuild");
+  int r = image.rebuild_object_map(pc);
+  if (r < 0) {
+    pc.fail();
+    return r;
+  }
+  pc.finish();
+  return 0;
+}
+
 static int do_kernel_map(const char *poolname, const char *imgname,
 			 const char *snapname)
 {
@@ -2533,7 +2546,8 @@ enum CommandType{
   COMMAND_TYPE_SNAP,
   COMMAND_TYPE_LOCK,
   COMMAND_TYPE_METADATA,
-  COMMAND_TYPE_FEATURE
+  COMMAND_TYPE_FEATURE,
+  COMMAND_TYPE_OBJECT_MAP
 };
 
 enum {
@@ -2576,6 +2590,7 @@ enum {
   OPT_METADATA_SET,
   OPT_METADATA_GET,
   OPT_METADATA_REMOVE,
+  OPT_OBJECT_MAP_REBUILD
 };
 
 static int get_cmd(const char *cmd, CommandType command_type)
@@ -2677,6 +2692,10 @@ static int get_cmd(const char *cmd, CommandType command_type)
     } else if (strcmp(cmd, "enable") == 0) {
       return OPT_FEATURE_ENABLE;
     }
+    break;
+  case COMMAND_TYPE_OBJECT_MAP:
+    if (strcmp(cmd, "rebuild") == 0)
+      return OPT_OBJECT_MAP_REBUILD;
     break;
   }
 
@@ -2889,43 +2908,31 @@ int main(int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
+  std::map<std::string, CommandType> command_map = boost::assign::map_list_of
+    ("snap", COMMAND_TYPE_SNAP)
+    ("lock", COMMAND_TYPE_LOCK)
+    ("image-meta", COMMAND_TYPE_METADATA)
+    ("feature", COMMAND_TYPE_FEATURE)
+    ("object-map", COMMAND_TYPE_OBJECT_MAP);
+
   i = args.begin();
   if (i == args.end()) {
     cerr << "rbd: you must specify a command." << std::endl;
     return EXIT_FAILURE;
-  } else if (strcmp(*i, "snap") == 0) {
+  } else if (command_map.count(*i) > 0) {
+    std::string command(*i);
     i = args.erase(i);
     if (i == args.end()) {
-      cerr << "rbd: which snap command do you want?" << std::endl;
+      cerr << "rbd: which " << command << " command do you want?" << std::endl;
       return EXIT_FAILURE;
     }
-    opt_cmd = get_cmd(*i, COMMAND_TYPE_SNAP);
-  } else if (strcmp(*i, "lock") == 0) {
-    i = args.erase(i);
-    if (i == args.end()) {
-      cerr << "rbd: which lock command do you want?" << std::endl;
-      return EXIT_FAILURE;
-    }
-    opt_cmd = get_cmd(*i, COMMAND_TYPE_LOCK);
-  } else if (strcmp(*i, "image-meta") == 0) {
-    i = args.erase(i);
-    if (i == args.end()) {
-      cerr << "rbd: which image-meta command do you want?" << std::endl;
-      return EXIT_FAILURE;
-    }
-    opt_cmd = get_cmd(*i, COMMAND_TYPE_METADATA);
-  } else if (strcmp(*i, "feature") == 0) {
-    i = args.erase(i);
-    if (i == args.end()) {
-      cerr << "rbd: which feature command do you want?" << std::endl;
-      return EXIT_FAILURE;
-    }
-    opt_cmd = get_cmd(*i, COMMAND_TYPE_FEATURE);
+    opt_cmd = get_cmd(*i, command_map[command]);
   } else {
     opt_cmd = get_cmd(*i, COMMAND_TYPE_NONE);
   }
   if (opt_cmd == OPT_NO_CMD) {
-    cerr << "rbd: error parsing command '" << *i << "'; -h or --help for usage" << std::endl;
+    cerr << "rbd: error parsing command '" << *i << "'; -h or --help for usage"
+         << std::endl;
     return EXIT_FAILURE;
   }
 
@@ -2965,6 +2972,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       case OPT_LOCK_LIST:
       case OPT_METADATA_LIST:
       case OPT_DIFF:
+      case OPT_OBJECT_MAP_REBUILD:
 	SET_CONF_PARAM(v, &imgname, NULL, NULL);
 	break;
       case OPT_UNMAP:
@@ -3146,10 +3154,11 @@ if (!set_conf_param(v, p1, p2, p3)) { \
 		      (char **)&imgname, (char **)&snapname);
   if (snapname && opt_cmd != OPT_SNAP_CREATE && opt_cmd != OPT_SNAP_ROLLBACK &&
       opt_cmd != OPT_SNAP_REMOVE && opt_cmd != OPT_INFO &&
-      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF && opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
+      opt_cmd != OPT_EXPORT && opt_cmd != OPT_EXPORT_DIFF &&
+      opt_cmd != OPT_DIFF && opt_cmd != OPT_COPY &&
       opt_cmd != OPT_MAP && opt_cmd != OPT_CLONE &&
       opt_cmd != OPT_SNAP_PROTECT && opt_cmd != OPT_SNAP_UNPROTECT &&
-      opt_cmd != OPT_CHILDREN) {
+      opt_cmd != OPT_CHILDREN && opt_cmd != OPT_OBJECT_MAP_REBUILD) {
     cerr << "rbd: snapname specified for a command that doesn't use it"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3262,7 +3271,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_CHILDREN || opt_cmd == OPT_LOCK_LIST ||
        opt_cmd == OPT_METADATA_SET || opt_cmd == OPT_METADATA_LIST ||
        opt_cmd == OPT_METADATA_REMOVE || opt_cmd == OPT_METADATA_GET ||
-       opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE)) {
+       opt_cmd == OPT_FEATURE_DISABLE || opt_cmd == OPT_FEATURE_ENABLE ||
+       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
 
     if (opt_cmd == OPT_INFO || opt_cmd == OPT_SNAP_LIST ||
 	opt_cmd == OPT_EXPORT || opt_cmd == OPT_EXPORT || opt_cmd == OPT_COPY ||
@@ -3286,7 +3296,8 @@ if (!set_conf_param(v, p1, p2, p3)) { \
        opt_cmd == OPT_EXPORT_DIFF ||
        opt_cmd == OPT_DIFF ||
        opt_cmd == OPT_COPY ||
-       opt_cmd == OPT_CHILDREN)) {
+       opt_cmd == OPT_CHILDREN ||
+       opt_cmd == OPT_OBJECT_MAP_REBUILD)) {
     r = image.snap_set(snapname);
     if (r < 0) {
       cerr << "rbd: error setting snapshot context: " << cpp_strerror(-r)
@@ -3708,6 +3719,15 @@ if (!set_conf_param(v, p1, p2, p3)) { \
     r = image.update_features(features, opt_cmd == OPT_FEATURE_ENABLE);
     if (r < 0) {
       cerr << "rbd: failed to update image features: " << cpp_strerror(r)
+           << std::endl;
+      return -r;
+    }
+    break;
+
+  case OPT_OBJECT_MAP_REBUILD:
+    r = do_object_map_rebuild(image);
+    if (r < 0) {
+      cerr << "rbd: rebuilding object map failed: " << cpp_strerror(r)
            << std::endl;
       return -r;
     }
