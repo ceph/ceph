@@ -46,10 +46,10 @@ inline int sync_filesystem(int fd)
     return 0;
   else
     return -errno;
-#endif
-
+#else
   sync();
   return 0;
+#endif
 }
 
 #endif
