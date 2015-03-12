@@ -280,12 +280,13 @@ namespace librbd {
       return 0;
     }
 
-    void set_flags(librados::ObjectWriteOperation *op, uint64_t flags,
-		   uint64_t mask)
+    void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                   uint64_t flags, uint64_t mask)
     {
       bufferlist inbl;
       ::encode(flags, inbl);
       ::encode(mask, inbl);
+      ::encode(snap_id, inbl);
       op->exec("rbd", "set_flags", inbl);
     }
 
