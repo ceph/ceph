@@ -15,6 +15,8 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
+| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* ] ...
+
 | **ceph** **fsid**
 
 | **ceph** **health** *{detail}*
@@ -31,15 +33,15 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *create* \| *deep-scrub* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lost* \| *ls* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-utilization* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
 
-| **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *reweight* \| *reweight-all* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
+| **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
-| **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
+| **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *ls* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
-| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
+| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *ls* \| *ls-by-osd* \| *ls-by-pool* \| *ls-by-primary* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
 
 | **ceph** **quorum** [ *enter* \| *exit* ]
 
@@ -54,6 +56,8 @@ Synopsis
 | **ceph** **sync** **force** {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
 
 | **ceph** **tell** *<name (type.id)> <args> [<args>...]*
+
+| **ceph** **version**
 
 Description
 ===========
@@ -74,7 +78,7 @@ or updating of authentication keys for a particular  entity such as a monitor or
 OSD. It uses some additional subcommands.
 
 Subcommand ``add`` adds authentication info for a particular entity from input
-file, or random key if no input given and/or any caps specified in the command.
+file, or random key if no input is given and/or any caps specified in the command.
 
 Usage::
 
@@ -206,6 +210,36 @@ Show cluster's free space status.
 Usage::
 
 	ceph df {detail}
+
+
+fs
+--
+
+Manage cephfs filesystems. It uses some additional subcommands.
+
+Subcommand ``ls`` to list filesystems
+
+Usage::
+
+	ceph fs ls
+
+Subcommand ``new`` to make a new filesystem using named pools <metadata> and <data>
+
+Usage::
+
+	ceph fs new <fs_name> <metadata> <data>
+
+Subcommand ``reset`` is used for disaster recovery only: reset to a single-MDS map
+
+Usage::
+
+	ceph fs reset <fs_name> {--yes-i-really-mean-it}
+
+Subcommand ``rm`` to disable the named filesystem
+
+Usage::
+
+	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
 
 fsid
@@ -466,6 +500,12 @@ Usage::
 
 	ceph osd blacklist rm <EntityAddr>
 
+Subcommand ``blocked-by`` prints a histogram of which OSDs are blocking their peers
+
+Usage::
+
+	ceph osd blocked-by
+
 Subcommand ``create`` creates new osd (with optional UUID).
 
 Usage::
@@ -495,7 +535,7 @@ Subcommand ``create-or-move`` creates entry or moves existing entry for <name>
 Usage::
 
 	ceph osd crush create-or-move <osdname (id|osd.id)> <float[0.0-]> <args>
-[<args>...]
+	[<args>...]
 
 Subcommand ``dump`` dumps crush map.
 
@@ -528,6 +568,12 @@ Usage::
 
 	ceph osd crush remove <name> {<ancestor>}
 
+Subcommand ``rename-bucket`` renames buchket <srcname> to <stname>
+
+Usage::
+
+	ceph osd crush rename-bucket <srcname> <dstname>
+
 Subcommand ``reweight`` change <name>'s weight to <weight> in crush map.
 
 Usage::
@@ -540,6 +586,13 @@ ensure they sum correctly
 Usage::
 
 	ceph osd crush reweight-all
+
+Subcommand ``reweight-subtree`` changes all leaf items beneath <name>
+to <weight> in crush map
+
+Usage::
+
+	ceph osd crush reweight-subtree <name> <weight>
 
 Subcommand ``rm`` removes <name> from crush map (everywhere, or just at
 <ancestor>).
@@ -620,7 +673,7 @@ Subcommand ``tunables`` sets crush tunables values to <profile>.
 
 Usage::
 
-	ceph osd crush tunables legacy|argonaut|bobtail|firefly|optimal|default
+	ceph osd crush tunables legacy|argonaut|bobtail|firefly|hammer|optimal|default
 
 Subcommand ``unlink`` unlinks <name> from crush map (everywhere, or just at
 <ancestor>).
@@ -628,6 +681,12 @@ Subcommand ``unlink`` unlinks <name> from crush map (everywhere, or just at
 Usage::
 
 	ceph osd crush unlink <name> {<ancestor>}
+
+Subcommand ``df`` shows OSD utilization
+
+Usage::
+
+	ceph osd df {plain|tree}
 
 Subcommand ``deep-scrub`` initiates deep scrub on specified osd.
 
@@ -769,7 +828,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> <int[0-]> {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<ruleset>}
+	{<erasure_code_profile>} {<ruleset>} {<int>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -789,13 +848,19 @@ Usage::
 	ceph osd pool get <poolname> cache_target_dirty_ratio|cache_target_full_ratio
 
 	ceph osd pool get <poolname> cache_min_flush_age|cache_min_evict_age|
-	erasure_code_profile
+	erasure_code_profile|min_read_recency_for_promote|write_fadvise_dontneed
 
 Subcommand ``get-quota`` obtains object or byte limits for pool.
 
 Usage::
 
 	ceph osd pool get-quota <poolname>
+
+Subcommand ``ls`` list pools
+
+Usage::
+
+	ceph osd pool ls {detail}
 
 Subcommand ``mksnap`` makes snapshot <snap> in <pool>.
 
@@ -820,17 +885,12 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 Usage::
 
 	ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
-	pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period
-
-	ceph osd pool set <poolname> hit_set_count|hit_set_fpp|debug_fake_ec_pool
-
-	ceph osd pool set <poolname> target_max_bytes|target_max_objects
-
-	ceph osd pool set <poolname> cache_target_dirty_ratio|cache_target_full_ratio
-
-	ceph osd pool set <poolname> cache_min_flush_age|cache_min_evict_age
-
-	ceph osd pool set <poolname> auid <val> {--yes-i-really-mean-it}
+	pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|
+	hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
+	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
+	cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
+	min_read_recency_for_promote|write_fadvise_dontneed
+	<val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
 
@@ -870,6 +930,13 @@ Usage::
 
 	osd reweight <int[0-]> <float[0.0-1.0]>
 
+Subcommand ``reweight-by-pg`` reweight OSDs by PG distribution
+[overload-percentage-for-consideration, default 120].
+
+Usage::
+
+	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
+
 Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 [overload-percentage-for-consideration, default 120].
 
@@ -893,8 +960,8 @@ Subcommand ``set`` sets <key>.
 
 Usage::
 
-	ceph osd set pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|
-	noscrub|nodeep-scrub|notieragent
+	ceph osd set full|pause|noup|nodown|noout|noin|nobackfill|
+	norebalance|norecover|noscrub|nodeep-scrub|notieragent
 
 Subcommand ``setcrushmap`` sets crush map from input file.
 
@@ -941,7 +1008,8 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly
+	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly|
+	readforward|readproxy
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -979,8 +1047,8 @@ Subcommand ``unset`` unsets <key>.
 
 Usage::
 
-	osd unset pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|
-	noscrub|nodeep-scrub|notieragent
+	ceph osd unset full|pause|noup|nodown|noout|noin|nobackfill|
+	norebalance|norecover|noscrub|nodeep-scrub|notieragent
 
 
 pg
@@ -1038,6 +1106,65 @@ Subcommand ``getmap`` gets binary pg map to -o/stdout.
 Usage::
 
 	ceph pg getmap
+
+Subcommand ``ls`` lists pg with specific pool, osd, state
+
+Usage::
+
+	ceph pg ls {<int>} {active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale| remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized [active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale|remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized...]}
+
+Subcommand ``ls-by-osd`` lists pg on osd [osd]
+
+Usage::
+
+	ceph pg ls-by-osd <osdname (id|osd.id)> {<int>}
+	{active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale| remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized [active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale|remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized...]}
+
+Subcommand ``ls-by-pool`` lists pg with pool = [poolname | poolid]
+
+Usage::
+
+	ceph pg ls-by-pool <poolstr> {<int>} {active|
+	clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale| remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized [active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale|remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized...]}
+
+Subcommand ``ls-by-primary`` lists pg with primary = [osd]
+
+Usage::
+
+	ceph pg ls-by-primary <osdname (id|osd.id)> {<int>}
+	{active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale| remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized [active|clean|down|replay|splitting|
+	scrubbing|scrubq|degraded|inconsistent|peering|repair|
+	recovery|backfill_wait|incomplete|stale|remapped|
+	deep_scrub|backfill|backfill_toofull|recovery_wait|
+	undersized...]}
 
 Subcommand ``map`` shows mapping of pg to osds.
 
@@ -1152,6 +1279,14 @@ Usage::
 
 	ceph tell <name (type.id)> <args> [<args>...]
 
+version
+-------
+
+Show mon daemon version
+
+Usage::
+
+	ceph version
 
 Options
 =======
