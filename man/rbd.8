@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "RBD" "8" "January 12, 2014" "dev" "Ceph"
+.TH "RBD" "8" "March 12, 2015" "dev" "Ceph"
 .SH NAME
 rbd \- manage rados block device (RBD) images
 .
@@ -187,6 +187,25 @@ See map options section below for more details.
 .B \-\-read\-only
 Map the image read\-only.  Equivalent to \-o ro.
 .UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-image\-features features
+Specifies which RBD format 2 features are to be enabled when creating
+an image. The numbers from the desired features below should be added
+to compute the parameter value:
+.sp
++1: layering support
++2: striping v2 support
++4: exclusive locking support
++8: object map support
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-image\-shared
+Specifies that the image will be used concurrently by multiple clients.
+This will disable features that are dependent upon exclusive ownership
+of the image.
+.UNINDENT
 .SH COMMANDS
 .INDENT 0.0
 .TP
@@ -207,7 +226,8 @@ Will create a new rbd image. You must also specify the size via \-\-size.  The
 .B \fBclone\fP [\fIparent\-snapname\fP] [\fIimage\-name\fP]
 Will create a clone (copy\-on\-write child) of the parent snapshot.
 Object order will be identical to that of the parent image unless
-specified. Size will be the same as the parent snapshot.
+specified. Size will be the same as the parent snapshot. The \-\-stripe\-unit
+and \-\-stripe\-count arguments are optional, but must be used together.
 .sp
 The parent snapshot must be protected (see \fIrbd snap protect\fP).
 This requires image format 2.
@@ -242,6 +262,9 @@ Creates a new image and imports its data from path (use \- for
 stdin).  The import operation will try to create sparse rbd images
 if possible.  For import from stdin, the sparsification unit is
 the data block size of the destination image (1 << order).
+.sp
+The \-\-stripe\-unit and \-\-stripe\-count arguments are optional, but must be
+used together.
 .TP
 .B \fBexport\-diff\fP [\fIimage\-name\fP] [\fIdest\-path\fP] [\-\-from\-snap \fIsnapname\fP]
 Exports an incremental diff for an image to dest path (use \- for stdout).  If
@@ -250,6 +273,14 @@ any regions of the image that contain data are included.  The end snapshot is sp
 using the standard \-\-snap option or @snap syntax (see below).  The image diff format includes
 metadata about image size changes, and the start and end snapshots.  It efficiently represents
 discarded or \(aqzero\(aq regions of the image.
+.TP
+.B \fBmerge\-diff\fP [\fIfirst\-diff\-path\fP] [\fIsecond\-diff\-path\fP] [\fImerged\-diff\-path\fP]
+Merge two continuous incremental diffs of an image into one single diff. The
+first diff\(aqs end snapshot must be equal with the second diff\(aqs start snapshot.
+The first diff could be \- for stdin, and merged diff could be \- for stdout, which
+enables multiple diff files to be merged using something like
+\(aqrbd merge\-diff first second \- | rbd merge\-diff \- third result\(aq. Note this command
+currently only support the source incremental diff with stripe_count == 1
 .TP
 .B \fBimport\-diff\fP [\fIsrc\-path\fP] [\fIimage\-name\fP]
 Imports an incremental diff of an image and applies it to the current image.  If the diff
@@ -311,6 +342,9 @@ Unmaps the block device that was mapped via the rbd kernel module.
 .B \fBshowmapped\fP
 Show the rbd images that are mapped via the rbd kernel module.
 .TP
+.B \fBstatus\fP [\fIimage\-name\fP]
+Show the status of the image, including which clients have it open.
+.TP
 .B \fBlock\fP list [\fIimage\-name\fP]
 Show locks held on the image. The first column is the locker
 to use with the \fIlock remove\fP command.
@@ -361,28 +395,21 @@ The striping is controlled by three parameters:
 .INDENT 0.0
 .TP
 .B order
-.TP
-.B The size of objects we stripe over is a power of two, specifially 2^[*order*] bytes.  The default
-.TP
-.B is 22, or 4 MB.
+The size of objects we stripe over is a power of two, specifically 2^[\fIorder\fP] bytes.  The default
+is 22, or 4 MB.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B stripe_unit
-.TP
-.B Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
-.TP
-.B to the next object.
+Each [\fIstripe_unit\fP] contiguous bytes are stored adjacently in the same object, before we move on
+to the next object.
 .UNINDENT
 .INDENT 0.0
 .TP
 .B stripe_count
-.TP
-.B After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
-.TP
-.B and write another stripe, until the object reaches its maximum size (as specified by [*order*].  At that
-.TP
-.B point, we move on to the next [*stripe_count*] objects.
+After we write [\fIstripe_unit\fP] bytes to [\fIstripe_count\fP] objects, we loop back to the initial object
+and write another stripe, until the object reaches its maximum size (as specified by [\fIorder\fP].  At that
+point, we move on to the next [\fIstripe_count\fP] objects.
 .UNINDENT
 .sp
 By default, [\fIstripe_unit\fP] is the same as the object size and [\fIstripe_count\fP] is 1.  Specifying a different
@@ -604,7 +631,7 @@ rbd lock remove mypool/myimage mylockid client.2485
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBrbd\fP is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
+\fBrbd\fP is part of Ceph, a massively scalable, open\-source, distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
