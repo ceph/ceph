@@ -8677,6 +8677,14 @@ int OSD::init_op_flags(OpRequestRef& op)
       }
       break;
 
+    case CEPH_OSD_OP_CACHE_TRY_FLUSH:
+    case CEPH_OSD_OP_CACHE_FLUSH:
+    case CEPH_OSD_OP_CACHE_EVICT:
+      // If try_flush/flush/evict is the only op, no need to promote.
+      if (m->ops.size() == 1) {
+	op->set_skip_promote();
+      }
+
     default:
       break;
     }
