@@ -1752,7 +1752,7 @@ int AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlist &a
 
     if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
       // handle error
-      existing->center->dispatch_event_external(existing->write_handler);
+      existing->fault();
     }
 
     _stop();
