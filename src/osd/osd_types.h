@@ -241,7 +241,8 @@ enum {
   CEPH_OSD_RMW_FLAG_CLASS_WRITE = (1 << 4),
   CEPH_OSD_RMW_FLAG_PGOP        = (1 << 5),
   CEPH_OSD_RMW_FLAG_CACHE       = (1 << 6),
-  CEPH_OSD_RMW_FLAG_PROMOTE     = (1 << 7),
+  CEPH_OSD_RMW_FLAG_FORCE_PROMOTE   = (1 << 7),
+  CEPH_OSD_RMW_FLAG_SKIP_PROMOTE    = (1 << 8),
 };
 
 
