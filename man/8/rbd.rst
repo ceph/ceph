@@ -123,16 +123,16 @@ Parameters
 
    Map the image read-only.  Equivalent to -o ro.
 
-.. option:: --image-features features
+.. option:: --image-feature feature
 
-   Specifies which RBD format 2 features are to be enabled when creating
-   an image. The numbers from the desired features below should be added
-   to compute the parameter value:
+   Specifies which RBD format 2 feature should be enabled when creating
+   an image. Multiple features can be enabled by repeating this option
+   multiple times. The following features are supported:
 
-   +1: layering support
-   +2: striping v2 support
-   +4: exclusive locking support
-   +8: object map support
+   layering: layering support
+   striping: striping v2 support
+   exclusive-lock: exclusive locking support
+   object-map: object map support (requires exclusive-lock)
 
 .. option:: --image-shared
 
@@ -293,6 +293,14 @@ Commands
 
 :command:`status` [*image-name*]
   Show the status of the image, including which clients have it open.
+
+:command:`feature` disable [*image-name*] [*feature*]
+  Disables the specified feature on the specified image. Multiple features can
+  be specified.
+
+:command:`feature` enable [*image-name*] [*feature*]
+  Enables the specified feature on the specified image. Multiple features can
+  be specified.
 
 :command:`lock` list [*image-name*]
   Show locks held on the image. The first column is the locker
