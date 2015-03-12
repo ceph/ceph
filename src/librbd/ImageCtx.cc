@@ -494,6 +494,28 @@ namespace librbd {
     return ((snap_flags & test_flags) == test_flags);
   }
 
+  int ImageCtx::update_flags(snap_t in_snap_id, uint64_t flag, bool enabled)
+  {
+    assert(snap_lock.is_wlocked());
+    uint64_t *_flags;
+    if (in_snap_id == CEPH_NOSNAP) {
+      _flags = &flags;
+    } else {
+      map<snap_t, SnapInfo>::iterator it = snap_info.find(in_snap_id);
+      if (it == snap_info.end()) {
+        return -ENOENT;
+      }
+      _flags = &it->second.flags;
+    }
+
+    if (enabled) {
+      (*_flags) |= flag;
+    } else {
+      (*_flags) &= ~flag;
+    }
+    return 0;
+  }
+
   const parent_info* ImageCtx::get_parent_info(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());

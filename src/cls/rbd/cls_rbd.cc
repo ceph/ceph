@@ -768,6 +768,7 @@ int get_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  * Input:
  * @params flags image flags
  * @params mask image flag mask
+ * @params snap_id which snapshot to update, or CEPH_NOSNAP (uint64_t)
  *
  * Output:
  * none
@@ -778,33 +779,61 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t flags;
   uint64_t mask;
+  uint64_t snap_id = CEPH_NOSNAP;
   bufferlist::iterator iter = in->begin();
   try {
     ::decode(flags, iter);
     ::decode(mask, iter);
+    if (!iter.end()) {
+      ::decode(snap_id, iter);
+    }
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
   // check that size exists to make sure this is a header object
   // that was created correctly
+  int r;
   uint64_t orig_flags = 0;
-  int r = read_key(hctx, "flags", &orig_flags);
-  if (r < 0 && r != -ENOENT) {
-    CLS_ERR("Could not read image's flags off disk: %s",
-            cpp_strerror(r).c_str());
-    return r;
+  cls_rbd_snap snap_meta;
+  string snap_meta_key;
+  if (snap_id == CEPH_NOSNAP) {
+    r = read_key(hctx, "flags", &orig_flags);
+    if (r < 0 && r != -ENOENT) {
+      CLS_ERR("Could not read image's flags off disk: %s",
+              cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    key_from_snap_id(snap_id, &snap_meta_key);
+    r = read_key(hctx, snap_meta_key, &snap_meta);
+    if (r < 0) {
+      CLS_ERR("Could not read snapshot: snap_id=%" PRIu64 ": %s",
+              snap_id, cpp_strerror(r).c_str());
+      return r;
+    }
+    orig_flags = snap_meta.flags;
   }
 
   flags = (orig_flags & ~mask) | (flags & mask);
-  CLS_LOG(20, "set_flags flags=%llu orig_flags=%llu", (unsigned long long)flags,
-          (unsigned long long)orig_flags);
+  CLS_LOG(20, "set_flags snap_id=%" PRIu64 ", orig_flags=%" PRIu64 ", "
+              "new_flags=%" PRIu64 ", mask=%" PRIu64, snap_id, orig_flags,
+              flags, mask);
 
-  bufferlist flagsbl;
-  ::encode(flags, flagsbl);
-  r = cls_cxx_map_set_val(hctx, "flags", &flagsbl);
+  if (snap_id == CEPH_NOSNAP) {
+    bufferlist bl;
+    ::encode(flags, bl);
+    r = cls_cxx_map_set_val(hctx, "flags", &bl);
+  } else {
+    snap_meta.flags = flags;
+
+    bufferlist bl;
+    ::encode(snap_meta, bl);
+    r = cls_cxx_map_set_val(hctx, snap_meta_key, &bl);
+  }
+
   if (r < 0) {
-    CLS_ERR("error updating flags: %d", r);
+    CLS_ERR("error updating flags: %s", cpp_strerror(r).c_str());
     return r;
   }
   return 0;
