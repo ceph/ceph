@@ -222,7 +222,7 @@ uint64_t Striper::get_num_objects(const ceph_file_layout& layout, uint64_t size)
   uint64_t num_periods = (size + period - 1) / period;
   uint64_t remainder_bytes = size % period;
   uint64_t remainder_objs = 0;
-  if ((remainder_bytes > 0) && (remainder_bytes < stripe_count * stripe_unit))
+  if ((remainder_bytes > 0) && (remainder_bytes < (uint64_t)stripe_count * stripe_unit))
     remainder_objs = stripe_count - ((remainder_bytes + stripe_unit - 1) / stripe_unit);
   return num_periods * stripe_count - remainder_objs;
 }
