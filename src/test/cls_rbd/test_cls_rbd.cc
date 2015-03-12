@@ -1044,7 +1044,7 @@ TEST_F(TestClsRbd, flags)
   ASSERT_EQ(0U, flags);
 
   librados::ObjectWriteOperation op1;
-  set_flags(&op1, 3, 2);
+  set_flags(&op1, CEPH_NOSNAP, 3, 2);
   ASSERT_EQ(0, ioctx.operate(oid, &op1));
   ASSERT_EQ(0, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
   ASSERT_EQ(2U, flags);
@@ -1055,12 +1055,12 @@ TEST_F(TestClsRbd, flags)
   ASSERT_EQ(0, snapshot_add(&ioctx, oid, snap_id, "snap"));
 
   librados::ObjectWriteOperation op2;
-  set_flags(&op2, 31, 4);
+  set_flags(&op2, snap_id, 31, 4);
   ASSERT_EQ(0, ioctx.operate(oid, &op2));
   ASSERT_EQ(0, get_flags(&ioctx, oid, &flags, snap_ids, &snap_flags));
-  ASSERT_EQ(6U, flags);
+  ASSERT_EQ(2U, flags);
   ASSERT_EQ(snap_ids.size(), snap_flags.size());
-  ASSERT_EQ(2U, snap_flags[0]);
+  ASSERT_EQ(6U, snap_flags[0]);
 
   ioctx.close();
 }
