@@ -2267,18 +2267,19 @@ static int do_kernel_map(const char *poolname, const char *imgname,
   if (r < 0)
     return r;
 
-  for (map<string, string>::const_iterator it = map_options.begin();
-       it != map_options.end();
-       ++it) {
+  for (map<string, string>::iterator it = map_options.begin();
+       it != map_options.end(); ) {
     // for compatibility with < 3.7 kernels, assume that rw is on by
     // default and omit it even if it was specified by the user
     // (see ceph.git commit fb0f1986449b)
-    if (it->first == "rw" && it->second == "rw")
-      continue;
-
-    if (it != map_options.begin())
-      oss << ",";
-    oss << it->second;
+    if (it->first == "rw" && it->second == "rw") {
+      map_options.erase(it++);
+    } else {
+      if (it != map_options.begin())
+        oss << ",";
+      oss << it->second;
+      ++it;
+    }
   }
 
   r = krbd_map(krbd, poolname, imgname, snapname, oss.str().c_str(), &devnode);
@@ -2356,11 +2357,6 @@ static string map_option_int_cb(const char *value_char)
 
 static void put_map_option(const string key, string val)
 {
-  map<string, string>::const_iterator it = map_options.find(key);
-  if (it != map_options.end()) {
-    cerr << "rbd: warning: redefining map option " << key << ": '"
-         << it->second << "' -> '" << val << "'" << std::endl;
-  }
   map_options[key] = val;
 }
 
@@ -2403,6 +2399,12 @@ static int parse_map_options(char *options)
       put_map_option("share", this_char);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
       put_map_option("crc", this_char);
+    } else if (!strcmp(this_char, "cephx_require_signatures") ||
+               !strcmp(this_char, "nocephx_require_signatures")) {
+      put_map_option("cephx_require_signatures", this_char);
+    } else if (!strcmp(this_char, "tcp_nodelay") ||
+               !strcmp(this_char, "notcp_nodelay")) {
+      put_map_option("tcp_nodelay", this_char);
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
         return 1;
@@ -2595,6 +2597,7 @@ int main(int argc, const char **argv)
     *lock_tag = NULL, *output_format = "plain",
     *fromsnapname = NULL,
     *first_diff = NULL, *second_diff = NULL;
+  char *cli_map_options = NULL;
   bool lflag = false;
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
@@ -2679,11 +2682,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       cerr << "rbd: --no-settle is deprecated" << std::endl;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--options", (char*)NULL)) {
-      char *map_options = strdup(val.c_str());
-      if (parse_map_options(map_options)) {
-        cerr << "rbd: couldn't parse map options" << std::endl;
-        return EXIT_FAILURE;
-      }
+      cli_map_options = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       // --read-only is equivalent to -o ro
       put_map_option("rw", "ro");
@@ -2913,6 +2912,20 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_MERGE_DIFF && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
+  }
+
+  if (opt_cmd == OPT_MAP) {
+    char *default_map_options = strdup(g_conf->rbd_default_map_options.c_str());
+
+    // parse default options first so they can be overwritten by cli options
+    if (parse_map_options(default_map_options)) {
+      cerr << "rbd: couldn't parse default map options" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (cli_map_options && parse_map_options(cli_map_options)) {
+      cerr << "rbd: couldn't parse map options" << std::endl;
+      return EXIT_FAILURE;
+    }
   }
 
   if (opt_cmd == OPT_UNMAP && !devpath) {
