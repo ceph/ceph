@@ -7,30 +7,53 @@
 Synopsis
 ========
 
-| **ceph** **auth** *add* *<entity>* {*<caps>* [*<caps>*...]}
+| **ceph** **auth** [ *add* \| *caps* \| *del* \| *export* \| *get* \| *get-key* \| *get-or-create* \| *get-or-create-key* \| *import* \| *list* \| *print-key* \| *print_key* ] ...
 
-| **ceph** **auth** *export* *<entity>*
+| **ceph** **compact**
 
-| **ceph** **config-key** *get* *<key>*
+| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *put* ] ...
 
-| **ceph** **mds** *add_data_pool* *<pool>*
+| **ceph** **df** *{detail}*
 
-| **ceph** **mds** *getmap* {*<int[0-]>*}
+| **ceph** **fsid**
 
-| **ceph** **mon** *add* *<name>* <*IPaddr[:port]*>
+| **ceph** **health** *{detail}*
+
+| **ceph** **heap** [ *dump* \| *start_profiler* \| *stop_profiler* \| *release* \| *stats* ] ...
+
+| **ceph** **injectargs** *<injectedargs>* [ *<injectedargs>*... ]
+
+| **ceph** **log** *<logtext>* [ *<logtext>*... ]
+
+| **ceph** **mds** [ *add_data_pool* \| *cluster_down* \| *cluster_up* \| *compat* \| *deactivate* \| *dump* \| *fail* \| *getmap* \| *newfs* \| *remove_data_pool* \| *rm* \| *rmfailed* \| *set* \| *set_max_mds* \| *set_state* \| *setmap* \| *stat* \| *stop* \| *tell* ] ...
+
+| **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** *create* {*<uuid>*}
+| **ceph** **osd** [ *blacklist* \| *create* \| *deep-scrub* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lost* \| *ls* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-utilization* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
 
-| **ceph** **osd** **crush** *add* *<osdname (id|osd.id)>*
-*<float[0.0-]>* *<args>* [*<args>*...]
+| **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *reweight* \| *reweight-all* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
-| **ceph** **pg** *force_create_pg* *<pgid>*
+| **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
 
-| **ceph** **pg** *stat*
+| **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
+
+| **ceph** **pg** [ *debug* \| *deep-scrub* \| *dump* \| *dump_json* \| *dump_pools_json* \| *dump_stuck* \| *force_create_pg* \| *getmap* \| *map* \| *repair* \| *scrub* \| *send_pg_creates* \| *set_full_ratio* \| *set_nearfull_ratio* \| *stat* ] ...
+
+| **ceph** **quorum** [ *enter* \| *exit* ]
 
 | **ceph** **quorum_status**
+
+| **ceph** **report** { *<tags>* [ *<tags>...* ] }
+
+| **ceph** **scrub**
+
+| **ceph** **status**
+
+| **ceph** **sync** **force** {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
+
+| **ceph** **tell** *<name (type.id)> <args> [<args>...]*
 
 Description
 ===========
@@ -144,17 +167,11 @@ config-key
 
 Manage configuration key. It uses some additional subcommands.
 
-Subcommand ``get`` gets the configuration key.
+Subcommand ``del`` deletes configuration key.
 
 Usage::
 
-	ceph config-key get <key>
-
-Subcommand ``put`` puts configuration key and values.
-
-Usage::
-
-	ceph config-key put <key> {<val>}
+	ceph config-key del <key>
 
 Subcommand ``exists`` checks for configuration keys existence.
 
@@ -162,17 +179,23 @@ Usage::
 
 	ceph config-key exists <key>
 
+Subcommand ``get`` gets the configuration key.
+
+Usage::
+
+	ceph config-key get <key>
+
 Subcommand ``list`` lists configuration keys.
 
 Usage::
 
 	ceph config-key list
 
-Subcommand ``del`` deletes configuration key.
+Subcommand ``put`` puts configuration key and values.
 
 Usage::
 
-	ceph config-key del <key>
+	ceph config-key put <key> {<val>}
 
 
 df
@@ -182,7 +205,7 @@ Show cluster's free space status.
 
 Usage::
 
-	ceph df
+	ceph df {detail}
 
 
 fsid
@@ -202,7 +225,7 @@ Show cluster's health.
 
 Usage::
 
-	ceph health
+	ceph health {detail}
 
 
 heap
@@ -328,6 +351,12 @@ Usage::
 
 	ceph mds rmfailed <int[0-]>
 
+Subcommand ``set`` set mds parameter <var> to <val>
+
+Usage::
+
+	ceph mds set max_mds|max_file_size|allow_new_snaps|inline_data <va> {<confirm>}
+
 Subcommand ``set_max_mds`` sets max MDS index.
 
 Usage::
@@ -400,7 +429,10 @@ Usage::
 
 	ceph mon stat
 
-Subcommand ``mon_status`` reports status of monitors.
+mon_status
+----------
+
+Reports status of monitors.
 
 Usage::
 
@@ -411,6 +443,28 @@ osd
 
 Manage OSD configuration and administration. It uses some additional
 subcommands.
+
+Subcommand ``blacklist`` manage blacklisted clients. It uses some additional
+subcommands.
+
+Subcommand ``add`` add <addr> to blacklist (optionally until <expire> seconds
+from now)
+
+Usage::
+
+	ceph osd blacklist add <EntityAddr> {<float[0.0-]>}
+
+Subcommand ``ls`` show blacklisted clients
+
+Usage::
+
+	ceph osd blacklist ls
+
+Subcommand ``rm`` remove <addr> from blacklist
+
+Usage::
+
+	ceph osd blacklist rm <EntityAddr>
 
 Subcommand ``create`` creates new osd (with optional UUID).
 
@@ -449,6 +503,12 @@ Usage::
 
 	ceph osd crush dump
 
+Subcommand ``get-tunable`` get crush tunable straw_calc_version
+
+Usage::
+
+	ceph osd crush get-tunable straw_calc_version
+
 Subcommand ``link`` links existing entry for <name> under location <args>.
 
 Usage::
@@ -473,6 +533,13 @@ Subcommand ``reweight`` change <name>'s weight to <weight> in crush map.
 Usage::
 
 	ceph osd crush reweight <name> <float[0.0-]>
+
+Subcommand ``reweight-all`` recalculate the weights for the tree to
+ensure they sum correctly
+
+Usage::
+
+	ceph osd crush reweight-all
 
 Subcommand ``rm`` removes <name> from crush map (everywhere, or just at
 <ancestor>).
@@ -523,7 +590,7 @@ Usage::
 
 	ceph osd crush rule rm <name>
 
-Subcommand ``set`` sets crush map from input file.
+Subcommand ``set`` used alone, sets crush map from input file.
 
 Usage::
 
@@ -535,6 +602,13 @@ for <name> to <weight> with location <args>.
 Usage::
 
 	ceph osd crush set <osdname (id|osd.id)> <float[0.0-]> <args> [<args>...]
+
+Subcommand ``set-tunable`` set crush tunable <tunable> to <value>.  The only
+tunable that can be set is straw_calc_version.
+
+Usage::
+
+	ceph osd crush set-tunable straw_calc_version <value>
 
 Subcommand ``show-tunables`` shows current crush tunables.
 
@@ -708,7 +782,7 @@ Subcommand ``get`` gets pool parameter <var>.
 Usage::
 
 	ceph osd pool get <poolname> size|min_size|crash_replay_interval|pg_num|
-	pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
+	pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp
 
 	ceph osd pool get <poolname> auid|target_max_objects|target_max_bytes
 
@@ -746,7 +820,7 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 Usage::
 
 	ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
-	pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
+	pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period
 
 	ceph osd pool set <poolname> hit_set_count|hit_set_fpp|debug_fake_ec_pool
 
@@ -754,10 +828,9 @@ Usage::
 
 	ceph osd pool set <poolname> cache_target_dirty_ratio|cache_target_full_ratio
 
-	ceph osd pool set <poolname> cache_min_flush_age
+	ceph osd pool set <poolname> cache_min_flush_age|cache_min_evict_age
 
-	ceph osd pool set <poolname> cache_min_evict_age|auid <val>
-	{--yes-i-really-mean-it}
+	ceph osd pool set <poolname> auid <val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
 
@@ -933,16 +1006,13 @@ with plain).
 
 Usage::
 
-	ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief}
-
-	ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief...}
+	ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief} [{all|summary|sum|delta|pools|osds|pgs|pgs_brief...]}
 
 Subcommand ``dump_json`` shows human-readable version of pg map in json only.
 
 Usage::
 
-	ceph pg dump_json {all|summary|sum|pools|osds|pgs[all|summary|sum|pools|
-	osds|pgs...]}
+	ceph pg dump_json {all|summary|sum|delta|pools|osds|pgs|pgs_brief} [{all|summary|sum|delta|pools|osds|pgs|pgs_brief...]}
 
 Subcommand ``dump_pools_json`` shows pg pools info in json only.
 
@@ -954,8 +1024,7 @@ Subcommand ``dump_stuck`` shows information about stuck pgs.
 
 Usage::
 
-	ceph pg dump_stuck {inactive|unclean|stale[inactive|unclean|stale...]}
-	{<int>}
+	ceph pg dump_stuck {inactive|unclean|stale [inactive|unclean|stale...]} {<int>}
 
 Subcommand ``force_create_pg`` forces creation of pg <pgid>.
 
