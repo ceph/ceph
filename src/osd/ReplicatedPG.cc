@@ -1800,13 +1800,17 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
     osd->logger->inc(l_osd_op_cache_hit);
     return false;
   }
-
+  
   MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
   const object_locator_t& oloc = m->get_object_locator();
 
   if (must_promote || op->need_promote()) {
     promote_object(obc, missing_oid, oloc, op);
     return true;
+  }
+
+  if (op->need_skip_promote()) {
+    return false;
   }
 
   // older versions do not proxy the feature bits.
@@ -1832,9 +1836,7 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
       waiting_for_cache_not_full.push_back(op);
       return true;
     }
-    if (can_skip_promote(op)) {
-      return false;
-    }
+
     if (op->may_write() || write_ordered || !hit_set) {
       promote_object(obc, missing_oid, oloc, op);
       return true;
@@ -1920,9 +1922,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op)) {
-	return false;
-      }
       promote_object(obc, missing_oid, oloc, op);
       return true;
     }
@@ -1940,9 +1939,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
 	waiting_for_cache_not_full.push_back(op);
 	return true;
       }
-      if (can_skip_promote(op)) {
-	return false;
-      }
       promote_object(obc, missing_oid, oloc, op);
       return true;
     }
@@ -1954,20 +1950,6 @@ bool ReplicatedPG::maybe_handle_cache(OpRequestRef op,
   default:
     assert(0 == "unrecognized cache_mode");
   }
-  return false;
-}
-
-bool ReplicatedPG::can_skip_promote(OpRequestRef op)
-{
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_req());
-  if (m->ops.empty())
-    return false;
-  // if we get a delete with FAILOK we can skip promote.  without
-  // FAILOK we still need to promote (or do something smarter) to
-  // determine whether to return ENOENT or 0.
-  if (m->ops[0].op.op == CEPH_OSD_OP_DELETE &&
-      (m->ops[0].op.flags & CEPH_OSD_OP_FLAG_FAILOK))
-    return true;
   return false;
 }
 
