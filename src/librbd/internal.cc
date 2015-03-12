@@ -14,6 +14,7 @@
 #include "include/stringify.h"
 
 #include "cls/rbd/cls_rbd.h"
+#include "cls/rbd/cls_rbd_client.h"
 
 #include "librbd/AioCompletion.h"
 #include "librbd/AioRequest.h"
@@ -1343,6 +1344,67 @@ reprotect_and_return_err:
       return r;
     RWLock::RLocker l(ictx->snap_lock);
     *features = ictx->features;
+    return 0;
+  }
+
+  int update_features(ImageCtx *ictx, uint64_t features, bool enabled)
+  {
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    CephContext *cct = ictx->cct;
+    if (ictx->read_only) {
+      return -EROFS;
+    } else if (ictx->old_format) {
+      lderr(cct) << "old-format images do not support features" << dendl;
+      return -EINVAL;
+    }
+
+    if ((features & RBD_FEATURES_MUTABLE) != features) {
+      lderr(cct) << "cannot update immutable features" << dendl;
+      return -EINVAL;
+    } else if (features == 0) {
+      lderr(cct) << "update requires at least one feature" << dendl;
+      return -EINVAL;
+    }
+
+    RWLock::RLocker l(ictx->snap_lock);
+    uint64_t new_features = ictx->features | features;
+    if (!enabled) {
+      new_features = ictx->features & ~features;
+    }
+
+    if (ictx->features == new_features) {
+      return 0;
+    }
+
+    uint64_t mask = features;
+    if ((features & RBD_FEATURE_EXCLUSIVE_LOCK) != 0 && !enabled) {
+      if ((new_features & RBD_FEATURE_OBJECT_MAP) != 0) {
+        lderr(cct) << "cannot disable exclusive lock" << dendl;
+        return -EINVAL;
+      }
+      mask |= RBD_FEATURE_OBJECT_MAP;
+    } else if ((features & RBD_FEATURE_OBJECT_MAP) != 0 && enabled) {
+      if ((new_features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
+        lderr(cct) << "cannot enable object map" << dendl;
+        return -EINVAL;
+      }
+      mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
+    }
+
+    ldout(cct, 10) << "update_features: features=" << new_features << ", mask="
+                   << mask << dendl;
+    r = librbd::cls_client::set_features(&ictx->md_ctx, ictx->header_oid,
+                                         new_features, mask);
+    if (r < 0) {
+      lderr(cct) << "failed to update features: " << cpp_strerror(r)
+                 << dendl;
+    }
+
+    notify_change(ictx->md_ctx, ictx->header_oid, ictx);
     return 0;
   }
 
