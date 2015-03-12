@@ -2590,6 +2590,7 @@ int main(int argc, const char **argv)
     *lock_tag = NULL, *output_format = "plain",
     *fromsnapname = NULL,
     *first_diff = NULL, *second_diff = NULL;
+  char *cli_map_options = NULL;
   bool lflag = false;
   int pretty_format = 0;
   long long stripe_unit = 0, stripe_count = 0;
@@ -2674,11 +2675,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "--no-settle", (char *)NULL)) {
       cerr << "rbd: --no-settle is deprecated" << std::endl;
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--options", (char*)NULL)) {
-      char *map_options = strdup(val.c_str());
-      if (parse_map_options(map_options)) {
-        cerr << "rbd: couldn't parse map options" << std::endl;
-        return EXIT_FAILURE;
-      }
+      cli_map_options = strdup(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       // --read-only is equivalent to -o ro
       put_map_option("rw", "ro");
@@ -2908,6 +2905,20 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_MERGE_DIFF && !imgname) {
     cerr << "rbd: image name was not specified" << std::endl;
     return EXIT_FAILURE;
+  }
+
+  if (opt_cmd == OPT_MAP) {
+    char *default_map_options = strdup(g_conf->rbd_default_map_options.c_str());
+
+    // parse default options first so they can be overwritten by cli options
+    if (parse_map_options(default_map_options)) {
+      cerr << "rbd: couldn't parse default map options" << std::endl;
+      return EXIT_FAILURE;
+    }
+    if (cli_map_options && parse_map_options(cli_map_options)) {
+      cerr << "rbd: couldn't parse map options" << std::endl;
+      return EXIT_FAILURE;
+    }
   }
 
   if (opt_cmd == OPT_UNMAP && !devpath) {

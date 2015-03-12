@@ -900,6 +900,8 @@ OPTION(rbd_default_features, OPT_INT, 3) // only applies to format 2 images
 					 // +1 for layering, +2 for stripingv2,
 					 // +4 for exclusive lock, +8 for object map
 
+OPTION(rbd_default_map_options, OPT_STR, "") // default rbd map -o / --options
+
 OPTION(nss_db_path, OPT_STR, "") // path to nss db
 
 
