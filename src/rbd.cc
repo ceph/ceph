@@ -2398,6 +2398,12 @@ static int parse_map_options(char *options)
       put_map_option("share", this_char);
     } else if (!strcmp(this_char, "crc") || !strcmp(this_char, "nocrc")) {
       put_map_option("crc", this_char);
+    } else if (!strcmp(this_char, "cephx_require_signatures") ||
+               !strcmp(this_char, "nocephx_require_signatures")) {
+      put_map_option("cephx_require_signatures", this_char);
+    } else if (!strcmp(this_char, "tcp_nodelay") ||
+               !strcmp(this_char, "notcp_nodelay")) {
+      put_map_option("tcp_nodelay", this_char);
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
         return 1;
