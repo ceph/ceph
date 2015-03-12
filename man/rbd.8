@@ -435,6 +435,17 @@ crc \- Enable CRC32C checksumming for data writes (default).
 .IP \(bu 2
 nocrc \- Disable CRC32C checksumming for data writes.
 .IP \(bu 2
+cephx_require_signatures \- Require cephx message signing, i.e. MSG_AUTH
+feature bit (since 3.19, default).
+.IP \(bu 2
+nocephx_require_signatures \- Don\(aqt require cephx message signing (since
+3.19).
+.IP \(bu 2
+tcp_nodelay \- Disable Nagle\(aqs algorithm on client sockets (since 4.0,
+default).
+.IP \(bu 2
+notcp_nodelay \- Enable Nagle\(aqs algorithm on client sockets (since 4.0).
+.IP \(bu 2
 osdkeepalive=x \- OSD keepalive timeout (default is 5 seconds).
 .IP \(bu 2
 osd_idle_ttl=x \- OSD idle TTL (default is 60 seconds).
