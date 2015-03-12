@@ -150,9 +150,7 @@ void ObjectMap::refresh(uint64_t snap_id)
   assert(m_image_ctx.snap_lock.is_wlocked());
   RWLock::WLocker l(m_image_ctx.object_map_lock);
 
-  uint64_t features;
-  m_image_ctx.get_features(snap_id, &features);
-  if ((features & RBD_FEATURE_OBJECT_MAP) == 0 ||
+  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0 ||
       (m_image_ctx.snap_id == snap_id && !m_image_ctx.snap_exists)) {
     m_object_map.clear();
     m_enabled = false;
@@ -198,9 +196,7 @@ void ObjectMap::rollback(uint64_t snap_id) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << &m_image_ctx << " rollback object map" << dendl;
 
-  uint64_t features;
-  m_image_ctx.get_features(snap_id, &features);
-  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
     r = m_image_ctx.md_ctx.remove(oid);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "unable to remove object map: " << cpp_strerror(r)
@@ -238,9 +234,7 @@ void ObjectMap::rollback(uint64_t snap_id) {
 
 void ObjectMap::snapshot(uint64_t snap_id) {
   assert(m_image_ctx.snap_lock.is_wlocked());
-  uint64_t features;
-  m_image_ctx.get_features(CEPH_NOSNAP, &features);
-  if ((features & RBD_FEATURE_OBJECT_MAP) == 0) {
+  if ((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) == 0) {
     return;
   }
 
