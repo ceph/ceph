@@ -38,6 +38,7 @@
     image-meta get <image-name> <key>           image metadata get the value associated with the key
     image-meta set <image-name> <key> <value>   image metadata set key with value
     image-meta remove <image-name> <key>        image metadata remove the key and value associated
+    object-map rebuild <image-name>             rebuild an invalid object map
     snap ls <image-name>                        dump list of image snapshots
     snap create <snap-name>                     create a snapshot
     snap rollback <snap-name>                   rollback image to snapshot
