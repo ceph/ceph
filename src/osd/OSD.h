@@ -2175,6 +2175,7 @@ protected:
       ThreadPool::TPHandle &handle) {
       osd->osd_lock.Lock();
       if (osd->is_stopping()) {
+	msg->put();
 	osd->osd_lock.Unlock();
 	return;
       }
