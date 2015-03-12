@@ -174,6 +174,7 @@ namespace librbd {
     bool test_features(uint64_t test_features) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     bool test_flags(uint64_t test_flags) const;
+    int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
     const parent_info* get_parent_info(librados::snap_t in_snap_id) const;
     int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
