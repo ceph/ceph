@@ -165,12 +165,9 @@ namespace librbd {
     uint64_t get_stripe_period() const;
 
     void add_snap(std::string in_snap_name, librados::snap_t id,
-		  uint64_t in_size, uint64_t features,
-		  parent_info parent, uint8_t protection_status,
-		  uint64_t flags);
+		  uint64_t in_size, parent_info parent,
+                  uint8_t protection_status, uint64_t flags);
     uint64_t get_image_size(librados::snap_t in_snap_id) const;
-    int get_features(librados::snap_t in_snap_id,
-		     uint64_t *out_features) const;
     bool test_features(uint64_t test_features) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     bool test_flags(uint64_t test_flags) const;
