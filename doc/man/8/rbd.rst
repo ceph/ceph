@@ -366,6 +366,17 @@ the running kernel.
 
 * nocrc - Disable CRC32C checksumming for data writes.
 
+* cephx_require_signatures - Require cephx message signing, i.e. MSG_AUTH
+  feature bit (since 3.19, default).
+
+* nocephx_require_signatures - Don't require cephx message signing (since
+  3.19).
+
+* tcp_nodelay - Disable Nagle's algorithm on client sockets (since 4.0,
+  default).
+
+* notcp_nodelay - Enable Nagle's algorithm on client sockets (since 4.0).
+
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
