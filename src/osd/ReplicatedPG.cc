@@ -3750,6 +3750,10 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+	if (!obs.exists) {
+	  result = 0;
+	  break;
+	}
 	if (oi.is_dirty()) {
 	  result = -EBUSY;
 	  break;
