@@ -2136,10 +2136,9 @@ static const string metadata_name_from_key(const string &key)
  */
 int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  map<string, bufferlist> vals;
-  map<string, string> out_map;
+  map<string, bufferlist> raw_data, data;
   int r = cls_cxx_map_get_vals(hctx, RBD_METADATA_KEY_PREFIX, RBD_METADATA_KEY_PREFIX,
-                               RBD_MAX_METAADATA_KEYS, &vals);
+                               RBD_MAX_METAADATA_KEYS, &raw_data);
   if (r < 0) {
     CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
     return r;
@@ -2147,49 +2146,39 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bufferlist::iterator iter;
   string v;
-  for (map<string, bufferlist>::iterator it = vals.begin();
-       it != vals.end(); ++it) {
-    iter = it->second.begin();
-    try {
-      ::decode(v, iter);
-    } catch (const buffer::error &err) {
-      CLS_ERR("failed to decode the vals off of disk");
-      return -EINVAL;
-    }
-
+  for (map<string, bufferlist>::iterator it = raw_data.begin(); it != raw_data.end(); ++it) {
     assert(it->first.find(RBD_METADATA_KEY_PREFIX, 0) == 0);
-    out_map[metadata_name_from_key(it->first)] = v;
+    data[metadata_name_from_key(it->first)].swap(it->second);
   }
 
-  ::encode(out_map, *out);
+  ::encode(data, *out);
   return 0;
 }
 
 /**
  * Input:
- * @param key
- * @param value
+ * @param data <map(key, value)>
  *
  * Output:
  * @returns 0 on success, negative error code on failure
  */
 int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  string key, value;
+  map<string, bufferlist> data, raw_data;
 
   bufferlist::iterator iter = in->begin();
   try {
-    ::decode(key, iter);
-    ::decode(value, iter);
+    ::decode(data, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
-  CLS_LOG(20, "metdata_set key=%s value=%s", key.c_str(), value.c_str());
-
-  bufferlist bl;
-  ::encode(value, bl);
-  int r = cls_cxx_map_set_val(hctx, metadata_key_for_name(key), &bl);
+  for (map<string, bufferlist>::iterator it = data.begin();
+       it != data.end(); ++it) {
+    CLS_LOG(20, "metdata_set key=%s value=%s", it->first.c_str(), it->second.c_str());
+    raw_data[metadata_key_for_name(it->first)].swap(it->second);
+  }
+  int r = cls_cxx_map_set_vals(hctx, &raw_data);
   if (r < 0) {
     CLS_ERR("error writing metadata: %d", r);
     return r;
@@ -2237,7 +2226,8 @@ int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  string key, value;
+  string key;
+  bufferlist value;
 
   bufferlist::iterator iter = in->begin();
   try {
@@ -2248,7 +2238,7 @@ int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   CLS_LOG(20, "metdata_get key=%s", key.c_str());
 
-  int r = read_key(hctx, metadata_key_for_name(key), &value);
+  int r = cls_cxx_map_get_val(hctx, metadata_key_for_name(key), &value);
   if (r < 0) {
     CLS_ERR("error get metadata: %d", r);
     return r;

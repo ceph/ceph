@@ -750,10 +750,9 @@ namespace librbd {
     }
 
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
-                     const std::string &key, const std::string &data)
+                     const map<string, bufferlist> &data)
     {
       bufferlist in;
-      ::encode(key, in);
       ::encode(data, in);
       bufferlist out;
       return ioctx->exec(oid, "rbd", "metadata_set", in, out);
@@ -769,7 +768,7 @@ namespace librbd {
     }
 
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
-                     map<string, string> *pairs)
+                     map<string, bufferlist> *pairs)
     {
       assert(pairs);
       bufferlist in, out;

@@ -1077,7 +1077,7 @@ reprotect_and_return_err:
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
-    map<string, string> pairs;
+    map<string, bufferlist> pairs;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
     r = open_image(p_imctx);
@@ -1149,13 +1149,10 @@ reprotect_and_return_err:
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       goto err_close_child;
     }
-    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid,
-                                   it->first, it->second);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << r << dendl;
-        goto err_close_child;
-      }
+    r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't set metadata: " << r << dendl;
+      goto err_close_child;
     }
 
     p_imctx->md_lock.get_write();
@@ -2277,19 +2274,17 @@ reprotect_and_return_err:
       return -EINVAL;
     }
     int r;
-    map<string, string> pairs;
+    map<string, bufferlist> pairs;
 
     r = cls_client::metadata_list(&src->md_ctx, src->header_oid, &pairs);
     if (r < 0) {
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       return r;
     }
-    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
-      r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, it->first, it->second);
-      if (r < 0) {
-        lderr(cct) << "couldn't set metadata: " << r << dendl;
-        return r;
-      }
+    r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't set metadata: " << r << dendl;
+      return r;
     }
 
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
@@ -3409,7 +3404,9 @@ reprotect_and_return_err:
       return r;
     }
 
-    return cls_client::metadata_set(&ictx->md_ctx, ictx->header_oid, key, value);
+    map<string, bufferlist> data;
+    data[key].append(value);
+    return cls_client::metadata_set(&ictx->md_ctx, ictx->header_oid, data);
   }
 
   int metadata_remove(ImageCtx *ictx, const string &key)
@@ -3425,7 +3422,7 @@ reprotect_and_return_err:
     return cls_client::metadata_remove(&ictx->md_ctx, ictx->header_oid, key);
   }
 
-  int metadata_list(ImageCtx *ictx, map<string, string> *pairs)
+  int metadata_list(ImageCtx *ictx, map<string, bufferlist> *pairs)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_list " << ictx << dendl;
