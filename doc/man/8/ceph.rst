@@ -495,7 +495,7 @@ Subcommand ``create-or-move`` creates entry or moves existing entry for <name>
 Usage::
 
 	ceph osd crush create-or-move <osdname (id|osd.id)> <float[0.0-]> <args>
-[<args>...]
+	[<args>...]
 
 Subcommand ``dump`` dumps crush map.
 
@@ -819,18 +819,12 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 
 Usage::
 
-	ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
-	pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period
-
-	ceph osd pool set <poolname> hit_set_count|hit_set_fpp|debug_fake_ec_pool
-
-	ceph osd pool set <poolname> target_max_bytes|target_max_objects
-
-	ceph osd pool set <poolname> cache_target_dirty_ratio|cache_target_full_ratio
-
-	ceph osd pool set <poolname> cache_min_flush_age|cache_min_evict_age
-
-	ceph osd pool set <poolname> auid <val> {--yes-i-really-mean-it}
+	ceph osd pool set <poolname> size|min_size|crash_replay_interval|
+	pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
+	hit_set_count|hit_set_fpp|debug_fake_ec_pool| target_max_bytes|
+	target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|
+	cache_min_flush_age|cache_min_evict_age|auid
+	<val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
 
