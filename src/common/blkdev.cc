@@ -57,7 +57,8 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   if (strncmp(dev, "/dev/", 5) != 0)
     return -EINVAL;
 
-  strcpy(devname, dev + 5);
+  strncpy(devname, dev + 5, PATH_MAX-1);
+  devname[PATH_MAX-1] = '\0';
   for (p = devname; *p; ++p)
     if (*p == '/')
       *p = '!';
