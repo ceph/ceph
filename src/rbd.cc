@@ -2104,7 +2104,7 @@ done:
 
 static int do_metadata_list(librbd::Image& image, Formatter *f)
 {
-  map<string, string> pairs;
+  map<string, bufferlist> pairs;
   int r;
   TextTable tbl;
 
@@ -2127,12 +2127,12 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
            << " metadata" << (one ? "" : "s") << " on this image.\n";
     }
 
-    for (map<string, string>::iterator it = pairs.begin();
+    for (map<string, bufferlist>::iterator it = pairs.begin();
          it != pairs.end(); ++it) {
       if (f) {
-        f->dump_string(it->first.c_str(), it->second);
+        f->dump_string(it->first.c_str(), it->second.c_str());
       } else {
-        tbl << it->first << it->second << TextTable::endrow;
+        tbl << it->first << it->second.c_str() << TextTable::endrow;
       }
     }
     if (!f)

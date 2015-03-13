@@ -2613,7 +2613,7 @@ TEST_F(TestLibRBD, Metadata)
 
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
-  map<string, string> pairs;
+  map<string, bufferlist> pairs;
   ASSERT_EQ(0, image1.metadata_list(&pairs));
   ASSERT_TRUE(pairs.empty());
 
