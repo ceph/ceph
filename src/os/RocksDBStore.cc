@@ -470,11 +470,6 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
   return dbiter->status().ok() ? 0 : -1;
 }
 
-bool RocksDBStore::in_prefix(const string &prefix, rocksdb::Slice key)
-{
-  return (key.compare(rocksdb::Slice(past_prefix(prefix))) < 0) &&
-    (key.compare(rocksdb::Slice(prefix)) > 0);
-}
 string RocksDBStore::past_prefix(const string &prefix)
 {
   string limit = prefix;
