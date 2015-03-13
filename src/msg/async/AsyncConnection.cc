@@ -2041,6 +2041,7 @@ void AsyncConnection::fault()
     ldout(async_msgr->cct, 0) << __func__ << " with nothing to send and in the half "
                               << "accept state just closed, state="
                               << get_state_name(state) << dendl;
+    center->dispatch_event_external(reset_handler);
     _stop();
     return ;
   }
