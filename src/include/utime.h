@@ -288,7 +288,7 @@ public:
       gmtime_r(&tt, &tm);
 
       if (nsec) {
-        *nsec = usec * 1000;
+        *nsec = (uint64_t)usec * 1000;
       }
     }
     time_t t = timegm(&tm);
