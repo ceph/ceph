@@ -2957,8 +2957,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
       opt_cmd != OPT_INFO && opt_cmd != OPT_LIST &&
       opt_cmd != OPT_SNAP_LIST && opt_cmd != OPT_LOCK_LIST &&
       opt_cmd != OPT_CHILDREN && opt_cmd != OPT_DIFF &&
-      opt_cmd != OPT_METADATA_LIST && opt_cmd != OPT_DIFF &&
-      opt_cmd != OPT_STATUS) {
+      opt_cmd != OPT_METADATA_LIST && opt_cmd != OPT_STATUS) {
     cerr << "rbd: command doesn't use output formatting"
 	 << std::endl;
     return EXIT_FAILURE;
@@ -3578,7 +3577,7 @@ if (!set_conf_param(v, p1, p2, p3)) { \
   case OPT_METADATA_SET:
     r = do_metadata_set(image, key, value);
     if (r < 0) {
-      cerr << "rbd: listing metadata failed: " << cpp_strerror(r) << std::endl;
+      cerr << "rbd: setting metadata failed: " << cpp_strerror(r) << std::endl;
       return -r;
     }
     break;

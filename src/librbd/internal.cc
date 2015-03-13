@@ -1149,7 +1149,7 @@ reprotect_and_return_err:
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       goto err_close_child;
     }
-    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); it++) {
+    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
       r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid,
                                    it->first, it->second);
       if (r < 0) {
@@ -2284,7 +2284,7 @@ reprotect_and_return_err:
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       return r;
     }
-    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); it++) {
+    for (map<string, string>::iterator it = pairs.begin(); it != pairs.end(); ++it) {
       r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, it->first, it->second);
       if (r < 0) {
         lderr(cct) << "couldn't set metadata: " << r << dendl;
