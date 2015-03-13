@@ -436,6 +436,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   if (!ret)
     ret = STATUS_CREATED;
   dump_etag(s, etag.c_str());
+  dump_last_modified(s, mtime);
   set_req_state_err(s, ret);
   dump_errno(s);
   end_header(s, this);
