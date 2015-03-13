@@ -919,14 +919,10 @@ class SyntheticWorkload {
     pair<Messenger*, Messenger*> p;
     {
       boost::uniform_int<> choose(0, available_servers.size() - 1);
-      int index = choose(rng);
-      if (server->get_default_policy().server || index % 2) {
-        conn = client->get_connection(server->get_myinst());
+      if (server->get_default_policy().server || choose(rng) % 2)
         p = make_pair(client, server);
-      } else {
-        conn = server->get_connection(client->get_myinst());
+      else
         p = make_pair(server, client);
-      }
     }
     if (!available_connections.count(p)) {
       ConnectionRef conn = p.first->get_connection(p.second->get_myinst());
@@ -1086,6 +1082,39 @@ TEST_P(MessengerTest, SyntheticInjectTest2) {
   SyntheticWorkload test_msg(8, 16, GetParam(), 100,
                              Messenger::Policy::lossless_peer_reuse(0, 0),
                              Messenger::Policy::lossless_peer_reuse(0, 0));
+  for (int i = 0; i < 100; ++i) {
+    if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
+    test_msg.generate_connection();
+  }
+  gen_type rng(time(NULL));
+  for (int i = 0; i < 1000; ++i) {
+    if (!(i % 10)) {
+      cerr << "Op " << i << ": ";
+      test_msg.print_internal_state();
+    }
+    boost::uniform_int<> true_false(0, 99);
+    int val = true_false(rng);
+    if (val > 90) {
+      test_msg.generate_connection();
+    } else if (val > 80) {
+      test_msg.drop_connection();
+    } else if (val > 10) {
+      test_msg.send_message();
+    } else {
+      usleep(rand() % 500 + 100);
+    }
+  }
+  test_msg.wait_for_done();
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
+  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
+}
+
+TEST_P(MessengerTest, SyntheticInjectTest3) {
+  g_ceph_context->_conf->set_val("ms_inject_socket_failures", "600");
+  g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
+  SyntheticWorkload test_msg(8, 16, GetParam(), 100,
+                             Messenger::Policy::stateless_server(0, 0),
+                             Messenger::Policy::lossy_client(0, 0));
   for (int i = 0; i < 100; ++i) {
     if (!(i % 10)) cerr << "seeding connection " << i << std::endl;
     test_msg.generate_connection();
