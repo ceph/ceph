@@ -823,13 +823,13 @@ namespace librbd {
     return r;
   }
 
-  int Image::metadata_list(map<string, string> *pairs)
+  int Image::metadata_list(map<string, bufferlist> *pairs)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, metadata_list_enter, ictx);
     int r = librbd::metadata_list(ictx, pairs);
     if (r >= 0) {
-      for (map<string, string>::const_iterator it = pairs->begin();
+      for (map<string, bufferlist>::iterator it = pairs->begin();
            it != pairs->end(); ++it) {
         tracepoint(librbd, metadata_list_entry, it->first.c_str(), it->second.c_str());
       }
@@ -1786,11 +1786,11 @@ extern "C" int rbd_metadata_list(rbd_image_t image,  char *key, size_t *key_len,
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, metadata_list_enter, ictx);
-  map<string, string> pairs;
+  map<string, bufferlist> pairs;
   int r = librbd::metadata_list(ictx, &pairs);
   size_t key_total_len = 0, val_total_len = 0;
   bool too_short = false;
-  for (map<string, string>::iterator it = pairs.begin();
+  for (map<string, bufferlist>::iterator it = pairs.begin();
        it != pairs.end(); ++it) {
     key_total_len += it->first.size() + 1;
     val_total_len += it->second.length() + 1;
@@ -1806,11 +1806,11 @@ extern "C" int rbd_metadata_list(rbd_image_t image,  char *key, size_t *key_len,
 
   char *key_p = key, *value_p = value;
 
-  for (map<string, string>::iterator it = pairs.begin();
+  for (map<string, bufferlist>::iterator it = pairs.begin();
        it != pairs.end(); ++it) {
     strncpy(key_p, it->first.c_str(), it->first.size());
     key_p += it->first.size() + 1;
-    strncpy(value_p, it->second.c_str(), it->second.size());
+    strncpy(value_p, it->second.c_str(), it->second.length());
     value_p += it->second.length() + 1;
     tracepoint(librbd, metadata_list_entry, it->first.c_str(), it->second.c_str());
   }

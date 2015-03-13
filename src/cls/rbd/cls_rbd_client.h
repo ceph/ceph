@@ -88,9 +88,9 @@ namespace librbd {
     int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 			      uint64_t stripe_unit, uint64_t stripe_count);
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
-                      map<string, string> *pairs);
+                      map<string, bufferlist> *pairs);
     int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
-                     const std::string &key, const std::string &data);
+                     const map<std::string, bufferlist> &data);
     int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
                         const std::string &key);
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,

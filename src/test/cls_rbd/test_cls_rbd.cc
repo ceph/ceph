@@ -1078,19 +1078,21 @@ TEST_F(TestClsRbd, metadata)
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid));
 
-  map<string, string> pairs;
+  map<string, bufferlist> pairs;
   string value;
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_TRUE(pairs.empty());
 
-  ASSERT_EQ(0, metadata_set(&ioctx, oid, "key1", "value1"));
-  ASSERT_EQ(0, metadata_set(&ioctx, oid, "key2", "value2"));
+  pairs["key1"].append("value1");
+  pairs["key2"].append("value2");
+  ASSERT_EQ(0, metadata_set(&ioctx, oid, pairs));
   ASSERT_EQ(0, metadata_get(&ioctx, oid, "key1", &value));
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
+  pairs.clear();
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_EQ(2U, pairs.size());
-  ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
+  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
   pairs.clear();
   ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key1"));
@@ -1098,7 +1100,7 @@ TEST_F(TestClsRbd, metadata)
   ASSERT_TRUE(metadata_get(&ioctx, oid, "key1", &value) < 0);
   ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
   ASSERT_EQ(1U, pairs.size());
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
   ioctx.close();
 }
