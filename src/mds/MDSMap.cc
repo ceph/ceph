@@ -499,7 +499,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 8;
+  __u16 ev = 9;
   ::encode(ev, bl);
   ::encode(compat, bl);
   ::encode(metadata_pool, bl);
@@ -517,6 +517,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   ::encode(inline_data_enabled, bl);
   ::encode(enabled, bl);
   ::encode(fs_name, bl);
+  ::encode(damaged, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -597,6 +598,10 @@ void MDSMap::decode(bufferlist::iterator& p)
       // filesystem until it's explicitly enabled.
       enabled = false;
     }
+  }
+
+  if (ev >= 9) {
+    ::decode(damaged, p);
   }
   DECODE_FINISH(p);
 }
