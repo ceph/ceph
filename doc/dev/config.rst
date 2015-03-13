@@ -56,7 +56,7 @@ Reading configuration values
 
 There are two ways for Ceph code to get configuration values. One way is to
 read it directly from a variable named "g_conf," or equivalently,
-"g_ceph_ctx->_conf." The other is to register an observer that will called
+"g_ceph_ctx->_conf." The other is to register an observer that will be called
 every time the relevant configuration values changes.  This observer will be
 called soon after the initial configuration is read, and every time after that
 when one of the relevant values changes. Each observer tracks a set of keys
