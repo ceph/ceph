@@ -198,7 +198,8 @@ protected:
 
   std::set<mds_rank_t> in;              // currently defined cluster
   std::map<mds_rank_t,int32_t> inc;     // most recent incarnation.
-  std::set<mds_rank_t> failed, stopped; // which roles are failed or stopped
+  // which ranks are failed, stopped, damaged (i.e. not held by a daemon)
+  std::set<mds_rank_t> failed, stopped, damaged;
   std::map<mds_rank_t, mds_gid_t> up;        // who is in those roles
   std::map<mds_gid_t, mds_info_t> mds_info;
 
