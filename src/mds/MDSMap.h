@@ -100,7 +100,12 @@ public:
     STATE_CLIENTREPLAY = CEPH_MDS_STATE_CLIENTREPLAY, // up, active
     STATE_ACTIVE =     CEPH_MDS_STATE_ACTIVE,         // up, active
     STATE_STOPPING  =  CEPH_MDS_STATE_STOPPING,       // up, exporting metadata (-> standby or out)
-    STATE_DNE       =  CEPH_MDS_STATE_DNE             // down, rank does not exist
+    STATE_DNE       =  CEPH_MDS_STATE_DNE,             // down, rank does not exist
+
+    // State which a daemon may send to MDSMonitor in its beacon
+    // to indicate that offline repair is required.  Daemon must stop
+    // immediately after indicating this state.
+    STATE_DAMAGED   = CEPH_MDS_STATE_DAMAGED
 
     /*
      * In addition to explicit states, an MDS rank implicitly in state:
