@@ -114,6 +114,8 @@ public:
 
 class RGWCopyObj_ObjStore_SWIFT : public RGWCopyObj_ObjStore {
   bool sent_header;
+protected:
+  void dump_copy_info();
 public:
   RGWCopyObj_ObjStore_SWIFT() : sent_header(false) {}
   ~RGWCopyObj_ObjStore_SWIFT() {}
