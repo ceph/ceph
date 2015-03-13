@@ -284,6 +284,8 @@ int shec_matrix_decode(int k, int m, int w, int *matrix,
   int *decoding_matrix = NULL, dm_ids[k];
   int minimum[k + m];
 
+  memset(dm_ids, 0, sizeof(dm_ids));
+
   if (w != 8 && w != 16 && w != 32) return -1;
 
   /* Find the number of data drives failed */
