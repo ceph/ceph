@@ -136,12 +136,8 @@ public:
     std::string standby_for_name;
     std::set<mds_rank_t> export_targets;
 
-#if 1
     mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0), state(STATE_STANDBY), state_seq(0),
 		   standby_for_rank(MDS_NO_STANDBY_PREF) { }
-#else
-    mds_info_t();
-#endif
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
