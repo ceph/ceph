@@ -105,7 +105,7 @@ cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
-#define RBD_MAX_MEATADATA_KEYS 1024
+#define RBD_MAX_METAADATA_KEYS 1024
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
@@ -2139,7 +2139,7 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   map<string, bufferlist> vals;
   map<string, string> out_map;
   int r = cls_cxx_map_get_vals(hctx, RBD_METADATA_KEY_PREFIX, RBD_METADATA_KEY_PREFIX,
-                               RBD_MAX_MEATADATA_KEYS, &vals);
+                               RBD_MAX_METAADATA_KEYS, &vals);
   if (r < 0) {
     CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
     return r;
