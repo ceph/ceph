@@ -253,6 +253,7 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDS_STATE_CLIENTREPLAY 12 /* up, replaying client operations */
 #define CEPH_MDS_STATE_ACTIVE       13 /* up, active */
 #define CEPH_MDS_STATE_STOPPING     14 /* up, but exporting metadata */
+#define CEPH_MDS_STATE_DAMAGED      15 /* rank not replayable, need repair */
 
 extern const char *ceph_mds_state_name(int s);
 
