@@ -53,18 +53,6 @@ static ostream& _prefix(std::ostream *_dout, WorkerPool *p) {
 }
 
 
-class C_conn_accept : public EventCallback {
-  AsyncConnectionRef conn;
-  int fd;
-
- public:
-  C_conn_accept(AsyncConnectionRef c, int s): conn(c), fd(s) {}
-  void do_request(int id) {
-    conn->accept(fd);
-  }
-};
-
-
 class C_processor_accept : public EventCallback {
   Processor *pro;
 
@@ -546,7 +534,7 @@ AsyncConnectionRef AsyncMessenger::add_accept(int sd)
   lock.Lock();
   Worker *w = pool->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &w->center);
-  w->center.dispatch_event_external(EventCallbackRef(new C_conn_accept(conn, sd)));
+  conn->accept(sd);
   accepting_conns.insert(conn);
   lock.Unlock();
   return conn;
