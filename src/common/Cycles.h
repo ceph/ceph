@@ -72,8 +72,15 @@ class Cycles {
     uint64_t cntvct;
     asm volatile ("isb; mrs %0, cntvct_el0; isb; " : "=r" (cntvct) :: "memory");
     return cntvct;
+#elif defined(__powerpc__) || defined (__powerpc64__)
+    // Based on:
+    // https://github.com/randombit/botan/blob/net.randombit.botan/src/lib/entropy/hres_timer/hres_timer.cpp
+    uint32_t lo = 0, hi = 0;
+    asm volatile("mftbu %0; mftb %1" : "=r" (hi), "=r" (lo));
+    return (((uint64_t)hi << 32) | lo);
 #else
-#error No high-precision counter available for your OS/arch
+#warning No high-precision counter available for your OS/arch
+    return 0;
 #endif
   }
 
