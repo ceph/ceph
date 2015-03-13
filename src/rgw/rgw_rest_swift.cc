@@ -582,6 +582,20 @@ void RGWCopyObj_ObjStore_SWIFT::send_partial_response(off_t ofs)
   rgw_flush_formatter(s, s->formatter);
 }
 
+void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
+{
+  /* Dump X-Copied-From */
+  string objname, bucketname;
+  url_encode(src_object.name, objname);
+  url_encode(src_bucket.name, bucketname);
+  s->cio->print("X-Copied-From: %s/%s\r\n", bucketname.c_str(), objname.c_str());
+
+  /* Dump X-Copied-From-Account */
+  string account_name;
+  url_encode(s->user.user_id, account_name);
+  s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
+}
+
 void RGWCopyObj_ObjStore_SWIFT::send_response()
 {
   if (!sent_header) {
@@ -591,6 +605,7 @@ void RGWCopyObj_ObjStore_SWIFT::send_response()
     dump_errno(s);
     dump_etag(s, etag.c_str());
     dump_last_modified(s, mtime);
+    dump_copy_info();
     end_header(s, this);
   } else {
     s->formatter->close_section();
