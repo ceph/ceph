@@ -6,6 +6,7 @@ usr/bin/ceph_multi_stress_watch
 usr/bin/ceph_erasure_code
 usr/bin/ceph_erasure_code_benchmark
 usr/bin/ceph_omapbench
+usr/bin/ceph_perf_objectstore
 usr/bin/ceph_psim
 usr/bin/ceph_radosacl
 usr/bin/ceph_rgw_jsonparser
