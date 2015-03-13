@@ -16,7 +16,7 @@ decode old objects across that $version (this is normally the case).
 
 
 How to generate an object corpus
-================================
+--------------------------------
 
 We can generate an object corpus for a particular version of ceph like so.
 
