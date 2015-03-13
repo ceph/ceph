@@ -2340,7 +2340,7 @@ void AsyncConnection::handle_write()
       ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
       goto fail;
     }
-  } else if (state != STATE_CONNECTING) {
+  } else if (state != STATE_CONNECTING && state != STATE_CLOSED) {
     r = _try_send(bl);
     if (r < 0) {
       ldout(async_msgr->cct, 1) << __func__ << " send outcoming bl failed" << dendl;
