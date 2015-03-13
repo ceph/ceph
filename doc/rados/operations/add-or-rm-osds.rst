@@ -213,22 +213,23 @@ that your cluster is not at its ``near full`` ratio.
    or exceed its ``full ratio``.
    
 
-Take the OSD ``out`` of the Cluster
------------------------------------
 
-Before you remove an OSD, it is usually ``up`` and ``in``.  You need to take it
-out of the cluster so that Ceph can begin rebalancing and copying its data to
-other OSDs. :: 
+Reweight the OSD to 0
+---------------------
 
-	ceph osd out {osd-num}
+Before you remove an OSD, it is usually ``up`` and ``in``. The safest
+way to remove it is to first trigger the rebalancing of its data through
+a setting of its weight to 0. ::
+
+    ceph osd crush reweight osd.{osd-num} 0
 
 
 Observe the Data Migration
 --------------------------
 
-Once you have taken your OSD ``out`` of the cluster, Ceph  will begin
-rebalancing the cluster by migrating placement groups out of the OSD you
-removed. You can observe  this process with  the `ceph`_ tool. :: 
+Once you have set the weight of your OSD to 0, Ceph will begin rebalancing
+the cluster by migrating placement groups out of the OSD you are removing.
+You can observe this process with  the `ceph`_ tool. ::
 
 	ceph -w
 
@@ -237,12 +238,20 @@ You should see the placement group states change from ``active+clean`` to
 completes. (Control-c to exit.)
 
 
+Take the OSD ``out`` of the Cluster
+-----------------------------------
+
+Now, you need to take it out of the cluster. ::
+
+	ceph osd out {osd-num}
+
+
 Stopping the OSD
 ----------------
 
-After you take an OSD out of the cluster, it may still be running. 
-That is, the OSD may be ``up`` and ``out``. You must stop 
-your OSD before you remove it from the configuration. :: 
+After you take an OSD out of the cluster, it may still be running.
+That is, the OSD may be ``up`` and ``out``. You must stop
+your OSD before you remove it from the configuration. ::
 
 	ssh {osd-host}
 	sudo /etc/init.d/ceph stop osd.{osd-num}
