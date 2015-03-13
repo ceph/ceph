@@ -2903,8 +2903,9 @@ int main(int argc, char **argv)
     if (op != "list-pgs" && tmppgid != pgid) {
       continue;
     }
-    if (snap != CEPH_NOSNAP && debug) {
-      cout << "skipping snapped dir " << *it
+    if (snap != CEPH_NOSNAP) {
+      if (debug)
+        cerr << "skipping snapped dir " << *it
 	       << " (pg " << pgid << " snap " << snap << ")" << std::endl;
       continue;
     }
