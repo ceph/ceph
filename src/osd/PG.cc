@@ -280,8 +280,11 @@ void PG::proc_master_log(
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
+
+  assert(info.last_epoch_started <= oinfo.last_epoch_started);
   info.last_epoch_started = oinfo.last_epoch_started;
   info.history.merge(oinfo.history);
+  assert(info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].swap(omissing);
 }
@@ -944,6 +947,16 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
       }
     }
 
+    // Prefer newer last_epoch_started
+    // (note: a.last_update > b.last_update -->
+    //   a.last_epoch_started > b.last_epoch_started)
+    if (p->second.last_epoch_started > best->second.last_epoch_started) {
+      continue;
+    } else if (p->second.last_epoch_started < best->second.last_epoch_started) {
+      best = p;
+      continue;
+    }
+
     // Prefer longer tail
     if (p->second.log_tail > best->second.log_tail) {
       continue;
@@ -1479,10 +1492,13 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size)
+    if (acting.size() >= pool.info.min_size) {
+      assert(info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
+    }
   } else if (is_acting(pg_whoami)) {
     // update last_epoch_started on acting replica to whatever the primary sent
+    assert(info.last_epoch_started <= activation_epoch);
     info.last_epoch_started = activation_epoch;
   }
 
@@ -1844,6 +1860,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
       get_osdmap()->get_epoch(),
       info);
 
+    assert(i.info.last_epoch_started <= activation_epoch);
     i.info.history.last_epoch_started = activation_epoch;
     if (acting.size() >= pool.info.min_size) {
       state_set(PG_STATE_ACTIVE);
