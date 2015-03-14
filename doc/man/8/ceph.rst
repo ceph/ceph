@@ -15,6 +15,8 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
+| **ceph** **fs** [ *ls* \| *new* \| *rm* ] ...
+
 | **ceph** **fsid**
 
 | **ceph** **health** *{detail}*
@@ -31,9 +33,9 @@ Synopsis
 
 | **ceph** **mon_status**
 
-| **ceph** **osd** [ *blacklist* \| *create* \| *deep-scrub* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lost* \| *ls* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-utilization* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blacklist* \| *blocked-by* \| *create* \| *deep-scrub* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *lost* \| *ls* \| *lspools* \| *map* \| *metadata* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *reweight-by-utilization* \| *rm* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *thrash* \| *tree* \| *unpause* \| *unset* ] ...
 
-| **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *reweight* \| *reweight-all* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
+| **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *link* \| *move* \| *remove* \| *reweight* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
 | **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
 
@@ -74,7 +76,7 @@ or updating of authentication keys for a particular  entity such as a monitor or
 OSD. It uses some additional subcommands.
 
 Subcommand ``add`` adds authentication info for a particular entity from input
-file, or random key if no input given and/or any caps specified in the command.
+file, or random key if no input is given and/or any caps specified in the command.
 
 Usage::
 
@@ -206,6 +208,30 @@ Show cluster's free space status.
 Usage::
 
 	ceph df {detail}
+
+
+fs
+--
+
+Manage cephfs filesystems. It uses some additional subcommands.
+
+Subcommand ``ls`` to list filesystems
+
+Usage::
+
+	ceph fs ls
+
+Subcommand ``new`` to make a new filesystem using named pools <metadata> and <data>
+
+Usage::
+
+	ceph fs new <fs_name> <metadata> <data>
+
+Subcommand ``rm`` to disable the named filesystem
+
+Usage::
+
+	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
 
 fsid
@@ -466,6 +492,12 @@ Usage::
 
 	ceph osd blacklist rm <EntityAddr>
 
+Subcommand ``blocked-by`` prints a histogram of which OSDs are blocking their peers
+
+Usage::
+
+	ceph osd blocked-by
+
 Subcommand ``create`` creates new osd (with optional UUID).
 
 Usage::
@@ -503,12 +535,6 @@ Usage::
 
 	ceph osd crush dump
 
-Subcommand ``get-tunable`` get crush tunable straw_calc_version
-
-Usage::
-
-	ceph osd crush get-tunable straw_calc_version
-
 Subcommand ``link`` links existing entry for <name> under location <args>.
 
 Usage::
@@ -534,12 +560,12 @@ Usage::
 
 	ceph osd crush reweight <name> <float[0.0-]>
 
-Subcommand ``reweight-all`` recalculate the weights for the tree to
-ensure they sum correctly
+Subcommand ``reweight-subtree`` changes all leaf items beneath <name>
+to <weight> in crush map
 
 Usage::
 
-	ceph osd crush reweight-all
+	ceph osd crush reweight-subtree <name> <weight>
 
 Subcommand ``rm`` removes <name> from crush map (everywhere, or just at
 <ancestor>).
@@ -602,13 +628,6 @@ for <name> to <weight> with location <args>.
 Usage::
 
 	ceph osd crush set <osdname (id|osd.id)> <float[0.0-]> <args> [<args>...]
-
-Subcommand ``set-tunable`` set crush tunable <tunable> to <value>.  The only
-tunable that can be set is straw_calc_version.
-
-Usage::
-
-	ceph osd crush set-tunable straw_calc_version <value>
 
 Subcommand ``show-tunables`` shows current crush tunables.
 
@@ -769,7 +788,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> <int[0-]> {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<ruleset>}
+	{<erasure_code_profile>} {<ruleset>} {<int>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -789,7 +808,7 @@ Usage::
 	ceph osd pool get <poolname> cache_target_dirty_ratio|cache_target_full_ratio
 
 	ceph osd pool get <poolname> cache_min_flush_age|cache_min_evict_age|
-	erasure_code_profile
+	erasure_code_profile|min_read_recency_for_promote
 
 Subcommand ``get-quota`` obtains object or byte limits for pool.
 
@@ -819,12 +838,12 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 
 Usage::
 
-	ceph osd pool set <poolname> size|min_size|crash_replay_interval|
-	pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
-	hit_set_count|hit_set_fpp|debug_fake_ec_pool| target_max_bytes|
+	ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
+	pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
+	hit_set_count|hit_set_fpp|debug_fake_ec_pool|target_max_bytes|
 	target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|
-	cache_min_flush_age|cache_min_evict_age|auid
-	<val> {--yes-i-really-mean-it}
+	cache_min_flush_age|cache_min_evict_age|auid|
+	min_read_recency_for_promote <val> {--yes-i-really-mean-it}
 
 Subcommand ``set-quota`` sets object or byte limit on pool.
 
@@ -864,6 +883,13 @@ Usage::
 
 	osd reweight <int[0-]> <float[0.0-1.0]>
 
+Subcommand ``reweight-by-pg`` reweight OSDs by PG distribution
+[overload-percentage-for-consideration, default 120].
+
+Usage::
+
+	ceph osd reweight-by-pg {<int[100-]>} {<poolname> [<poolname...]}
+
 Subcommand ``reweight-by-utilization`` reweight OSDs by utilization
 [overload-percentage-for-consideration, default 120].
 
@@ -887,8 +913,8 @@ Subcommand ``set`` sets <key>.
 
 Usage::
 
-	ceph osd set pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-	nodeep-scrub|notieragent
+	ceph osd set pause|noup|nodown|noout|noin|nobackfill|
+	norecover|noscrub|nodeep-scrub|notieragent
 
 Subcommand ``setcrushmap`` sets crush map from input file.
 
@@ -935,7 +961,8 @@ Subcommand ``cache-mode`` specifies the caching mode for cache tier <pool>.
 
 Usage::
 
-	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly
+	ceph osd tier cache-mode <poolname> none|writeback|forward|readonly|
+	readforward
 
 Subcommand ``remove`` removes the tier <tierpool> (the second one) from base pool
 <pool> (the first one).
@@ -973,8 +1000,8 @@ Subcommand ``unset`` unsets <key>.
 
 Usage::
 
-	osd unset pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-	nodeep-scrub|notieragent
+	ceph osd unset pause|noup|nodown|noout|noin|nobackfill|
+	norecover|noscrub|nodeep-scrub|notieragent
 
 
 pg
@@ -1145,6 +1172,14 @@ Usage::
 
 	ceph tell <name (type.id)> <args> [<args>...]
 
+version
+-------
+
+Show mon daemon version
+
+Usage::
+
+	ceph version
 
 Options
 =======

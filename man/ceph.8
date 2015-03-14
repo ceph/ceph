@@ -75,6 +75,10 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .fi
 .sp
 .nf
+\fBceph\fP \fBfs\fP [ \fIls\fP | \fInew\fP | \fIrm\fP ] ...
+.fi
+.sp
+.nf
 \fBceph\fP \fBfsid\fP
 .fi
 .sp
@@ -107,11 +111,11 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .fi
 .sp
 .nf
-\fBceph\fP \fBosd\fP [ \fIblacklist\fP | \fIcreate\fP | \fIdeep\-scrub\fP | \fIdown\fP | \fIdump\fP | \fIerasure\-code\-profile\fP | \fIfind\fP | \fIgetcrushmap\fP | \fIgetmap\fP | \fIgetmaxosd\fP | \fIin\fP | \fIlost\fP | \fIls\fP | \fIlspools\fP | \fImap\fP | \fImetadata\fP | \fIout\fP | \fIpause\fP | \fIperf\fP | \fIprimary\-affinity\fP | \fIprimary\-temp\fP | \fIrepair\fP | \fIreweight\fP | \fIreweight\-by\-utilization\fP | \fIrm\fP | \fIscrub\fP | \fIset\fP | \fIsetcrushmap\fP | \fIsetmaxosd\fP  | \fIstat\fP | \fIthrash\fP | \fItree\fP | \fIunpause\fP | \fIunset\fP ] ...
+\fBceph\fP \fBosd\fP [ \fIblacklist\fP | \fIblocked\-by\fP | \fIcreate\fP | \fIdeep\-scrub\fP | \fIdown\fP | \fIdump\fP | \fIerasure\-code\-profile\fP | \fIfind\fP | \fIgetcrushmap\fP | \fIgetmap\fP | \fIgetmaxosd\fP | \fIin\fP | \fIlost\fP | \fIls\fP | \fIlspools\fP | \fImap\fP | \fImetadata\fP | \fIout\fP | \fIpause\fP | \fIperf\fP | \fIpg\-temp\fP | \fIprimary\-affinity\fP | \fIprimary\-temp\fP | \fIrepair\fP | \fIreweight\fP | \fIreweight\-by\-pg\fP | \fIreweight\-by\-utilization\fP | \fIrm\fP | \fIscrub\fP | \fIset\fP | \fIsetcrushmap\fP | \fIsetmaxosd\fP  | \fIstat\fP | \fIthrash\fP | \fItree\fP | \fIunpause\fP | \fIunset\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBosd\fP \fBcrush\fP [ \fIadd\fP | \fIadd\-bucket\fP | \fIcreate\-or\-move\fP | \fIdump\fP | \fIget\-tunable\fP | \fIlink\fP | \fImove\fP | \fIremove\fP | \fIreweight\fP | \fIreweight\-all\fP | \fIrm\fP | \fIrule\fP | \fIset\fP | \fIset\-tunable\fP | \fIshow\-tunables\fP | \fItunables\fP | \fIunlink\fP ] ...
+\fBceph\fP \fBosd\fP \fBcrush\fP [ \fIadd\fP | \fIadd\-bucket\fP | \fIcreate\-or\-move\fP | \fIdump\fP | \fIlink\fP | \fImove\fP | \fIremove\fP | \fIreweight\fP | \fIreweight\-subtree\fP | \fIrm\fP | \fIrule\fP | \fIset\fP | \fIshow\-tunables\fP | \fItunables\fP | \fIunlink\fP ] ...
 .fi
 .sp
 .nf
@@ -168,7 +172,7 @@ or updating of authentication keys for a particular  entity such as a monitor or
 OSD. It uses some additional subcommands.
 .sp
 Subcommand \fBadd\fP adds authentication info for a particular entity from input
-file, or random key if no input given and/or any caps specified in the command.
+file, or random key if no input is given and/or any caps specified in the command.
 .sp
 Usage:
 .INDENT 0.0
@@ -439,6 +443,51 @@ Usage:
 .nf
 .ft C
 ceph df {detail}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SS fs
+.sp
+Manage cephfs filesystems. It uses some additional subcommands.
+.sp
+Subcommand \fBls\fP to list filesystems
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs ls
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBnew\fP to make a new filesystem using named pools <metadata> and <data>
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs new <fs_name> <metadata> <data>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBrm\fP to disable the named filesystem
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs rm <fs_name> {\-\-yes\-i\-really\-mean\-it}
 .ft P
 .fi
 .UNINDENT
@@ -959,6 +1008,20 @@ ceph osd blacklist rm <EntityAddr>
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBblocked\-by\fP prints a histogram of which OSDs are blocking their peers
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd blocked\-by
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBcreate\fP creates new osd (with optional UUID).
 .sp
 Usage:
@@ -1036,20 +1099,6 @@ ceph osd crush dump
 .UNINDENT
 .UNINDENT
 .sp
-Subcommand \fBget\-tunable\fP get crush tunable straw_calc_version
-.sp
-Usage:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-ceph osd crush get\-tunable straw_calc_version
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
 Subcommand \fBlink\fP links existing entry for <name> under location <args>.
 .sp
 Usage:
@@ -1107,8 +1156,8 @@ ceph osd crush reweight <name> <float[0.0\-]>
 .UNINDENT
 .UNINDENT
 .sp
-Subcommand \fBreweight\-all\fP recalculate the weights for the tree to
-ensure they sum correctly
+Subcommand \fBreweight\-subtree\fP changes all leaf items beneath <name>
+to <weight> in crush map
 .sp
 Usage:
 .INDENT 0.0
@@ -1116,7 +1165,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd crush reweight\-all
+ceph osd crush reweight\-subtree <name> <weight>
 .ft P
 .fi
 .UNINDENT
@@ -1251,21 +1300,6 @@ Usage:
 .nf
 .ft C
 ceph osd crush set <osdname (id|osd.id)> <float[0.0\-]> <args> [<args>...]
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Subcommand \fBset\-tunable\fP set crush tunable <tunable> to <value>.  The only
-tunable that can be set is straw_calc_version.
-.sp
-Usage:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-ceph osd crush set\-tunable straw_calc_version <value>
 .ft P
 .fi
 .UNINDENT
@@ -1626,7 +1660,7 @@ Usage:
 .nf
 .ft C
 ceph osd pool create <poolname> <int[0\-]> {<int[0\-]>} {replicated|erasure}
-{<erasure_code_profile>} {<ruleset>}
+{<erasure_code_profile>} {<ruleset>} {<int>}
 .ft P
 .fi
 .UNINDENT
@@ -1662,7 +1696,7 @@ ceph osd pool get <poolname> auid|target_max_objects|target_max_bytes
 ceph osd pool get <poolname> cache_target_dirty_ratio|cache_target_full_ratio
 
 ceph osd pool get <poolname> cache_min_flush_age|cache_min_evict_age|
-erasure_code_profile
+erasure_code_profile|min_read_recency_for_promote
 .ft P
 .fi
 .UNINDENT
@@ -1732,12 +1766,12 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd pool set <poolname> size|min_size|crash_replay_interval|
-pg_num|pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
-hit_set_count|hit_set_fpp|debug_fake_ec_pool| target_max_bytes|
+ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
+pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
+hit_set_count|hit_set_fpp|debug_fake_ec_pool|target_max_bytes|
 target_max_objects|cache_target_dirty_ratio|cache_target_full_ratio|
-cache_min_flush_age|cache_min_evict_age|auid
-<val> {\-\-yes\-i\-really\-mean\-it}
+cache_min_flush_age|cache_min_evict_age|auid|
+min_read_recency_for_promote <val> {\-\-yes\-i\-really\-mean\-it}
 .ft P
 .fi
 .UNINDENT
@@ -1829,6 +1863,21 @@ osd reweight <int[0\-]> <float[0.0\-1.0]>
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBreweight\-by\-pg\fP reweight OSDs by PG distribution
+[overload\-percentage\-for\-consideration, default 120].
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd reweight\-by\-pg {<int[100\-]>} {<poolname> [<poolname...]}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBreweight\-by\-utilization\fP reweight OSDs by utilization
 [overload\-percentage\-for\-consideration, default 120].
 .sp
@@ -1880,8 +1929,8 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd set pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-nodeep\-scrub|notieragent
+ceph osd set pause|noup|nodown|noout|noin|nobackfill|
+norecover|noscrub|nodeep\-scrub|notieragent
 .ft P
 .fi
 .UNINDENT
@@ -1984,7 +2033,8 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd tier cache\-mode <poolname> none|writeback|forward|readonly
+ceph osd tier cache\-mode <poolname> none|writeback|forward|readonly|
+readforward
 .ft P
 .fi
 .UNINDENT
@@ -2070,8 +2120,8 @@ Usage:
 .sp
 .nf
 .ft C
-osd unset pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-nodeep\-scrub|notieragent
+ceph osd unset pause|noup|nodown|noout|noin|nobackfill|
+norecover|noscrub|nodeep\-scrub|notieragent
 .ft P
 .fi
 .UNINDENT
@@ -2393,6 +2443,21 @@ Usage:
 .nf
 .ft C
 ceph tell <name (type.id)> <args> [<args>...]
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SS version
+.sp
+Show mon daemon version
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph version
 .ft P
 .fi
 .UNINDENT
