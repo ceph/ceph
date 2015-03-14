@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "CEPH" "8" "December 18, 2014" "dev" "Ceph"
+.TH "CEPH" "8" "March 12, 2015" "dev" "Ceph"
 .SH NAME
 ceph \- ceph administration tool
 .
@@ -59,27 +59,51 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 ..
 .SH SYNOPSIS
 .nf
-\fBceph\fP \fBauth\fP \fIadd\fP \fI<entity>\fP {\fI<caps>\fP [\fI<caps>\fP\&...]}
+\fBceph\fP \fBauth\fP [ \fIadd\fP | \fIcaps\fP | \fIdel\fP | \fIexport\fP | \fIget\fP | \fIget\-key\fP | \fIget\-or\-create\fP | \fIget\-or\-create\-key\fP | \fIimport\fP | \fIlist\fP | \fIprint\-key\fP | \fIprint_key\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBauth\fP \fIexport\fP \fI<entity>\fP
+\fBceph\fP \fBcompact\fP
 .fi
 .sp
 .nf
-\fBceph\fP \fBconfig\-key\fP \fIget\fP \fI<key>\fP
+\fBceph\fP \fBconfig\-key\fP [ \fIdel\fP | \fIexists\fP | \fIget\fP | \fIlist\fP | \fIput\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBmds\fP \fIadd_data_pool\fP \fI<pool>\fP
+\fBceph\fP \fBdf\fP \fI{detail}\fP
 .fi
 .sp
 .nf
-\fBceph\fP \fBmds\fP \fIgetmap\fP {\fI<int[0\-]>\fP}
+\fBceph\fP \fBfs\fP [ \fIls\fP | \fInew\fP | \fIreset\fP | \fIrm\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBmon\fP \fIadd\fP \fI<name>\fP <\fIIPaddr[:port]\fP>
+\fBceph\fP \fBfsid\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBhealth\fP \fI{detail}\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBheap\fP [ \fIdump\fP | \fIstart_profiler\fP | \fIstop_profiler\fP | \fIrelease\fP | \fIstats\fP ] ...
+.fi
+.sp
+.nf
+\fBceph\fP \fBinjectargs\fP \fI<injectedargs>\fP [ \fI<injectedargs>\fP\&... ]
+.fi
+.sp
+.nf
+\fBceph\fP \fBlog\fP \fI<logtext>\fP [ \fI<logtext>\fP\&... ]
+.fi
+.sp
+.nf
+\fBceph\fP \fBmds\fP [ \fIadd_data_pool\fP | \fIcluster_down\fP | \fIcluster_up\fP | \fIcompat\fP | \fIdeactivate\fP | \fIdump\fP | \fIfail\fP | \fIgetmap\fP | \fInewfs\fP | \fIremove_data_pool\fP | \fIrm\fP | \fIrmfailed\fP | \fIset\fP | \fIset_max_mds\fP | \fIset_state\fP | \fIsetmap\fP | \fIstat\fP | \fIstop\fP | \fItell\fP ] ...
+.fi
+.sp
+.nf
+\fBceph\fP \fBmon\fP [ \fIadd\fP | \fIdump\fP | \fIgetmap\fP | \fIremove\fP | \fIstat\fP ] ...
 .fi
 .sp
 .nf
@@ -87,25 +111,55 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 .fi
 .sp
 .nf
-\fBceph\fP \fBosd\fP \fIcreate\fP {\fI<uuid>\fP}
+\fBceph\fP \fBosd\fP [ \fIblacklist\fP | \fIblocked\-by\fP | \fIcreate\fP | \fIdeep\-scrub\fP | \fIdf\fP | \fIdown\fP | \fIdump\fP | \fIerasure\-code\-profile\fP | \fIfind\fP | \fIgetcrushmap\fP | \fIgetmap\fP | \fIgetmaxosd\fP | \fIin\fP | \fIlspools\fP | \fImap\fP | \fImetadata\fP | \fIout\fP | \fIpause\fP | \fIperf\fP | \fIpg\-temp\fP | \fIprimary\-affinity\fP | \fIprimary\-temp\fP | \fIrepair\fP | \fIreweight\fP | \fIreweight\-by\-pg\fP | \fIrm\fP | \fIscrub\fP | \fIset\fP | \fIsetcrushmap\fP | \fIsetmaxosd\fP  | \fIstat\fP | \fIthrash\fP | \fItree\fP | \fIunpause\fP | \fIunset\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBosd\fP \fBcrush\fP \fIadd\fP \fI<osdname (id|osd.id)>\fP
-.fi
-.sp
-.sp
-\fI<float[0.0\-]>\fP \fI<args>\fP [\fI<args>\fP\&...]
-.nf
-\fBceph\fP \fBpg\fP \fIforce_create_pg\fP \fI<pgid>\fP
+\fBceph\fP \fBosd\fP \fBcrush\fP [ \fIadd\fP | \fIadd\-bucket\fP | \fIcreate\-or\-move\fP | \fIdump\fP | \fIget\-tunable\fP | \fIlink\fP | \fImove\fP | \fIremove\fP | \fIrename\-bucket\fP | \fIreweight\fP | \fIreweight\-all\fP | \fIreweight\-subtree\fP | \fIrm\fP | \fIrule\fP | \fIset\fP | \fIset\-tunable\fP | \fIshow\-tunables\fP | \fItunables\fP | \fIunlink\fP ] ...
 .fi
 .sp
 .nf
-\fBceph\fP \fBpg\fP \fIstat\fP
+\fBceph\fP \fBosd\fP \fBpool\fP [ \fIcreate\fP | \fIdelete\fP | \fIget\fP | \fIget\-quota\fP | \fIls\fP | \fImksnap\fP | \fIrename\fP | \fIrmsnap\fP | \fIset\fP | \fIset\-quota\fP | \fIstats\fP ] ...
+.fi
+.sp
+.nf
+\fBceph\fP \fBosd\fP \fBtier\fP [ \fIadd\fP | \fIadd\-cache\fP | \fIcache\-mode\fP | \fIremove\fP | \fIremove\-overlay\fP | \fIset\-overlay\fP ] ...
+.fi
+.sp
+.nf
+\fBceph\fP \fBpg\fP [ \fIdebug\fP | \fIdeep\-scrub\fP | \fIdump\fP | \fIdump_json\fP | \fIdump_pools_json\fP | \fIdump_stuck\fP | \fIforce_create_pg\fP | \fIgetmap\fP | \fIls\fP | \fIls\-by\-osd\fP | \fIls\-by\-pool\fP | \fIls\-by\-primary\fP | \fImap\fP | \fIrepair\fP | \fIscrub\fP | \fIsend_pg_creates\fP | \fIset_full_ratio\fP | \fIset_nearfull_ratio\fP | \fIstat\fP ] ...
+.fi
+.sp
+.nf
+\fBceph\fP \fBquorum\fP [ \fIenter\fP | \fIexit\fP ]
 .fi
 .sp
 .nf
 \fBceph\fP \fBquorum_status\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBreport\fP { \fI<tags>\fP [ \fI<tags>...\fP ] }
+.fi
+.sp
+.nf
+\fBceph\fP \fBscrub\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBstatus\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBsync\fP \fBforce\fP {\-\-yes\-i\-really\-mean\-it} {\-\-i\-know\-what\-i\-am\-doing}
+.fi
+.sp
+.nf
+\fBceph\fP \fBtell\fP \fI<name (type.id)> <args> [<args>...]\fP
+.fi
+.sp
+.nf
+\fBceph\fP \fBversion\fP
 .fi
 .sp
 .SH DESCRIPTION
@@ -122,7 +176,7 @@ or updating of authentication keys for a particular  entity such as a monitor or
 OSD. It uses some additional subcommands.
 .sp
 Subcommand \fBadd\fP adds authentication info for a particular entity from input
-file, or random key if no input given and/or any caps specified in the command.
+file, or random key if no input is given and/or any caps specified in the command.
 .sp
 Usage:
 .INDENT 0.0
@@ -313,7 +367,7 @@ ceph compact
 .sp
 Manage configuration key. It uses some additional subcommands.
 .sp
-Subcommand \fBget\fP gets the configuration key.
+Subcommand \fBdel\fP deletes configuration key.
 .sp
 Usage:
 .INDENT 0.0
@@ -321,21 +375,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph config\-key get <key>
-.ft P
-.fi
-.UNINDENT
-.UNINDENT
-.sp
-Subcommand \fBput\fP puts configuration key and values.
-.sp
-Usage:
-.INDENT 0.0
-.INDENT 3.5
-.sp
-.nf
-.ft C
-ceph config\-key put <key> {<val>}
+ceph config\-key del <key>
 .ft P
 .fi
 .UNINDENT
@@ -355,6 +395,20 @@ ceph config\-key exists <key>
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBget\fP gets the configuration key.
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph config\-key get <key>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBlist\fP lists configuration keys.
 .sp
 Usage:
@@ -369,7 +423,7 @@ ceph config\-key list
 .UNINDENT
 .UNINDENT
 .sp
-Subcommand \fBdel\fP deletes configuration key.
+Subcommand \fBput\fP puts configuration key and values.
 .sp
 Usage:
 .INDENT 0.0
@@ -377,7 +431,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph config\-key del <key>
+ceph config\-key put <key> {<val>}
 .ft P
 .fi
 .UNINDENT
@@ -392,7 +446,66 @@ Usage:
 .sp
 .nf
 .ft C
-ceph df
+ceph df {detail}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SS fs
+.sp
+Manage cephfs filesystems. It uses some additional subcommands.
+.sp
+Subcommand \fBls\fP to list filesystems
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs ls
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBnew\fP to make a new filesystem using named pools <metadata> and <data>
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs new <fs_name> <metadata> <data>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBreset\fP is used for disaster recovery only: reset to a single\-MDS map
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs reset <fs_name> {\-\-yes\-i\-really\-mean\-it}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBrm\fP to disable the named filesystem
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph fs rm <fs_name> {\-\-yes\-i\-really\-mean\-it}
 .ft P
 .fi
 .UNINDENT
@@ -422,7 +535,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph health
+ceph health {detail}
 .ft P
 .fi
 .UNINDENT
@@ -676,6 +789,20 @@ ceph mds rmfailed <int[0\-]>
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBset\fP set mds parameter <var> to <val>
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph mds set max_mds|max_file_size|allow_new_snaps|inline_data <va> {<confirm>}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBset_max_mds\fP sets max MDS index.
 .sp
 Usage:
@@ -833,8 +960,9 @@ ceph mon stat
 .fi
 .UNINDENT
 .UNINDENT
+.SS mon_status
 .sp
-Subcommand \fBmon_status\fP reports status of monitors.
+Reports status of monitors.
 .sp
 Usage:
 .INDENT 0.0
@@ -851,6 +979,66 @@ ceph mon_status
 .sp
 Manage OSD configuration and administration. It uses some additional
 subcommands.
+.sp
+Subcommand \fBblacklist\fP manage blacklisted clients. It uses some additional
+subcommands.
+.sp
+Subcommand \fBadd\fP add <addr> to blacklist (optionally until <expire> seconds
+from now)
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd blacklist add <EntityAddr> {<float[0.0\-]>}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\fP show blacklisted clients
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd blacklist ls
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBrm\fP remove <addr> from blacklist
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd blacklist rm <EntityAddr>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBblocked\-by\fP prints a histogram of which OSDs are blocking their peers
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd blocked\-by
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .sp
 Subcommand \fBcreate\fP creates new osd (with optional UUID).
 .sp
@@ -909,12 +1097,11 @@ Usage:
 .nf
 .ft C
 ceph osd crush create\-or\-move <osdname (id|osd.id)> <float[0.0\-]> <args>
+[<args>...]
 .ft P
 .fi
 .UNINDENT
 .UNINDENT
-.sp
-[<args>...]
 .sp
 Subcommand \fBdump\fP dumps crush map.
 .sp
@@ -925,6 +1112,20 @@ Usage:
 .nf
 .ft C
 ceph osd crush dump
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBget\-tunable\fP get crush tunable straw_calc_version
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush get\-tunable straw_calc_version
 .ft P
 .fi
 .UNINDENT
@@ -973,6 +1174,20 @@ ceph osd crush remove <name> {<ancestor>}
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBrename\-bucket\fP renames buchket <srcname> to <stname>
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush rename\-bucket <srcname> <dstname>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBreweight\fP change <name>\(aqs weight to <weight> in crush map.
 .sp
 Usage:
@@ -982,6 +1197,36 @@ Usage:
 .nf
 .ft C
 ceph osd crush reweight <name> <float[0.0\-]>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBreweight\-all\fP recalculate the weights for the tree to
+ensure they sum correctly
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush reweight\-all
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBreweight\-subtree\fP changes all leaf items beneath <name>
+to <weight> in crush map
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush reweight\-subtree <name> <weight>
 .ft P
 .fi
 .UNINDENT
@@ -1092,7 +1337,7 @@ ceph osd crush rule rm <name>
 .UNINDENT
 .UNINDENT
 .sp
-Subcommand \fBset\fP sets crush map from input file.
+Subcommand \fBset\fP used alone, sets crush map from input file.
 .sp
 Usage:
 .INDENT 0.0
@@ -1121,6 +1366,21 @@ ceph osd crush set <osdname (id|osd.id)> <float[0.0\-]> <args> [<args>...]
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBset\-tunable\fP set crush tunable <tunable> to <value>.  The only
+tunable that can be set is straw_calc_version.
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd crush set\-tunable straw_calc_version <value>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBshow\-tunables\fP shows current crush tunables.
 .sp
 Usage:
@@ -1143,7 +1403,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd crush tunables legacy|argonaut|bobtail|firefly|optimal|default
+ceph osd crush tunables legacy|argonaut|bobtail|firefly|hammer|optimal|default
 .ft P
 .fi
 .UNINDENT
@@ -1159,6 +1419,20 @@ Usage:
 .nf
 .ft C
 ceph osd crush unlink <name> {<ancestor>}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBdf\fP shows OSD utilization
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd df {plain|tree}
 .ft P
 .fi
 .UNINDENT
@@ -1476,7 +1750,7 @@ Usage:
 .nf
 .ft C
 ceph osd pool create <poolname> <int[0\-]> {<int[0\-]>} {replicated|erasure}
-{<erasure_code_profile>} {<ruleset>}
+{<erasure_code_profile>} {<ruleset>} {<int>}
 .ft P
 .fi
 .UNINDENT
@@ -1505,14 +1779,14 @@ Usage:
 .nf
 .ft C
 ceph osd pool get <poolname> size|min_size|crash_replay_interval|pg_num|
-pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|
+pgp_num|crush_ruleset|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp
 
 ceph osd pool get <poolname> auid|target_max_objects|target_max_bytes
 
 ceph osd pool get <poolname> cache_target_dirty_ratio|cache_target_full_ratio
 
 ceph osd pool get <poolname> cache_min_flush_age|cache_min_evict_age|
-erasure_code_profile
+erasure_code_profile|min_read_recency_for_promote|write_fadvise_dontneed
 .ft P
 .fi
 .UNINDENT
@@ -1527,6 +1801,20 @@ Usage:
 .nf
 .ft C
 ceph osd pool get\-quota <poolname>
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\fP list pools
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd pool ls {detail}
 .ft P
 .fi
 .UNINDENT
@@ -1583,18 +1871,12 @@ Usage:
 .nf
 .ft C
 ceph osd pool set <poolname> size|min_size|crash_replay_interval|pg_num|
-pgp_num|crush_ruleset|hashpspool|hit_set_type|hit_set_period|
-
-ceph osd pool set <poolname> hit_set_count|hit_set_fpp|debug_fake_ec_pool
-
-ceph osd pool set <poolname> target_max_bytes|target_max_objects
-
-ceph osd pool set <poolname> cache_target_dirty_ratio|cache_target_full_ratio
-
-ceph osd pool set <poolname> cache_min_flush_age
-
-ceph osd pool set <poolname> cache_min_evict_age|auid <val>
-{\-\-yes\-i\-really\-mean\-it}
+pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|
+hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
+target_max_bytes|target_max_objects|cache_target_dirty_ratio|
+cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|auid|
+min_read_recency_for_promote|write_fadvise_dontneed
+<val> {\-\-yes\-i\-really\-mean\-it}
 .ft P
 .fi
 .UNINDENT
@@ -1686,6 +1968,21 @@ osd reweight <int[0\-]> <float[0.0\-1.0]>
 .UNINDENT
 .UNINDENT
 .sp
+Subcommand \fBreweight\-by\-pg\fP reweight OSDs by PG distribution
+[overload\-percentage\-for\-consideration, default 120].
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph osd reweight\-by\-pg {<int[100\-]>} {<poolname> [<poolname...]}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
 Subcommand \fBreweight\-by\-utilization\fP reweight OSDs by utilization
 [overload\-percentage\-for\-consideration, default 120].
 .sp
@@ -1737,8 +2034,8 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd set pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-nodeep\-scrub|notieragent
+ceph osd set full|pause|noup|nodown|noout|noin|nobackfill|
+norebalance|norecover|noscrub|nodeep\-scrub|notieragent
 .ft P
 .fi
 .UNINDENT
@@ -1841,7 +2138,8 @@ Usage:
 .sp
 .nf
 .ft C
-ceph osd tier cache\-mode <poolname> none|writeback|forward|readonly
+ceph osd tier cache\-mode <poolname> none|writeback|forward|readonly|
+readforward|readproxy
 .ft P
 .fi
 .UNINDENT
@@ -1927,8 +2225,8 @@ Usage:
 .sp
 .nf
 .ft C
-osd unset pause|noup|nodown|noout|noin|nobackfill|norecover|noscrub|
-nodeep\-scrub|notieragent
+ceph osd unset full|pause|noup|nodown|noout|noin|nobackfill|
+norebalance|norecover|noscrub|nodeep\-scrub|notieragent
 .ft P
 .fi
 .UNINDENT
@@ -1975,9 +2273,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief}
-
-ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief...}
+ceph pg dump {all|summary|sum|delta|pools|osds|pgs|pgs_brief} [{all|summary|sum|delta|pools|osds|pgs|pgs_brief...]}
 .ft P
 .fi
 .UNINDENT
@@ -1991,8 +2287,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph pg dump_json {all|summary|sum|pools|osds|pgs[all|summary|sum|pools|
-osds|pgs...]}
+ceph pg dump_json {all|summary|sum|delta|pools|osds|pgs|pgs_brief} [{all|summary|sum|delta|pools|osds|pgs|pgs_brief...]}
 .ft P
 .fi
 .UNINDENT
@@ -2020,7 +2315,7 @@ Usage:
 .sp
 .nf
 .ft C
-ceph pg dump_stuck {inactive|unclean|stale|undersized|degraded[inactive|unclean|stale|undersized|degraded...]}
+ceph pg dump_stuck {inactive|unclean|stale|undersized|degraded [inactive|unclean|stale|undersized|degraded...]}
 {<int>}
 .ft P
 .fi
@@ -2050,6 +2345,97 @@ Usage:
 .nf
 .ft C
 ceph pg getmap
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\fP lists pg with specific pool, osd, state
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph pg ls {<int>} {active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale| remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized [active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale|remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized...]}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\-by\-osd\fP lists pg on osd [osd]
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph pg ls\-by\-osd <osdname (id|osd.id)> {<int>}
+{active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale| remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized [active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale|remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized...]}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\-by\-pool\fP lists pg with pool = [poolname | poolid]
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph pg ls\-by\-pool <poolstr> {<int>} {active|
+clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale| remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized [active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale|remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized...]}
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.sp
+Subcommand \fBls\-by\-primary\fP lists pg with primary = [osd]
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph pg ls\-by\-primary <osdname (id|osd.id)> {<int>}
+{active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale| remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized [active|clean|down|replay|splitting|
+scrubbing|scrubq|degraded|inconsistent|peering|repair|
+recovery|backfill_wait|incomplete|stale|remapped|
+deep_scrub|backfill|backfill_toofull|recovery_wait|
+undersized...]}
 .ft P
 .fi
 .UNINDENT
@@ -2258,6 +2644,21 @@ ceph tell <name (type.id)> <args> [<args>...]
 .fi
 .UNINDENT
 .UNINDENT
+.SS version
+.sp
+Show mon daemon version
+.sp
+Usage:
+.INDENT 0.0
+.INDENT 3.5
+.sp
+.nf
+.ft C
+ceph version
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
 .SH OPTIONS
 .INDENT 0.0
 .TP
@@ -2366,7 +2767,7 @@ Set a timeout for connecting to the cluster.
 .UNINDENT
 .SH AVAILABILITY
 .sp
-\fBceph\fP is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
+\fBceph\fP is part of Ceph, a massively scalable, open\-source, distributed storage system. Please refer to
 the Ceph documentation at \fI\%http://ceph.com/docs\fP for more information.
 .SH SEE ALSO
 .sp
