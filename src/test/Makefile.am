@@ -814,7 +814,7 @@ if LINUX
 ceph_test_librbd_fsx_SOURCES = test/librbd/fsx.c common/dummy.cc
 ceph_test_librbd_fsx_LDADD = \
 	$(LIBKRBD) $(LIBRBD) $(LIBRADOS) \
-	$(CRYPTO_LIBS) $(PTHREAD_LIBS) -luuid
+	$(CRYPTO_LIBS) $(PTHREAD_LIBS) $(CEPH_GLOBAL) -luuid
 ceph_test_librbd_fsx_CFLAGS = ${AM_CFLAGS}
 bin_DEBUGPROGRAMS += ceph_test_librbd_fsx
 endif
