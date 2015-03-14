@@ -229,7 +229,8 @@ namespace librbd {
 		      object_no, 0, 0,
 		      objectx, object_overlap,
 		      snapc, snap_id, completion,
-		      true) {
+		      true),
+        m_object_state(OBJECT_NONEXISTENT) {
     }
     virtual ~AioRemove() {}
 
