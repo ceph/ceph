@@ -14,7 +14,7 @@ MDS internal data structures
   CDir only exists for directory inode, it's used to link CDentries under the
   directory. A CInode can have multiple CDir when the directory is fragmented.
 
-These data structures are linked together as:
+These data structures are linked together as::
 
   CInode
   CDir
