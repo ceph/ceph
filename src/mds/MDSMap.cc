@@ -321,6 +321,23 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  if (!damaged.empty()) {
+    std::ostringstream oss;
+    oss << "mds rank"
+	<< ((damaged.size() > 1) ? "s ":" ")
+	<< damaged
+	<< ((damaged.size() > 1) ? " are":" is")
+	<< " damaged";
+    summary.push_back(make_pair(HEALTH_ERR, oss.str()));
+    if (detail) {
+      for (set<mds_rank_t>::const_iterator p = damaged.begin(); p != damaged.end(); ++p) {
+	std::ostringstream oss;
+	oss << "mds." << *p << " is damaged";
+	detail->push_back(make_pair(HEALTH_ERR, oss.str()));
+      }
+    }
+  }
+
   if (is_degraded()) {
     summary.push_back(make_pair(HEALTH_WARN, "mds cluster is degraded"));
     if (detail) {
