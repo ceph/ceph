@@ -175,6 +175,10 @@ if WITH_LIBROCKSDB
 LIBOS += libos_rocksdb.la
 endif # WITH_LIBROCKSDB
 
+if WITH_TCMALLOC_MINIMAL
+LIBPERFGLUE += -ltcmalloc_minimal
+endif # WITH_TCMALLOC_MINIMAL
+
 if WITH_TCMALLOC
 LIBPERFGLUE += -ltcmalloc
 endif # WITH_TCMALLOC
