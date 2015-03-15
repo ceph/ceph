@@ -17,7 +17,7 @@ Banner
 
 The first action is the server sending banner to the client.  The banner is
 defined in ``CEPH_BANNER`` from ``src/include/msgr.h``.  This is followed by
-the server's then client's address each encoded as a ``sockaddr_storage``.
+the server's then client's address each encoded as a ``entity_addr_t``.
 
 Once the client verifies that the servers banner matches its own it replies with
 its banner and its address.
