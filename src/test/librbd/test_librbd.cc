@@ -1450,8 +1450,8 @@ TEST_F(TestLibRBD, TestCoR)
   // make a parent to clone from
   ASSERT_EQ(0, create_image_full(ioctx, "parent", image_size, &order, false, features));
   ASSERT_EQ(0, rbd_open(ioctx, "parent", &parent, NULL));
-  printf("made parent image \"parent\": %ldK (%d * %dK)\n", 
-         image_size, object_num, object_size/1024);
+  printf("made parent image \"parent\": %ldK (%d * %dK)\n",
+         (unsigned long)image_size, object_num, object_size/1024);
 
   // write something into parent
   char test_data[TEST_IO_SIZE + 1];
@@ -1477,18 +1477,19 @@ TEST_F(TestLibRBD, TestCoR)
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
-    printf("\t [%-8ld, %-8ld]\n", itr->first, itr->second);
+    printf("\t [%-8ld, %-8ld]\n",
+	   (unsigned long)itr->first, (unsigned long)itr->second);
 
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\twrite object-%-4ld\t", itr->first);
+    printf("\twrite object-%-4ld\t", (unsigned long)itr->first);
     ASSERT_PASSED(write_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
          itr != write_tracker.end(); ++itr) {
-    printf("\tread object-%-4ld\t", itr->first);
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
     ASSERT_PASSED(read_test_data, parent, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
   }
 
@@ -1522,20 +1523,20 @@ TEST_F(TestLibRBD, TestCoR)
   printf("read from \"child\"\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\t", itr->first);
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
     ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\tread object-%-4ld\t", itr->first);
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
     ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
   }
 
   printf("read again reversely\n");
   for (map<uint64_t, uint64_t>::iterator itr = --write_tracker.end();
      itr != write_tracker.begin(); --itr) {
-    printf("\tread object-%-4ld\t", itr->first);
+    printf("\tread object-%-4ld\t", (unsigned long)itr->first);
     ASSERT_PASSED(read_test_data, child, test_data, itr->first * object_size + itr->second, TEST_IO_SIZE, 0);
   }
 
