@@ -547,6 +547,38 @@ bool MDSMonitor::prepare_beacon(MMDSBeacon *m)
         m->put();
         return false;
       }
+    } else if (state == MDSMap::STATE_DAMAGED) {
+      if (!mon->osdmon()->is_writeable()) {
+        dout(4) << __func__ << ": DAMAGED from rank " << info.rank
+                << " waiting for osdmon writeable to blacklist it" << dendl;
+        mon->osdmon()->wait_for_writeable(new C_RetryMessage(this, m));
+        return false;
+      }
+
+      // Record this MDS rank as damaged, so that other daemons
+      // won't try to run it.
+      dout(4) << __func__ << ": marking rank "
+              << info.rank << " damaged" << dendl;
+
+
+      // Blacklist this MDS daemon
+      const utime_t until = ceph_clock_now(g_ceph_context);
+      pending_mdsmap.last_failure_osd_epoch = mon->osdmon()->blacklist(
+          info.addr, until);
+      request_proposal(mon->osdmon());
+
+      // Clear out daemon state and add rank to damaged list
+      pending_mdsmap.up.erase(info.rank);
+      pending_mdsmap.damaged.insert(info.rank);
+      last_beacon.erase(gid);
+
+      // Call erase() last because the `info` reference becomes invalid
+      // after we remove the instance from the map.
+      pending_mdsmap.mds_info.erase(gid);
+
+      // Respond to MDS, so that it knows it can continue to shut down
+      mon->send_reply(m, new MMDSBeacon(mon->monmap->fsid, m->get_global_id(),
+                    m->get_name(), mdsmap.get_epoch(), state, seq));
     } else {
       info.state = state;
       info.state_seq = seq;
