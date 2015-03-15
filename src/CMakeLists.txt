@@ -25,7 +25,13 @@ if(WITH_CDS)
   list(APPEND EXTRALIBS ${CDS_LIBS})
 endif(WITH_CDS)
 
-set(CRYPTO_LIBS cryptopp)
+if(USE_NSS)
+  if(NSS_FOUND)
+    if(NSPR_FOUND)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${NSS_INCLUDE_DIR} -I${NSPR_INCLUDE_DIR}")
+    endif(NSPR_FOUND)
+  endif(NSS_FOUND)
+endif(USE_NSS)
 
 if(${HAVE_ATOMIC_OPS})
   set(EXTRALIBS
@@ -550,7 +556,7 @@ install(TARGETS osdmaptool DESTINATION bin)
 set(ceph_authtool_srcs
   tools/ceph_authtool.cc)
 add_executable(ceph-authtool ${ceph_authtool_srcs})
-target_link_libraries(ceph-authtool global ${EXTRALIBS})
+target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
