@@ -242,6 +242,7 @@ AC_DEFUN([AC_CHECK_CC_FLAG],
 
 AC_CHECK_CC_FLAG([-Wtype-limits], [WARN_TYPE_LIMITS])
 AC_CHECK_CC_FLAG([-Wignored-qualifiers], [WARN_IGNORED_QUALIFIERS])
+AC_CHECK_CC_FLAG([-Werror=format-security], [WARN_ERROR_FORMAT_SECURITY])
 
 # Check for compiler VTA support
 AX_CHECK_COMPILE_FLAG([-fvar-tracking-assignments], [HAS_VTA_SUPPORT=1], [HAS_VTA_SUPPORT=0])
@@ -257,7 +258,7 @@ ACX_PTHREAD
 AC_CHECK_LIB([uuid], [uuid_parse], [true], AC_MSG_FAILURE([libuuid not found]))
 
 # rbd {map,unmap,showmapped} dependencies, Linux only
-if test x"$linux" = x"yes"; then
+if test x"$linux" = x"yes" -a x"$with_rbd" = x"yes"; then
   # libblkid
   AC_CHECK_HEADER([blkid/blkid.h], [],
     AC_MSG_ERROR([blkid/blkid.h not found (libblkid-dev, libblkid-devel)]))
@@ -645,7 +646,7 @@ fi
 #
 # FreeBSD has it in base.
 #
-if test x"$freebsd" != x"yes"; then
+if test x"$freebsd" != x"yes" -a x"$with_radosgw" = x"yes"; then
 PKG_CHECK_MODULES([LIBEDIT], [libedit >= 2.11],
                 [], AC_MSG_FAILURE([No usable version of libedit found.]))
 else
@@ -966,6 +967,7 @@ AC_MSG_RESULT([no])
 ])
 
 AC_MSG_CHECKING([for sched.h])
++AC_LANG_PUSH([C++])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
 #define _GNU_SOURCE
 #include <sched.h>
@@ -982,6 +984,8 @@ AC_DEFINE([HAVE_SCHED], 1, [Define to 1 if you have sched.h.])
 ], [
 AC_MSG_RESULT([no])
 ])
++AC_LANG_POP([C++])
+
 
 #
 # Check for pthread spinlock (depends on ACX_PTHREAD)
