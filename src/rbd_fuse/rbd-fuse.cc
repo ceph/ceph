@@ -349,7 +349,7 @@ static int rbdfs_write(const char *path, const char *buf, size_t size,
 	while (size > 0) {
 		ssize_t ret;
 
-		if (offset + size > rbdsize(fi->fh)) {
+		if ((size_t)(offset + size) > rbdsize(fi->fh)) {
 			int r;
 			fprintf(stderr, "rbdfs_write resizing %s to 0x%"PRIxMAX"\n",
 				path, offset+size);
