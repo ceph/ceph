@@ -101,4 +101,5 @@ about Ceph, see our `Architecture`_ section.
    architecture
    Development <dev/index>
    release-notes
+   releases
    Glossary <glossary>
