@@ -406,6 +406,26 @@ AS_IF([test "x$with_jemalloc" = xyes],
 		  [no jemalloc found (do not use --with-jemalloc)])])])
 AM_CONDITIONAL(WITH_JEMALLOC, [test "$HAVE_LIBJEMALLOC" = "1"])
 
+# tcmalloc-minimal?
+AC_ARG_WITH([tcmalloc-minimal],
+	    [AS_HELP_STRING([--with-tcmalloc-minimal], [enable minimal tcmalloc support for memory allocations])],
+	    [],
+	    [with_tcmalloc_minimal=no])
+
+AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc_minimal=no],[])
+
+TCMALLOC_MINIMAL=
+AS_IF([test "x$with_tcmalloc_minimal" != xno],
+        [AC_CHECK_LIB([tcmalloc_minimal], [malloc],
+         [AC_SUBST([LIBTCMALLOC], ["-ltcmalloc_minimal"])
+	       AC_DEFINE([HAVE_LIBTCMALLOC_MINIMAL], [1],
+	       		 [Define if you have tcmalloc])
+	       HAVE_LIBTCMALLOC_MINIMAL=1
+	     ],
+	    [AC_MSG_FAILURE(
+		  [no tcmalloc found (do not use --with-tcmalloc-minimal)])])])
+AM_CONDITIONAL(WITH_TCMALLOC_MINIMAL, [test "$HAVE_LIBTCMALLOC_MINIMAL" = "1"])
+
 # tcmalloc?
 AC_ARG_WITH([tcmalloc],
 	    [AS_HELP_STRING([--without-tcmalloc], [disable tcmalloc for memory allocations])],
@@ -413,6 +433,7 @@ AC_ARG_WITH([tcmalloc],
 	    [with_tcmalloc=yes])
 
 AS_IF([test "x$with_jemalloc" = "xyes"],[with_tcmalloc=no],[])
+AS_IF([test "x$with_tcmalloc_minimal" = "xyes"],[with_tcmalloc=no],[])
 
 TCMALLOC=
 AS_IF([test "x$with_tcmalloc" != xno],
