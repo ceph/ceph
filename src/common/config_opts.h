@@ -449,6 +449,7 @@ OPTION(mds_snap_rstat, OPT_BOOL, false) // enable/disbale nested stat for snapsh
 OPTION(mds_verify_backtrace, OPT_U32, 1)
 
 OPTION(mds_action_on_write_error, OPT_U32, 1) // 0: ignore; 1: force readonly; 2: crash
+OPTION(mds_mon_shutdown_timeout, OPT_DOUBLE, 5)
 
 // If true, compact leveldb store on mount
 OPTION(osd_compact_leveldb_on_mount, OPT_BOOL, false)
