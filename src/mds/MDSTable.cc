@@ -22,6 +22,7 @@
 #include "include/types.h"
 
 #include "common/config.h"
+#include "common/errno.h"
 #include "common/Finisher.h"
 
 #include "include/assert.h"
@@ -158,12 +159,15 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   assert(is_opening());
   state = STATE_ACTIVE;
   if (r == -EBLACKLISTED) {
-    mds->suicide();
+    mds->respawn();
     return;
   }
   if (r < 0) {
     derr << "load_2 could not read table: " << r << dendl;
-    assert(r >= 0);
+    mds->clog->error() << "error reading table object '" << get_object_name()
+                       << "' " << r << " (" << cpp_strerror(r) << ")";
+    mds->damaged();
+    assert(r >= 0);  // Should be unreachable because damaged() calls respawn()
   }
 
   dout(10) << "load_2 got " << bl.length() << " bytes" << dendl;
