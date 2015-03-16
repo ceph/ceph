@@ -174,7 +174,7 @@ quorum.
 
 	ssh {mon-host}
 
-#. Extract a copy of the monap file.  ::
+#. Extract a copy of the monmap file.  ::
 
         ceph-mon -i {mon-id} --extract-monmap {map-path}
         # in most cases, that's
