@@ -850,8 +850,6 @@ void PG::clear_primary_state()
   osd->snap_trim_wq.dequeue(this);
 
   agent_clear();
-
-  osd->remove_want_pg_temp(info.pgid.pgid);
 }
 
 /**
@@ -4861,8 +4859,10 @@ void PG::start_peering_interval(
   actingbackfill.clear();
 
   // reset primary state?
-  if (was_old_primary || is_primary())
-    clear_primary_state();
+  if (was_old_primary || is_primary()) {
+    osd->remove_want_pg_temp(info.pgid.pgid);
+  }
+  clear_primary_state();
 
     
   // pg->on_*
@@ -5670,6 +5670,7 @@ void PG::RecoveryState::Primary::exit()
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
+  pg->clear_primary_state();
 }
 
 /*---------Peering--------*/
