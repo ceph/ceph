@@ -425,6 +425,8 @@ endif # WITH_CEPHFS
 
 
 if WITH_RADOSGW
+
+if WITH_BUILD_TESTS
 test_build_librgw_SOURCES = \
 	test/buildtest_skeleton.cc \
 	$(librgw_la_SOURCES)
@@ -436,6 +438,7 @@ test_build_librgw_LDFLAGS = -static-libtool-libs
 test_build_librgw_CFLAGS = $(AM_CFLAGS)
 test_build_librgw_CXXFLAGS = $(AM_CXXFLAGS)
 bin_DEBUGPROGRAMS += test_build_librgw
+endif # WITH_BUILD_TESTS
 
 #unittest_librgw_link_SOURCES = test/librgw_link.cc
 #unittest_librgw_link_LDFLAGS = $(PTHREAD_CFLAGS) ${AM_LDFLAGS}
