@@ -64,7 +64,7 @@ AM_COMMON_CFLAGS = \
 	${WARN_IGNORED_QUALIFIERS} \
 	-Winit-self \
 	-Wpointer-arith \
-	-Werror=format-security \
+	${WARN_ERROR_FORMAT_SECURITY} \
 	-fno-strict-aliasing \
 	-fsigned-char
 if !CLANG
