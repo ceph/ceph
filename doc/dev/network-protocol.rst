@@ -161,7 +161,7 @@ CEPH_MSGR_TAG_ACK (0x08)
 	
 	struct ceph_msgr_ack {
 		u8    tag = 0x08;
-		u64le seq; // The sequence number of the message being acknoledged.
+		u64le seq; // The sequence number of the message being acknowledged.
 	}
 
 CEPH_MSGR_TAG_KEEPALIVE (0x09)
