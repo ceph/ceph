@@ -2115,7 +2115,18 @@ int RGW_Auth_S3::authorize(RGWRados *store, struct req_state *s)
     } else {
       keystone_result = keystone_validator.validate_s3token(auth_id, token, auth_sign);
       if (keystone_result == 0) {
-        s->user.user_id = keystone_validator.response.token.tenant.id;
+	// Check for time skew first
+	time_t req_sec = s->header_time.sec();
+
+	if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+	     req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+	  dout(10) << "req_sec=" << req_sec << " now=" << now << "; now - RGW_AUTH_GRACE_MINS=" << now - RGW_AUTH_GRACE_MINS * 60 << "; now + RGW_AUTH_GRACE_MINS=" << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
+	  dout(0) << "NOTICE: request time skew too big now=" << utime_t(now, 0) << " req_time=" << s->header_time << dendl;
+	  return -ERR_REQUEST_TIME_SKEWED;
+	}
+
+
+	s->user.user_id = keystone_validator.response.token.tenant.id;
         s->user.display_name = keystone_validator.response.token.tenant.name; // wow.
 
         /* try to store user if it not already exists */
