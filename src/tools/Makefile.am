@@ -11,20 +11,12 @@ ceph_kvstore_tool_LDADD = $(LIBOS) $(CEPH_GLOBAL)
 ceph_kvstore_tool_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 bin_DEBUGPROGRAMS += ceph-kvstore-tool
 
-
-ceph_filestore_tool_SOURCES = tools/ceph_filestore_tool.cc
-ceph_filestore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) -lboost_program_options
+ceph_objectstore_tool_SOURCES = tools/ceph_objectstore_tool.cc
+ceph_objectstore_tool_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS) $(LIBRADOS)
 if LINUX
-ceph_filestore_tool_LDADD += -ldl
+ceph_objectstore_tool_LDADD += -ldl
 endif # LINUX
-bin_PROGRAMS += ceph_filestore_tool
-
-ceph_filestore_dump_SOURCES = tools/ceph_filestore_dump.cc
-ceph_filestore_dump_LDADD = $(LIBOSD) $(LIBOS) $(CEPH_GLOBAL) $(BOOST_PROGRAM_OPTIONS_LIBS)
-if LINUX
-ceph_filestore_dump_LDADD += -ldl
-endif # LINUX
-bin_PROGRAMS += ceph_filestore_dump
+bin_PROGRAMS += ceph-objectstore-tool
 
 monmaptool_SOURCES = tools/monmaptool.cc
 monmaptool_LDADD = $(CEPH_GLOBAL) $(LIBCOMMON)

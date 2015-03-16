@@ -603,7 +603,7 @@ bool PG::needs_backfill() const
   return ret;
 }
 
-bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
+bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end, epoch_t oldest_map)
 {
   *end = info.history.same_interval_since;
 
@@ -620,7 +620,7 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
 
   *start = MAX(MAX(info.history.epoch_created,
 		   info.history.last_epoch_clean),
-	       osd->get_superblock().oldest_map);
+	       oldest_map);
   if (*start >= *end) {
     dout(10) << __func__ << " start epoch " << *start << " >= end epoch " << *end
 	     << ", nothing to do" << dendl;
@@ -634,7 +634,8 @@ bool PG::_calc_past_interval_range(epoch_t *start, epoch_t *end)
 void PG::generate_past_intervals()
 {
   epoch_t cur_epoch, end_epoch;
-  if (!_calc_past_interval_range(&cur_epoch, &end_epoch)) {
+  if (!_calc_past_interval_range(&cur_epoch, &end_epoch,
+      osd->get_superblock().oldest_map)) {
     return;
   }
 
@@ -659,8 +660,8 @@ void PG::generate_past_intervals()
 
     cur_map = osd->get_map(cur_epoch);
     pg_t pgid = get_pgid().pgid;
-    if (cur_map->get_pools().count(pgid.pool()))
-      pgid = pgid.get_ancestor(cur_map->get_pg_num(pgid.pool()));
+    if (last_map->get_pools().count(pgid.pool()))
+      pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
     cur_map->pg_to_up_acting_osds(pgid, &up, &up_primary, &acting, &primary);
 
     std::stringstream debug;

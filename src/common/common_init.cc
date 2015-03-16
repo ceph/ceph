@@ -63,6 +63,7 @@ CephContext *common_preinit(const CephInitParameters &iparams,
       conf->set_val("keyring", "$osd_data/keyring", false);
     break;
 
+  case CODE_ENVIRONMENT_UTILITY_NODOUT:
   case CODE_ENVIRONMENT_LIBRARY:
     conf->set_val_or_die("log_to_stderr", "false");
     conf->set_val_or_die("err_to_stderr", "false");

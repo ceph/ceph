@@ -2208,7 +2208,7 @@ void OSD::build_past_intervals_parallel()
 {
   map<PG*,pistate> pis;
 
-  // calculate untion of map range
+  // calculate junction of map range
   epoch_t end_epoch = superblock.oldest_map;
   epoch_t cur_epoch = superblock.newest_map;
   for (ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.begin();
@@ -2217,7 +2217,7 @@ void OSD::build_past_intervals_parallel()
     PG *pg = i->second;
 
     epoch_t start, end;
-    if (!pg->_calc_past_interval_range(&start, &end))
+    if (!pg->_calc_past_interval_range(&start, &end, superblock.oldest_map))
       continue;
 
     dout(10) << pg->info.pgid << " needs " << start << "-" << end << dendl;
@@ -2255,8 +2255,11 @@ void OSD::build_past_intervals_parallel()
       vector<int> acting, up;
       int up_primary;
       int primary;
+      pg_t pgid = pg->info.pgid.pgid;
+      if (p.same_interval_since && last_map->get_pools().count(pgid.pool()))
+	pgid = pgid.get_ancestor(last_map->get_pg_num(pgid.pool()));
       cur_map->pg_to_up_acting_osds(
-	pg->info.pgid.pgid, &up, &up_primary, &acting, &primary);
+	pgid, &up, &up_primary, &acting, &primary);
 
       if (p.same_interval_since == 0) {
 	dout(10) << __func__ << " epoch " << cur_epoch << " pg " << pg->info.pgid
@@ -2283,7 +2286,7 @@ void OSD::build_past_intervals_parallel()
 	pg->info.history.last_epoch_clean,
 	cur_map, last_map,
 	pg->info.pgid.pool(),
-	pg->info.pgid.pgid,
+	pgid,
 	&pg->past_intervals,
 	&debug);
       if (new_interval) {
