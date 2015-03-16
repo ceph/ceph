@@ -39,7 +39,7 @@ private:
   XioConnection::EntitySet conns_entity_map;
   XioPortals portals;
   DispatchStrategy* dispatch_strategy;
-  XioLoopbackConnection loop_con;
+  XioLoopbackConnectionRef loop_con;
   uint32_t special_handling;
   Mutex sh_mtx;
   Cond sh_cond;
@@ -57,7 +57,7 @@ public:
 
   virtual void set_myaddr(const entity_addr_t& a) {
     Messenger::set_myaddr(a);
-    loop_con.set_peer_addr(a);
+    loop_con->set_peer_addr(a);
   }
 
   int _send_message(Message *m, const entity_inst_t &dest);
