@@ -251,7 +251,7 @@ XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
     shutdown_called(false),
     portals(this, cct->_conf->xio_portal_threads),
     dispatch_strategy(ds),
-    loop_con(this),
+    loop_con(new XioLoopbackConnection(this)),
     special_handling(0),
     sh_mtx("XioMessenger session mutex"),
     sh_cond()
@@ -726,11 +726,10 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
 
 int XioMessenger::_send_message(Message *m, Connection *con)
 {
-  if (con == &loop_con) {
+  if (con == loop_con.get() /* intrusive_ptr get() */) {
     m->set_connection(con);
     m->set_src(get_myinst().name);
-    XioLoopbackConnection *xlcon = static_cast<XioLoopbackConnection*>(con);
-    m->set_seq(xlcon->next_seq());
+    m->set_seq(loop_con->next_seq());
     ds_dispatch(m);
     return 0;
   }
