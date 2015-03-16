@@ -7,9 +7,56 @@ import time
 import gevent
 import json
 import threading
+import os
 from teuthology import misc as teuthology
-from . import ceph as ceph_task
 from tasks.scrub import Scrubber
+from teuthology.orchestra.remote import Remote
+import subprocess
+
+def make_admin_daemon_dir(ctx, remote):
+    """
+    Create /var/run/ceph directory on remote site.
+
+    :param ctx: Context
+    :param remote: Remote site
+    """
+    remote.run(
+            args=[
+                'sudo',
+                'install', '-d', '-m0777', '--', '/var/run/ceph',
+                ],
+            )
+
+
+def mount_osd_data(ctx, remote, osd):
+    """
+    Mount a remote OSD
+
+    :param ctx: Context
+    :param remote: Remote site
+    :param ods: Osd name
+    """
+    log.debug('Mounting data for osd.{o} on {r}'.format(o=osd, r=remote))
+    if remote in ctx.disk_config.remote_to_roles_to_dev and osd in ctx.disk_config.remote_to_roles_to_dev[remote]:
+        dev = ctx.disk_config.remote_to_roles_to_dev[remote][osd]
+        mount_options = ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][osd]
+        fstype = ctx.disk_config.remote_to_roles_to_dev_fstype[remote][osd]
+        mnt = os.path.join('/var/lib/ceph/osd', 'ceph-{id}'.format(id=osd))
+
+        log.info('Mounting osd.{o}: dev: {n}, mountpoint: {p}, type: {t}, options: {v}'.format(
+                 o=osd, n=remote.name, p=mnt, t=fstype, v=mount_options))
+
+        remote.run(
+            args=[
+                'sudo',
+                'mount',
+                '-t', fstype,
+                '-o', ','.join(mount_options),
+                dev,
+                mnt,
+            ]
+            )
+
 
 class Thrasher:
     """
@@ -31,6 +78,7 @@ class Thrasher:
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
         self.minin = self.config.get("min_in", 3)
+        self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * num_osds
@@ -54,6 +102,28 @@ class Thrasher:
             manager.raw_cluster_cmd('--', 'mon', 'tell', '*', 'injectargs',
                                     '--mon-osd-down-out-interval 0')
         self.thread = gevent.spawn(self.do_thrash)
+        if self.cmd_exists_on_osds("ceph-objectstore-tool"):
+            self.ceph_objectstore_tool = \
+                self.config.get('ceph_objectstore_tool', True)
+            self.test_rm_past_intervals = \
+                self.config.get('test_rm_past_intervals', True)
+        else:
+            self.ceph_objectstore_tool = False
+            self.test_rm_past_intervals = False
+            self.log("Unable to test ceph_objectstore_tool, "
+                     "not available on all OSD nodes")
+
+    def cmd_exists_on_osds(self, cmd):
+        allremotes = self.ceph_manager.ctx.cluster.only(\
+            teuthology.is_type('osd')).remotes.keys()
+        allremotes = list(set(allremotes))
+        for remote in allremotes:
+            proc = remote.run(args=['type', cmd], wait=True,
+                              check_status=False, stdout=StringIO(),
+                              stderr=StringIO())
+            if proc.exitstatus != 0:
+                return False;
+        return True;
 
     def kill_osd(self, osd=None, mark_down=False, mark_out=False):
         """
@@ -71,6 +141,124 @@ class Thrasher:
             self.ceph_manager.mark_down_osd(osd)
         if mark_out and osd in self.in_osds:
             self.out_osd(osd)
+        if self.ceph_objectstore_tool:
+            self.log("Testing ceph-objectstore-tool on down osd")
+            (remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            FSPATH = self.ceph_manager.get_filepath()
+            JPATH = os.path.join(FSPATH, "journal")
+            exp_osd = imp_osd = osd
+            exp_remote = imp_remote = remote
+            # If an older osd is available we'll move a pg from there
+            if len(self.dead_osds) > 1 and random.random() < self.chance_move_pg:
+                exp_osd = random.choice(self.dead_osds[:-1])
+                (exp_remote,) = self.ceph_manager.ctx.cluster.only('osd.{o}'.format(o=exp_osd)).remotes.iterkeys()
+            if 'keyvaluestore_backend' in self.ceph_manager.ctx.ceph.conf['osd']:
+                prefix = "sudo ceph-objectstore-tool --data-path {fpath} --journal-path {jpath} --type keyvaluestore-dev --log-file=/var/log/ceph/objectstore_tool.\\$pid.log ".format(fpath=FSPATH, jpath=JPATH)
+            else:
+                prefix = "sudo ceph-objectstore-tool --data-path {fpath} --journal-path {jpath} --log-file=/var/log/ceph/objectstore_tool.\\$pid.log ".format(fpath=FSPATH, jpath=JPATH)
+            cmd = (prefix + "--op list-pgs").format(id=exp_osd)
+            proc = exp_remote.run(args=cmd, wait=True,
+                                  check_status=False, stdout=StringIO())
+            if proc.exitstatus:
+                raise Exception("ceph-objectstore-tool: exp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
+            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            if len(pgs) == 0:
+                self.log("No PGs found for osd.{osd}".format(osd=exp_osd))
+                return
+            pg = random.choice(pgs)
+            exp_path = os.path.join(os.path.join(teuthology.get_testdir(self.ceph_manager.ctx), "data"), "exp.{pg}.{id}".format(pg=pg, id=exp_osd))
+            # export
+            cmd = (prefix + "--op export --pgid {pg} --file {file}").format(id=exp_osd, pg=pg, file=exp_path)
+            proc = exp_remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph-objectstore-tool: export failure with status {ret}".format(ret=proc.exitstatus))
+            # remove
+            cmd = (prefix + "--op remove --pgid {pg}").format(id=exp_osd, pg=pg)
+            proc = exp_remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph-objectstore-tool: remove failure with status {ret}".format(ret=proc.exitstatus))
+            # If there are at least 2 dead osds we might move the pg
+            if exp_osd != imp_osd:
+                # If pg isn't already on this osd, then we will move it there
+                cmd = (prefix + "--op list-pgs").format(id=imp_osd)
+                proc = imp_remote.run(args=cmd, wait=True,
+                                      check_status=False, stdout=StringIO())
+                if proc.exitstatus:
+                    raise Exception("ceph-objectstore-tool: imp list-pgs failure with status {ret}".format(ret=proc.exitstatus))
+                pgs = proc.stdout.getvalue().split('\n')[:-1]
+                if pg not in pgs:
+                    self.log("Moving pg {pg} from osd.{fosd} to osd.{tosd}".format(pg=pg, fosd=exp_osd, tosd=imp_osd))
+                    if imp_remote != exp_remote:
+                        # Copy export file to the other machine
+                        self.log("Transfer export file from {srem} to {trem}".format(srem=exp_remote, trem=imp_remote))
+                        tmpexport = Remote.get_file(exp_remote, exp_path)
+                        Remote.put_file(imp_remote, tmpexport, exp_path)
+                        os.remove(tmpexport)
+                else:
+                    # Can't move the pg after all
+                    imp_osd = exp_osd
+                    imp_remote = exp_remote
+            # import
+            cmd = (prefix + "--op import --file {file}")
+            cmd = cmd.format(id=imp_osd, file=exp_path)
+            proc = imp_remote.run(args=cmd, wait=True, check_status=False)
+            if proc.exitstatus == 10:
+                self.log("Pool went away before processing an import"
+                         "...ignored");
+            elif proc.exitstatus:
+                raise Exception("ceph-objectstore-tool: "
+                                "import failure with status {ret}".
+                                format(ret=proc.exitstatus))
+            cmd = "rm -f {file}".format(file=exp_path)
+            exp_remote.run(args=cmd)
+            if imp_remote != exp_remote:
+                imp_remote.run(args=cmd)
+
+    def rm_past_intervals(self, osd=None):
+        """
+        :param osd: Osd to find pg to remove past intervals
+        """
+        if self.test_rm_past_intervals:
+            if osd is None:
+                osd = random.choice(self.dead_osds)
+            self.log("Use ceph_objectstore_tool to remove past intervals")
+            (remote,) = self.ceph_manager.ctx.\
+                cluster.only('osd.{o}'.format(o=osd)).remotes.iterkeys()
+            FSPATH = self.ceph_manager.get_filepath()
+            JPATH = os.path.join(FSPATH, "journal")
+            if ('keyvaluestore_backend' in
+                    self.ceph_manager.ctx.ceph.conf['osd']):
+                prefix = ("sudo ceph-objectstore-tool "
+                          "--data-path {fpath} --journal-path {jpath} "
+                          "--type keyvaluestore-dev "
+                          "--log-file="
+                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
+                          format(fpath=FSPATH, jpath=JPATH))
+            else:
+                prefix = ("sudo ceph-objectstore-tool "
+                          "--data-path {fpath} --journal-path {jpath} "
+                          "--log-file="
+                          "/var/log/ceph/objectstore_tool.\\$pid.log ".
+                          format(fpath=FSPATH, jpath=JPATH))
+            cmd = (prefix + "--op list-pgs").format(id=osd)
+            proc = remote.run(args=cmd, wait=True,
+                              check_status=False, stdout=StringIO())
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: "
+                                "exp list-pgs failure with status {ret}".
+                                format(ret=proc.exitstatus))
+            pgs = proc.stdout.getvalue().split('\n')[:-1]
+            if len(pgs) == 0:
+                self.log("No PGs found for osd.{osd}".format(osd=osd))
+                return
+            pg = random.choice(pgs)
+            cmd = (prefix + "--op rm-past-intervals --pgid {pg}").\
+                format(id=osd, pg=pg)
+            proc = remote.run(args=cmd)
+            if proc.exitstatus:
+                raise Exception("ceph_objectstore_tool: "
+                                "rm-past-intervals failure with status {ret}".
+                                format(ret=proc.exitstatus))
 
     def blackhole_kill_osd(self, osd=None):
         """
@@ -325,6 +513,8 @@ class Thrasher:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
+        if len(self.dead_osds) > 1:
+            actions.append((self.rm_past_intervals, 1.0,))
         if len(self.out_osds) > minout:
             actions.append((self.in_osd, 1.7,))
         if len(self.dead_osds) > mindead:
@@ -398,6 +588,10 @@ class CephManager:
     Ceph manager object.
     Contains several local functions that form a bulk of this module.
     """
+
+    REPLICATED_POOL = 1
+    ERASURE_CODED_POOL = 3
+
     def __init__(self, controller, ctx=None, config=None, logger=None):
         self.lock = threading.RLock()
         self.ctx = ctx
@@ -524,6 +718,7 @@ class CephManager:
     def osd_admin_socket(self, osdnum, command, check_status=True):
         """
         Remotely start up ceph specifying the admin socket
+        :param command a list of words to use as the command to the admin socket
         """
         testdir = teuthology.get_testdir(self.ctx)
         remote = None
@@ -551,7 +746,7 @@ class CephManager:
 
     def get_pgid(self, pool, pgnum):
         """
-        :param pool: pool number
+        :param pool: pool name
         :param pgnum: pg number
         :returns: a string representing this pg.
         """
@@ -642,6 +837,16 @@ class CephManager:
                         osdnum=osdnum,
                         command=args))
                 time.sleep(5)
+
+    def get_pool_dump(self, pool):
+        """
+        get the osd dump part of a pool 
+        """
+        osd_dump = self.get_osd_dump_json()
+        for i in osd_dump['pools']:
+            if i['pool_name'] == pool:
+                return i
+        assert False
 
     def set_config(self, osdnum, **argdict):
         """
@@ -941,6 +1146,14 @@ class CephManager:
                 return pg
 
         return None
+
+    def get_osd_dump_json(self):
+        """
+        osd dump --format=json converted to a python object
+        :returns: the python object
+        """
+        out = self.raw_cluster_cmd('osd', 'dump', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
 
     def get_osd_dump(self):
         """
@@ -1250,8 +1463,8 @@ class CephManager:
             if not remote.console.check_status(300):
                 raise Exception('Failed to revive osd.{o} via ipmi'.format(o=osd))
             teuthology.reconnect(self.ctx, 60, [remote])
-            ceph_task.mount_osd_data(self.ctx, remote, str(osd))
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            mount_osd_data(self.ctx, remote, str(osd))
+            make_admin_daemon_dir(self.ctx, remote)
             self.ctx.daemons.get_daemon('osd', osd).reset()
         self.ctx.daemons.get_daemon('osd', osd).restart()
         # wait for dump_ops_in_flight; this command doesn't appear
@@ -1306,7 +1519,7 @@ class CephManager:
             self.log('revive_mon on mon.{m} doing powercycle of {s}'.format(m=mon, s=remote.name))
             assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            make_admin_daemon_dir(self.ctx, remote)
         self.ctx.daemons.get_daemon('mon', mon).restart()
 
     def get_mon_status(self, mon):
@@ -1379,7 +1592,7 @@ class CephManager:
             self.log('revive_mds on mds.{m} doing powercycle of {s}'.format(m=mds, s=remote.name))
             assert remote.console is not None, "powercycling requested but RemoteConsole is not initialized.  Check ipmi config."
             remote.console.power_on()
-            ceph_task.make_admin_daemon_dir(self.ctx, remote)
+            make_admin_daemon_dir(self.ctx, remote)
         args = []
         if standby_for_rank:
             args.extend(['--hot-standby', standby_for_rank])
@@ -1424,3 +1637,9 @@ class CephManager:
         out = self.raw_cluster_cmd('mds', 'dump', '--format=json')
         j = json.loads(' '.join(out.splitlines()[1:]))
         return j
+
+    def get_filepath(self):
+        """
+        Return path to osd data with {id} needing to be replaced
+        """
+        return "/var/lib/ceph/osd/ceph-{id}"
