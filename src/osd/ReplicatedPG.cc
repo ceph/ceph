@@ -9518,6 +9518,13 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
     else
       p->second.clear();
   }
+  for (map<hobject_t, list<Context*> >::iterator i =
+	 callbacks_for_degraded_object.begin();
+       i != callbacks_for_degraded_object.end();
+    ) {
+    finish_degraded_object((i++)->first);
+  }
+  assert(callbacks_for_degraded_object.empty());
 
   if (is_primary()) {
     requeue_ops(waiting_for_cache_not_full);
