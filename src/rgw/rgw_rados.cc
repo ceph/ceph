@@ -6603,9 +6603,9 @@ int RGWRados::get_bucket_stats(rgw_bucket& bucket, string *bucket_ver, string *m
   char buf[64];
   for(; iter != headers.end(); ++iter, ++viter) {
     accumulate_raw_stats(iter->second, stats);
-    snprintf(buf, sizeof(buf), "%lu", iter->second.ver);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->second.ver);
     ver_mgr.add(viter->first, string(buf));
-    snprintf(buf, sizeof(buf), "%lu", iter->second.master_ver);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->second.master_ver);
     master_ver_mgr.add(viter->first, string(buf));
     marker_mgr.add(viter->first, iter->second.max_marker);
   }
