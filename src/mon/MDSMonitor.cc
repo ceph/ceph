@@ -1503,6 +1503,17 @@ int MDSMonitor::filesystem_command(
       return -EAGAIN; // don't propose yet; wait for message to be retried
     }
 
+  } else if (prefix == "mds repaired") {
+    mds_rank_t rank;
+    cmd_getval(g_ceph_context, cmdmap, "rank", rank);
+    if (pending_mdsmap.damaged.count(rank)) {
+      dout(4) << "repaired: restoring rank " << rank << dendl;
+      pending_mdsmap.damaged.erase(rank);
+      pending_mdsmap.failed.insert(rank);
+    } else {
+      dout(4) << "repaired: no-op on rank " << rank << dendl;
+    }
+    r = 0;
   } else if (prefix == "mds rm") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
