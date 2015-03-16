@@ -2126,7 +2126,7 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
   bool cmd_w = (this_cmd->req_perms.find('w') != string::npos);
   bool cmd_x = (this_cmd->req_perms.find('x') != string::npos);
 
-  bool capable = s->caps.is_capable(g_ceph_context, s->inst.name,
+  bool capable = s->caps.is_capable(g_ceph_context, s->entity_name,
                                     module, prefix, param_str_map,
                                     cmd_r, cmd_w, cmd_x);
 
@@ -2869,7 +2869,6 @@ bool Monitor::_ms_dispatch(Message *m)
   ConnectionRef connection = m->get_connection();
   MonSession *s = NULL;
   MonCap caps;
-  EntityName entity_name;
   bool src_is_mon;
 
   // regardless of who we are or who the sender is, the message must
@@ -2937,7 +2936,7 @@ bool Monitor::_ms_dispatch(Message *m)
 
   if (s) {
     if (s->auth_handler) {
-      entity_name = s->auth_handler->get_entity_name();
+      s->entity_name = s->auth_handler->get_entity_name();
     }
     dout(20) << " caps " << s->caps.get_str() << dendl;
   }

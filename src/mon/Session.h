@@ -53,6 +53,7 @@ struct MonSession : public RefCountedObject {
   map<string, Subscription*> sub_map;
 
   AuthServiceHandler *auth_handler;
+  EntityName entity_name;
 
   ConnectionRef proxy_con;
   uint64_t proxy_tid;
@@ -75,7 +76,7 @@ struct MonSession : public RefCountedObject {
   bool is_capable(string service, int mask) {
     map<string,string> args;
     return caps.is_capable(g_ceph_context,
-			   inst.name,
+			   entity_name,
 			   service, "", args,
 			   mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
   }
