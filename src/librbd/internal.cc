@@ -584,8 +584,11 @@ namespace librbd {
 	  (scan_for_parents(ictx, our_pspec, snap_id) == -ENOENT)) {
 	  r = cls_client::remove_child(&ictx->md_ctx, RBD_CHILDREN,
 				       our_pspec, ictx->id);
-	  if (r < 0)
+	  if (r < 0 && r != -ENOENT) {
+            lderr(ictx->cct) << "snap_remove: failed to deregister from parent "
+                                "image" << dendl;
 	    return r;
+          }
       }
     }
 
