@@ -201,8 +201,7 @@ public:
     submit_q.enq(xcon, send_q);
   }
 
-  void requeue_all_xcon(XioMsg* xmsg,
-			XioConnection* xcon,
+  void requeue_all_xcon(XioConnection* xcon,
 			XioSubmit::Queue::iterator& q_iter,
 			XioSubmit::Queue& send_q) {
     // XXX gather all already-dequeued outgoing messages for xcon
@@ -210,8 +209,8 @@ public:
     // and mark the connection as flow-controlled
     XioSubmit::Queue requeue_q;
     XioSubmit *xs;
-    requeue_q.push_back(*xmsg);
-    ++q_iter;
+    XioMsg *xmsg;
+
     while (q_iter != send_q.end()) {
       xs = &(*q_iter);
       // skip retires and anything for other connections
@@ -273,7 +272,7 @@ public:
 		xio_qdepth_high = xcon->xio_qdepth_high_mark();
 		if (unlikely((xcon->send_ctr + xmsg->hdr.msg_cnt) >
 			     xio_qdepth_high)) {
-		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 
@@ -292,7 +291,7 @@ public:
 		switch (code) {
 		case XIO_E_TX_QUEUE_OVERFLOW:
 		{
-		  requeue_all_xcon(xmsg, xcon, q_iter, send_q);
+		  requeue_all_xcon(xcon, q_iter, send_q);
 		  goto restart;
 		}
 		  break;
