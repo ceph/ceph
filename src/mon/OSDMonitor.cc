@@ -829,8 +829,9 @@ bool OSDMonitor::preprocess_failure(MOSDFailure *m)
   }
 
   // already reported?
-  if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dup: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+  if (osdmap.is_down(badboy) ||
+      osdmap.get_up_from(badboy) > m->get_epoch()) {
+    dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(m, m->get_epoch()+1);
     goto didit;
