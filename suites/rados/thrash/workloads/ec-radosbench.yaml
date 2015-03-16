@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - shard.*missing
 tasks:
 - radosbench:
     clients: [client.0]
