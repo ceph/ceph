@@ -295,6 +295,8 @@ COMMAND("mds set_state " \
 	"set mds state of <gid> to <numeric-state>", "mds", "rw", "cli,rest")
 COMMAND("mds fail name=who,type=CephString", \
 	"force mds to status failed", "mds", "rw", "cli,rest")
+COMMAND("mds repaired name=rank,type=CephInt", \
+	"mark a damaged MDS rank as no longer damaged", "mds", "rw", "cli,rest")
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=who,type=CephName", \
