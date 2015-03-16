@@ -518,7 +518,7 @@ public:
     int get_data_alignment() {
       if (!largest_data_len)
 	return -1;
-      return (largest_data_off - get_data_offset()) & ~CEPH_PAGE_MASK;
+      return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
     bool empty() {
