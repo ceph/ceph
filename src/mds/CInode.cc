@@ -2981,26 +2981,36 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   map<string, bufferptr> *pxattrs = 0;
 
-  if (snapid != CEPH_NOSNAP && is_multiversion()) {
+  if (snapid != CEPH_NOSNAP) {
 
     // for now at least, old_inodes is only defined/valid on the auth
     if (!is_auth())
       valid = false;
 
-    compact_map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
-    if (p != old_inodes.end()) {
-      if (p->second.first > snapid) {
-        if  (p != old_inodes.begin())
-          --p;
-        else dout(0) << "old_inode lower_bound starts after snapid!" << dendl;
+    if (is_multiversion()) {
+      compact_map<snapid_t,old_inode_t>::iterator p = old_inodes.lower_bound(snapid);
+      if (p != old_inodes.end()) {
+	if (p->second.first > snapid) {
+	  if  (p != old_inodes.begin())
+	    --p;
+	}
+	if (p->second.first <= snapid && snapid <= p->first) {
+	  dout(15) << "encode_inodestat snapid " << snapid
+		   << " to old_inode [" << p->second.first << "," << p->first << "]"
+		   << " " << p->second.inode.rstat
+		   << dendl;
+	  pi = oi = &p->second.inode;
+	  pxattrs = &p->second.xattrs;
+	} else {
+	  // snapshoted remote dentry can result this
+	  dout(0) << "encode_inodestat old_inode for snapid " << snapid
+		  << " not found" << dendl;
+	}
       }
-      dout(15) << "encode_inodestat snapid " << snapid
-	       << " to old_inode [" << p->second.first << "," << p->first << "]" 
-	       << " " << p->second.inode.rstat
-	       << dendl;
-      assert(p->second.first <= snapid && snapid <= p->first);
-      pi = oi = &p->second.inode;
-      pxattrs = &p->second.xattrs;
+    } else if (snapid < first || snapid > last) {
+      // snapshoted remote dentry can result this
+      dout(0) << "encode_inodestat [" << first << "," << last << "]"
+	      << " not match snapid " << snapid << dendl;
     }
   }
   
