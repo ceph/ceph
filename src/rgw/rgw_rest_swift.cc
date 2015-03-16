@@ -424,6 +424,11 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+#define REMOVE_ATTR_PREFIX     "HTTP_X_REMOVE_CONTAINER_META_"
+#define PUT_ATTR_PREFIX        "HTTP_X_CONTAINER_META_"
+#define REMOVE_ATTR_PREFIX_LEN sizeof(REMOVE_ATTR_PREFIX) - 1
+#define PUT_ATTR_PREFIX_LEN    sizeof(PUT_ATTR_PREFIX) - 1
+
 int RGWPutMetadata_ObjStore_SWIFT::get_params()
 {
   if (s->has_bad_meta)
@@ -433,6 +438,24 @@ int RGWPutMetadata_ObjStore_SWIFT::get_params()
     int r = get_swift_container_settings(s, store, &policy, &has_policy, &cors_config, &has_cors);
     if (r < 0) {
       return r;
+    }
+    map<string, string, ltstr_nocase>& m = s->info.env->get_map();
+    map<string, string, ltstr_nocase>::iterator iter;
+    for (iter = m.begin(); iter != m.end(); ++iter) {
+      size_t prefix_len = 0;
+      const char *p = iter->first.c_str();
+      if (strncasecmp(p, REMOVE_ATTR_PREFIX, REMOVE_ATTR_PREFIX_LEN) == 0) {
+        // Explicitly requested removal
+        prefix_len = REMOVE_ATTR_PREFIX_LEN;
+      } else if ((strncasecmp(p, PUT_ATTR_PREFIX, PUT_ATTR_PREFIX_LEN) == 0) && iter->second.empty()) {
+        // Removal requested by putting an empty value
+        prefix_len = PUT_ATTR_PREFIX_LEN;
+      }
+      if (prefix_len > 0) {
+        string name(RGW_ATTR_META_PREFIX);
+        name.append(lowercase_dash_http_attr(p + prefix_len));
+        rmattr_names.insert(name);
+      }
     }
   }
 
