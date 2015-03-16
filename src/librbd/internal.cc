@@ -1426,6 +1426,9 @@ reprotect_and_return_err:
 
     RWLock::RLocker l(ictx->snap_lock);
     RWLock::RLocker l2(ictx->parent_lock);
+    if (ictx->parent == NULL) {
+      return -ENOENT;
+    }
 
     parent_spec parent_spec;
 
