@@ -33,7 +33,6 @@ libcommon_internal_la_SOURCES = \
 	common/str_map.cc \
 	common/errno.cc \
 	common/RefCountedObj.cc \
-	common/blkdev.cc \
 	common/common_init.cc \
 	common/pipe.c \
 	common/ceph_argparse.cc \
@@ -75,6 +74,11 @@ libcommon_internal_la_SOURCES = \
 	common/Readahead.cc \
 	common/Cycles.cc \
 	common/ContextCompletion.cc
+
+if WITH_RBD
+libcommon_internal_la_SOURCES += \
+	common/blkdev.cc
+endif
 
 if ENABLE_XIO
 libcommon_internal_la_SOURCES += \
