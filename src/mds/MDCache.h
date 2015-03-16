@@ -615,6 +615,25 @@ public:
 	   uncommitted_slave_rename_olddir.count(dir->inode) == 0;
   }
 
+  /**
+   * For all unreferenced inodes, dirs, dentries below an inode, compose
+   * expiry messages.  This is used when giving up all replicas of entities
+   * for an MDS peer in the 'stopping' state, such that the peer can
+   * empty its cache and finish shutting down.
+   *
+   * We have to make sure we're only expiring un-referenced items to
+   * avoid interfering with ongoing stray-movement (we can't distinguish
+   * between the "moving my strays" and "waiting for my cache to empty"
+   * phases within 'stopping')
+   *
+   * @return false if we completed cleanly, true if caller should stop
+   *         expiring because we hit something with refs.
+   */
+  bool expire_recursive(
+    CInode *in,
+    std::map<mds_rank_t, MCacheExpire*>& expiremap,
+    CDir *subtree);
+
   void trim_client_leases();
   void check_memory_usage();
 
