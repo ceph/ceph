@@ -59,10 +59,10 @@ TEST(ErasureCodeShec, init_1)
   int r = shec->init(*parameters);
 
   //check parameters
-  EXPECT_EQ(6u, shec->k);
-  EXPECT_EQ(4u, shec->m);
-  EXPECT_EQ(3u, shec->c);
-  EXPECT_EQ(8u, shec->w);
+  EXPECT_EQ(6, shec->k);
+  EXPECT_EQ(4, shec->m);
+  EXPECT_EQ(3, shec->c);
+  EXPECT_EQ(8, shec->w);
   EXPECT_EQ(ErasureCodeShec::MULTIPLE, shec->technique);
   EXPECT_STREQ("default", shec->ruleset_root.c_str());
   EXPECT_STREQ("osd", shec->ruleset_failure_domain.c_str());
@@ -1093,7 +1093,7 @@ TEST(ErasureCodeShec, minimum_to_decode_3)
   int r = shec->minimum_to_decode(want_to_decode, available_chunks,
 				  &minimum_chunks);
   EXPECT_EQ(-EINVAL, r);
-  EXPECT_EQ(0, minimum_chunks.size());
+  EXPECT_EQ(0u, minimum_chunks.size());
 
   delete shec;
   delete parameters;
