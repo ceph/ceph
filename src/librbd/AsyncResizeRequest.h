@@ -4,6 +4,7 @@
 #define CEPH_LIBRBD_ASYNC_RESIZE_REQUEST_H
 
 #include "librbd/AsyncRequest.h"
+#include "include/xlist.h"
 
 namespace librbd
 {
@@ -14,19 +15,25 @@ class ProgressContext;
 class AsyncResizeRequest : public AsyncRequest
 {
 public:
-  AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish,
-		     uint64_t original_size, uint64_t new_size,
-		     ProgressContext &prog_ctx)
-    : AsyncRequest(image_ctx, on_finish),
-      m_original_size(original_size), m_new_size(new_size),
-      m_prog_ctx(prog_ctx), m_original_parent_overlap(0),
-      m_new_parent_overlap(0)
-  {
-  }
+  AsyncResizeRequest(ImageCtx &image_ctx, Context *on_finish, uint64_t new_size,
+                     ProgressContext &prog_ctx);
+  virtual ~AsyncResizeRequest();
 
   virtual void send();
 
-protected:
+  inline bool shrinking() const {
+    return m_new_size < m_original_size;
+  }
+
+  inline uint64_t get_image_size() const {
+    return m_new_size;
+  }
+
+  inline uint64_t get_parent_overlap() const {
+    return m_new_parent_overlap;
+  }
+
+private:
   /**
    * Resize goes through the following state machine to resize the image
    * and update the object map:
@@ -71,9 +78,11 @@ protected:
   uint64_t m_original_size;
   uint64_t m_new_size;
   ProgressContext &m_prog_ctx;
-  uint64_t m_original_parent_overlap;
   uint64_t m_new_parent_overlap;
 
+  xlist<AsyncResizeRequest *>::item m_xlist_item;
+
+  virtual bool safely_cancel(int r);
   virtual bool should_complete(int r);
 
   void send_flush();
@@ -82,6 +91,10 @@ protected:
   void send_grow_object_map();
   bool send_shrink_object_map();
   void send_update_header();
+
+  void compute_parent_overlap();
+  void increment_refresh_seq();
+  void update_size_and_overlap();
 
 };
 
