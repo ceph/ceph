@@ -629,6 +629,9 @@ void RGWCopyObj_ObjStore_SWIFT::dump_copy_info()
   string account_name;
   url_encode(s->user.user_id, account_name);
   s->cio->print("X-Copied-From-Account: %s\r\n", account_name.c_str());
+
+  /* Dump X-Copied-From-Last-Modified. */
+  dump_time_header(s, "X-Copied-From-Last-Modified", src_mtime);
 }
 
 void RGWCopyObj_ObjStore_SWIFT::send_response()

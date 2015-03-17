@@ -3439,6 +3439,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               time_t *src_mtime,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -3528,6 +3529,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+  if (src_mtime) {
+    *src_mtime = set_mtime;
+  }
+
   if (petag) {
     map<string, bufferlist>::iterator iter = src_attrs.find(RGW_ATTR_ETAG);
     if (iter != src_attrs.end()) {
@@ -3601,6 +3606,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               time_t *src_mtime,
                time_t *mtime,
                const time_t *mod_ptr,
                const time_t *unmod_ptr,
@@ -3619,7 +3625,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 {
   int ret;
   uint64_t total_len, obj_size;
-  time_t lastmod;
   rgw_obj shadow_obj = dest_obj;
   string shadow_oid;
 
@@ -3641,7 +3646,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, info, source_zone,
-               dest_obj, src_obj, dest_bucket_info, src_bucket_info, mtime, mod_ptr,
+               dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
                unmod_ptr, if_match, if_nomatch, replace_attrs, attrs, category,
                olh_epoch, version_id, ptag, petag, err, progress_cb, progress_data);
   }
@@ -3657,7 +3662,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   read_op.conds.if_match = if_match;
   read_op.conds.if_nomatch = if_nomatch;
   read_op.params.attrs = &src_attrs;
-  read_op.params.lastmod = &lastmod;
+  read_op.params.lastmod = src_mtime;
   read_op.params.read_size = &total_len;
   read_op.params.obj_size = &obj_size;
   read_op.params.perr = err;

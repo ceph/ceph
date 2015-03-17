@@ -584,6 +584,7 @@ protected:
   string dest_bucket_name;
   rgw_bucket dest_bucket;
   string dest_object;
+  time_t src_mtime;
   time_t mtime;
   bool replace_attrs;
   RGWBucketInfo src_bucket_info;
@@ -615,6 +616,7 @@ public:
     mod_ptr = NULL;
     unmod_ptr = NULL;
     ret = 0;
+    src_mtime = 0;
     mtime = 0;
     replace_attrs = false;
     last_ofs = 0;
