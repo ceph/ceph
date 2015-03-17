@@ -389,16 +389,14 @@ def fetch_binaries_for_coredumps(path, remote):
                                                             dump_program))
 
             # Pull Debug symbols:
-            # RPM distro's append their non-stripped ELF's with .debug
-            # When deb based distro's do not.
-            debug_program = '{dump_program}.debug'.format(
-                dump_program=dump_program)
             debug_path = os.path.join('/usr/lib/debug', remote_path)
 
+            # RPM distro's append their non-stripped ELF's with .debug
+            # When deb based distro's do not.
             if remote.system_type == 'rpm':
                 debug_path = '{debug_path}.debug'.format(debug_path=debug_path)
 
-            remote._sftp_get_file(debug_path, os.path.join(coredump_path, debug_program))
+            remote.get_file(debug_path, coredump_path)
 
 
 @contextlib.contextmanager
