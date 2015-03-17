@@ -6680,14 +6680,14 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
     fop->objecter_tid = 0;
   }
+  if (fop->blocking) {
+    fop->obc->stop_block();
+    kick_object_context_blocked(fop->obc);
+  }
   if (requeue) {
     if (fop->op)
       requeue_op(fop->op);
     requeue_ops(fop->dup_ops);
-  }
-  if (fop->blocking) {
-    fop->obc->stop_block();
-    kick_object_context_blocked(fop->obc);
   }
   if (fop->on_flush) {
     Context *on_flush = fop->on_flush;
