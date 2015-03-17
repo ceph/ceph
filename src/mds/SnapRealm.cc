@@ -115,8 +115,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   assert(srnode.past_parents.size() >= open_past_parents.size());
   if (srnode.past_parents.size() > open_past_parents.size()) {
     for (map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.begin();
-	 p != srnode.past_parents.end();
-	 ++p) {    
+	 p != srnode.past_parents.end(); ) {
       dout(10) << " past_parent [" << p->second.first << "," << p->first << "] is "
 	       << p->second.ino << dendl;
       CInode *parent = mdcache->get_inode(p->second.ino);
@@ -126,12 +125,18 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
 	mdcache->open_ino(p->second.ino, mdcache->mds->mdsmap->get_metadata_pool(), fin);
 	return false;
       }
+      if (parent->state_test(CInode::STATE_PURGING)) {
+	dout(10) << " skip purging past_parent " << *parent << dendl;
+	srnode.past_parents.erase(p++);
+	continue;
+      }
       assert(parent->snaprealm);  // hmm!
       if (!parent->snaprealm->_open_parents(finish, p->second.first, p->first))
 	return false;
       if (!open_past_parents.count(p->second.ino)) {
 	add_open_past_parent(parent->snaprealm);
       }
+      ++p;
     }
   }
 
