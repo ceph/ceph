@@ -147,7 +147,7 @@ bool ObjectMap::object_may_exist(uint64_t object_no) const
 
 void ObjectMap::refresh(uint64_t snap_id)
 {
-  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.snap_lock.is_wlocked());
   RWLock::WLocker l(m_image_ctx.object_map_lock);
 
   uint64_t features;
@@ -166,24 +166,27 @@ void ObjectMap::refresh(uint64_t snap_id)
   std::string oid(object_map_name(m_image_ctx.id, snap_id));
   int r = cls_client::object_map_load(&m_image_ctx.md_ctx, oid,
                                       &m_object_map);
-  if (r < 0) { 
+  if (r < 0) {
     lderr(cct) << "error refreshing object map: " << cpp_strerror(r)
                << dendl;
     invalidate();
     m_object_map.clear();
     return;
   }
-  
+
   ldout(cct, 20) << "refreshed object map: " << m_object_map.size()
                  << dendl;
-  
+
   uint64_t num_objs = Striper::get_num_objects(
     m_image_ctx.layout, m_image_ctx.get_image_size(snap_id));
-  if (m_object_map.size() != num_objs) {
-    // resize op might have been interrupted
-    lderr(cct) << "incorrect object map size: " << m_object_map.size()
-               << " != " << num_objs << dendl;
+  if (m_object_map.size() < num_objs) {
+    lderr(cct) << "object map smaller than current object count: "
+               << m_object_map.size() << " != " << num_objs << dendl;
     invalidate();
+  } else if (m_object_map.size() > num_objs) {
+    // resize op might have been interrupted
+    ldout(cct, 1) << "object map larger than current object count: "
+                  << m_object_map.size() << " != " << num_objs << dendl;
   }
 }
 
@@ -332,10 +335,12 @@ void ObjectMap::invalidate() {
 
   CephContext *cct = m_image_ctx.cct;
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
-  m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
+  m_image_ctx.update_flags(m_image_ctx.snap_id, RBD_FLAG_OBJECT_MAP_INVALID,
+                           true);
 
   librados::ObjectWriteOperation op;
-  cls_client::set_flags(&op, m_image_ctx.flags, RBD_FLAG_OBJECT_MAP_INVALID);
+  cls_client::set_flags(&op, m_image_ctx.snap_id, m_image_ctx.flags,
+                        RBD_FLAG_OBJECT_MAP_INVALID);
 
   int r = m_image_ctx.md_ctx.operate(m_image_ctx.header_oid, &op);
   if (r < 0) {
@@ -390,12 +395,16 @@ bool ObjectMap::Request::invalidate() {
   CephContext *cct = m_image_ctx.cct;
   RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
 
+  // requests shouldn't be running while using snapshots
+  assert(m_image_ctx.snap_id == CEPH_NOSNAP);
+
   lderr(cct) << &m_image_ctx << " invalidating object map" << dendl;
   m_state = STATE_INVALIDATE;
   m_image_ctx.flags |= RBD_FLAG_OBJECT_MAP_INVALID;
 
   librados::ObjectWriteOperation op;
-  cls_client::set_flags(&op, m_image_ctx.flags, RBD_FLAG_OBJECT_MAP_INVALID);
+  cls_client::set_flags(&op, CEPH_NOSNAP, m_image_ctx.flags,
+                        RBD_FLAG_OBJECT_MAP_INVALID);
 
   librados::AioCompletion *rados_completion = create_callback_completion();
   int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid,
