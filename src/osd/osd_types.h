@@ -3005,6 +3005,9 @@ public:
   /// in-progress copyfrom ops for this object
   bool blocked;
 
+  //means this obc was found in a cache and not just created
+  bool found_in_cache;
+
   // set if writes for this object are blocked on another objects recovery
   ObjectContextRef blocked_by;      // object blocking our writes
   set<ObjectContextRef> blocking;   // objects whose writes we block
@@ -3254,7 +3257,7 @@ public:
       destructor_callback(0),
       lock("ReplicatedPG::ObjectContext::lock"),
       unstable_writes(0), readers(0), writers_waiting(0), readers_waiting(0),
-      blocked(false), requeue_scrub_on_unblock(false) {}
+      blocked(false), found_in_cache(false), requeue_scrub_on_unblock(false) {}
 
   ~ObjectContext() {
     assert(rwstate.empty());
