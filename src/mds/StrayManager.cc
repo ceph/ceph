@@ -75,12 +75,6 @@ public:
   }
 };
 
-/**
- * Purge a dentry from a stray directory.  This function
- * is called once eval_stray is satisfied and StrayManager
- * throttling is also satisfied.  There is no going back
- * at this stage!
- */
 void StrayManager::purge(CDentry *dn, uint32_t op_allowance)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -203,11 +197,6 @@ public:
   }
 };
 
-/**
- * Completion handler for a Filer::purge on a stray inode.
- *
- *
- */
 void StrayManager::_purge_stray_purged(
     CDentry *dn, uint32_t ops_allowance, bool only_head)
 {
@@ -320,15 +309,6 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, LogSegment *l
   }
 }
 
-
-/**
- * Enqueue a purge operation on a dentry that has passed the tests
- * in eval_stray.  This may start the operation inline if the throttle
- * allowances are already available.
- *
- * @param trunc false to purge dentry (normal), true to just truncate
- *                 inode (snapshots)
- */
 void StrayManager::enqueue(CDentry *dn, bool trunc)
 {
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
@@ -365,11 +345,6 @@ void StrayManager::enqueue(CDentry *dn, bool trunc)
   }
 }
 
-
-/**
- * Iteratively call _consume on items from the ready_for_purge
- * list until it returns false (throttle limit reached)
- */
 void StrayManager::_advance()
 {
   std::list<QueuedStray>::iterator i;
@@ -386,10 +361,9 @@ void StrayManager::_advance()
   ready_for_purge.erase(ready_for_purge.begin(), i);
 }
 
-/**
- * Attempt to purge an inode, if throttling permits
- * it.  Note that there are compromises to how
- * the throttling works, in interests of simplicity:
+/*
+ * Note that there are compromises to how throttling
+ * is implemented here, in the interests of simplicity:
  *  * If insufficient ops are available to execute
  *    the next item on the queue, we block even if
  *    there are items further down the queue requiring
@@ -404,9 +378,6 @@ void StrayManager::_advance()
  *    required by a single inode is greater than the
  *    limit, for example directories with very many
  *    fragments.
- *
- * Return true if we successfully consumed resource,
- * false if insufficient resource was available.
  */
 bool StrayManager::_consume(CDentry *dn, bool trunc, uint32_t ops_required)
 {
@@ -451,13 +422,6 @@ bool StrayManager::_consume(CDentry *dn, bool trunc, uint32_t ops_required)
   return true;
 }
 
-
-/**
- * Return the maximum number of concurrent RADOS ops that
- * may be executed while purging this inode.
- *
- * @param trunc true if it's a truncate, false if it's a purge
- */
 uint32_t StrayManager::_calculate_ops_required(CInode *in, bool trunc)
 {
   uint32_t ops_required = 0;
@@ -550,19 +514,6 @@ struct C_MDC_EvalStray : public StrayManagerContext {
   }
 };
 
-/**
- * Evaluate a stray dentry for purging or reintegration.
- *
- * If the inode has no linkage, and no more references, then
- * we may decide to purge it.
- *
- * If the inode still has linkage, then it means someone else
- * (a hard link) is still referring to it, and we should
- * think about reintegrating that inode into the remote dentry.
- *
- * @returns true if the dentry will be purged (caller should never
- *          take more refs after this happens), else false.
- */
 bool StrayManager::eval_stray(CDentry *dn, bool delay)
 {
   dout(10) << "eval_stray " << *dn << dendl;
@@ -717,17 +668,6 @@ void StrayManager::eval_remote_stray(CDentry *stray_dn, CDentry *remote_dn)
     }
 }
 
-
-
-/**
- * When hard links exist to an inode whose primary dentry
- * is unlinked, the inode gets a stray primary dentry.
- *
- * We may later "reintegrate" the inode into a remaining
- * non-stray dentry (one of what was previously a remote
- * dentry) by issuing a rename from the stray to the other
- * dentry.
- */
 void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
   dout(10) << __func__ << " " << *straydn << " into " << *rdn << dendl;
@@ -748,23 +688,6 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   mds->send_message_mds(req, rdn->authority().first);
 }
  
-
-/**
- * Given a dentry within one of my stray directories,
- * send it off to a stray directory in another MDS.
- *
- * This is for use:
- *  * Case A: when shutting down a rank, we migrate strays
- *    away from ourselves rather than waiting for purge
- *  * Case B: when a client request has a trace that refers to
- *    a stray inode on another MDS, we migrate that inode from
- *    there to here, in order that we can later re-integrate it
- *    here.
- *
- * In case B, the receiver should be calling into eval_stray
- * on completion of mv (i.e. inode put), resulting in a subsequent
- * reintegration.
- */
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
   CInode *in = dn->get_linkage()->get_inode();
@@ -803,15 +726,6 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   update_op_limit();
 }
 
-
-/**
- * For any strays that are enqueued for purge, but
- * currently blocked on throttling, clear their
- * purging status.  Used during MDS rank shutdown
- * so that it can migrate these strays instead
- * of waiting for them to trickle through the
- * queue.
- */
 void StrayManager::abort_queue()
 {
   for (std::list<QueuedStray>::iterator i = ready_for_purge.begin();
@@ -889,11 +803,6 @@ void StrayManager::truncate(CDentry *dn, uint32_t op_allowance)
   gather.activate();
 }
 
-
-/**
- * Callback: we have logged the update to an inode's metadata
- * reflecting it's newly-zeroed length.
- */
 void StrayManager::_truncate_stray_logged(CDentry *dn, LogSegment *ls)
 {
   CInode *in = dn->get_projected_linkage()->get_inode();
@@ -919,9 +828,6 @@ const char** StrayManager::get_tracked_conf_keys() const
   return KEYS;
 }
 
-
-// Subscribe to the per-PG ops throttle config event, and do a cool calculation
-// of (throttle * pg_num / (mds_num))
 void StrayManager::handle_conf_change(const struct md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
