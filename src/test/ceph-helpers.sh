@@ -443,6 +443,7 @@ function activate_osd() {
     ceph_args+=" --osd-data=$osd_data"
     ceph_args+=" --chdir="
     ceph_args+=" --osd-pool-default-erasure-code-directory=.libs"
+    ceph_args+=" --osd-class-dir=.libs"
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/\$name.log"
