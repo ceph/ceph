@@ -1410,6 +1410,9 @@ protected:
   int get_num_auth_pins() const { return auth_pins; }
   int get_num_nested_auth_pins() const { return nested_auth_pins; }
 
+  void dump_states(Formatter *f) const;
+  void dump(Formatter *f) const;
+
   // --------------------------------------------
   // auth pins
   virtual bool can_auth_pin() const = 0;
