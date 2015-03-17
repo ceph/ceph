@@ -458,14 +458,18 @@ CEPH_RBD_API int rbd_metadata_remove(rbd_image_t image, const char *key);
  * of the image, with a '\0' after each.
  *
  * @param image which image (and implicitly snapshot) to list clones of
- * @param pools buffer in which to store pool names
- * @param pools_len number of bytes in pools buffer
- * @param images buffer in which to store image names
- * @param images_len number of bytes in images buffer
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max the maximum number of names to lis(if 0 means no limit)
+ * @param keys buffer in which to store pool names
+ * @param keys_len number of bytes in pools buffer
+ * @param values buffer in which to store image names
+ * @param vals_len number of bytes in images buffer
  * @returns number of children on success, negative error code on failure
  * @returns -ERANGE if either buffer is too short
  */
-CEPH_RBD_API int rbd_metadata_list(rbd_image_t image,  char *key, size_t *key_len, char *value, size_t *val_len);
+CEPH_RBD_API int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+    char *keys, size_t *key_len, char *values, size_t *vals_len);
 
 
 #ifdef __cplusplus

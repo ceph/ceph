@@ -105,7 +105,6 @@ cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
 
 #define RBD_MAX_KEYS_READ 64
-#define RBD_MAX_METAADATA_KEYS 1024
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
@@ -2128,28 +2127,53 @@ static const string metadata_name_from_key(const string &key)
 
 /**
  * Input:
- * @param in ignored
- *
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to lis(if 0 means no limit)
+
  * Output:
  * @param value
  * @returns 0 on success, negative error code on failure
  */
 int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  map<string, bufferlist> raw_data, data;
-  int r = cls_cxx_map_get_vals(hctx, RBD_METADATA_KEY_PREFIX, RBD_METADATA_KEY_PREFIX,
-                               RBD_MAX_METAADATA_KEYS, &raw_data);
-  if (r < 0) {
-    CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
-    return r;
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
   }
 
-  bufferlist::iterator iter;
-  string v;
-  for (map<string, bufferlist>::iterator it = raw_data.begin(); it != raw_data.end(); ++it) {
-    assert(it->first.find(RBD_METADATA_KEY_PREFIX, 0) == 0);
-    data[metadata_name_from_key(it->first)].swap(it->second);
-  }
+  map<string, bufferlist> data;
+  string last_read = metadata_key_for_name(start_after);
+  int max_read = max_return ? MIN(RBD_MAX_KEYS_READ, max_return) : RBD_MAX_KEYS_READ;
+  int r;
+
+  do {
+    map<string, bufferlist> raw_data;
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
+                             max_read, &raw_data);
+    if (r < 0) {
+      CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+    if (raw_data.empty())
+      break;
+
+    map<string, bufferlist>::iterator it = raw_data.begin();
+    if (metadata_name_from_key(it->first) == last_read)
+        ++it;
+    for (; it != raw_data.end(); ++it)
+      data[metadata_name_from_key(it->first)].swap(it->second);
+
+    last_read = raw_data.rbegin()->first;
+    if (max_return)
+      max_read = MIN(RBD_MAX_KEYS_READ, max_return-data.size());
+  } while (max_return && max_read);
 
   ::encode(data, *out);
   return 0;
