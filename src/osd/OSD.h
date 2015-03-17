@@ -2173,21 +2173,20 @@ protected:
     void _process(
       MOSDRepScrub *msg,
       ThreadPool::TPHandle &handle) {
-      osd->osd_lock.Lock();
-      if (osd->is_stopping()) {
-	osd->osd_lock.Unlock();
-	return;
+      PG *pg = NULL;
+      {
+	Mutex::Locker lock(osd->osd_lock);
+	if (osd->is_stopping() ||
+	    !osd->_have_pg(msg->pgid)) {
+	  msg->put();
+	  return;
+	}
+	pg = osd->_lookup_lock_pg(msg->pgid);
       }
-      if (osd->_have_pg(msg->pgid)) {
-	PG *pg = osd->_lookup_lock_pg(msg->pgid);
-	osd->osd_lock.Unlock();
-	pg->replica_scrub(msg, handle);
-	msg->put();
-	pg->unlock();
-      } else {
-	msg->put();
-	osd->osd_lock.Unlock();
-      }
+      assert(pg);
+      pg->replica_scrub(msg, handle);
+      msg->put();
+      pg->unlock();
     }
     void _clear() {
       while (!rep_scrub_queue.empty()) {
