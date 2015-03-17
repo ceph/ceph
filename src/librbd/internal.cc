@@ -1144,7 +1144,7 @@ reprotect_and_return_err:
       goto err_close_child;
     }
 
-    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, &pairs);
+    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
     if (r < 0) {
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       goto err_close_child;
@@ -2276,7 +2276,7 @@ reprotect_and_return_err:
     int r;
     map<string, bufferlist> pairs;
 
-    r = cls_client::metadata_list(&src->md_ctx, src->header_oid, &pairs);
+    r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
     if (r < 0) {
       lderr(cct) << "couldn't list metadata: " << r << dendl;
       return r;
@@ -3422,7 +3422,7 @@ reprotect_and_return_err:
     return cls_client::metadata_remove(&ictx->md_ctx, ictx->header_oid, key);
   }
 
-  int metadata_list(ImageCtx *ictx, map<string, bufferlist> *pairs)
+  int metadata_list(ImageCtx *ictx, const string &start, uint64_t max, map<string, bufferlist> *pairs)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "metadata_list " << ictx << dendl;
@@ -3432,7 +3432,7 @@ reprotect_and_return_err:
       return r;
     }
 
-    return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, pairs);
+    return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
   }
   
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)

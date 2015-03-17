@@ -247,7 +247,7 @@ public:
   /**
    * Returns a pair of key/value for this image
    */
-  int metadata_list(std::map<std::string, ceph::bufferlist> *pairs);
+  int metadata_list(const std::string &start, uint64_t max, std::map<std::string, ceph::bufferlist> *pairs);
 
 private:
   friend class RBD;
