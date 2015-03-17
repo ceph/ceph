@@ -219,6 +219,10 @@ def main():
         )
     bootstrap_key(
         cluster=args.cluster,
+        type_='rgw',
+        )
+    bootstrap_key(
+        cluster=args.cluster,
         type_='mds',
         )
 
