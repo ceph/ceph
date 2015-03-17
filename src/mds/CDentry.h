@@ -126,6 +126,7 @@ public:
     const CInode *get_inode() const { return inode; }
     inodeno_t get_remote_ino() const { return remote_ino; }
     unsigned char get_remote_d_type() const { return remote_d_type; }
+    std::string get_remote_d_type_string() const;
 
     void set_remote(inodeno_t ino, unsigned char d_type) { 
       remote_ino = ino;
@@ -388,6 +389,7 @@ public:
   
   ostream& print_db_line_prefix(ostream& out);
   void print(ostream& out);
+  void dump(Formatter *f) const;
 
   friend class CDir;
 };
