@@ -359,18 +359,20 @@ def check_conflict(ctx, config):
     if failed:
         raise RuntimeError('Stale jobs detected, aborting.')
 
+
 def fetch_binaries_for_coredumps(path, remote):
     """
     Pul ELFs (debug and stripped) for each coredump found
     """
-    #Check for Coredumps:
+    # Check for Coredumps:
     coredump_path = os.path.join(path, 'coredump')
     if os.path.isdir(coredump_path):
         log.info('Transferring binaries for coredumps...')
         for dump in os.listdir(coredump_path):
             # Pull program from core file
             dump_path = os.path.join(coredump_path, dump)
-            dump_info = subprocess.Popen(['file', dump_path], stdout=subprocess.PIPE)
+            dump_info = subprocess.Popen(['file', dump_path],
+                                         stdout=subprocess.PIPE)
             dump_out = dump_info.communicate()
 
             # Parse file output to get program, Example output:
@@ -383,18 +385,21 @@ def fetch_binaries_for_coredumps(path, remote):
             remote_path = r.stdout.getvalue()
 
             # Pull remote program into coredump folder:
-            remote._sftp_get_file(remote_path, os.path.join(coredump_path, dump_program))
+            remote._sftp_get_file(remote_path, os.path.join(coredump_path,
+                                                            dump_program))
 
             # Pull Debug symbols:
             # RPM distro's append their non-stripped ELF's with .debug
             # When deb based distro's do not.
-            debug_program = '{dump_program}.debug'.format(dump_program=dump_program)
+            debug_program = '{dump_program}.debug'.format(
+                dump_program=dump_program)
             debug_path = os.path.join('/usr/lib/debug', remote_path)
 
             if remote.system_type == 'rpm':
                 debug_path = '{debug_path}.debug'.format(debug_path=debug_path)
 
             remote._sftp_get_file(debug_path, os.path.join(coredump_path, debug_program))
+
 
 @contextlib.contextmanager
 def archive(ctx, config):
