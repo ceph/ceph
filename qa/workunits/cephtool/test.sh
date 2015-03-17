@@ -961,6 +961,7 @@ function test_mon_osd()
   ceph osd pool create data 10
   ceph osd lspools | grep data
   ceph osd map data foo | grep 'pool.*data.*object.*foo.*pg.*up.*acting'
+  ceph osd map data foo namespace| grep 'pool.*data.*object.*namespace/foo.*pg.*up.*acting'
   ceph osd pool delete data data --yes-i-really-really-mean-it
 
   ceph osd pause
