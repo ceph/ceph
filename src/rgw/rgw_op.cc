@@ -146,20 +146,26 @@ static void format_xattr(std::string &xattr)
  * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
  *
  */
-static void rgw_get_request_metadata(CephContext *cct, struct req_info& info, map<string, bufferlist>& attrs)
+static void rgw_get_request_metadata(CephContext *cct,
+                                     struct req_info& info,
+                                     map<string, bufferlist>& attrs,
+                                     const bool allow_empty_attrs = true)
 {
   map<string, string>::iterator iter;
   for (iter = info.x_meta_map.begin(); iter != info.x_meta_map.end(); ++iter) {
     const string &name(iter->first);
     string &xattr(iter->second);
-    ldout(cct, 10) << "x>> " << name << ":" << xattr << dendl;
-    format_xattr(xattr);
-    string attr_name(RGW_ATTR_PREFIX);
-    attr_name.append(name);
-    map<string, bufferlist>::value_type v(attr_name, bufferlist());
-    std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
-    bufferlist& bl(rval.first->second);
-    bl.append(xattr.c_str(), xattr.size() + 1);
+
+    if (allow_empty_attrs || !xattr.empty()) {
+      ldout(cct, 10) << "x>> " << name << ":" << xattr << dendl;
+      format_xattr(xattr);
+      string attr_name(RGW_ATTR_PREFIX);
+      attr_name.append(name);
+      map<string, bufferlist>::value_type v(attr_name, bufferlist());
+      std::pair < map<string, bufferlist>::iterator, bool > rval(attrs.insert(v));
+      bufferlist& bl(rval.first->second);
+      bl.append(xattr.c_str(), xattr.size() + 1);
+    }
   }
 }
 
@@ -2054,11 +2060,10 @@ void RGWPutMetadata::execute()
   if (ret < 0)
     return;
 
-  rgw_get_request_metadata(s->cct, s->info, attrs);
-
   RGWObjVersionTracker *ptracker = NULL;
-
   bool is_object_op = (!s->object.empty());
+
+  rgw_get_request_metadata(s->cct, s->info, attrs, is_object_op);
 
   if (is_object_op) {
     /* check if obj exists, read orig attrs */
