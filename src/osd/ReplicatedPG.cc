@@ -3423,6 +3423,18 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       op.op = CEPH_OSD_OP_TRUNCATE;
     }
 
+    /*
+     * The mean of LIBRADOS_OP_FLAG_FADVISE_NOCACHE is this client(only for this client) don't
+     * need data in the future. For filestore, it hope if no data found in page
+     * cache it should use directio. But at present, filesystem don't handle this.
+     * So we use a tricky method that if can't find object in cache of
+     * ObjectContext which mean in the past shorttime none access this object.
+     * In this case, we transform NOCACHE into DONTNEED.
+     * Although this method isn't exactly. But at some case it can work and don't affect others.
+     */
+    if (!(ctx->obc->found_in_cache) && (op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE))
+      op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
+
     switch (op.op) {
       
       // --- READS ---
@@ -7747,6 +7759,7 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
   osd->logger->inc(l_osd_object_ctx_cache_total);
   if (obc) {
     osd->logger->inc(l_osd_object_ctx_cache_hit);
+    obc->found_in_cache = true;
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
   } else {
