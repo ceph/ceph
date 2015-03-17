@@ -823,11 +823,11 @@ namespace librbd {
     return r;
   }
 
-  int Image::metadata_list(map<string, bufferlist> *pairs)
+  int Image::metadata_list(const std::string &start, uint64_t max, map<string, bufferlist> *pairs)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, metadata_list_enter, ictx);
-    int r = librbd::metadata_list(ictx, pairs);
+    int r = librbd::metadata_list(ictx, start, max, pairs);
     if (r >= 0) {
       for (map<string, bufferlist>::iterator it = pairs->begin();
            it != pairs->end(); ++it) {
@@ -1782,12 +1782,13 @@ extern "C" int rbd_metadata_remove(rbd_image_t image, const char *key)
   return r;
 }
 
-extern "C" int rbd_metadata_list(rbd_image_t image,  char *key, size_t *key_len, char *value, size_t *val_len)
+extern "C" int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
+                                 char *key, size_t *key_len, char *value, size_t *val_len)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, metadata_list_enter, ictx);
   map<string, bufferlist> pairs;
-  int r = librbd::metadata_list(ictx, &pairs);
+  int r = librbd::metadata_list(ictx, start, max, &pairs);
   size_t key_total_len = 0, val_total_len = 0;
   bool too_short = false;
   for (map<string, bufferlist>::iterator it = pairs.begin();

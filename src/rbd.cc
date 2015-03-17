@@ -2108,7 +2108,7 @@ static int do_metadata_list(librbd::Image& image, Formatter *f)
   int r;
   TextTable tbl;
 
-  r = image.metadata_list(&pairs);
+  r = image.metadata_list("", 0, &pairs);
   if (r < 0)
     return r;
 

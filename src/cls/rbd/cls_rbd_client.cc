@@ -768,10 +768,13 @@ namespace librbd {
     }
 
     int metadata_list(librados::IoCtx *ioctx, const std::string &oid,
-                     map<string, bufferlist> *pairs)
+                      const std::string &start, uint64_t max_return,
+                      map<string, bufferlist> *pairs)
     {
       assert(pairs);
       bufferlist in, out;
+      ::encode(start, in);
+      ::encode(max_return, in);
       int r = ioctx->exec(oid, "rbd", "metadata_list", in, out);
       if (r < 0)
         return r;

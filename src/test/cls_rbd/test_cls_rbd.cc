@@ -1069,7 +1069,6 @@ TEST_F(TestClsRbd, flags)
   ioctx.close();
 }
 
-
 TEST_F(TestClsRbd, metadata)
 {
   librados::IoCtx ioctx;
@@ -1080,7 +1079,7 @@ TEST_F(TestClsRbd, metadata)
 
   map<string, bufferlist> pairs;
   string value;
-  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, "", 0, &pairs));
   ASSERT_TRUE(pairs.empty());
 
   pairs["key1"].append("value1");
@@ -1089,7 +1088,7 @@ TEST_F(TestClsRbd, metadata)
   ASSERT_EQ(0, metadata_get(&ioctx, oid, "key1", &value));
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
   pairs.clear();
-  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, "", 0, &pairs));
   ASSERT_EQ(2U, pairs.size());
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
@@ -1098,9 +1097,38 @@ TEST_F(TestClsRbd, metadata)
   ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key1"));
   ASSERT_EQ(0, metadata_remove(&ioctx, oid, "key3"));
   ASSERT_TRUE(metadata_get(&ioctx, oid, "key1", &value) < 0);
-  ASSERT_EQ(0, metadata_list(&ioctx, oid, &pairs));
+  ASSERT_EQ(0, metadata_list(&ioctx, oid, "", 0, &pairs));
   ASSERT_EQ(1U, pairs.size());
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
+
+  pairs.clear();
+  char key[10], val[20];
+  for (int i = 0; i < 1024; i++) {
+    sprintf(key, "key%d", i);
+    sprintf(val, "value%d", i);
+    pairs[key].append(val, strlen(val));
+  }
+  ASSERT_EQ(0, metadata_set(&ioctx, oid, pairs));
+
+  string last_read = "";
+  uint64_t max_read = 48, r;
+  uint64_t size = 0;
+  map<string, bufferlist> data;
+  do {
+    map<string, bufferlist> cur;
+    metadata_list(&ioctx, oid, last_read, max_read, &cur);
+    size += cur.size();
+    for (map<string, bufferlist>::iterator it = cur.begin();
+         it != cur.end(); ++it)
+      data[it->first] = it->second;
+    last_read = cur.rbegin()->first;
+    r = cur.size();
+  } while (r == max_read);
+  ASSERT_EQ(size, 1024U);
+  for (map<string, bufferlist>::iterator it = data.begin();
+       it != data.end(); ++it) {
+    ASSERT_TRUE(it->second.contents_equal(pairs[it->first]));
+  }
 
   ioctx.close();
 }

@@ -2614,25 +2614,26 @@ TEST_F(TestLibRBD, Metadata)
   librbd::Image image1;
   ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
   map<string, bufferlist> pairs;
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_TRUE(pairs.empty());
 
   ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
   ASSERT_EQ(0, image1.metadata_set("key2", "value2"));
   ASSERT_EQ(0, image1.metadata_get("key1", &value));
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(2U, pairs.size());
-  ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
+  const char * ddd = pairs["key1"].c_str();
+  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_remove("key1"));
   ASSERT_EQ(0, image1.metadata_remove("key3"));
   ASSERT_TRUE(image1.metadata_get("key3", &value) < 0);
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(1U, pairs.size());
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
   // test metadata with snapshot adding
   ASSERT_EQ(0, image1.snap_create("snap1"));
@@ -2642,18 +2643,18 @@ TEST_F(TestLibRBD, Metadata)
   pairs.clear();
   ASSERT_EQ(0, image1.metadata_set("key1", "value1"));
   ASSERT_EQ(0, image1.metadata_set("key3", "value3"));
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
-  ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
-  ASSERT_EQ(0, strcmp("value3", pairs["key3"].c_str()));
+  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
 
   ASSERT_EQ(0, image1.snap_set(NULL));
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
-  ASSERT_EQ(0, strcmp("value1", pairs["key1"].c_str()));
-  ASSERT_EQ(0, strcmp("value2", pairs["key2"].c_str()));
-  ASSERT_EQ(0, strcmp("value3", pairs["key3"].c_str()));
+  ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
+  ASSERT_EQ(0, strncmp("value3", pairs["key3"].c_str(), 6));
 
   // test metadata with cloning
   string cname = get_temp_image_name();
@@ -2664,10 +2665,10 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, rbd.open(ioctx, image2, cname.c_str(), NULL));
   ASSERT_EQ(0, image2.metadata_set("key4", "value4"));
   pairs.clear();
-  ASSERT_EQ(0, image2.metadata_list(&pairs));
+  ASSERT_EQ(0, image2.metadata_list("", 0, &pairs));
   ASSERT_EQ(4U, pairs.size());
   pairs.clear();
-  ASSERT_EQ(0, image1.metadata_list(&pairs));
+  ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(3U, pairs.size());
   ASSERT_EQ(-ENOENT, image1.metadata_get("key4", &value));
 }
