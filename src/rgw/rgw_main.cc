@@ -90,6 +90,7 @@ static void signal_shutdown();
 struct RGWRequest
 {
   uint64_t id;
+  uuid_t theID;
   struct req_state *s;
   string req_str;
   RGWOp *op;
@@ -102,6 +103,10 @@ struct RGWRequest
 
   void init_state(req_state *_s) {
     s = _s;
+  }
+
+  void init_uuid() {
+	  uuid_generate(theID);
   }
 
   void log_format(struct req_state *s, const char *fmt, ...)
@@ -552,6 +557,8 @@ static int process_request(RGWRados *store, RGWREST *rest, RGWRequest *req, RGWC
   s->obj_ctx = &rados_ctx;
 
   s->req_id = store->unique_id(req->id);
+  req->init_uuid();
+  uuid_unparse(req->theID,s->trans_id);
 
   req->log(s, "initializing");
 

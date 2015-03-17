@@ -285,6 +285,15 @@ static void dump_container_metadata(struct req_state *s, RGWBucketEnt& bucket)
   }
 }
 
+static void dump_trans_id(struct req_state *s)
+{
+  char buf[256];
+  timeval timetest;
+  gettimeofday(&timetest, NULL);
+  snprintf(buf, sizeof(buf), "tx-%s-%llx", s->trans_id, (unsigned long long)(timetest.tv_sec*1000 + timetest.tv_usec/1000));
+  s->cio->print("X-Trans-Id: %s\r\n", buf);
+}
+
 void RGWStatAccount_ObjStore_SWIFT::send_response()
 {
   if (ret >= 0) {
@@ -390,6 +399,7 @@ void RGWCreateBucket_ObjStore_SWIFT::send_response()
     ret = STATUS_ACCEPTED;
   set_req_state_err(s, ret);
   dump_errno(s);
+  dump_trans_id(s);
   end_header(s, NULL);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -402,6 +412,7 @@ void RGWDeleteBucket_ObjStore_SWIFT::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
+  dump_trans_id(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -450,6 +461,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
   dump_etag(s, etag.c_str());
   set_req_state_err(s, ret);
   dump_errno(s);
+  dump_trans_id(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -624,6 +636,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl, off_t bl_ofs, o
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
+  dump_trans_id(s);
   s->cio->print("X-Timestamp: %lld.00000\r\n", (long long)lastmod);
 
   if (!ret) {
