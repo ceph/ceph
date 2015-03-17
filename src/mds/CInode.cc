@@ -3546,29 +3546,26 @@ void CInode::decode_import(bufferlist::iterator& p,
 }
 
 
-void InodeStore::dump(Formatter *f) const
+void InodeStoreBase::dump(Formatter *f) const
 {
-  f->open_object_section("inode_store");
-  {
-    inode.dump(f);
-    f->dump_string("symlink", symlink);
-    // FIXME: dirfragtree: dump methods for fragtree_t
-    // FIXME: xattrs: JSON-safe versions of binary xattrs
-    f->open_array_section("old_inodes");
-    for (compact_map<snapid_t, old_inode_t>::const_iterator i = old_inodes.begin();
-	 i != old_inodes.end();
-	 ++i) {
-      f->open_object_section("old_inode");
-      {
-        // The key is the last snapid, the first is in the old_inode_t
-        f->dump_int("last", i->first);
-        i->second.dump(f);
-      }
-      f->close_section();  // old_inode
+  inode.dump(f);
+  f->dump_string("symlink", symlink);
+  f->open_array_section("old_inodes");
+  for (compact_map<snapid_t, old_inode_t>::const_iterator i = old_inodes.begin();
+      i != old_inodes.end(); ++i) {
+    f->open_object_section("old_inode");
+    {
+      // The key is the last snapid, the first is in the old_inode_t
+      f->dump_int("last", i->first);
+      i->second.dump(f);
     }
-    f->close_section();  // old_inodes
+    f->close_section();  // old_inode
   }
-  f->close_section();  // inode_store
+  f->close_section();  // old_inodes
+
+  f->open_object_section("dirfragtree");
+  dirfragtree.dump(f);
+  f->close_section(); // dirfragtree
 }
 
 
@@ -3832,3 +3829,109 @@ void CInode::validated_data::dump(Formatter *f) const
   }
   f->close_section(); // results
 }
+
+void CInode::dump(Formatter *f) const
+{
+  InodeStoreBase::dump(f);
+
+  MDSCacheObject::dump(f);
+
+  f->open_object_section("versionlock");
+  versionlock.dump(f);
+  f->close_section();
+
+  f->open_object_section("authlock");
+  authlock.dump(f);
+  f->close_section();
+
+  f->open_object_section("linklock");
+  linklock.dump(f);
+  f->close_section();
+
+  f->open_object_section("dirfragtreelock");
+  dirfragtreelock.dump(f);
+  f->close_section();
+
+  f->open_object_section("filelock");
+  filelock.dump(f);
+  f->close_section();
+
+  f->open_object_section("xattrlock");
+  xattrlock.dump(f);
+  f->close_section();
+
+  f->open_object_section("snaplock");
+  snaplock.dump(f);
+  f->close_section();
+
+  f->open_object_section("nestlock");
+  nestlock.dump(f);
+  f->close_section();
+
+  f->open_object_section("flocklock");
+  flocklock.dump(f);
+  f->close_section();
+
+  f->open_object_section("policylock");
+  policylock.dump(f);
+  f->close_section();
+
+  f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
+  if (state_test(STATE_EXPORTING))
+    f->dump_string("state", "exporting");
+  if (state_test(STATE_OPENINGDIR))
+    f->dump_string("state", "openingdir");
+  if (state_test(STATE_FREEZING))
+    f->dump_string("state", "freezing");
+  if (state_test(STATE_FROZEN))
+    f->dump_string("state", "frozen");
+  if (state_test(STATE_AMBIGUOUSAUTH))
+    f->dump_string("state", "ambiguousauth");
+  if (state_test(STATE_EXPORTINGCAPS))
+    f->dump_string("state", "exportingcaps");
+  if (state_test(STATE_NEEDSRECOVER))
+    f->dump_string("state", "needsrecover");
+  if (state_test(STATE_PURGING))
+    f->dump_string("state", "purging");
+  if (state_test(STATE_DIRTYPARENT))
+    f->dump_string("state", "dirtyparent");
+  if (state_test(STATE_DIRTYRSTAT))
+    f->dump_string("state", "dirtyrstat");
+  if (state_test(STATE_STRAYPINNED))
+    f->dump_string("state", "straypinned");
+  if (state_test(STATE_FROZENAUTHPIN))
+    f->dump_string("state", "frozenauthpin");
+  if (state_test(STATE_DIRTYPOOL))
+    f->dump_string("state", "dirtypool");
+  if (state_test(STATE_ORPHAN))
+    f->dump_string("state", "orphan");
+  f->close_section();
+
+  f->open_array_section("client_caps");
+  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
+       it != client_caps.end(); ++it) {
+    f->open_object_section("client_cap");
+    f->dump_int("client_id", it->first.v);
+    f->dump_string("pending", ccap_string(it->second->pending()));
+    f->dump_string("issued", ccap_string(it->second->issued()));
+    f->dump_string("wanted", ccap_string(it->second->wanted()));
+    f->dump_string("last_sent", ccap_string(it->second->get_last_sent()));
+    f->close_section();
+  }
+  f->close_section();
+
+  f->dump_int("loner", loner_cap.v);
+  f->dump_int("want_loner", want_loner_cap.v);
+
+  f->open_array_section("mds_caps_wanted");
+  for (compact_map<int,int>::const_iterator p = mds_caps_wanted.begin();
+       p != mds_caps_wanted.end(); ++p) {
+    f->open_object_section("mds_cap_wanted");
+    f->dump_int("rank", p->first);
+    f->dump_string("cap", ccap_string(p->second));
+    f->close_section();
+  }
+  f->close_section();
+}
+
