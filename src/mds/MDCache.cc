@@ -3564,7 +3564,6 @@ bool MDCache::expire_recursive(
   // Recurse into any dirfrags beneath this inode
   list<CDir*> ls;
   in->get_dirfrags(ls);
-  list<CDir*>::iterator p = ls.begin();
   for (std::list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
     CDir *subdir = *p;
 
@@ -6241,7 +6240,6 @@ bool MDCache::trim(int max, int count)
           CInode *subtree_in = subtree->inode;
           list<CDir*> ls;
           subtree->inode->get_dirfrags(ls);
-          list<CDir*>::iterator p = ls.begin();
           for (std::list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
             CDir *frag = *p;
             trim_dirfrag(frag, subtree, expiremap);
