@@ -6935,7 +6935,6 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 	 ++it) {
       CDir *dir = get_dirfrag(it->first);
       unsigned nonce = it->second;
-      dout(20) << __func__ << ": expiring dirfrag " << *dir << dendl;
       
       if (!dir) {
 	CInode *diri = get_inode(it->first.ino);
@@ -6967,8 +6966,10 @@ void MDCache::handle_cache_expire(MCacheExpire *m)
 		<< ", don't have it" << dendl;
 	assert(dir);
       }
+      dout(20) << __func__ << ": expiring dirfrag " << *dir << dendl;
+
       assert(dir->is_auth());
-      
+
       // check nonce
       if (nonce == dir->get_replica_nonce(from)) {
 	// remove from our cached_by
