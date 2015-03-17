@@ -4200,6 +4200,50 @@ Notable Changes
 * sysvinit: add condrestart command (Dan van der Ster)
 
 
+v0.67.12 "Dumpling"
+===================
+
+This stable update for Dumpling fixes a few longstanding issues with
+backfill in the OSD that can lead to stalled IOs.  There is also a fix
+for memory utilization for reads in librbd when caching is enabled,
+and then several other small fixes across the rest of the system.
+
+Dumpling users who have encountered IO stalls during backfill and who
+do not expect to upgrade to Firefly soon should upgrade.  Everyone
+else should upgrade to Firefly already.  This is likely to be the last stable
+release for the 0.67.x Dumpling series.
+
+
+Notable Changes
+---------------
+
+* buffer: fix buffer rebuild alignment corner case (#6614 #6003 Loic Dachary, Samuel Just)
+* ceph-disk: reprobe partitions after zap (#9665 #9721 Loic Dachary)
+* ceph-disk: use partx instead of partprobe when appropriate (Loic Dachary)
+* common: add $cctid meta variable (#6228 Adam Crume)
+* crush: fix get_full_location_ordered (Sage Weil)
+* crush: pick ruleset id that matches rule_id (#9675 Xiaoxi Chen)
+* libcephfs: fix tid wrap bug (#9869 Greg Farnum)
+* libcephfs: get osd location on -1 should return EINVAL (Sage Weil)
+* librados: fix race condition with C API and op timeouts (#9582 Sage Weil)
+* librbd: constrain max number of in-flight read requests (#9854 Jason Dillaman)
+* librbd: enforce cache size on read requests (Jason Dillaman)
+* librbd: fix invalid close in image open failure path (#10030 Jason Dillaman)
+* librbd: fix read hang on sparse files (Jason Dillaman)
+* librbd: gracefully handle deleted/renamed pools (#10270 #10122 Jason Dillaman)
+* librbd: protect list_children from invalid child pool ioctxs (#10123 Jason Dillaman)
+* mds: fix ctime updates from clients without dirty caps (#9514 Greg Farnum)
+* mds: fix rare NULL dereference in cap update path (Greg Farnum)
+* mds: store backtrace on straydir (Yan, Zheng)
+* osd: fix journal committed_thru update after replay (#6756 Samuel Just)
+* osd: fix memory leak, busy loop on snap trim (#9113 Samuel Just)
+* osd: fix misc peering, recovery bugs (#10168 Samuel Just)
+* osd: fix purged_snap field on backfill start (#9487 Sage Weil)
+* osd: handle no-op write with snapshot corner case (#10262 Sage Weil, Loic Dachary)
+* osd: respect RWORDERED rados flag (Sage Weil)
+* osd: several backfill fixes and refactors (Samuel Just, David Zafman)
+
+
 v0.67.11 "Dumpling"
 ===================
 
