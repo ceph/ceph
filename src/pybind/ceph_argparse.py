@@ -897,7 +897,7 @@ def validate(args, signature, partial=False):
                 if not desc.req:
                     # if not required, just push back; it might match
                     # the next arg
-                    print >> sys.stderr, myarg, 'not valid: ', str(e)
+                    save_exception = [ myarg, e ]
                     myargs.insert(0, myarg)
                     break
                 else:
@@ -909,12 +909,16 @@ def validate(args, signature, partial=False):
             # Whew, valid arg acquired.  Store in dict
             matchcnt += 1
             store_arg(desc, d)
+            # Clear prior exception
+            save_exception = None
 
     # Done with entire list of argdescs
     if matchcnt < reqsiglen:
         raise ArgumentTooFew("not enough arguments given")
 
     if myargs and not partial:
+        if save_exception:
+            print >> sys.stderr, save_exception[0], 'not valid: ', str(save_exception[1])
         raise ArgumentError("unused arguments: " + str(myargs))
 
     # Finally, success
