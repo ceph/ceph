@@ -28,7 +28,7 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.todo',
     'sphinx_ditaa',
-    'asphyxiate',
+    'breathe',
     ]
 todo_include_todos = True
 
@@ -69,14 +69,21 @@ def _get_manpages():
 
 man_pages = list(_get_manpages())
 
-asphyxiate_doxygen_xml = 'doxygen'
-
 top_level = os.path.dirname(
     os.path.dirname(
         os.path.abspath(__file__)
     )
 )
 
+breathe_default_project = "Ceph"
+# see $(top_srcdir)/Doxyfile
+
+breathe_build_directory = os.path.join(top_level, "build-doc")
+breathe_projects = {"Ceph": os.path.join(top_level, breathe_build_directory)}
+breathe_projects_source = {
+    "Ceph": (os.path.join(top_level, "src/include/rados"),
+             ["rados_types.h", "librados.h"])
+}
 pybind = os.path.join(top_level, 'src/pybind')
 if pybind not in sys.path:
     sys.path.insert(0, pybind)
