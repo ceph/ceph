@@ -8,7 +8,7 @@ except ImportError:
         import subprocess
         # backported from python 2.7 stdlib
         process = subprocess.Popen(
-           stdout=subprocess.PIPE, *popenargs, **kwargs)
+            stdout=subprocess.PIPE, *popenargs, **kwargs)
         output, unused_err = process.communicate()
         retcode = process.poll()
         if retcode:
@@ -51,7 +51,7 @@ def get_osd_pgs(SUBDIR, ID):
     if ID:
         endhead = re.compile("{id}.*_head$".format(id=ID))
     DIR = os.path.join(SUBDIR, "current")
-    PGS += [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and (ID == None or endhead.match(f))]
+    PGS += [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and (ID is None or endhead.match(f))]
     PGS = [re.sub("_head", "", p) for p in PGS if "_head" in p]
     return PGS
 
@@ -79,7 +79,7 @@ def get_objs(ALLPGS, prefix, DIR, ID):
                 continue
             FINALDIR = os.path.join(SUBDIR, PGDIR)
             # See if there are any objects there
-            if [ f for f in [ val for  _, _, fl in os.walk(FINALDIR) for val in fl ] if string.find(f, prefix) == 0 ]:
+            if any(f for f in [val for _, _, fl in os.walk(FINALDIR) for val in fl] if f.startswith(prefix)):
                 PGS += [p]
     return sorted(set(PGS))
 
@@ -130,6 +130,7 @@ def vstart(new):
     call("MON=1 OSD=4 CEPH_PORT=7400 ./vstart.sh -l {opt} -d mon osd > /dev/null 2>&1".format(opt=OPT), shell=True)
     print "DONE"
 
+
 def test_failure_tty(cmd, errmsg):
     try:
         ttyfd = open("/dev/tty", "rw")
@@ -156,10 +157,11 @@ def test_failure_tty(cmd, errmsg):
         logging.error("Bad message to stderr \"" + line + "\"")
         return 1
 
+
 def test_failure(cmd, errmsg):
     logging.debug(cmd)
     try:
-        out = check_output(cmd, stderr=subprocess.STDOUT, shell=True)
+        check_output(cmd, stderr=subprocess.STDOUT, shell=True)
         logging.error("Should have failed, but got exit 0")
         return 1
     except subprocess.CalledProcessError, e:
@@ -169,6 +171,7 @@ def test_failure(cmd, errmsg):
         else:
             logging.error("Bad message to stderr \"" + e.output + "\"")
             return 1
+
 
 def get_nspace(num):
     if num == 0:
@@ -206,15 +209,17 @@ def verify(DATADIR, POOL, NAME_PREFIX):
 CEPH_DIR = "ceph_objectstore_tool_dir"
 CEPH_CONF = os.path.join(CEPH_DIR, 'ceph.conf')
 
+
 def kill_daemons():
     call("./init-ceph -c {conf} stop osd mon > /dev/null 2>&1".format(conf=CEPH_CONF), shell=True)
+
 
 def main(argv):
     sys.stdout = os.fdopen(sys.stdout.fileno(), 'w', 0)
     nullfd = open(os.devnull, "w")
 
     call("rm -fr ceph_objectstore_tool_dir ; mkdir ceph_objectstore_tool_dir", shell=True)
-    os.environ["CEPH_DIR"] = CEPH_DIR;
+    os.environ["CEPH_DIR"] = CEPH_DIR
     OSDDIR = os.path.join(CEPH_DIR, "dev")
     REP_POOL = "rep_pool"
     REP_NAME = "REPobject"
@@ -491,7 +496,7 @@ def main(argv):
 
     # retrieve all objects from all PGs
     cmd = (CFSD_PREFIX + "--op list --format json").format(osd=osd)
-    logging.debug(cmd);
+    logging.debug(cmd)
     tmpfd = open(TMPFILE, "a")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
@@ -505,7 +510,7 @@ def main(argv):
 
     # retrieve all objects in a given PG
     cmd = (CFSD_PREFIX + "--op list --pgid {pg} --format json").format(osd=osd, pg=pgid)
-    logging.debug(cmd);
+    logging.debug(cmd)
     tmpfd = open(OTHERFILE, "a")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
@@ -524,7 +529,7 @@ def main(argv):
 
     # retrieve all objects with a given name in a given PG
     cmd = (CFSD_PREFIX + "--op list --pgid {pg} {object} --format json").format(osd=osd, pg=pgid, object=jsondict['oid'])
-    logging.debug(cmd);
+    logging.debug(cmd)
     tmpfd = open(OTHERFILE, "w")
     logging.debug(cmd)
     ret = call(cmd, shell=True, stdout=tmpfd)
@@ -783,7 +788,7 @@ def main(argv):
         cmd = (CFSD_PREFIX + "--op list-pgs").format(osd=osd)
         logging.debug(cmd)
         TEST_PGS = check_output(cmd, shell=True).split("\n")
-        TEST_PGS = sorted(TEST_PGS)[1:] # Skip extra blank line
+        TEST_PGS = sorted(TEST_PGS)[1:]  # Skip extra blank line
 
         if TEST_PGS != CHECK_PGS:
             logging.error("list-pgs got wrong result for osd.{osd}".format(osd=osd))
@@ -805,7 +810,7 @@ def main(argv):
             elif pg == ALLREPPGS[1]:
                 cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file - > {file}").format(osd=osd, pg=pg, file=fname)
             else:
-              cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
+                cmd = (CFSD_PREFIX + "--op export --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
             if ret != 0:
