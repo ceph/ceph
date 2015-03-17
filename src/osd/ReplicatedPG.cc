@@ -6003,18 +6003,19 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
       dout(10) << " final snapset " << ctx->new_snapset
 	       << " in " << soid << dendl;
       setattr_maybe_cache(ctx->obc, ctx, ctx->op_t, SS_ATTR, bss);
-
-      if (pool.info.require_rollback()) {
-	set<string> changing;
-	changing.insert(OI_ATTR);
-	changing.insert(SS_ATTR);
-	ctx->obc->fill_in_setattrs(changing, &(ctx->mod_desc));
-      } else {
-	// replicated pools are never rollbackable in this case
-	ctx->mod_desc.mark_unrollbackable();
-      }
     } else {
       dout(10) << " no snapset (this is a clone)" << dendl;
+    }
+
+    if (pool.info.require_rollback()) {
+      set<string> changing;
+      changing.insert(OI_ATTR);
+      if (!soid.is_snap())
+	changing.insert(SS_ATTR);
+      ctx->obc->fill_in_setattrs(changing, &(ctx->mod_desc));
+    } else {
+      // replicated pools are never rollbackable in this case
+      ctx->mod_desc.mark_unrollbackable();
     }
   } else {
     ctx->new_obs.oi = object_info_t(ctx->obc->obs.oi.soid);
