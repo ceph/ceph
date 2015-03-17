@@ -212,10 +212,12 @@ static int on_cancel_request(struct xio_session *session,
 }
 
 /* free functions */
-static string xio_uri_from_entity(const entity_addr_t& addr, bool want_port)
+static string xio_uri_from_entity(const string &type,
+				  const entity_addr_t& addr, bool want_port)
 {
   const char *host = NULL;
   char addr_buf[129];
+  string xio_uri;
 
   switch(addr.addr.ss_family) {
   case AF_INET:
@@ -231,8 +233,12 @@ static string xio_uri_from_entity(const entity_addr_t& addr, bool want_port)
     break;
   };
 
+  if (type == "rdma" || type == "tcp")
+      xio_uri = type + "://";
+  else
+      xio_uri = "rdma://";
+
   /* The following can only succeed if the host is rdma-capable */
-  string xio_uri = "rdma://";
   xio_uri += host;
   if (want_port) {
     xio_uri += ":";
@@ -669,7 +675,8 @@ int XioMessenger::bind(const entity_addr_t& addr)
 
   entity_addr_t shift_addr = *a;
 
-  string base_uri = xio_uri_from_entity(shift_addr, false /* want_port */);
+  string base_uri = xio_uri_from_entity(cct->_conf->xio_transport_type,
+					shift_addr, false /* want_port */);
   ldout(cct,4) << "XioMessenger " << this << " bind: xio_uri "
     << base_uri << ':' << shift_addr.get_port() << dendl;
 
@@ -915,7 +922,8 @@ ConnectionRef XioMessenger::get_connection(const entity_inst_t& dest)
   }
   else {
     conns_sp.unlock();
-    string xio_uri = xio_uri_from_entity(dest.addr, true /* want_port */);
+    string xio_uri = xio_uri_from_entity(cct->_conf->xio_transport_type,
+					 dest.addr, true /* want_port */);
 
     ldout(cct,4) << "XioMessenger " << this << " get_connection: xio_uri "
       << xio_uri << dendl;
