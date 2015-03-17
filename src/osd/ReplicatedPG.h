@@ -1499,6 +1499,9 @@ private:
 
   int _verify_no_head_clones(const hobject_t& soid,
 			     const SnapSet& ss);
+  // return true if we're creating a local object, false for a
+  // whiteout or no change.
+  bool maybe_create_new_object(OpContext *ctx);
   int _delete_oid(OpContext *ctx, bool no_whiteout);
   int _rollback_to(OpContext *ctx, ceph_osd_op& op);
 public:
