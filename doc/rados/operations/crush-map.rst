@@ -493,8 +493,8 @@ CRUSH rules deﬁnes placement and replication strategies or distribution polici
 that  allow you to specify exactly how CRUSH places object replicas. For
 example, you might create a rule selecting a pair of targets for 2-way
 mirroring, another rule for selecting three targets in two different data
-centers for 3-way mirroring, and yet another rule for RAID-4 over six storage
-devices. For a detailed discussion of CRUSH rules, refer to 
+centers for 3-way mirroring, and yet another rule for erasure coding over six
+storage devices. For a detailed discussion of CRUSH rules, refer to
 `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
 and more specifically to **Section 3.2**.
 
@@ -503,7 +503,7 @@ A rule takes the following form::
 	rule <rulename> {
 	
 		ruleset <ruleset>
-		type [ replicated | raid4 ]
+		type [ replicated | erasure ]
 		min_size <min-size>
 		max_size <max-size>
 		step take <bucket-type>
@@ -534,7 +534,7 @@ A rule takes the following form::
 :Type: String
 :Required: Yes
 :Default: ``replicated``
-:Valid Values: Currently only ``replicated``
+:Valid Values: Currently only ``replicated`` and ``erasure``
 
 ``min_size``
 
