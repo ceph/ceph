@@ -161,7 +161,7 @@ TEST(chain_xattr, listxattr) {
   ASSERT_EQ(LARGE_BLOCK_LEN, chain_setxattr(file, name1.c_str(), x.c_str(), LARGE_BLOCK_LEN));
   ASSERT_EQ((int)sizeof(y), chain_setxattr(file, name2.c_str(), &y, sizeof(y)));
 
-  int buffer_size = name1.size() + sizeof('\0') + name2.size() + sizeof('\0');
+  int buffer_size = name1.size() + sizeof(char) + name2.size() + sizeof(char);
   char* expected = (char*)malloc(buffer_size);
   ::strcpy(expected, name1.c_str());
   ::strcpy(expected + name1.size() + 1, name2.c_str());
