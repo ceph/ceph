@@ -254,9 +254,11 @@ bool AsyncTrimRequest::send_clean_boundary() {
       uint64_t parent_overlap;
       {
         RWLock::RLocker l2(m_image_ctx.snap_lock);
-        RWLock::RLocker l3(m_image_ctx.parent_lock);
         snapc = m_image_ctx.snapc;
-        parent_overlap = m_image_ctx.parent_md.overlap;
+
+        RWLock::RLocker l3(m_image_ctx.parent_lock);
+        int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
+        assert(r == 0);
       }
 
       // discard the weird boundary, if any

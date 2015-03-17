@@ -6592,6 +6592,7 @@ done:
       return true;
     }
     np->tiers.insert(tierpool_id);
+    np->read_tier = np->write_tier = tierpool_id;
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
     ntp->cache_mode = mode;

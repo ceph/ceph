@@ -49,7 +49,10 @@ public:
       }
 
       // resize might have occurred while flatten is running
-      overlap = min(m_image_ctx.size, m_image_ctx.parent_md.overlap);
+      uint64_t parent_overlap;
+      int r = m_image_ctx.get_parent_overlap(CEPH_NOSNAP, &parent_overlap);
+      assert(r == 0);
+      overlap = min(m_image_ctx.size, parent_overlap);
     }
 
     // map child object onto the parent

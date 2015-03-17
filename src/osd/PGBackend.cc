@@ -622,8 +622,12 @@ void PGBackend::be_compare_scrubmaps(
       authoritative[*k] = auth_list;
     }
     if (okseed &&
+	parent->get_pool().is_replicated() &&
 	auth_object.digest_present && auth_object.omap_digest_present &&
-	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
+	(!auth_oi.is_data_digest() || !auth_oi.is_omap_digest() ||
+	 (g_conf->osd_debug_scrub_chance_rewrite_digest &&
+	  (((unsigned)rand() % 100) >
+	    g_conf->osd_debug_scrub_chance_rewrite_digest)))) {
       if (!cur_inconsistent.empty() || !cur_missing.empty()) {
 	dout(20) << __func__ << " not updating oi digest on "
 		 << *k << " since it is inconsistent" << dendl;

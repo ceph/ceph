@@ -137,7 +137,10 @@ public:
   }
 
   T front() { return static_cast<T>(_front->_item); }
+  const T front() const { return static_cast<const T>(_front->_item); }
+
   T back() { return static_cast<T>(_back->_item); }
+  const T back() const { return static_cast<const T>(_back->_item); }
 
   void pop_front() {
     assert(!empty());

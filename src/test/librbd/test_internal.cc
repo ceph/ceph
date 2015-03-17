@@ -319,3 +319,45 @@ TEST_F(TestInternal, CancelAsyncResize) {
     ASSERT_EQ(0, r);
   }
 }
+
+TEST_F(TestInternal, MultipleResize) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  {
+    RWLock::WLocker l(ictx->owner_lock);
+    if (ictx->image_watcher->is_lock_supported()) {
+      ASSERT_EQ(0, ictx->image_watcher->try_lock());
+      ASSERT_TRUE(ictx->image_watcher->is_lock_owner());
+    }
+  }
+
+  uint64_t size;
+  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+  uint64_t original_size = size;
+
+  std::vector<C_SaferCond*> contexts;
+
+  uint32_t attempts = 0;
+  librbd::NoOpProgressContext prog_ctx;
+  while (size > 0) {
+    uint64_t new_size = original_size;
+    if (attempts++ % 2 == 0) {
+      size -= MIN(size, 1<<18);
+      new_size = size;
+    }
+
+    RWLock::RLocker l(ictx->owner_lock);
+    contexts.push_back(new C_SaferCond());
+    ASSERT_EQ(0, librbd::async_resize(ictx, contexts.back(), new_size,
+                                      prog_ctx));
+  }
+
+  for (uint32_t i = 0; i < contexts.size(); ++i) {
+    ASSERT_EQ(0, contexts[i]->wait());
+    delete contexts[i];
+  }
+
+  ASSERT_EQ(0, librbd::get_size(ictx, &size));
+  ASSERT_EQ(0U, size);
+}
