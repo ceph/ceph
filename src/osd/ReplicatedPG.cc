@@ -7151,7 +7151,8 @@ int ReplicatedPG::start_flush(
 		CEPH_OSD_COPY_FROM_FLAG_FLUSH |
 		CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
 		CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
-		CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE);
+		CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
+		0);
   }
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
