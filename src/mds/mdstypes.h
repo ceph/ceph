@@ -631,10 +631,13 @@ inline std::ostream& operator<<(std::ostream& out, const old_rstat_t& o) {
 
 struct session_info_t {
   entity_inst_t inst;
+  bool root_squash;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
   std::map<std::string, std::string> client_metadata;
+
+  session_info_t() : root_squash(false) { }
 
   client_t get_client() const { return client_t(inst.name.num()); }
 

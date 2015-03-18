@@ -660,18 +660,19 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
  */
 void session_info_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   ::encode(inst, bl);
   ::encode(completed_requests, bl);
   ::encode(prealloc_inos, bl);   // hacky, see below.
   ::encode(used_inos, bl);
   ::encode(client_metadata, bl);
+  ::encode(root_squash, bl);
   ENCODE_FINISH(bl);
 }
 
 void session_info_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, p);
   ::decode(inst, p);
   if (struct_v <= 2) {
     set<ceph_tid_t> s;
@@ -690,13 +691,16 @@ void session_info_t::decode(bufferlist::iterator& p)
   if (struct_v >= 4) {
     ::decode(client_metadata, p);
   }
+  if (struct_v >= 5) {
+    ::decode(root_squash, p);
+  }
   DECODE_FINISH(p);
 }
 
 void session_info_t::dump(Formatter *f) const
 {
   f->dump_stream("inst") << inst;
-
+  f->dump_bool("root_squash", root_squash);
   f->open_array_section("completed_requests");
   for (map<ceph_tid_t,inodeno_t>::const_iterator p = completed_requests.begin();
        p != completed_requests.end();
