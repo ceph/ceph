@@ -289,6 +289,14 @@ void MDSMap::print_summary(Formatter *f, ostream *out)
       *out << ", " << failed.size() << " failed";
     }
   }
+
+  if (!damaged.empty()) {
+    if (f) {
+      f->dump_unsigned("damaged", damaged.size());
+    } else {
+      *out << ", " << damaged.size() << " damaged";
+    }
+  }
   //if (stopped.size())
   //out << ", " << stopped.size() << " stopped";
 }
