@@ -1077,6 +1077,7 @@ reprotect_and_return_err:
     int remove_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
+    map<string, bufferlist> pairs;
     // make sure parent snapshot exists
     ImageCtx *p_imctx = new ImageCtx(p_name, "", p_snap_name, p_ioctx, true);
     r = open_image(p_imctx);
@@ -1140,6 +1141,17 @@ reprotect_and_return_err:
     r = cls_client::add_child(&c_ioctx, RBD_CHILDREN, pspec, c_imctx->id);
     if (r < 0) {
       lderr(cct) << "couldn't add child: " << r << dendl;
+      goto err_close_child;
+    }
+
+    r = cls_client::metadata_list(&p_ioctx, p_imctx->header_oid, "", 0, &pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      goto err_close_child;
+    }
+    r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't set metadata: " << r << dendl;
       goto err_close_child;
     }
 
@@ -2285,6 +2297,19 @@ reprotect_and_return_err:
       return -EINVAL;
     }
     int r;
+    map<string, bufferlist> pairs;
+
+    r = cls_client::metadata_list(&src->md_ctx, src->header_oid, "", 0, &pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't list metadata: " << r << dendl;
+      return r;
+    }
+    r = cls_client::metadata_set(&dest->md_ctx, dest->header_oid, pairs);
+    if (r < 0) {
+      lderr(cct) << "couldn't set metadata: " << r << dendl;
+      return r;
+    }
+
     SimpleThrottle throttle(cct->_conf->rbd_concurrent_management_ops, false);
     uint64_t period = src->get_stripe_period();
     for (uint64_t offset = 0; offset < src_size; offset += period) {
@@ -3389,6 +3414,60 @@ reprotect_and_return_err:
     return r;
   }
 
+  int metadata_get(ImageCtx *ictx, const string &key, string *value)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "metadata_get " << ictx << " key=" << key << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    return cls_client::metadata_get(&ictx->md_ctx, ictx->header_oid, key, value);
+  }
+
+  int metadata_set(ImageCtx *ictx, const string &key, const string &value)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "metadata_set " << ictx << " key=" << key << " value=" << value << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    map<string, bufferlist> data;
+    data[key].append(value);
+    return cls_client::metadata_set(&ictx->md_ctx, ictx->header_oid, data);
+  }
+
+  int metadata_remove(ImageCtx *ictx, const string &key)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "metadata_remove " << ictx << " key=" << key << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    return cls_client::metadata_remove(&ictx->md_ctx, ictx->header_oid, key);
+  }
+
+  int metadata_list(ImageCtx *ictx, const string &start, uint64_t max, map<string, bufferlist> *pairs)
+  {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 20) << "metadata_list " << ictx << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    return cls_client::metadata_list(&ictx->md_ctx, ictx->header_oid, start, max, pairs);
+  }
+  
   int aio_discard(ImageCtx *ictx, uint64_t off, uint64_t len, AioCompletion *c)
   {
     CephContext *cct = ictx->cct;

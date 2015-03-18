@@ -96,6 +96,10 @@ cls_method_handle_t h_dir_rename_image;
 cls_method_handle_t h_object_map_load;
 cls_method_handle_t h_object_map_resize;
 cls_method_handle_t h_object_map_update;
+cls_method_handle_t h_metadata_set;
+cls_method_handle_t h_metadata_remove;
+cls_method_handle_t h_metadata_list;
+cls_method_handle_t h_metadata_get;
 cls_method_handle_t h_old_snapshots_list;
 cls_method_handle_t h_old_snapshot_add;
 cls_method_handle_t h_old_snapshot_remove;
@@ -104,6 +108,7 @@ cls_method_handle_t h_old_snapshot_remove;
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
+#define RBD_METADATA_KEY_PREFIX "metadata_"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -2138,6 +2143,165 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return r;
 }
 
+
+static const string metadata_key_for_name(const string &name)
+{
+  return RBD_METADATA_KEY_PREFIX + name;
+}
+
+static const string metadata_name_from_key(const string &key)
+{
+  return key.substr(strlen(RBD_METADATA_KEY_PREFIX));
+}
+
+/**
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to lis(if 0 means no limit)
+
+ * Output:
+ * @param value
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    ::decode(start_after, iter);
+    ::decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  map<string, bufferlist> data;
+  string last_read = metadata_key_for_name(start_after);
+  int max_read = max_return ? MIN(RBD_MAX_KEYS_READ, max_return) : RBD_MAX_KEYS_READ;
+  int r;
+
+  do {
+    map<string, bufferlist> raw_data;
+    r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
+                             max_read, &raw_data);
+    if (r < 0) {
+      CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+    if (raw_data.empty())
+      break;
+
+    map<string, bufferlist>::iterator it = raw_data.begin();
+    if (metadata_name_from_key(it->first) == last_read)
+        ++it;
+    for (; it != raw_data.end(); ++it)
+      data[metadata_name_from_key(it->first)].swap(it->second);
+
+    last_read = raw_data.rbegin()->first;
+    if (max_return)
+      max_read = MIN(RBD_MAX_KEYS_READ, max_return-data.size());
+  } while (max_return && max_read);
+
+  ::encode(data, *out);
+  return 0;
+}
+
+/**
+ * Input:
+ * @param data <map(key, value)>
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  map<string, bufferlist> data, raw_data;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(data, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  for (map<string, bufferlist>::iterator it = data.begin();
+       it != data.end(); ++it) {
+    CLS_LOG(20, "metdata_set key=%s value=%s", it->first.c_str(), it->second.c_str());
+    raw_data[metadata_key_for_name(it->first)].swap(it->second);
+  }
+  int r = cls_cxx_map_set_vals(hctx, &raw_data);
+  if (r < 0) {
+    CLS_ERR("error writing metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param key
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(key, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "metdata_set key=%s", key.c_str());
+
+  int r = cls_cxx_map_remove_key(hctx, metadata_key_for_name(key));
+  if (r < 0) {
+    CLS_ERR("error remove metadata: %d", r);
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param key
+ *
+ * Output:
+ * @param metadata value associated with the key
+ * @returns 0 on success, negative error code on failure
+ */
+int metadata_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key;
+  bufferlist value;
+
+  bufferlist::iterator iter = in->begin();
+  try {
+    ::decode(key, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "metdata_get key=%s", key.c_str());
+
+  int r = cls_cxx_map_get_val(hctx, metadata_key_for_name(key), &value);
+  if (r < 0) {
+    CLS_ERR("error get metadata: %d", r);
+    return r;
+  }
+
+  ::encode(value, *out);
+  return 0;
+}
+
+
 /****************************** Old format *******************************/
 
 int old_snapshots_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -2399,6 +2563,18 @@ void __cls_init()
   cls_register_cxx_method(h_class, "set_flags",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           set_flags, &h_set_flags);
+  cls_register_cxx_method(h_class, "metadata_list",
+                          CLS_METHOD_RD,
+			  metadata_list, &h_metadata_list);
+  cls_register_cxx_method(h_class, "metadata_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  metadata_set, &h_metadata_set);
+  cls_register_cxx_method(h_class, "metadata_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+			  metadata_remove, &h_metadata_remove);
+  cls_register_cxx_method(h_class, "metadata_get",
+                          CLS_METHOD_RD,
+			  metadata_get, &h_metadata_get);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",
@@ -2450,7 +2626,7 @@ void __cls_init()
                           CLS_METHOD_RD | CLS_METHOD_WR,
 			  object_map_update, &h_object_map_update);
 
-  /* methods for the old format */
+ /* methods for the old format */
   cls_register_cxx_method(h_class, "snap_list",
 			  CLS_METHOD_RD,
 			  old_snapshots_list, &h_old_snapshots_list);
