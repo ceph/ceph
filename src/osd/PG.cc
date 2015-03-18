@@ -280,8 +280,12 @@ void PG::proc_master_log(
   peer_info[from] = oinfo;
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
-  info.last_epoch_started = oinfo.last_epoch_started;
+
+  // See doc/dev/osd_internals/last_epoch_started
+  if (oinfo.last_epoch_started > info.last_epoch_started)
+    info.last_epoch_started = oinfo.last_epoch_started;
   info.history.merge(oinfo.history);
+  assert(info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].swap(omissing);
 }
@@ -1480,11 +1484,17 @@ void PG::activate(ObjectStore::Transaction& t,
 
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
-    if (acting.size() >= pool.info.min_size)
+    if (acting.size() >= pool.info.min_size) {
+      assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
+    }
   } else if (is_acting(pg_whoami)) {
-    // update last_epoch_started on acting replica to whatever the primary sent
-    info.last_epoch_started = activation_epoch;
+    /* update last_epoch_started on acting replica to whatever the primary sent
+     * unless it's smaller (could happen if we are going peered rather than
+     * active, see doc/dev/osd_internals/last_epoch_started.rst) */
+    if (info.last_epoch_started < activation_epoch)
+      info.last_epoch_started = activation_epoch;
   }
 
   const pg_missing_t &missing = pg_log.get_missing();
