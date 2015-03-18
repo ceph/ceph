@@ -7170,6 +7170,9 @@ int ReplicatedPG::start_flush(
 		CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
 		CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE,
 		0);
+    //mean the base tier don't cache data after this
+    if (agent_state && agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL)
+      o.set_last_op_flags(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
   }
   C_Flush *fin = new C_Flush(this, soid, get_last_peering_reset());
 
