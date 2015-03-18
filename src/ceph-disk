@@ -1861,18 +1861,23 @@ def start_daemon(
                     ],
                 )
         elif os.path.exists(os.path.join(path, 'systemd')):
+            cname = ""
+            if cluster != "ceph":
+                cname = "%s-" % (cluster)
             command_check_call(
                 [
                     'systemctl',
                     'enable',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                    'ceph-{cname}osd@{osd_id}'.format(osd_id=osd_id,
+                        cname=cname),
                     ],
                 )
             command_check_call(
                 [
                     'systemctl',
                     'start',
-                    'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+                    'ceph-{cname}osd@{osd_id}'.format(osd_id=osd_id,
+                        cname=cname),
                     ],
                 )
         else:
