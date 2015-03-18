@@ -1,5 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,14 +19,24 @@
 #ifndef CEPH_ERASURE_CODE_SHEC_H
 #define CEPH_ERASURE_CODE_SHEC_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <algorithm>
+#include <list>
+#include <map>
+#include <string>
+#include <set>
 #include "common/Mutex.h"
+#include "common/debug.h"
+#include "osd/osd_types.h"
+#include "crush/CrushWrapper.h"
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
-#include <list>
 
 class ErasureCodeShec : public ErasureCode {
-
-public:
+ public:
   enum {
     MULTIPLE = 0,
     SINGLE = 1
@@ -49,7 +57,7 @@ public:
   int *matrix;
 
   ErasureCodeShec(const int _technique,
-		  ErasureCodeShecTableCache &_tcache) :
+                  ErasureCodeShecTableCache &_tcache) :
     tcache(_tcache),
     k(0),
     DEFAULT_K(4),
@@ -68,8 +76,8 @@ public:
   virtual ~ErasureCodeShec() {}
 
   virtual int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const;
+                             CrushWrapper &crush,
+                             ostream *ss) const;
 
   virtual unsigned int get_chunk_count() const {
     return k + m;
@@ -82,54 +90,59 @@ public:
   virtual unsigned int get_chunk_size(unsigned int object_size) const;
 
   virtual int minimum_to_decode(const set<int> &want_to_decode,
-				const set<int> &available_chunks,
-				set<int> *minimum);
+                                const set<int> &available_chunks,
+                                set<int> *minimum);
 
   virtual int minimum_to_decode_with_cost(const set<int> &want_to_decode,
-					  const map<int, int> &available,
-					  set<int> *minimum);
+                                          const map<int, int> &available,
+                                          set<int> *minimum);
 
   virtual int encode(const set<int> &want_to_encode,
-		     const bufferlist &in,
-		     map<int, bufferlist> *encoded);
+                     const bufferlist &in,
+                     map<int, bufferlist> *encoded);
   virtual int encode_chunks(const set<int> &want_to_encode,
-			    map<int, bufferlist> *encoded);
+                            map<int, bufferlist> *encoded);
 
   virtual int decode(const set<int> &want_to_read,
-		     const map<int, bufferlist> &chunks,
-		     map<int, bufferlist> *decoded);
+                     const map<int, bufferlist> &chunks,
+                     map<int, bufferlist> *decoded);
   virtual int decode_chunks(const set<int> &want_to_read,
-			    const map<int, bufferlist> &chunks,
-			    map<int, bufferlist> *decoded);
+                            const map<int, bufferlist> &chunks,
+                            map<int, bufferlist> *decoded);
 
-  int init(const map<std::string,std::string> &parameters);
+  int init(const map<std::string, std::string> &parameters);
   virtual void shec_encode(char **data,
-			   char **coding,
-			   int blocksize) = 0;
+                           char **coding,
+                           int blocksize) = 0;
   virtual int shec_decode(int *erasures,
-			  int *avails,
-			  char **data,
-			  char **coding,
-			  int blocksize) = 0;
+                          int *avails,
+                          char **data,
+                          char **coding,
+                          int blocksize) = 0;
   virtual unsigned get_alignment() const = 0;
-  virtual int parse(const map<std::string,std::string> &parameters) = 0;
+  virtual int parse(const map<std::string, std::string> &parameters) = 0;
   virtual void prepare() = 0;
-  
+
   virtual int shec_matrix_decode(int *erased, int *avails,
-				 char **data_ptrs, char **coding_ptrs, int size);
+                                 char **data_ptrs, char **coding_ptrs,
+                                 int size);
   virtual int* shec_reedsolomon_coding_matrix(int is_single);
 
-private:
-  virtual double shec_calc_recovery_efficiency1(int k, int m1, int m2, int c1, int c2);
-  virtual int shec_make_decoding_matrix(bool prepare, int *erased, int *avails,
-					int *decoding_matrix, int *dm_ids, int *minimum);
+ private:
+  virtual double shec_calc_recovery_efficiency1(int k,
+                                                int m1, int m2,
+                                                int c1, int c2);
+  virtual int shec_make_decoding_matrix(bool prepare,
+                                        int *erased, int *avails,
+                                        int *decoding_matrix,
+                                        int *dm_ids,
+                                        int *minimum);
 };
 
 class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
-public:
-
+ public:
   ErasureCodeShecReedSolomonVandermonde(ErasureCodeShecTableCache &_tcache,
-					int technique = MULTIPLE) :
+                                        int technique = MULTIPLE) :
     ErasureCodeShec(technique, _tcache)
   {}
 
@@ -137,15 +150,15 @@ public:
   }
 
   virtual void shec_encode(char **data,
-			   char **coding,
-			   int blocksize);
+                           char **coding,
+                           int blocksize);
   virtual int shec_decode(int *erasures,
-			  int *avails,
-			  char **data,
-			  char **coding,
-			  int blocksize);
+                          int *avails,
+                          char **data,
+                          char **coding,
+                          int blocksize);
   virtual unsigned get_alignment() const;
-  virtual int parse(const map<std::string,std::string> &parameters);
+  virtual int parse(const map<std::string, std::string> &parameters);
   virtual void prepare();
 };
 

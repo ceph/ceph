@@ -1,5 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
 /*
  * Ceph distributed storage system
  *
@@ -15,7 +13,7 @@
  *
  */
 
-#include "ceph_ver.h"
+#include "./ceph_ver.h"
 #include "common/debug.h"
 #include "arch/probe.h"
 #include "arch/intel.h"
@@ -26,8 +24,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
-static ostream& _prefix(std::ostream* _dout)
-{
+static ostream& _prefix(std::ostream* _dout) {
   return *_dout << "ErasureCodePluginSelectShec: ";
 }
 
@@ -42,8 +39,8 @@ static string get_variant() {
       ceph_arch_intel_sse2) {
     return "sse4";
   } else if (ceph_arch_intel_ssse3 &&
-	     ceph_arch_intel_sse3 &&
-	     ceph_arch_intel_sse2) {
+             ceph_arch_intel_sse3 &&
+             ceph_arch_intel_sse2) {
     return "sse3";
   } else if (ceph_arch_neon) {
     return "neon";
@@ -53,9 +50,9 @@ static string get_variant() {
 }
 
 class ErasureCodePluginSelectShec : public ErasureCodePlugin {
-public:
-  virtual int factory(const map<string,string> &parameters,
-		      ErasureCodeInterfaceRef *erasure_code) {
+ public:
+  virtual int factory(const map<string, string> &parameters,
+                      ErasureCodeInterfaceRef *erasure_code) {
     ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
     stringstream ss;
     int ret;
@@ -64,13 +61,15 @@ public:
       name = parameters.find("shec-name")->second;
     if (parameters.count("shec-variant")) {
       dout(10) << "shec-variant "
-	       << parameters.find("shec-variant")->second << dendl;
-      ret = instance.factory(name + "_" + parameters.find("shec-variant")->second,
-			     parameters, erasure_code, ss);
+               << parameters.find("shec-variant")->second << dendl;
+      ret = instance.factory(name + "_" +
+                             parameters.find("shec-variant")->second,
+                             parameters, erasure_code, ss);
     } else {
       string variant = get_variant();
       dout(10) << variant << " plugin" << dendl;
-      ret = instance.factory(name + "_" + variant, parameters, erasure_code, ss);
+      ret = instance.factory(name + "_" + variant,
+                             parameters, erasure_code, ss);
     }
     if (ret)
       derr << ss.str() << dendl;
@@ -80,14 +79,13 @@ public:
 
 const char *__erasure_code_version() { return CEPH_GIT_NICE_VER; }
 
-int __erasure_code_init(char *plugin_name, char *directory = (char *)"")
-{
+int __erasure_code_init(char *plugin_name, char *directory = (char *)"") {
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   string variant = get_variant();
   ErasureCodePlugin *plugin;
   stringstream ss;
   int r = instance.load(plugin_name + string("_") + variant,
-			directory, &plugin, ss);
+                        directory, &plugin, ss);
   if (r) {
     derr << ss.str() << dendl;
     return r;
