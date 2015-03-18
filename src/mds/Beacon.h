@@ -53,7 +53,6 @@ class Beacon : public Dispatcher
   MDSMap::DaemonState want_state;
 
   // Internal beacon state
-  version_t last_send;
   version_t last_seq;          // last seq sent to monitor
   std::map<version_t,utime_t>  seq_stamp;    // seq # -> time sent
   utime_t last_acked_stamp;  // last time we sent a beacon that got acked
