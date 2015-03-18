@@ -20,6 +20,7 @@ libmds_la_SOURCES = \
 	mds/JournalPointer.cc \
 	mds/MDSTableClient.cc \
 	mds/MDSTableServer.cc \
+	mds/SimpleLock.cc \
 	mds/SnapRealm.cc \
 	mds/SnapServer.cc \
 	mds/snap.cc \
