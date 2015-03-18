@@ -2099,6 +2099,20 @@ void ReplicatedPG::do_proxy_read(OpRequestRef op)
   ObjectOperation obj_op;
   obj_op.dup(prdop->ops);
 
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+      (agent_state && agent_state->evict_mode != TierAgentState::EVICT_MODE_FULL)) {
+    for (unsigned i = 0; i < obj_op.ops.size(); i++) {
+      ceph_osd_op op = obj_op.ops[i].op;
+      switch (op.op) {
+	case CEPH_OSD_OP_READ:
+	case CEPH_OSD_OP_SYNC_READ:
+	case CEPH_OSD_OP_SPARSE_READ:
+	  op.flags = (op.flags | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL) &
+		       ~(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      }
+    }
+  }
+
   C_ProxyRead *fin = new C_ProxyRead(this, soid, get_last_peering_reset(),
 				     prdop);
   ceph_tid_t tid = osd->objecter->read(
