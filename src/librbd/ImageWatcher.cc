@@ -714,6 +714,33 @@ int ImageWatcher::notify_async_request(const AsyncRequestId &async_request_id,
   return ctx.wait();
 }
 
+int ImageWatcher::prepare_async_request(const AsyncRequestId& async_request_id,
+                                        bool* new_request, Context** ctx,
+                                        ProgressContext** prog_ctx) {
+  if (async_request_id.client_id == get_client_id()) {
+    return -ERESTART;
+  } else {
+    RWLock::WLocker l(m_async_request_lock);
+    if (m_async_pending.count(async_request_id) == 0) {
+      m_async_pending.insert(async_request_id);
+      *new_request = true;
+      *prog_ctx = new RemoteProgressContext(*this, async_request_id);
+      *ctx = new RemoteContext(*this, async_request_id, *prog_ctx);
+    } else {
+      *new_request = false;
+    }
+  }
+  return 0;
+}
+
+void ImageWatcher::cleanup_async_request(const AsyncRequestId& async_request_id,
+                                         Context *ctx) {
+  delete ctx;
+
+  RWLock::WLocker l(m_async_request_lock);
+  m_async_pending.erase(async_request_id);
+}
+
 void ImageWatcher::handle_payload(const HeaderUpdatePayload &payload,
 				  bufferlist *out) {
   ldout(m_image_ctx.cct, 10) << "image header updated" << dendl;
@@ -820,34 +847,19 @@ void ImageWatcher::handle_payload(const FlattenPayload &payload,
 
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
-    int r = 0;
-    bool new_request = false;
-    if (payload.async_request_id.client_id == get_client_id()) {
-      r = -ERESTART;
-    } else {
-      RWLock::WLocker l(m_async_request_lock);
-      if (m_async_pending.count(payload.async_request_id) == 0) {
-	m_async_pending.insert(payload.async_request_id);
-	new_request = true;
-      }
-    }
-
+    bool new_request;
+    Context *ctx;
+    ProgressContext *prog_ctx;
+    int r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, &prog_ctx);
     if (new_request) {
-      RemoteProgressContext *prog_ctx =
-	new RemoteProgressContext(*this, payload.async_request_id);
-      RemoteContext *ctx = new RemoteContext(*this, payload.async_request_id,
-					     prog_ctx);
-
       ldout(m_image_ctx.cct, 10) << "remote flatten request: "
 				 << payload.async_request_id << dendl;
       r = librbd::async_flatten(&m_image_ctx, ctx, *prog_ctx);
       if (r < 0) {
-	delete ctx;
 	lderr(m_image_ctx.cct) << "remove flatten request failed: "
 			       << cpp_strerror(r) << dendl;
-
-	RWLock::WLocker l(m_async_request_lock);
-	m_async_pending.erase(payload.async_request_id);
+        cleanup_async_request(payload.async_request_id, ctx);
       }
     }
 
@@ -859,24 +871,12 @@ void ImageWatcher::handle_payload(const ResizePayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
-    int r = 0;
-    bool new_request = false;
-    if (payload.async_request_id.client_id == get_client_id()) {
-      r = -ERESTART;
-    } else {
-      RWLock::WLocker l(m_async_request_lock);
-      if (m_async_pending.count(payload.async_request_id) == 0) {
-	m_async_pending.insert(payload.async_request_id);
-	new_request = true;
-      }
-    }
-
+    bool new_request;
+    Context *ctx;
+    ProgressContext *prog_ctx;
+    int r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, &prog_ctx);
     if (new_request) {
-      RemoteProgressContext *prog_ctx =
-	new RemoteProgressContext(*this, payload.async_request_id);
-      RemoteContext *ctx = new RemoteContext(*this, payload.async_request_id,
-					     prog_ctx);
-
       ldout(m_image_ctx.cct, 10) << "remote resize request: "
 				 << payload.async_request_id << " "
 				 << payload.size << dendl;
@@ -884,10 +884,7 @@ void ImageWatcher::handle_payload(const ResizePayload &payload,
       if (r < 0) {
 	lderr(m_image_ctx.cct) << "remove resize request failed: "
 			       << cpp_strerror(r) << dendl;
-	delete ctx;
-
-	RWLock::WLocker l(m_async_request_lock);
-	m_async_pending.erase(payload.async_request_id);
+        cleanup_async_request(payload.async_request_id, ctx);
       }
     }
 
@@ -911,9 +908,22 @@ void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
                                   bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
-    ldout(m_image_ctx.cct, 10) << "remote rebuild_object_map request" << dendl;
+    bool new_request;
+    Context *ctx;
+    ProgressContext *prog_ctx;
+    int r = prepare_async_request(payload.async_request_id, &new_request,
+                                  &ctx, &prog_ctx);
+    if (new_request) {
+      ldout(m_image_ctx.cct, 10) << "remote rebuild object map request: "
+                                 << payload.async_request_id << dendl;
+      r = librbd::async_rebuild_object_map(&m_image_ctx, ctx, *prog_ctx);
+      if (r < 0) {
+        lderr(m_image_ctx.cct) << "remove rebuild object map request failed: "
+                               << cpp_strerror(r) << dendl;
+        cleanup_async_request(payload.async_request_id, ctx);
+      }
+    }
 
-    // TODO
     ::encode(ResponseMessage(0), *out);
   }
 }
