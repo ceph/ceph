@@ -2758,40 +2758,16 @@ void CDir::dump(Formatter *f) const
 
   string path;
   get_inode()->make_path_string_projected(path);
+  f->dump_stream("path") << path;
 
   f->dump_stream("dirfrag") << dirfrag();
-  f->dump_stream("path") << path;
   f->dump_int("snapid_first", first);
-  f->dump_bool("auth", is_auth());
 
-  // Fields only meaningful for auth
-  f->open_object_section("auth_state");
-  {
-    f->open_object_section("replica_map");
-    for (compact_map<mds_rank_t, unsigned>::const_iterator i = replica_map.begin();
-	 i != replica_map.end();
-	 ++i) {
-      std::ostringstream rank_str;
-      rank_str << i->first;
-      f->dump_int(rank_str.str().c_str(), i->second);
-    }
-    f->close_section();
-    f->dump_stream("projected_version") << get_projected_version();
-    f->dump_stream("version") << get_version();
-    f->dump_stream("comitting_version") << get_committing_version();
-    f->dump_stream("comitted_version") << get_committed_version();
-  }
-  f->close_section();
+  f->dump_stream("projected_version") << get_projected_version();
+  f->dump_stream("version") << get_version();
+  f->dump_stream("committing_version") << get_committing_version();
+  f->dump_stream("committed_version") << get_committed_version();
 
-  // Fields only meaningful for replica
-  f->open_object_section("replica_state");
-  {
-    f->dump_stream("authority_first") << authority().first;
-    f->dump_stream("authority_second") << authority().second;
-    f->dump_stream("replica_nonce") << get_replica_nonce();
-  }
-  f->close_section();
-  
   f->dump_bool("is_rep", is_rep());
 
   if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
@@ -2805,6 +2781,7 @@ void CDir::dump(Formatter *f) const
   }
 
   f->open_array_section("states");
+  MDSCacheObject::dump_states(f);
   if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
   if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
   if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
@@ -2814,5 +2791,7 @@ void CDir::dump(Formatter *f) const
   if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
   if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
   f->close_section();
+
+  MDSCacheObject::dump(f);
 }
 
