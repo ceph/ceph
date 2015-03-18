@@ -2624,7 +2624,6 @@ TEST_F(TestLibRBD, Metadata)
   ASSERT_EQ(0, strcmp("value1", value.c_str()));
   ASSERT_EQ(0, image1.metadata_list("", 0, &pairs));
   ASSERT_EQ(2U, pairs.size());
-  const char * ddd = pairs["key1"].c_str();
   ASSERT_EQ(0, strncmp("value1", pairs["key1"].c_str(), 6));
   ASSERT_EQ(0, strncmp("value2", pairs["key2"].c_str(), 6));
 
