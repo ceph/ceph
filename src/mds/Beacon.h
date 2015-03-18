@@ -78,6 +78,9 @@ class Beacon : public Dispatcher
   void _notify_mdsmap(MDSMap const *mdsmap);
   void _send();
 
+  version_t awaiting_seq;
+  Cond waiting_cond;
+
 public:
   Beacon(CephContext *cct_, MonClient *monc_, std::string name);
   ~Beacon();
@@ -98,6 +101,13 @@ public:
 
   void handle_mds_beacon(MMDSBeacon *m);
   void send();
+
+  /**
+   * Send a beacon, and block until the ack is received from the mon
+   * or `duration` seconds pass, whichever happens sooner.  Useful
+   * for emitting a last message on shutdown.
+   */
+  void send_and_wait(const double duration);
 
   bool is_laggy();
   utime_t get_laggy_until() const;
