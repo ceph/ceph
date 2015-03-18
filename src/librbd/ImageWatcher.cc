@@ -898,7 +898,8 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
   if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
     ldout(m_image_ctx.cct, 10) << "remote snap_create request: "
 			       << payload.snap_name << dendl;
-    int r = librbd::snap_create(&m_image_ctx, payload.snap_name.c_str(), false);
+    int r = librbd::snap_create_helper(&m_image_ctx, NULL,
+                                       payload.snap_name.c_str());
 
     ::encode(ResponseMessage(r), *out);
   }
