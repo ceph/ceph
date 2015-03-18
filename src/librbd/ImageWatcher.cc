@@ -480,6 +480,19 @@ int ImageWatcher::notify_snap_create(const std::string &snap_name) {
   return notify_lock_owner(bl);
 }
 
+int ImageWatcher::notify_rebuild_object_map(uint64_t request_id,
+                                            ProgressContext &prog_ctx) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  assert(!is_lock_owner());
+
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  bufferlist bl;
+  ::encode(NotifyMessage(RebuildObjectMapPayload(async_request_id)), bl);
+
+  return notify_async_request(async_request_id, bl, prog_ctx);
+}
+
 void ImageWatcher::notify_header_update(librados::IoCtx &io_ctx,
 				        const std::string &oid)
 {
@@ -894,6 +907,16 @@ void ImageWatcher::handle_payload(const SnapCreatePayload &payload,
   }
 }
 
+void ImageWatcher::handle_payload(const RebuildObjectMapPayload& payload,
+                                  bufferlist *out) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (m_lock_owner_state == LOCK_OWNER_STATE_LOCKED) {
+    ldout(m_image_ctx.cct, 10) << "remote rebuild_object_map request" << dendl;
+
+    // TODO
+    ::encode(ResponseMessage(0), *out);
+  }
+}
 void ImageWatcher::handle_payload(const UnknownPayload &payload,
 				  bufferlist *out) {
   RWLock::RLocker l(m_image_ctx.owner_lock);
