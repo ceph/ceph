@@ -359,6 +359,46 @@ def check_conflict(ctx, config):
     if failed:
         raise RuntimeError('Stale jobs detected, aborting.')
 
+
+def fetch_binaries_for_coredumps(path, remote):
+    """
+    Pul ELFs (debug and stripped) for each coredump found
+    """
+    # Check for Coredumps:
+    coredump_path = os.path.join(path, 'coredump')
+    if os.path.isdir(coredump_path):
+        log.info('Transferring binaries for coredumps...')
+        for dump in os.listdir(coredump_path):
+            # Pull program from core file
+            dump_path = os.path.join(coredump_path, dump)
+            dump_info = subprocess.Popen(['file', dump_path],
+                                         stdout=subprocess.PIPE)
+            dump_out = dump_info.communicate()
+
+            # Parse file output to get program, Example output:
+            # 1422917770.7450.core: ELF 64-bit LSB core file x86-64, version 1 (SYSV), SVR4-style, \
+            # from 'radosgw --rgw-socket-path /home/ubuntu/cephtest/apache/tmp.client.0/fastcgi_soc'
+            dump_program = dump_out.split("from '")[1].split(' ')[0]
+
+            # Find path on remote server:
+            r = remote.run(args=['which', dump_program], stdout=StringIO())
+            remote_path = r.stdout.getvalue()
+
+            # Pull remote program into coredump folder:
+            remote._sftp_get_file(remote_path, os.path.join(coredump_path,
+                                                            dump_program))
+
+            # Pull Debug symbols:
+            debug_path = os.path.join('/usr/lib/debug', remote_path)
+
+            # RPM distro's append their non-stripped ELF's with .debug
+            # When deb based distro's do not.
+            if remote.system_type == 'rpm':
+                debug_path = '{debug_path}.debug'.format(debug_path=debug_path)
+
+            remote.get_file(debug_path, coredump_path)
+
+
 @contextlib.contextmanager
 def archive(ctx, config):
     """
@@ -392,6 +432,8 @@ def archive(ctx, config):
             for rem in ctx.cluster.remotes.iterkeys():
                 path = os.path.join(logdir, rem.shortname)
                 misc.pull_directory(rem, archive_dir, path)
+                # Check for coredumps and pull binaries
+                fetch_binaries_for_coredumps(path, rem)
 
         log.info('Removing archive directory...')
         run.wait(
