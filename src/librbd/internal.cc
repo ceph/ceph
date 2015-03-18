@@ -2703,6 +2703,69 @@ reprotect_and_return_err:
     return 0;
   }
 
+  int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx) {
+    CephContext *cct = ictx->cct;
+    ldout(cct, 10) << "rebuild_object_map" << dendl;
+
+    int r = ictx_check(ictx);
+    if (r < 0) {
+      return r;
+    }
+
+    {
+      RWLock::RLocker snap_locker(ictx->snap_lock);
+      if (ictx->read_only || ictx->snap_id != CEPH_NOSNAP) {
+        return -EROFS;
+      }
+    }
+
+    uint64_t request_id = ictx->async_request_seq.inc();
+    do {
+      C_SaferCond ctx;
+      {
+        RWLock::RLocker l(ictx->owner_lock);
+        while (ictx->image_watcher->is_lock_supported()) {
+          r = prepare_image_update(ictx);
+          if (r < 0) {
+            return -EROFS;
+          } else if (ictx->image_watcher->is_lock_owner()) {
+	    break;
+	  }
+
+          r = ictx->image_watcher->notify_rebuild_object_map(request_id,
+                                                             prog_ctx);
+          if (r != -ETIMEDOUT && r != -ERESTART) {
+            return r;
+          }
+          ldout(ictx->cct, 5) << "rebuild object map timed out notifying lock "
+                              << "owner" << dendl;
+        }
+
+        r = async_rebuild_object_map(ictx, &ctx, prog_ctx);
+        if (r < 0) {
+	  return r;
+        }
+      }
+
+      r = ctx.wait();
+      if (r == -ERESTART) {
+	ldout(ictx->cct, 5) << "rebuild object map interrupted: restarting"
+                            << dendl;
+      }
+    } while (r == -ERESTART);
+
+    // TODO rebuild snapshots
+
+    ldout(cct, 10) << "rebuild object map finished" << dendl;
+    return r;
+  }
+
+  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                               ProgressContext &prog_ctx) {
+    // TODO rebuild image HEAD
+    return 0;
+  }
+
   int list_lockers(ImageCtx *ictx,
 		   std::list<locker_t> *lockers,
 		   bool *exclusive,

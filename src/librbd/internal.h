@@ -137,6 +137,8 @@ namespace librbd {
 		   const char *buf);
   int flatten(ImageCtx *ictx, ProgressContext &prog_ctx);
 
+  int rebuild_object_map(ImageCtx *ictx, ProgressContext &prog_ctx);
+
   /* cooperative locking */
   int list_lockers(ImageCtx *ictx,
 		   std::list<locker_t> *locks,
@@ -196,6 +198,8 @@ namespace librbd {
 		   ProgressContext &prog_ctx);
   void async_resize_helper(ImageCtx *ictx, Context *ctx, uint64_t new_size,
                            ProgressContext& prog_ctx);
+  int async_rebuild_object_map(ImageCtx *ictx, Context *ctx,
+                               ProgressContext &prog_ctx);
 
   int aio_write(ImageCtx *ictx, uint64_t off, size_t len, const char *buf,
 		AioCompletion *c, int op_flags);
