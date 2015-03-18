@@ -2475,9 +2475,12 @@ void Locker::handle_client_caps(MClientCaps *m)
     mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  CInode *in = mdcache->pick_inode_snap(head_in, follows);
-  if (in != head_in)
-    dout(10) << " head inode " << *head_in << dendl;
+  CInode *in = head_in;
+  if (follows > 0) {
+    in = mdcache->pick_inode_snap(head_in, follows);
+    if (in != head_in)
+      dout(10) << " head inode " << *head_in << dendl;
+  }
   dout(10) << "  cap inode " << *in << dendl;
 
   Capability *cap = 0;

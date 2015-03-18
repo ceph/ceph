@@ -1585,6 +1585,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   // purge stale snaps?
   // only if we have past_parents open!
+  bool force_dirty = false;
   const set<snapid_t> *snaps = NULL;
   SnapRealm *realm = inode->find_snaprealm();
   if (!realm->have_past_parents_open()) {
@@ -1594,7 +1595,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
-    fnode.snap_purged_thru = realm->get_last_destroyed();
+    if (get_num_snap_items() == 0) {
+      fnode.snap_purged_thru = realm->get_last_destroyed();
+      force_dirty = true;
+    }
   }
 
   bool stray = inode->is_stray();
@@ -1634,8 +1638,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
      * doesn't exist) but for which no explicit negative dentry is in
      * the cache.
      */
-    CDentry *dn = NULL;
-    if (!stale)
+    CDentry *dn;
+    if (stale)
+      dn = lookup_exact_snap(dname, last);
+    else
       dn = lookup(dname, last);
 
     if (type == 'L') {
@@ -1645,8 +1651,13 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       ::decode(ino, q);
       ::decode(d_type, q);
 
-      if (stale)
+      if (stale) {
+	if (!dn) {
+	  stale_items.insert(p->first);
+	  force_dirty = true;
+	}
 	continue;
+      }
 
       if (dn) {
         if (dn->get_linkage()->get_inode() == 0) {
@@ -1675,8 +1686,13 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       InodeStore inode_data;
       inode_data.decode_bare(q);
       
-      if (stale)
+      if (stale) {
+	if (!dn) {
+	  stale_items.insert(p->first);
+	  force_dirty = true;
+	}
 	continue;
+      }
 
       bool undef_inode = false;
       if (dn) {
@@ -1797,6 +1813,10 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     cache->opened_undef_inode(in);
   }
 
+  // dirty myself to remove stale snap dentries
+  if (force_dirty && !is_dirty() && !inode->mdcache->is_readonly())
+    log_mark_dirty();
+
   auth_unpin(this);
 
   // kick waiters
@@ -1880,6 +1900,7 @@ void CDir::_omap_commit(int op_prio)
     dout(10) << " snap_purged_thru " << fnode.snap_purged_thru
 	     << " < " << realm->get_last_destroyed()
 	     << ", snap purge based on " << *snaps << dendl;
+    // fnode.snap_purged_thru = realm->get_last_destroyed();
   }
 
   set<string> to_remove;
@@ -1893,6 +1914,16 @@ void CDir::_omap_commit(int op_prio)
   SnapContext snapc;
   object_t oid = get_ondisk_object();
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
+
+  if (!stale_items.empty()) {
+    for (compact_set<string>::iterator p = stale_items.begin();
+	 p != stale_items.end();
+	 ++p) {
+      to_remove.insert(*p);
+      write_size += (*p).length();
+    }
+    stale_items.clear();
+  }
 
   for (map_t::iterator p = items.begin();
       p != items.end(); ) {
@@ -2010,8 +2041,14 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode
 
-    if (in->is_multiversion() && snaps && !in->snaprealm)
-      in->purge_stale_snap_data(*snaps);
+    if (in->is_multiversion()) {
+      if (!in->snaprealm) {
+	if (snaps)
+	  in->purge_stale_snap_data(*snaps);
+      } else if (in->snaprealm->have_past_parents_open()) {
+	in->purge_stale_snap_data(in->snaprealm->get_snaps());
+      }
+    }
 
     bufferlist snap_blob;
     in->encode_snap_blob(snap_blob);

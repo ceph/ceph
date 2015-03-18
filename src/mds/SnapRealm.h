@@ -119,11 +119,18 @@ struct SnapRealm {
 
   snapid_t get_snap_following(snapid_t follows) {
     check_cache();
-    set<snapid_t> s = get_snaps();
-    set<snapid_t>::iterator p = s.upper_bound(follows);
+    const set<snapid_t>& s = get_snaps();
+    set<snapid_t>::const_iterator p = s.upper_bound(follows);
     if (p != s.end())
       return *p;
     return CEPH_NOSNAP;
+  }
+
+  bool has_snaps_in_range(snapid_t first, snapid_t last) {
+    check_cache();
+    const set<snapid_t>& s = get_snaps();
+    set<snapid_t>::const_iterator p = s.lower_bound(first);
+    return (p != s.end() && *p <= last);
   }
 
   void adjust_parent();
