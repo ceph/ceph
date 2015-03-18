@@ -1567,32 +1567,39 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
   if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
     // multiversion inode.
     CInode *in = dnl->get_inode();
+    SnapRealm *realm = NULL;
 
     if (in->get_projected_parent_dn() != dn) {
       assert(follows == CEPH_NOSNAP);
-      snapid_t dir_follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
+      realm = dn->dir->inode->find_snaprealm();
+      snapid_t dir_follows = realm->get_newest_snap();
 
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
-	CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
-						    oldfirst, dir_follows);
-	olddn->pre_dirty();
-	dout(10) << " olddn " << *olddn << dendl;
-	metablob->add_remote_dentry(olddn, true);
-	mut->add_cow_dentry(olddn);
-	// FIXME: adjust link count here?  hmm.
+	if (realm->has_snaps_in_range(oldfirst, dn->last)) {
+	  CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+						      oldfirst, dir_follows);
+	  olddn->pre_dirty();
+	  dout(10) << " olddn " << *olddn << dendl;
+	  metablob->add_remote_dentry(olddn, true);
+	  mut->add_cow_dentry(olddn);
+	  // FIXME: adjust link count here?  hmm.
 
-	if (dir_follows+1 > in->first)
-	  in->cow_old_inode(dir_follows, false);
+	  if (dir_follows+1 > in->first)
+	    in->cow_old_inode(dir_follows, false);
+	}
       }
 
-      if (in->snaprealm)
-	follows = in->snaprealm->get_newest_seq();
-      else
+      if (in->snaprealm) {
+	realm = in->snaprealm;
+	follows = realm->get_newest_seq();
+      } else
 	follows = dir_follows;
-    } else if (follows == CEPH_NOSNAP) {
-      follows = in->find_snaprealm()->get_newest_seq();
+    } else {
+      realm = in->find_snaprealm();
+      if (follows == CEPH_NOSNAP)
+	follows = realm->get_newest_seq();
     }
 
     // already cloned?
@@ -1601,26 +1608,41 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
+    if (!realm->has_snaps_in_range(in->first, in->last)) {
+      dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *in << dendl;
+      in->first = follows + 1;
+      return;
+    }
+
     in->cow_old_inode(follows, false);
 
   } else {
+    SnapRealm *realm = dn->dir->inode->find_snaprealm();
     if (follows == CEPH_NOSNAP)
-      follows = dn->dir->inode->find_snaprealm()->get_newest_seq();
-    
+      follows = realm->get_newest_seq();
+
     // already cloned?
     if (follows < dn->first) {
       dout(10) << "journal_cow_dentry follows " << follows << " < first on " << *dn << dendl;
       return;
     }
-       
+
     // update dn.first before adding old dentry to cdir's map
     snapid_t oldfirst = dn->first;
     dn->first = follows+1;
+
+    CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+
+    if (!realm->has_snaps_in_range(oldfirst, dn->last)) {
+      dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
+      if (in)
+	in->first = follows+1;
+      return;
+    }
     
     dout(10) << "    dn " << *dn << dendl;
-    if (dnl->is_primary()) {
-      assert(oldfirst == dnl->get_inode()->first);
-      CInode *oldin = cow_inode(dnl->get_inode(), follows);
+    if (in) {
+      CInode *oldin = cow_inode(in, follows);
       mut->add_cow_inode(oldin);
       if (pcow_inode)
 	*pcow_inode = oldin;
@@ -1710,17 +1732,19 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 
   if (cur->last >= floor)
     _project_rstat_inode_to_frag(*curi, MAX(first, floor), cur->last, parent, linkunlink);
-      
-  for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
-       p != cur->dirty_old_rstats.end();
-       ++p) {
-    old_inode_t& old = cur->old_inodes[*p];
-    snapid_t ofirst = MAX(old.first, floor);
-    set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
-    if (q == snaps.end() || *q > *p)
-      continue;
-    if (*p >= floor)
-      _project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+
+  if (g_conf->mds_snap_rstat) {
+    for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
+	 p != cur->dirty_old_rstats.end();
+	 ++p) {
+      old_inode_t& old = cur->old_inodes[*p];
+      snapid_t ofirst = MAX(old.first, floor);
+      set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
+      if (q == snaps.end() || *q > *p)
+	continue;
+      if (*p >= floor)
+	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0);
+    }
   }
   cur->dirty_old_rstats.clear();
 }
@@ -1757,7 +1781,10 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
     snapid_t first;
     fnode_t *pf = parent->get_projected_fnode();
     if (last == CEPH_NOSNAP) {
-      first = MAX(ofirst, parent->first);
+      if (g_conf->mds_snap_rstat)
+	first = MAX(ofirst, parent->first);
+      else
+	first = parent->first;
       prstat = &pf->rstat;
       dout(20) << " projecting to head [" << first << "," << last << "] " << *prstat << dendl;
 
@@ -1772,6 +1799,9 @@ void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snap
 	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
       }
       parent->first = first;
+    } else if (!g_conf->mds_snap_rstat) {
+      // drop snapshots' rstats
+      break;
     } else if (last >= parent->first) {
       first = parent->first;
       parent->dirty_old_rstat[last].first = first;
@@ -2233,10 +2263,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       // first, if the frag is stale, bring it back in sync.
       parent->resync_accounted_rstat();
 
-      for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
-	   p != parent->dirty_old_rstat.end();
-	   ++p)
-	project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first, p->first, pin, true);//false);
+      if (g_conf->mds_snap_rstat) {
+	for (compact_map<snapid_t,old_rstat_t>::iterator p = parent->dirty_old_rstat.begin();
+	     p != parent->dirty_old_rstat.end();
+	     ++p)
+	  project_rstat_frag_to_inode(p->second.rstat, p->second.accounted_rstat, p->second.first,
+				      p->first, pin, true);//false);
+      }
       parent->dirty_old_rstat.clear();
       project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
 
@@ -9077,6 +9110,7 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
 	  !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn)))
 	return;
       in->snaprealm->prune_past_parents();
+      in->purge_stale_snap_data(in->snaprealm->get_snaps());
     }
     if (in->is_dir()) {
       if (in->snaprealm && in->snaprealm->has_past_parents()) {
@@ -9121,7 +9155,9 @@ void MDCache::eval_stray(CDentry *dn, bool delay)
 	num_strays_delayed++;
 	logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
       }
-    } else if (in->snaprealm && in->snaprealm->has_past_parents()) {
+    // don't purge multiversion inode with snap data
+    } else if (in->snaprealm && in->snaprealm->has_past_parents() &&
+	       !in->old_inodes.empty()) {
       assert(!in->is_dir());
       dout(20) << " file has past parents " << in->snaprealm->srnode.past_parents << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0)
