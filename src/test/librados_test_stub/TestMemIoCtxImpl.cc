@@ -37,7 +37,8 @@ TestIoCtxImpl *TestMemIoCtxImpl::clone() {
 }
 
 int TestMemIoCtxImpl::aio_remove(const std::string& oid, AioCompletionImpl *c) {
-  m_client->add_aio_operation(oid, boost::bind(&TestMemIoCtxImpl::remove, this, oid),
+  m_client->add_aio_operation(oid, true,
+                              boost::bind(&TestMemIoCtxImpl::remove, this, oid),
                               c);
   return 0;
 }

@@ -57,8 +57,8 @@ static void finish_aio_completion(AioCompletionImpl *c, int r) {
 class AioFunctionContext : public Context {
 public:
   AioFunctionContext(const TestRadosClient::AioFunction &callback,
-                     AioCompletionImpl *c)
-    : m_callback(callback), m_comp(c)
+                     Finisher *finisher, AioCompletionImpl *c)
+    : m_callback(callback), m_finisher(finisher), m_comp(c)
   {
     if (m_comp != NULL) {
       m_comp->get();
@@ -68,11 +68,17 @@ public:
   virtual void finish(int r) {
     int ret = m_callback();
     if (m_comp != NULL) {
-      finish_aio_completion(m_comp, ret);
+      if (m_finisher != NULL) {
+        m_finisher->queue(new FunctionContext(boost::bind(
+          &finish_aio_completion, m_comp, ret)));
+      } else {
+        finish_aio_completion(m_comp, ret);
+      }
     }
   }
 private:
   TestRadosClient::AioFunction m_callback;
+  Finisher *m_finisher;
   AioCompletionImpl *m_comp;
 };
 
@@ -82,11 +88,16 @@ TestRadosClient::TestRadosClient(CephContext *cct)
 {
   get();
 
+  // simulate multiple OSDs
   int concurrency = get_concurrency();
   for (int i = 0; i < concurrency; ++i) {
     m_finishers.push_back(new Finisher(m_cct));
     m_finishers.back()->start();
   }
+
+  // replicate AIO callback processing
+  m_aio_finisher = new Finisher(m_cct);
+  m_aio_finisher->start();
 }
 
 TestRadosClient::~TestRadosClient() {
@@ -96,6 +107,8 @@ TestRadosClient::~TestRadosClient() {
     m_finishers[i]->stop();
     delete m_finishers[i];
   }
+  m_aio_finisher->stop();
+  delete m_aio_finisher;
 
   m_cct->put();
   m_cct = NULL;
@@ -162,9 +175,11 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
 }
 
 void TestRadosClient::add_aio_operation(const std::string& oid,
+                                        bool queue_callback,
 				        const AioFunction &aio_function,
                                         AioCompletionImpl *c) {
-  AioFunctionContext *ctx = new AioFunctionContext(aio_function, c);
+  AioFunctionContext *ctx = new AioFunctionContext(
+    aio_function, queue_callback ? m_aio_finisher : NULL, c);
   get_finisher(oid)->queue(ctx);
 }
 
@@ -200,7 +215,7 @@ void TestRadosClient::flush_aio_operations(AioCompletionImpl *c) {
   for (size_t i = 0; i < m_finishers.size(); ++i) {
     AioFunctionContext *ctx = new AioFunctionContext(
       boost::bind(&WaitForFlush::flushed, wait_for_flush),
-      NULL);
+      m_aio_finisher, NULL);
     m_finishers[i]->queue(ctx);
   }
 }

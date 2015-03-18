@@ -72,7 +72,7 @@ public:
     return m_watch_notify;
   }
 
-  void add_aio_operation(const std::string& oid,
+  void add_aio_operation(const std::string& oid, bool queue_callback,
 			 const AioFunction &aio_function, AioCompletionImpl *c);
   void flush_aio_operations();
   void flush_aio_operations(AioCompletionImpl *c);
@@ -87,6 +87,7 @@ private:
 
   Finisher *get_finisher(const std::string& oid);
 
+  Finisher *m_aio_finisher;
   std::vector<Finisher *> m_finishers;
   boost::hash<std::string> m_hash;
 
