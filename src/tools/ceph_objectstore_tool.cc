@@ -1724,7 +1724,7 @@ int do_import_rados(string pool)
   return 0;
 }
 
-int do_import(ObjectStore *store, OSDSuperblock& sb)
+int do_import(ObjectStore *store, OSDSuperblock& sb, bool force)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1786,8 +1786,11 @@ int do_import(ObjectStore *store, OSDSuperblock& sb)
       cerr << "OSD requires sharding to be enabled" << std::endl;
       cerr << std::endl;
       cerr << "If you wish to import, first do 'ceph-objectstore-tool...--op set-allow-sharded-objects'" << std::endl;
+      return 1;
     }
-    return 11;  // Assume no +EAGAIN gets to end of main() until we clean up error code handling
+    // Let them import if they specify the --force option
+    if (!force)
+        return 11;  // Assume no +EAGAIN gets to end of main() until we clean up error code handling
   }
 
   // Don't import if pool no longer exists
@@ -2312,6 +2315,7 @@ int main(int argc, char **argv)
   spg_t pgid;
   ghobject_t ghobj;
   bool human_readable;
+  bool force;
   Formatter *formatter;
 
   po::options_description desc("Allowed options");
@@ -2332,6 +2336,7 @@ int main(int argc, char **argv)
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
+    ("force", "Ignore some types of errors and proceed with operation - USE WITH CAUTION: CORRUPTION POSSIBLE NOW OR IN THE FUTURE")
     ("skip-journal-replay", "Disable journal replay")
     ("skip-mount-omap", "Disable mounting of omap")
     ;
@@ -2374,6 +2379,12 @@ int main(int argc, char **argv)
     debug = false;
   } else {
     debug = true;
+  }
+
+  if (!vm.count("force")) {
+    force = false;
+  } else {
+    force = true;
   }
 
   vector<const char *> ceph_options;
@@ -2812,7 +2823,7 @@ int main(int argc, char **argv)
   if (op == "import") {
 
     try {
-      ret = do_import(fs, superblock);
+      ret = do_import(fs, superblock, force);
     }
     catch (const buffer::error &e) {
       cerr << "do_import threw exception error " << e.what() << std::endl;
