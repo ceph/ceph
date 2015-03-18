@@ -187,6 +187,7 @@ void MDSMap::print(ostream& out)
   out << "in\t" << in << "\n"
       << "up\t" << up << "\n"
       << "failed\t" << failed << "\n"
+      << "damaged\t" << damaged << "\n"
       << "stopped\t" << stopped << "\n";
   out << "data_pools\t" << data_pools << "\n";
   out << "metadata_pool\t" << metadata_pool << "\n";
