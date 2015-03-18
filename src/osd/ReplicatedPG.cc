@@ -3432,7 +3432,8 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
      * In this case, we transform NOCACHE into DONTNEED.
      * Although this method isn't exactly. But at some case it can work and don't affect others.
      */
-    if (!(ctx->obc->found_in_cache) && (op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE))
+    if (!(ctx->obc->found_in_cache) && (op.flags & CEPH_OSD_OP_FLAG_FADVISE_NOCACHE) &&
+	g_conf->osd_munge_nocache_wontneed_on_first_access)
       op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
     switch (op.op) {
