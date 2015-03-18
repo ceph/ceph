@@ -551,7 +551,6 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   //  missing set, as that should already be consistent with our
   //  current log.
   if (olog.tail < log.tail) {
-    mark_dirty_to(log.log.begin()->version); // last clean entry
     dout(10) << "merge_log extending tail to " << olog.tail << dendl;
     list<pg_log_entry_t>::iterator from = olog.log.begin();
     list<pg_log_entry_t>::iterator to;
@@ -564,6 +563,10 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
       dout(15) << *to << dendl;
     }
       
+    if (to == olog.log.end())
+      mark_dirty_to(oinfo.last_update);
+    else
+      mark_dirty_to(to->version);
     // splice into our log.
     log.log.splice(log.log.begin(),
 		   olog.log, from, to);
@@ -678,6 +681,32 @@ void PGLog::merge_log(ObjectStore::Transaction& t,
   if (changed) {
     dirty_info = true;
     dirty_big_info = true;
+  }
+}
+
+void PGLog::check() {
+  if (!pg_log_debug)
+    return;
+  if (log.log.size() != log_keys_debug.size()) {
+    derr << "log.log.size() != log_keys_debug.size()" << dendl;
+    derr << "actual log:" << dendl;
+    for (list<pg_log_entry_t>::iterator i = log.log.begin();
+	 i != log.log.end();
+	 ++i) {
+      derr << "    " << *i << dendl;
+    }
+    derr << "log_keys_debug:" << dendl;
+    for (set<string>::const_iterator i = log_keys_debug.begin();
+	 i != log_keys_debug.end();
+	 ++i) {
+      derr << "    " << *i << dendl;
+    }
+  }
+  assert(log.log.size() == log_keys_debug.size());
+  for (list<pg_log_entry_t>::iterator i = log.log.begin();
+       i != log.log.end();
+       ++i) {
+    assert(log_keys_debug.count(i->get_key_name()));
   }
 }
 
