@@ -90,7 +90,7 @@ int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &
                                int flags) {
   // TODO ignoring snap_context and flags for now
   ops.get();
-  m_client->add_aio_operation(oid, boost::bind(
+  m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
     reinterpret_cast<bufferlist*>(NULL)), c);
   return 0;
@@ -102,7 +102,7 @@ int TestIoCtxImpl::aio_operate_read(const std::string& oid,
                                     bufferlist *pbl) {
   // TODO ignoring flags for now
   ops.get();
-  m_client->add_aio_operation(oid, boost::bind(
+  m_client->add_aio_operation(oid, true, boost::bind(
     &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl), c);
   return 0;
 }
@@ -137,11 +137,14 @@ void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
 
 int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops) {
   AioCompletionImpl *comp = new AioCompletionImpl();
-  int ret = aio_operate(oid, ops, comp, NULL, 0);
-  if (ret == 0) {
-    comp->wait_for_safe();
-    ret = comp->get_return_value();
-  }
+
+  ops.get();
+  m_client->add_aio_operation(oid, false, boost::bind(
+    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops,
+    reinterpret_cast<bufferlist*>(NULL)), comp);
+
+  comp->wait_for_safe();
+  int ret = comp->get_return_value();
   comp->put();
   return ret;
 }
@@ -149,11 +152,13 @@ int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops)
 int TestIoCtxImpl::operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                 bufferlist *pbl) {
   AioCompletionImpl *comp = new AioCompletionImpl();
-  int ret = aio_operate_read(oid, ops, comp, 0, pbl);
-  if (ret == 0) {
-    comp->wait_for_complete();
-    ret = comp->get_return_value();
-  }
+
+  ops.get();
+  m_client->add_aio_operation(oid, false, boost::bind(
+    &TestIoCtxImpl::execute_aio_operations, this, oid, &ops, pbl), comp);
+
+  comp->wait_for_complete();
+  int ret = comp->get_return_value();
   comp->put();
   return ret;
 }
