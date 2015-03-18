@@ -192,7 +192,7 @@ The procedure is as follows:
 
 #. Populate the monitor daemon(s) with the monitor map and keyring. ::
 
-	ceph-mon --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+	ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
    For example::
 
@@ -248,7 +248,7 @@ The procedure is as follows:
 
    For Ubuntu, use Upstart::
 
-	sudo start ceph-mon id=node1
+	sudo start ceph-mon id=node1 [cluster={cluster-name}]
 
    In this case, to allow the start of the daemon at each reboot you
    must create two empty files like this::
@@ -366,7 +366,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 #. Create the default directory on your new OSD. :: 
 
 	ssh {new-osd-host}
-	sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
+	sudo mkdir /var/lib/ceph/osd/{cluster-name}-{osd-number}
 	
 
 #. If the OSD is for a drive other than the OS drive, prepare it 
@@ -374,7 +374,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
 	ssh {new-osd-host}
 	sudo mkfs -t {fstype} /dev/{hdd}
-	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
+	sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/{cluster-name}-{osd-number}
 
 	
 #. Initialize the OSD data directory. :: 
@@ -391,12 +391,12 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your 
    cluster name differs from ``ceph``, use your cluster name instead.::
 
-	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
+	sudo ceph auth add osd.{osd-num} osd 'allow *' mon 'allow profile osd' -i /var/lib/ceph/osd/{cluster-name}-{osd-num}/keyring
 
 
 #. Add your Ceph Node to the CRUSH map. ::
 
-	ceph osd crush add-bucket {hostname} host
+	ceph [--cluster {cluster-name}] osd crush add-bucket {hostname} host
 
    For example::
 
@@ -413,7 +413,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
    bucket (if it's not already in the CRUSH map), add the device as an item in the
    host, assign it a weight, recompile it and set it. ::
 
-	ceph osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
+	ceph [--cluster {cluster-name}] osd crush add {id-or-name} {weight} [{bucket-type}={bucket-name} ...]
 
    For example::
 
@@ -426,7 +426,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
    For Ubuntu, use Upstart::
 
-	sudo start ceph-osd id={osd-num}
+	sudo start ceph-osd id={osd-num} [cluster={cluster-name}]
 
    For example::
 
@@ -435,7 +435,7 @@ OSDs with the long form procedure, execute the following on ``node2`` and
 
    For Debian/CentOS/RHEL, use sysvinit::
 
-	sudo /etc/init.d/ceph start osd.{osd-num}
+	sudo /etc/init.d/ceph start osd.{osd-num} [--cluster {cluster-name}]
 
    For example::
 
