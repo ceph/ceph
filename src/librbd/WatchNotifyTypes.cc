@@ -241,6 +241,22 @@ void SnapCreatePayload::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
 }
 
+void RebuildObjectMapPayload::encode(bufferlist &bl) const {
+  ::encode(static_cast<uint32_t>(NOTIFY_OP_REBUILD_OBJECT_MAP), bl);
+  ::encode(async_request_id, bl);
+}
+
+void RebuildObjectMapPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  ::decode(async_request_id, iter);
+}
+
+void RebuildObjectMapPayload::dump(Formatter *f) const {
+  f->dump_string("notify_op", stringify(NOTIFY_OP_REBUILD_OBJECT_MAP));
+  f->open_object_section("async_request_id");
+  async_request_id.dump(f);
+  f->close_section();
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   assert(false);
 }
@@ -292,6 +308,9 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   case NOTIFY_OP_SNAP_CREATE:
     payload = SnapCreatePayload();
     break;
+  case NOTIFY_OP_REBUILD_OBJECT_MAP:
+    payload = RebuildObjectMapPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -315,6 +334,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(FlattenPayload(AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(ResizePayload(123, AsyncRequestId(ClientId(0, 1), 2))));
   o.push_back(new NotifyMessage(SnapCreatePayload("foo")));
+  o.push_back(new NotifyMessage(RebuildObjectMapPayload(AsyncRequestId(ClientId(0, 1), 2))));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -371,6 +391,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_SNAP_CREATE:
     out << "SnapCreate";
+    break;
+  case NOTIFY_OP_REBUILD_OBJECT_MAP:
+    out << "RebuildObjectMap";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

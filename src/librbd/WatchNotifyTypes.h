@@ -73,15 +73,16 @@ struct AsyncRequestId {
 };
 
 enum NotifyOp {
-  NOTIFY_OP_ACQUIRED_LOCK  = 0,
-  NOTIFY_OP_RELEASED_LOCK  = 1,
-  NOTIFY_OP_REQUEST_LOCK   = 2,
-  NOTIFY_OP_HEADER_UPDATE  = 3,
-  NOTIFY_OP_ASYNC_PROGRESS = 4,
-  NOTIFY_OP_ASYNC_COMPLETE = 5,
-  NOTIFY_OP_FLATTEN        = 6,
-  NOTIFY_OP_RESIZE         = 7,
-  NOTIFY_OP_SNAP_CREATE    = 8
+  NOTIFY_OP_ACQUIRED_LOCK      = 0,
+  NOTIFY_OP_RELEASED_LOCK      = 1,
+  NOTIFY_OP_REQUEST_LOCK       = 2,
+  NOTIFY_OP_HEADER_UPDATE      = 3,
+  NOTIFY_OP_ASYNC_PROGRESS     = 4,
+  NOTIFY_OP_ASYNC_COMPLETE     = 5,
+  NOTIFY_OP_FLATTEN            = 6,
+  NOTIFY_OP_RESIZE             = 7,
+  NOTIFY_OP_SNAP_CREATE        = 8,
+  NOTIFY_OP_REBUILD_OBJECT_MAP = 9
 };
 
 struct AcquiredLockPayload {
@@ -179,7 +180,18 @@ struct SnapCreatePayload {
   SnapCreatePayload(const std::string &name) : snap_name(name) {}
 
   std::string snap_name;
- 
+
+  void encode(bufferlist &bl) const;
+  void decode(__u8 version, bufferlist::iterator &iter);
+  void dump(Formatter *f) const;
+};
+
+struct RebuildObjectMapPayload {
+  RebuildObjectMapPayload() {}
+  RebuildObjectMapPayload(const AsyncRequestId &id) : async_request_id(id) {}
+
+  AsyncRequestId async_request_id;
+
   void encode(bufferlist &bl) const;
   void decode(__u8 version, bufferlist::iterator &iter);
   void dump(Formatter *f) const;
@@ -200,6 +212,7 @@ typedef boost::variant<AcquiredLockPayload,
                  FlattenPayload,
                  ResizePayload,
                  SnapCreatePayload,
+                 RebuildObjectMapPayload,
                  UnknownPayload> Payload;
 
 struct NotifyMessage {
