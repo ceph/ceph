@@ -9,7 +9,7 @@
 #include <errno.h>
 
 #define CHAIN_XATTR_MAX_NAME_LEN  128
-#define CHAIN_XATTR_MAX_BLOCK_LEN 2048
+#define CHAIN_XATTR_MAX_BLOCK_LEN 250
 
 
 // wrappers to hide annoying errno handling.
