@@ -121,11 +121,11 @@ TEST_F(SharedLRU_all, add) {
 TEST_F(SharedLRU_all, empty) {
   SharedLRUTest cache;
   unsigned int key = 1;
-  int value1 = 2;
   bool existed = false;
 
   ASSERT_TRUE(cache.empty());
   {
+    int value1 = 2;
     shared_ptr<int> ptr = cache.add(key, new int(value1), &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_FALSE(existed);
