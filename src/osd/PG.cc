@@ -2911,6 +2911,15 @@ void PG::append_log(
 {
   if (transaction_applied)
     update_snap_map(logv, t);
+
+  /* The primary has sent an info updating the history, but it may not
+   * have arrived yet.  We want to make sure that we cannot remember this
+   * write without remembering that it happened in an interval which went
+   * active in epoch history.last_epoch_started.
+   */
+  if (info.last_epoch_started != info.history.last_epoch_started) {
+    info.history.last_epoch_started = info.last_epoch_started;
+  }
   dout(10) << "append_log " << pg_log.get_log() << " " << logv << dendl;
 
   map<string,bufferlist> keys;
