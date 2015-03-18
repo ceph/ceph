@@ -479,6 +479,92 @@ TRACEPOINT_EVENT(librbd, invalidate_cache_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, metadata_get_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, key),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(key, key)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_get_exit,
+    TP_ARGS(
+        int, retval,
+        const char*, key,
+        const char*, value),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+        ctf_string(key, key)
+        ctf_string(value, value)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_set_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, key,
+        const char*, value),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(key, key)
+        ctf_string(value, value)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_set_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_remove_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, key),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(key, key)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_remove_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_list_enter,
+    TP_ARGS(
+        void*, imagectx),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_list_entry,
+    TP_ARGS(
+        const char*, key,
+        const char*, value),
+    TP_FIELDS(
+        ctf_string(key, key)
+        ctf_string(value, value)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, metadata_list_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, flush_enter,
     TP_ARGS(
         void*, imagectx,
