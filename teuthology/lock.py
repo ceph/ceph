@@ -544,7 +544,7 @@ def update_lock(name, description=None, status=None, ssh_pub_key=None):
     if not status:
         status_info = get_status(name)
         if status_info['is_vm']:
-            with safe_while(sleep=10, tries=3, _raise=False,
+            with safe_while(sleep=1, tries=15, _raise=False,
                             action='ssh-keyscan') as proceed:
                 while proceed():
                     ssh_key = ssh_keyscan([name])
@@ -606,7 +606,7 @@ def ssh_keyscan(hostnames):
         raise TypeError("'hostnames' must be a list")
     hostnames = [misc.canonicalize_hostname(name, user=None) for name in
                  hostnames]
-    args = ['ssh-keyscan', '-t', 'rsa'] + hostnames
+    args = ['ssh-keyscan', '-T', '1', '-t', 'rsa'] + hostnames
     p = subprocess.Popen(
         args=args,
         stdout=subprocess.PIPE,
