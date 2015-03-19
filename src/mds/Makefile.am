@@ -1,3 +1,6 @@
+if ENABLE_SERVER
+if WITH_MDS
+
 libmds_la_SOURCES = \
 	mds/Capability.cc \
 	mds/MDS.cc \
@@ -91,4 +94,5 @@ noinst_HEADERS += \
 	mds/events/ETableServer.h \
 	mds/events/EUpdate.h
 
-
+endif # WITH_MDS
+endif # ENABLE_SERVER
