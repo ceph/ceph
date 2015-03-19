@@ -12901,7 +12901,8 @@ void ReplicatedPG::_scrub(
 
     dout(20) << mode << "  " << soid << " " << oi << dendl;
 
-    if (pool.info.is_replicated()) {
+    if (pool.info.is_replicated() &&
+	(peer_features & CEPH_FEATURE_OSD_OBJECT_DIGEST)) {
       if (oi.is_data_digest() && p->second.digest_present &&
 	  oi.data_digest != p->second.digest) {
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
