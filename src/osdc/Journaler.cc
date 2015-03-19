@@ -202,14 +202,22 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   assert(bl.length() || r < 0 );
 
   // unpack header
-  Header h;
-  bufferlist::iterator p = bl.begin();
-  ::decode(h, p);
-  prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = h.write_pos;
-  expire_pos = h.expire_pos;
-  trimmed_pos = trimming_pos = h.trimmed_pos;
-  init_headers(h);
-  state = STATE_ACTIVE;
+  if (r == 0) {
+    Header h;
+    bufferlist::iterator p = bl.begin();
+    try {
+      ::decode(h, p);
+    } catch (const buffer::error &e) {
+      finish->complete(-EINVAL);
+      return;
+    }
+    prezeroing_pos = prezero_pos = write_pos = flush_pos = safe_pos = h.write_pos;
+    expire_pos = h.expire_pos;
+    trimmed_pos = trimming_pos = h.trimmed_pos;
+    init_headers(h);
+    state = STATE_ACTIVE;
+  }
+
   finish->complete(r);
 }
 
@@ -238,17 +246,21 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   } 
 
   // unpack header
+  bool corrupt = false;
   Header h;
   bufferlist::iterator p = bl.begin();
-  ::decode(h, p);
+  try {
+    ::decode(h, p);
 
-  bool corrupt = false;
-  if (h.magic != magic) {
-    ldout(cct, 0) << "on disk magic '" << h.magic << "' != my magic '"
-	    << magic << "'" << dendl;
-    corrupt = true;
-  } else if (h.write_pos < h.expire_pos || h.expire_pos < h.trimmed_pos) {
-    ldout(cct, 0) << "Corrupt header (bad offsets): " << h << dendl;
+    if (h.magic != magic) {
+      ldout(cct, 0) << "on disk magic '" << h.magic << "' != my magic '"
+              << magic << "'" << dendl;
+      corrupt = true;
+    } else if (h.write_pos < h.expire_pos || h.expire_pos < h.trimmed_pos) {
+      ldout(cct, 0) << "Corrupt header (bad offsets): " << h << dendl;
+      corrupt = true;
+    }
+  } catch (const buffer::error &e) {
     corrupt = true;
   }
 
@@ -1058,9 +1070,15 @@ bool Journaler::try_read_entry(bufferlist& bl)
   }
 
   uint64_t start_ptr;
-  size_t consumed = journal_stream.read(read_buf, &bl, &start_ptr);
-  if (stream_format >= JOURNAL_FORMAT_RESILIENT) {
-    assert(start_ptr == read_pos);
+  size_t consumed;
+  try {
+    consumed = journal_stream.read(read_buf, &bl, &start_ptr);
+    if (stream_format >= JOURNAL_FORMAT_RESILIENT) {
+      assert(start_ptr == read_pos);
+    }
+  } catch (const buffer::error &e) {
+    error = -EINVAL;
+    return false;
   }
 
   ldout(cct, 10) << "try_read_entry at " << read_pos << " read " 
@@ -1271,7 +1289,6 @@ size_t JournalStream::read(bufferlist &from, bufferlist *entry, uint64_t *start_
     assert(entry_sentinel == sentinel);
   }
   ::decode(entry_size, from_ptr);
-  assert(entry_size != 0);
 
   // Read out the payload
   from_ptr.copy(entry_size, *entry);
