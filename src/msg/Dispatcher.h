@@ -192,7 +192,7 @@ public:
 protected:
   CephContext *cct;
 private:
-  Dispatcher(const Dispatcher &rhs);
+  explicit Dispatcher(const Dispatcher &rhs);
   Dispatcher& operator=(const Dispatcher &rhs);
 };
 
