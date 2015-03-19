@@ -1,34 +1,11 @@
 AUTOMAKE_OPTIONS = gnu
 
-dist_man_MANS = \
-	ceph-deploy.8 \
-	ceph-disk.8 \
-	ceph-osd.8 \
-	ceph-mds.8 \
-	ceph-mon.8 \
-	ceph-fuse.8 \
-	ceph-syn.8 \
-	crushtool.8 \
-	osdmaptool.8 \
-	monmaptool.8 \
-	ceph-conf.8 \
-	ceph-run.8 \
-	ceph.8 \
-	mount.ceph.8 \
-	radosgw.8 \
-	radosgw-admin.8 \
-	ceph-authtool.8 \
-	rados.8 \
-	librados-config.8 \
-	rbd.8 \
-	ceph-clsinfo.8 \
-	ceph-debugpack.8 \
-	cephfs.8 \
-	ceph-dencoder.8 \
-	ceph-rest-api.8 \
-	ceph-rbdnamer.8 \
-	ceph-post-file.8 \
-	rbd-fuse.8 \
-	rbd-replay.8 \
-	rbd-replay-many.8 \
-	rbd-replay-prep.8
+dist_man_MANS = 
+
+if ENABLE_CLIENT
+include Makefile-client.am
+endif
+
+if ENABLE_SERVER
+include Makefile-server.am
+endif

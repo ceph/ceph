@@ -1,4 +1,7 @@
+if ENABLE_CLIENT
+if WITH_RADOS
 if WITH_RADOSGW
+
 librgw_la_SOURCES =  \
 	rgw/librgw.cc \
 	rgw/rgw_acl.cc \
@@ -113,9 +116,6 @@ DENCODER_SOURCES += \
 	rgw/rgw_json_enc.cc
 
 
-endif # WITH_RADOSGW
-
-
 noinst_HEADERS += \
 	rgw/logrotate.conf \
 	rgw/rgw_acl.h \
@@ -173,3 +173,7 @@ noinst_HEADERS += \
 	civetweb/include/civetweb.h \
 	civetweb/include/civetweb_conf.h \
 	civetweb/src/md5.h
+
+endif # WITH_RADOSGW
+endif # WITH_RADOS
+endif # ENABLE_CLIENT

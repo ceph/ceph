@@ -360,17 +360,8 @@ protected:
 	 i != log_keys_debug->end() && *i < ub;
 	 log_keys_debug->erase(i++));
   }
-  void check() {
-    if (!pg_log_debug)
-      return;
-    assert(log.log.size() == log_keys_debug.size());
-    for (list<pg_log_entry_t>::iterator i = log.log.begin();
-	 i != log.log.end();
-	 ++i) {
-      assert(log_keys_debug.count(i->get_key_name()));
-    }
-  }
 
+  void check();
   void undirty() {
     dirty_to = eversion_t();
     dirty_from = eversion_t::max();

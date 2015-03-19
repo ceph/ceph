@@ -120,6 +120,40 @@ function SHARE_MON_TEST_experimental_shec() {
     ! ./ceph osd erasure-code-profile ls | grep $profile || return 1
 }
 
+function SHARE_MON_TEST_set_idempotent() {
+    local dir=$1
+    local id=$2
+
+    #
+    # The default profile is set using a code path different from 
+    # ceph osd erasure-code-profile set: verify that it is idempotent,
+    # as if it was using the same code path.
+    #
+    ./ceph osd erasure-code-profile set default k=2 m=1 2>&1 || return 1
+    local profile
+    #
+    # Because plugin=jerasure is the default, it uses a slightly
+    # different code path where defaults (m=1 for instance) are added
+    # implicitly.
+    #
+    profile=profileidempotent1
+    ! ./ceph osd erasure-code-profile ls | grep $profile || return 1
+    ./ceph osd erasure-code-profile set $profile k=2 ruleset-failure-domain=osd 2>&1 || return 1
+    ./ceph osd erasure-code-profile ls | grep $profile || return 1
+    ./ceph osd erasure-code-profile set $profile k=2 ruleset-failure-domain=osd 2>&1 || return 1
+    ./ceph osd erasure-code-profile rm $profile # cleanup
+
+    #
+    # In the general case the profile is exactly what is on
+    #
+    profile=profileidempotent2
+    ! ./ceph osd erasure-code-profile ls | grep $profile || return 1
+    ./ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 ruleset-failure-domain=osd 2>&1 || return 1
+    ./ceph osd erasure-code-profile ls | grep $profile || return 1
+    ./ceph osd erasure-code-profile set $profile plugin=lrc k=4 m=2 l=3 ruleset-failure-domain=osd 2>&1 || return 1
+    ./ceph osd erasure-code-profile rm $profile # cleanup
+}
+
 function TEST_format_invalid() {
     local dir=$1
 
